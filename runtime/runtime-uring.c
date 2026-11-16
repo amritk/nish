@@ -746,6 +746,10 @@ static int ur_add_ring(struct nish_uring_set *s) {
   if (s->nrings >= s->rings_max) return -ENOSPC;
   struct ur_ring *r;
   if (ur_pool.made) {
+    /* A full set asks again on every top-up, so a spent pool answers without
+       counting: `next` stays within the threads past `n` and never wraps to
+       a negative index (NURING-34). */
+    if (__atomic_load_n(&ur_pool.next, __ATOMIC_RELAXED) >= ur_pool.n) return -ENOSPC;
     int i = __atomic_fetch_add(&ur_pool.next, 1, __ATOMIC_RELAXED);
     if (i >= ur_pool.n) return -ENOSPC;
     r = ur_pool.rings[i];
@@ -774,14 +778,20 @@ static int ur_add_ring(struct nish_uring_set *s) {
 /* Make `n` restricted rings of `slots` slots, at the sizes a set opens with
  * by default, for the sets this process opens later (WP63 S3). `--sandbox`
  * calls it once, before its seccomp filter and before any thread; with `n`
- * of 0 it only records that this process may not make a ring (-EPERM). A ring
- * that fails any step closes every ring made, and the pool answers that
- * step's errno from then on: the process falls back to descriptors for good.
+ * of 0 it only records that this process may not make a ring (-EPERM). A
+ * kernel below the probe's floor makes none, and a ring that fails any step
+ * closes every ring made; either way the pool answers that step's errno from
+ * then on: the process falls back to descriptors for good.
  * Answers the number of rings made or that errno. */
 int32_t nish_uring_premake(int32_t n, int32_t slots) {
   if (ur_pool.made) return ur_pool.rc;
   ur_pool.made = 1;
   if (n <= 0) return ur_pool.rc = -EPERM;
+  /* A restricted ring drops SINGLE_ISSUER and DEFER_TASKRUN, so it alone
+     would take a 5.19 or 6.0 kernel; the probe holds the pool to the floor
+     an unsandboxed set has, 6.1 (NURING-33). */
+  int32_t probed = ur_probe_once();
+  if (probed < 0) return ur_pool.rc = probed;
   if (n > UR_POOL_MAX) n = UR_POOL_MAX;
   if (slots < 1) slots = 1;
   if (slots > UR_MAX_SLOTS) slots = UR_MAX_SLOTS;

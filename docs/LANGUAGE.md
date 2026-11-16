@@ -14540,12 +14540,24 @@ entry:
   is not bounded by that ceiling, so in such a program it no longer sees the
   quota.
 - **Always.** `ptrace`, `process_vm_readv`, `process_vm_writev` and
-  `pidfd_getfd` kill; io_uring kills unless both `net` and `process.spawn`
-  are granted; on x86-64 a system call numbered with bit 30 (x32) kills, and
+  `pidfd_getfd` kill; io_uring kills without `net`, and with `net` but not
+  `process.spawn` only `io_uring_enter` is let through (see the premade
+  rings below); on x86-64 a system call numbered with bit 30 (x32) kills, and
   a call from any other architecture's entry kills. A killed process ends by
   `SIGSYS`, exit status 159 from a shell. From Landlock ABI 6 a sandboxed
   process cannot signal or reach the abstract sockets of a process outside
   it.
+- **The premade rings.** With `net` granted and `process.spawn` not, a
+  program whose `main` reaches `tcpListenFlags` with `NET_LISTEN_RING` gets
+  its rings before the filter loads: `nish.netRings` in the root
+  `package.json` (an integer from 1 to 64, default 1; anything else is
+  NL3058) restricted rings, each taking only `ACCEPT`, `RECV`, `SEND`,
+  `CLOSE`, `ASYNC_CANCEL` and `NOP`, with the submission flags
+  `FIXED_FILE`, `BUFFER_SELECT` and `CQE_SKIP_SUCCESS`; any other
+  submission completes with `-13`. The first ring listener takes them; a
+  listener needing more serves descriptors (its open answers `-23`), and a
+  kernel or limit that refuses them leaves the process on descriptors for
+  good, which `netRingState()` reports.
 - **Refusals.** A program whose sandbox cannot be applied prints one line,
   `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
   kernel without Landlock, and one below ABI 3 when `fs.write` is not

@@ -674,7 +674,9 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   binary, as it records other capability use. Two candidates: a
   build-time count from a `nish.json` setting, with 1 as the default, or
   `ceil(hard limit × k / limit)` for a declared connection ceiling. Without
-  `--sandbox`, rings are made on demand.
+  `--sandbox`, rings are made on demand. *Decided in S3: `netRings` in the root
+  `package.json`'s `"nish"` field, 1 to 64, default 1 (NL3058 otherwise);
+  the compiler passes 0 when `main` cannot reach the bit or `net`.*
 - **D3: one thread or more.** This design is one thread with N rings, which
   keeps the single-threaded `nish:net` model WP42 §1 fixed. The top entry
   runs a ring per thread. Rings per thread would need `nish:net` inside

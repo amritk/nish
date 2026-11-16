@@ -13,10 +13,12 @@ functions rather than lines, so it has no `file:line` anchors to move.
 
 | File | What |
 | --- | --- |
-| `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_marks` and `nish_sb_spawn_open`, the spawn-target check, and `nish_sb_spawn_once`, `nish_sb_supervisor`, `nish_sb_spawner`, `nish_sb_start`, `nish_sb_answer`, `nish_sb_lift` and `nish_sb_refuse_spawn`, the one exec a spawn's subtree is held to (SBX-1); the non-Linux stubs |
+| `runtime/runtime-sandbox.c` | `nish_sandbox` (the seven steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_marks` and `nish_sb_spawn_open`, the spawn-target check, and `nish_sb_spawn_once`, `nish_sb_supervisor`, `nish_sb_spawner`, `nish_sb_start`, `nish_sb_answer`, `nish_sb_lift` and `nish_sb_refuse_spawn`, the one exec a spawn's subtree is held to (SBX-1); the non-Linux stubs |
+| `runtime/runtime-net.c`, `runtime/runtime-uring.c` | step 5, the rings made before the filter (WP63 S3): `nish_net_ring_premake`, `nr_slots` and `nr_open`'s latch on a pooled failure; `nish_uring_premake`, `nish_uring_pooled`, `ur_make_ring`, `ur_restrict`, `ur_ops_ok`, `ur_pool` and `ur_add_ring`'s pool path. The io_uring side of those rings, what a restricted ring still reaches in the kernel, is [net-uring.md](net-uring.md)'s |
+| `src/attributes.ts`, `src/manifest.ts` | the ring fact: `listenFlagsValue`, `listenFlagsMayRing` and `FunctionFacts.ringListen`, carried by `relaxEdge`, which say whether `main` can reach `tcpListenFlags` with `NET_LISTEN_RING`; `netRingsAt`, the position NL3058 names |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read`, `@.sandbox.write` and `@.sandbox.exec` (`sandboxDirs`) |
 | `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
-| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments, and the `//` mark on an interpreter the grant does not name (WP37 §2a, WP40 §2a) |
+| `src/compilation.ts` | `sandboxWidened`, the widening of an `ffi` main by the policy's grants (open question 13); `narrowSandbox`, the scopes and the exec allowlist taken from a dependency's grant arguments, and the `//` mark on an interpreter the grant does not name (WP37 §2a, WP40 §2a); `readNetRings` (NL3058) and `sandboxNetRings`, the ring count `nish_sandbox` takes last: `nish.netRings` (1 to 64, default 1) when `main` reaches `net` and the ring bit, else 0 |
 | `runtime/runtime-os.c` | `nish_spawn_sandboxed` and its call in `nish_spawn_start`: the spawn handed to the sandbox whole under an exec allowlist, and its error |
 | `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
 | `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check`, `nish_cpu_prime` and `nish_spawn_sandboxed` |
@@ -93,7 +95,12 @@ first as well, and the program then refuses to run (§3, §7).
   `mmap` with `PROT_EXEC`;
 - the metadata reads of §4: `stat`, `lstat`, `statx`, `readlink`, `access`,
   `getxattr`, `listxattr`, `O_PATH`, `chdir`, `inotify` and `fanotify`;
-- io_uring, when both `net` and `process.spawn` are granted;
+- io_uring, when both `net` and `process.spawn` are granted; with `net`
+  without `process.spawn`, `io_uring_enter` on the rings step 5 made, each
+  restricted to ACCEPT, RECV, SEND, CLOSE, ASYNC_CANCEL and NOP, with no
+  SQE flag but FIXED_FILE, BUFFER_SELECT and CQE_SKIP_SUCCESS, and no
+  register call after it was enabled; what those opcodes reach in the kernel
+  is [net-uring.md](net-uring.md)'s;
 - the same-uid routes no row kills: SysV shared memory and message queues
   (`shmget`, `shmat`, `msgget`) shared with an unconfined process of the
   same user, `perf_event_open` within what `perf_event_paranoid` allows,
@@ -124,12 +131,16 @@ one of these:
   `open_by_handle_at` walks past path rules, but it needs
   `CAP_DAC_READ_SEARCH`, which step 3 drops.
 - **Processes:** the `process.spawn` row, `clone3`'s `ENOSYS` and the
-  io_uring kill. A module that loads one (`finit_module`) is refused `EPERM`
+  io_uring rows: no ring can be made or registered without `process.spawn`,
+  and a premade ring refuses every opcode that opens, reads, writes or
+  messages another ring. A module that loads one (`finit_module`) is refused `EPERM`
   after step 3. `bpf` is refused `EPERM` where
   `kernel.unprivileged_bpf_disabled` is 1 or 2, the default of most
   distributions; where it is 0, an unprivileged process may still load a
   socket filter, which reaches no capability the mask withholds.
-- **The network:** the `net` row, the io_uring kill and the x32 kill.
+- **The network:** the `net` row, the io_uring rows (a premade ring's
+  ACCEPT, RECV and SEND reach only descriptors the `net` row lets the process
+  hold) and the x32 kill.
 - **Another process:** the always-on `ptrace`, `process_vm_*` and
   `pidfd_getfd` kills.
 
@@ -172,25 +183,38 @@ constructor, and applies, in order:
    on each listed file alone. A directory scope is resolved by the compiler
    and refused there unless it is a directory, so dropping `O_DIRECTORY`
    widens no scope the command line can name.
-5. A seccomp denylist (open question 4), `SECCOMP_FILTER_FLAG_TSYNC`:
+5. Unless both `net` and `process.spawn` are granted, the premade rings: with
+   `net` and a sixth operand above 0, `nish_net_ring_premake` makes that many
+   io_uring rings, each set up `IORING_SETUP_R_DISABLED`, then
+   `IORING_REGISTER_RESTRICTIONS` (the six opcodes and three flags above),
+   then its file table, buffer ring and eventfd, then
+   `IORING_REGISTER_ENABLE_RINGS` last. The first `tcpListenFlags` with
+   `NET_LISTEN_RING` takes them; a ring that fails is closed, the process
+   serves without rings for good, and `netRingState` answers that step's
+   errno. A failure here never exits: a ring is an optimisation, and the
+   fallback is the unsandboxed path's. With both granted, a listener makes
+   its rings itself, as it does unsandboxed.
+6. A seccomp denylist (open question 4), `SECCOMP_FILTER_FLAG_TSYNC`:
    - an architecture other than the build's kills, and on x86-64 a number with
      bit 30 (x32) kills;
    - always: `ptrace`, `process_vm_readv`, `process_vm_writev`, `pidfd_getfd`
      kill;
    - without `net`: `socket`, `socketpair`, `connect`, `bind`, `listen`,
      `accept`, `accept4` kill;
-   - unless both `net` and `process.spawn`: `io_uring_setup`, `_enter`,
-     `_register` kill;
+   - io_uring, the same in both modes: without `net`, `io_uring_setup`,
+     `_enter` and `_register` kill; with `net` and without `process.spawn`,
+     `io_uring_setup` and `io_uring_register` kill and `io_uring_enter`, the
+     one call a premade ring needs, is let through; with both, none kills;
    - without `fs.write`, or with it only beneath directories: the mode,
      owner, times and extended-attribute writes answer `EPERM`;
    - without `process.spawn`: `execve`, `execveat`, `fork`, `vfork` kill,
      `clone3` answers `ENOSYS`, and `clone` kills unless `CLONE_THREAD` is
      set.
-6. Marks itself applied; `nish_sandbox_check`, `@main`'s first call, exits
+7. Marks itself applied; `nish_sandbox_check`, `@main`'s first call, exits
    126 if it was not.
 
-A failure in any step prints `nish: --sandbox: <what> (<errno>)` and exits
-126. The two modes differ only where Landlock is missing or too old: strict
+A failure in any step but 5 prints `nish: --sandbox: <what> (<errno>)` and
+exits 126. The two modes differ only where Landlock is missing or too old: strict
 exits 126 without Landlock, or below ABI 3 when `fs.write` is not granted
 whole (TRUNCATE could not be withheld); best-effort runs and names what it
 could not withhold. A scope directory that cannot be opened is the one
@@ -221,6 +245,17 @@ counted. One finding is counted, and it is fixed:
   granted `net` can connect to an abstract listener outside the sandbox; from
   ABI 6 that connect is -1 (`EPERM`), and its own abstract listeners still
   work.
+- **The premade rings are fixed at start.** Under `net` without
+  `process.spawn`, a process holds `nish.netRings` rings for its whole life,
+  each with as many descriptor slots as the soft `RLIMIT_NOFILE` it was
+  launched with; a ring listener past them serves through the fallback, and
+  rings a closed listener held are not made again. The ring flags lose
+  `SINGLE_ISSUER` and `DEFER_TASKRUN`, which tie a ring to the thread that
+  made it, the preinit thread here. Both are recorded in
+  [net-uring.md](net-uring.md) (NURING-30, NURING-31), with the silent
+  premake failure (NURING-32). The probe still holds a premade set to the
+  unsandboxed floor (NURING-33), and a spent set answers without counting
+  (NURING-34).
 - **A pathname Unix listener needs `fs.write`.** Landlock counts binding a
   socket file as MAKE_SOCK, a write, so `unixListen` on a path under `net`
   alone is -13 and leaves no file. The capability pass grants `net` for the
@@ -512,6 +547,43 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
 - `sandbox: ptrace(PTRACE_ATTACH) on the parent dies of SIGSYS (best-effort)`
 - `sandbox: an x32 socket from ffi dies of SIGSYS (best-effort)`
 - `sandbox: without --sandbox the same probe forks (the control)`
+
+The premade rings of step 5 and the io_uring rows of step 6 (WP63 S3). The
+checks marked `(<mode>)` run once under `strict` and once under
+`best-effort`, with the same result, since the rule does not depend on the
+mode:
+
+- `sandbox: a main that reaches NET_LISTEN_RING with net asks for 1 ring (nish_sandbox's last operand is 1)`
+- `sandbox: a main that reaches net but never the ring bit asks for no ring (nish_sandbox's last operand is 0)`
+- `sandbox: a main that also reaches process.spawn passes its ring count on (nish_sandbox's last operand is 1)`
+- `sandbox: a main without net asks for no ring (nish_sandbox's last operand is 0)`
+- `sandbox: tcpListenFlags flags \`<flags>\` ask for <n> ring(s)`, for `8` (1), `1` (0), `NET_LISTEN_RING | 1` (1), `(1 | 2)` (0) and `toI32(process.argv.length)` (1: a value the compiler cannot fold may ring)
+- `sandbox: \`nish.netRings\` 3 asks for 3 rings` and the same for `64`
+- `sandbox: \`nish.netRings\` <value> is refused where package.json writes it`, NL3058, for `0`, `65`, `-1`, `1.5` and `"4"`
+- `sandbox: without --sandbox a ring program premakes no ring (the control)`
+- `sandbox: without --sandbox io_uring_register and io_uring_enter reach the kernel (the control)`
+- `sandbox: io_uring_setup from ffi with net and without process.spawn dies of SIGSYS (<mode>)`
+- `sandbox: io_uring_register from ffi with net and without process.spawn dies of SIGSYS (<mode>)`
+- `sandbox: io_uring_register from ffi without net dies of SIGSYS (<mode>)`
+- `sandbox: io_uring_enter from ffi without net dies of SIGSYS (<mode>)`
+- `sandbox: io_uring_enter from ffi with net reaches the kernel (<mode>)`
+- `sandbox: without net the ring probe answers the refusal, not SIGSYS (<mode>)`
+- `sandbox: a main without net, or with net and never the ring bit, makes no ring (<mode>)`
+- `sandbox: with net and process.spawn io_uring_setup from ffi is not killed and no ring is premade (<mode>)`
+- `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring (<mode>)`
+- `sandbox: a premade ring completes a NOP (<mode>, the control)`
+- `sandbox: a premade ring refuses IORING_OP_<op> with EACCES (<mode>)`, for SOCKET, CONNECT, OPENAT, READ, WRITE, SENDMSG, MSG_RING and URING_CMD
+- `sandbox: a premade ring refuses IOSQE_<flag> with EACCES (<mode>)`, for IO_DRAIN, IO_LINK, IO_HARDLINK and ASYNC
+- `sandbox: a premade ring takes <op> past its restriction (<mode>)`, for ACCEPT, RECV, SEND, CLOSE, ASYNC_CANCEL, and RECV with FIXED_FILE, with BUFFER_SELECT and with CQE_SKIP_SUCCESS (each completes with whatever its arguments earn, never EACCES)
+- `sandbox: a sandboxed NET_LISTEN_RING listener serves a loopback connection through a premade ring (<mode>)`
+- `sandbox: \`nish.netRings\` 3 premakes 3 rings`
+- `sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)`
+- `net_ring: under --sandbox a full set of premade rings answers -23 and makes no ring past them`, in the `net_ring` section
+
+Where this kernel refuses `io_uring_setup` to an unconfined process, the
+premade-ring checks are skipped by name (`sandbox: this kernel refuses
+io_uring_setup unconfined; ...`) rather than passed; the kill checks still run.
+
 - `sandbox: a process.spawn-granted program runs a child`
 - `sandbox: chmod, utimensat and setxattr without fs.write fail EPERM`
 - `sandbox: open from ffi without fs.read is refused`

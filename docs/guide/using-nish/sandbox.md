@@ -83,7 +83,8 @@ A few things are refused whatever `main` reaches: attaching to, reading or
 writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
 of another architecture (a 32-bit `int 0x80`), and io_uring unless the
-program reaches both `net` and `process.spawn`. On a kernel whose Landlock
+program reaches `net` (and only `io_uring_enter` of it, unless it reaches
+`process.spawn` too; see [Ring listeners](#ring-listeners)). On a kernel whose Landlock
 is ABI 6 or later, so is signalling a process outside the sandbox and
 connecting to an abstract Unix socket created outside it, even when `main`
 reaches `signal`; the program can still signal itself. The other
@@ -299,6 +300,26 @@ but changing a file's mode, owner, times or extended attributes is still
 refused (`EPERM`): that check cannot see which directory a file is in. A
 program that reaches `process.spawn` can still read every file beneath `/`,
 scope or not, as above.
+
+## Ring listeners
+
+A server that listens with `NET_LISTEN_RING` accepts into io_uring rings.
+Under `--sandbox`, when `main` reaches `net` but not `process.spawn`, those
+rings are made before anything is confined, and making more is refused
+afterwards. Say how many listeners will take rings in the root
+`package.json` (an integer from 1 to 64; 1 when it is not written):
+
+```json
+{ "nish": { "netRings": 2 } }
+```
+
+Each premade ring takes only accepting, receiving, sending, closing and
+cancelling; anything else submitted to it fails with `-13`. A ring listener
+past the rings made, a kernel too old for them, or a descriptor limit too
+low to make them, serves through plain descriptors instead, which
+`netRingState()` reports. Any other value of `netRings` is refused with
+NL3058. The rules are in
+[The sandbox](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-sandbox).
 
 ## When the sandbox cannot be applied
 

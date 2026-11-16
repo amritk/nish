@@ -32231,6 +32231,19 @@ if (!only || "sandbox".includes(only)) {
         n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 3\n",
         l3.status === 0 ? said(n3) : shown(l3)
       )
+      // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
+      // ring, which drops it; the stand-in refuses the flag as such a kernel
+      // does, and the pool keeps the probe's floor and makes none (NURING-33).
+      const old = build("ring-old-kernel", "ring", ["--sandbox"], {
+        defines: [...hooks.defines, "-DUR_SYS_SETUP(e,p)=((p)->flags & (1u << 13) ? (errno = EINVAL, -1L) : syscall(__NR_io_uring_setup, e, p))"],
+      })
+      const oldCount = run(old, ["ring-count"])
+      const oldProbe = run(old, ["ring-probe"])
+      check(
+        "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)",
+        oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
+        `${said(oldCount)}\n${said(oldProbe)}`
+      )
     }
 
     // seccomp answers EPERM to the metadata calls Landlock does not decide, so
