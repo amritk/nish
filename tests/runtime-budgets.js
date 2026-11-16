@@ -770,12 +770,15 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * from `nish:net` (6,400 to 6,912): `nish_uring_hold`, which cancels a slot's receive
  * and arms it again so a peer the program does not read cannot grow its queue
  * (NURING-9), `nish_uring_queued`, the unsent bytes that bound a send area (NURING-2),
- * and `nish_uring_full`, the full-set check behind tcpAccept's -23 (NURING-6). The
- * budget is the 256-byte boundary above it. A unit of its own beside runtime-net.c,
+ * and `nish_uring_full`, the full-set check behind tcpAccept's -23 (NURING-6).
+ * **7,277 bytes** on 2026-11-16 once an accept that found memory short paused and
+ * resumed rather than stopping the set (NURING-28; 6,912 to 7,424): the back-off's
+ * clock and doubling, its event, and the sleep bound that wakes the caller when it
+ * ends. The budget is the 256-byte boundary above it. A unit of its own beside runtime-net.c,
  * so that a build whose probe fails
  * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 6912
+const RUNTIME_URING_TEXT_BUDGET = 7424
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle

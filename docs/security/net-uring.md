@@ -215,7 +215,7 @@ where the probe says it is refused.
   runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c,
   runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c
   compile warning-free together and pass the runtime unit test", and its
-  `.text` budget, "runtime-uring.c: .text* at -Oz fits the 6912 byte
+  `.text` budget, "runtime-uring.c: .text* at -Oz fits the 7424 byte
   budget".
 
 ### What S2 adds
