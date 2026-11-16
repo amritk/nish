@@ -30399,9 +30399,11 @@ if (!only || "net_http_server_deep".includes(only)) {
 // answers -24 near 61. A host whose hard limit is under 256 cannot show the
 // raise, so the section skips there. The verdict is the program's exit status
 // and its line, never a message of bash's.
+/** The hard descriptor limit `ulimit -H -n` reported, Infinity for unlimited, 0 when it was not read. */
+const hardNofile = (hard) => (hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout))
 if (!only || "net_fd_limit".includes(only)) {
   const hard = process.platform === "win32" ? null : spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" })
-  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  const room = hardNofile(hard)
   if (!HAS_CLANG || hard === null) {
     skip("net_fd_limit: the raise is read under bash's ulimit, and this host has no clang or is Windows")
   } else if (!(room >= 256)) {
@@ -30449,7 +30451,7 @@ if (!only || "net_fd_limit".includes(only)) {
 // kernel takes no filter: each is a counted skip, never a pass.
 if (!only || "net_ring".includes(only)) {
   const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
-  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  const room = hardNofile(hard)
   if (!HAS_CLANG || hard === null) {
     skip("net_ring: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
   } else {

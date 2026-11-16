@@ -367,6 +367,12 @@ static struct nr_set *nr_set_of(struct nr_vent *v) {
 }
 
 /* The readiness bits a source holds now: 1 readable, 2 writable, 4 an error. */
+/* Whether the slot's connection has failed: a receive's error or a send's.
+   A peer's FIN alone (`hup_res` 0) is not a failure. */
+static int nr_failed(const struct nr_conn *c) {
+  return c->werr || (c->hup && c->hup_res < 0);
+}
+
 static int32_t nr_bits(struct nr_vent *v) {
   if (v->is_listener) {
     struct nr_set *S = nr_set_of(v);
@@ -375,7 +381,7 @@ static int32_t nr_bits(struct nr_vent *v) {
   struct nr_conn *c = nr_conn_of(v);
   int32_t b = 0;
   if (c->rlen > c->roff || c->hup || c->werr) b |= 1;
-  if (c->werr || (c->hup && c->hup_res < 0)) b |= 4;
+  if (nr_failed(c)) b |= 4;
   else if (!c->wblocked) b |= 2;
   return b;
 }
@@ -525,7 +531,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   } else if (e->kind == 4) {
     if (!c->werr) c->werr = e->res < 0 ? e->res : -5;
   }
-  if (c->lingering && ((c->hup && c->hup_res < 0) || c->werr)) (void)nr_finish(S, (uint32_t)e->ring, (uint32_t)e->slot);
+  if (c->lingering && nr_failed(c)) (void)nr_finish(S, (uint32_t)e->ring, (uint32_t)e->slot);
   else nr_touch(&c->v);
 }
 
@@ -539,7 +545,7 @@ static void nr_pump(struct nr_set *S) {
     if (n <= 0) break;
     for (int i = 0; i < n; i++) nr_dispatch(S, &ev[i]);
   }
-  int full = nish_uring_full(S->u);
+  int full = S->npend > 0 && nish_uring_full(S->u);
   uint32_t keep = 0;
   for (uint32_t i = 0; i < S->npend; i++) {
     uint32_t x = S->pend[i], ring = x >> 20, slot = x & (NR_BASE - 1);
@@ -547,7 +553,7 @@ static void nr_pump(struct nr_set *S) {
     int64_t q = nish_uring_queued(S->u, (int32_t)ring, (int32_t)slot);
     if (!c->open) continue;
     if (c->lingering) {
-      if ((q <= 0 || (c->hup && c->hup_res < 0) || c->werr || full) && nr_finish(S, ring, slot)) continue;
+      if ((q <= 0 || nr_failed(c) || full) && nr_finish(S, ring, slot)) continue;
     } else if (c->wblocked) {
       if (q >= NR_AREA) {
         S->pend[keep++] = x;
@@ -702,9 +708,9 @@ static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32
   c->rbuf = NULL;
   c->rcap = 0;
   int64_t q = nish_uring_queued(S->u, ring, slot);
-  /* A peer that only stopped sending (a FIN, `hup_res` 0) still takes what
-     is queued, so only an error ends the slot before its bytes are sent. */
-  if (!(q > 0 && !(c->hup && c->hup_res < 0) && !c->werr) && nr_finish(S, (uint32_t)ring, (uint32_t)slot)) {
+  /* A peer that only stopped sending (a FIN) still takes what is queued, so
+     only a failure ends the slot before its bytes are sent. */
+  if ((q <= 0 || nr_failed(c)) && nr_finish(S, (uint32_t)ring, (uint32_t)slot)) {
     nr_pump(S);
     return 0;
   }
