@@ -42,13 +42,16 @@
     "./*": "./std/*.ts"
   },
   "bin": {
-    "nish": "bin/nish"
+    "nish": "bin/nish",
+    "nish-skills": "bin/nish-skills.js"
   },
   "files": [
     "bin",
     "runtime",
     "scripts/build.sh",
+    "scripts/link-skills.mjs",
     "scripts/postinstall.mjs",
+    "skills",
     "std",
     "README.md",
     "LICENSE",

@@ -25517,6 +25517,9 @@ if (dealtHere("releaseChecks")) {
         /^runtime\//,
         /^scripts\//,
         /^std\//,
+        // Every Nish package's agent skills, as skills/<name>/SKILL.md; the
+        // linker in scripts/ puts them in a project's .claude/skills/.
+        /^skills\//,
         /^README\.md$/,
         /^LICENSE$/,
         /^llms\.txt$/,
@@ -25633,10 +25636,16 @@ if (dealtHere("releaseChecks")) {
         "llms.txt",
         "docs/AI.md",
         "docs/INSTALL.md",
+        // The agent skill for writing Nish, and the two ways it reaches a
+        // project's .claude/skills/: postinstall's call into the linker, and the
+        // `nish-skills` command for a library installed later.
+        "skills/writing-nish/SKILL.md",
+        "scripts/link-skills.mjs",
+        "bin/nish-skills.js",
       ]
       const absent = required.filter((f) => !files.includes(f))
       check(
-        "npm pack includes everything --link and `node --import` need (runtime.c, runtime-os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md and INSTALL.md",
+        "npm pack includes everything --link and `node --import` need (runtime.c, runtime-os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md, INSTALL.md and the writing-nish skill with its linker",
         absent.length === 0,
         absent.join("\n")
       )
@@ -25746,6 +25755,11 @@ if (dealtHere("releaseChecks")) {
         `bin.nish is ${JSON.stringify(manifest.bin)}, bin/nish ${
           files.includes("bin/nish") ? "ships" : "does not ship"
         }, and bin/launcher.js ${files.includes("bin/launcher.js") ? "ships" : "does not ship"}`
+      )
+      check(
+        "npm pack ships the `nish-skills` command `bin` names",
+        manifest.bin?.["nish-skills"] === "bin/nish-skills.js" && files.includes("bin/nish-skills.js"),
+        `bin is ${JSON.stringify(manifest.bin)}`
       )
       // `bin/nish` is a node shim in the tarball and a native binary after
       // postinstall has run on a machine that got one. Packing the *binary* is a
@@ -26397,6 +26411,247 @@ if (dealtHere("releaseChecks")) {
         }
       }
     }
+  }
+
+  // ---- Agent skills: scripts/link-skills.mjs, bin/nish-skills.js, postinstall ----------
+  // A package ships a skill as skills/<name>/SKILL.md, and the linker puts a link to it in
+  // the project's .claude/skills/. Each claim here is proven by exit status and by
+  // lstat/readlink on a fixture project outside the checkout, never by what was printed
+  // (.claude/testing.md, "Checks that spawn a process").
+  if (!only || "skills".includes(only)) {
+    const skillsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nish-skills-"))
+    const skillsBin = path.join(root, "bin", "nish-skills.js")
+    const lstatOf = (file) => fs.lstatSync(file, { throwIfNoEntry: false }) ?? null
+    let fixtures = 0
+    /** A project directory with a package.json and the given packages installed. */
+    const project = (packages) => {
+      const dir = path.join(skillsRoot, `p${fixtures++}`)
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, "package.json"), "{}\n")
+      for (const [name, exportsField, skills] of packages) {
+        const at = path.join(dir, "node_modules", name)
+        fs.mkdirSync(at, { recursive: true })
+        fs.writeFileSync(path.join(at, "package.json"), JSON.stringify({ name, exports: exportsField }))
+        for (const skill of skills) {
+          fs.mkdirSync(path.join(at, "skills", skill), { recursive: true })
+          fs.writeFileSync(path.join(at, "skills", skill, "SKILL.md"), `# ${name} ${skill}\n`)
+        }
+      }
+      return dir
+    }
+    const nishPkg = ["nish", { ".": { types: "./runtime/nish.d.ts" } }, ["writing-nish"]]
+    const libPkg = ["@scope/lib", { ".": { nish: "./lib.ts", default: "./lib.js" } }, ["lib-skill"]]
+    const plainPkg = ["plain", { ".": "./index.js" }, ["x"]]
+    const linkSkillsCli = (args, cwd) =>
+      spawnSync(process.execPath, [skillsBin, ...args], { cwd, encoding: "utf8" })
+    /** Whether .claude/skills/<name> is a relative link that resolves to <pkg>'s skills/<name>/SKILL.md. */
+    const linkedTo = (dir, name, pkg) => {
+      const entry = path.join(dir, ".claude", "skills", name)
+      const st = lstatOf(entry)
+      if (st === null || !st.isSymbolicLink() || path.isAbsolute(fs.readlinkSync(entry))) {
+        return false
+      }
+      try {
+        return (
+          fs.realpathSync(path.join(entry, "SKILL.md")) ===
+          fs.realpathSync(path.join(dir, "node_modules", pkg, "skills", name, "SKILL.md"))
+        )
+      } catch {
+        return false
+      }
+    }
+    const tree = (dir) => {
+      const skillsDir = path.join(dir, ".claude", "skills")
+      return lstatOf(skillsDir) === null
+        ? []
+        : fs.readdirSync(skillsDir).sort().map((n) => `${n}:${lstatOf(path.join(skillsDir, n)).ino}`)
+    }
+
+    // Linking from a subdirectory: the command finds the nearest package.json above it.
+    const a = project([
+      nishPkg,
+      libPkg,
+      plainPkg,
+      ["b-dup", { "./x": { nish: "./x.ts" } }, ["dup"]],
+      ["@a/dup", [{ import: { nish: "./x.ts" } }], ["dup"]],
+    ])
+    fs.mkdirSync(path.join(a, "sub"))
+    const first = linkSkillsCli([], path.join(a, "sub"))
+    check("nish-skills run from a subdirectory of a project exits 0", first.status === 0, first.stdout + first.stderr)
+    check(
+      "nish-skills links nish's writing-nish and an @scope package's skill as relative links to their SKILL.md",
+      linkedTo(a, "writing-nish", "nish") && linkedTo(a, "lib-skill", "@scope/lib"),
+      tree(a).join("\n")
+    )
+    check(
+      "nish-skills leaves a package whose exports use no nish condition unlinked, skills/ or not",
+      lstatOf(path.join(a, ".claude", "skills", "x")) === null,
+      tree(a).join("\n")
+    )
+    check(
+      "two packages shipping one skill name: the first in sort order is linked and the second is not",
+      linkedTo(a, "dup", "@a/dup"),
+      tree(a).join("\n")
+    )
+    const before = tree(a)
+    const again = linkSkillsCli([a], skillsRoot)
+    check(
+      "a second nish-skills run changes nothing: the same entries, the same inodes",
+      again.status === 0 && JSON.stringify(tree(a)) === JSON.stringify(before),
+      `${before.join(" ")}\n${tree(a).join(" ")}\n${again.stdout}${again.stderr}`
+    )
+    fs.rmSync(path.join(a, "node_modules", "@scope", "lib"), { recursive: true })
+    const pruned = linkSkillsCli([a], skillsRoot)
+    check(
+      "after a package is removed, nish-skills prunes its link and keeps the others",
+      pruned.status === 0 &&
+        lstatOf(path.join(a, ".claude", "skills", "lib-skill")) === null &&
+        linkedTo(a, "writing-nish", "nish"),
+      tree(a).join("\n") + pruned.stdout + pruned.stderr
+    )
+
+    // What the project owns: a real directory, a link pointing elsewhere, a dangling one.
+    const b = project([nishPkg, libPkg])
+    const outside = fs.mkdtempSync(path.join(skillsRoot, "outside-"))
+    const userSkills = path.join(b, ".claude", "skills")
+    fs.mkdirSync(path.join(userSkills, "writing-nish"), { recursive: true })
+    fs.writeFileSync(path.join(userSkills, "writing-nish", "SKILL.md"), "mine\n")
+    fs.symlinkSync(outside, path.join(userSkills, "lib-skill"))
+    const gone = path.join(skillsRoot, "no-such-dir")
+    fs.symlinkSync(gone, path.join(userSkills, "dangling"))
+    const userRun = linkSkillsCli([b], skillsRoot)
+    check(
+      "nish-skills leaves the project's own entries alone: a real directory, a link outside node_modules, a dangling one",
+      userRun.status === 0 &&
+        lstatOf(path.join(userSkills, "writing-nish")).isDirectory() &&
+        fs.readFileSync(path.join(userSkills, "writing-nish", "SKILL.md"), "utf8") === "mine\n" &&
+        fs.readlinkSync(path.join(userSkills, "lib-skill")) === outside &&
+        fs.readlinkSync(path.join(userSkills, "dangling")) === gone &&
+        fs.readdirSync(outside).length === 0,
+      tree(b).join("\n") + userRun.stdout + userRun.stderr
+    )
+
+    // `.claude` itself a link: nothing is written, through it or beside it.
+    const c = project([nishPkg])
+    const elsewhere = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-"))
+    fs.symlinkSync(elsewhere, path.join(c, ".claude"))
+    const linkedClaude = linkSkillsCli([c], skillsRoot)
+    check(
+      "when .claude is a link, nish-skills writes nothing and still exits 0",
+      linkedClaude.status === 0 &&
+        fs.readdirSync(elsewhere).length === 0 &&
+        lstatOf(path.join(c, ".claude")).isSymbolicLink(),
+      linkedClaude.stdout + linkedClaude.stderr
+    )
+
+    // The win32 shape, a link to the absolute path, is the linker's own too.
+    const d = project([nishPkg])
+    const { linkSkills } = await import(pathToFileURL(path.join(root, "scripts", "link-skills.mjs")).href)
+    linkSkills(d, { platform: "win32" })
+    const junction = path.join(d, ".claude", "skills", "writing-nish")
+    const junctionTarget = lstatOf(junction)?.isSymbolicLink() ? fs.readlinkSync(junction) : ""
+    const kept = linkSkills(d, { platform: "win32" })
+    fs.rmSync(path.join(d, "node_modules", "nish"), { recursive: true })
+    linkSkills(d, { platform: "win32" })
+    check(
+      "the win32 shape links the absolute path, keeps it on a second run, and prunes it when the package goes",
+      path.isAbsolute(junctionTarget) &&
+        junctionTarget === path.join(d, "node_modules", "nish", "skills", "writing-nish") &&
+        kept.kept.includes("writing-nish") &&
+        lstatOf(junction) === null,
+      `${junctionTarget} ${JSON.stringify(kept)}`
+    )
+
+    // The command's surface.
+    const help = linkSkillsCli(["--help"], skillsRoot)
+    check("nish-skills --help exits 0 with the usage on stdout", help.status === 0 && help.stdout.length > 0, help.stderr)
+    const bogus = linkSkillsCli(["--bogus"], skillsRoot)
+    check("nish-skills with an unknown flag exits 2", bogus.status === 2, bogus.stdout + bogus.stderr)
+    const nowhere = fs.mkdtempSync(path.join(os.tmpdir(), "nish-skills-noproject-"))
+    let above = nowhere
+    while (path.dirname(above) !== above && !fs.existsSync(path.join(above, "package.json"))) {
+      above = path.dirname(above)
+    }
+    if (fs.existsSync(path.join(above, "package.json"))) {
+      console.log(`SKIP  nish-skills with no project: ${above} holds a package.json above the temporary directory`)
+    } else {
+      const none = linkSkillsCli([], nowhere)
+      check("nish-skills with no package.json above the cwd exits 2", none.status === 2, none.stdout + none.stderr)
+    }
+    fs.rmSync(nowhere, { recursive: true, force: true })
+
+    // Postinstall, from an installed copy: it links only behind every guard, and it never
+    // fails the install.
+    const installedNish = (dir) => {
+      const at = path.join(dir, "node_modules", "nish")
+      fs.rmSync(at, { recursive: true, force: true })
+      fs.mkdirSync(path.join(at, "scripts"), { recursive: true })
+      for (const f of ["package.json", "scripts/postinstall.mjs", "scripts/link-skills.mjs"]) {
+        fs.copyFileSync(path.join(root, f), path.join(at, f))
+      }
+      fs.cpSync(path.join(root, "skills"), path.join(at, "skills"), { recursive: true })
+      return at
+    }
+    const postinstall = (at, extra) => {
+      const env = { ...process.env, ...extra }
+      for (const k of ["INIT_CWD", "npm_config_global", "NISH_NO_SKILLS"]) {
+        if (!(k in extra)) {
+          delete env[k]
+        }
+      }
+      return spawnSync(process.execPath, [path.join(at, "scripts", "postinstall.mjs")], {
+        cwd: at,
+        encoding: "utf8",
+        env,
+      })
+    }
+    const e = project([])
+    const eNish = installedNish(e)
+    const linkedHere = postinstall(eNish, { INIT_CWD: e })
+    check(
+      "postinstall in a project's node_modules/nish, INIT_CWD the project, links writing-nish",
+      linkedHere.status === 0 && linkedTo(e, "writing-nish", "nish"),
+      linkedHere.stdout + linkedHere.stderr
+    )
+    const w = project([])
+    const member = path.join(w, "packages", "member")
+    fs.mkdirSync(member, { recursive: true })
+    fs.writeFileSync(path.join(member, "package.json"), "{}\n")
+    const wNish = installedNish(w)
+    const hoisted = postinstall(wNish, { INIT_CWD: member })
+    check(
+      "postinstall run from a workspace member, nish hoisted to the root, links at the root",
+      hoisted.status === 0 && linkedTo(w, "writing-nish", "nish") && lstatOf(path.join(member, ".claude")) === null,
+      hoisted.stdout + hoisted.stderr
+    )
+    const stranger = project([])
+    for (const [what, extra] of [
+      ["a global install (npm_config_global=true)", { INIT_CWD: e, npm_config_global: "true" }],
+      ["NISH_NO_SKILLS=1", { INIT_CWD: e, NISH_NO_SKILLS: "1" }],
+      ["INIT_CWD naming a project this copy is not installed in (npx's cache)", { INIT_CWD: stranger }],
+      ["no INIT_CWD", {}],
+    ]) {
+      fs.rmSync(path.join(e, ".claude"), { recursive: true, force: true })
+      const r = postinstall(eNish, extra)
+      check(
+        `postinstall under ${what} exits 0 and writes no .claude anywhere`,
+        r.status === 0 && lstatOf(path.join(e, ".claude")) === null && lstatOf(path.join(stranger, ".claude")) === null,
+        r.stdout + r.stderr
+      )
+    }
+    fs.rmSync(path.join(e, ".claude"), { recursive: true, force: true })
+    fs.mkdirSync(path.join(e, ".claude", "skills"), { recursive: true })
+    fs.chmodSync(path.join(e, ".claude", "skills"), 0o555)
+    const readOnly = postinstall(eNish, { INIT_CWD: e })
+    // Root writes through 0555, so only an unprivileged run can see the write refused.
+    const refused = process.getuid?.() === 0 || fs.readdirSync(path.join(e, ".claude", "skills")).length === 0
+    fs.chmodSync(path.join(e, ".claude", "skills"), 0o755)
+    check(
+      "postinstall with a read-only .claude/skills still exits 0, and writes nothing into it",
+      readOnly.status === 0 && refused,
+      readOnly.stdout + readOnly.stderr
+    )
+    fs.rmSync(skillsRoot, { recursive: true, force: true })
   }
 
   // ---- WP12: the release train's version bump ------------------------------------------
