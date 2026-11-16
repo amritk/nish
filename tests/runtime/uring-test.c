@@ -608,10 +608,57 @@ static int move_wait(struct nish_uring_set *s, int *ring, int *slot) {
   return n;
 }
 
+/* What `move` prints when a client sat in the backlog: the kernel, the set
+ * and every ring as user space sees it, and each ring's fdinfo, whose poll
+ * list shows whether the kernel holds an accept. Then a wait of 0 and an
+ * entry with GETEVENTS on every ring tell which side lost it: an accept that
+ * appears now was armed and its eventfd never woke the sleep; none at all
+ * means no accept was armed. */
+static void move_dump(struct nish_uring_set *s, int client) {
+  struct utsname u;
+  if (uname(&u) != 0) strcpy(u.release, "?");
+  fprintf(stderr, "uring-test: kernel %s, client %d of 5, acceptor %d, accept_stopped %d, rings %d of %d\n", u.release,
+          client + 1, s->acceptor, s->accept_stopped, s->nrings, s->rings_max);
+  for (int ri = 0; ri < s->nrings; ri++) {
+    struct ur_ring *r = s->rings[ri];
+    struct pollfd q = {r->efd, POLLIN, 0};
+    fprintf(stderr,
+            "uring-test: ring %d: live %ld accepting %ld to_submit %u sq_flags %#x sq head %u tail %u cq head %u tail %u "
+            "efd readable %d\n",
+            ri, (long)r->live, (long)r->accepting, r->to_submit, __atomic_load_n(r->sq_flags, __ATOMIC_ACQUIRE),
+            __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE), r->sq_local_tail, *r->cq_head,
+            __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE), poll(&q, 1, 0));
+    for (uint32_t sl = 0; sl < s->slots; sl++) fprintf(stderr, "uring-test:   slot %u state %#x\n", sl, r->st[sl]);
+    char path[64], buf[4096];
+    snprintf(path, sizeof path, "/proc/self/fdinfo/%d", r->fd);
+    FILE *f = fopen(path, "r");
+    if (!f) continue;
+    while (fgets(buf, sizeof buf, f)) fprintf(stderr, "uring-test:   fdinfo %s", buf);
+    fclose(f);
+  }
+  struct nish_uring_event ev[EVENTS_MAX];
+  int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+  for (int i = 0; i < n; i++)
+    fprintf(stderr, "uring-test: a wait of 0 after the timeout found kind %d ring %d slot %d res %d\n", (int)ev[i].kind,
+            ev[i].ring, ev[i].slot, ev[i].res);
+  if (n <= 0) fprintf(stderr, "uring-test: a wait of 0 after the timeout answered %d\n", n);
+  for (int ri = 0; ri < s->nrings; ri++) {
+    int rc = ur_enter(s->rings[ri], 0, 0, UR_ENTER_GETEVENTS);
+    int k = ur_service(s, ri, ev, EVENTS_MAX);
+    fprintf(stderr, "uring-test: ring %d entered with GETEVENTS (%d) and gave %d events%s\n", ri, rc, k,
+            k > 0 && ev[0].kind == NISH_URING_ACCEPTED ? ", an accept first" : "");
+  }
+  struct nish_uring_stats st;
+  nish_uring_stats(s, &st);
+  fprintf(stderr, "uring-test: stats accepting %ld accept_errors %ld bound_violations %ld\n", (long)st.accepting,
+          (long)st.accept_errors, (long)st.bound_violations);
+}
+
 /* Connect one client and sleep on the set's descriptor, as a caller's own
  * loop would, until the set accepts it. The set is idle first, so the wait
  * that takes the accept runs it before any eventfd is read. */
-static int move_accept(struct nish_uring_set *s, const struct sockaddr_in *a, int *fd, int *ring, int *slot) {
+static int move_accept(struct nish_uring_set *s, int client, const struct sockaddr_in *a, int *fd, int *ring,
+                       int *slot) {
   int r = -1, sl = -1;
   for (int i = 0; i < 100; i++) {
     struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
@@ -624,7 +671,10 @@ static int move_accept(struct nish_uring_set *s, const struct sockaddr_in *a, in
   if (*fd < 0 || connect(*fd, (const struct sockaddr *)a, sizeof *a) != 0) return fail("client connect");
   while (r < 0) {
     struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
-    if (poll(&q, 1, 5000) != 1) return fail("a client waited in the backlog with no accept in the kernel");
+    if (poll(&q, 1, 5000) != 1) {
+      move_dump(s, client);
+      return fail("a client waited in the backlog with no accept in the kernel");
+    }
     if (move_wait(s, &r, &sl) < 0) return 1;
   }
   *ring = r;
@@ -657,7 +707,7 @@ static int move(void) {
   static const int want[5] = {0, 0, 1, 1, 0};
   int fds[5], ring[5], slot[5];
   for (int c = 0; c < 5; c++) {
-    if (move_accept(s, &a, &fds[c], &ring[c], &slot[c]) != 0) return 1;
+    if (move_accept(s, c, &a, &fds[c], &ring[c], &slot[c]) != 0) return 1;
     if (ring[c] != want[c]) {
       fprintf(stderr, "uring-test: client %d was accepted on ring %d, not %d\n", c + 1, ring[c], want[c]);
       return 1;
