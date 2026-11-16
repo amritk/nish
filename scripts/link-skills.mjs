@@ -240,12 +240,24 @@ export const projectOf = (start, nishRoot) => {
   }
 }
 
+/** How many directories deep `readSkill` reads before the rest counts as `TOO_LARGE`. */
+const MAX_DEPTH = 32
+
+/** How many entries `readSkill` reads before the rest counts as `TOO_LARGE`. */
+const MAX_ENTRIES = 10_000
+
+/** How many bytes of files `readSkill` reads before the rest counts as `TOO_LARGE`. */
+const MAX_BYTES = 64 * 1024 * 1024
+
+/** The grant of a skill too deep or too large to read whole. */
+const TOO_LARGE = "too large to read whole"
+
 /**
  * A skill directory read whole, for its hash and its `SKILL.md`.
  *
  * @typedef {object} SkillTree
  * @property {string} hash `sha256-<hex>` over the directory.
- * @property {string[]} grants What its shape grants: a link, a special file or an unreadable entry inside it.
+ * @property {string[]} grants What its shape grants: a link, a special file, an unreadable entry, or more than `MAX_DEPTH`, `MAX_ENTRIES` or `MAX_BYTES` inside it.
  * @property {Buffer | null} skillMd The bytes of its `SKILL.md`, or null when they could not be read.
  */
 
@@ -260,7 +272,10 @@ export const projectOf = (start, nishRoot) => {
  * entry that cannot be read. Each is a grant, so `--yes` refuses the skill,
  * and each mixes a fresh random value into the hash, so a name that accepts
  * such a skill accepts it for that run only: the next run finds it changed and
- * asks again, rather than keep serving content nobody saw.
+ * asks again, rather than keep serving content nobody saw. A tree deeper than
+ * `MAX_DEPTH`, or holding more than `MAX_ENTRIES` entries or `MAX_BYTES` of
+ * files, is read no further and counts the same way, so a package cannot stall
+ * the run or exhaust its memory with the skill it ships.
  *
  * @param {string} dir The skill directory, already known to be a real directory.
  * @returns {SkillTree}
@@ -268,7 +283,12 @@ export const projectOf = (start, nishRoot) => {
 const readSkill = (dir) => {
   const entries = []
   const grants = new Set()
-  const walk = (at, rel) => {
+  let bytes = 0
+  const walk = (at, rel, depth) => {
+    if (depth > MAX_DEPTH || entries.length > MAX_ENTRIES || bytes > MAX_BYTES) {
+      grants.add(TOO_LARGE)
+      return
+    }
     let list
     try {
       list = fs.readdirSync(at, { withFileTypes: true })
@@ -280,9 +300,13 @@ const readSkill = (dir) => {
     for (const e of list) {
       const file = path.join(at, e.name)
       const name = rel === "" ? e.name : `${rel}/${e.name}`
+      if (entries.length > MAX_ENTRIES || bytes > MAX_BYTES) {
+        grants.add(TOO_LARGE)
+        return
+      }
       if (e.isDirectory()) {
         entries.push({ name, kind: "dir", data: Buffer.alloc(0) })
-        walk(file, name)
+        walk(file, name, depth + 1)
         continue
       }
       let kind = "other"
@@ -291,6 +315,7 @@ const readSkill = (dir) => {
         if (e.isFile()) {
           kind = "file"
           data = fs.readFileSync(file)
+          bytes += data.length
         } else if (e.isSymbolicLink()) {
           kind = "link"
           data = Buffer.from(fs.readlinkSync(file))
@@ -306,7 +331,7 @@ const readSkill = (dir) => {
       entries.push({ name, kind, data })
     }
   }
-  walk(dir, "")
+  walk(dir, "", 0)
   const hash = crypto.createHash("sha256")
   for (const { name, kind, data } of entries.sort((x, y) => byCodeUnit(x.name, y.name))) {
     const head = Buffer.from(name)
@@ -365,6 +390,14 @@ const SHELL_AT_LOAD = /(?<![\p{L}\p{N}_])!`|(?:`{3,}|~{3,})[^\S\r\n]*!/u
 /** A YAML scalar with its quotes taken off. */
 const unquote = (value) => (/^"[^"]*"$|^'[^']*'$/.test(value) ? value.slice(1, -1) : value)
 
+/**
+ * One thing a skill grants: a line to show, or an `allowed-tools` key with
+ * every entry it lists, kept apart so the display can count and dedupe them
+ * rather than re-split a joined string.
+ *
+ * @typedef {string | { key: string, tools: string[] }} Grant
+ */
+
 /** The tools an `allowed-tools` key lists, with `<unreadable>` for a form this file does not read. */
 const toolsOf = ({ value, under }) => {
   if (value === "" && under.every((item) => item.startsWith("- "))) {
@@ -392,7 +425,7 @@ const toolsOf = ({ value, under }) => {
  * an empty `grants`.
  *
  * @param {string} text The whole `SKILL.md`.
- * @returns {{ description: string, grants: string[] }} Each grant as it is shown, unsanitised.
+ * @returns {{ description: string, grants: Grant[] }} Each grant unsanitised.
  */
 const frontmatter = (text) => {
   const shell = SHELL_AT_LOAD.test(text) ? ["runs shell at load"] : []
@@ -403,6 +436,11 @@ const frontmatter = (text) => {
   }
   const end = lines.findIndex((line, i) => i > 0 && line.trimEnd() === "---")
   if (end === -1) {
+    return unreadable
+  }
+  // A YAML reader may break a line at NEL or a Unicode line or paragraph
+  // separator, where this one does not, so a block holding one is not read.
+  if (lines.slice(1, end).some((line) => /[\u0085\u2028\u2029]/.test(line))) {
     return unreadable
   }
   /** Each top-level key with its inline value and the indented lines under it. */
@@ -438,7 +476,7 @@ const frontmatter = (text) => {
     if (/^allowed[-_]?tools$/i.test(k.key)) {
       // Any spelling a reader might honour is shown as what it is, so a near-miss reads as a grant.
       const tools = toolsOf(k).filter((t) => t !== "")
-      grants.push(tools.length === 0 ? `${k.key} (present, empty)` : `${k.key}: ${tools.join(", ")}`)
+      grants.push(tools.length === 0 ? `${k.key} (present, empty)` : { key: k.key, tools })
     } else {
       grants.push(GRANTING.has(k.key) ? k.key : `unknown key ${k.key}`)
     }
@@ -462,7 +500,7 @@ const versionOf = (dir) => {
  * @property {string} dir The skill directory's absolute path.
  * @property {string} hash `sha256-<hex>` over the whole skill directory.
  * @property {string} description The frontmatter's `description`, unsanitised.
- * @property {string[]} grants What it grants, as `frontmatter` reads it, unsanitised; empty when it grants nothing.
+ * @property {Grant[]} grants What it grants, as `frontmatter` and `readSkill` read it, unsanitised; empty when it grants nothing.
  */
 
 /**
@@ -555,15 +593,26 @@ const isAccepted = (record, skill) => {
 
 /** Write `data` to `file` through a temporary name and a rename, so a reader never sees half of it. */
 const writeAtomic = (file, data) => {
-  const temp = `${file}.${process.pid}.tmp`
-  // A leftover of a killed run with this pid goes first; `wx` then refuses
-  // anything that appears in its place, a link above all, rather than write through it.
-  fs.rmSync(temp, { force: true })
+  let temp = `${file}.${process.pid}.tmp`
+  // A leftover of a killed run with this pid goes first. What cannot be
+  // removed, such as a directory, is left alone for a fresh random name; `wx`
+  // then refuses anything that appears in its place, a link above all, rather
+  // than write through it.
+  try {
+    fs.rmSync(temp, { force: true })
+  } catch {
+    temp = `${file}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`
+  }
+  let written = false
   try {
     fs.writeFileSync(temp, data, { flag: "wx" })
+    written = true
     fs.renameSync(temp, file)
   } catch (err) {
-    fs.rmSync(temp, { force: true })
+    // Only what this call wrote is removed, never what refused the write.
+    if (written) {
+      fs.rmSync(temp, { force: true })
+    }
     throw err
   }
 }
@@ -753,41 +802,73 @@ const GRANT_ORDER = [
   /^hooks$/,
   /^runs shell at load$/,
   /^contains a link$/,
-  /^unreadable |^contains an unreadable |^contains a special /,
+  /^unreadable |^contains an unreadable |^contains a special |^too large /,
   /^(context|agent|background)$/,
 ]
 
 /** The prefix `frontmatter` gives a key it does not know. */
 const UNKNOWN_KEY = "unknown key "
 
+/** Tools that run commands, write files or reach out, shown before the rest. */
+const ACTING_TOOL = /^(<unreadable>|Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|mcp__)/
+
+/** The most code points of one tool or one unknown key shown. */
+const ITEM_MAX = 80
+
 /**
- * What a skill grants, for the terminal: one line per grant, those that act
- * first in `GRANT_ORDER`, and every unknown key folded into one capped line
- * last, so each line fits whatever the skill holds.
+ * A heading and one indented line per distinct item, the acting ones first,
+ * so no cap on a line can drop an item: each is cut on its own line only.
+ */
+const listed = (head, items, acting = () => false) => {
+  const distinct = [...new Set(items)].sort(
+    (x, y) => Number(acting(y)) - Number(acting(x)) || byCodeUnit(x, y)
+  )
+  return [head(items.length, distinct.length), ...distinct.map((item) => `  - ${clean(item, ITEM_MAX)}`)]
+}
+
+/**
+ * What a skill grants, for the terminal, each line starting with its `- `
+ * bullet: one grant to a line, those that act first in `GRANT_ORDER`. No cap
+ * may remove a distinct grant from what the user sees, so a list is never
+ * joined onto one line: an `allowed-tools` key with more than one entry shows
+ * its count and then each distinct tool on a line of its own, acting tools
+ * first, and the unknown keys come last the same way. Only the text of a
+ * single tool or key is cut, at `ITEM_MAX`; how many are shown never is.
  *
  * @param {Skill} skill
  * @returns {string[]} The lines, cleaned; empty when it grants nothing.
  */
 const grantLines = (skill) => {
+  const label = (g) => (typeof g === "string" ? g : g.key)
   const rank = (g) => {
-    const i = GRANT_ORDER.findIndex((re) => re.test(g))
+    const i = GRANT_ORDER.findIndex((re) => re.test(label(g)))
     return i === -1 ? GRANT_ORDER.length : i
   }
-  const known = skill.grants.filter((g) => !g.startsWith(UNKNOWN_KEY))
+  const known = skill.grants.filter((g) => typeof g !== "string" || !g.startsWith(UNKNOWN_KEY))
   const unknown = skill.grants
-    .filter((g) => g.startsWith(UNKNOWN_KEY))
-    .map((g) => g.slice(UNKNOWN_KEY.length))
+    .filter((g) => typeof g === "string" && g.startsWith(UNKNOWN_KEY))
+    .map((g) => String(g).slice(UNKNOWN_KEY.length))
   const lines = known
     .map((g, i) => ({ g, i }))
     .sort((x, y) => rank(x.g) - rank(y.g) || x.i - y.i)
-    .map(({ g }) => clean(g, 200))
-  if (unknown.length > 0) {
-    lines.push(
-      clean(
-        `${unknown.length === 1 ? "unknown key" : `${unknown.length} unknown keys`}: ${unknown.join(", ")}`,
-        200
+    .flatMap(({ g }) => {
+      if (typeof g === "string") {
+        return [`- ${clean(g, ITEM_MAX)}`]
+      }
+      const key = clean(g.key, ITEM_MAX)
+      if (g.tools.length === 1) {
+        return [`- ${key}: ${clean(g.tools[0], ITEM_MAX)}`]
+      }
+      return listed(
+        (n, d) => `- ${key} (${n} entries, ${d} distinct):`,
+        g.tools,
+        (t) => ACTING_TOOL.test(t)
       )
-    )
+    })
+  if (unknown.length === 1) {
+    lines.push(`- unknown key ${clean(unknown[0], ITEM_MAX)}`)
+  } else if (unknown.length > 1) {
+    lines.push(...listed((n, d) => `- ${n} unknown keys (${d} distinct):`, unknown))
   }
   return lines
 }
@@ -827,12 +908,12 @@ export const review = async (
     if (isAccepted(record, skill) || names.includes(skill.name)) {
       accepted.push(skill)
     } else if (ask !== null) {
-      say(`${clean(skill.name, 100)} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}`)
+      say(`${clean(skill.name, 100)} from ${clean(skill.pkg, 214)}@${clean(skill.version, 40)}`)
       say(`  ${clean(skill.description) || "(no description)"}`)
       const lines = grantLines(skill)
       say(lines.length === 0 ? "  grants nothing" : "  grants:")
       for (const line of lines) {
-        say(`    - ${line}`)
+        say(`    ${line}`)
       }
       const answer = await ask(`Link ${clean(skill.name, 100)}? [y/N] `, skill.name)
       if (answer !== null && /^y(es)?$/i.test(answer.trim())) {
@@ -848,7 +929,7 @@ export const review = async (
   for (const skill of waiting) {
     const name = clean(skill.name, 100)
     say(
-      `found   ${name} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}: ${clean(skill.description) || "(no description)"}`
+      `found   ${name} from ${clean(skill.pkg, 214)}@${clean(skill.version, 40)}: ${clean(skill.description) || "(no description)"}`
     )
     // The name is a `NAME`, so the command below is never cut.
     if (skill.grants.length === 0) {
@@ -856,7 +937,7 @@ export const review = async (
     } else {
       say("        not linked, since it grants:")
       for (const line of grantLines(skill)) {
-        say(`          - ${line}`)
+        say(`          ${line}`)
       }
       say("        only naming it accepts it:")
     }

@@ -26574,7 +26574,7 @@ if (dealtHere("releaseChecks")) {
       const plainPkg = ["plain", { ".": "./index.js" }, ["x"]]
       /** The command, its stdin a pipe: never a terminal, so it never asks. */
       const linkSkillsCli = (args, cwd) =>
-        spawnSync(process.execPath, [skillsBin, ...args], { cwd, encoding: "utf8" })
+        spawnSync(process.execPath, [skillsBin, ...args], { cwd, encoding: "utf8", timeout: 60000 })
       /** Whether .claude/skills/<name> is a relative link that resolves to <pkg>'s skills/<name>/SKILL.md. */
       const linkedTo = (dir, name, pkg) => {
         const entry = path.join(dir, ".claude", "skills", name)
@@ -27011,6 +27011,106 @@ if (dealtHere("releaseChecks")) {
         `${paddedSeen}\n${paddedCli.stdout}${paddedCli.stderr}`
       )
 
+      // No cap removes a distinct grant: forty `Read` entries before `Bash` show `Bash`,
+      // first among the distinct tools, before the question is asked.
+      const reads = project([
+        ["nish", {}, [["reads", `---\nname: reads\nallowed-tools: ${"Read, ".repeat(40)}Bash\n---\n`]]],
+      ])
+      let readsShown = ""
+      let readsSeen = null
+      await review(reads, {
+        write: (t) => {
+          readsShown += t
+        },
+        ask: async () => {
+          readsSeen = readsShown
+          return null
+        },
+      })
+      const readsLines = (readsSeen ?? "").split("\n").map((line) => line.trim())
+      const readsCli = linkSkillsCli(["--dir", reads], skillsRoot)
+      check(
+        "an allowed-tools list padded with forty Read entries shows its count and Bash, before Read, before it asks",
+        readsLines.includes("- allowed-tools (41 entries, 2 distinct):") &&
+          readsLines.indexOf("- Bash") !== -1 &&
+          readsLines.indexOf("- Bash") < readsLines.indexOf("- Read") &&
+          readsLines.filter((line) => line === "- Read").length === 1 &&
+          readsCli.status === 0 &&
+          readsCli.stdout.split("\n").some((line) => line.trim() === "- Bash"),
+        `${readsSeen}\n${readsCli.stdout}${readsCli.stderr}`
+      )
+
+      // Thirty unknown keys each show on a line of their own: none is cut from the list.
+      const manyKeys = Array.from({ length: 30 }, (_, i) => `key-${i}-${"y".repeat(40)}`)
+      const unknowns = project([
+        ["nish", {}, [["unknowns", `---\nname: unknowns\n${manyKeys.map((k) => `${k}: 1`).join("\n")}\n---\n`]]],
+      ])
+      const unknownsCli = linkSkillsCli(["--dir", unknowns], skillsRoot)
+      const unknownsLines = unknownsCli.stdout.split("\n").map((line) => line.trim())
+      check(
+        "a skill with thirty long unknown keys shows each of them",
+        unknownsCli.status === 0 &&
+          unknownsLines.includes("- 30 unknown keys (30 distinct):") &&
+          manyKeys.every((k) => unknownsLines.includes(`- ${k}`)),
+        unknownsCli.stdout + unknownsCli.stderr
+      )
+
+      // A line break YAML honours and this reader does not -- NEL, U+2028, U+2029 --
+      // makes the frontmatter unreadable, so a key hidden after one is never inert.
+      const breaks = project([
+        [
+          "nish",
+          {},
+          ["\u0085", " ", " "].map((c, i) => [
+            `break-${i}`,
+            `---\nname: break-${i}\ndescription: d${c}allowed-tools: Bash\n---\n`,
+          ]),
+        ],
+      ])
+      const breaksRun = linkSkillsCli(["--dir", breaks, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill whose frontmatter holds a NEL, a line separator or a paragraph separator",
+        breaksRun.status === 0 &&
+          [0, 1, 2].every((i) => lstatOf(path.join(breaks, ".claude", "skills", `break-${i}`)) === null) &&
+          breaksRun.stdout.includes("- unreadable frontmatter"),
+        breaksRun.stdout + breaksRun.stderr
+      )
+
+      // A skill deeper than the walk reads is a grant, not a tree it hashes whole.
+      const deep = project([["nish", {}, ["deep"]]])
+      const deepDir = path.join(deep, "node_modules", "nish", "skills", "deep", ...Array(40).fill("d"))
+      fs.mkdirSync(deepDir, { recursive: true })
+      fs.writeFileSync(path.join(deepDir, "hidden.md"), "x\n")
+      const deepRun = linkSkillsCli(["--dir", deep, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill nested deeper than the walk reads, and names why",
+        deepRun.status === 0 &&
+          lstatOf(path.join(deep, ".claude", "skills", "deep")) === null &&
+          deepRun.stdout.includes("- too large to read whole"),
+        deepRun.stdout + deepRun.stderr
+      )
+
+      // A link whose target names the skill by its real path, as a pnpm store does,
+      // is the same skill as the path through node_modules/nish: kept, not rewritten.
+      const stored = project([nishPkg])
+      const storedModules = path.join(stored, "node_modules")
+      fs.mkdirSync(path.join(storedModules, ".store"))
+      fs.renameSync(path.join(storedModules, "nish"), path.join(storedModules, ".store", "nish"))
+      fs.symlinkSync(path.join(".store", "nish"), path.join(storedModules, "nish"))
+      await review(stored, { yes: true, write: () => {} })
+      const storedEntry = path.join(stored, ".claude", "skills", "writing-nish")
+      fs.unlinkSync(storedEntry)
+      fs.symlinkSync(path.join("..", "..", "node_modules", ".store", "nish", "skills", "writing-nish"), storedEntry)
+      const storedRun = await review(stored, { yes: true, write: () => {} })
+      check(
+        "a link naming an accepted skill by its real path is kept, not rewritten",
+        storedRun.result !== null &&
+          storedRun.result.kept.includes("writing-nish") &&
+          storedRun.result.linked.length === 0 &&
+          fs.readlinkSync(storedEntry).includes(".store"),
+        JSON.stringify(storedRun.result)
+      )
+
       // clean replaces one character of each invisible class it names, and keeps printable text.
       const invisible = ["\ue000", "\u0378", "\u2028", "\u034f", "\u3164", "\u{e0100}", "\u180b", "\u180f", "\u17b4"]
       const cleaned = invisible.map((c) => clean(`a${c}b`))
@@ -27035,6 +27135,28 @@ if (dealtHere("releaseChecks")) {
           plantedRecord?.isFile() === true &&
           linkedTo(planted, "writing-nish", "nish"),
         tree(planted).join("\n")
+      )
+
+      // A directory at the record's temporary name, which rmSync cannot remove, is left
+      // alone, and the record is still written under another name.
+      const dirAtTemp = project([nishPkg])
+      const dirAtTempSkills = path.join(dirAtTemp, ".claude", "skills")
+      const tempDir = path.join(dirAtTempSkills, `.nish-skills.json.${process.pid}.tmp`)
+      fs.mkdirSync(tempDir, { recursive: true })
+      fs.writeFileSync(path.join(tempDir, "keep.txt"), "kept\n")
+      let dirAtTempError = null
+      try {
+        await review(dirAtTemp, { yes: true, write: () => {} })
+      } catch (err) {
+        dirAtTempError = err
+      }
+      check(
+        "a directory at the record's temporary name is left untouched, and the record is still written",
+        dirAtTempError === null &&
+          fs.readFileSync(path.join(tempDir, "keep.txt"), "utf8") === "kept\n" &&
+          lstatOf(path.join(dirAtTempSkills, ".nish-skills.json"))?.isFile() === true &&
+          fs.readdirSync(dirAtTempSkills).filter((n) => n.endsWith(".tmp")).length === 1,
+        `${dirAtTempError}\n${tree(dirAtTemp).join("\n")}`
       )
 
       // A FIFO inside a skill is a grant: --yes refuses it, and the run does not hang on it.

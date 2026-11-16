@@ -70,8 +70,10 @@ npx nish-skills
 
 For each skill you have not accepted at its current hash, it prints the
 package, the skill's description and what it grants, one grant to a line with
-the ones that act first, then asks
-`Link <name>? [y/N]`. Only `y` or `yes` links it. Enter, any other answer and
+the ones that act first, then asks `Link <name>? [y/N]`. A list of tools shows
+how many entries it has and then each distinct tool on a line of its own, the
+ones that run commands, write files or reach out first, so a long list cannot
+hide one. Only `y` or `yes` links it. Enter, any other answer and
 the end of input decline. A decline is not recorded, so the next run asks
 again. Ctrl-C at a question stops the command with exit status 130 and writes
 nothing, since every question is asked before anything is linked.
@@ -97,8 +99,10 @@ skill is left for you to name:
   `!` and a list or quote marker before the fence included;
 - frontmatter Nish cannot read, or none at all;
 - a link, a device or other special file, or an entry Nish cannot read,
-  anywhere in the skill's directory. Its hash cannot pin what it serves, so
-  accepting it links it for that run only, and the next run removes the link.
+  anywhere in the skill's directory, or a directory more than 32 levels deep,
+  or holding more than 10,000 entries or 64 MiB of files, which Nish stops
+  reading. Its hash cannot pin what it serves, so accepting it links it for
+  that run only, and the next run removes the link.
 
 A linked `skills/` directory, a linked skill directory and a linked
 `SKILL.md` are no skill at all: Nish does not offer them, and naming one is
@@ -121,8 +125,9 @@ directory whose name is not a valid skill name: lowercase letters, digits,
 
 It prints one line per change, a `found` entry for each skill still waiting
 to be accepted (what it grants, and the exact `npx nish-skills <name>` that
-accepts it on a line of its own), and a summary. Running it again changes nothing on disk, though
-the `found` lines repeat until you accept or remove those skills. Run it after
+accepts it on a line of its own), and a summary. Running it again changes
+nothing on disk, though the `found` lines repeat until you accept or remove
+those skills. Run it after
 you add, remove or upgrade a Nish library. It exits 0 when it ran, 1 when a
 write failed, 2 for a usage error, a skill name no installed package ships, or
 when it finds no project, and 130 when Ctrl-C interrupts a question.
