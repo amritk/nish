@@ -25,8 +25,7 @@ NOT, REQUIRED) is tested or excluded here.
 --- middle
 
 {::comment}
-Ported from vector (https://github.com/amritk/vector),
-specs/rfc8439-chacha20-poly1305.md at v0.2.1.
+Copied from vector (https://github.com/amritk/vector), specs/rfc8439-chacha20-poly1305.md at v0.2.1. Copyright (c) 2026 Amrit Kahlon. Used under the MIT License, whose text follows.
 
 MIT License
 
