@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 286531837962b5cf71654110761048b6a2f32b7b142ce66e30ab081af7d0e2ec
+// vector-contract-sha256: d8cfc67ca99b15aa3260af49c582d24c1a087e8ba869d01ed2aedb38e3d7d1eb
 
 import { Suite } from "nish/testing";
 import { x25519, x25519Base } from "nish/crypto/x25519";

@@ -1212,7 +1212,7 @@
     },
     {
       "name": "X25519_SIZE",
-      "reason": "a constant, the 32-byte length the properties already test through the function"
+      "reason": "a constant, not a function; the properties test the 32-byte sizes it names through x25519"
     }
   ]
 }
