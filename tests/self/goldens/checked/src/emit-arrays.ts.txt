@@ -34,6 +34,7 @@ import emitSliceCheck from "./emit-strings" -> function @emitSliceCheck
 import guardKeep from "./emit-strings" -> function @guardKeep
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import internalErrorFor from "./ice" -> function @internalErrorFor
+import IRBlock from "./ir" -> struct IRBlock
 import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
 import bytesKernelOf from "./kernels" -> function @bytesKernelOf
 import JSON_PUT_F64_KERNEL from "./kernels" -> const JSON_PUT_F64_KERNEL
@@ -61,8 +62,10 @@ import ARRAY_STRUCT from "./types" -> const ARRAY_STRUCT
 import intBits from "./types" -> function @intBits
 import isFloat from "./types" -> function @isFloat
 import isUnsigned from "./types" -> function @isUnsigned
+import T_BOOL from "./types" -> const T_BOOL
 import T_F64 from "./types" -> const T_F64
 import T_I32 from "./types" -> const T_I32
+import T_I64 from "./types" -> const T_I64
 import T_STRING from "./types" -> const T_STRING
 import T_U32 from "./types" -> const T_U32
 import T_U8 from "./types" -> const T_U8
@@ -95,6 +98,16 @@ struct ArrayUse (class) size=32 align=8
   field len: boolean index=3 offset=24
   field data: boolean index=4 offset=25
   constructor -> @ArrayUse.constructor
+struct AppendRange (class) size=64 align=8
+  field name: string index=0 offset=0
+  field type: i32 index=1 offset=8
+  field bound: Node index=2 offset=16
+  field offset: Node | null index=3 offset=24
+  field counter: Node index=4 offset=32
+  field dst: Node index=5 offset=40
+  field src: Node index=6 offset=48
+  field elem: i32 index=7 offset=56
+  constructor -> @AppendRange.constructor
 function allocRefusedBytes(): i64 -> @allocRefusedBytes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -1579,6 +1592,211 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
   local +107:9 tail: string (const)
   callee +107:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee +108:3 IRFunction.emit -> @IRFunction.emit
+function AppendRange.constructor(this: AppendRange, name: string, type: i32, bound: Node, offset: Node | null, counter: Node, dst: Node, src: Node, elem: i32): void -> @AppendRange.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: bound counter dst elem name offset src type
+  pointer this: size=64 writesThrough=true captured=false
+  pointer bound: size=40 writesThrough=true captured=true
+  pointer offset: size=40 writesThrough=true captured=true
+  pointer counter: size=40 writesThrough=true captured=true
+  pointer dst: size=40 writesThrough=true captured=true
+  pointer src: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function isIdentNamed(node: Node, name: string): boolean -> @isIdentNamed
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function isInvariant(emitter: Emitter, node: Node, name: string, type: i32): boolean -> @isInvariant
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.typeOf
+  escaping: name type
+  calls: Emitter.typeOf isInvariant nish_panic_index nish_str_eq
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.typeOf#0 isInvariant#0 isInvariant#0 isInvariant#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
+  stackSites=0 stackLocals=0
+  callee +0:7 Emitter.typeOf -> @Emitter.typeOf
+  callee +4:12 isInvariant -> @isInvariant
+  callee +14:7 isInvariant -> @isInvariant
+  callee +14:61 isInvariant -> @isInvariant
+function isUnitStep(node: Node, name: string): boolean -> @isUnitStep
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: isIdentNamed nish_panic_index nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:34 isIdentNamed -> @isIdentNamed
+  callee +5:5 isIdentNamed -> @isIdentNamed
+function soleExpression(body: Node): Node | null -> @soleExpression
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index soleExpression
+  pointer body: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:41 soleExpression -> @soleExpression
+function appendRangeOf(emitter: Emitter, stmt: Node): AppendRange | null -> @appendRangeOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.typeOf
+  calls: AppendRange.constructor Emitter.typeOf TypeTable.isArray TypeTable.refOf inlineStruct isIdentNamed isInvariant isUnitStep nish_alloc_struct nish_panic_index nish_str_eq soleExpression
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.typeOf#0 isInvariant#0 Emitter.typeOf#0 Emitter.typeOf#0 inlineStruct#0 Emitter.typeOf#0 isInvariant#0 isInvariant#0
+  pointer stmt: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 init: Node (const)
+  local +1:9 cond: Node (const)
+  local +5:9 declared: Node (const)
+  local +9:9 name: string (const)
+  local +10:9 counter: Node (const)
+  local +11:9 type: i32 (const)
+  callee +11:16 Emitter.typeOf -> @Emitter.typeOf
+  callee +12:67 isIdentNamed -> @isIdentNamed
+  local +15:9 bound: Node (const)
+  callee +16:8 isInvariant -> @isInvariant
+  callee +16:52 isUnitStep -> @isUnitStep
+  local +19:9 call: Node | null (const)
+  callee +19:16 soleExpression -> @soleExpression
+  local +23:9 callee: Node (const)
+  local +24:9 dst: Node (const)
+  local +25:9 access: Node (const)
+  local +32:9 src: Node (const)
+  local +33:9 dstType: i32 (const)
+  callee +33:19 Emitter.typeOf -> @Emitter.typeOf
+  local +34:9 srcType: i32 (const)
+  callee +34:19 Emitter.typeOf -> @Emitter.typeOf
+  callee +35:8 TypeTable.isArray -> @TypeTable.isArray
+  callee +35:43 TypeTable.isArray -> @TypeTable.isArray
+  local +38:9 elem: i32 (const)
+  callee +38:16 TypeTable.refOf -> @TypeTable.refOf
+  callee +40:14 TypeTable.refOf -> @TypeTable.refOf
+  callee +43:5 inlineStruct -> @inlineStruct
+  local +47:9 index: Node (const)
+  callee +48:7 Emitter.typeOf -> @Emitter.typeOf
+  callee +51:7 isIdentNamed -> @isIdentNamed
+  callee +52:12 new AppendRange -> @AppendRange.constructor
+  local +57:9 left: Node (const)
+  local +58:9 right: Node (const)
+  callee +59:7 isIdentNamed -> @isIdentNamed
+  callee +59:36 isInvariant -> @isInvariant
+  callee +60:12 new AppendRange -> @AppendRange.constructor
+  callee +62:7 isIdentNamed -> @isIdentNamed
+  callee +62:35 isInvariant -> @isInvariant
+  callee +63:12 new AppendRange -> @AppendRange.constructor
+function addWithOverflow(emitter: Emitter, ty: string, lhs: string, rhs: string): string[] -> @addWithOverflow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
+  pointer emitter: size=400 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 pair: string (const)
+  callee +1:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:27 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +5:5 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:5 IRFunction.emitValue -> @IRFunction.emitValue
+function emitAppendRange(emitter: Emitter, stmt: Node, end: IRBlock): boolean -> @emitAppendRange [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via appendRangeOf
+  calls: Emitter.declare Emitter.declareType Emitter.emitExpression Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock addWithOverflow appendRangeOf elementAccess elementBytes elementSize loadHeaderField loadLength nish_panic_index nish_str_concat nish_str_from_i32 storeHeaderField
+  pointer emitter: size=400 writesThrough=true captured=false passedTo=appendRangeOf#0 Emitter.declareType#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 addWithOverflow#0 addWithOverflow#0 Emitter.emitExpression#0 loadLength#0 Emitter.emitExpression#0 loadLength#0 loadHeaderField#0 storeHeaderField#0 Emitter.useRuntime#0 elementSize#0 elementSize#0 Emitter.declare#0 elementBytes#0 elementBytes#0 elementAccess#0 storeHeaderField#0
+  pointer stmt: size=40 writesThrough=false captured=false passedTo=appendRangeOf#1
+  pointer end: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 range: AppendRange | null (const)
+  callee +0:17 appendRangeOf -> @appendRangeOf
+  local +4:9 fn: IRFunction (const)
+  callee +5:3 Emitter.declareType -> @Emitter.declareType
+  local +6:9 ty: string (const)
+  callee +6:14 Emitter.llvm -> @Emitter.llvm
+  local +7:9 slow: IRBlock (const)
+  callee +7:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +8:9 check: IRBlock (const)
+  callee +8:17 IRFunction.newBlock -> @IRFunction.newBlock
+  local +9:9 inRange: IRBlock (const)
+  callee +9:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local +10:9 room: IRBlock (const)
+  callee +10:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +11:9 growTest: IRBlock (const)
+  callee +11:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local +12:9 grow: IRBlock (const)
+  callee +12:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +13:9 copy: IRBlock (const)
+  callee +13:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +15:9 bound: string (const)
+  callee +15:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local +16:9 first: string (const)
+  callee +16:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local +17:9 runs: string (const)
+  callee +17:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +18:3 IRFunction.emit -> @IRFunction.emit
+  callee +20:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +21:9 offsetNode: Node | null (const)
+  local +22:9 offset: string (const)
+  callee +22:46 Emitter.emitExpression -> @Emitter.emitExpression
+  local +24:9 last: string (const)
+  callee +24:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +25:9 lo: string[] (const)
+  callee +25:14 addWithOverflow -> @addWithOverflow
+  local +26:9 hi: string[] (const)
+  callee +26:14 addWithOverflow -> @addWithOverflow
+  local +27:9 wraps: string (const)
+  callee +27:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +28:3 IRFunction.emit -> @IRFunction.emit
+  callee +30:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +31:9 wide: boolean (const)
+  local +32:9 lo64: string (const)
+  callee +32:31 IRFunction.emitValue -> @IRFunction.emitValue
+  local +33:9 hi64: string (const)
+  callee +33:31 IRFunction.emitValue -> @IRFunction.emitValue
+  local +34:9 src: string (const)
+  callee +34:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +35:9 below: string (const)
+  callee +35:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +36:9 past: string (const)
+  callee +36:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +36:54 loadLength -> @loadLength
+  local +37:9 outside: string (const)
+  callee +37:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +38:3 IRFunction.emit -> @IRFunction.emit
+  callee +40:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +41:9 count: string (const)
+  callee +42:7 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +43:7 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +44:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +44:71 IRFunction.emitValue -> @IRFunction.emitValue
+  local +46:9 dst: string (const)
+  callee +46:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +47:9 len: string (const)
+  callee +47:15 loadLength -> @loadLength
+  local +48:9 need: string (const)
+  callee +48:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +49:9 tooLong: string (const)
+  callee +49:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +50:3 IRFunction.emit -> @IRFunction.emit
+  callee +52:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +53:9 cap: string (const)
+  callee +53:15 loadHeaderField -> @loadHeaderField
+  local +54:9 short: string (const)
+  callee +54:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +55:3 IRFunction.emit -> @IRFunction.emit
+  callee +57:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +58:3 storeHeaderField -> @storeHeaderField
+  callee +59:3 IRFunction.emit -> @IRFunction.emit
+  callee +60:18 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +60:85 elementSize -> @elementSize
+  callee +62:3 IRFunction.emit -> @IRFunction.emit
+  callee +64:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +65:9 size: i32 (const)
+  callee +65:16 elementSize -> @elementSize
+  local +66:9 bytes: string (const)
+  callee +66:38 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +67:3 Emitter.declare -> @Emitter.declare
+  local +70:9 to: string (const)
+  callee +70:14 elementBytes -> @elementBytes
+  local +71:9 from: string (const)
+  callee +71:16 elementBytes -> @elementBytes
+  callee +72:3 IRFunction.emit -> @IRFunction.emit
+  callee +72:82 elementAccess -> @elementAccess
+  callee +73:3 storeHeaderField -> @storeHeaderField
+  callee +74:3 IRFunction.emit -> @IRFunction.emit
+  callee +76:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function elementBytes(emitter: Emitter, arr: string, elem: i32, idx: string): string -> @elementBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via slotType

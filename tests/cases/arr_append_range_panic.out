@@ -1,0 +1,5 @@
+30
+index out of range: 4 >= 4
+pastEnd exit 1
+attempt to multiply with overflow
+wraps exit 1

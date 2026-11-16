@@ -1169,6 +1169,8 @@ const pathMtu = (why, filesByProgram) =>
 /** The changelog words of the stage that adds atomic arrays to nish/threads. */
 const ATOMIC_ARRAYS = "AtomicI32Array and AtomicI64Array, n atomics in one buffer"
 /** The changelog words of the stage that gives HmacSha256 and Sha256 digestInto (#1542). */
+/** The release-note words for the push loop that copies an array range in one `memcpy`. */
+const APPEND_RANGE = "Copy a push loop over an array range in one memcpy"
 const HMAC_DIGEST_INTO = "HmacSha256.digest allocates only the tag, and digestInto allocates nothing"
 /** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
 const VECTOR_ACCESS_TBAA = "vector loads and stores in range"
@@ -1292,6 +1294,25 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // A `for` loop whose body is one `dst.push(src[P + j])` copies the range in
+  // one `memcpy` behind its guards, and keeps the loop as the fallback, so each
+  // module with such a loop gains the guard blocks and the memcpy declaration.
+  {
+    file: "rsa.ll",
+    changelog: APPEND_RANGE,
+    why: "std/crypto/rsa.ts appends a byte range with a push loop twice, so the module every importer of nish/crypto/rsa writes gains the guarded memcpy before each loop and renumbered values; no importer's own module moves",
+  },
+  ...[
+    "tests/link/crypto_bcrypt_batch/main.ts",
+    "tests/link/crypto_bcrypt_width/main.ts",
+    "tests/cases/arr_append_range.ts",
+    "tests/cases/arr_append_range_panic.ts",
+  ].map((program) => ({
+    program,
+    file: `${program.endsWith("main.ts") ? "main" : path.basename(program, ".ts")}.ll`,
+    changelog: APPEND_RANGE,
+    why: "the program has a push loop over an array range, so the candidate copies it in one guarded memcpy before the loop and the 0.41.0 seed does not",
+  })),
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
