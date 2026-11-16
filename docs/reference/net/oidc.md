@@ -418,7 +418,6 @@ class OidcKeySet
 | --- | --- |
 | `new OidcKeySet()` | An empty set, `OIDC_OK`; `oidcParseJwks` is the way to fill one. |
 | `error: i32` | `OIDC_OK`, or the reason the set was refused; a refused set holds no key. |
-| `hasKid: boolean[]` | Whether each key has a `kid`. |
 | `keys: JwtKey[]` | The keys taken, in the set's order. |
 | `kids: string[]` | Each key's `kid`; `""` for a key with none. |
 | `count(): i32` | The number of keys taken. |

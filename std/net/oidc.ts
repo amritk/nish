@@ -196,14 +196,11 @@ export class OidcKeySet {
   keys: JwtKey[]
   /** Each key's `kid`; `""` for a key with none. */
   kids: string[]
-  /** Whether each key has a `kid`. */
-  hasKid: boolean[]
 
   /** An empty set, `OIDC_OK`; `oidcParseJwks` is the way to fill one. */
   constructor() {
     this.keys = []
     this.kids = []
-    this.hasKid = []
   }
 
   /**
@@ -223,7 +220,7 @@ export class OidcKeySet {
    */
   find(kid: string): JwtKey | null {
     for (let i: i32 = 0; i < toI32(this.keys.length); i += 1) {
-      if (this.hasKid[i] && this.kids[i] === kid) {
+      if (kid !== "" && this.kids[i] === kid) {
         return this.keys[i]
       }
     }
@@ -350,19 +347,23 @@ class OidcFetched {
   }
 }
 
+/** Why `client`'s fetch failed: `OIDC_ERR_SIZE` past the bound, else `OIDC_ERR_FETCH`. */
+const oidcFetchError = (client: FetchSyncClient): i32 =>
+  client.error === HTTP_E_BODY_TOO_LARGE ? OIDC_ERR_SIZE : OIDC_ERR_FETCH
+
 /** One blocking GET of `url`, its body bounded at `limit` bytes; only a 200 is taken. */
 const oidcGet = (url: string, options: OidcOptions, limit: i32): OidcFetched => {
   const out: OidcFetched = new OidcFetched()
   const client: FetchSyncClient = new FetchSyncClient(oidcHttpOptions(options, limit))
   const res: HttpResponse | null = client.fetch(new HttpRequest("GET", url))
   if (res === null) {
-    out.error = client.error === HTTP_E_BODY_TOO_LARGE ? OIDC_ERR_SIZE : OIDC_ERR_FETCH
+    out.error = oidcFetchError(client)
   } else if (res.status !== OIDC_HTTP_OK) {
     out.error = OIDC_ERR_FETCH
   } else {
     const body: u8[] | null = res.body.readAll(limit)
     if (body === null) {
-      out.error = client.error === HTTP_E_BODY_TOO_LARGE ? OIDC_ERR_SIZE : OIDC_ERR_FETCH
+      out.error = oidcFetchError(client)
     } else {
       out.body = body
       out.cacheControl = res.header("cache-control")
@@ -528,7 +529,6 @@ class OidcEntry {
   key: JwtKey | null = null
   kid: string = ""
   error: i32 = 0
-  hasKid: boolean = false
 }
 
 /** One entry of `keys`, read under the rules `oidcParseJwks` states. */
@@ -566,7 +566,7 @@ const oidcEntry = (json: JsonDocument, o: JsonValue): OidcEntry => {
   }
   const typed: i32 = oidcAlgOfType(kty.text, crv.text)
   if (typed === 0) {
-    out.error = named === 0 ? OIDC_OK : OIDC_ERR_KEY
+    out.error = algName.present ? OIDC_ERR_KEY : OIDC_OK
     return out
   }
   let alg: i32 = typed
@@ -584,8 +584,7 @@ const oidcEntry = (json: JsonDocument, o: JsonValue): OidcEntry => {
     return out
   }
   out.key = key
-  out.kid = kid.text
-  out.hasKid = kid.present
+  out.kid = kid.present ? kid.text : ""
   return out
 }
 
@@ -644,13 +643,12 @@ export const oidcParseJwks = (doc: u8[]): OidcKeySet => {
     const key: JwtKey | null = entry.key
     if (key !== null) {
       for (let j: i32 = 0; j < set.count(); j += 1) {
-        if (set.hasKid[j] === entry.hasKid && set.kids[j] === entry.kid) {
+        if (set.kids[j] === entry.kid) {
           return oidcRefused(OIDC_ERR_DUPLICATE_KID)
         }
       }
       set.keys.push(key)
       set.kids.push(entry.kid)
-      set.hasKid.push(entry.hasKid)
     }
   }
   if (set.count() === 0) {
