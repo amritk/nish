@@ -185,7 +185,7 @@ The cases cover:
 
 - the grammar: basic and extended forms, the six-digit years and their range
   ends, `-000000`, leap seconds, annotations critical and not, and the
-  ambiguous bare times (`1230`, `0230`, `2021-12`);
+  ambiguous bare times (`1230`, `0229`, `2021-12`);
 - the ISO week at both ends of a year, including week 53 of 2020 and of
   year −2;
 - month-end constraining, days carried from time fields, and negative and zero

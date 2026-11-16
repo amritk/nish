@@ -1801,8 +1801,10 @@ export const plainTimeFromOrNull = (text: string): PlainTime | null => {
 /**
  * Whether `text`, before any annotation, reads as a year and month
  * (`2021-12`, `202112`) or a month and day (`12-14`, `1214`), which a time
- * without its `T` may not be. The test is the grammar's, not the calendar's:
- * `0230` is a month and day to it, though February has no 30th.
+ * without its `T` may not be. Only a month and day that exist count, in the
+ * leap year 1972 that `PlainMonthDay` takes for reference: `0229` is one, so
+ * it is refused as a time, and `0230` is not, so it reads as 02:30, as
+ * Node's `Temporal` reads it.
  */
 const temporalLooksLikeYearMonthOrMonthDay = (text: string): boolean => {
   const bracket: i32 = toI32(text.indexOf("["))
@@ -1825,7 +1827,7 @@ const temporalLooksLikeYearMonthOrMonthDay = (text: string): boolean => {
   if ((n === 5 && toI32(head.charCodeAt(2)) === 45) || (n === 4 && toI32(head.indexOf("-")) < 0)) {
     const m: i32 = temporalTwoDigits(head, 0)
     const d: i32 = temporalTwoDigits(head, n === 5 ? 3 : 2)
-    return m >= 1 && m <= 12 && d >= 1 && d <= 31
+    return m >= 1 && m <= 12 && d >= 1 && d <= temporalDaysInMonth(1972, m)
   }
   return false
 }

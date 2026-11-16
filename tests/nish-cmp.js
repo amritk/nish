@@ -1295,6 +1295,12 @@ const DECLARED = [
     changelog: "TC39 Temporal's dates, times, instants and durations",
     why: "`nish/temporal` is new in this release, so the 0.40.1 seed's standard library has no such module (WP64 S1)",
   },
+  {
+    program: "bench/temporal.ts",
+    file: "exit",
+    changelog: "TC39 Temporal's dates, times, instants and durations",
+    why: "the bench imports `nish/temporal`, which is new in this release, so the 0.40.1 seed refuses it (WP64 S1)",
+  },
   // WP28 C0: `nish.compat` and the `!nish.compat` metadata are new, so the
   // 0.39.0 seed refuses the key, reads no dependency's `nish` field, and
   // writes no dialect into the IR of a `--compat` build.

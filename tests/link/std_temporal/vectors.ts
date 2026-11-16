@@ -101,6 +101,7 @@ export const temporalVectors = (): string[] => [
   "time|2024-01-15T12:30[u-ca=japanese]",
   "time|1230",
   "time|1314",
+  "time|0229",
   "time|0230",
   "time|2021-12",
   "time|202112",

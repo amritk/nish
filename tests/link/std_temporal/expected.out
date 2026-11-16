@@ -84,7 +84,8 @@ time|12:30+01:00 => 12:30:00
 time|2024-01-15T12:30[u-ca=japanese] => 12:30:00
 time|1230 => RangeError
 time|1314 => 13:14:00
-time|0230 => RangeError
+time|0229 => RangeError
+time|0230 => 02:30:00
 time|2021-12 => RangeError
 time|202112 => RangeError
 time|12-14 => RangeError

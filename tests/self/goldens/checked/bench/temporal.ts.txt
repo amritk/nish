@@ -1068,7 +1068,7 @@ function plainTimeFromOrNull(text: string): PlainTime | null -> @nish.plainTimeF
 function temporalLooksLikeYearMonthOrMonthDay(text: string): boolean -> @nish.temporalLooksLikeYearMonthOrMonthDay
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: text
-  calls: nish.temporalTwoDigits nish_arena_mark nish_arena_release nish_panic_index nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.temporalDaysInMonth nish.temporalTwoDigits nish_arena_mark nish_arena_release nish_panic_index nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 bracket: i32 (const)
   local +1:9 head: string (const)
@@ -1083,6 +1083,7 @@ function temporalLooksLikeYearMonthOrMonthDay(text: string): boolean -> @nish.te
   callee +18:20 temporalTwoDigits -> @nish.temporalTwoDigits
   local +19:11 d: i32 (const)
   callee +19:20 temporalTwoDigits -> @nish.temporalTwoDigits
+  callee +20:48 temporalDaysInMonth -> @nish.temporalDaysInMonth
 function temporalTwoDigits(text: string, at: i32): i32 -> @nish.temporalTwoDigits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
