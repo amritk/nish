@@ -519,7 +519,12 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * drain of ring completions, the send backpressure and close of a slot, the fallback
  * to epoll whenever the probe or a set's open fails (NURING-20, NURING-22), and the room
  * left for epoll's events when ring slots fill the batch (NURING-18). It stays in this
- * unit because `nish_net_poll` and every socket call must branch on the handle kind.
+ * unit, and the ceiling is raised rather than split off as the rule above asks,
+ * because a unit of its own would save nothing: `nish_net_poll` and every socket call
+ * branch on the handle kind, so any program that uses `nish:net` links the slot layer
+ * from whichever file holds it, and the speed build's full LTO optimises across the
+ * units either way. The split would add a sixth budget and a cross-unit interface for
+ * no smaller program and no faster one.
  */
 const NET_TEXT_BUDGET = 11008
 /**
