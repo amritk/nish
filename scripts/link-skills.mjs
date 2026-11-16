@@ -69,7 +69,11 @@ const subdirectories = (dir) => {
   }
 }
 
-/** The qualifying packages under `node_modules`, one level and one under each `@scope`, sorted by name. */
+/**
+ * The qualifying packages under `node_modules`, one level and one under each
+ * `@scope`: `nish` first, so no library can shadow its skills, then the rest by
+ * name.
+ */
 const nishPackages = (nodeModules) => {
   const found = []
   for (const entry of subdirectories(nodeModules)) {
@@ -87,7 +91,8 @@ const nishPackages = (nodeModules) => {
     }
   }
   // Code-unit order, not the locale's, so every machine picks the same first claimant.
-  return found.sort((a, b) => Number(a.name > b.name) - Number(a.name < b.name))
+  const rank = (p) => (p.name === "nish" ? "" : p.name)
+  return found.sort((a, b) => Number(rank(a) > rank(b)) - Number(rank(a) < rank(b)))
 }
 
 /** The skills a package ships: each `skills/<name>/` that holds a `SKILL.md`. */
@@ -110,10 +115,45 @@ const targetOf = (link) => {
   return path.resolve(path.dirname(link), target)
 }
 
+/** The name a link is written under before it is renamed into place; see `tempName`. */
+const TEMP = /^\..+\.\d+\.tmp$/
+
+/** The temporary name for skill `name`'s link, unique to this process. */
+const tempName = (name) => `.${name}.${process.pid}.tmp`
+
 /** Whether `child` lies strictly inside `parent`. */
 const inside = (child, parent) => {
   const rel = path.relative(parent, child)
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
+}
+
+/**
+ * The project a copy of `nish` at `nishRoot` is installed in, searching from
+ * `start` upwards: `start` itself or the nearest ancestor holding a
+ * `package.json` whose `node_modules/nish` is that copy. In a workspace that is
+ * the root nish was hoisted to, not the member `start` names. Null when no
+ * directory above `start` installs this copy -- a checkout, or npx's cache.
+ *
+ * @param {string} start Where to start: npm's `INIT_CWD`, or the current directory.
+ * @param {string} nishRoot The root of the `nish` package asking.
+ * @returns {string | null} The project directory, or null.
+ */
+export const projectOf = (start, nishRoot) => {
+  const here = fs.realpathSync(nishRoot)
+  const from = path.resolve(start)
+  for (let dir = from; ; dir = path.dirname(dir)) {
+    const candidate = path.join(dir, "node_modules", "nish")
+    if (
+      (dir === from || fs.existsSync(path.join(dir, "package.json"))) &&
+      fs.existsSync(candidate) &&
+      fs.realpathSync(candidate) === here
+    ) {
+      return dir
+    }
+    if (path.dirname(dir) === dir) {
+      return null
+    }
+  }
 }
 
 /**
@@ -184,16 +224,21 @@ export const linkSkills = (project, { platform = process.platform } = {}) => {
     }
     const junction = platform === "win32"
     const target = junction ? claim.dir : path.relative(skills, claim.dir)
-    const temp = path.join(skills, `.${name}.${process.pid}.tmp`)
+    const temp = path.join(skills, tempName(name))
+    // win32's rename does not replace an existing directory entry, so the old
+    // link is removed first, and put back if the rename then fails.
+    const replaced = st !== null && junction ? fs.readlinkSync(entry) : null
     try {
       fs.symlinkSync(target, temp, junction ? "junction" : "dir")
-      if (st !== null && junction) {
-        // win32's rename does not replace an existing directory entry.
+      if (replaced !== null) {
         fs.unlinkSync(entry)
       }
       fs.renameSync(temp, entry)
     } catch (err) {
       fs.rmSync(temp, { force: true })
+      if (replaced !== null && lstatOrNull(entry) === null) {
+        fs.symlinkSync(replaced, entry, "junction")
+      }
       throw err
     }
     result.linked.push(name)
@@ -204,7 +249,10 @@ export const linkSkills = (project, { platform = process.platform } = {}) => {
     if (claims.has(name) || !owned(entry, lstatOrNull(entry))) {
       continue
     }
-    if (!fs.existsSync(targetOf(entry))) {
+    if (TEMP.test(name)) {
+      // A temporary link a killed run left behind: never a skill, whatever it points at.
+      fs.unlinkSync(entry)
+    } else if (!fs.existsSync(targetOf(entry))) {
       fs.unlinkSync(entry)
       result.pruned.push(name)
     }

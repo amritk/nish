@@ -41,9 +41,11 @@ library you add later is not linked on its own. Run
 npx nish-skills
 ```
 
-in the project. It finds the nearest directory above you holding a
-`package.json`, or takes one as its argument (`npx nish-skills path/to/app`),
-and links the skills of every installed Nish package: `nish` and each
+in the project. It finds the project the same way the install does: the
+directory whose `node_modules/nish` it is running from, which in a workspace is
+the root Nish was hoisted to even when you run it inside a member. Failing
+that, it takes the nearest directory above you holding a `package.json`. You
+can also name the project (`npx nish-skills path/to/app`). It links the skills of every installed Nish package: `nish` and each
 `node_modules/<pkg>` or `node_modules/@scope/<pkg>` with a `nish` condition. An
 ordinary npm package that happens to have a `skills/` directory is left out.
 
@@ -52,8 +54,9 @@ nothing. Run it after you add or remove a Nish library: a link whose package
 is gone is removed. It exits 0 when it ran, 1 when a write failed and 2 for a
 usage error or when it finds no project.
 
-When two packages ship a skill with the same name, the first by package name
-is linked and the other is reported as skipped.
+When two packages ship a skill with the same name, `nish` wins first, so no
+library can replace `writing-nish`; between libraries, the first by package
+name is linked and the other is reported as skipped.
 
 ## What belongs to you
 

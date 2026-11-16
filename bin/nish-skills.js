@@ -17,12 +17,15 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { linkSkills } from "../scripts/link-skills.mjs"
+import { linkSkills, projectOf } from "../scripts/link-skills.mjs"
 
 const USAGE = `Usage: nish-skills [dir]
 
 Link the agent skills of every installed Nish package into <dir>/.claude/skills/.
-<dir> defaults to the nearest ancestor of the current directory holding a package.json.
+<dir> defaults to the project this copy of nish is installed in: the current
+directory or the nearest ancestor holding a package.json whose node_modules/nish
+is this copy (a workspace's root, run from a member), else the nearest ancestor
+holding a package.json.
 
 A package ships a skill as skills/<name>/SKILL.md. Only links that resolve inside
 <dir>/node_modules/ are ever replaced or removed; anything else is left alone.
@@ -38,6 +41,9 @@ const usageError = (message) => {
   process.stderr.write(`nish-skills: ${message}\n${USAGE}`)
   process.exitCode = 2
 }
+
+/** This package's root: the directory holding `bin/` and `scripts/`. */
+const root = path.resolve(import.meta.dirname, "..")
 
 /** The nearest directory from `start` upwards that holds a `package.json`, or null. */
 const findProject = (start) => {
@@ -74,7 +80,9 @@ const run = (args) => {
     }
     project = path.resolve(args[0])
   } else {
-    project = findProject(process.cwd())
+    // The rule postinstall uses, so a workspace member links at the root nish
+    // was hoisted to; a copy installed nowhere above (npx's cache) falls back.
+    project = projectOf(process.cwd(), root) ?? findProject(process.cwd())
     if (project === null) {
       usageError("no package.json in this directory or any above it")
       return

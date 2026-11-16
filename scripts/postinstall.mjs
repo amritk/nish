@@ -139,32 +139,6 @@ const swap = async () => {
   return `bin/nish now execs the native compiler in ${name}`
 }
 
-/**
- * The project this install belongs to, or null when it belongs to none.
- *
- * `INIT_CWD` is where `npm` was run. This package's root has to be that
- * directory's own `node_modules/nish`, or the same path under an ancestor that
- * holds a `package.json` -- a workspace member's install, hoisted to the root.
- * `npx nish` installs into npm's cache with `INIT_CWD` set to the user's cwd,
- * and without this test the links would be planted into that cache instead.
- */
-const projectOf = (initCwd) => {
-  const here = fs.realpathSync(root)
-  for (let dir = path.resolve(initCwd); ; dir = path.dirname(dir)) {
-    const candidate = path.join(dir, "node_modules", "nish")
-    if (
-      (dir === path.resolve(initCwd) || fs.existsSync(path.join(dir, "package.json"))) &&
-      fs.existsSync(candidate) &&
-      fs.realpathSync(candidate) === here
-    ) {
-      return dir
-    }
-    if (path.dirname(dir) === dir) {
-      return null
-    }
-  }
-}
-
 /** Link the installed Nish packages' skills into the project, when every guard passes. */
 const skills = async () => {
   if (fs.existsSync(path.join(root, "src", "compile.ts"))) {
@@ -180,15 +154,15 @@ const skills = async () => {
   if (initCwd === "") {
     return "INIT_CWD is not set, so there is no project to link skills into"
   }
-  const project = projectOf(initCwd)
-  if (project === null) {
-    return "not installed in INIT_CWD's project, so no skills are linked"
-  }
   const linker = path.join(root, "scripts", "link-skills.mjs")
   if (!fs.existsSync(linker)) {
     return "scripts/link-skills.mjs is missing, so no skills are linked"
   }
-  const { linkSkills } = await import(pathToFileURL(linker).href)
+  const { linkSkills, projectOf } = await import(pathToFileURL(linker).href)
+  const project = projectOf(initCwd, root)
+  if (project === null) {
+    return "not installed in INIT_CWD's project, so no skills are linked"
+  }
   const r = linkSkills(project)
   return `skills: ${r.linked.length} linked, ${r.kept.length} unchanged, ${r.pruned.length} pruned, ${r.skipped.length} skipped in .claude/skills (npx nish-skills to relink)`
 }
