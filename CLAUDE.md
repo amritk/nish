@@ -133,6 +133,12 @@ private key or secret intermediate takes and gives it as `Secret<T>`
 before it returns — a volatile store `tests/run.js` pins under `-O2`
 ("nish:secret: the wipe survives opt -O2"). What a wipe cannot reach is
 recorded in its area's record.
+**Code that decides what a package may grant fails closed.** Anything that
+reads package-controlled input to decide whether to ask (skill frontmatter,
+names, file trees) uses an allowlist of what is inert and treats everything
+else, including whatever it cannot parse, as a grant. No length cap may drop
+a distinct grant from what the user is asked about (`scripts/link-skills.mjs`,
+SC-35 in [`docs/security/supply-chain.md`](docs/security/supply-chain.md)).
 Record format and review scope: [`docs/security/README.md`](docs/security/README.md#writing-a-record).
 
 ## Git & PR Guidelines
