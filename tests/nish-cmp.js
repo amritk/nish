@@ -7355,6 +7355,13 @@ const DECLARED = [
       "tests/link/std_json_typed/main.ts": ["keys.ll"],
     }
   ),
+  ...byFinding("restricted io_uring rings before the --sandbox filter")(
+    "`nish_sandbox` takes the number of rings to premake as a sixth `i32` argument, so its declaration and its call in `main` gain `i32 0` where the program cannot reach a ring listener (WP63 S3)",
+    {
+      "tests/cases/sandbox_hello.ts": ["sandbox_hello.ll"],
+      "docs/cookbook/sandbox.ts": ["sandbox.ll"],
+    }
+  ),
 ]
 
 /**
