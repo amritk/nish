@@ -11,7 +11,7 @@ Which gates CI runs and which stay by hand: the spec-first paragraph of
 
 ```bash
 bash scripts/fetch-vector.sh            # the vector .vector-version pins, in build/vector/
-build/vector/dist/vector --version      # vector 0.2.1
+build/vector/dist/vector --version      # vector 0.3.1
 ```
 
 `scripts/build-spec.sh` also needs kramdown-rfc and xml2rfc, at the versions
@@ -37,13 +37,16 @@ exists only once `scripts/fetch-vector.sh` has run, so `spec extract --check`
 and `spec check` need vector in `build/vector/`. CI's `node tests/run.js spec`
 does not read the schema.
 
-**Property tests run fewer samples than before 0.2.1.** The contract extracted
-before vector 0.2.1 set `"samples": 96` on each of hex's ten property clauses;
-the one extracted from `specs/hex.xml` sets none, so `test/spec/hex.ts` runs
-the emitter's default, 26 to 39 samples per property (29 for P-ENC-LEN, 27 for
-P-CANONICAL). This is a vector 0.2.1 limit, not a spec error: a `ts-property`
-block cannot set `samples`, and the contract is generated, so it is not edited
-to restore them.
+**What a spec declares.** With vector 0.3.1, the pin in `.vector-version`, a
+`ts-property` block sets its sample count with `// samples: N` on its second
+line (hex's ten properties set 96, as its hand-written contract did); an export
+no clause tests is declared with an `Out of scope: <export>, <reason>`
+paragraph, which extracts to `outOfScope`; and a vector run many times over is
+declared with an `Iterate:` paragraph after its table. An iterated vector
+marked `slow` is emitted skipped unless `spec emit` is given `--slow`, and the
+committed tests are emitted without it: run one by hand with `spec run --slow`;
+`node tests/run.js spec` prints a SKIP line for each clause a test skipped.
+The syntax: vector's `docs/guide/guides/writing-a-spec.md`, in `build/vector/`.
 
 A spec that cites a reference not yet in `.refcache/` fails to build: run
 `bash scripts/build-spec.sh --fetch specs/<name>.md` once and commit the new
