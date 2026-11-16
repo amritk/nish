@@ -45,7 +45,6 @@ import {
   JWT_ALG_RS256,
   JWT_ALG_RS384,
   JWT_ALG_RS512,
-  JWT_ERR_FORMAT,
   JWT_ERR_SIZE,
   JWT_MAX_TOKEN,
   JwtKey,
@@ -130,8 +129,6 @@ export const OIDC_DEFAULT_TIMEOUT_MS: i32 = 10000
 
 /** The path discovery appends to the issuer (OpenID Connect Discovery 1.0 §4). */
 const OIDC_WELL_KNOWN: string = "/.well-known/openid-configuration"
-/** The most digits of a `max-age` read; a longer value is past `OIDC_MAX_LIFETIME` anyway. */
-const OIDC_MAX_AGE_DIGITS: i32 = 10
 /** The bytes a `kid` may hold: printable ASCII, space to tilde. */
 const OIDC_KID_LOW: i32 = 32
 const OIDC_KID_HIGH: i32 = 126
@@ -670,7 +667,7 @@ const oidcMaxAge = (directive: string): i64 => {
   }
   const value: string = trim(directive.slice(eq + 1, toI32(directive.length)))
   const n: i32 = toI32(value.length)
-  if (n < 1 || n > OIDC_MAX_AGE_DIGITS) {
+  if (n < 1) {
     return toI64(-1)
   }
   let age: i64 = toI64(0)
@@ -679,7 +676,10 @@ const oidcMaxAge = (directive: string): i64 => {
     if (c < OIDC_CH_0 || c > OIDC_CH_9) {
       return toI64(-1)
     }
-    age = age * toI64(10) + toI64(c - OIDC_CH_0)
+    // Saturate rather than overflow (RFC 9111 §1.2.2): the clamp caps it anyway.
+    if (age <= OIDC_MAX_LIFETIME) {
+      age = age * toI64(10) + toI64(c - OIDC_CH_0)
+    }
   }
   return age
 }
@@ -882,7 +882,7 @@ export class OidcKeys {
    * The token's bytes in the verifier's buffer, for `oidcVerify`.
    *
    * @param token The compact token.
-   * @returns Its length, or a `JWT_ERR_*` when it is too long or not ASCII.
+   * @returns Its length, or `JWT_ERR_SIZE` when it is too long.
    */
   load(token: string): i32 {
     const n: i32 = toI32(token.length)
@@ -890,11 +890,7 @@ export class OidcKeys {
       return JWT_ERR_SIZE
     }
     for (let i: i32 = 0; i < n; i += 1) {
-      const c: i32 = token.charCodeAt(i)
-      if (c > 127) {
-        return JWT_ERR_FORMAT
-      }
-      this.text[i] = toU8(c)
+      this.text[i] = toU8(token.charCodeAt(i))
     }
     return n
   }
