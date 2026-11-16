@@ -159,7 +159,7 @@ nish/crypto/hkdf are listed here, each with the reason it is not tested:
   take a class and output offsets, which a ts-interface block cannot declare.
 - hkdfExpandLabelSha256Held, hkdfExpandLabelSha384Held,
   hkdfExpandLabelHeldInto: Expand-Label of a held Secret PRK, written in place
-  into a Secret or a caller buffer; likewise RFC 8446, and they return void.
+  into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869.
 - HkdfScratch: a class holding reusable buffers, not a function; the profile
   declares functions only.
 

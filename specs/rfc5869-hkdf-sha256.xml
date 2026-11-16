@@ -155,7 +155,7 @@ take a class and output offsets, which a ts-interface block cannot declare.</t>
         <li>
           <t>hkdfExpandLabelSha256Held, hkdfExpandLabelSha384Held,
 hkdfExpandLabelHeldInto: Expand-Label of a held Secret PRK, written in place
-into a Secret or a caller buffer; likewise RFC 8446, and they return void.</t>
+into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869.</t>
         </li>
         <li>
           <t>HkdfScratch: a class holding reusable buffers, not a function; the profile
@@ -359,29 +359,29 @@ I8gWfp82VMa2rsYeRMdgWWbbm3z4rJXRYJcud7Kq5WzT71eg74aj4VsCn9s8
 LcmLKSYCzvkcaMXrJCGGLWd5tr7Wvyc6p/gQOS/F7AW5DD4u0uslL9e5ostJ
 hAV1rGLOi6K6aao6zCxJcFAs6LdBKdKU71xUVAW0caJUWE23TU/46VzN5RO+
 0q/2XULDFQA7+GuWn+FdHbpMdxQEREm3m0sKVUEgaUx4M6uisG2EXoCI3qvb
-tKiOEuTSJt8V3YwCnCW7yVJJNm0h2N0gNcvm+iY0V+uCxyCHGvomFJoUeFGl
-0Cbua6yK+2zSlK1vhqbEPdXtcWEYn9hAsk/shOrYJ8IBL5QeqaroJzbRd7P4
-MqW7d/bJ+NTGH/2x+bHzde8LlrBex6LDJsT89fETIXo40zQt0zYd0zU90zcD
-MzQjk5uxKfRVDM2In//36K+krLrYMYMgMCPHt4WtHFsmppTCwadwgzjmvhOZ
-sS8CJ449M4mEY9m2EnAXl4GwY0d5JGpzPdPaOjd/2uooYeJOR0lrmltrvOvu
-XulUh5fKbRTxUp+9G6ioWdlAtVW9/3/MqRoA6vHNxErsxEncxEv8JEjCJGqh
-6XnJXLvCrzoLOCK2vQT/OBfSC3hkuo6b+K40sYnE5ra0pYlRkVjc467wZGza
-0vOVEHiIE8c1zcA2Q+nFYRhYITCpMZ1une1aOz3bvwPt1rFwG1ky4rC2qobY
-/mI0+qZv+bbv+K7v+b4f+FDmcx/I+tJXAMsMrMAOnMANvMCHR8IgCngQByKQ
-gQKUZmiFdgj6IXPDIAzDKORhHIpQhgpAm5EV2ZETuZEX+VEQhVEU8SiORCQj
-FSXc5Ba3ucNdQOrzgIc84pzHXHDJFU82OfFk1pjSVHCwaVmWbTmWa3mWbwF9
-K7K4FVvCkpaC+00bAWI7tmt7tm8HdmhH8GiM4JK2QnCYjuXYjuO4juf4TuCE
-TuRwJ3aEIx2F0DFdy7URD67rub4buKEbudyNXeFKV7nJTh4SgGEovNBzHN/i
-gNh0RSRU7Hix6wmVBD7McRFffoCNu9yKSIOwvETYrvvMPLR/J1jsr8hD+0t5
-+AfN2eQh6MqKkZqxG3uxHwdxGEcxj+NYxDJWcSKwRNjCoWwSSG0RQgsXsRBC
-CiUSaUoLKehIV3rSl4EMZSS5jKWQ9H81EmUqS4ErlKs85atAhSpSXMVKKKmU
-Sh7jgYQnUJxgcZJUnBDucEJsWcqJQilC07EDbokQQR8ADGSJGyEcEtOylQQ3
-uCrhMuQIT6IDK+IJjwLMM12PR2RHECLsAkvEriV8T+GNMrF/iPWAn7ATM4pD
-BzmGwIsQ/46MMVs4JpC3gkgJR4WBsFxhWtITFugG7GTJMPg6jnle2HyJY8IN
-xzhPcwxdGv+xkmZFKrFdYCRAQ7HlB4kDcCzpg5bDWCaRD0cEgc8TGSNrAy4A
-CkVR5AgRm0+mUqu5Nt/FxvkdbJyvSCnnCyn1R81qMYJ2v4KFkrsqCDzu+Y6w
-wiRACoamjZR1hMcdKw65ZSWe8JSyQh1SYDPlJQ7qaIjUiqRtWk5EFdCNkeqR
-L8IvRBc9bN21/jt4Pq+e/QvKoWaYFCYAAA==
+tKiOEuTSyofbHttCrrtBaJbN9Q1ortYFj0EKNeRNCDSh/6JKnU281xgV91mk
+qVrfCE2Jc6pb48IwPrGBZJ/YCdWvT2Q/Xig9UlXPT2yi72TxZUp37uyT8amN
+P/pj82Pn694XLGG9jkWHTIj56+MnQfRupmlapm06pmt6pm8GZmhGJjdjU+gr
+GJoRP//v0V9JWXWhYwZBYEaObwtbObZMTCmFg0/hBnHMfScyY18EThx7ZhIJ
+x7JtJeAmLgNhx47ySNTmWqa1dV7+tNVJwsSdTpLWNLfVeNfdvcqpDi2V2yjS
+pT5zN1BRk7KBaqtq//+YUxV+6u3NxErsxEncxEv8JEjCJGqh2XnJXLvCrzoD
+OCK2vQT/OBfSC3hkuo6b+K40sYnE5ra0pYlRkVjc467wZGza0vOVEHiIE8c1
+zcA2Q+nFYRhYITCpMZ1unelaO73avwPt1nFwG1ky4rC2qobY/mI0+qZv+bbv
++K7v+b4f+FDmcx/I+tJXAMsMrMAOnMANvMCHR8IgCngQByKQgQKUZmiFdgja
+IXPDIAzDKORhHIpQhgpAm5EV2ZETuZEX+VEQhVEU8SiORCQjFSXc5Ba3ucNd
+QOrzgIc84pzHXHDJFU82OfFk1pjSVHCwaVmWbTmWa3mWbwF9K7K4FVvCkpaC
++00bAWI7tmt7tm8HdmhH8GiM4JK2QnCYjuXYjuO4juf4TuCETuRwJ3aEIx2F
+0DFdy7URD67rub4buKEbudyNXeFKV7nJTh4SgGEovNBzHN/igNh0RSRU7Hix
+6wmVBD7McRFffoCNu9yKSIOwvETYrvvMPLR/J1jsr8hD+0t5+AfN2eQh6MqK
+kZqxG3uxHwdxGEcxj+NYxDJWcSKwRNjCoWwSSG0RQgsXsRBCCiUSaUoLKehI
+V3rSl4EMZSS5jKWQ9H80EmUqS4ErlKs85atAhSpSXMVKKKmUSh7jgYQnUJxg
+cZJUnBDucEJsWcqJQilC07EDbokQQR8ADGSJGyEcEtOylQQ3uCrhMuQIT6ID
+K+IJjwLMM12PR2RHECLsAkvEriV8T+GNMrF/iPWAn7ATM4pDBzmGwIsQ/46M
+MVs4JpC3gkgJR4WBsFxhWtITFugG7GTJMPg6jnle2HyJY8INxzhPcwxdFv+x
+kmZFKrFdYCRAQ7HlB4kDcCzpg5bDWCaRD0cEgc8TGSNrAy4ACkVR5AgRm0+m
+Uqu5Lt/FxvkdbJyvSCnnCyn1R81qMYJ2v4KFkrsqCDzu+Y6wwiRACoamjZR1
+hMcdKw65ZSWe8JSyQh1SYDPlJQ7qaIjUiqRtWk5EFdCNkeqRL8IvRBc9bN2x
+/jt4Pq+e/QswOgc5DCYAAA==
 
 -->
 
