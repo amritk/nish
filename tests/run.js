@@ -12146,6 +12146,24 @@ if (dealtHere("unboundedPass")) {
       shown(r)
     )
   }
+  // The callee summary's edges, one loop each: a recursion `a ⇄ b` warns at
+  // both loops whichever is checked first, a constructor that dispatches on
+  // its parameter is followed, and a comparison against a `let` or a message
+  // built for a `panic` in the next statement is not charged.
+  const callees = build("callees", path.join(root, "tests", "link", "nl9018_callees", "callees.ts"), [])
+  const calleeHits = nl9018Lines(callees.stderr)
+  check(
+    "nl9018: callees.ts warns at the two loops of a recursion and at a constructor's dispatch, and nowhere else",
+    callees.status === 0 &&
+      calleeHits.length === 3 &&
+      calleeHits[0].includes("callees.ts:54:3: ") &&
+      calleeHits[0].includes("what `a` leaves behind on line 56 (the string built on line 37, in `c`) piles up") &&
+      calleeHits[1].includes("callees.ts:61:3: ") &&
+      calleeHits[1].includes("what `b` leaves behind on line 63 (the string built on line 37, in `c`) piles up") &&
+      calleeHits[2].includes("callees.ts:85:3: ") &&
+      calleeHits[2].includes("(the string built on line 72, in `Handler.constructor`) piles up"),
+    shown(callees)
+  )
   const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",

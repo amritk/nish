@@ -904,7 +904,9 @@ const settle = (drops: CalleeDrops, mark: i32, to: i32): void => {
     drops.state.set(drops.deferred[k], to)
     k = k + 1
   }
-  drops.deferred = drops.deferred.slice(0, mark)
+  while (drops.deferred.length > mark) {
+    drops.deferred.pop()
+  }
 }
 
 const findDrop = (drops: CalleeDrops, sig: FunctionSig): DropOrigin | null => {
