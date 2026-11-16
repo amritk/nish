@@ -42,9 +42,15 @@ if [ -z "$force" ] && [ -x "$bin" ] && [ -x "$dir/.z3/z3" ] \
   exit 0
 fi
 
-rm -rf "$dir"
+# Clone beside the old build and swap it in only once the clone succeeded, so
+# a failed clone (offline, a missing tag) leaves the previous vector in place.
 mkdir -p build
-git clone --quiet --depth 1 --branch "v$version" https://github.com/amritk/vector "$dir"
+tmp="$dir.tmp.$$"
+trap 'rm -rf "$tmp"' EXIT
+rm -rf "$tmp"
+git clone --quiet --depth 1 --branch "v$version" https://github.com/amritk/vector "$tmp"
+rm -rf "$dir"
+mv "$tmp" "$dir"
 nish=$(tr -d ' \t\r\n' < "$dir/.nish-version")
 if [ -x build/seed/bin/nish ] && [ "$(build/seed/bin/nish --version)" = "nish $nish" ]; then
   mkdir -p "$dir/.nish"

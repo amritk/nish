@@ -38946,7 +38946,7 @@ if (!only || "spec".includes(only)) {
       continue
     }
     if (!HAS_CLANG) {
-      skip(`spec: ${rel}: no clang to link it`)
+      skip(`spec: ${rel}: ${stdRel} is there, but this environment has no clang to link the test`)
       continue
     }
     const dir = path.join(buildDir, "spec", name)
