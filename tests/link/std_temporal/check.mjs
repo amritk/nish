@@ -110,9 +110,41 @@ const answer = (T, op, a, b) => {
 }
 
 /**
+ * The cases where the engine's `Temporal` is known to answer otherwise than
+ * this module, each with the engine's answer and why. A case here is held to
+ * that answer instead of expected.out's, so when the engine changes (a fix
+ * in V8, or Node moving to another parser) the check fails and names it, and
+ * the entry is reconsidered rather than left behind.
+ */
+const ENGINE_DIFFERENCES = new Map([
+  [
+    "date|2024-01-15[foo=x]",
+    {
+      engine: "RangeError",
+      why: "the grammar's AnnotationValueComponent is one or more letters or digits, and ixdtf (the parser temporal_rs uses) accepts `x`; Node 26.13.1 refuses it",
+    },
+  ],
+  [
+    "date|2024-01-15[foo=a--b]",
+    {
+      engine: "2024-01-15",
+      why: "the grammar joins AnnotationValueComponents with single `-`, and ixdtf refuses `a--b`; Node 26.13.1 accepts it",
+    },
+  ],
+  [
+    "date|2024-01-15[u-ca=japanese]",
+    {
+      engine: "2024-01-15[u-ca=japanese]",
+      why: "nish/temporal has only the iso8601 calendar (docs/wp64-temporal.md §8); Node has ECMA-402's calendars",
+    },
+  ],
+])
+
+/**
  * The cases whose `Temporal` answer differs from expected.out, as
- * `case: Temporal says X, expected.out says Y`; empty when every one agrees.
- * `T` is the engine's `Temporal`.
+ * `case: Temporal says X, expected.out says Y`; empty when every one agrees,
+ * the known differences above by the engine's recorded answer. `T` is the
+ * engine's `Temporal`.
  */
 export const judge = (T) => {
   const want = fs
@@ -124,6 +156,11 @@ export const judge = (T) => {
   if (want.length !== all.length) {
     problems.push(`vectors.ts has ${all.length} cases and expected.out ${want.length} lines`)
   }
+  for (const c of ENGINE_DIFFERENCES.keys()) {
+    if (!all.includes(c)) {
+      problems.push(`${c}: ENGINE_DIFFERENCES names a case vectors.ts no longer has`)
+    }
+  }
   all.forEach((c, i) => {
     const [op, a = "", b = ""] = c.split("|")
     let got
@@ -131,6 +168,15 @@ export const judge = (T) => {
       got = answer(T, op, a, b)
     } catch (e) {
       got = `threw ${e}`
+    }
+    const known = ENGINE_DIFFERENCES.get(c)
+    if (known !== undefined) {
+      if (got !== known.engine) {
+        problems.push(
+          `${c}: Temporal says ${got}, not the ${known.engine} ENGINE_DIFFERENCES records (${known.why}); reconsider the entry`
+        )
+      }
+      return
     }
     const line = `${c} => ${got}`
     if (want[i] !== line) {

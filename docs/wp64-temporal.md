@@ -239,6 +239,11 @@ These are all recorded on the guide page.
   not Temporal's.
 - **Methods take only an object.** `add`, `until` and the rest take a
   `Duration` or a `Plain*`, not a string or a property bag.
+- **Annotation values follow the grammar,** as ixdtf (temporal_rs's parser)
+  reads it: `[foo=x]` is accepted and `[foo=a--b]` refused. Node 26.13.1
+  answers the other way on both. `tests/link/std_temporal/check.mjs` records
+  the two as known engine differences, held to Node's answers, so a change in
+  either is noticed.
 - **Errors panic.** A `RangeError` is a panic, which a program cannot catch.
   The `...OrNull` parses are the way to handle bad input.
 
