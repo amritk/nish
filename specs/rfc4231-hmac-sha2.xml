@@ -18,17 +18,18 @@
       </address>
     </author>
     <date year="2026" month="November" day="16"/>
+    <keyword>vector-main-RFC4231</keyword>
     <abstract>
-      <?line 29?>
+      <?line 31?>
 
-<t>Module: std/crypto/hmac.ts (nish/crypto/hmac). HMAC (<xref target="HMAC"/>)
-instantiated with SHA-256, SHA-384 and SHA-512 as <xref target="RFC4231"/> defines it,
-held to every RFC 4231 test vector, with its tag checks held to accept the
-right tag and refuse a tampered one.</t>
+<t>A profile of RFC 4231 for nish/crypto/hmac (std/crypto/hmac.ts): HMAC
+(<xref target="HMAC"/>) instantiated with SHA-256, SHA-384 and SHA-512. Every requirement
+quotes RFC 4231, the main source, and every RFC 4231 test vector for those
+three hash functions is held here.</t>
     </abstract>
   </front>
   <middle>
-    <?line 36?>
+    <?line 38?>
 
 <section anchor="introduction">
       <name>Introduction</name>
@@ -43,7 +44,19 @@ appear in all capitals, as shown here.</t>
 HMAC-SHA-512 over a key and a message, each as <tt>u8[]</tt>, and a verify function
 for each that compares a tag with the one it computes. The construction is
 <xref target="HMAC"/>'s; the properties compare it with nish/crypto/sha256 and
-nish/crypto/sha512, the hash functions it is built on.</t>
+nish/crypto/sha512, the hash functions it is built on. RFC 4231 also
+defines HMAC-SHA-224, which nish/crypto/hmac does not export.</t>
+      <t>RFC 4231 has no binding sentence in the sense of BCP 14, so there is nothing
+to exclude. Two properties of the implementation lie
+outside what a functional test can observe and are held by nish's own tests
+instead. The verify functions compare through timingSafeEqual, whose loop
+tests/cases/ct_asm_k1_ct.ts holds to no branch on the data at 32 and 48
+bytes after clang -O2 (docs/security/ct-verification.md, and
+docs/security/crypto-k1.md K1-8 for the verify functions themselves). The
+key blocks, hashed key, inner digest and hashers are wiped before return,
+held under -O2 by tests/wipes/crypto.js ("crypto_hmac crypto_hkdf: the wipes
+survive -O2"); the caller's own key array is recorded in
+docs/security/crypto-k1.md (K1-7) and docs/security/secret.md.</t>
       <t>The module's other exports are out of scope here. hmacSha256Secret,
 hmacSha384Secret and hmacSha512Secret take the key as a <tt>Secret&lt;u8[]&gt;</tt>,
 which a property cannot construct; they compute the same function as the
@@ -78,117 +91,111 @@ export const sha512 = (data: u8[]): u8[]
         <t>HMAC-SHA-256 is the realization of the HMAC message authentication code using the SHA-256 hash function
 <xref section="1" sectionFormat="of" target="RFC4231"/></t>
       </blockquote>
+      <t>Note: the properties below hold hmacSha256 to the HMAC construction of
+<xref target="HMAC"/> over nish/crypto/sha256 (block length 64 bytes, ipad 0x36, opad
+0x5c, a key longer than the block hashed first) and to a 32-byte tag, and
+hmacSha256Verify to accept that tag and refuse it with any one bit flipped.</t>
+      <sourcecode type="ts-property"><![CDATA[
+// P-CONSTRUCTION-256 covers R-HMAC-SHA256 — HMAC-SHA-256 of a key of at most 64 bytes is the RFC 2104 construction over SHA-256
+forall (key: u8[] /* 0..64 */, text: u8[] /* 0..200 */) => hmacSha256(key, text) === sha256(xor(key.concat(zeros(64 - key.length)), fill(92, 64)).concat(sha256(xor(key.concat(zeros(64 - key.length)), fill(54, 64)).concat(text))))
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-LONG-KEY-256 covers R-HMAC-SHA256 — a key longer than 64 bytes gives the tag of its SHA-256 hash
+forall (key: u8[] /* 65..300 */, text: u8[] /* 0..100 */) => hmacSha256(key, text) === hmacSha256(sha256(key), text)
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-VERIFY-ACCEPT-256 covers R-HMAC-SHA256 — hmacSha256Verify accepts the HMAC-SHA-256 tag
+forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha256Verify(key, text, hmacSha256(key, text))
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-VERIFY-REJECT-256 covers R-HMAC-SHA256 — hmacSha256Verify refuses the HMAC-SHA-256 tag with any one bit flipped
+forall (key: u8[] /* 0..100 */, text: u8[] /* 0..100 */, bit: i32 /* 0..255 */) => !hmacSha256Verify(key, text, flipBit(hmacSha256(key, text), bit))
+]]></sourcecode>
       <blockquote anchor="R-HMAC-SHA384">
         <t>HMAC-SHA-384 is the realization of the HMAC message authentication code using the SHA-384 hash function
 <xref section="1" sectionFormat="of" target="RFC4231"/></t>
       </blockquote>
+      <t>Note: as for SHA-256, with SHA-384, a block length of 128 bytes and a
+48-byte tag.</t>
+      <sourcecode type="ts-property"><![CDATA[
+// P-CONSTRUCTION-384 covers R-HMAC-SHA384 — HMAC-SHA-384 of a key of at most 128 bytes is the RFC 2104 construction over SHA-384
+forall (key: u8[] /* 0..128 */, text: u8[] /* 0..300 */) => hmacSha384(key, text) === sha384(xor(key.concat(zeros(128 - key.length)), fill(92, 128)).concat(sha384(xor(key.concat(zeros(128 - key.length)), fill(54, 128)).concat(text))))
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-LONG-KEY-384 covers R-HMAC-SHA384 — a key longer than 128 bytes gives the tag of its SHA-384 hash
+forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha384(key, text) === hmacSha384(sha384(key), text)
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-VERIFY-ACCEPT-384 covers R-HMAC-SHA384 — hmacSha384Verify accepts the HMAC-SHA-384 tag
+forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha384Verify(key, text, hmacSha384(key, text))
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-VERIFY-REJECT-384 covers R-HMAC-SHA384 — hmacSha384Verify refuses the HMAC-SHA-384 tag with any one bit flipped
+forall (key: u8[] /* 0..150 */, text: u8[] /* 0..100 */, bit: i32 /* 0..383 */) => !hmacSha384Verify(key, text, flipBit(hmacSha384(key, text), bit))
+]]></sourcecode>
       <blockquote anchor="R-HMAC-SHA512">
         <t>HMAC-SHA-512 is the realization of the HMAC message authentication code using the SHA-512 hash function
 <xref section="1" sectionFormat="of" target="RFC4231"/></t>
       </blockquote>
-      <section anchor="the-construction">
-        <name>The Construction</name>
-        <t anchor="R-CONSTRUCTION">The tag <bcp14>MUST</bcp14> be H((K0 XOR opad) || H((K0 XOR ipad) || text)) as
-<xref target="HMAC"/> defines it, where H is the hash function, B is its block length
-(64 bytes for SHA-256, 128 for SHA-384 and SHA-512), K0 is the key padded
-with zero bytes to B bytes, ipad is B bytes of 0x36 and opad is B bytes of
-0x5c.</t>
-        <sourcecode type="ts-property"><![CDATA[
-// P-CONSTRUCTION-256 covers R-CONSTRUCTION, R-HMAC-SHA256 — HMAC-SHA-256 of a key of at most 64 bytes is the RFC 2104 construction over SHA-256
-forall (key: u8[] /* 0..64 */, text: u8[] /* 0..200 */) => hmacSha256(key, text) === sha256(xor(key.concat(zeros(64 - key.length)), fill(92, 64)).concat(sha256(xor(key.concat(zeros(64 - key.length)), fill(54, 64)).concat(text))))
-]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
-// P-CONSTRUCTION-384 covers R-CONSTRUCTION, R-HMAC-SHA384 — HMAC-SHA-384 of a key of at most 128 bytes is the RFC 2104 construction over SHA-384
-forall (key: u8[] /* 0..128 */, text: u8[] /* 0..300 */) => hmacSha384(key, text) === sha384(xor(key.concat(zeros(128 - key.length)), fill(92, 128)).concat(sha384(xor(key.concat(zeros(128 - key.length)), fill(54, 128)).concat(text))))
-]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
-// P-CONSTRUCTION-512 covers R-CONSTRUCTION, R-HMAC-SHA512 — HMAC-SHA-512 of a key of at most 128 bytes is the RFC 2104 construction over SHA-512
+      <t>Note: as for SHA-256, with SHA-512, a block length of 128 bytes and a
+64-byte tag.</t>
+      <sourcecode type="ts-property"><![CDATA[
+// P-CONSTRUCTION-512 covers R-HMAC-SHA512 — HMAC-SHA-512 of a key of at most 128 bytes is the RFC 2104 construction over SHA-512
 forall (key: u8[] /* 0..128 */, text: u8[] /* 0..300 */) => hmacSha512(key, text) === sha512(xor(key.concat(zeros(128 - key.length)), fill(92, 128)).concat(sha512(xor(key.concat(zeros(128 - key.length)), fill(54, 128)).concat(text))))
 ]]></sourcecode>
-      </section>
-      <section anchor="long-keys">
-        <name>Long Keys</name>
-        <t anchor="R-LONG-KEY">A key longer than B bytes <bcp14>MUST</bcp14> first be hashed with H, and the B-byte block
-padded from that hash used in its place, as <xref target="HMAC"/> defines it.</t>
-        <sourcecode type="ts-property"><![CDATA[
-// P-LONG-KEY-256 covers R-LONG-KEY — a key longer than 64 bytes gives the tag of its SHA-256 hash
-forall (key: u8[] /* 65..300 */, text: u8[] /* 0..100 */) => hmacSha256(key, text) === hmacSha256(sha256(key), text)
-]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
-// P-LONG-KEY-384 covers R-LONG-KEY — a key longer than 128 bytes gives the tag of its SHA-384 hash
-forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha384(key, text) === hmacSha384(sha384(key), text)
-]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
-// P-LONG-KEY-512 covers R-LONG-KEY — a key longer than 128 bytes gives the tag of its SHA-512 hash
+      <sourcecode type="ts-property"><![CDATA[
+// P-LONG-KEY-512 covers R-HMAC-SHA512 — a key longer than 128 bytes gives the tag of its SHA-512 hash
 forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha512(key, text) === hmacSha512(sha512(key), text)
 ]]></sourcecode>
-      </section>
-      <section anchor="tag-length">
-        <name>Tag Length</name>
-        <t anchor="R-TAG-LEN">hmacSha256, hmacSha384 and hmacSha512 <bcp14>MUST</bcp14> return the whole hash output:
-32, 48 and 64 bytes.</t>
-        <sourcecode type="ts-property"><![CDATA[
-// P-TAG-LEN covers R-TAG-LEN — the tags are 32, 48 and 64 bytes for any key and message
+      <sourcecode type="ts-property"><![CDATA[
+// P-VERIFY-ACCEPT-512 covers R-HMAC-SHA512 — hmacSha512Verify accepts the HMAC-SHA-512 tag
+forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha512Verify(key, text, hmacSha512(key, text))
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-VERIFY-REJECT-512 covers R-HMAC-SHA512 — hmacSha512Verify refuses the HMAC-SHA-512 tag with any one bit flipped
+forall (key: u8[] /* 0..150 */, text: u8[] /* 0..100 */, bit: i32 /* 0..511 */) => !hmacSha512Verify(key, text, flipBit(hmacSha512(key, text), bit))
+]]></sourcecode>
+      <sourcecode type="ts-property"><![CDATA[
+// P-TAG-LEN covers R-HMAC-SHA256, R-HMAC-SHA384, R-HMAC-SHA512 — the tags are 32, 48 and 64 bytes, the hash output, for any key and message
 forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha256(key, text).length === 32 && hmacSha384(key, text).length === 48 && hmacSha512(key, text).length === 64
 ]]></sourcecode>
-        <blockquote anchor="R-TRUNC">
-          <t>Test with a truncation of output to 128 bits.
+    </section>
+    <section anchor="the-test-cases">
+      <name>The Test Cases</name>
+      <blockquote anchor="R-SHORT-KEY">
+        <t>Test with a key shorter than the length of the HMAC output.
+<xref section="4.3" sectionFormat="of" target="RFC4231"/></t>
+      </blockquote>
+      <blockquote anchor="R-KEY-DATA-64">
+        <t>Test with a combined length of key and data that is larger than 64 bytes (= block-size of SHA-224 and SHA-256).
+<xref section="4.4" sectionFormat="of" target="RFC4231"/></t>
+      </blockquote>
+      <blockquote anchor="R-TRUNC">
+        <t>Test with a truncation of output to 128 bits.
 <xref section="4.6" sectionFormat="of" target="RFC4231"/></t>
-        </blockquote>
-        <t>Note: the functions return the whole tag, so test case 5 (<xref section="4.6" sectionFormat="of" target="RFC4231"/>: a key of 20 bytes of 0x0c, the data "Test With Truncation") is
+      </blockquote>
+      <t>Note: the functions return the whole tag, so test case 5 (<xref section="4.6" sectionFormat="of" target="RFC4231"/>: a key of 20 bytes of 0x0c, the data "Test With Truncation") is
 written as a slice of it, its first 16 bytes.</t>
-        <sourcecode type="ts-property"><![CDATA[
+      <sourcecode type="ts-property"><![CDATA[
 // P-TRUNC-256 covers R-TRUNC, R-HMAC-SHA256 — RFC 4231 test case 5: the first 128 bits of HMAC-SHA-256 are a3b6167473100ee06e0c796c2955552b
 forall (n: i32 /* 16..16 */) => hmacSha256(fill(12, 20), utf8("Test With Truncation")).slice(0, n) === [a3 b6 16 74 73 10 0e e0 6e 0c 79 6c 29 55 55 2b]
 ]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
+      <sourcecode type="ts-property"><![CDATA[
 // P-TRUNC-384 covers R-TRUNC, R-HMAC-SHA384 — RFC 4231 test case 5: the first 128 bits of HMAC-SHA-384 are 3abf34c3503b2a23a46efc619baef897
 forall (n: i32 /* 16..16 */) => hmacSha384(fill(12, 20), utf8("Test With Truncation")).slice(0, n) === [3a bf 34 c3 50 3b 2a 23 a4 6e fc 61 9b ae f8 97]
 ]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
+      <sourcecode type="ts-property"><![CDATA[
 // P-TRUNC-512 covers R-TRUNC, R-HMAC-SHA512 — RFC 4231 test case 5: the first 128 bits of HMAC-SHA-512 are 415fad6271580a531d4179bc891d87a6
 forall (n: i32 /* 16..16 */) => hmacSha512(fill(12, 20), utf8("Test With Truncation")).slice(0, n) === [41 5f ad 62 71 58 0a 53 1d 41 79 bc 89 1d 87 a6]
 ]]></sourcecode>
-      </section>
-    </section>
-    <section anchor="verifying-a-tag">
-      <name>Verifying a Tag</name>
-      <section anchor="accepting-the-tag">
-        <name>Accepting the Tag</name>
-        <t anchor="R-VERIFY-ACCEPT">hmacSha256Verify, hmacSha384Verify and hmacSha512Verify <bcp14>MUST</bcp14> return true
-for the tag that hmacSha256, hmacSha384 and hmacSha512 compute over the same
-key and message.</t>
-        <sourcecode type="ts-property"><![CDATA[
-// P-VERIFY-ACCEPT covers R-VERIFY-ACCEPT — each verify accepts the tag its function computes
-forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha256Verify(key, text, hmacSha256(key, text)) && hmacSha384Verify(key, text, hmacSha384(key, text)) && hmacSha512Verify(key, text, hmacSha512(key, text))
-]]></sourcecode>
-      </section>
-      <section anchor="refusing-a-tampered-tag">
-        <name>Refusing a Tampered Tag</name>
-        <t anchor="R-VERIFY-REJECT">hmacSha256Verify, hmacSha384Verify and hmacSha512Verify <bcp14>MUST</bcp14> return false
-for a tag that differs from that tag in any one bit.</t>
-        <sourcecode type="ts-property"><![CDATA[
-// P-VERIFY-REJECT-256 covers R-VERIFY-REJECT — hmacSha256Verify refuses the tag with any one bit flipped
-forall (key: u8[] /* 0..100 */, text: u8[] /* 0..100 */, bit: i32 /* 0..255 */) => !hmacSha256Verify(key, text, flipBit(hmacSha256(key, text), bit))
-]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
-// P-VERIFY-REJECT-384 covers R-VERIFY-REJECT — hmacSha384Verify refuses the tag with any one bit flipped
-forall (key: u8[] /* 0..150 */, text: u8[] /* 0..100 */, bit: i32 /* 0..383 */) => !hmacSha384Verify(key, text, flipBit(hmacSha384(key, text), bit))
-]]></sourcecode>
-        <sourcecode type="ts-property"><![CDATA[
-// P-VERIFY-REJECT-512 covers R-VERIFY-REJECT — hmacSha512Verify refuses the tag with any one bit flipped
-forall (key: u8[] /* 0..150 */, text: u8[] /* 0..100 */, bit: i32 /* 0..511 */) => !hmacSha512Verify(key, text, flipBit(hmacSha512(key, text), bit))
-]]></sourcecode>
-      </section>
-    </section>
-    <section anchor="security-considerations">
-      <name>Security Considerations</name>
-      <t anchor="R-CT-COMPARE">The verify functions <bcp14>MUST</bcp14> compare the tag in time that depends only on its
-length.</t>
-      <t>Untested: How the code runs, not what it returns: no functional test observes a running time. Checked in nish instead: the verify functions compare through timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data at 32 and 48 bytes after clang -O2; docs/security/ct-verification.md records the verify functions themselves as resting on review (docs/security/crypto-k1.md, K1-8).</t>
-      <t anchor="R-WIPE">The padded key block, the hash of a key longer than B bytes and the inner
-hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
-      <t>Untested: Memory after return, not a return value: no functional test reads freed memory. Checked in nish instead: tests/wipes/crypto.js ("crypto_hmac crypto_hkdf: the wipes survive -O2") holds HMAC's key blocks, hashed key, inner digest and hashers to wipe's volatile stores under -O2, the same store tests/run.js "nish:secret: the wipe survives opt -O2" pins; the caller's own key array, which no wipe here reaches, is recorded in docs/security/crypto-k1.md (K1-7) and docs/security/secret.md.</t>
+      <blockquote anchor="R-KEY-128">
+        <t>Test with a key larger than 128 bytes (= block-size of SHA-384 and SHA-512).
+<xref section="4.7" sectionFormat="of" target="RFC4231"/></t>
+      </blockquote>
+      <blockquote anchor="R-KEY-DATA-128">
+        <t>Test with a key and data that is larger than 128 bytes (= block-size of SHA-384 and SHA-512).
+<xref section="4.8" sectionFormat="of" target="RFC4231"/></t>
+      </blockquote>
     </section>
     <section anchor="test-vectors">
       <name>Test Vectors</name>
@@ -210,7 +217,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha256(Key = 0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b, Data = 4869205468657265)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-256 = b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7</tt></td>
-            <td align="left">R-HMAC-SHA256, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA256</td>
             <td align="left">
               <xref section="4.2" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 1, HMAC-SHA-256</td>
@@ -221,7 +228,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha384(Key = 0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b, Data = 4869205468657265)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-384 = afd03944d84895626b0825f4ab46907f15f9dadbe4101ec682aa034c7cebc59cfaea9ea9076ede7f4af152e8b2fa9cb6</tt></td>
-            <td align="left">R-HMAC-SHA384, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA384</td>
             <td align="left">
               <xref section="4.2" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 1, HMAC-SHA-384</td>
@@ -232,7 +239,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha512(Key = 0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b, Data = 4869205468657265)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-512 = 87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cdedaa833b7d6b8a702038b274eaea3f4e4be9d914eeb61f1702e696c203a126854</tt></td>
-            <td align="left">R-HMAC-SHA512, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA512</td>
             <td align="left">
               <xref section="4.2" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 1, HMAC-SHA-512</td>
@@ -243,7 +250,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha256(Key = 4a656665, Data = 7768617420646f2079612077616e7420666f72206e6f7468696e673f)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-256 = 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843</tt></td>
-            <td align="left">R-HMAC-SHA256, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA256, R-SHORT-KEY</td>
             <td align="left">
               <xref section="4.3" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 2, a key shorter than the tag, HMAC-SHA-256</td>
@@ -254,7 +261,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha384(Key = 4a656665, Data = 7768617420646f2079612077616e7420666f72206e6f7468696e673f)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-384 = af45d2e376484031617f78d2b58a6b1b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649</tt></td>
-            <td align="left">R-HMAC-SHA384, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA384, R-SHORT-KEY</td>
             <td align="left">
               <xref section="4.3" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 2, a key shorter than the tag, HMAC-SHA-384</td>
@@ -265,7 +272,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha512(Key = 4a656665, Data = 7768617420646f2079612077616e7420666f72206e6f7468696e673f)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-512 = 164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737</tt></td>
-            <td align="left">R-HMAC-SHA512, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA512, R-SHORT-KEY</td>
             <td align="left">
               <xref section="4.3" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 2, a key shorter than the tag, HMAC-SHA-512</td>
@@ -276,7 +283,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha256(Key = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, Data = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-256 = 773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe</tt></td>
-            <td align="left">R-HMAC-SHA256, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA256, R-KEY-DATA-64</td>
             <td align="left">
               <xref section="4.4" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 3, 50 bytes of data, HMAC-SHA-256</td>
@@ -287,7 +294,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha384(Key = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, Data = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-384 = 88062608d3e6ad8a0aa2ace014c8a86f0aa635d947ac9febe83ef4e55966144b2a5ab39dc13814b94e3ab6e101a34f27</tt></td>
-            <td align="left">R-HMAC-SHA384, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA384, R-KEY-DATA-64</td>
             <td align="left">
               <xref section="4.4" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 3, 50 bytes of data, HMAC-SHA-384</td>
@@ -298,7 +305,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha512(Key = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, Data = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-512 = fa73b0089d56a284efb0f0756c890be9b1b5dbdd8ee81a3655f83e33b2279d39bf3e848279a722c806b485a47e67c807b946a337bee8942674278859e13292fb</tt></td>
-            <td align="left">R-HMAC-SHA512, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA512, R-KEY-DATA-64</td>
             <td align="left">
               <xref section="4.4" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 3, 50 bytes of data, HMAC-SHA-512</td>
@@ -309,7 +316,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha256(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-256 = 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b</tt></td>
-            <td align="left">R-HMAC-SHA256, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA256, R-KEY-DATA-64</td>
             <td align="left">
               <xref section="4.5" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 4, HMAC-SHA-256</td>
@@ -320,7 +327,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha384(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-384 = 3e8a69b7783c25851933ab6290af6ca77a9981480850009cc5577c6e1f573b4e6801dd23c4a7d679ccf8a386c674cffb</tt></td>
-            <td align="left">R-HMAC-SHA384, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA384, R-KEY-DATA-64</td>
             <td align="left">
               <xref section="4.5" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 4, HMAC-SHA-384</td>
@@ -331,7 +338,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha512(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-512 = b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd</tt></td>
-            <td align="left">R-HMAC-SHA512, R-CONSTRUCTION, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA512, R-KEY-DATA-64</td>
             <td align="left">
               <xref section="4.5" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 4, HMAC-SHA-512</td>
@@ -342,7 +349,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha256(Key = 131 × aa, Data = 54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-256 = 60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54</tt></td>
-            <td align="left">R-HMAC-SHA256, R-LONG-KEY, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA256, R-KEY-128</td>
             <td align="left">
               <xref section="4.7" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 6, a 131-byte key, HMAC-SHA-256</td>
@@ -353,7 +360,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha384(Key = 131 × aa, Data = 54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-384 = 4ece084485813e9088d2c63a041bc5b44f9ef1012a2b588f3cd11f05033ac4c60c2ef6ab4030fe8296248df163f44952</tt></td>
-            <td align="left">R-HMAC-SHA384, R-LONG-KEY, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA384, R-KEY-128</td>
             <td align="left">
               <xref section="4.7" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 6, a 131-byte key, HMAC-SHA-384</td>
@@ -364,7 +371,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha512(Key = 131 × aa, Data = 54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-512 = 80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f3526b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598</tt></td>
-            <td align="left">R-HMAC-SHA512, R-LONG-KEY, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA512, R-KEY-128</td>
             <td align="left">
               <xref section="4.7" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 6, a 131-byte key, HMAC-SHA-512</td>
@@ -375,7 +382,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha256(Key = 131 × aa, Data = 5468697320697320612074657374207573696e672061206c6172676572207468616e20626c6f636b2d73697a65206b657920616e642061206c6172676572207468616e20626c6f636b2d73697a6520646174612e20546865206b6579206e6565647320746f20626520686173686564206265666f7265206265696e6720757365642062792074686520484d414320616c676f726974686d2e)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-256 = 9b09ffa71b942fcb27635fbcd5b0e944bfdc63644f0713938a7f51535c3a35e2</tt></td>
-            <td align="left">R-HMAC-SHA256, R-LONG-KEY, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA256, R-KEY-DATA-128</td>
             <td align="left">
               <xref section="4.8" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 7, a 131-byte key and data longer than the block, HMAC-SHA-256</td>
@@ -386,7 +393,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha384(Key = 131 × aa, Data = 5468697320697320612074657374207573696e672061206c6172676572207468616e20626c6f636b2d73697a65206b657920616e642061206c6172676572207468616e20626c6f636b2d73697a6520646174612e20546865206b6579206e6565647320746f20626520686173686564206265666f7265206265696e6720757365642062792074686520484d414320616c676f726974686d2e)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-384 = 6617178e941f020d351e2f254e8fd32c602420feb0b8fb9adccebb82461e99c5a678cc31e799176d3860e6110c46523e</tt></td>
-            <td align="left">R-HMAC-SHA384, R-LONG-KEY, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA384, R-KEY-DATA-128</td>
             <td align="left">
               <xref section="4.8" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 7, a 131-byte key and data longer than the block, HMAC-SHA-384</td>
@@ -397,7 +404,7 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
               <tt>hmacSha512(Key = 131 × aa, Data = 5468697320697320612074657374207573696e672061206c6172676572207468616e20626c6f636b2d73697a65206b657920616e642061206c6172676572207468616e20626c6f636b2d73697a6520646174612e20546865206b6579206e6565647320746f20626520686173686564206265666f7265206265696e6720757365642062792074686520484d414320616c676f726974686d2e)</tt></td>
             <td align="left">
               <tt>HMAC-SHA-512 = e37b6a775dc87dbaa4dfa9f96e5e3ffddebd71f8867289865df5a32d20cdc944b6022cac3c4982b10d5eeb55c3e4de15134676fb6de0446065c97440fa8c6a58</tt></td>
-            <td align="left">R-HMAC-SHA512, R-LONG-KEY, R-TAG-LEN</td>
+            <td align="left">R-HMAC-SHA512, R-KEY-DATA-128</td>
             <td align="left">
               <xref section="4.8" sectionFormat="of" target="RFC4231"/></td>
             <td align="left">RFC 4231 test case 7, a 131-byte key and data longer than the block, HMAC-SHA-512</td>
@@ -467,126 +474,121 @@ hash <bcp14>MUST</bcp14> be wiped before the functions return.</t>
     </references>
   </back>
   <!-- ##markdown-source:
-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
-VEcAAA==
+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
 
 -->
 
