@@ -537,6 +537,11 @@ const serveCancel = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: SERVE_CANCEL, why }))
   )
+const BETWEEN_REQUESTS = "Http1Connection says when it is between requests"
+const betweenRequests = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: BETWEEN_REQUESTS, why }))
+  )
 const ASYNC_TRIM = "the async request path's instructions per request"
 const asyncTrim = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
@@ -2646,6 +2651,144 @@ const DECLARED = [
         "postgres-carrier.ll",
       ],
       "tests/link/tfb_entry/main.ts": ["bench_techempower_server.ll", "http1-server.ll", "main.ll"],
+    }
+  ),
+  // `Http1Connection` gains `betweenRequests()`, so every module of a program
+  // that reaches std/net/http1-server.ts declares one more method and the
+  // declarations after it move down a line.
+  ...betweenRequests(
+    "Http1Connection gains betweenRequests(), so a graceful drain can ask whether closing a connection cuts a request short; every module declaring the class's methods moves",
+    {
+      "tests/link/net_http_server/main.ts": ["handler.ll", "http-server.ll", "main.ll", "server.ll"],
+      "tests/link/net_http_server_bad_limit/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_bad_param/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_bad_watch/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_caps/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_carriers/main.ts": [
+        "client.ll",
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "rig.ll",
+      ],
+      "tests/link/net_http_server_end_short/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_end_unstarted/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_foreign/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_fields/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h1_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_connect/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_h2_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_refused/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+      ],
+      "tests/link/net_http_server_h2_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h2c/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_head/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_slots/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_twice/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_h3_webtransport/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_lifecycle/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_matrix/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_start_fields/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_length/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_refused/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_status/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_start_twice/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_take_none/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_timeouts/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "net_http_server_carriers_client.ll",
+        "rig.ll",
+        "rows.ll",
+      ],
+      "tests/link/net_http_server_unbegun/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_wait_tls/main.ts": ["handler.ll", "http-server.ll", "main.ll", "taken.ll"],
+      "tests/link/net_http_server_write_long/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_write_unstarted/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
+      "tests/link/net_http_server_write_window/main.ts": [
+        "handler.ll",
+        "http-server.ll",
+        "main.ll",
+        "taken.ll",
+      ],
     }
   ),
   {
