@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 961
+export const RULE_COUNT: i32 = 962
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -491,6 +491,8 @@ const diagnosticRules = (): string[] => [
   "NL2661",
   ", and this analysis cannot see what it does with memory, so nothing proves that what the block allocated is gone when it releases",
   "NL2425",
+  "` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once",
+  "NL3036",
   "` is `async`: a call to it is awaited where it is made (`await`), or handed to `spawn` or `awaitAll` — a promise is never a value",
   "NL2645",
   "`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds",
@@ -533,6 +535,8 @@ const diagnosticRules = (): string[] => [
   "NL2643",
   '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`',
   "NL2669",
+  "`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to ",
+  "NL3058",
   "A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take",
   "NL2774",
   "`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach",
@@ -551,8 +555,6 @@ const diagnosticRules = (): string[] => [
   "NL2369",
   "` cannot declare `static readonly json`: a handle is never serialised, and its options would name the pointer it owns",
   "NL2566",
-  "` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host` and `compat`, each written once",
-  "NL3036",
   "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
   "NL2284",
   " has type `number`, whose width `--number-mode` chooses: a C struct field has one layout, so spell it `i32` or `f64`",

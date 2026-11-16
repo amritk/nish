@@ -251,6 +251,13 @@ export class Options {
    */
   sandboxCapabilities: i32
   /**
+   * WP63 S3: how many restricted rings `nish_sandbox` makes before its filter
+   * loads, the root package's `"nish".netRings` (1 when unset), or 0 when
+   * `main` does not reach `NET_LISTEN_RING` or `net` is not granted. Set by
+   * `Compilation.emit`.
+   */
+  sandboxNetRings: i32
+  /**
    * WP50 S3: tag each wasm32 panic call with its site, for a program
    * `Compilation.guardsPanics` says is written for the panic guard. Set by
    * `Compilation.emit`.
@@ -343,6 +350,7 @@ export class Options {
     this.deterministic = false
     this.sandbox = 0
     this.sandboxCapabilities = 0
+    this.sandboxNetRings = 0
     this.panicSites = false
     this.rootSymbols = []
     this.holdsRoots = false

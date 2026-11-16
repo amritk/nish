@@ -32605,7 +32605,7 @@ if (!only || "sandbox".includes(only)) {
         `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
       ) &&
       !scopedText.includes("@.sandbox.write") &&
-      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null)`) &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null, i32 0)`) &&
       (as === null || as.status === 0),
     sc.status === 0
       ? `${scopedText
@@ -32709,7 +32709,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
       check(
         "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.read scope",
         ir(reader).includes(`c"${fs.realpathSync(path.join(linkDir, reader, "data"))}\\00\\00"`) &&
-          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null\)/.test(
+          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null, i32 0\)/.test(
             ir(reader)
           ),
         ir(reader)
@@ -32748,7 +32748,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
         check(
           "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
           ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
-            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null, i32 0\)/.test(
               ir(writer)
             ),
           ir(writer)

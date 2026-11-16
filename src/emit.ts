@@ -969,7 +969,8 @@ export class Emitter {
    * WP37 §3: `nish_sandbox` runs from `.preinit_array`, ahead of every
    * constructor a linked C object brings, so foreign start-up code is confined
    * too. `@llvm.used` keeps the entry from being dropped, since nothing calls
-   * it by name.
+   * it by name. Its last argument is how many restricted rings to make before
+   * the filter loads (WP63 S3, `Options.sandboxNetRings`).
    */
   emitSandboxApply(): void {
     const sandbox = this.useRuntime("nish_sandbox")
@@ -986,7 +987,7 @@ export class Emitter {
     const apply = new IRFunction(".sandbox.apply", [], "void")
     apply.linkage = "internal"
     apply.emit(
-      `call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write}, i8* ${exec})`
+      `call void ${sandbox}(i32 ${caps}, i32 ${this.opts.sandbox}, i8* ${read}, i8* ${write}, i8* ${exec}, i32 ${this.opts.sandboxNetRings})`
     )
     apply.emit("ret void")
     this.module.addFunction(apply)

@@ -12,7 +12,7 @@
  * before any constructor in the executable, an `ffi` object or a shared
  * library:
  *
- *   nish_sandbox(caps, mode, read_dirs, write_dirs, exec_paths)
+ *   nish_sandbox(caps, mode, read_dirs, write_dirs, exec_paths, net_rings)
  *
  * `caps` is `main`'s capability mask (src/capabilities.ts numbers the bits),
  * `mode` is 1 for `--sandbox` and 2 for `--sandbox=best-effort`. The two
@@ -192,6 +192,9 @@ static const uint16_t nish_sb_meta[] = {
 };
 #endif
 static const uint16_t nish_sb_uring[] = {425, 426, 427}; /* io_uring_setup, _enter, _register */
+/* With `net` and without `process.spawn` only the rings step 5 made before
+ * the filter are left: no ring may be made or registered (WP63 S3). */
+static const uint16_t nish_sb_uring_make[] = {425, 427}; /* io_uring_setup, _register */
 #define NISH_SB_CLONE3 435
 
 /* Set by step 6 and read by `nish_sandbox_check`. */
@@ -439,9 +442,13 @@ static void nish_sb_seccomp(int32_t caps) {
   memcpy(prog, head, sizeof head);
   at = NISH_SB_ROWS(prog, at, nish_sb_always, KILL);
   if (!(caps & CAP_BIT_NET)) at = NISH_SB_ROWS(prog, at, nish_sb_net, KILL);
-  /* io_uring opens, connects and accepts sockets without those calls. */
-  if ((caps & (CAP_BIT_NET | CAP_BIT_SPAWN)) != (CAP_BIT_NET | CAP_BIT_SPAWN))
+  /* io_uring opens, connects and accepts sockets without those calls. With
+   * `net`, a ring made before the filter is restricted to accept, recv,
+   * send, close, cancel and nop, so only entering one stays allowed. */
+  if (!(caps & CAP_BIT_NET))
     at = NISH_SB_ROWS(prog, at, nish_sb_uring, KILL);
+  else if (!(caps & CAP_BIT_SPAWN))
+    at = NISH_SB_ROWS(prog, at, nish_sb_uring_make, KILL);
   if (!(caps & CAP_BIT_FS_WRITE)) at = NISH_SB_ROWS(prog, at, nish_sb_meta, EPERM_RET);
   if (!(caps & CAP_BIT_SPAWN)) {
     at = NISH_SB_ROWS(prog, at, nish_sb_spawn, KILL);
@@ -822,7 +829,8 @@ static void nish_sb_keep_marks(const char *paths) {
   }
 }
 
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths,
+                  int32_t net_rings) {
   nish_cpu_prime();
   nish_sb_keep_marks(exec_paths);
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
@@ -830,6 +838,11 @@ void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char 
   nish_sb_landlock(caps, mode, read_dirs, write_dirs, exec_paths);
   /* Metadata writes stay EPERM inside a scoped write directory (open
    * question 1): Landlock has no right for chmod, chown or xattrs. */
+  /* The filter kills io_uring_setup unless `net` and `process.spawn` are
+   * both granted, so the rings a ring listener takes are made now, or the
+   * ring layer is told it may make none (WP63 S3). */
+  if ((caps & (CAP_BIT_NET | CAP_BIT_SPAWN)) != (CAP_BIT_NET | CAP_BIT_SPAWN))
+    (void)nish_net_ring_premake(caps & CAP_BIT_NET ? net_rings : 0);
   nish_sb_seccomp(write_dirs ? caps & ~CAP_BIT_FS_WRITE : caps);
   __atomic_store_n(&nish_sb_applied, 1, __ATOMIC_RELEASE);
 }
@@ -852,12 +865,14 @@ static void nish_sb_none(void) {
   _exit(126);
 }
 
-void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths) {
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs, const char *exec_paths,
+                  int32_t net_rings) {
   (void)caps;
   (void)mode;
   (void)read_dirs;
   (void)write_dirs;
   (void)exec_paths;
+  (void)net_rings;
   nish_sb_none();
 }
 

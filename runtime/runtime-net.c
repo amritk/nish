@@ -283,6 +283,8 @@ struct nish_uring_opts {
   int32_t buf_size;
 };
 int32_t nish_uring_probe(void);
+int32_t nish_uring_premake(int32_t n, int32_t slots);
+int32_t nish_uring_pooled(void);
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
 int32_t nish_uring_fd(const struct nish_uring_set *s);
 int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
@@ -607,29 +609,38 @@ static int nr_refused(int32_t r) { return r == -1 || r == -38 || r == -22 || r =
    to descriptors (§5.4); a refusal before any set has opened also decides for
    every later listen, and any other failure, such as -24 or -12, only for
    this one (NURING-20, NURING-22). */
+static int32_t nr_slots(void) {
+  struct rlimit rl;
+  if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return -1;
+  int32_t n = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > NR_SLOTS_MAX ? NR_SLOTS_MAX : (int32_t)rl.rlim_cur;
+  return n < 1 ? 1 : n;
+}
+
 static int32_t nr_open(int32_t fd, int32_t port) {
   if (nr_state < 0) return 0;
+  /* Under `--sandbox` every set takes the rings made before the filter, so
+     any failure of theirs, a refusal or not, decides for good: no ring can be
+     made again (WP63 S3). */
+  int32_t pooled = nish_uring_pooled();
   if (nr_state == 0) {
     int32_t p = nish_uring_probe();
     if (p < 0) {
-      if (nr_refused(p)) nr_state = p;
+      if (pooled != 0 || nr_refused(p)) nr_state = p;
       return 0;
     }
   }
   if (nr_nsets >= NR_SETS) return -23;
-  struct rlimit rl;
-  if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return 0;
   struct nish_uring_opts o;
   memset(&o, 0, sizeof o);
-  o.slots = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > NR_SLOTS_MAX ? NR_SLOTS_MAX : (int32_t)rl.rlim_cur;
-  if (o.slots < 1) o.slots = 1;
+  o.slots = pooled > 0 ? pooled : nr_slots();
+  if (o.slots < 0) return 0;
   o.rings_max = NR_RINGS;
   struct nr_set *S = calloc(1, sizeof *S);
   if (!S) return 0;
   int32_t r = nish_uring_open(&S->u, fd, &o);
   if (r < 0) {
     free(S);
-    if (nr_state == 0 && nr_refused(r)) nr_state = r;
+    if (nr_state == 0 && (pooled != 0 || nr_refused(r))) nr_state = r;
     return 0;
   }
   /* Only an open set decides for rings: a probe that passed before a set
@@ -934,6 +945,19 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
    (EPERM) for a filter or `io_uring_disabled`, -38 for a kernel without
    io_uring, -22 or -95 for one too old for the features the set needs. Darwin
    has no io_uring, and answers -95. */
+/* WP63 S3: `--sandbox`, before its filter, makes the `n` restricted rings
+   every ring listener of this process takes, at the slots `nr_open` would
+   give a set. With `n` of 0 it records that no ring may be made. */
+int32_t nish_net_ring_premake(int32_t n) {
+#if defined(__linux__)
+  int32_t slots = nr_slots();
+  return nish_uring_premake(n, slots < 0 ? 1 : slots);
+#else
+  (void)n;
+  return -95;
+#endif
+}
+
 int32_t nish_net_ring_state(void) {
 #if defined(__linux__)
   return nr_state;

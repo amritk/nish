@@ -429,6 +429,13 @@ export const isUnusedArrayImport = (
     (specifier === COLLECTIONS_SPECIFIER && isCollectionForEachLocal(local))) &&
   (template === null || template.count === 0)
 
+/**
+ * WP63 S3: the most restricted rings `"nish".netRings` may ask `--sandbox`
+ * for, the most a listener's ring set opens (`NR_RINGS` in
+ * runtime/runtime-net.c).
+ */
+const NET_RINGS_MAX: i32 = 64
+
 export class Compilation {
   opts: Options
   /** Shared by every module, so a type id means one thing across the program. */
@@ -521,6 +528,8 @@ export class Compilation {
    */
   manifestAllow: i32
   manifestDeny: i32
+  /** WP63 S3: the root package's `"nish".netRings`, 1 when it is unset (`readNetRings`). */
+  netRings: i32
   /**
    * WP40: the root package's `"nish".capabilities.dependencies` grants, read
    * by `readCapabilityPolicy`: each named dependency and the gated
@@ -570,6 +579,7 @@ export class Compilation {
     this.panicScope = []
     this.manifestAllow = -1
     this.manifestDeny = 0
+    this.netRings = 1
     this.grantNames = []
     this.grantMasks = []
     this.grantScoped = []
@@ -1357,6 +1367,7 @@ export class Compilation {
     this.readNoPanic(manifest, nish)
     this.readCapabilityPolicy(manifest, nish)
     this.readCompat(manifest, nish)
+    this.readNetRings(manifest, nish)
     this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
       return false
@@ -1647,6 +1658,43 @@ export class Compilation {
   }
 
   /**
+   * WP63 S3, D2: the root package's `"nish".netRings`, how many restricted
+   * rings `--sandbox` makes before its filter loads, as `netRings`; 1 when it
+   * is unset. It is an integer from 1 to `NET_RINGS_MAX`, the most rings the
+   * runtime opens for one listener (`NR_RINGS`, runtime/runtime-net.c), and
+   * anything else is refused where `package.json` writes it (NL3058): a count
+   * the runtime would cut quietly is a server that refuses connections it
+   * was configured for.
+   */
+  readNetRings(source: SourceFile | null, nish: NishManifest | null): void {
+    this.netRings = 1
+    if (source === null || nish === null || nish.netRingsAt < 0) {
+      return
+    }
+    const text = source.text.substring(nish.netRingsAt, nish.netRingsEnd)
+    let value = -1
+    if (text.length > 0 && text.length <= 2) {
+      value = 0
+      let i = 0
+      while (i < text.length && value >= 0) {
+        const digit = text.charCodeAt(i) - 48
+        value = digit >= 0 && digit <= 9 ? value * 10 + digit : -1
+        i = i + 1
+      }
+    }
+    if (value >= 1 && value <= NET_RINGS_MAX) {
+      this.netRings = value
+      return
+    }
+    this.sink.report(
+      source,
+      nish.netRingsAt,
+      nish.netRingsEnd > nish.netRingsAt ? nish.netRingsEnd : nish.netRingsAt + 1,
+      `\`${PACKAGE_CONDITION}.netRings\` is \`${text}\`: it is how many restricted rings \`--sandbox\` makes for \`NET_LISTEN_RING\` before its filter loads, an integer from 1 to ${NET_RINGS_MAX}`
+    )
+  }
+
+  /**
    * The refusals of the host exports a Nish module imports, each once (WP50
    * §12): a host file may export what the page alone calls, in types no wasm
    * import carries, and the build reads only the names it imports.
@@ -1856,8 +1904,8 @@ export class Compilation {
   /**
    * The root package's `"nish"` field, read strictly (`manifestNish`), or null
    * when there is no manifest or the field is refused: it is one object,
-   * written once, whose only keys are `noPanic`, `capabilities`, `host` and
-   * `compat`, and anything else is NL3036 where `package.json` writes it, so that nothing
+   * written once, whose only keys are `noPanic`, `capabilities`, `host`,
+   * `compat` and `netRings`, and anything else is NL3036 where `package.json` writes it, so that nothing
    * the reader cannot vouch for is honoured, a policy least of all.
    */
   readRootNish(source: SourceFile | null): NishManifest | null {
@@ -1872,7 +1920,7 @@ export class Compilation {
       source,
       nish.problemStart,
       nish.problemEnd,
-      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\`, \`host\` and \`compat\`, each written once`
+      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\`, \`host\`, \`compat\` and \`netRings\`, each written once`
     )
     return null
   }
@@ -4337,6 +4385,10 @@ export class Compilation {
       const fact = facts.get(main.name)
       this.opts.sandboxCapabilities = this.sandboxWidened(fact === null ? 0 : fact.caps)
       this.narrowSandbox(facts)
+      // WP63 S3: the rings are made before the filter, so only a `main` that
+      // may reach the ring bit, with `net` granted, asks for them.
+      const net = (this.opts.sandboxCapabilities & (1 << capabilityIndex("net"))) !== 0
+      this.opts.sandboxNetRings = net && fact !== null && fact.ringListen ? this.netRings : 0
     }
     this.opts.panicSites = this.guardsPanics()
     this.opts.rootSymbols = this.rootSymbols()
