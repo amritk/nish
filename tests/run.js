@@ -141,7 +141,8 @@ process.env.XDG_CACHE_HOME = suiteCache
  * system calls, `runtime-parallel.c` divides work across threads,
  * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
- * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
+ * `runtime-net.c` the sockets of `nish:net`, `runtime-uring.c` the io_uring
+ * rings that will hold them past `RLIMIT_NOFILE`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, `runtime-sha256.c` the SHA-256 block on its SHA
  * instructions, `runtime-chacha20.c` ChaCha20's keystream on AVX2 or
@@ -153,7 +154,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  * makes and frees one at a time and `runtime-async.c` the executor `spawn` parks tasks on, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eighteen
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same nineteen
  * (`runtime-async.c` among them, though a link takes its object only for async IR):
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
@@ -172,6 +173,7 @@ const RUNTIME_C = [
   "runtime/runtime-cross.c",
   "runtime/runtime-host.c",
   "runtime/runtime-net.c",
+  "runtime/runtime-uring.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
   "runtime/runtime-sha256.c",
@@ -1673,7 +1675,7 @@ const DEALT_SECTIONS = {
     tail: true,
   },
   runtimeChecks: {
-    name: "the region, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
+    name: "the region, uring, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
     selected: true,
     tail: true,
   },
@@ -5349,7 +5351,8 @@ if (dealtHere("diagnostics")) {
     if (!tool) {
       skip("-g: neither llvm-dwarfdump nor objdump is installed; line table not inspected")
     } else {
-      const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" })
+      // The table covers every runtime unit linked in, past spawnSync's 1 MiB default.
+      const dump = spawnSync(tool[0], tool[1], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
       const out = dump.stdout
       // A row of the line table for our file: `<address> <line> <column> ...` (dwarfdump) or `dbg_main.ts <line> <addr>` (objdump).
       const hasRow =
@@ -5376,7 +5379,10 @@ if (dealtHere("diagnostics")) {
   const speedTable = speed.status === 0 ? lineTableOf(`${exe}.speed`) : null
   const symbols =
     speedTable !== null && has("llvm-dwarfdump")
-      ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], { encoding: "utf8" }).stdout
+      ? spawnSync("llvm-dwarfdump", ["--debug-line", speedTable.file], {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+          }).stdout
       : ""
   check(
     "-g --link (speed profile) is not stripped: the line table survives " +
@@ -10652,7 +10658,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's eighteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's nineteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -10706,6 +10712,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-cross.c",
       "runtime-host.c",
       "runtime-net.c",
+      "runtime-uring.c",
       "runtime-simd.c",
       "runtime-aes.c",
       "runtime-sha256.c",
@@ -10724,7 +10731,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eighteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the nineteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -10733,7 +10740,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the eighteen runtime units once",
+      "runtime cache: the miss compiled each of the nineteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -16740,6 +16747,48 @@ if (dealtHere("runtimeChecks")) {
     )
   }
 
+  // ---- The io_uring ring layer (WP63 S1): runtime-uring.c from C -------------------------
+  // tests/runtime/uring-test.c includes the layer and runs one mode a check:
+  // an echo server forked over a listener holds the parent's clients in a set
+  // of rings and answers by exit status (0 a pass, 77 a skip with its reason on
+  // stdout). `fallback` refuses io_uring with a seccomp filter or the layer's
+  // UR_SYS_SETUP/UR_SYS_REGISTER hooks, and its refused-setup cases run on any
+  // Linux; the others need io_uring and skip where the probe says it is
+  // refused. docs/security/net-uring.md lists what each one proves.
+  if (!only || "uring".includes(only)) {
+    if (process.platform !== "linux") {
+      skip("uring: runtime-uring.c's rings are Linux-only")
+    } else {
+      const exe = path.join(buildDir, "uring-test")
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
+      const modes = [
+        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
+        ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
+        ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
+        ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
+        ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
+        ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
+        ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
+        ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
+        ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
+        ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+      ]
+      for (const [mode, what] of cc.status === 0 ? modes : []) {
+        const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })
+        if (run.status === 77) {
+          skip(`uring: runtime-uring.c ${mode}: ${run.stdout.trim()}`)
+          continue
+        }
+        check(`uring: runtime-uring.c ${mode}: ${what}`, run.status === 0, `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}`)
+      }
+    }
+  }
+
   // ---- B. Pipeline checks -----------------------------------------------------------
   // The two runtime unit tests below name the runtime's sources rather than the
   // prebuilt objects, deliberately: what they assert *is* that the two
@@ -16765,7 +16814,7 @@ if (dealtHere("runtimeChecks")) {
     )
     const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
     check(
-      "runtime.c, runtime-os.c, runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
+      "runtime.c, runtime-os.c, runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-uring.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
       rtRun !== null && rtRun.status === 0,
       String(rt.stderr) +
         (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -25513,6 +25562,9 @@ if (dealtHere("releaseChecks")) {
         // And the fifth (WP34 N5): without it every link of a program that
         // imports `nish:net` would fail to find `nish_tcp_listen` and the rest.
         "runtime/runtime-net.c",
+        // And the io_uring rings beside it (WP63 S1), which build.sh pairs with
+        // runtime.c on every native link.
+        "runtime/runtime-uring.c",
         // And the sixth (WP38 S1): build.sh pairs it with runtime.c, and a
         // program that searches for a byte of a set calls into it.
         "runtime/runtime-simd.c",
@@ -38389,9 +38441,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eighteen runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all nineteen runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 18 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z0-9-]*\.c( |$)/.test(l)).length === 19 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

@@ -286,7 +286,7 @@ so the practical routes are
   build/nish app.ts -o app.ll
   # on the musl host, with its own clang and the runtime from this repository
   clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runtime/runtime-parallel.c \
-    runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
+    runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c runtime/runtime-uring.c \
     runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
     runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
     runtime/runtime-shm.c runtime/runtime-region.c -ffp-contract=off -lm -o app
@@ -393,7 +393,7 @@ It needs Node, clang and a released `nish` to start from, which the build
 fetches for you.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — seventeen translation units, the wasm subset and their
+`runtime/` (the C runtime — nineteen translation units, the wasm subset and their
 header — and `runtime/sqlite/`, SQLite's vendored source),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
@@ -408,11 +408,12 @@ any working directory — and the binary runs from inside its own platform
 package for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is seventeen files:
+on the `clang` line, and it is eighteen files (`runtime-async.c` joins them only
+for a program that awaits):
 
 ```bash
 clang app.ll runtime/runtime.c runtime/runtime-text.c runtime/runtime-os.c runtime/runtime-parallel.c \
-  runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
+  runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c runtime/runtime-uring.c \
   runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-sha256.c runtime/runtime-chacha20.c \
   runtime/runtime-term.c runtime/runtime-bytes.c runtime/runtime-checksum.c runtime/runtime-sandbox.c \
   runtime/runtime-shm.c runtime/runtime-region.c -ffp-contract=off -lm -o app
