@@ -126,7 +126,11 @@ send record, in flight or not, and unmaps the buffers. Nothing can copy from
 a freed record or into an unmapped buffer meanwhile: the rings are made with
 `IORING_SETUP_DEFER_TASKRUN`, so a send or receive waiting on its socket is
 retried only as task work on the thread that owns the ring, which is the one
-running `destroy`.
+running `destroy`. This rests on one assumption about the kernel: that
+closing a ring cancels the task work still queued on it rather than running
+it, from a fallback worker, after `close` returns. The code cannot show that
+window closed on every kernel the probe accepts; S2, which makes `destroy`
+reachable from a program, revisits it.
 
 **Options.** `nish_uring_open` refuses a `buf_count` that is not a power of
 two or is past 32,768, a `buf_size` past 1 MiB, a `rings_max` past 4,096
