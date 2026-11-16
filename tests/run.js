@@ -16891,6 +16891,8 @@ if (dealtHere("runtimeChecks")) {
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
+        ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
+        ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
@@ -30834,9 +30836,11 @@ if (!only || "net_http_server_deep".includes(only)) {
 // answers -24 near 61. A host whose hard limit is under 256 cannot show the
 // raise, so the section skips there. The verdict is the program's exit status
 // and its line, never a message of bash's.
+/** The hard descriptor limit `ulimit -H -n` reported, Infinity for unlimited, 0 when it was not read. */
+const hardNofile = (hard) => (hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout))
 if (!only || "net_fd_limit".includes(only)) {
   const hard = process.platform === "win32" ? null : spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" })
-  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  const room = hardNofile(hard)
   if (!HAS_CLANG || hard === null) {
     skip("net_fd_limit: the raise is read under bash's ulimit, and this host has no clang or is Windows")
   } else if (!(room >= 256)) {
@@ -30859,6 +30863,194 @@ if (!only || "net_fd_limit".includes(only)) {
       r !== null && r.status === 0 && r.stdout === "held 200 descriptors past a soft limit of 64\n",
       r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
     )
+  }
+}
+
+// WP63 S2: a `NET_LISTEN_RING` listener accepts into io_uring slots, not
+// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Seven
+// programs in tests/link/net_ring_*, each judged by its own exit status:
+// `echo.ts` serves 3,000 connections under a descriptor limit of 1,024 with
+// fewer than 64 descriptors open; `full.ts`, under a limit of 32, takes
+// connections until tcpAccept answers -23 (NURING-6), then checks that the
+// handle it closed answers -9 and that the freed slot is taken again;
+// `flood.ts` takes a connection that writes 64 MiB and does not read it until
+// the writer stalls, which a held receive makes it do within the kernel's
+// socket buffers (NURING-9), then reads all 64 MiB; `sink.ts` writes 64 MiB
+// to a connection that reads nothing for a second, and netWrite must answer
+// -11 once the kernel's buffers and the slot's 256 KiB send area are full
+// (NURING-2), as must netWrite2 with an empty first range (NURING-21);
+// `halfclose.ts` closes a slot whose peer has sent its FIN while
+// 256 KiB are still queued, and every byte must reach the peer, and checks
+// that a slot in a loop the program closed joins a new one; `starve.ts`
+// holds 80 slots that are always ready to write in one loop beside one
+// descriptor, which waits with room for 64 and with room for one must still
+// report (NURING-18); `reset.ts` reads a slot whose peer reset it until
+// netRead answers the reset, and netWrite must then answer an errno
+// (NURING-23); `transient.ts` runs under `ulimit -n 32` with one
+// descriptor free, so the io_uring probe answers -24, and netRingState() must
+// stay 0 and the next ring listen open rings (NURING-20), and with rings open
+// a later set whose open answers -24 must fall back to descriptors
+// (NURING-22); and `fallback.ts` runs under `deny.c`'s seccomp filter, which
+// refuses io_uring_setup, and must serve descriptors with netRingState() at
+// -1. The clients run in node (`client.mjs`), outside the limit. A ring
+// program that exits 2 found rings refused here, the deny wrapper exits 3
+// where the kernel takes no filter, and `deny.c` names io_uring_setup only on
+// x86_64 and aarch64, so another architecture skips it: each is a counted
+// skip, never a pass.
+if (!only || "net_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const room = hardNofile(hard)
+  if (!HAS_CLANG || hard === null) {
+    skip("net_ring: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else {
+    const dir = path.join(buildDir, "net_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const client = path.join(linkDir, "net_ring_beyond_limit", "client.mjs")
+    const build = (sub, file) => {
+      const exe = path.join(dir, file.replace(/\.ts$/, ""))
+      const c = spawnSync(NISH, [path.join(linkDir, sub, file), "--link", exe], { cwd: root, encoding: "utf8" })
+      return c.status === 0 ? { exe, c } : { exe: null, c }
+    }
+    const ring = (name, sub, file, limit, count, mode, want) => {
+      if (!(room >= limit)) {
+        skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the ${limit} the check sets`)
+        return
+      }
+      const b = build(sub, file)
+      const r =
+        b.exe === null
+          ? null
+          : spawnSync(process.execPath, [client, b.exe, String(limit), String(count), mode], {
+              encoding: "utf8",
+              timeout: 180000,
+            })
+      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+        skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+        return
+      }
+      check(
+        name,
+        r !== null && r.status === 0 && (typeof want === "string" ? r.stdout.includes(want) : want(r.stdout)),
+        r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+    ring(
+      "net_ring: a ring listener serves 3,000 connections under a limit of 1,024 with fewer than 64 descriptors",
+      "net_ring_beyond_limit",
+      "echo.ts",
+      1024,
+      3000,
+      "echo",
+      "served 3000 connections with fewer than 64 descriptors\n"
+    )
+    ring(
+      "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
+      "net_ring_full",
+      "full.ts",
+      32,
+      800,
+      "hold",
+      "answered -23, then reused the freed slot\n"
+    )
+    ring(
+      "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads",
+      "net_ring_flood",
+      "flood.ts",
+      64,
+      1,
+      "flood",
+      (out) => {
+        const m = /^flood: (\d+) bytes before the stall$/m.exec(out)
+        return m !== null && Number(m[1]) < 32 * 1024 * 1024 && out.includes("read all 67108864 bytes after the hold\n")
+      }
+    )
+    ring(
+      "net_ring: writes to a peer that does not read answer -11 within the kernel's buffers and the send area, and every byte arrives",
+      "net_ring_sink",
+      "sink.ts",
+      64,
+      1,
+      "sink",
+      (out) => {
+        const m = /^sink: the first -11 came after (\d+) bytes$/m.exec(out)
+        return (
+          m !== null &&
+          Number(m[1]) < 32 * 1024 * 1024 &&
+          out.includes("sink: netWrite2 with an empty first range answered -11\n") &&
+          out.includes("sink: received 67108864 bytes\n")
+        )
+      }
+    )
+    ring(
+      "net_ring: a close after the peer's FIN still sends every queued byte, and a closed loop lets its slots go",
+      "net_ring_halfclose",
+      "halfclose.ts",
+      64,
+      1,
+      "halfclose",
+      (out) => {
+        const sent = /^halfclose: wrote (\d+) bytes after the client's end and closed$/m.exec(out)
+        const got = /^halfclose: received (\d+) bytes$/m.exec(out)
+        return sent !== null && got !== null && sent[1] === got[1]
+      }
+    )
+    ring(
+      "net_ring: a slot whose peer reset it answers netWrite with an errno",
+      "net_ring_reset",
+      "reset.ts",
+      64,
+      1,
+      "reset",
+      (out) => /^reset: netRead answered -\d+ and netWrite -\d+$/m.test(out)
+    )
+    ring(
+      "net_ring: a descriptor is reported beside more ready slots than one wait holds",
+      "net_ring_starve",
+      "starve.ts",
+      256,
+      80,
+      "hold",
+      (out) => /^starve: the descriptor came after \d+ and \d+ waits beside 80 ready slots$/m.test(out)
+    )
+    const t = build("net_ring_transient", "transient.ts")
+    const tr =
+      t.exe === null
+        ? null
+        : spawnSync("bash", ["-c", 'ulimit -n 32 && exec "$0"', t.exe], { encoding: "utf8", timeout: 60000 })
+    if (tr !== null && tr.status === 2 && tr.stdout.includes("rings refused: ")) {
+      skip(`net_ring: the transient probe check needs io_uring, and this kernel refuses it (${tr.stdout.trim()})`)
+    } else {
+      check(
+        "net_ring: a probe or first set that fails for want of a descriptor is not kept, the next ring listen opens rings, and a later set that fails for one falls back",
+        tr !== null &&
+          tr.status === 0 &&
+          tr.stdout.includes(
+            "transient: neither the probe's -24 nor the first set's was kept, the next listen opened rings, and a later set's -24 fell back to descriptors\n"
+          ),
+        tr === null ? `does not compile and link\n${shown(t.c)}` : `signal ${tr.signal}\n${shown(tr)}`
+      )
+    }
+    const deny = path.join(dir, "deny")
+    const known = process.arch === "x64" || process.arch === "arm64"
+    const d = known
+      ? spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
+          encoding: "utf8",
+        })
+      : null
+    const b = d !== null && d.status === 0 ? build("net_ring_fallback", "fallback.ts") : { exe: null, c: d }
+    const r = b.exe === null ? null : spawnSync(deny, [b.exe], { encoding: "utf8", timeout: 60000 })
+    if (!known) {
+      skip(`net_ring: deny.c names io_uring_setup on x86_64 and aarch64 only, not ${process.arch}`)
+    } else if (r !== null && r.status === 3) {
+      skip("net_ring: the fallback needs a seccomp filter, and this kernel takes none")
+    } else {
+      check(
+        "net_ring: with io_uring_setup refused, a ring listener serves descriptors and netRingState() is -1",
+        r !== null && r.status === 0 && r.stdout.startsWith("rings refused with -1; served descriptor "),
+        r === null ? `does not build\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
   }
 }
 

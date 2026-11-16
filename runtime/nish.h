@@ -822,7 +822,10 @@ bool nish_is_executable(const nish_str *path);
  * with `SO_REUSEPORT` for flag 1, `TCP_NODELAY` on each accepted socket for
  * flag 2, and, for flag 4 with flag 1, a reuseport program steering each new
  * connection to the listener bound at the index of the CPU that received it
- * (Linux; -95 elsewhere). Any other bit, or 4 without 1, is -22.
+ * (Linux; -95 elsewhere). Flag 8 accepts into io_uring slots on Linux,
+ * whose handles are at or above 2^20; any other bit, or 4 without 1, is -22.
+ * `nish_net_ring_state()`: 1 when flag 8 listeners get rings, 0 before one
+ * has asked, or the negative errno that refused them; -95 on Darwin.
  * `nish_tcp_accept(fd, peer)`: a new descriptor and the peer's address.
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a
@@ -895,6 +898,7 @@ int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags);
+int32_t nish_net_ring_state(void);
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);

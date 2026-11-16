@@ -234,7 +234,7 @@ const helpers = (): void => {
   const before = availableParallelism();
   console.log(setCpuAffinity(-1) === refused && setCpuAffinity(1 << 20) === refused);
   console.log(availableParallelism() === before);
-  console.log(tcpListenFlags("127.0.0.1", 0, 1, 4) === -22 && tcpListenFlags("127.0.0.1", 0, 1, 8) === -22);
+  console.log(tcpListenFlags("127.0.0.1", 0, 1, 4) === -22 && tcpListenFlags("127.0.0.1", 0, 1, 16) === -22);
   const worker = "--nish-prefork-worker=1";
   console.log(preforkListener(["a", "--nish-prefork-listener=5", worker]) === 5);
   console.log(preforkListener(["a", "--nish-prefork-listener=6", "--nish-prefork-channels=3", worker]) === 6);

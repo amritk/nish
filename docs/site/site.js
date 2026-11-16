@@ -1,11 +1,9 @@
 /*
   The docs site's one script: it builds the animated hero on the landing page
   (the name unfolding into what it stands for, a source file compiling to its
-  targets), gives cards a highlight that follows the pointer, and writes the
-  pages' structured data (JSON-LD), and lets a path in a table break at its
-  slashes. Everything it draws is styled, and
-  animated, by theme.css; with this file missing the pages read the same,
-  without the hero.
+  targets) and gives cards a highlight that follows the pointer. Everything it draws is
+  styled, and animated, by theme.css; with this file missing the pages read
+  the same, without the hero.
 
   The hero's host is `<div data-nish-hero></div>` in docs/guide/index.md, left
   empty so that GitHub, which renders the same Markdown, shows nothing there.
@@ -269,129 +267,53 @@
     return term
   }
 
+  /** When the hero on the page was built: see `fill`. */
+  let built = 0
+
   /**
    * The site is a single-page app: the landing page's Markdown is mounted,
    * hydrated and unmounted by the framework, which may replace the host at
-   * any of those moments. So rather than build once on load, every change to
-   * the document refills whichever host is empty.
+   * any of those moments: on a first load the client app swaps the server's
+   * page, hero and all, for its own copy. So every change to the document
+   * refills whichever host is empty, moving in the hero that same change took
+   * off the page rather than building and playing a second one. A host that
+   * comes back on a later navigation gets a fresh hero.
    */
-  const fill = () => {
+  const fill = (records) => {
+    let kept = null
+    for (const { removedNodes } of records) {
+      for (const node of removedNodes) {
+        kept ??= node.querySelector?.(".nish-hero__inner") ?? null
+      }
+    }
     for (const host of document.querySelectorAll("[data-nish-hero]:empty")) {
       host.classList.add("nish-hero")
-      host.append(hero())
-    }
-    // theme.css holds the page under an unready host hidden, so the hero's
-    // arrival moves nothing a reader can see. Ready waits two frames: the
-    // frame that lays the hero out still hides the page it pushed down, and
-    // the page shows where it will stay.
-    for (const host of document.querySelectorAll("[data-nish-hero]:not(:empty):not([data-nish-ready])")) {
-      requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
-    }
-  }
-
-  const SITE = "https://nishlang.com"
-  const DESCRIPTION =
-    "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector."
-
-  /** What Nish is, the same on every page. Nothing here names a person. */
-  const PROJECT = [
-    { "@type": "WebSite", "@id": `${SITE}/#website`, url: `${SITE}/`, name: "Nish", inLanguage: "en" },
-    {
-      "@type": "SoftwareApplication",
-      "@id": `${SITE}/#software`,
-      name: "Nish",
-      alternateName: "Native Instruction Static Host",
-      description: DESCRIPTION,
-      url: `${SITE}/`,
-      applicationCategory: "DeveloperApplication",
-      applicationSubCategory: "Compiler",
-      operatingSystem: "Linux, macOS",
-      license: "https://github.com/amritk/nish/blob/main/LICENSE",
-      sameAs: ["https://github.com/amritk/nish", "https://www.npmjs.com/package/nish"],
-      isAccessibleForFree: true,
-      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-    },
-  ]
-
-  /**
-   * Structured data (schema.org JSON-LD) for search and answer engines: what
-   * Nish is on every page and, on any other page than the home page, what that
-   * page is, read from the title and description Scalar has put in the head.
-   * Scalar renders none of its own. The site is a single-page app, so the
-   * block is rewritten whenever the route or the head changes, and only when
-   * its text would differ, so its own write does not start another.
-   */
-  const structuredData = () => {
-    const path = location.pathname.replace(/\/+$/, "") || "/"
-    const graph = [...PROJECT]
-    if (path !== "/") {
-      const description = document.querySelector('meta[name="description"]')?.getAttribute("content")
-      graph.push({
-        "@type": "TechArticle",
-        "@id": `${SITE}${path}#article`,
-        url: `${SITE}${path}`,
-        headline: document.title.replace(/\s+[|·–—-]\s+Nish$/, ""),
-        ...(description ? { description } : {}),
-        inLanguage: "en",
-        isPartOf: { "@id": `${SITE}/#website` },
-        about: { "@id": `${SITE}/#software` },
-      })
-    }
-    const text = JSON.stringify({ "@context": "https://schema.org", "@graph": graph })
-    let block = document.getElementById("nish-structured-data")
-    if (!block) {
-      block = el("script", { id: "nish-structured-data", type: "application/ld+json" })
-      document.head.append(block)
-    }
-    if (block.textContent !== text) {
-      block.textContent = text
-    }
-  }
-
-  /**
-   * A path in a table cell, such as `nish/net/http1-client-codec`, may break
-   * after a slash and nowhere else: theme.css keeps a name in a table whole,
-   * and a long path would otherwise widen its column past the page. Only code
-   * with no markup inside is touched, so each is rewritten once; should
-   * Scalar redraw one, the next pass puts its breaks back.
-   */
-  const pathBreaks = () => {
-    for (const code of document.querySelectorAll("table.t-editor__table code")) {
-      if (code.childElementCount > 0 || !code.textContent.includes("/")) {
-        continue
-      }
-      const nodes = []
-      code.textContent.split("/").forEach((part, i) => {
-        if (i > 0) {
-          nodes.push("/", document.createElement("wbr"))
+      if (kept?.isConnected === false) {
+        // Moving it restarts its CSS animations. All began when it was built,
+        // so one elapsed time puts each back where it was.
+        host.append(kept)
+        for (const animation of kept.getAnimations({ subtree: true })) {
+          animation.currentTime = performance.now() - built
         }
-        nodes.push(part)
-      })
-      code.replaceChildren(...nodes)
+        host.setAttribute("data-nish-ready", "")
+        kept = null
+      } else {
+        built = performance.now()
+        host.append(hero())
+        // theme.css hides the page under an unready host, so the hero's
+        // arrival moves nothing a reader sees. Two frames: the one laying it
+        // out still hides the page it pushed down.
+        requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
+      }
     }
   }
 
-  let queued = false
-  const observer = new MutationObserver(() => {
-    if (queued) {
-      return
-    }
-    queued = true
-    requestAnimationFrame(() => {
-      queued = false
-      fill()
-      structuredData()
-      pathBreaks()
-    })
-  })
+  // It runs before the browser paints the change, so no frame shows an empty host.
+  const observer = new MutationObserver(fill)
 
   const start = () => {
-    fill()
-    structuredData()
-    pathBreaks()
+    fill([])
     observer.observe(document.body, { childList: true, subtree: true })
-    // A route change retitles the page in the head, not only in the body.
-    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start)
