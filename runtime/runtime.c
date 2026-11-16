@@ -229,18 +229,20 @@ static uint64_t nish_debug_page;
 static int nish_debug_state;     /* 0 none, 1 reserving, 2 reserved */
 static struct sigaction nish_debug_old_segv, nish_debug_old_bus;
 
-/* A fault in the reservation is a stale arena reference: say so, then put the
-   default back and return, so the access faults once more and the program
-   dies of the signal, as its parent expects. Any other fault goes to the
-   handler that was there before. */
+/* A fault in the part of the reservation handed out so far is a stale arena
+   reference: say so, then put the default back and return, so the access
+   faults once more and the program dies of the signal, as its parent expects.
+   Any other fault, pages never handed out included, goes to the handler that
+   was there before. It runs on an alternate stack when the thread has one
+   (runtime-term.c's), so a stack overflow still reaches that handler. */
 static void nish_debug_on_fault(int sig, siginfo_t *info, void *ctx) {
   (void)ctx;
   uintptr_t a = (uintptr_t)info->si_addr, base = (uintptr_t)nish_debug_base;
   struct sigaction *old = sig == SIGSEGV ? &nish_debug_old_segv : &nish_debug_old_bus;
-  if (a >= base && a - base < nish_debug_size) {
+  if (a >= base && a - base < __atomic_load_n(&nish_debug_next, __ATOMIC_RELAXED)) {
     char msg[] = "nish: --debug-arena: stale arena reference at 0x0000000000000000: "
                  "the memory was released by the scope that allocated it\n";
-    char *hex = strstr(msg, "0x") + 2;
+    char *hex = msg + sizeof "nish: --debug-arena: stale arena reference at 0x" - 1;
     for (int i = 15; i >= 0; i--, a >>= 4) hex[i] = "0123456789abcdef"[a & 15];
     nish_write_all(2, msg, sizeof msg - 1);
     void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
@@ -273,7 +275,7 @@ static void nish_debug_reserve(void) {
   struct sigaction sa;
   memset(&sa, 0, sizeof sa);
   sa.sa_sigaction = nish_debug_on_fault;
-  sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+  sa.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
   sigemptyset(&sa.sa_mask);
   sigaction(SIGSEGV, &sa, &nish_debug_old_segv);
   sigaction(SIGBUS, &sa, &nish_debug_old_bus);
@@ -287,7 +289,7 @@ static uint64_t nish_debug_span(uint64_t cap) {
 /* A chunk of `cap` bytes, header included, on pages no block had before. */
 static nish_chunk *nish_debug_chunk(uint64_t cap) {
   if (__atomic_load_n(&nish_debug_state, __ATOMIC_ACQUIRE) != 2) nish_debug_reserve();
-  if (cap > nish_debug_size) nish_oom();
+  if (cap > nish_debug_size - sizeof(nish_chunk) - nish_debug_page) nish_oom();
   uint64_t span = nish_debug_span(cap);
   uint64_t at = __atomic_fetch_add(&nish_debug_next, span, __ATOMIC_RELAXED);
   if (at > nish_debug_size - span)
