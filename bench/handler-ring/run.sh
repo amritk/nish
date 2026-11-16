@@ -209,12 +209,12 @@ awk -v limit="$limit" '
         if (band < 0) band = -band
         d = m[e] > 0 ? (m[e] - m[u]) / m[e] * 100 : 0
         printf "         the ring process is %.1f%% %s than five on descriptors; noise band (epoll vs its copy) %.1f%%\n", (d < 0 ? -d : d), (d >= 0 ? "cheaper" : "dearer"), band
-        last = c; lastd = d; lastband = band; lastup = up[u]; lastfds = fds[u]
+        if (last == "" || c + 0 > last + 0) { last = c; lastd = d; lastband = band; lastup = up[u]; lastfds = fds[u] }
       }
     }
     if (last != "") {
       verdict = (lastup + 0 > limit + 0 && lastd > lastband) ? "go" : "no-go"
-      printf "== verdict at C=%s: %s (the ring process held %s under a limit of %s with %s descriptors; %.1f%% against a %.1f%% band)\n", last, verdict, lastup, limit, lastfds, lastd, lastband
+      printf "== advisory verdict at the highest C, %s: %s (the ring process held %s, past the limit of %s every server ran under, with %s descriptors; %.1f%% against a %.1f%% band). The limit is min(65535, the hard RLIMIT_NOFILE); design 4 asks for a C past 65,535, so read the verdict against that.\n", last, verdict, lastup, limit, lastfds, lastd, lastband
     }
   }
 ' "$results"

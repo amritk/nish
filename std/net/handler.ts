@@ -1246,7 +1246,9 @@ export class HttpHandler {
   /**
    * Whether the listener is resting: an accept failed for want of a resource
    * (EMFILE for descriptors, ENFILE for ring slots, ENOMEM), so the handler
-   * takes no connection until one closes or the 100 ms rest ends.
+   * takes no connection until one closes or the 100 ms rest ends. During
+   * `drain()` a close does not end the rest, so it stays true until the
+   * 100 ms pass.
    * @returns true while the listener is out of the loop for such a rest
    */
   resting(): boolean {
