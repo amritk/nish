@@ -42,25 +42,32 @@ three hash functions is held here.
 {::boilerplate bcp14-tagged}
 
 nish/crypto/hmac exports one-shot HMAC-SHA-256, HMAC-SHA-384 and
-HMAC-SHA-512 over a key and a message, each as `u8[]`, and a verify function
-for each that compares a tag with the one it computes. The construction is
+HMAC-SHA-512 over a key and a message, each as `u8[]`. The construction is
 {{HMAC}}'s; the properties compare it with nish/crypto/sha256 and
 nish/crypto/sha512, the hash functions it is built on. RFC 4231 also
 defines HMAC-SHA-224, which nish/crypto/hmac does not export.
 
 RFC 4231 has no binding sentence in the sense of BCP 14, so there is nothing
-to exclude. Two properties of the implementation lie
-outside what a functional test can observe and are held by nish's own tests
-instead. The verify functions compare through timingSafeEqual, whose loop
-tests/cases/ct_asm_k1_ct.ts holds to no branch on the data at 32 and 48
-bytes after clang -O2 (docs/security/ct-verification.md, and
-docs/security/crypto-k1.md K1-8 for the verify functions themselves). The
+to exclude. The wiping of secret intermediates lies outside what a
+functional test can observe and is held by nish's own tests instead. The
 key blocks, hashed key, inner digest and hashers are wiped before return,
 held under -O2 by tests/wipes/crypto.js ("crypto_hmac crypto_hkdf: the wipes
 survive -O2"); the caller's own key array is recorded in
 docs/security/crypto-k1.md (K1-7) and docs/security/secret.md.
 
-The module's other exports are out of scope here. hmacSha256Secret,
+The module's other exports are out of scope here, each for the reason
+given.
+
+hmacSha256Verify, hmacSha384Verify and hmacSha512Verify are an API RFC 4231
+does not specify: it defines the tag, not how one is checked. They are held
+by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and their
+compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to
+no branch on the data after clang -O2 (docs/security/ct-verification.md,
+and docs/security/crypto-k1.md K1-8). hmacKeyedVerify is the same check
+over an absorbed HmacKey and a window of a buffer, held by
+tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made").
+
+hmacSha256Secret,
 hmacSha384Secret and hmacSha512Secret take the key as a `Secret<u8[]>`,
 which a property cannot construct; they compute the same function as the
 plain exports, and their wiping is held by nish's `nish:secret` tests.
@@ -69,7 +76,12 @@ PRF but is a different function, with its own vectors and none in RFC 4231. The
 classes HmacSha256, HmacSha384, HmacSha512, HmacSha256Scratch,
 HmacSha384Scratch and HmacKey are stateful, reusable forms of the same
 functions; a property here calls only functions, so they are left to nish's
-own tests.
+own tests (tests/link/crypto_hmac*). hmacKeyedInto writes the tag of an
+absorbed HmacKey into a caller's array at an offset, a buffer interface RFC
+4231 does not describe, held by tests/link/crypto_jwt. hmacCopySha256 and
+hmacCopySha384 copy a hasher's state into another, a helper for those
+classes that computes no HMAC. HMAC_SHA256, HMAC_SHA384 and HMAC_SHA512 are
+the constants that name a hash for HmacKey, not functions.
 
 # Interface
 
@@ -78,9 +90,6 @@ own tests.
 export const hmacSha256 = (key: u8[], data: u8[]): u8[]
 export const hmacSha384 = (key: u8[], data: u8[]): u8[]
 export const hmacSha512 = (key: u8[], data: u8[]): u8[]
-export const hmacSha256Verify = (key: u8[], data: u8[], tag: u8[]): boolean
-export const hmacSha384Verify = (key: u8[], data: u8[], tag: u8[]): boolean
-export const hmacSha512Verify = (key: u8[], data: u8[], tag: u8[]): boolean
 // module: nish/crypto/sha256
 export const sha256 = (data: u8[]): u8[]
 // module: nish/crypto/sha512
@@ -96,8 +105,7 @@ export const sha512 = (data: u8[]): u8[]
 
 Note: the properties below hold hmacSha256 to the HMAC construction of
 {{HMAC}} over nish/crypto/sha256 (block length 64 bytes, ipad 0x36, opad
-0x5c, a key longer than the block hashed first) and to a 32-byte tag, and
-hmacSha256Verify to accept that tag and refuse it with any one bit flipped.
+0x5c, a key longer than the block hashed first) and to a 32-byte tag.
 
 ~~~ ts-property
 // P-CONSTRUCTION-256 covers R-HMAC-SHA256 — HMAC-SHA-256 of a key of at most 64 bytes is the RFC 2104 construction over SHA-256
@@ -107,16 +115,6 @@ forall (key: u8[] /* 0..64 */, text: u8[] /* 0..200 */) => hmacSha256(key, text)
 ~~~ ts-property
 // P-LONG-KEY-256 covers R-HMAC-SHA256 — a key longer than 64 bytes gives the tag of its SHA-256 hash
 forall (key: u8[] /* 65..300 */, text: u8[] /* 0..100 */) => hmacSha256(key, text) === hmacSha256(sha256(key), text)
-~~~
-
-~~~ ts-property
-// P-VERIFY-ACCEPT-256 covers R-HMAC-SHA256 — hmacSha256Verify accepts the HMAC-SHA-256 tag
-forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha256Verify(key, text, hmacSha256(key, text))
-~~~
-
-~~~ ts-property
-// P-VERIFY-REJECT-256 covers R-HMAC-SHA256 — hmacSha256Verify refuses the HMAC-SHA-256 tag with any one bit flipped
-forall (key: u8[] /* 0..100 */, text: u8[] /* 0..100 */, bit: i32 /* 0..255 */) => !hmacSha256Verify(key, text, flipBit(hmacSha256(key, text), bit))
 ~~~
 
 > HMAC-SHA-384 is the realization of the HMAC message authentication code using the SHA-384 hash function
@@ -134,16 +132,6 @@ forall (key: u8[] /* 0..128 */, text: u8[] /* 0..300 */) => hmacSha384(key, text
 ~~~ ts-property
 // P-LONG-KEY-384 covers R-HMAC-SHA384 — a key longer than 128 bytes gives the tag of its SHA-384 hash
 forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha384(key, text) === hmacSha384(sha384(key), text)
-~~~
-
-~~~ ts-property
-// P-VERIFY-ACCEPT-384 covers R-HMAC-SHA384 — hmacSha384Verify accepts the HMAC-SHA-384 tag
-forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha384Verify(key, text, hmacSha384(key, text))
-~~~
-
-~~~ ts-property
-// P-VERIFY-REJECT-384 covers R-HMAC-SHA384 — hmacSha384Verify refuses the HMAC-SHA-384 tag with any one bit flipped
-forall (key: u8[] /* 0..150 */, text: u8[] /* 0..100 */, bit: i32 /* 0..383 */) => !hmacSha384Verify(key, text, flipBit(hmacSha384(key, text), bit))
 ~~~
 
 > HMAC-SHA-512 is the realization of the HMAC message authentication code using the SHA-512 hash function
@@ -164,16 +152,6 @@ forall (key: u8[] /* 129..400 */, text: u8[] /* 0..100 */) => hmacSha512(key, te
 ~~~
 
 ~~~ ts-property
-// P-VERIFY-ACCEPT-512 covers R-HMAC-SHA512 — hmacSha512Verify accepts the HMAC-SHA-512 tag
-forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha512Verify(key, text, hmacSha512(key, text))
-~~~
-
-~~~ ts-property
-// P-VERIFY-REJECT-512 covers R-HMAC-SHA512 — hmacSha512Verify refuses the HMAC-SHA-512 tag with any one bit flipped
-forall (key: u8[] /* 0..150 */, text: u8[] /* 0..100 */, bit: i32 /* 0..511 */) => !hmacSha512Verify(key, text, flipBit(hmacSha512(key, text), bit))
-~~~
-
-~~~ ts-property
 // P-TAG-LEN covers R-HMAC-SHA256, R-HMAC-SHA384, R-HMAC-SHA512 — the tags are 32, 48 and 64 bytes, the hash output, for any key and message
 forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha256(key, text).length === 32 && hmacSha384(key, text).length === 48 && hmacSha512(key, text).length === 64
 ~~~
@@ -188,13 +166,22 @@ forall (key: u8[] /* 0..200 */, text: u8[] /* 0..200 */) => hmacSha256(key, text
 > {{Section 4.4 of RFC4231}}
 {: #R-KEY-DATA-64 gi="blockquote"}
 
+> Test with a combined length of key and data that is larger than 64 bytes (= block-size of SHA-224 and SHA-256).
+> {{Section 4.5 of RFC4231}}
+{: #R-KEY-DATA-64-TC4 gi="blockquote"}
+
+Note: Sections 4.4 and 4.5 describe test cases 3 and 4 in the same
+sentence; each is quoted under its own section.
+
 > Test with a truncation of output to 128 bits.
 > {{Section 4.6 of RFC4231}}
 {: #R-TRUNC gi="blockquote"}
 
 Note: the functions return the whole tag, so test case 5 ({{Section 4.6 of
 RFC4231}}: a key of 20 bytes of 0x0c, the data "Test With Truncation") is
-written as a slice of it, its first 16 bytes.
+written as a slice of it, its first 16 bytes. This is a limit of vector: a
+vector row holds a function's whole return value, so a truncated tag can
+only be a property.
 
 ~~~ ts-property
 // P-TRUNC-256 covers R-TRUNC, R-HMAC-SHA256 — RFC 4231 test case 5: the first 128 bits of HMAC-SHA-256 are a3b6167473100ee06e0c796c2955552b
@@ -232,9 +219,9 @@ forall (n: i32 /* 16..16 */) => hmacSha512(fill(12, 20), utf8("Test With Truncat
 | TC3-256 | `hmacSha256(Key = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, Data = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)` | `HMAC-SHA-256 = 773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe` | R-HMAC-SHA256, R-KEY-DATA-64 | {{Section 4.4 of RFC4231}} | RFC 4231 test case 3, 50 bytes of data, HMAC-SHA-256 |
 | TC3-384 | `hmacSha384(Key = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, Data = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)` | `HMAC-SHA-384 = 88062608d3e6ad8a0aa2ace014c8a86f0aa635d947ac9febe83ef4e55966144b2a5ab39dc13814b94e3ab6e101a34f27` | R-HMAC-SHA384, R-KEY-DATA-64 | {{Section 4.4 of RFC4231}} | RFC 4231 test case 3, 50 bytes of data, HMAC-SHA-384 |
 | TC3-512 | `hmacSha512(Key = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, Data = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)` | `HMAC-SHA-512 = fa73b0089d56a284efb0f0756c890be9b1b5dbdd8ee81a3655f83e33b2279d39bf3e848279a722c806b485a47e67c807b946a337bee8942674278859e13292fb` | R-HMAC-SHA512, R-KEY-DATA-64 | {{Section 4.4 of RFC4231}} | RFC 4231 test case 3, 50 bytes of data, HMAC-SHA-512 |
-| TC4-256 | `hmacSha256(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)` | `HMAC-SHA-256 = 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b` | R-HMAC-SHA256, R-KEY-DATA-64 | {{Section 4.5 of RFC4231}} | RFC 4231 test case 4, HMAC-SHA-256 |
-| TC4-384 | `hmacSha384(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)` | `HMAC-SHA-384 = 3e8a69b7783c25851933ab6290af6ca77a9981480850009cc5577c6e1f573b4e6801dd23c4a7d679ccf8a386c674cffb` | R-HMAC-SHA384, R-KEY-DATA-64 | {{Section 4.5 of RFC4231}} | RFC 4231 test case 4, HMAC-SHA-384 |
-| TC4-512 | `hmacSha512(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)` | `HMAC-SHA-512 = b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd` | R-HMAC-SHA512, R-KEY-DATA-64 | {{Section 4.5 of RFC4231}} | RFC 4231 test case 4, HMAC-SHA-512 |
+| TC4-256 | `hmacSha256(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)` | `HMAC-SHA-256 = 82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b` | R-HMAC-SHA256, R-KEY-DATA-64-TC4 | {{Section 4.5 of RFC4231}} | RFC 4231 test case 4, HMAC-SHA-256 |
+| TC4-384 | `hmacSha384(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)` | `HMAC-SHA-384 = 3e8a69b7783c25851933ab6290af6ca77a9981480850009cc5577c6e1f573b4e6801dd23c4a7d679ccf8a386c674cffb` | R-HMAC-SHA384, R-KEY-DATA-64-TC4 | {{Section 4.5 of RFC4231}} | RFC 4231 test case 4, HMAC-SHA-384 |
+| TC4-512 | `hmacSha512(Key = 0102030405060708090a0b0c0d0e0f10111213141516171819, Data = cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd)` | `HMAC-SHA-512 = b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd` | R-HMAC-SHA512, R-KEY-DATA-64-TC4 | {{Section 4.5 of RFC4231}} | RFC 4231 test case 4, HMAC-SHA-512 |
 | TC6-256 | `hmacSha256(Key = 131 × aa, Data = 54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374)` | `HMAC-SHA-256 = 60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54` | R-HMAC-SHA256, R-KEY-128 | {{Section 4.7 of RFC4231}} | RFC 4231 test case 6, a 131-byte key, HMAC-SHA-256 |
 | TC6-384 | `hmacSha384(Key = 131 × aa, Data = 54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374)` | `HMAC-SHA-384 = 4ece084485813e9088d2c63a041bc5b44f9ef1012a2b588f3cd11f05033ac4c60c2ef6ab4030fe8296248df163f44952` | R-HMAC-SHA384, R-KEY-128 | {{Section 4.7 of RFC4231}} | RFC 4231 test case 6, a 131-byte key, HMAC-SHA-384 |
 | TC6-512 | `hmacSha512(Key = 131 × aa, Data = 54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374)` | `HMAC-SHA-512 = 80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f3526b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598` | R-HMAC-SHA512, R-KEY-128 | {{Section 4.7 of RFC4231}} | RFC 4231 test case 6, a 131-byte key, HMAC-SHA-512 |

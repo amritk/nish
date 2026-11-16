@@ -23,7 +23,7 @@
       "section": "1",
       "level": "DEFINITION",
       "quote": "HMAC-SHA-256 is the realization of the HMAC message authentication code using the SHA-256 hash function",
-      "note": "the properties below hold hmacSha256 to the HMAC construction of [HMAC] over nish/crypto/sha256 (block length 64 bytes, ipad 0x36, opad 0x5c, a key longer than the block hashed first) and to a 32-byte tag, and hmacSha256Verify to accept that tag and refuse it with any one bit flipped."
+      "note": "the properties below hold hmacSha256 to the HMAC construction of [HMAC] over nish/crypto/sha256 (block length 64 bytes, ipad 0x36, opad 0x5c, a key longer than the block hashed first) and to a 32-byte tag."
     },
     {
       "id": "R-HMAC-SHA384",
@@ -52,11 +52,18 @@
       "quote": "Test with a combined length of key and data that is larger than 64 bytes (= block-size of SHA-224 and SHA-256)."
     },
     {
+      "id": "R-KEY-DATA-64-TC4",
+      "section": "4.5",
+      "level": "DEFINITION",
+      "quote": "Test with a combined length of key and data that is larger than 64 bytes (= block-size of SHA-224 and SHA-256).",
+      "note": "Sections 4.4 and 4.5 describe test cases 3 and 4 in the same sentence; each is quoted under its own section."
+    },
+    {
       "id": "R-TRUNC",
       "section": "4.6",
       "level": "DEFINITION",
       "quote": "Test with a truncation of output to 128 bits.",
-      "note": "the functions return the whole tag, so test case 5 (Section 4.6 of [RFC4231]: a key of 20 bytes of 0x0c, the data \"Test With Truncation\") is written as a slice of it, its first 16 bytes."
+      "note": "the functions return the whole tag, so test case 5 (Section 4.6 of [RFC4231]: a key of 20 bytes of 0x0c, the data \"Test With Truncation\") is written as a slice of it, its first 16 bytes. This is a limit of vector: a vector row holds a function's whole return value, so a truncated tag can only be a property."
     },
     {
       "id": "R-KEY-128",
@@ -113,60 +120,6 @@
         }
       ],
       "returns": "bytes"
-    },
-    {
-      "name": "hmacSha256Verify",
-      "params": [
-        {
-          "name": "key",
-          "type": "bytes"
-        },
-        {
-          "name": "data",
-          "type": "bytes"
-        },
-        {
-          "name": "tag",
-          "type": "bytes"
-        }
-      ],
-      "returns": "bool"
-    },
-    {
-      "name": "hmacSha384Verify",
-      "params": [
-        {
-          "name": "key",
-          "type": "bytes"
-        },
-        {
-          "name": "data",
-          "type": "bytes"
-        },
-        {
-          "name": "tag",
-          "type": "bytes"
-        }
-      ],
-      "returns": "bool"
-    },
-    {
-      "name": "hmacSha512Verify",
-      "params": [
-        {
-          "name": "key",
-          "type": "bytes"
-        },
-        {
-          "name": "data",
-          "type": "bytes"
-        },
-        {
-          "name": "tag",
-          "type": "bytes"
-        }
-      ],
-      "returns": "bool"
     },
     {
       "name": "sha256",
@@ -441,7 +394,7 @@
       "kind": "vector",
       "id": "TC4-256",
       "title": "RFC 4231 test case 4, HMAC-SHA-256",
-      "covers": ["R-HMAC-SHA256", "R-KEY-DATA-64"],
+      "covers": ["R-HMAC-SHA256", "R-KEY-DATA-64-TC4"],
       "source": {
         "cite": {
           "section": "4.5"
@@ -467,7 +420,7 @@
       "kind": "vector",
       "id": "TC4-384",
       "title": "RFC 4231 test case 4, HMAC-SHA-384",
-      "covers": ["R-HMAC-SHA384", "R-KEY-DATA-64"],
+      "covers": ["R-HMAC-SHA384", "R-KEY-DATA-64-TC4"],
       "source": {
         "cite": {
           "section": "4.5"
@@ -493,7 +446,7 @@
       "kind": "vector",
       "id": "TC4-512",
       "title": "RFC 4231 test case 4, HMAC-SHA-512",
-      "covers": ["R-HMAC-SHA512", "R-KEY-DATA-64"],
+      "covers": ["R-HMAC-SHA512", "R-KEY-DATA-64-TC4"],
       "source": {
         "cite": {
           "section": "4.5"
@@ -880,109 +833,6 @@
     },
     {
       "kind": "property",
-      "id": "P-VERIFY-ACCEPT-256",
-      "title": "hmacSha256Verify accepts the HMAC-SHA-256 tag",
-      "covers": ["R-HMAC-SHA256"],
-      "forall": [
-        {
-          "name": "key",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 200
-        },
-        {
-          "name": "text",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 200
-        }
-      ],
-      "assert": {
-        "call": "hmacSha256Verify",
-        "args": [
-          {
-            "var": "key"
-          },
-          {
-            "var": "text"
-          },
-          {
-            "call": "hmacSha256",
-            "args": [
-              {
-                "var": "key"
-              },
-              {
-                "var": "text"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-VERIFY-REJECT-256",
-      "title": "hmacSha256Verify refuses the HMAC-SHA-256 tag with any one bit flipped",
-      "covers": ["R-HMAC-SHA256"],
-      "forall": [
-        {
-          "name": "key",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 100
-        },
-        {
-          "name": "text",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 100
-        },
-        {
-          "name": "bit",
-          "type": "i32",
-          "min": 0,
-          "max": 255
-        }
-      ],
-      "assert": {
-        "op": "not",
-        "args": [
-          {
-            "call": "hmacSha256Verify",
-            "args": [
-              {
-                "var": "key"
-              },
-              {
-                "var": "text"
-              },
-              {
-                "op": "flipBit",
-                "args": [
-                  {
-                    "call": "hmacSha256",
-                    "args": [
-                      {
-                        "var": "key"
-                      },
-                      {
-                        "var": "text"
-                      }
-                    ]
-                  },
-                  {
-                    "var": "bit"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
       "id": "P-CONSTRUCTION-384",
       "title": "HMAC-SHA-384 of a key of at most 128 bytes is the RFC 2104 construction over SHA-384",
       "covers": ["R-HMAC-SHA384"],
@@ -1184,109 +1034,6 @@
     },
     {
       "kind": "property",
-      "id": "P-VERIFY-ACCEPT-384",
-      "title": "hmacSha384Verify accepts the HMAC-SHA-384 tag",
-      "covers": ["R-HMAC-SHA384"],
-      "forall": [
-        {
-          "name": "key",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 200
-        },
-        {
-          "name": "text",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 200
-        }
-      ],
-      "assert": {
-        "call": "hmacSha384Verify",
-        "args": [
-          {
-            "var": "key"
-          },
-          {
-            "var": "text"
-          },
-          {
-            "call": "hmacSha384",
-            "args": [
-              {
-                "var": "key"
-              },
-              {
-                "var": "text"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-VERIFY-REJECT-384",
-      "title": "hmacSha384Verify refuses the HMAC-SHA-384 tag with any one bit flipped",
-      "covers": ["R-HMAC-SHA384"],
-      "forall": [
-        {
-          "name": "key",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 150
-        },
-        {
-          "name": "text",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 100
-        },
-        {
-          "name": "bit",
-          "type": "i32",
-          "min": 0,
-          "max": 383
-        }
-      ],
-      "assert": {
-        "op": "not",
-        "args": [
-          {
-            "call": "hmacSha384Verify",
-            "args": [
-              {
-                "var": "key"
-              },
-              {
-                "var": "text"
-              },
-              {
-                "op": "flipBit",
-                "args": [
-                  {
-                    "call": "hmacSha384",
-                    "args": [
-                      {
-                        "var": "key"
-                      },
-                      {
-                        "var": "text"
-                      }
-                    ]
-                  },
-                  {
-                    "var": "bit"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
       "id": "P-CONSTRUCTION-512",
       "title": "HMAC-SHA-512 of a key of at most 128 bytes is the RFC 2104 construction over SHA-512",
       "covers": ["R-HMAC-SHA512"],
@@ -1480,109 +1227,6 @@
               },
               {
                 "var": "text"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-VERIFY-ACCEPT-512",
-      "title": "hmacSha512Verify accepts the HMAC-SHA-512 tag",
-      "covers": ["R-HMAC-SHA512"],
-      "forall": [
-        {
-          "name": "key",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 200
-        },
-        {
-          "name": "text",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 200
-        }
-      ],
-      "assert": {
-        "call": "hmacSha512Verify",
-        "args": [
-          {
-            "var": "key"
-          },
-          {
-            "var": "text"
-          },
-          {
-            "call": "hmacSha512",
-            "args": [
-              {
-                "var": "key"
-              },
-              {
-                "var": "text"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-VERIFY-REJECT-512",
-      "title": "hmacSha512Verify refuses the HMAC-SHA-512 tag with any one bit flipped",
-      "covers": ["R-HMAC-SHA512"],
-      "forall": [
-        {
-          "name": "key",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 150
-        },
-        {
-          "name": "text",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 100
-        },
-        {
-          "name": "bit",
-          "type": "i32",
-          "min": 0,
-          "max": 511
-        }
-      ],
-      "assert": {
-        "op": "not",
-        "args": [
-          {
-            "call": "hmacSha512Verify",
-            "args": [
-              {
-                "var": "key"
-              },
-              {
-                "var": "text"
-              },
-              {
-                "op": "flipBit",
-                "args": [
-                  {
-                    "call": "hmacSha512",
-                    "args": [
-                      {
-                        "var": "key"
-                      },
-                      {
-                        "var": "text"
-                      }
-                    ]
-                  },
-                  {
-                    "var": "bit"
-                  }
-                ]
               }
             ]
           }
