@@ -22,16 +22,19 @@ made with, and a completion for a slot closed since is recognised by its
 generation and only gives back its buffer. A slot handle a caller passes is
 checked before use and answers `-EBADF`. A double free a peer could cause by
 resetting a connection during a send (NURING-1) was found in review and
-fixed before landing. One finding is open: queued sends to a peer that never
-reads are not bounded (NURING-2), which S2's surface must bound. Five
-findings (NURING-1 to NURING-5): one fixed, one open, three decided.
+fixed before landing. Two findings are open, both for S2's surface: queued
+sends to a peer that never reads are not bounded (NURING-2), and a set that
+cannot grow stops accepting without telling its caller (NURING-6). Six
+findings (NURING-1 to NURING-6): one fixed, two open, three decided. The
+kernel's own io_uring flaws that S1's operations reach, and the kernels that
+fix them, are under "The kernel's record" below.
 
 ## Scope
 
 | File | What |
 | --- | --- |
 | `runtime/runtime-uring.c` | the probe (`nish_uring_probe`, `ur_probe_once`, `ur_setup_flags`); the set and its rings (`nish_uring_open` and its option checks, `ur_add_ring`, `ur_free_ring`, `nish_uring_destroy`); the accepting job (`ur_top_up`); completions (`ur_complete`, `ur_reap`, `ur_service`, `ur_catch_up`, `nish_uring_wait`); receives and buffers (`ur_arm`, `ur_recycle`); sends (`nish_uring_send`, `ur_send_head`, `ur_drop_sends`, `ur_unlink_all`); slots (`ur_open_slot`, `nish_uring_close`); and the stubs a native build off Linux links (a wasm build compiles none of the file) |
-| `tests/runtime/uring-test.c` | the test: an echo server on the layer in a forked child, driven by plain-socket clients, one mode a check |
+| `tests/runtime/uring-test.c` | the test: an echo server on the layer in a forked child, driven by plain-socket clients, one mode a check; and the `UR_SYS_SETUP` and `UR_SYS_REGISTER` hooks it compiles the layer with, which stand in for the two syscalls to force the answers a seccomp filter cannot |
 
 Out of scope: `runtime/runtime-net.c`, whose epoll path does not call the
 layer, and `bench/fd-limit/`, the prototype the design measured. The rule for
@@ -64,6 +67,7 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-2 | Low | `runtime/runtime-uring.c` (`nish_uring_send`) | Each send copies its bytes into a record that is queued until the kernel takes them. A peer that never reads leaves every later send for its slot queued, so a server that keeps answering it grows without bound. | **Open**, for S2: the layer reports nothing a caller could use as backpressure, and `nish:net`'s surface must bound the bytes queued per connection, or expose them, before a program can reach the layer. Tracked in #1648. |
 | NURING-3 | Low | `runtime/runtime-uring.c` (`ur_complete`, `nish_uring_wait`) | A DATA event's bytes are the provided buffer the kernel filled, lent, not copied: they are given back to the kernel at the start of the next `nish_uring_wait`, and a caller that keeps the pointer past it reads bytes another connection's receive may have written. | **Decided.** The copy would cost every receive; the contract is in the header comment ("valid until the next wait"), and S2's surface copies the bytes into the program's array before the next wait. |
 | NURING-4 | Low | `runtime/runtime-uring.c` (`ur_tag`, `nish_uring_close`) | A slot's generation is 24 bits, so a recv's completion that arrives after 2^24 closes of the same slot would match a newer connection's generation. | **Decided.** `nish_uring_close` cancels the slot's recv before it closes it, in the same submission, so no recv of the slot outlives the close by more than one completion; 2^24 closes and re-accepts of one slot in that window cannot happen. |
+| NURING-6 | Low | `runtime/runtime-uring.c` (`ur_top_up`) | A set whose every ring is full and that cannot open another (`ur_add_ring` answers `-ENOSPC` at `rings_max`, or its setup fails for want of memory or descriptors) stops queuing accepts and says nothing: no event tells the caller, so new peers wait in the listener's backlog until the kernel drops them there. No connection already accepted is lost. | **Open**, for S2: the surface must report a full set to the program as `-ENFILE` (-23), the answer a full table gives, without dropping or closing any accepted connection, and take accepting up again when a slot closes. Tracked in #1648. |
 | NURING-5 | Low | `runtime/runtime-uring.c` (`ur_complete`) | A send the kernel answers with 0 bytes, for a record with bytes left, is taken as complete, and the bytes left are not sent. | **Decided.** A stream socket's send does not answer 0 for a non-empty buffer; re-arming on 0 would spin on a kernel that did. The connection's next send or recv reports any real failure. |
 
 ## Properties verified
@@ -88,10 +92,18 @@ where the probe says it is refused.
   An accepted slot at or past `slots` is counted as a bound violation, never
   used.
 - **The kernel's re-entry flags.** "uring: runtime-uring.c taskrun: a burst
-  of 500 over four rings completes, entering again while IORING_SQ_TASKRUN
-  is up" and "uring: runtime-uring.c overflow: a CQ of 8 under 256 clients
-  overflows and is drained": completions the kernel held back are taken, not
-  lost.
+  of 100 queued on one ring is taken by one wait, entering again while
+  IORING_SQ_TASKRUN is up" and "uring: runtime-uring.c overflow: a CQ of 8
+  under 256 clients overflows and is drained": completions the kernel held
+  back are taken, not lost. The taskrun server holds 100 clients until all
+  are accepted, so their sends are queued as task work together, then asks
+  one `nish_uring_wait` with no timeout for every event: a DEFER_TASKRUN ring
+  runs at most 20 queued completions per enter on 6.13 and later, so a layer
+  that does not enter again takes 20 of the 100 (a mutant without the
+  re-entry answered "one wait took 1280 of the burst's 6400 bytes" on
+  6.18.44, on every run). On 6.18 and later the re-entry counter must also
+  move. A kernel without the cap has nothing to re-enter for and passes
+  either way.
 - **Buffers run out.** "uring: runtime-uring.c nobufs: a recv that runs out
   of provided buffers is re-armed, not closed": a peer that fills every
   buffer delays the others' receives and closes nothing.
@@ -99,10 +111,21 @@ where the probe says it is refused.
   short arrives whole and in order", and NURING-1's "reset" check.
 - **Stale handles.** Every mode that closes a slot checks, once, that a send
   and a second close on the closed slot answer `-EBADF`.
-- **Refused io_uring.** "uring: runtime-uring.c fallback: a seccomp-refused
-  io_uring_setup or io_uring_register answers its errno, with no descriptor
-  left": the probe and `nish_uring_open` answer the refusal, and the caller
-  keeps the epoll path.
+- **Refused io_uring.** "uring: runtime-uring.c fallback: a refused setup
+  or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or
+  opcode answers what sends a caller to epoll, with no descriptor left": the
+  probe and `nish_uring_open` answer the refusal with no set, and the caller
+  keeps the epoll path. A seccomp filter (native arch only) answers
+  io_uring_setup with EPERM, ENOSYS or EINVAL and io_uring_register with
+  EPERM or EINVAL; through the hooks, setup answers -EINVAL to both of
+  `ur_setup_flags`'s attempts (the second must add COOP_TASKRUN, and the
+  probe answers -EINVAL), FEAT_NODROP is hidden, or the SEND opcode is
+  hidden (each -EOPNOTSUPP). A kernel that wants COOP_TASKRUN takes the
+  second attempt, and the set opens on it. The refused-setup cases run on any
+  Linux; the rest skip where the kernel has no io_uring. Each of five mutants
+  of the probe (no COOP retry, no NODROP check, no EINVAL-to-EOPNOTSUPP
+  mapping, no opcode check, an open that does not pass the probe's answer
+  on) fails the mode.
 - **The unit builds into every runtime.** "runtime.c, runtime-os.c,
   runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c,
   runtime-net.c, runtime-uring.c, runtime-simd.c, runtime-aes.c,
@@ -111,6 +134,64 @@ where the probe says it is refused.
   compile warning-free together and pass the runtime unit test", and its
   `.text` budget, "runtime-uring.c: .text* at -Oz fits the 6144 byte
   budget".
+
+## The kernel's record
+
+The layer's safety rests on the kernel's io_uring as much as on its own
+checks, and io_uring has the longest CVE record of any kernel subsystem since
+5.10. What follows is the part of that record S1's configuration can reach:
+the setup flags `SINGLE_ISSUER`, `DEFER_TASKRUN`, `TASKRUN_FLAG`,
+`SUBMIT_ALL`, `CQSIZE` (and `COOP_TASKRUN` on the retry); the operations
+`ACCEPT` with `IORING_FILE_INDEX_ALLOC`, multishot `RECV` from a provided
+buffer ring, `SEND`, `CLOSE` on a fixed file and `ASYNC_CANCEL`; and the
+registrations `PROBE`, sparse `FILES2`, `PBUF_RING` (with memory the layer
+maps itself) and `EVENTFD`.
+
+**How this list was made.** From memory of the kernel's advisories, not from
+a lookup: this change's environment could not reach `git.kernel.org`. Its
+versions are the mainline releases recalled as carrying each fix, and stable
+backports reach older series. Before S2 makes the layer reachable from a
+program, check every row and look for newer ones in the kernel CNA's record
+(`git.kernel.org/pub/scm/linux/security/vulns.git`, `cve/published/`,
+searched for `io_uring/`) and NVD. Since 2024 the CNA assigns a CVE to most
+io_uring fixes, so the full record is far longer than this; these are the
+memory-safety flaws in code S1 drives.
+
+**The floor the probe sets.** `ur_probe_once` accepts a kernel only if setup
+takes `SINGLE_ISSUER` and `DEFER_TASKRUN` (6.0 and 6.1), sparse file
+registration and `PBUF_RING` register (5.19), and the probe lists the five
+operations. In practice that is 6.1 or later, or a vendor kernel that
+backported these, so a flaw fixed in mainline before 6.1 is reachable only
+on a vendor kernel that took the feature without the fix.
+
+| CVE | What, in code S1 reaches | Fixed in | S1 |
+| --- | --- | --- | --- |
+| CVE-2023-0469 | use after free installing a fixed file (`io_install_fixed_file`): `ACCEPT` and `CLOSE` on direct descriptors | 6.1 | reached by S1's operations; fixed before 6.1 was released, so below the floor |
+| CVE-2023-1872 | `io_file_get_fixed` without the ring lock in io-wq: a use after free on fixed files | 5.18 | below the floor |
+| CVE-2023-3389 | a race between poll cancellation and completion, a use after free: the arm multishot `RECV` and `ASYNC_CANCEL` use | 6.0 | below the floor |
+| CVE-2022-2602 | registered files and the unix socket garbage collector: a use after free | 6.1 | not reached: it needs an io_uring descriptor passed over a unix socket, and a TCP peer cannot pass one |
+| CVE-2024-0582 | `PBUF_RING` with kernel-allocated memory (`IOU_PBUF_RING_MMAP`), unregistered while mapped: a use after free | 6.7 (6.4 to 6.6 affected) | not reached: the layer maps the buffer ring's memory itself and never passes the flag |
+| CVE-2023-6560 | `IORING_SETUP_NO_MMAP`'s ring mapping: out of bounds | 6.7 | not reached: the layer maps its rings |
+| CVE-2023-2598 | registered fixed buffers (`REGISTER_BUFFERS`): out of bounds | 6.4 | not reached: no fixed buffers |
+| CVE-2023-46862 | `SQPOLL` and the fdinfo reader: a null dereference | 6.6 | not reached: no `SQPOLL` |
+| CVE-2021-41073 | classic provided buffers (`IOSQE_BUFFER_SELECT`) on a read: type confusion | 5.15 | not reached: receives only, from a buffer ring |
+
+The rows marked "below the floor" are reachable only on a kernel older than
+the probe accepts, or a vendor kernel that backported features without
+fixes. Nothing here is a flaw in the layer; the decision it informs is which
+kernels may run it, and the probe's feature floor is that decision for now.
+A deployment that must pin a kernel should take a 6.1-or-later stable
+release with the current stable fixes, since the CNA's record keeps adding
+fixes to the multishot receive, provided-buffer and fixed-file code.
+
+**What S3 adds.** The framing of this record around a restricted ring is
+S3's, with `sandbox.md` (the design's §6.2): under `--sandbox` each ring is
+created with `IORING_SETUP_R_DISABLED` and given
+`IORING_REGISTER_RESTRICTIONS` (the five operations above and `NOP`; no
+registration after enabling), and the filter then kills `io_uring_setup` and
+`io_uring_register`. S1 makes no restricted ring, so this section lists what
+S1's own rings reach; S3 extends it with the restriction check's own record
+and with which rows a restricted ring of those six opcodes still reaches.
 
 ## Notes
 

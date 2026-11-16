@@ -757,9 +757,9 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * the completion drain with its DEFER_TASKRUN re-entry and overflow catch-up, the
  * send queue with its short-send requeue, and the slot close with its generation.
  *
- * Measured **6,138 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64 (the same with
- * `-DNISH_THREADS=1`: the layer keeps no thread-local state). The budget is the next
- * 256-byte boundary above the measurement. A unit of its own beside runtime-net.c, so
+ * Measured **6,045 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after the
+ * review round dropped two unused fields; 6,138 before. The budget is the 256-byte
+ * boundary above the first measurement, kept. A unit of its own beside runtime-net.c, so
  * that the epoll path links none of it: nothing in `nish:net` calls it until S2.
  */
 const RUNTIME_URING_TEXT_BUDGET = 6144

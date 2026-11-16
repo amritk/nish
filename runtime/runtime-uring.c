@@ -27,9 +27,11 @@
  *     to another ring is a fresh submission there, which is tried at once and
  *     drains the backlog.
  *  4. A DEFER_TASKRUN ring runs at most 20 queued completions per
- *     io_uring_enter (IO_LOCAL_TW_DEFAULT_MAX) and does not signal its
- *     eventfd again for the rest; TASKRUN_FLAG says so in IORING_SQ_TASKRUN.
- *     `ur_service` enters again while that flag is up, and while
+ *     io_uring_enter (IO_LOCAL_TW_DEFAULT_MAX), and queuing more work does
+ *     not signal its eventfd while the rest wait; only the completions the
+ *     enter posts do. TASKRUN_FLAG says work is left in IORING_SQ_TASKRUN.
+ *     `ur_service` enters again while that flag is up, so one wait takes
+ *     all of a ring's queued work rather than 20 per wakeup, and while
  *     IORING_SQ_CQ_OVERFLOW says the kernel holds completions the CQ had no
  *     room for (FEAT_NODROP keeps them rather than dropping them).
  *
@@ -293,7 +295,7 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
  * kernel still held. */
 struct ur_send {
   struct ur_send *next, *prev_all, *next_all;
-  uint32_t ring, slot, gen;
+  uint32_t slot, gen;
   uint32_t off, len;
   int in_flight;
   uint8_t data[];
@@ -322,7 +324,6 @@ struct ur_ring {
 struct nish_uring_set {
   int listener, ep;
   uint32_t slots, buf_count, buf_size, sq_entries, cq_entries;
-  uint32_t setup_flags; /* the flags the probe found this kernel takes */
   int nrings, rings_max, acceptor;
   int accept_stopped;
   struct ur_ring **rings;
@@ -337,44 +338,50 @@ struct nish_uring_set {
 
 static int ur_errno(long rc) { return rc < 0 ? -errno : (int)rc; }
 
-static int ur_setup(uint32_t entries, struct ur_params *p) {
-  return ur_errno(syscall(__NR_io_uring_setup, entries, p));
-}
+/* tests/runtime/uring-test.c stands in for setup and register to force the
+ * answers a seccomp filter cannot: an -EINVAL that depends on the flags, a
+ * missing feature bit or opcode. */
+#ifndef UR_SYS_SETUP
+#define UR_SYS_SETUP(entries, p) syscall(__NR_io_uring_setup, entries, p)
+#endif
+#ifndef UR_SYS_REGISTER
+#define UR_SYS_REGISTER(fd, op, arg, nr) syscall(__NR_io_uring_register, fd, op, arg, nr)
+#endif
+
+static int ur_setup(uint32_t entries, struct ur_params *p) { return ur_errno(UR_SYS_SETUP(entries, p)); }
 
 static int ur_enter(struct ur_ring *r, uint32_t submit, uint32_t wait, uint32_t flags) {
   return ur_errno(syscall(__NR_io_uring_enter, r->fd, submit, wait, flags, NULL, 0));
 }
 
 static int ur_register(int fd, unsigned op, void *arg, unsigned nr) {
-  return ur_errno(syscall(__NR_io_uring_register, fd, op, arg, nr));
+  return ur_errno(UR_SYS_REGISTER(fd, op, arg, nr));
+}
+
+static int ur_setup_try(uint32_t entries, uint32_t cq, struct ur_params *p, uint32_t f) {
+  memset(p, 0, sizeof *p);
+  p->flags = f;
+  p->cq_entries = cq;
+  return ur_setup(entries, p);
 }
 
 /* Make a ring fd with the set's flags. A kernel that has TASKRUN_FLAG but
  * wants COOP_TASKRUN beside it, or DEFER_TASKRUN's precondition, answers
  * -EINVAL, so the second try adds COOP_TASKRUN. */
-static int ur_setup_flags(uint32_t entries, uint32_t cq, struct ur_params *p, uint32_t *flags) {
-  uint32_t base = UR_SETUP_SINGLE_ISSUER | UR_SETUP_DEFER_TASKRUN | UR_SETUP_TASKRUN_FLAG | UR_SETUP_SUBMIT_ALL;
-  if (cq) base |= UR_SETUP_CQSIZE;
-  for (int i = 0; i < 2; i++) {
-    uint32_t f = i ? base | UR_SETUP_COOP_TASKRUN : base;
-    memset(p, 0, sizeof *p);
-    p->flags = f;
-    p->cq_entries = cq;
-    int fd = ur_setup(entries, p);
-    if (fd >= 0) {
-      *flags = f;
-      return fd;
-    }
-    if (fd != -EINVAL) return fd;
-    if (i) return fd;
+static int ur_setup_flags(uint32_t entries, uint32_t cq, struct ur_params *p) {
+  uint32_t f = UR_SETUP_SINGLE_ISSUER | UR_SETUP_DEFER_TASKRUN | UR_SETUP_TASKRUN_FLAG | UR_SETUP_SUBMIT_ALL;
+  if (cq) f |= UR_SETUP_CQSIZE;
+  int fd = ur_setup_try(entries, cq, p, f);
+  if (fd == -EINVAL) {
+    f |= UR_SETUP_COOP_TASKRUN;
+    fd = ur_setup_try(entries, cq, p, f);
   }
-  return -EINVAL;
+  return fd;
 }
 
 static int32_t ur_probe_once(void) {
   struct ur_params p;
-  uint32_t flags = 0;
-  int fd = ur_setup_flags(4, 0, &p, &flags);
+  int fd = ur_setup_flags(4, 0, &p);
   if (fd < 0) return fd;
   int32_t rc = 1;
   if (!(p.features & UR_FEAT_NODROP) || !(p.features & UR_FEAT_SINGLE_MMAP)) rc = -EOPNOTSUPP;
@@ -422,15 +429,18 @@ static int32_t ur_probe_once(void) {
 }
 
 /* 1 when this process may use a set, else the negative errno that says why
- * not. The answer is computed once per process: what refuses io_uring (the
- * kernel, a seccomp filter, the sysctl) does not change under a running
- * program in a way it could act on. */
+ * not. A yes or a static refusal is kept for the process: what refuses
+ * io_uring (the kernel, a seccomp filter, the sysctl) does not change under
+ * a running program in a way it could act on. A refusal for want of a
+ * resource (-EMFILE, -ENFILE, -ENOMEM, ...) is not kept, so the next call
+ * asks again once descriptors or memory are free. */
 int32_t nish_uring_probe(void) {
   static int32_t cached;
   int32_t c = __atomic_load_n(&cached, __ATOMIC_RELAXED);
   if (c == 0) {
     c = ur_probe_once();
-    __atomic_store_n(&cached, c, __ATOMIC_RELAXED);
+    if (c > 0 || c == -ENOSYS || c == -EPERM || c == -EINVAL || c == -EOPNOTSUPP)
+      __atomic_store_n(&cached, c, __ATOMIC_RELAXED);
   }
   return c;
 }
@@ -526,8 +536,8 @@ static int ur_add_ring(struct nish_uring_set *s) {
   r->efd = -1;
   int rc = 0;
   struct ur_params p;
-  uint32_t flags = 0;
-  r->fd = ur_setup_flags(s->sq_entries, s->cq_entries, &p, &flags);
+  /* The ring itself, and the two features the layer cannot do without. */
+  r->fd = ur_setup_flags(s->sq_entries, s->cq_entries, &p);
   if (r->fd < 0) {
     rc = r->fd;
     goto fail;
@@ -536,7 +546,7 @@ static int ur_add_ring(struct nish_uring_set *s) {
     rc = -EOPNOTSUPP;
     goto fail;
   }
-  s->setup_flags = flags;
+  /* SQ and CQ share one mapping (FEAT_SINGLE_MMAP); the SQEs are another. */
   r->sq_entries = p.sq_entries;
   size_t sq_len = p.sq_off.array + (size_t)p.sq_entries * sizeof(uint32_t);
   size_t cq_len = p.cq_off.cqes + (size_t)p.cq_entries * sizeof(struct ur_cqe);
@@ -564,6 +574,7 @@ static int ur_add_ring(struct nish_uring_set *s) {
   }
   r->sq_local_tail = *r->sq_tail;
 
+  /* The sparse file table: one entry per slot, filled by FILE_INDEX_ALLOC. */
   struct ur_rsrc_register files;
   memset(&files, 0, sizeof files);
   files.nr = s->slots;
@@ -571,6 +582,7 @@ static int ur_add_ring(struct nish_uring_set *s) {
   rc = ur_register(r->fd, UR_REGISTER_FILES2, &files, sizeof files);
   if (rc < 0) goto fail;
 
+  /* The provided-buffer ring every multishot recv draws from, full. */
   r->br = mmap(NULL, (size_t)s->buf_count * sizeof(struct ur_buf), PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   r->bufs = mmap(NULL, (size_t)s->buf_count * s->buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -587,6 +599,7 @@ static int ur_add_ring(struct nish_uring_set *s) {
   if (rc < 0) goto fail;
   for (uint32_t i = 0; i < s->buf_count; i++) ur_recycle(s, r, i);
 
+  /* Per-slot state: generation and flags, send queues, parked recvs. */
   r->st = calloc(s->slots, sizeof *r->st);
   r->sq_first = calloc(s->slots, sizeof *r->sq_first);
   r->sq_last = calloc(s->slots, sizeof *r->sq_last);
@@ -596,6 +609,8 @@ static int ur_add_ring(struct nish_uring_set *s) {
     goto fail;
   }
 
+  /* The eventfd the kernel signals for this ring, in the set's epoll with
+   * the ring's index as its data. */
   r->efd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   if (r->efd < 0) {
     rc = -errno;
@@ -829,7 +844,12 @@ static int ur_reap(struct nish_uring_set *s, int ri, struct nish_uring_event *ev
 
 /* Reap, submit, and enter again while the kernel says it holds more for this
  * ring (behaviour 4): IORING_SQ_TASKRUN for completions DEFER_TASKRUN has not
- * run, IORING_SQ_CQ_OVERFLOW for ones the CQ had no room for. */
+ * run, IORING_SQ_CQ_OVERFLOW for ones the CQ had no room for. A flush that
+ * answers -EBUSY (a kernel that refuses submissions while completions
+ * overflow) is retried at once with no backoff: the reap before it has
+ * freed CQ room, so the next pass moves the overflow along. The guard only
+ * bounds a kernel that keeps a flag up without progress; the next wait
+ * starts again from here. */
 static int ur_service(struct nish_uring_set *s, int ri, struct nish_uring_event *ev, int cap) {
   struct ur_ring *r = s->rings[ri];
   int n = 0;
@@ -906,8 +926,11 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
   return 0;
 }
 
-/* The epoll descriptor a caller's own loop may wait on beside other sources:
- * it is readable when some ring of the set has work. */
+/* The epoll descriptor a caller's own loop may wait on beside other sources.
+ * It is readable when a ring's eventfd was signalled since that ring was last
+ * serviced. It is not readable for events a wait left behind because `cap`
+ * was full, so a caller that got `cap` events calls wait again (with a
+ * timeout of 0) before it sleeps on this descriptor. */
 int32_t nish_uring_fd(const struct nish_uring_set *s) { return s->ep; }
 
 /* What the last wait left to do: give back the buffers it lent, re-arm the
@@ -925,6 +948,9 @@ static void ur_catch_up(struct nish_uring_set *s) {
       if ((r->st[slot] & (ST_OPEN | ST_ARMED)) == ST_OPEN) ur_arm(r, slot);
     }
   }
+  /* Scanning every slot of every ring costs rings * slots, but only after a
+   * send found the SQ full, which a queue of `sq_entries` (1,024 by default)
+   * makes rare; keeping a list of the stalled slots would cost every send. */
   if (s->stalled_sends) {
     s->stalled_sends = 0;
     for (int ri = 0; ri < s->nrings; ri++)
@@ -982,7 +1008,6 @@ int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, co
   q->next_all = s->all;
   if (s->all) s->all->prev_all = q;
   s->all = q;
-  q->ring = (uint32_t)ring;
   q->slot = (uint32_t)slot;
   q->gen = ST_GEN(r->st[slot]);
   q->off = 0;

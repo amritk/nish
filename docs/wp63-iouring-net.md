@@ -108,7 +108,12 @@ three of them, and the runtime has to handle all four:
    four sat with 20,000 connections unaccepted. With
    `IORING_SETUP_TASKRUN_FLAG`, `io_run_local_work_continue` sets
    `IORING_SQ_TASKRUN` while work is left, and the loop enters again until it
-   clears.
+   clears. Correction (S1): the completions an enter posts do signal the
+   eventfd, so a loop that reads its eventfd *before* entering wakes again
+   and takes the next 20; one that drains it after entering sleeps on the
+   rest. Without the re-entry, S1's layer is the first kind, and one wait
+   took 20 of a ring's 100 queued receives on 6.18.44. The `taskrun` check
+   in `tests/runtime/uring-test.c` asserts that one wait takes all 100.
 
 ## 3. Stage A: the measurement
 

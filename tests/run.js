@@ -10654,7 +10654,7 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's eighteen translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's nineteen translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -10727,7 +10727,7 @@ if (dealtHere("runtimeCache")) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eighteen objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the nineteen objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -10736,7 +10736,7 @@ if (dealtHere("runtimeCache")) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the eighteen runtime units once",
+      "runtime cache: the miss compiled each of the nineteen runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -16747,7 +16747,8 @@ if (dealtHere("runtimeChecks")) {
   // tests/runtime/uring-test.c includes the layer and runs one mode a check:
   // an echo server forked over a listener holds the parent's clients in a set
   // of rings and answers by exit status (0 a pass, 77 a skip with its reason on
-  // stdout). `fallback` refuses io_uring with a seccomp filter and runs on any
+  // stdout). `fallback` refuses io_uring with a seccomp filter or the layer's
+  // UR_SYS_SETUP/UR_SYS_REGISTER hooks, and its refused-setup cases run on any
   // Linux; the others need io_uring and skip where the probe says it is
   // refused. docs/security/net-uring.md lists what each one proves.
   if (!only || "uring".includes(only)) {
@@ -16762,10 +16763,10 @@ if (dealtHere("runtimeChecks")) {
       )
       check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
       const modes = [
-        ["fallback", "a seccomp-refused io_uring_setup or io_uring_register answers its errno, with no descriptor left"],
+        ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
-        ["taskrun", "a burst of 500 over four rings completes, entering again while IORING_SQ_TASKRUN is up"],
+        ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
         ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
         ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
