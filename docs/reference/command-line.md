@@ -60,6 +60,12 @@ an arena per thread, for --emit-napi-async
 
 </scalar-field>
 
+<scalar-field name="--debug-arena">
+
+trap a stale arena reference; for tests, slow
+
+</scalar-field>
+
 <scalar-field name="--host" type="&lt;file.ts&gt;">
 
 a page module whose functions wasm imports

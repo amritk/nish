@@ -16911,6 +16911,143 @@ if (dealtHere("runtimeChecks")) {
     }
   }
 
+  // ---- The debug arena: a stale arena reference traps ----------------------------------
+  // docs/security/runtime.md, "The debug arena". tests/runtime/debug-arena-test.c
+  // keeps a pointer across `nish_arena_release` and reads it after the next
+  // allocation: the normal runtime hands that allocation the same slot, so
+  // the read answers its 7, and the -DNISH_ARENA_DEBUG runtime must fault
+  // there, name the arena and die of SIGSEGV. Then the arena and region cases
+  // run linked against that runtime and must still print their `.out`, one
+  // goes through `--debug-arena` end to end, and the flag's refusals hold.
+  if (!only || "debug-arena".includes(only)) {
+    const staleBuild = (name, flags) => {
+      const exe = path.join(buildDir, name)
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", ...flags, ...RUNTIME_C, "tests/runtime/debug-arena-test.c", "-lm", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      return { cc, run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
+    }
+    const plain = staleBuild("debug_arena_plain", [])
+    check(
+      "debug arena: without it, a pointer kept across a release reads the next allocation's value",
+      plain.run !== null && plain.run.status === 0 && plain.run.stdout === "kept 1, next 7\nstale 7\n",
+      plain.shown
+    )
+    const trapped = staleBuild("debug_arena_trap", ["-DNISH_ARENA_DEBUG=1"])
+    check(
+      "debug arena: a pointer kept across a release faults at the read, names the arena and dies of SIGSEGV",
+      trapped.run !== null &&
+        trapped.run.signal === "SIGSEGV" &&
+        trapped.run.stdout === "kept 1, next 7\n" &&
+        /^nish: --debug-arena: stale arena reference at 0x[0-9a-f]{16}: the memory was released by the scope that allocated it\n$/.test(
+          trapped.run.stderr
+        ),
+      trapped.shown
+    )
+
+    // Every case that exercises the arena or a region, linked as section A
+    // links it but against the debug objects. A case that measures the
+    // arena's growth (`mem_loop_scope`) is left out: under the mode every
+    // allocation grows it, by design.
+    const debugDir = path.join(buildDir, "debug-arena")
+    fs.mkdirSync(debugDir, { recursive: true })
+    const debugCases = fs
+      .readdirSync(casesDir)
+      .filter((f) => f.endsWith(".out"))
+      .map((f) => f.slice(0, -".out".length))
+      .filter((name) => /^(arena_|region_)|_arena|_region/.test(name))
+      .sort()
+    const failed = []
+    for (const name of debugCases) {
+      const src = path.join(casesDir, `${name}.ts`)
+      const args = caseArgs(name)
+      const ll = path.join(debugDir, `${name}.ll`)
+      const compiled = spawnSync(NISH, [src, "-o", ll, ...args], { cwd: root, encoding: "utf8" })
+      if (compiled.status !== 0) {
+        failed.push(`${name}: does not compile\n${compiled.stderr}`)
+        continue
+      }
+      const own = path.join(casesDir, `${name}.c`)
+      const hasEntry = /\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
+      const defines = ["-DNISH_ARENA_DEBUG=1", ...(args.includes("--threads") ? ["-DNISH_THREADS=1"] : [])]
+      const exe = path.join(debugDir, name)
+      const linked = linkNative(exe, ll, {
+        driver: fs.existsSync(own) ? own : hasEntry ? null : DRIVER_C,
+        defines,
+        libm: true,
+      })
+      if (linked.status !== 0) {
+        failed.push(`${name}: does not link\n${linked.stderr}`)
+        continue
+      }
+      const ran = spawnSync(exe, [], { encoding: "utf8", timeout: 120_000, env: caseEnv(path.join(casesDir, `${name}.env`)) })
+      const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8").trim()
+      if (ran.status !== 0 || ran.stdout.trim() !== want) {
+        failed.push(`${name}: exit ${ran.status} ${ran.signal ?? ""}\n${ran.stdout}${ran.stderr}`)
+      }
+    }
+    check(
+      `debug arena: the ${debugCases.length} arena and region cases print their .out with every released block unmapped`,
+      debugCases.length >= 20 && failed.length === 0,
+      failed.join("\n")
+    )
+
+    // The flag itself. The same program is linked without it and then with it,
+    // so a run or runtime cache keyed without the flag would hand the second
+    // link the first one's runtime; `-g` keeps the symbol table that tells
+    // them apart (the fault handler, `nish_debug_on_fault`), and the debug
+    // build must still print the `.out`.
+    const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+    const flagLink = (exe, flags) => {
+      const linked = spawnSync(
+        NISH,
+        ["-g", ...flags, "tests/cases/arena_placement.ts", "-o", path.join(debugDir, `${path.basename(exe)}.ll`), "--link", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      const symbols = linked.status === 0 && nm !== undefined ? spawnSync(nm, [exe], { encoding: "utf8" }).stdout : ""
+      return {
+        printed: run !== null && run.status === 0 && run.stdout.trim() === fs.readFileSync("tests/cases/arena_placement.out", "utf8").trim(),
+        trapping: / [tT] nish_debug_on_fault$/m.test(symbols),
+        read: / T main$/m.test(symbols),
+        shown: `${linked.stderr}${run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : ""}`,
+      }
+    }
+    if (nm === undefined) {
+      skip("debug arena: no llvm-nm on PATH, so which runtime `--debug-arena --link` linked is not read")
+    } else {
+      const normal = flagLink(path.join(debugDir, "flag_plain"), [])
+      const debugged = flagLink(path.join(debugDir, "flag_debug"), ["--debug-arena"])
+      check(
+        "debug arena: a plain `--link` links the normal runtime, and `--debug-arena --link` of the same program the debug one, which prints its .out",
+        normal.printed && normal.read && !normal.trapping && debugged.printed && debugged.read && debugged.trapping,
+        `--- plain\n${normal.shown}\n--- --debug-arena\n${debugged.shown}`
+      )
+    }
+    const refused = (what, argv, message) => {
+      const r = spawnSync(argv[0], argv.slice(1), { cwd: root, encoding: "utf8" })
+      check(`debug arena: ${what}`, r.status === 2 && r.stderr.includes(message), `exit ${r.status}\n${r.stderr}`)
+    }
+    refused(
+      "without --link or `run` it is a usage error",
+      [NISH, "--debug-arena", "tests/cases/arena_placement.ts", "-o", path.join(debugDir, "refused.ll")],
+      "--debug-arena changes the runtime a binary links"
+    )
+    refused(
+      "`--profile wasi` refuses it",
+      [NISH, "--debug-arena", "--profile", "wasi", "tests/cases/arena_placement.ts", "-o", path.join(debugDir, "refused.ll"), "--link", path.join(debugDir, "refused.wasm")],
+      "--debug-arena"
+    )
+    refused(
+      "scripts/build.sh refuses it with the wasm profile",
+      ["bash", "scripts/build.sh", path.join(debugDir, "arena_placement.ll"), "runtime/runtime-wasm.c", "-o", path.join(debugDir, "refused.wasm"), "--profile", "wasm", "--debug-arena"],
+      "--debug-arena maps pages and catches SIGSEGV, so the wasm profile does not take it"
+    )
+  }
+
   // ---- B. Pipeline checks -----------------------------------------------------------
   // The two runtime unit tests below name the runtime's sources rather than the
   // prebuilt objects, deliberately: what they assert *is* that the two
@@ -28653,6 +28790,9 @@ if (dealtHere("cSymbols")) {
       const runtimeBuilds = [
         ["the native runtime leaves undefined", runtimeObjects([])],
         ["the native runtime with -DNISH_THREADS leaves undefined", runtimeObjects(["-DNISH_THREADS=1"])],
+        // `--debug-arena` links this runtime, so its `mprotect` and signal
+        // handler are the runtime's C calls too.
+        ["the native runtime with -DNISH_ARENA_DEBUG leaves undefined", runtimeObjects(["-DNISH_ARENA_DEBUG=1"])],
       ]
       if (WASI_SYSROOT === undefined) {
         skip(

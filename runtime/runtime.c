@@ -21,6 +21,12 @@
  * both use `-flto`, and the cold paths that lost the inlining are cold.
  */
 #define _POSIX_C_SOURCE 200809L
+#ifdef NISH_ARENA_DEBUG
+/* The debug arena's `madvise`, which POSIX leaves out (its `posix_madvise`
+   gives nothing back on glibc). */
+#define _DEFAULT_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
@@ -197,11 +203,138 @@ NISH_TLS uint64_t nish_region_chunk;
    single allocation larger than this still gets a chunk of its own size. */
 #define NISH_REGION_CHUNK_MAX ((uint64_t)1 << 20)
 
+#ifdef NISH_ARENA_DEBUG
+/* ---- The debug arena (`--debug-arena`, `-DNISH_ARENA_DEBUG`;
+   docs/security/runtime.md, "The debug arena")
+   Every arena block is a chunk of its own, as under ASan: its pages are cut
+   from one address range reserved at the first allocation and never handed
+   out twice, with the header at the start of its first page and `cap` exact,
+   so the inline bump never fits again and every block, and every release,
+   comes through this file. A release or reset that frees a chunk retires it
+   instead: its pages go `PROT_NONE` and back to the system, but stay
+   reserved, so a stale reference faults at the read rather than reading what
+   the next allocation wrote there. The handler below names that fault before
+   the program dies of it. The bytes past the mark in the mark's own chunk
+   are not retired; with exact chunks there are none, as every mark but a
+   region's 0 sits at a chunk's end. A chunk C code malloc'd and linked in
+   (runtime-cross.c's) lies outside the range and is freed as always.
+   Memory only grows, since no address is reused: this is for tests and
+   fuzzing, never a release build. */
+#include <signal.h>
+#include <sys/mman.h>
+static char *nish_debug_base;   /* the reservation, PROT_NONE until a block is cut from it */
+static uint64_t nish_debug_size;
+static uint64_t nish_debug_next; /* the next unused byte's offset, taken atomically */
+static uint64_t nish_debug_page;
+static int nish_debug_state;     /* 0 none, 1 reserving, 2 reserved */
+static struct sigaction nish_debug_old_segv, nish_debug_old_bus;
+
+/* A fault in the reservation is a stale arena reference: say so, then put the
+   default back and return, so the access faults once more and the program
+   dies of the signal, as its parent expects. Any other fault goes to the
+   handler that was there before. */
+static void nish_debug_on_fault(int sig, siginfo_t *info, void *ctx) {
+  (void)ctx;
+  uintptr_t a = (uintptr_t)info->si_addr, base = (uintptr_t)nish_debug_base;
+  struct sigaction *old = sig == SIGSEGV ? &nish_debug_old_segv : &nish_debug_old_bus;
+  if (a >= base && a - base < nish_debug_size) {
+    char msg[] = "nish: --debug-arena: stale arena reference at 0x0000000000000000: "
+                 "the memory was released by the scope that allocated it\n";
+    char *hex = strstr(msg, "0x") + 2;
+    for (int i = 15; i >= 0; i--, a >>= 4) hex[i] = "0123456789abcdef"[a & 15];
+    nish_write_all(2, msg, sizeof msg - 1);
+    void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
+    if (hook) hook();
+    signal(sig, SIG_DFL);
+    return;
+  }
+  sigaction(sig, old, 0);
+}
+
+/* Reserve the range, once for every thread: as much address space as the
+   system lets a process have without committing it, from 1 TiB down to 1 GiB. */
+static void nish_debug_reserve(void) {
+  int want = 0;
+  if (!__atomic_compare_exchange_n(&nish_debug_state, &want, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+    while (__atomic_load_n(&nish_debug_state, __ATOMIC_ACQUIRE) != 2) {}
+    return;
+  }
+  long page = sysconf(_SC_PAGESIZE);
+  nish_debug_page = page > 0 ? (uint64_t)page : 4096;
+  for (uint64_t size = (uint64_t)1 << 40; size >= (uint64_t)1 << 30; size >>= 1) {
+    void *p = mmap(0, (size_t)size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if (p != MAP_FAILED) {
+      nish_debug_base = p;
+      nish_debug_size = size;
+      break;
+    }
+  }
+  if (!nish_debug_base) nish_die("nish: --debug-arena: cannot reserve address space for the arena\n");
+  struct sigaction sa;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_sigaction = nish_debug_on_fault;
+  sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+  sigemptyset(&sa.sa_mask);
+  sigaction(SIGSEGV, &sa, &nish_debug_old_segv);
+  sigaction(SIGBUS, &sa, &nish_debug_old_bus);
+  __atomic_store_n(&nish_debug_state, 2, __ATOMIC_RELEASE);
+}
+
+static uint64_t nish_debug_span(uint64_t cap) {
+  return (sizeof(nish_chunk) + cap + nish_debug_page - 1) & ~(nish_debug_page - 1);
+}
+
+/* A chunk of `cap` bytes, header included, on pages no block had before. */
+static nish_chunk *nish_debug_chunk(uint64_t cap) {
+  if (__atomic_load_n(&nish_debug_state, __ATOMIC_ACQUIRE) != 2) nish_debug_reserve();
+  if (cap > nish_debug_size) nish_oom();
+  uint64_t span = nish_debug_span(cap);
+  uint64_t at = __atomic_fetch_add(&nish_debug_next, span, __ATOMIC_RELAXED);
+  if (at > nish_debug_size - span)
+    nish_die("nish: --debug-arena: the arena's address space is used up (no address is reused)\n");
+  char *p = nish_debug_base + at;
+  if (mprotect(p, (size_t)span, PROT_READ | PROT_WRITE) != 0) nish_oom();
+  return (nish_chunk *)p;
+}
+
+/* Whether `c` is one of the debug arena's chunks, not one C code malloc'd. */
+static int nish_debug_owns(const void *c) {
+  uintptr_t a = (uintptr_t)c, base = (uintptr_t)nish_debug_base;
+  return nish_debug_base && a >= base && a - base < nish_debug_size;
+}
+
+/* Retire a chunk: every page of it unreadable and given back, its addresses
+   kept. A process at its limit of mappings (each retired run splits one) is
+   refused the `mprotect`; the chunk is then filled with 0xDB instead, which
+   reads as a pointer no system maps and a length no bounds check passes. */
+static void nish_debug_retire(nish_chunk *c) {
+  uint64_t span = nish_debug_span(NISH_CHUNK_CAP(c));
+  if (mprotect(c, (size_t)span, PROT_NONE) == 0) madvise(c, (size_t)span, MADV_DONTNEED);
+  else memset(c, 0xDB, (size_t)span);
+}
+
+/* runtime-region.c's adopt drops an empty chunk through this. */
+void nish_debug_drop(void *c) {
+  if (nish_debug_owns(c)) nish_debug_retire(c);
+  else free(c);
+}
+#endif
+
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB, or a region's
    next size), bump from it. A region's chunks double from its first, up to
    NISH_REGION_CHUNK_MAX. */
 void *nish_arena_grow(uint64_t size) {
-#ifdef NISH_ASAN
+#if defined NISH_ARENA_DEBUG
+  /* An exact chunk, as under ASan, of pages no block had before. `off` is the
+     whole chunk, so even a block the rounding left room after is alone in it. */
+  uint64_t cap = (size + 7) & ~(uint64_t)7;
+  if (cap < size) nish_oom();
+  nish_chunk *d = nish_debug_chunk(cap);
+  d->next = nish_arena.chunks;
+  d->cap = cap;
+  nish_arena = (struct nish_arena){ (char *)(d + 1), cap, cap, d };
+  return nish_arena.buf;
+#elif defined NISH_ASAN
   /* An exact chunk leaves off == cap, so the inline bump never fits again and
      every block comes through here: one malloc, one redzone, per block. */
   uint64_t cap = size;
@@ -327,13 +460,17 @@ static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
      between: what frees the older chunk frees the memory under it. */
   while (c != end) {
     nish_chunk *n = c->next;
+#ifdef NISH_ARENA_DEBUG
+    if (!(c->cap & NISH_CHUNK_CARVED)) nish_debug_drop(c);
+#else
     if (!(c->cap & NISH_CHUNK_CARVED)) free(c);
+#endif
     c = n;
   }
 }
 
 void nish_reset_arena(void) {
-#ifdef NISH_ASAN
+#if defined NISH_ASAN || defined NISH_ARENA_DEBUG
   /* Free everything, so a value read after the reset is a use after free. */
   nish_free_arena();
   return;
@@ -383,6 +520,10 @@ void nish_arena_release(uint64_t mark) {
   if (!c) return;
   nish_free_until(nish_arena.chunks, c);
   nish_arena = (struct nish_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), NISH_CHUNK_CAP(c), c };
+#ifdef NISH_ARENA_DEBUG
+  /* Never bump into what the mark gave back: the next block gets a chunk. */
+  nish_arena.cap = nish_arena.off;
+#endif
 }
 
 /* Release back to `mark` while keeping the newest allocation; returns where it
@@ -414,6 +555,9 @@ void *nish_arena_keep(uint64_t mark, void *p) {
     memmove((void *)mark, p, size);
     nish_free_until(pc, c);
     nish_arena = (struct nish_arena){ (char *)(c + 1), mark + size - (uintptr_t)(c + 1), NISH_CHUNK_CAP(c), c };
+#ifdef NISH_ARENA_DEBUG
+    nish_arena.cap = nish_arena.off;
+#endif
     return (void *)mark;
   }
   /* Keeping a carved `pc` while the chunks under it go could free the one it
