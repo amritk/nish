@@ -6,8 +6,10 @@
  *
  * The layer is included rather than linked so the test reaches it without a
  * header (S2 adds the declarations to runtime-net.c). Each mode but
- * `fallback` forks an echo server that drives one set on a listener the
- * parent made, and the parent plays every client. The server sets its own
+ * `fallback` and `move` forks an echo server that drives one set on a
+ * listener the parent made, and the parent plays every client; `move` drives
+ * its set and its clients in one process, so it can check the set between
+ * waits. The server sets its own
  * RLIMIT_NOFILE, so what the check proves does not depend on the runner's
  * limits, only on the hard limit letting the parent hold its clients.
  *
@@ -125,8 +127,22 @@ static int kernel_at_least(int want_major, int want_minor) {
  * io_uring absent or disabled, or a kernel older than the layer's floor.
  * Anything else negative is the layer failing on a kernel that has what it
  * needs, and the caller fails on it. */
+/* Whether io_uring_setup itself refuses here: a probe's -EPERM or -ENOSYS
+ * skips only when it came from setup, not from a register the probe passed
+ * through. */
+static int setup_refuses(int err) {
+  struct ur_params pp;
+  memset(&pp, 0, sizeof pp);
+  long fd = syscall(__NR_io_uring_setup, 1, &pp);
+  if (fd >= 0) {
+    close((int)fd);
+    return 0;
+  }
+  return errno == err;
+}
+
 static int probe_skips(int p) {
-  if (p == -ENOSYS || p == -EPERM || (p == -EINVAL && !kernel_at_least(6, 1))) {
+  if (((p == -ENOSYS || p == -EPERM) && setup_refuses(-p)) || (p == -EINVAL && !kernel_at_least(6, 1))) {
     printf("skip: io_uring is unavailable here (the probe answered %d)\n", p);
     return 1;
   }

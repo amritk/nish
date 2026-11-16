@@ -933,7 +933,10 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
  * timeout of 0) before it sleeps on this descriptor. Sends and closes are
  * only queued: the next wait hands them to the kernel, so a caller calls
  * wait after them, too, before it sleeps here. A wait returns with nothing
- * left queued. */
+ * left queued unless the kernel refused the submission (-EBUSY while
+ * completions overflow, -EAGAIN or -ENOMEM for memory): then the ring has
+ * completions to reap or the refusal is transient, and the next wait
+ * submits them again. */
 int32_t nish_uring_fd(const struct nish_uring_set *s) { return s->ep; }
 
 /* What the last wait left to do: give back the buffers it lent, re-arm the
@@ -966,7 +969,8 @@ static void ur_catch_up(struct nish_uring_set *s) {
  * or sleeps. Servicing a ring submits its own, but an accept or a close there
  * can move the accepting job to a ring the wait already passed or will not
  * reach (`cap` full, or not ready), and that ring's new accepts would sit in
- * user space while the caller sleeps on `nish_uring_fd`. */
+ * user space while the caller sleeps on `nish_uring_fd`. A refused flush
+ * leaves them queued for the next wait, as ur_flush says. */
 static void ur_submit_queued(struct nish_uring_set *s) {
   for (int ri = 0; ri < s->nrings; ri++)
     if (s->rings[ri]->to_submit) (void)ur_flush(s->rings[ri]);
