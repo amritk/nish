@@ -1,17 +1,18 @@
-// `nish/net/handler` on io_uring slots (WP63 S4). tests/run.js's `net_handler`
-// section starts this program under a descriptor limit of 32, which bounds the
-// slots of a ring and the rings the process can make, and `client.mjs` opens
-// 800 keep-alive connections to the port it prints, more than the set can
-// take, each sending one `GET /`. With `HandlerLimits.ring` set and 4,096
-// slots, the handler must answer each connection it takes on a slot handle,
-// stop taking at the set's size, where tcpAccept answers -23 (ENFILE), and
-// rest rather than spin. When the program prints `full`, the client ends one
-// connection, and the handler must close its end and take a waiting
-// connection into the freed slot. A full set's listener is not readable, so
-// the -23 a burst of accepts ends on is the only one the handler sees; the
-// rest it starts is HANDLER-10's, which a close ends early (that path is
-// proven on descriptors, deterministically, by net_handler_rest_close). Exit 0 is a pass, 2 says the kernel refused rings (the
-// section's skip), and 1 is a failure, with its line.
+// `nish/net/handler` on io_uring slots (WP63 S4). tests/run.js's
+// `net_handler_ring` section starts this program under a descriptor limit of
+// 32, which bounds the slots of a ring and the rings the process can make, and
+// `client.mjs` opens 800 keep-alive connections to the port it prints, more
+// than the set can take, each sending one `GET /`. With `HandlerLimits.ring`
+// set and 4,096 slots, the handler must answer each connection it takes on a
+// slot handle, stop taking at the set's size, where tcpAccept answers -23
+// (ENFILE), and rest rather than spin. When the program prints `full`, the
+// client ends one connection, and the handler must close its end and take a
+// waiting connection into the freed slot. A full set's listener is not
+// readable, so the -23 a burst of accepts ends on is the only one the handler
+// sees; the rest it starts is HANDLER-10's, which a close ends early (that path
+// is proven on descriptors, deterministically, by net_handler_rest_close). Exit
+// 0 is a pass, 2 says the kernel refused rings (the section's skip), and 1 is a
+// failure, with its line.
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { Router, RouterLimits } from "nish/net/router"
 import { netClose, netLocalPort, netRingState } from "nish:net"

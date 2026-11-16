@@ -1,4 +1,4 @@
-// The other end of tests/run.js's `net_handler: on io_uring slots` check. It
+// The other end of tests/run.js's `net_handler_ring` section. It
 // starts `ring.ts`'s binary under `ulimit -n <limit>`, reads the `port N` line
 // it prints, and opens <count> connections to that port from this process,
 // which has no such limit. Each sends one `GET /` and stays open. When the
