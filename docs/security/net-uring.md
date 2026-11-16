@@ -352,6 +352,25 @@ searched for `io_uring/`) and NVD. Since 2024 the CNA assigns a CVE to most
 io_uring fixes, so the full record is far longer than this; these are the
 memory-safety flaws in code S1 drives.
 
+**What the table covers, and what it does not.** The rows above are the
+records this review classified; each was read on 2026-11-16 in `cvelistV5`
+(a clone at commit `f63b785f`), and its fix commit placed on a mainline tag
+through `github.com/torvalds/linux`. The fixes for CVE-2021-3491,
+CVE-2022-29582, CVE-2022-1116, CVE-2022-3910, CVE-2023-21400 and
+CVE-2023-0240 also come from their CNAs and the Ubuntu, openEuler and Red Hat
+patch threads; where a point release is inferred from an affected range
+rather than read, the row says so. NVD, `git.kernel.org` and the kernel
+CNA's `vulns.git` were not reachable from the review and were not consulted.
+The list is not complete. The same `cvelistV5` clone holds 103 published
+Linux-CNA records from 2021 to 2026 whose `programFiles` name `io_uring/`,
+`fs/io_uring.c` or `fs/io-wq` (30 published in 2024, 37 in 2025 and 37 so far
+in 2026), 145 Linux-CNA records that name io_uring anywhere, and about 35
+from other CNAs (MITRE, Google, Canonical, Red Hat, Android), most from 2021
+to 2023. **Unclassified**: every one of those records not named in this
+section; they were counted, not read one by one, so whether one reaches the
+layer's operations is unknown. A stage that reaches a new operation, flag or
+registration reads them against it.
+
 **The floor the probe sets.** `ur_probe_once` accepts a kernel only if setup
 takes `SINGLE_ISSUER` and `DEFER_TASKRUN` (6.0 and 6.1), sparse file
 registration and `PBUF_RING` register (5.19), and the probe lists the five
@@ -361,15 +380,21 @@ on a vendor kernel that took the feature without the fix.
 
 | CVE | What, in code S1 reaches | Fixed in | S1 |
 | --- | --- | --- | --- |
-| CVE-2023-0469 | use after free installing a fixed file (`io_install_fixed_file`): `ACCEPT` and `CLOSE` on direct descriptors | 6.1 | reached by S1's operations; fixed before 6.1 was released, so below the floor |
+| CVE-2023-0469 | a reference underflow installing a fixed file (`io_install_fixed_file`, an extra `fput`; Red Hat records it as a use after free): `ACCEPT` and `CLOSE` on direct descriptors | 6.1 (fix `9d94c04c0db0`, first in 6.1-rc7; introduced by `61c1b44a21d7` in 5.19, so 5.19 and 6.0 are affected, and no upstream stable backport to either was found) | reached by S1's operations; fixed before 6.1 was released, so below the floor |
 | CVE-2023-1872 | `io_file_get_fixed` without the ring lock in io-wq: a use after free on fixed files | 5.18 | below the floor |
 | CVE-2023-3389 | cancelling a poll request that has a linked timeout races the timeout: a use after free in an hrtimer | 6.4 (5.13 to 6.3 affected; 5.10.162 to 5.10.184 too) | not reached: above the floor, but it needs a linked timeout (`IOSQE_IO_LINK` with `LINK_TIMEOUT`), and the layer links no requests and submits no timeout |
-| CVE-2022-2602 | registered files and the unix socket garbage collector: a use after free | 6.1 | not reached: it needs an io_uring descriptor passed over a unix socket, and a TCP peer cannot pass one |
+| CVE-2022-2602 | registered files and the unix socket garbage collector: a use after free | 6.1 | not reached: it needs an io_uring descriptor passed over a unix socket, and a TCP peer cannot pass one; since CVE-2023-52654's fix (`705318a99a13`, 6.7; 6.6.7, 6.1.68, 5.15.143, 5.10.204, 5.4.264) `sendmsg` refuses one with `EINVAL` |
 | CVE-2024-0582 | `PBUF_RING` with kernel-allocated memory (`IOU_PBUF_RING_MMAP`), unregistered while mapped: a use after free | 6.7 (6.4 to 6.6 affected) | not reached: the layer maps the buffer ring's memory itself and never passes the flag |
 | CVE-2023-6560 | `IORING_SETUP_NO_MMAP`'s ring mapping: out of bounds | 6.7 | not reached: the layer maps its rings |
 | CVE-2023-2598 | registered fixed buffers (`REGISTER_BUFFERS`): out of bounds | 6.4 | not reached: no fixed buffers |
 | CVE-2023-46862 | `SQPOLL` and the fdinfo reader: a null dereference | 6.6 | not reached: no `SQPOLL` |
 | CVE-2021-41073 | classic provided buffers (`IOSQE_BUFFER_SELECT`) on a read: type confusion | 5.15 | not reached: receives only, from a buffer ring |
+| CVE-2021-3491 | `PROVIDE_BUFFERS` lengths past `MAX_RW_COUNT`: a heap overflow | 5.13 (`d1f82808877b`; 5.12.4, 5.11.21, 5.10.37) | not reached: below the floor, and the layer never submits `PROVIDE_BUFFERS` (its buffer ring is registered with `PBUF_RING`) |
+| CVE-2022-29582 | a timeout racing its completion (`TIMEOUT`, `LINK_TIMEOUT`): a use after free | 5.18 (`e677edbcabee`; 5.17.3) | not reached: below the floor, and the layer submits no timeout |
+| CVE-2022-1116 | 5.4 only: `req->fs` taken on async offload and never put, so `fs->users` overflows | 5.4.189 (`1a623d361ffe`, a 5.4-only patch) | not reached: the code exists only in 5.4, far below the floor |
+| CVE-2022-3910 | `MSG_RING` on a fixed file puts the file wrongly | 6.0 (`fc7222c3a9f5`, first in 6.0-rc6; 5.18 to 5.19.10 affected) | not reached: below the floor, and the layer never submits `MSG_RING` |
+| CVE-2023-21400 | `IOPOLL` rings: deferred work run without the lock, a double free | 5.18 (by a larger rework, no single commit); stable fixes `810e401b34c4` (5.10.188) and `fb348857e7b6` (5.15, point release not confirmed) | not reached: the layer never sets `IORING_SETUP_IOPOLL`, and the code is in 5.10 and 5.15 only |
+| CVE-2023-0240 | 5.10 only: the `io_identity` reference count in `io_prep_async_work`: a use after free | 5.10.162 (`788d0824269b`; the CNA marks 5.10 to 5.10.161 affected; no mainline fix was confirmed) | not reached: the code exists only in 5.10, below the floor |
 
 The rows marked "below the floor" are reachable only on a kernel older than
 the probe accepts, or a vendor kernel that backported features without
@@ -420,12 +445,14 @@ What that changes in the table above, row by row:
 
 The setup-time code (`R_DISABLED`, `REGISTER_RESTRICTIONS`,
 `REGISTER_ENABLE_RINGS`) runs before the filter, on the program's own
-arguments, so a remote peer reaches none of it. Its own record, found by a
-web search of the CVE aggregators on 2026-11-16 and not checked against
-`cvelistV5`: CVE-2026-99096 (a ring created disabled skipped the task-level
-restrictions of `IORING_REGISTER_RESTRICTIONS_TASK` while disabled, 7.0
-affected) and CVE-2026-80713 (`exec` freeing a task's io_uring context with
-its task-level restrictions). Neither is reached: the layer uses per-ring
+arguments, so a remote peer reaches none of it. Its own record, both
+published by the Linux CNA and read in `cvelistV5` on 2026-11-16:
+CVE-2026-99096 (a ring created disabled while its task had task-level
+restrictions, added by `ed82f35b926b`, took any registration before it was
+enabled; 7.0 affected, fixed in 7.2.11 and 7.3; the record says per-ring
+restrictions on a disabled ring work as before) and CVE-2026-80713 (`exec`
+freed a task's task-level restrictions; 7.0 affected, fixed in 7.1.8 and
+7.2). Neither is reached: the layer uses per-ring
 restrictions, never the task-level ones, the filter kills
 `io_uring_register`, and without `process.spawn` it kills `execve`.
 
