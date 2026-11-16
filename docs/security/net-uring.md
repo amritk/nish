@@ -22,10 +22,12 @@ made with, and a completion for a slot closed since is recognised by its
 generation and only gives back its buffer. A slot handle a caller passes is
 checked before use and answers `-EBADF`. A double free a peer could cause by
 resetting a connection during a send (NURING-1) was found in review and
-fixed before landing. Two findings are open, both for S2's surface: queued
+fixed before landing, and so was a wait that could return with a ring's new
+accepts still queued in user space, so a caller sleeping on the set's
+descriptor left new peers in the backlog (NURING-7). Two findings are open, both for S2's surface: queued
 sends to a peer that never reads are not bounded (NURING-2), and a set that
-cannot grow stops accepting without telling its caller (NURING-6). Six
-findings (NURING-1 to NURING-6): one fixed, two open, three decided. The
+cannot grow stops accepting without telling its caller (NURING-6). Seven
+findings (NURING-1 to NURING-7): two fixed, two open, three decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -67,6 +69,7 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-2 | Low | `runtime/runtime-uring.c` (`nish_uring_send`) | Each send copies its bytes into a record that is queued until the kernel takes them. A peer that never reads leaves every later send for its slot queued, so a server that keeps answering it grows without bound. | **Open**, for S2: the layer reports nothing a caller could use as backpressure, and `nish:net`'s surface must bound the bytes queued per connection, or expose them, before a program can reach the layer. Tracked in #1648. |
 | NURING-3 | Low | `runtime/runtime-uring.c` (`ur_complete`, `nish_uring_wait`) | A DATA event's bytes are the provided buffer the kernel filled, lent, not copied: they are given back to the kernel at the start of the next `nish_uring_wait`, and a caller that keeps the pointer past it reads bytes another connection's receive may have written. | **Decided.** The copy would cost every receive; the contract is in the header comment ("valid until the next wait"), and S2's surface copies the bytes into the program's array before the next wait. |
 | NURING-4 | Low | `runtime/runtime-uring.c` (`ur_tag`, `nish_uring_close`) | A slot's generation is 24 bits, so a recv's completion that arrives after 2^24 closes of the same slot would match a newer connection's generation. | **Decided.** `nish_uring_close` cancels the slot's recv before it closes it, in the same submission, so no recv of the slot outlives the close by more than one completion; 2^24 closes and re-accepts of one slot in that window cannot happen. |
+| NURING-7 | Medium | `runtime/runtime-uring.c` (`nish_uring_wait`, `ur_top_up`) | A wait serviced each ring and submitted that ring's own queue, but an accept or a close on one ring can move the accepting job to a ring the wait already passed (or will not reach: `cap` full, or not ready). That ring's new accepts sat in user space while the caller slept on `nish_uring_fd`, which nothing would signal: new peers waited in the backlog until some other event woke the caller. A peer cannot cause it alone, but any server whose set grows past one ring could stop accepting. | **Fixed before landing**: `nish_uring_wait` hands every ring's queued submissions to the kernel before it returns or sleeps (`ur_submit_queued`), so a wait returns with nothing queued. Before: "uring: runtime-uring.c move" failed on every run (5 of 5 on 6.18.44) with "a wait returned 1 events with 1 submissions still queued on ring 0". After: "uring: runtime-uring.c move: an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns". |
 | NURING-6 | Low | `runtime/runtime-uring.c` (`ur_top_up`) | A set whose every ring is full and that cannot open another (`ur_add_ring` answers `-ENOSPC` at `rings_max`, or its setup fails for want of memory or descriptors) stops queuing accepts and says nothing: no event tells the caller, so new peers wait in the listener's backlog until the kernel drops them there. No connection already accepted is lost. | **Open**, for S2: the surface must report a full set to the program as `-ENFILE` (-23), the answer a full table gives, without dropping or closing any accepted connection, and take accepting up again when a slot closes. Tracked in #1648. |
 | NURING-5 | Low | `runtime/runtime-uring.c` (`ur_complete`) | A send the kernel answers with 0 bytes, for a record with bytes left, is taken as complete, and the bytes left are not sent. | **Decided.** A stream socket's send does not answer 0 for a non-empty buffer; re-arming on 0 would spin on a kernel that did. The connection's next send or recv reports any real failure. |
 
@@ -104,6 +107,17 @@ where the probe says it is refused.
   6.18.44, on every run). On 6.18 and later the re-entry counter must also
   move. A kernel without the cap has nothing to re-enter for and passes
   either way.
+- **Nothing is left queued.** "uring: runtime-uring.c move: an accept or a
+  close that moves the accepting job to a ring the wait passed leaves nothing
+  queued in user space when the wait returns" (NURING-7): a two-ring set of
+  two slots each takes five clients one at a time, so accepts move the job
+  from ring 0 to ring 1 and a close moves it back; after every wait no ring
+  has a submission queued, and each client is accepted while the server
+  sleeps on `nish_uring_fd` alone. The sleep alone would not catch the bug:
+  the ring's eventfd is level-triggered and still readable after the wait
+  that left the accept queued, so the next wait submits it (a mutant without
+  the queued check passed 3 of 3). The invariant after every wait is the
+  check.
 - **Buffers run out.** "uring: runtime-uring.c nobufs: a recv that runs out
   of provided buffers is re-armed, not closed": a peer that fills every
   buffer delays the others' receives and closes nothing.
@@ -147,11 +161,15 @@ buffer ring, `SEND`, `CLOSE` on a fixed file and `ASYNC_CANCEL`; and the
 registrations `PROBE`, sparse `FILES2`, `PBUF_RING` (with memory the layer
 maps itself) and `EVENTFD`.
 
-**How this list was made.** From memory of the kernel's advisories, not from
-a lookup: this change's environment could not reach `git.kernel.org`. Its
-versions are the mainline releases recalled as carrying each fix, and stable
-backports reach older series. Before S2 makes the layer reachable from a
-program, check every row and look for newer ones in the kernel CNA's record
+**How this list was made.** Each row was checked on 2026-11-16 against its
+CVE record in `cvelistV5` (`github.com/CVEProject/cvelistV5`, `cves/`), the
+CNA's `affected` versions and the fix commit it cites. "Fixed in" is the
+first mainline release outside the affected range; stable backports reach
+older series. Two records give no clean range: CVE-2024-0582's CNA (Red Hat)
+marks only kernels before 6.4 unaffected, and its fix (`c392cbecd8ec`)
+landed in 6.7; CVE-2023-46862's (MITRE) says "through 6.5.9", and its fix
+(`7644b1a1c9a7`) landed in 6.6. Before S2 makes the layer reachable from a
+program, look again for newer ones in the kernel CNA's record
 (`git.kernel.org/pub/scm/linux/security/vulns.git`, `cve/published/`,
 searched for `io_uring/`) and NVD. Since 2024 the CNA assigns a CVE to most
 io_uring fixes, so the full record is far longer than this; these are the
@@ -168,7 +186,7 @@ on a vendor kernel that took the feature without the fix.
 | --- | --- | --- | --- |
 | CVE-2023-0469 | use after free installing a fixed file (`io_install_fixed_file`): `ACCEPT` and `CLOSE` on direct descriptors | 6.1 | reached by S1's operations; fixed before 6.1 was released, so below the floor |
 | CVE-2023-1872 | `io_file_get_fixed` without the ring lock in io-wq: a use after free on fixed files | 5.18 | below the floor |
-| CVE-2023-3389 | a race between poll cancellation and completion, a use after free: the arm multishot `RECV` and `ASYNC_CANCEL` use | 6.0 | below the floor |
+| CVE-2023-3389 | cancelling a poll request that has a linked timeout races the timeout: a use after free in an hrtimer | 6.4 (5.13 to 6.3 affected; 5.10.162 to 5.10.184 too) | not reached: above the floor, but it needs a linked timeout (`IOSQE_IO_LINK` with `LINK_TIMEOUT`), and the layer links no requests and submits no timeout |
 | CVE-2022-2602 | registered files and the unix socket garbage collector: a use after free | 6.1 | not reached: it needs an io_uring descriptor passed over a unix socket, and a TCP peer cannot pass one |
 | CVE-2024-0582 | `PBUF_RING` with kernel-allocated memory (`IOU_PBUF_RING_MMAP`), unregistered while mapped: a use after free | 6.7 (6.4 to 6.6 affected) | not reached: the layer maps the buffer ring's memory itself and never passes the flag |
 | CVE-2023-6560 | `IORING_SETUP_NO_MMAP`'s ring mapping: out of bounds | 6.7 | not reached: the layer maps its rings |

@@ -930,7 +930,10 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
  * It is readable when a ring's eventfd was signalled since that ring was last
  * serviced. It is not readable for events a wait left behind because `cap`
  * was full, so a caller that got `cap` events calls wait again (with a
- * timeout of 0) before it sleeps on this descriptor. */
+ * timeout of 0) before it sleeps on this descriptor. Sends and closes are
+ * only queued: the next wait hands them to the kernel, so a caller calls
+ * wait after them, too, before it sleeps here. A wait returns with nothing
+ * left queued. */
 int32_t nish_uring_fd(const struct nish_uring_set *s) { return s->ep; }
 
 /* What the last wait left to do: give back the buffers it lent, re-arm the
@@ -959,6 +962,16 @@ static void ur_catch_up(struct nish_uring_set *s) {
   }
 }
 
+/* Hand every ring's queued submissions to the kernel before a wait returns
+ * or sleeps. Servicing a ring submits its own, but an accept or a close there
+ * can move the accepting job to a ring the wait already passed or will not
+ * reach (`cap` full, or not ready), and that ring's new accepts would sit in
+ * user space while the caller sleeps on `nish_uring_fd`. */
+static void ur_submit_queued(struct nish_uring_set *s) {
+  for (int ri = 0; ri < s->nrings; ri++)
+    if (s->rings[ri]->to_submit) (void)ur_flush(s->rings[ri]);
+}
+
 /* Wait up to `timeout_ms` (-1 for ever, 0 not at all) for events, and write
  * at most `cap` of them, at most 256. Answers the count or a negative errno.
  * A DATA event's bytes are the set's buffer until the next wait. */
@@ -968,6 +981,7 @@ int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nis
   ur_catch_up(s);
   int n = 0;
   for (int ri = 0; ri < s->nrings && n < cap; ri++) n += ur_service(s, ri, ev + n, cap - n);
+  ur_submit_queued(s);
   if (n > 0) return n;
   struct epoll_event ready[64];
   int k = epoll_wait(s->ep, ready, 64, timeout_ms);
@@ -981,9 +995,7 @@ int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nis
     (void)ur_enter(r, 0, 0, UR_ENTER_GETEVENTS);
     n += ur_service(s, (int)ri, ev + n, cap - n);
   }
-  /* A close or an accept on one ring may have moved the accepting job to a
-   * ring this wait did not service; its new accepts must reach the kernel. */
-  if (s->nrings && s->rings[s->acceptor]->to_submit) (void)ur_flush(s->rings[s->acceptor]);
+  ur_submit_queued(s);
   return n;
 }
 

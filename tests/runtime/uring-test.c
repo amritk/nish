@@ -29,6 +29,11 @@
  *    takes it in pieces, and every byte arrives in order.
  *  - `reset`: one 64 MiB send to a client that resets the connection; the
  *    send fails, the slot closes, and the set lives.
+ *  - `move`: rings of two slots. The last accept on ring 1 moves the
+ *    accepting job back to ring 0, which that wait had already serviced; the
+ *    wait still hands ring 0's new accepts to the kernel before it returns,
+ *    no ring holds a submission after any wait, and the next client is
+ *    accepted while the caller sleeps on `nish_uring_fd`.
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer
@@ -54,6 +59,7 @@ static long test_register(int fd, unsigned op, void *arg, unsigned nr);
 #include <linux/seccomp.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/prctl.h>
@@ -115,6 +121,19 @@ static int kernel_at_least(int want_major, int want_minor) {
   return major > want_major || (major == want_major && minor >= want_minor);
 }
 
+/* Whether a probe's answer is one the fallback stands for, so a mode skips:
+ * io_uring absent or disabled, or a kernel older than the layer's floor.
+ * Anything else negative is the layer failing on a kernel that has what it
+ * needs, and the caller fails on it. */
+static int probe_skips(int p) {
+  if (p == -ENOSYS || p == -EPERM || (p == -EINVAL && !kernel_at_least(6, 1))) {
+    printf("skip: io_uring is unavailable here (the probe answered %d)\n", p);
+    return 1;
+  }
+  if (p < 0) fprintf(stderr, "uring-test: the probe answered %d on a kernel that should take the layer\n", p);
+  return 0;
+}
+
 static int fail(const char *what) {
   fprintf(stderr, "uring-test: %s\n", what);
   return 1;
@@ -133,9 +152,12 @@ struct mode {
   int hold;          /* the burst mode: see `taskrun` above */
 };
 
-/* The burst mode's handshake: the server writes a byte here once every client
- * is accepted, and the parent reads it before the clients send. */
+/* The burst mode's handshake: the server writes a byte on `ready_pipe` once
+ * every client is accepted, and the parent reads it before the clients send;
+ * the parent writes a byte on `sent_pipe` once every client's write has
+ * returned, which on loopback has queued the bytes on the server's sockets. */
 static int ready_pipe[2] = {-1, -1};
+static int sent_pipe[2] = {-1, -1};
 
 static uint8_t pattern(int client, int i) { return (uint8_t)(client * 31 + i * 7 + 1); }
 
@@ -209,13 +231,15 @@ static int serve(const struct mode *m, int listener, int base_fds) {
         if (++live > peak_live) peak_live = live;
         if (m->opts.slots && live > m->opts.slots * m->opts.rings_max) return fail("more live connections than slots");
         if (live == m->clients) {
-          peak_fds = fd_count() - base_fds;
+          int now = fd_count();
+          if (now < 0) return fail("the server could not count its descriptors");
+          peak_fds = now - base_fds;
           if (m->hold) {
-            /* Let the clients send all at once, and give their bytes time to
-             * queue on the ring before the next enter. */
+            /* Let the clients send all at once, and enter the ring again only
+             * once every client's bytes are queued. */
+            char c;
             if (write(ready_pipe[1], "r", 1) != 1) return fail("the ready byte");
-            struct timespec t = {0, 300 * 1000 * 1000};
-            nanosleep(&t, NULL);
+            if (read(sent_pipe[0], &c, 1) != 1) return fail("the clients never said they had sent");
             burst_due = 1;
           }
         }
@@ -336,6 +360,7 @@ static int run_clients(const struct mode *m, int port) {
     for (int i = 0; i < len; i++) out[i] = pattern(c, i);
     if (write(fds[c], out, (size_t)len) != len) return fail("client write");
   }
+  if (m->hold && write(sent_pipe[1], "s", 1) != 1) return fail("the sent byte");
   if (m->reset) {
     /* One byte back says the big send is in the kernel; the reset fails it. */
     uint8_t z;
@@ -368,17 +393,8 @@ static int run_clients(const struct mode *m, int port) {
 static int run_mode(const struct mode *m) {
   int base_fds = fd_count();
   int p = nish_uring_probe();
-  /* Only a refusal the fallback stands for is a skip: io_uring absent or
-   * disabled, or a kernel older than the layer's floor. Anything else is the
-   * layer failing on a kernel that has what it needs. */
-  if (p == -ENOSYS || p == -EPERM || (p == -EINVAL && !kernel_at_least(6, 1))) {
-    printf("skip: io_uring is unavailable here (the probe answered %d)\n", p);
-    return SKIP;
-  }
-  if (p < 0) {
-    fprintf(stderr, "uring-test: the probe answered %d on a kernel that should take the layer\n", p);
-    return 1;
-  }
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
   struct rlimit rl;
   if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return fail("getrlimit");
   rlim_t want = (rlim_t)m->clients + 64;
@@ -402,7 +418,7 @@ static int run_mode(const struct mode *m) {
   if (bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 4096) != 0 ||
       getsockname(l, (struct sockaddr *)&a, &al) != 0)
     return fail("listener");
-  if (m->hold && pipe(ready_pipe) != 0) return fail("pipe");
+  if (m->hold && (pipe(ready_pipe) != 0 || pipe(sent_pipe) != 0)) return fail("pipe");
   fflush(NULL);
   pid_t pid = fork();
   if (pid < 0) return fail("fork");
@@ -515,17 +531,19 @@ static int fallback(void) {
       {__NR_io_uring_setup, EINVAL, HOOK_NONE, -EINVAL},
       {-1, 0, HOOK_EINVAL, -EINVAL},
   };
+  /* A runner without seccomp filters skips the filtered cases, and the
+   * hook cases, which need none, still run. */
+  int no_seccomp = 0;
   for (size_t i = 0; i < sizeof refused / sizeof refused[0]; i++) {
     int rc = fallback_one(refused[i][0], refused[i][1], (enum hook)refused[i][2], refused[i][3]);
-    if (rc != 0) return rc;
+    if (rc == SKIP) no_seccomp = 1;
+    else if (rc != 0) return rc;
   }
   /* The rest need a setup the kernel takes. The probe's cache is not read:
    * every case forks, and a child would inherit it. */
   int have = ur_probe_once();
-  if (have <= 0) {
-    printf("skip: io_uring answers %d here; the refused-setup cases passed\n", have);
-    return SKIP;
-  }
+  if (probe_skips(have)) return SKIP;
+  if (have <= 0) return 1;
   static const int missing[][4] = {
       {__NR_io_uring_register, EPERM, HOOK_NONE, -EPERM},
       {__NR_io_uring_register, EINVAL, HOOK_NONE, -EOPNOTSUPP},
@@ -534,9 +552,114 @@ static int fallback(void) {
   };
   for (size_t i = 0; i < sizeof missing / sizeof missing[0]; i++) {
     int rc = fallback_one(missing[i][0], missing[i][1], (enum hook)missing[i][2], missing[i][3]);
-    if (rc != 0) return rc;
+    if (rc == SKIP) no_seccomp = 1;
+    else if (rc != 0) return rc;
   }
-  return fallback_coop();
+  int rc = fallback_coop();
+  if (rc != 0) return rc;
+  if (no_seccomp) {
+    printf("skip: seccomp filters are unavailable here; the hook cases passed\n");
+    return SKIP;
+  }
+  return 0;
+}
+
+/* The `move` mode's wait: one that need not sleep, after which no ring may
+ * hold a submission the kernel has not been handed. Records the ring and
+ * slot of each accept; any other event but a hang-up is a failure. */
+static int move_wait(struct nish_uring_set *s, int *ring, int *slot) {
+  struct nish_uring_event ev[EVENTS_MAX];
+  int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+  if (n < 0) {
+    fprintf(stderr, "uring-test: wait answered %d\n", n);
+    return -1;
+  }
+  for (int ri = 0; ri < s->nrings; ri++)
+    if (s->rings[ri]->to_submit) {
+      fprintf(stderr, "uring-test: a wait returned %d events with %u submissions still queued on ring %d\n", n,
+              s->rings[ri]->to_submit, ri);
+      return -1;
+    }
+  for (int i = 0; i < n; i++) {
+    if (ev[i].kind == NISH_URING_ACCEPTED) {
+      *ring = ev[i].ring;
+      *slot = ev[i].slot;
+    } else if (ev[i].kind != NISH_URING_HUP) {
+      fprintf(stderr, "uring-test: an event of kind %d where only accepts were due\n", (int)ev[i].kind);
+      return -1;
+    }
+  }
+  return n;
+}
+
+/* Connect one client and sleep on the set's descriptor, as a caller's own
+ * loop would, until the set accepts it. The set is idle first, so the wait
+ * that takes the accept runs it before any eventfd is read. */
+static int move_accept(struct nish_uring_set *s, const struct sockaddr_in *a, int *fd, int *ring, int *slot) {
+  int r = -1, sl = -1;
+  for (int i = 0; i < 100; i++) {
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    int n = move_wait(s, &r, &sl);
+    if (n < 0) return 1;
+    if (n == 0 && poll(&q, 1, 0) == 0) break;
+  }
+  if (r >= 0) return fail("an accept arrived with no client connecting");
+  *fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (*fd < 0 || connect(*fd, (const struct sockaddr *)a, sizeof *a) != 0) return fail("client connect");
+  while (r < 0) {
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    if (poll(&q, 1, 5000) != 1) return fail("a client waited in the backlog with no accept in the kernel");
+    if (move_wait(s, &r, &sl) < 0) return 1;
+  }
+  *ring = r;
+  *slot = sl;
+  return 0;
+}
+
+/* Rings of two slots: fill ring 0, which makes ring 1; free a slot on ring 0;
+ * fill ring 1. Its last accept moves the accepting job back to ring 0, which
+ * that wait serviced before ring 1, and the next client must be accepted
+ * there while the caller sleeps on the set's descriptor. */
+static int move(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(60);
+  int l = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+  socklen_t al = sizeof a;
+  if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 64) != 0 ||
+      getsockname(l, (struct sockaddr *)&a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_set *s;
+  struct nish_uring_opts o = {2, 2, 0, 0, 0, 0};
+  int rc = nish_uring_open(&s, l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  static const int want[5] = {0, 0, 1, 1, 0};
+  int fds[5], ring[5], slot[5];
+  for (int c = 0; c < 5; c++) {
+    if (move_accept(s, &a, &fds[c], &ring[c], &slot[c]) != 0) return 1;
+    if (ring[c] != want[c]) {
+      fprintf(stderr, "uring-test: client %d was accepted on ring %d, not %d\n", c + 1, ring[c], want[c]);
+      return 1;
+    }
+    if (c == 1) {
+      if (s->nrings != 2) return fail("a full ring 0 did not make ring 1");
+      if (nish_uring_close(s, ring[0], slot[0]) != 0) return fail("the close was refused");
+      int r = -1, sl = -1;
+      if (move_wait(s, &r, &sl) < 0) return 1;
+      uint8_t z;
+      if (read(fds[0], &z, 1) != 0) return fail("the closed client did not read end of file");
+    }
+  }
+  if (s->acceptor != 0) return fail("the accepting job left ring 0 with a slot free there");
+  nish_uring_destroy(s);
+  for (int c = 0; c < 5; c++) close(fds[c]);
+  close(l);
+  return 0;
 }
 
 int main(int argc, char **argv) {
@@ -544,6 +667,7 @@ int main(int argc, char **argv) {
   signal(SIGPIPE, SIG_IGN);
   if (argc != 2) return fail("usage: uring-test <mode>");
   if (strcmp(argv[1], "fallback") == 0) return fallback();
+  if (strcmp(argv[1], "move") == 0) return move();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},

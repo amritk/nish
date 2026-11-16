@@ -16765,6 +16765,7 @@ if (dealtHere("runtimeChecks")) {
       const modes = [
         ["fallback", "a refused setup or register (EPERM, ENOSYS, EINVAL on both tries) or a missing feature or opcode answers what sends a caller to epoll, with no descriptor left"],
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
+        ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
