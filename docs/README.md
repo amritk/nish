@@ -226,6 +226,10 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   rules card by absolute URL; a change to AI.md's loop, its "What you must
   unlearn" table or its checklist updates the skill too, and `npm test`
   compiles the skill's marked examples as it does AI.md's.
+  The npm package ships the same file (`skills/` is in `package.json`'s
+  `files`), and installing it links the skill into the project's
+  `.claude/skills/`, as the [Agent skills](guide/using-nish/agent-skills.md)
+  page describes.
 
 To see a change, run `npx @scalar/cli project preview scalar.config.json`
 (it needs Node 24) and look at the landing page, a page with tables and code,
