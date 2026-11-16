@@ -1,5 +1,7 @@
 PASS  the handler takes the first connection
 PASS  a second client connects with the last descriptor
 PASS  with no descriptor free, the second connection waits
+PASS  and the handler rests its listener on -24
 PASS  the handler closes its end of the first connection
-PASS  and takes the waiting connection in turns that do not wait, before a timed rest would end
+PASS  and the close ends the rest in the same turn
+PASS  and takes the waiting connection in turns that do not wait
