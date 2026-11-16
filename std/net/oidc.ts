@@ -17,7 +17,11 @@
  * **Nothing is guessed about the issuer.** The issuer is named by the caller,
  * and the discovery document must name the same issuer, byte for byte; the key
  * set is read only from the `jwks_uri` that document gives, and both must be
- * https. Every key in the set is bound to exactly one algorithm, which comes
+ * https (loopback http, with `allowLoopbackHttp`, for an http issuer only). A
+ * `jwks_uri` on another origin than the issuer's was chosen by the document,
+ * not the program, so it is fetched under an `OutboundPolicy`
+ * (`OidcOptions.jwksOutbound`): public addresses only, no proxy. Every key in
+ * the set is bound to exactly one algorithm, which comes
  * from the key — its `kty`, its `crv` and its `alg` — and never from a token's
  * header: a key whose `alg` disagrees with its type refuses the whole set, and
  * the verifier refuses a token whose header names any other algorithm.
@@ -30,8 +34,8 @@
  * `OIDC_MIN_REFRESH_INTERVAL`. A server calls `refresh(now)` from its own
  * loop or timer, where blocking is harmless, and never from a request.
  *
- * Time is a `now` parameter, in seconds since 1970, everywhere, so a test
- * drives the clock. The security record is `docs/security/oidc.md`.
+ * Every function that reads the clock takes it as a `now` parameter, in
+ * seconds since 1970, so a test drives the clock; `oidcDiscover` reads none. The security record is `docs/security/oidc.md`.
  *
  * @module
  */
@@ -62,7 +66,8 @@ import {
   HttpRequest,
   HttpResponse,
 } from "nish/net/fetch"
-import { Url, urlParse } from "nish/net/url"
+import { OutboundPolicy } from "nish/net/outbound"
+import { Url, urlOrigin, urlParse } from "nish/net/url"
 import {
   JSON_VALUE_ARRAY,
   JSON_VALUE_OBJECT,
@@ -85,7 +90,7 @@ export const OIDC_ERR_SIZE: i32 = -41
 export const OIDC_ERR_JSON: i32 = -42
 /** The discovery document's `issuer` is not the configured issuer, byte for byte. */
 export const OIDC_ERR_ISSUER: i32 = -43
-/** The issuer or `jwks_uri` is not an https URL (or loopback http, when allowed), or has a form refused. */
+/** The issuer or `jwks_uri` is not an https URL (or loopback http, when allowed; an http `jwks_uri` only for an http issuer), or has a form refused. */
 export const OIDC_ERR_SCHEME: i32 = -44
 /** A key's `alg` disagrees with its `kty` or `crv`, its material does not make a key, or its `kid` is refused. */
 export const OIDC_ERR_KEY: i32 = -45
@@ -149,18 +154,30 @@ const oidcPrivateMembers = (): string[] => ["d", "p", "q", "dp", "dq", "qi", "ot
 export class OidcOptions {
   /** Allow `http://` to `127.0.0.1`, `localhost` or `::1` for the issuer and `jwks_uri`; off by default, for tests. */
   allowLoopbackHttp: boolean = false
-  /** The bound on one fetch, connect to last byte, in milliseconds. */
+  /** The bound on one fetch, connect to last byte, in milliseconds; 0 or less means `OIDC_DEFAULT_TIMEOUT_MS`. */
   timeoutMs: i32
   /** The clock skew allowed on `exp`, `nbf` and `iat`, in seconds. */
   leeway: i64
   /** The longest token verified, in bytes. */
   maxToken: i32
+  /**
+   * The policy a `jwks_uri` on another origin than the issuer's is fetched
+   * under, since the discovery document chose it and the program did not: by
+   * default `new OutboundPolicy()`, public addresses only and no proxy. Null
+   * fetches it like the issuer, through any proxy the environment names.
+   */
+  jwksOutbound: OutboundPolicy | null
 
-  /** The defaults: `OIDC_DEFAULT_TIMEOUT_MS`, `OIDC_DEFAULT_LEEWAY`, `JWT_MAX_TOKEN`, no loopback http. */
+  /**
+   * The defaults: `OIDC_DEFAULT_TIMEOUT_MS`, `OIDC_DEFAULT_LEEWAY`,
+   * `JWT_MAX_TOKEN`, no loopback http, and a default `OutboundPolicy` for a
+   * `jwks_uri` on another origin.
+   */
   constructor() {
     this.timeoutMs = OIDC_DEFAULT_TIMEOUT_MS
     this.leeway = OIDC_DEFAULT_LEEWAY
     this.maxToken = JWT_MAX_TOKEN
+    this.jwksOutbound = new OutboundPolicy()
   }
 }
 
@@ -290,7 +307,8 @@ const oidcDocument = (limit: i32): JsonDocument => {
 /**
  * The discovery document `doc`, already fetched, checked against `issuer`:
  * an object whose `issuer` is `issuer` byte for byte and whose `jwks_uri` is
- * a URL `oidcDiscover` would fetch. Fetches nothing.
+ * a URL `oidcDiscover` would fetch, and http only when the issuer is (so an
+ * https issuer never names an http key set). Fetches nothing.
  *
  * @param issuer The issuer, as configured.
  * @param doc The document's bytes.
@@ -319,20 +337,29 @@ export const oidcParseDiscovery = (issuer: string, doc: u8[], options: OidcOptio
   }
   const jwksUri: string = json.string(jwks)
   const u: Url | null = urlParse(jwksUri)
-  if (u === null || !oidcUrlAllowed(u, options)) {
+  if (
+    u === null ||
+    !oidcUrlAllowed(u, options) ||
+    (u.scheme === "http" && !asciiLower(issuer).startsWith("http:"))
+  ) {
     return new OidcMetadata(OIDC_ERR_SCHEME, "", "")
   }
   return new OidcMetadata(OIDC_OK, issuer, jwksUri)
 }
 
-/** The fetch options: no redirect followed, every wait bounded, the body bounded at `limit`. */
-const oidcHttpOptions = (options: OidcOptions, limit: i32): HttpOptions => {
+/**
+ * The fetch options: no redirect followed, every wait bounded, the body
+ * bounded at `limit`, and `outbound` applied when it is not null.
+ */
+const oidcHttpOptions = (options: OidcOptions, limit: i32, outbound: OutboundPolicy | null): HttpOptions => {
   const http: HttpOptions = new HttpOptions()
+  const timeout: i32 = options.timeoutMs > 0 ? options.timeoutMs : OIDC_DEFAULT_TIMEOUT_MS
   http.followRedirects = false
-  http.connectTimeoutMs = options.timeoutMs
-  http.readTimeoutMs = options.timeoutMs
-  http.totalTimeoutMs = options.timeoutMs
+  http.connectTimeoutMs = timeout
+  http.readTimeoutMs = timeout
+  http.totalTimeoutMs = timeout
   http.maxBodyBytes = toI64(limit)
+  http.outbound = outbound
   return http
 }
 
@@ -351,10 +378,27 @@ class OidcFetched {
 const oidcFetchError = (client: FetchSyncClient): i32 =>
   client.error === HTTP_E_BODY_TOO_LARGE ? OIDC_ERR_SIZE : OIDC_ERR_FETCH
 
-/** One blocking GET of `url`, its body bounded at `limit` bytes; only a 200 is taken. */
-const oidcGet = (url: string, options: OidcOptions, limit: i32): OidcFetched => {
+/** Whether `a` and `b` parse to the same origin (scheme, host and port); false when either does not. */
+const oidcSameOrigin = (a: string, b: string): boolean => {
+  const ua: Url | null = urlParse(a)
+  const ub: Url | null = urlParse(b)
+  if (ua === null || ub === null) {
+    return false
+  }
+  const oa: string | null = urlOrigin(ua)
+  const ob: string | null = urlOrigin(ub)
+  return oa !== null && ob !== null && oa === ob
+}
+
+/** One blocking GET of `url`, its body bounded at `limit` bytes, under `outbound` when not null; only a 200 is taken. */
+const oidcGet = (
+  url: string,
+  options: OidcOptions,
+  limit: i32,
+  outbound: OutboundPolicy | null
+): OidcFetched => {
   const out: OidcFetched = new OidcFetched()
-  const client: FetchSyncClient = new FetchSyncClient(oidcHttpOptions(options, limit))
+  const client: FetchSyncClient = new FetchSyncClient(oidcHttpOptions(options, limit, outbound))
   const res: HttpResponse | null = client.fetch(new HttpRequest("GET", url))
   if (res === null) {
     out.error = oidcFetchError(client)
@@ -386,7 +430,7 @@ export const oidcDiscover = (issuer: string, options: OidcOptions): OidcMetadata
   if (!oidcIssuerAllowed(issuer, options)) {
     return new OidcMetadata(OIDC_ERR_SCHEME, "", "")
   }
-  const got: OidcFetched = oidcGet(oidcDiscoveryUrl(issuer), options, OIDC_MAX_DISCOVERY_BYTES)
+  const got: OidcFetched = oidcGet(oidcDiscoveryUrl(issuer), options, OIDC_MAX_DISCOVERY_BYTES, null)
   if (got.error !== OIDC_OK) {
     return new OidcMetadata(got.error, "", "")
   }
@@ -418,7 +462,7 @@ const oidcAlgByName = (name: string): i32 => {
 const oidcIsRsa = (alg: i32): boolean =>
   alg === JWT_ALG_RS256 || alg === JWT_ALG_RS384 || alg === JWT_ALG_RS512
 
-/** Member `name` of `o` as a string, or null when it is absent; `wrong` is set when it is present and not a string. */
+/** One member of a JWK as `oidcMember` read it: whether it is present, whether it is not a string, and its text. */
 class OidcMember {
   present: boolean = false
   wrong: boolean = false
@@ -592,24 +636,37 @@ const oidcEntry = (json: JsonDocument, o: JsonValue): OidcEntry => {
  * A JWK Set, already fetched, read into keys. The rules:
  *
  * - The document is at most `OIDC_MAX_JWKS_BYTES`, a JSON object whose `keys`
- *   is an array of at most `OIDC_MAX_KEYS` objects; `kty`, `use`, `alg`,
- *   `kid` and `crv` are strings where present, and `kty` is present.
- * - A key holding `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth` or `k` refuses the set
- *   (`OIDC_ERR_PRIVATE`): a publisher that leaks a private or symmetric key
- *   has a set no verifier should trust.
- * - A key is skipped when its `use` is present and not `"sig"`, when its
- *   `alg` names an algorithm `nish/crypto/jwt` does not have, or when its
- *   `kty`/`crv` is not RSA, EC P-256, EC P-384 or OKP Ed25519 and it has no
- *   `alg` this module knows.
- * - A key's algorithm is its `alg` when present, which must agree with its
- *   type (RS256/384/512 for RSA, ES256 for P-256, ES384 for P-384, EdDSA for
- *   Ed25519), or the set is refused (`OIDC_ERR_KEY`); without `alg` it is
- *   ES256, ES384 or EdDSA by curve, and RS256 for RSA, OpenID Connect Core's
- *   default.
- * - A key's material must make a key (`n`/`e`, an RSA modulus of at least
- *   2048 bits; `x`/`y` of the curve's size; an Ed25519 `x` of 32 bytes), and
- *   its `kid` is 1 to `OIDC_MAX_KID` bytes of printable ASCII, or the set is
- *   refused (`OIDC_ERR_KEY`).
+ *   is an array of at most `OIDC_MAX_KEYS` entries.
+ *
+ * Each entry is then read by these rules, in this order; the first that
+ * applies decides it, and a refusal refuses the whole set:
+ *
+ * 1. An entry that is not an object refuses the set (`OIDC_ERR_JSON`).
+ * 2. An entry holding `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth` or `k` refuses the
+ *    set (`OIDC_ERR_PRIVATE`), whatever its `use` or type: a publisher that
+ *    leaks a private or symmetric key has a set no verifier should trust.
+ * 3. An entry without `kty`, or whose `kty`, `use`, `alg`, `kid` or `crv` is
+ *    present and not a string, refuses the set (`OIDC_ERR_JSON`).
+ * 4. A `kid` that is not 1 to `OIDC_MAX_KID` bytes of printable ASCII refuses
+ *    the set (`OIDC_ERR_KEY`), whatever the entry's `use`.
+ * 5. An entry whose `use` is present and not `"sig"` is skipped.
+ * 6. An entry whose `alg` names an algorithm `nish/crypto/jwt` does not have
+ *    is skipped.
+ * 7. An entry whose `kty`/`crv` is not RSA, EC P-256, EC P-384 or OKP Ed25519
+ *    is skipped when it has no `alg`, and refuses the set (`OIDC_ERR_KEY`)
+ *    when it has one, since the `alg` then names a key this module would
+ *    misread.
+ * 8. The key's algorithm is its `alg` when present, which must agree with its
+ *    type (RS256/384/512 for RSA, ES256 for P-256, ES384 for P-384, EdDSA for
+ *    Ed25519), or the set is refused (`OIDC_ERR_KEY`); without `alg` it is
+ *    ES256, ES384 or EdDSA by curve, and RS256 for RSA, OpenID Connect Core's
+ *    default.
+ * 9. The key's material must make a key — `n`/`e` with an RSA modulus of 2048
+ *    to 8192 bits, `x`/`y` of the curve's size, an Ed25519 `x` of 32 bytes —
+ *    or the set is refused (`OIDC_ERR_KEY`).
+ *
+ * Then:
+ *
  * - Two keys taken with the same `kid`, or two without one, refuse the set
  *   (`OIDC_ERR_DUPLICATE_KID`), and a set where none is taken is
  *   `OIDC_ERR_NO_KEYS`.
@@ -724,7 +781,10 @@ export const oidcLifetime = (cacheControl: string | null): i64 => {
  * which keeps verifying until `OIDC_STALE_GRACE` past the end of its
  * lifetime; past that hard expiry, nothing verifies until a refresh succeeds.
  * A refresh that succeeds replaces the set whole, so a key the issuer stopped
- * publishing stops verifying then.
+ * publishing stops verifying then. A token whose `kid` the set holds never
+ * makes a refresh due early, so a removed key keeps verifying until the set's
+ * lifetime ends — at most `OIDC_MAX_LIFETIME` — and, while refreshes fail,
+ * until its hard expiry, at most `OIDC_STALE_GRACE` more.
  */
 export class OidcKeys {
   /** The issuer's metadata, as discovery gave it. */
@@ -795,13 +855,18 @@ export class OidcKeys {
    * @param cacheControl The response's `Cache-Control`, or null.
    * @param now The current time, in seconds since 1970.
    * @returns `OIDC_SKIPPED` when no refresh is due, `OIDC_OK` when the set
-   *   was taken, or why it was refused (the last set is kept).
+   *   was taken, or why it was refused (the last set is kept); a failed
+   *   `meta` answers its own error, as `refresh` does.
    */
   refreshWith(doc: u8[] | null, cacheControl: string | null, now: i64): i32 {
     if (!this.due(now)) {
       return OIDC_SKIPPED
     }
     this.begin(now)
+    if (this.meta.error !== OIDC_OK) {
+      this.lastError = this.meta.error
+      return this.meta.error
+    }
     if (doc === null) {
       this.lastError = OIDC_ERR_FETCH
       return OIDC_ERR_FETCH
@@ -812,8 +877,9 @@ export class OidcKeys {
   /**
    * Fetch the key set from `meta.jwksUri` when a refresh is due: one
    * blocking GET, no redirect followed, bounded by `options.timeoutMs` and
-   * `OIDC_MAX_JWKS_BYTES`. Call it once at start-up and then from the
-   * server's own loop or timer.
+   * `OIDC_MAX_JWKS_BYTES`, and under `options.jwksOutbound` when the
+   * `jwks_uri` is on another origin than the issuer. Call it once at
+   * start-up and then from the server's own loop or timer.
    *
    * @param now The current time, in seconds since 1970.
    * @returns `OIDC_SKIPPED` when no refresh is due, `OIDC_OK` when a set was
@@ -828,7 +894,10 @@ export class OidcKeys {
       this.lastError = this.meta.error
       return this.meta.error
     }
-    const got: OidcFetched = oidcGet(this.meta.jwksUri, this.options, OIDC_MAX_JWKS_BYTES)
+    const outbound: OutboundPolicy | null = oidcSameOrigin(this.meta.issuer, this.meta.jwksUri)
+      ? null
+      : this.options.jwksOutbound
+    const got: OidcFetched = oidcGet(this.meta.jwksUri, this.options, OIDC_MAX_JWKS_BYTES, outbound)
     if (got.error !== OIDC_OK) {
       this.lastError = got.error
       return got.error
@@ -898,7 +967,9 @@ export class OidcKeys {
    * checked, only to choose a key.
    *
    * @param n The token's length.
-   * @returns The `kid`, or null when the token has none that fits `OIDC_MAX_KID`.
+   * @returns The `kid`, or null when the token has none, its `kid` is not a
+   *   string, or it is longer than `OIDC_MAX_KID`: such a token is treated as
+   *   naming no `kid`.
    */
   peekKid(n: i32): string | null {
     const k: i32 = this.verifier.peekKid(this.text, 0, n, this.kidBytes)
@@ -945,8 +1016,10 @@ export class OidcKeys {
 
 /**
  * Verify `token` with the issuer's keys, without fetching. The key is chosen
- * by the token's `kid`; a token with no `kid` is taken only when the set holds
- * exactly one key, since otherwise which key it means is a guess. The key
+ * by the token's `kid`; a token with no `kid` — or one whose `kid` is not a
+ * string or is longer than `OIDC_MAX_KID`, which counts as none — is taken
+ * only when the set holds exactly one key, and is checked under that key,
+ * since otherwise which key it means is a guess. The key
  * alone decides the algorithm, so `none`, any HMAC algorithm and any
  * algorithm but the key's are refused (`JWT_ERR_ALG`); then the signature,
  * `iss` (the issuer, exactly), `aud` (a string or an array that holds
@@ -961,6 +1034,8 @@ export class OidcKeys {
  *   or the `JWT_ERR_*` the verifier refused the token with.
  */
 export const oidcVerify = (keys: OidcKeys, token: string, audience: string, now: i64): i32 => {
+  // Every refusal, the ones decided here included, leaves no claims behind.
+  keys.verifier.claimsLen = 0
   const set: OidcKeySet | null = keys.set
   if (set === null || !keys.usable(now)) {
     return OIDC_ERR_STALE

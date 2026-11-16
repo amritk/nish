@@ -92,12 +92,21 @@ tokens' `iss`. The key set is read only from the `jwks_uri` that document
 gives. Both must be `https`, with no user name or password in the URL;
 redirects are not followed.
 
+**A key set on another host is fetched as an outsider would.** Discovery,
+and a `jwks_uri` on the issuer's own origin, are fetched as `nish/net/fetch`
+fetches by default, through any proxy the environment names. A `jwks_uri` on
+another origin is fetched under `options.jwksOutbound`, by default a
+`new OutboundPolicy()` from `nish/net/outbound`: public addresses only, no
+proxy. So a discovery document cannot point your program at an internal
+address. Set `options.jwksOutbound = null` to fetch it like the issuer, if
+your provider's keys live on a private host you trust.
+
 **The key decides the algorithm, never the token.** Each key in the set is
 bound to one algorithm by its type and its `alg`:
 
 | Key | Algorithm |
 | --- | --- |
-| `"kty":"RSA"`, 2048 bits or more | its `alg`, one of `RS256`, `RS384`, `RS512`; `RS256` when it has none |
+| `"kty":"RSA"`, 2048 to 8192 bits | its `alg`, one of `RS256`, `RS384`, `RS512`; `RS256` when it has none |
 | `"kty":"EC"`, `"crv":"P-256"` | `ES256` |
 | `"kty":"EC"`, `"crv":"P-384"` | `ES384` |
 | `"kty":"OKP"`, `"crv":"Ed25519"` | `EdDSA` |
@@ -106,13 +115,18 @@ A token whose header names any other algorithm is refused: `none`, any
 `HS*` algorithm (so the public key can never be used as an HMAC secret),
 and `RS256` on a key published for `RS384`.
 
-**The key set is read strictly.** Encryption keys (`"use":"enc"`), key types
-and algorithms this module does not verify (`PS256`, X25519) are skipped. A
-set is refused whole when a key's `alg` disagrees with its type, when a key
-carries private material (`d`, `p`, `q`, ...) or is a symmetric `oct` key
-with its secret `k`, when two keys share a `kid`, or when a key's material
-does not make a key, such as an RSA modulus under 2048 bits. A provider that
-publishes such a set is misconfigured, and no key from it is trusted.
+**The key set is read strictly.** Encryption keys (`"use":"enc"`), and keys
+with an algorithm this module does not verify (`"alg":"PS256"`), are
+skipped, and so is a key type or curve it does not know (X25519) when the
+key has no `alg`. A set is refused whole when any key carries private
+material (`d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`) or is a symmetric `oct`
+key with its secret `k`, even an encryption key; when a key's `kid` is empty,
+longer than `OIDC_MAX_KID` (256) bytes or not printable ASCII, even an
+encryption key's; when a key of an unknown type names an algorithm this
+module verifies; when a key's `alg` disagrees with its type; when two keys
+share a `kid`; or when a key's material does not make a key, such as an RSA
+modulus under 2048 bits. A provider that publishes such a set is
+misconfigured, and no key from it is trusted.
 
 **The claims are checked by `nish/crypto/jwt`.** `iss` must be the issuer,
 `aud` must be `audience` or an array holding it, and `exp` is required;
@@ -131,7 +145,11 @@ the old one some time after. `OidcKeys` follows that:
   however fresh the set is, but never more than once per
   `OIDC_MIN_REFRESH_INTERVAL` (one minute). A flood of tokens with made-up
   `kid`s costs the provider one request a minute.
-- A key the provider removed stops verifying at the next refresh.
+- A key the provider removed stops verifying once a set without it is
+  taken. A token naming a key the set holds never makes a refresh due, so
+  that happens when the set's lifetime ends: at most `OIDC_MAX_LIFETIME`
+  after the last refresh, and up to `OIDC_STALE_GRACE` more while refreshes
+  fail.
 - When a refresh fails, or the provider serves a set that is refused, the
   last good set keeps verifying, for up to `OIDC_STALE_GRACE` (1 day) past
   its freshness. After that `oidcVerify` answers `OIDC_ERR_STALE` until a
@@ -140,7 +158,8 @@ the old one some time after. `OidcKeys` follows that:
 ## Refreshing from a timer
 
 `oidcDiscover` and `refresh` each make one blocking request, bounded by
-`options.timeoutMs` (10 seconds by default). `oidcVerify` and `keys.key`
+`options.timeoutMs` (10 seconds by default; 0 or less also means 10
+seconds, so no setting waits forever). `oidcVerify` and `keys.key`
 never fetch. So call `refresh` where blocking is harmless: from your
 server's own loop or timer, never inside a request. `refresh(now)` answers
 `OIDC_SKIPPED` and does nothing while the set is fresh and no token has
@@ -166,8 +185,9 @@ rather run it on a worker. Discovery is read once: if your provider ever
 moves its `jwks_uri`, restart the program, or call `oidcDiscover` again and
 make new `OidcKeys`.
 
-Everything takes the time as a `now` parameter, in seconds since 1970, so a
-test can drive the clock. `keys.refreshWith(doc, cacheControl, now)` takes a
+Every function that reads the clock takes it as a `now` parameter, in
+seconds since 1970, so a test can drive the clock; `oidcDiscover` reads
+none. `keys.refreshWith(doc, cacheControl, now)` takes a
 key set you already hold, for a test or for a set you fetch yourself.
 
 ## Local development
@@ -186,7 +206,9 @@ export const main = (): i32 => {
 };
 ```
 
-http to any other host is refused even then.
+http to any other host is refused even then, and so is an http `jwks_uri`
+under an `https` issuer: the key set is never read over a weaker channel
+than the issuer.
 
 ## Cost
 

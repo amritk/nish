@@ -90,7 +90,7 @@ How long a key set fetched with this `Cache-Control` is fresh: its first `max-ag
 
 <scalar-card title="oidc​Parse​Discovery" icon="phosphor/regular/function" href="#oidcparsediscovery">
 
-The discovery document `doc`, already fetched, checked against `issuer`: an object whose `issuer` is `issuer` byte for byte and whose `jwks_uri` is a URL `oidcDiscover` would fetch.
+The discovery document `doc`, already fetched, checked against `issuer`: an object whose `issuer` is `issuer` byte for byte and whose `jwks_uri` is a URL `oidcDiscover` would fetch, and http only when the issuer is (so an https issuer never names an http key set).
 
 </scalar-card>
 
@@ -137,7 +137,11 @@ How discovery and the key set fetch, and how tokens are checked.
 The issuer is named by the caller,
 and the discovery document must name the same issuer, byte for byte; the key
 set is read only from the `jwks_uri` that document gives, and both must be
-https. Every key in the set is bound to exactly one algorithm, which comes
+https (loopback http, with `allowLoopbackHttp`, for an http issuer only). A
+`jwks_uri` on another origin than the issuer's was chosen by the document,
+not the program, so it is fetched under an `OutboundPolicy`
+(`OidcOptions.jwksOutbound`): public addresses only, no proxy. Every key in
+the set is bound to exactly one algorithm, which comes
 from the key — its `kty`, its `crv` and its `alg` — and never from a token's
 header: a key whose `alg` disagrees with its type refuses the whole set, and
 the verifier refuses a token whose header names any other algorithm.
@@ -155,8 +159,8 @@ loop or timer, where blocking is harmless, and never from a request.
 
 </scalar-detail>
 
-Time is a `now` parameter, in seconds since 1970, everywhere, so a test
-drives the clock. The security record is `docs/security/oidc.md`.
+Every function that reads the clock takes it as a `now` parameter, in
+seconds since 1970, so a test drives the clock; `oidcDiscover` reads none. The security record is `docs/security/oidc.md`.
 
 @module
 
@@ -276,7 +280,8 @@ The lifetime, in seconds.
 
 The discovery document `doc`, already fetched, checked against `issuer`:
 an object whose `issuer` is `issuer` byte for byte and whose `jwks_uri` is
-a URL `oidcDiscover` would fetch. Fetches nothing.
+a URL `oidcDiscover` would fetch, and http only when the issuer is (so an
+https issuer never names an http key set). Fetches nothing.
 
 ```ts
 function oidcParseDiscovery(
@@ -315,24 +320,37 @@ The metadata; its `error` is `OIDC_OK` or the reason it was refused.
 A JWK Set, already fetched, read into keys. The rules:
 
 - The document is at most `OIDC_MAX_JWKS_BYTES`, a JSON object whose `keys`
-  is an array of at most `OIDC_MAX_KEYS` objects; `kty`, `use`, `alg`,
-  `kid` and `crv` are strings where present, and `kty` is present.
-- A key holding `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth` or `k` refuses the set
-  (`OIDC_ERR_PRIVATE`): a publisher that leaks a private or symmetric key
-  has a set no verifier should trust.
-- A key is skipped when its `use` is present and not `"sig"`, when its
-  `alg` names an algorithm `nish/crypto/jwt` does not have, or when its
-  `kty`/`crv` is not RSA, EC P-256, EC P-384 or OKP Ed25519 and it has no
-  `alg` this module knows.
-- A key's algorithm is its `alg` when present, which must agree with its
-  type (RS256/384/512 for RSA, ES256 for P-256, ES384 for P-384, EdDSA for
-  Ed25519), or the set is refused (`OIDC_ERR_KEY`); without `alg` it is
-  ES256, ES384 or EdDSA by curve, and RS256 for RSA, OpenID Connect Core's
-  default.
-- A key's material must make a key (`n`/`e`, an RSA modulus of at least
-  2048 bits; `x`/`y` of the curve's size; an Ed25519 `x` of 32 bytes), and
-  its `kid` is 1 to `OIDC_MAX_KID` bytes of printable ASCII, or the set is
-  refused (`OIDC_ERR_KEY`).
+  is an array of at most `OIDC_MAX_KEYS` entries.
+
+Each entry is then read by these rules, in this order; the first that
+applies decides it, and a refusal refuses the whole set:
+
+1. An entry that is not an object refuses the set (`OIDC_ERR_JSON`).
+2. An entry holding `d`, `p`, `q`, `dp`, `dq`, `qi`, `oth` or `k` refuses the
+   set (`OIDC_ERR_PRIVATE`), whatever its `use` or type: a publisher that
+   leaks a private or symmetric key has a set no verifier should trust.
+3. An entry without `kty`, or whose `kty`, `use`, `alg`, `kid` or `crv` is
+   present and not a string, refuses the set (`OIDC_ERR_JSON`).
+4. A `kid` that is not 1 to `OIDC_MAX_KID` bytes of printable ASCII refuses
+   the set (`OIDC_ERR_KEY`), whatever the entry's `use`.
+5. An entry whose `use` is present and not `"sig"` is skipped.
+6. An entry whose `alg` names an algorithm `nish/crypto/jwt` does not have
+   is skipped.
+7. An entry whose `kty`/`crv` is not RSA, EC P-256, EC P-384 or OKP Ed25519
+   is skipped when it has no `alg`, and refuses the set (`OIDC_ERR_KEY`)
+   when it has one, since the `alg` then names a key this module would
+   misread.
+8. The key's algorithm is its `alg` when present, which must agree with its
+   type (RS256/384/512 for RSA, ES256 for P-256, ES384 for P-384, EdDSA for
+   Ed25519), or the set is refused (`OIDC_ERR_KEY`); without `alg` it is
+   ES256, ES384 or EdDSA by curve, and RS256 for RSA, OpenID Connect Core's
+   default.
+9. The key's material must make a key — `n`/`e` with an RSA modulus of 2048
+   to 8192 bits, `x`/`y` of the curve's size, an Ed25519 `x` of 32 bytes —
+   or the set is refused (`OIDC_ERR_KEY`).
+
+Then:
+
 - Two keys taken with the same `kid`, or two without one, refuse the set
   (`OIDC_ERR_DUPLICATE_KID`), and a set where none is taken is
   `OIDC_ERR_NO_KEYS`.
@@ -356,8 +374,10 @@ The set; its `error` is `OIDC_OK` or the reason it was refused.
 ### oidcVerify
 
 Verify `token` with the issuer's keys, without fetching. The key is chosen
-by the token's `kid`; a token with no `kid` is taken only when the set holds
-exactly one key, since otherwise which key it means is a guess. The key
+by the token's `kid`; a token with no `kid` — or one whose `kid` is not a
+string or is longer than `OIDC_MAX_KID`, which counts as none — is taken
+only when the set holds exactly one key, and is checked under that key,
+since otherwise which key it means is a guess. The key
 alone decides the algorithm, so `none`, any HMAC algorithm and any
 algorithm but the key's are refused (`JWT_ERR_ALG`); then the signature,
 `iss` (the issuer, exactly), `aud` (a string or an array that holds
@@ -435,7 +455,10 @@ named a `kid` the set does not hold — and never twice within
 which keeps verifying until `OIDC_STALE_GRACE` past the end of its
 lifetime; past that hard expiry, nothing verifies until a refresh succeeds.
 A refresh that succeeds replaces the set whole, so a key the issuer stopped
-publishing stops verifying then.
+publishing stops verifying then. A token whose `kid` the set holds never
+makes a refresh due early, so a removed key keeps verifying until the set's
+lifetime ends — at most `OIDC_MAX_LIFETIME` — and, while refreshes fail,
+until its hard expiry, at most `OIDC_STALE_GRACE` more.
 
 ```ts
 class OidcKeys
@@ -460,7 +483,7 @@ class OidcKeys
 | `key(kid: string, now: i64): JwtKey \| null` | The key whose `kid` is `kid`, without fetching. A `kid` the set lacks marks the set as wanted, so the next due `refresh` fetches it. |
 | `load(token: string): i32` | The token's bytes in the verifier's buffer, for `oidcVerify`. |
 | `peekKid(n: i32): string \| null` | The `kid` of the token `load` copied, read before any signature is checked, only to choose a key. |
-| `refresh(now: i64): i32` | Fetch the key set from `meta.jwksUri` when a refresh is due: one blocking GET, no redirect followed, bounded by `options.timeoutMs` and `OIDC_MAX_JWKS_BYTES`. Call it once at start-up and then from the server's own loop or timer. |
+| `refresh(now: i64): i32` | Fetch the key set from `meta.jwksUri` when a refresh is due: one blocking GET, no redirect followed, bounded by `options.timeoutMs` and `OIDC_MAX_JWKS_BYTES`, and under `options.jwksOutbound` when the `jwks_uri` is on another origin than the issuer. Call it once at start-up and then from the server's own loop or timer. |
 | `refreshWith(doc: u8[] \| null, cacheControl: string \| null, now: i64): i32` | Take `doc` as the key set when a refresh is due, without fetching: for a caller that fetches the set its own way, and for tests. Counts as a fetch for the rate limit. |
 | `usable(now: i64): boolean` | Whether the set verifies at `now`: one has been taken and it is not past its hard expiry. |
 
@@ -489,11 +512,12 @@ class OidcOptions
 
 | Member | |
 | --- | --- |
-| `new OidcOptions()` | The defaults: `OIDC_DEFAULT_TIMEOUT_MS`, `OIDC_DEFAULT_LEEWAY`, `JWT_MAX_TOKEN`, no loopback http. |
+| `new OidcOptions()` | The defaults: `OIDC_DEFAULT_TIMEOUT_MS`, `OIDC_DEFAULT_LEEWAY`, `JWT_MAX_TOKEN`, no loopback http, and a default `OutboundPolicy` for a `jwks_uri` on another origin. |
 | `allowLoopbackHttp: boolean` | Allow `http://` to `127.0.0.1`, `localhost` or `::1` for the issuer and `jwks_uri`; off by default, for tests. |
+| `jwksOutbound: OutboundPolicy \| null` | The policy a `jwks_uri` on another origin than the issuer's is fetched under, since the discovery document chose it and the program did not: by default `new OutboundPolicy()`, public addresses only and no proxy. Null fetches it like the issuer, through any proxy the environment names. |
 | `leeway: i64` | The clock skew allowed on `exp`, `nbf` and `iat`, in seconds. |
 | `maxToken: i32` | The longest token verified, in bytes. |
-| `timeoutMs: i32` | The bound on one fetch, connect to last byte, in milliseconds. |
+| `timeoutMs: i32` | The bound on one fetch, connect to last byte, in milliseconds; 0 or less means `OIDC_DEFAULT_TIMEOUT_MS`. |
 
 ## Limits
 
@@ -653,7 +677,7 @@ A key carries a private or symmetric member (`d`, `p`, `q`, `dp`, `dq`, `qi`, `o
 
 `OIDC_ERR_SCHEME: i32`
 
-The issuer or `jwks_uri` is not an https URL (or loopback http, when allowed), or has a form refused.
+The issuer or `jwks_uri` is not an https URL (or loopback http, when allowed; an http `jwks_uri` only for an http issuer), or has a form refused.
 
 </scalar-card>
 
