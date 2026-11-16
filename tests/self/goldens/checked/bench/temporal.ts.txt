@@ -701,9 +701,9 @@ function TemporalReader.readOffset(this: TemporalReader): void -> @nish.Temporal
   callee +20:20 TemporalReader.fractionDigits -> @nish.TemporalReader.fractionDigits
   local +27:11 total: i64 (const)
 function TemporalReader.readAnnotations(this: TemporalReader): void -> @nish.TemporalReader.readAnnotations [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.TemporalReader.done nish.TemporalReader.eat nish.TemporalReader.peek nish.temporalIsAnnotationKey nish.temporalIsAnnotationValue nish.temporalIsIsoCalendar nish.temporalIsTimeZoneName nish_panic_overflow nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish.TemporalReader.done nish.TemporalReader.eat nish.TemporalReader.peek nish.temporalCharAt nish.temporalIsAnnotationKey nish.temporalIsAnnotationValue nish.temporalIsTimeZoneName nish.temporalRangeIs nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.TemporalReader.eat#0 nish.TemporalReader.eat#0 nish.TemporalReader.done#0 nish.TemporalReader.peek#0 nish.TemporalReader.done#0
   stackSites=0 stackLocals=0
   local -7:9 calendars: i32 (let)
@@ -716,16 +716,17 @@ function TemporalReader.readAnnotations(this: TemporalReader): void -> @nish.Tem
   callee -1:15 TemporalReader.done -> @nish.TemporalReader.done
   callee -1:30 TemporalReader.peek -> @nish.TemporalReader.peek
   callee +2:11 TemporalReader.done -> @nish.TemporalReader.done
-  local +6:13 body: string (const)
-  local +8:13 eq: i32 (const)
-  callee +13:24 temporalIsTimeZoneName -> @nish.temporalIsTimeZoneName
-  local +19:15 key: string (const)
-  local +20:15 value: string (const)
-  callee +21:14 temporalIsAnnotationKey -> @nish.temporalIsAnnotationKey
-  callee +21:47 temporalIsAnnotationValue -> @nish.temporalIsAnnotationValue
-  callee +31:32 temporalIsIsoCalendar -> @nish.temporalIsIsoCalendar
+  local +8:13 end: i32 (const)
+  local +10:11 eq: i32 (let)
+  callee +11:26 temporalCharAt -> @nish.temporalCharAt
+  callee +18:24 temporalIsTimeZoneName -> @nish.temporalIsTimeZoneName
+  local +24:15 text: string (const)
+  callee +25:14 temporalIsAnnotationKey -> @nish.temporalIsAnnotationKey
+  callee +25:59 temporalIsAnnotationValue -> @nish.temporalIsAnnotationValue
+  callee +29:13 temporalRangeIs -> @nish.temporalRangeIs
+  callee +35:32 temporalRangeIs -> @nish.temporalRangeIs
 function TemporalReader.readDateTime(this: TemporalReader): void -> @nish.TemporalReader.readDateTime [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.TemporalReader.digitAt nish.TemporalReader.done nish.TemporalReader.peek nish.TemporalReader.readAnnotations nish.TemporalReader.readDate nish.TemporalReader.readOffset nish.TemporalReader.readTime nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.TemporalReader.readDate#0 nish.TemporalReader.peek#0 nish.TemporalReader.digitAt#0 nish.TemporalReader.readTime#0 nish.TemporalReader.readOffset#0 nish.TemporalReader.readAnnotations#0 nish.TemporalReader.done#0
@@ -738,54 +739,66 @@ function TemporalReader.readDateTime(this: TemporalReader): void -> @nish.Tempor
   callee +3:9 TemporalReader.readOffset -> @nish.TemporalReader.readOffset
   callee +7:7 TemporalReader.readAnnotations -> @nish.TemporalReader.readAnnotations
   callee +9:10 TemporalReader.done -> @nish.TemporalReader.done
-function temporalIsAnnotationKey(key: string): boolean -> @nish.temporalIsAnnotationKey
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+function temporalIsAnnotationKey(text: string, from: i32, to: i32): boolean -> @nish.temporalIsAnnotationKey
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from text
+  calls: nish.temporalCharAt
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
   local +1:11 c: i32 (const)
+  callee +1:20 temporalCharAt -> @nish.temporalCharAt
   local +2:11 letter: boolean (const)
 function temporalIsAlphaNumeric(c: i32): boolean -> @nish.temporalIsAlphaNumeric
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function temporalIsAnnotationValue(value: string): boolean -> @nish.temporalIsAnnotationValue
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.temporalIsAlphaNumeric nish_panic_overflow
+function temporalIsAnnotationValue(text: string, from: i32, to: i32): boolean -> @nish.temporalIsAnnotationValue
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from text
+  calls: nish.temporalCharAt nish.temporalIsAlphaNumeric nish_panic_overflow
   stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +1:7 run: i32 (let)
-  local +2:12 i: i32 (let)
-  local +3:11 c: i32 (const)
-  callee +4:9 temporalIsAlphaNumeric -> @nish.temporalIsAlphaNumeric
-function temporalIsTimeZoneName(name: string): boolean -> @nish.temporalIsTimeZoneName
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: name
-  calls: nish.TemporalReader.constructor nish.TemporalReader.digits nish.TemporalReader.done nish.TemporalReader.eat nish.temporalCharAt nish.temporalIsAlphaNumeric nish_panic_overflow
-  stackSites=1 stackLocals=1
+  local +0:7 run: i32 (let)
+  local +1:12 i: i32 (let)
+  local +2:11 c: i32 (const)
+  callee +2:20 temporalCharAt -> @nish.temporalCharAt
+  callee +3:9 temporalIsAlphaNumeric -> @nish.temporalIsAlphaNumeric
+function temporalAnnotationTwo(text: string, at: i32): i32 -> @nish.temporalAnnotationTwo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at text
+  calls: nish.temporalCharAt nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 high: i32 (const)
+  callee +0:21 temporalCharAt -> @nish.temporalCharAt
+  local +1:9 low: i32 (const)
+  callee +1:20 temporalCharAt -> @nish.temporalCharAt
+function temporalIsTimeZoneName(text: string, from: i32, to: i32): boolean -> @nish.temporalIsTimeZoneName
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from text
+  calls: nish.temporalAnnotationTwo nish.temporalCharAt nish.temporalIsAlphaNumeric nish_panic_overflow
+  stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:9 first: i32 (const)
   callee +1:22 temporalCharAt -> @nish.temporalCharAt
-  local +5:11 r: TemporalReader (const)
-  callee +5:31 new TemporalReader -> @nish.TemporalReader.constructor
-  local +7:11 hours: i32 (const)
-  callee +7:24 TemporalReader.digits -> @nish.TemporalReader.digits
-  local +8:9 minutes: i32 (let)
-  callee +9:10 TemporalReader.done -> @nish.TemporalReader.done
-  callee +10:7 TemporalReader.eat -> @nish.TemporalReader.eat
-  callee +11:17 TemporalReader.digits -> @nish.TemporalReader.digits
-  local +13:11 shape: boolean (const)
-  callee +13:62 temporalCharAt -> @nish.temporalCharAt
-  callee +14:20 TemporalReader.done -> @nish.TemporalReader.done
-  local +16:7 length: i32 (let)
-  local +17:12 i: i32 (let)
-  local +18:11 c: i32 (const)
-  local +25:13 leading: boolean (const)
-  callee +26:42 temporalIsAlphaNumeric -> @nish.temporalIsAlphaNumeric
-function temporalIsIsoCalendar(value: string): boolean -> @nish.temporalIsIsoCalendar
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  local +3:11 hours: i32 (const)
+  callee +3:24 temporalAnnotationTwo -> @nish.temporalAnnotationTwo
+  local +10:11 at: i32 (const)
+  callee +10:32 temporalCharAt -> @nish.temporalCharAt
+  local +11:11 minutes: i32 (const)
+  callee +11:26 temporalAnnotationTwo -> @nish.temporalAnnotationTwo
+  local +14:7 length: i32 (let)
+  local +15:12 i: i32 (let)
+  local +16:11 c: i32 (const)
+  callee +16:29 temporalCharAt -> @nish.temporalCharAt
+  local +23:13 leading: boolean (const)
+  callee +24:42 temporalIsAlphaNumeric -> @nish.temporalIsAlphaNumeric
+function temporalRangeIs(text: string, from: i32, to: i32, want: string): boolean -> @nish.temporalRangeIs
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: text want
+  calls: nish.temporalCharAt nish_panic_overflow
   stackSites=0 stackLocals=0
-  local +0:9 want: string (const)
-  local +4:12 i: i32 (let)
-  local +5:9 c: i32 (let)
+  local +0:12 i: i32 (let)
+  local +1:9 c: i32 (let)
+  callee +1:18 temporalCharAt -> @nish.temporalCharAt
+  callee +5:15 temporalCharAt -> @nish.temporalCharAt
 function temporalCharAt(text: string, at: i32): i32 -> @nish.temporalCharAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
