@@ -3432,9 +3432,11 @@ at least 18 bytes, receiving the peer's address in the 18-byte form; it must not
 
 the connection's descriptor, or a slot handle at or above 2^20 from a `NET_LISTEN_RING`
   listener, whose `peer` is written as zeros; -11 when none waits; -23 when a ring listener's
-  slots are all taken; -95 for a datagram socket. A ring listener whose accept failed with any
-  errno but -11, -4, -103 or -71 stops accepting and answers that errno from then on, where a
-  descriptor answers it once: close the listener and listen again.
+  slots are all taken; -95 for a datagram socket. A ring listener whose accept found memory
+  short answers -12 or -105 once, as a descriptor does, then pauses accepting for a back-off of
+  10 ms, doubling to 640 ms while it recurs, and accepts again. Any other errno but -11, -4,
+  -103 or -71 means the listener is broken: it stops accepting and answers that errno from then
+  on, so close it and listen again.
 
 </scalar-field>
 

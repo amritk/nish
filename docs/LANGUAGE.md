@@ -11674,9 +11674,13 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
 - `tcpAccept` answers `-23` when every slot its listener may hold is taken:
   up to 64 rings, each of as many slots as the soft descriptor limit, at most
   16,384. A slot freed by `netClose` takes a waiting connection again.
-- A ring listener whose accept fails with any errno but `-11`, `-4`, `-103`
-  or `-71` stops accepting: `tcpAccept` answers that errno from then on,
-  where a descriptor answers it once. Close the listener and listen again.
+- A ring listener whose accept finds memory short (`-12`, `-105`) answers
+  that errno from `tcpAccept` once, as a descriptor does, pauses accepting
+  for 10 ms, doubling to 640 ms while it recurs, and then accepts again.
+  Waiting connections stay in the listener's backlog meanwhile. Any other
+  errno but `-11`, `-4`, `-103` or `-71` means the listener is broken: it
+  stops accepting and `tcpAccept` answers that errno from then on. Close the
+  listener and listen again.
 - A slot holds at most 256 KiB of bytes the kernel has not yet sent: a
   `netWrite` past that copies what fits, and a full slot answers `-11` until
   the peer reads. Its received bytes queue up to the same bound before the

@@ -332,6 +332,7 @@ struct nr_set {
   struct nish_uring_set *u;
   struct nr_vent v; /* the listener's own entry */
   int32_t listener, port, slots, gens, dead, accept_err;
+  int32_t accept_once; /* an accept that found memory short, answered by the next tcpAccept */
   struct nr_conn *conns[NR_RINGS];
   uint32_t *fifo; /* accepted (ring << 20 | slot), not yet taken */
   uint32_t fhead, flen, fcap;
@@ -376,7 +377,7 @@ static int nr_failed(const struct nr_conn *c) {
 static int32_t nr_bits(struct nr_vent *v) {
   if (v->is_listener) {
     struct nr_set *S = nr_set_of(v);
-    return (S->flen > 0 || S->accept_err) ? 1 : 0;
+    return (S->flen > 0 || S->accept_err || S->accept_once) ? 1 : 0;
   }
   struct nr_conn *c = nr_conn_of(v);
   int32_t b = 0;
@@ -446,6 +447,13 @@ static int nr_finish(struct nr_set *S, uint32_t ring, uint32_t slot) {
 static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   if (e->kind == 5) {
     S->accept_err = e->res < 0 ? e->res : -5;
+    nr_touch(&S->v);
+    return;
+  }
+  if (e->kind == 6) {
+    /* Memory was short for an accept; the set pauses and accepts again. A
+       descriptor's accept answers the errno once, and so does tcpAccept. */
+    S->accept_once = e->res < 0 ? e->res : -12;
     nr_touch(&S->v);
     return;
   }
@@ -675,6 +683,11 @@ static int32_t nr_accept(struct nr_set *S, nish_array *peer) {
     return nr_encode(S, si, ring, slot);
   }
   if (S->accept_err) return S->accept_err;
+  if (S->accept_once) {
+    int32_t r = S->accept_once;
+    S->accept_once = 0;
+    return r;
+  }
   return nish_uring_full(S->u) ? -23 : -11;
 }
 

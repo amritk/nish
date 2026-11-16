@@ -95,7 +95,8 @@ enum {
   NISH_URING_DATA = 2,     /* `res` bytes at `data` from (ring, slot) */
   NISH_URING_HUP = 3,      /* the peer closed (`res` 0) or failed (`res` < 0) */
   NISH_URING_SEND_FAILED = 4, /* a send on (ring, slot) failed with `res` */
-  NISH_URING_ACCEPT_FAILED = 5 /* the listener failed with `res`; accepting stopped */
+  NISH_URING_ACCEPT_FAILED = 5, /* the listener failed with `res`; accepting stopped */
+  NISH_URING_ACCEPT_PAUSED = 6  /* an accept found memory short (`res`); accepting resumes after a back-off */
 };
 
 struct nish_uring_event {
@@ -130,6 +131,7 @@ struct nish_uring_stats {
   int64_t nobufs_rearms;
   int64_t send_requeues;
   int64_t accept_errors;
+  int64_t accept_pauses;
   int64_t bound_violations;
   int64_t max_accepting_rings;
 };
@@ -156,6 +158,7 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
+#include <time.h>
 #include <unistd.h>
 
 /* The kernel's io_uring ABI (include/uapi/linux/io_uring.h), declared here so
@@ -301,6 +304,11 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 
 #define BGID 1
 #define ACCEPT_DEPTH 32
+/* The back-off after an accept that found memory short: 10 ms, doubling to
+ * 640 ms while accepts keep failing. Connections wait in the listener's
+ * backlog meanwhile, as they do at a full set. */
+#define ACCEPT_BACKOFF_MIN_MS 10
+#define ACCEPT_BACKOFF_MAX_MS 640
 #define EVENTS_MAX 256
 
 /* One send's bytes, owned by the set until the kernel has taken all of them.
@@ -341,6 +349,12 @@ struct nish_uring_set {
   uint32_t slots, buf_count, buf_size, sq_entries, cq_entries;
   int nrings, rings_max, acceptor;
   int accept_stopped;
+  /* Accepting waits until `resume_ms` after an accept found memory short; the
+   * wait doubles from ACCEPT_BACKOFF_MIN_MS while it keeps failing and starts
+   * again from the minimum once an accept succeeds. */
+  int accept_paused;
+  int32_t backoff_ms;
+  int64_t resume_ms;
   struct ur_ring **rings;
   struct ur_send *all;
   long stalled_sends; /* heads that found the SQ full */
@@ -361,6 +375,11 @@ static int ur_errno(long rc) { return rc < 0 ? -errno : (int)rc; }
 #endif
 #ifndef UR_SYS_REGISTER
 #define UR_SYS_REGISTER(fd, op, arg, nr) syscall(__NR_io_uring_register, fd, op, arg, nr)
+#endif
+/* What an accept completion answered; uring-test.c turns one into -ENOMEM,
+ * which the kernel gives only when memory is short. */
+#ifndef UR_ACCEPT_RES
+#define UR_ACCEPT_RES(res) (res)
 #endif
 
 static int ur_setup(uint32_t entries, struct ur_params *p) { return ur_errno(UR_SYS_SETUP(entries, p)); }
@@ -655,6 +674,12 @@ fail:
   return rc < 0 ? rc : -EINVAL;
 }
 
+static int64_t ur_now_ms(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
 /* Keep min(ACCEPT_DEPTH, free slots) accepts in flight on the accepting ring,
  * and only there (behaviours 2 and 3). A full acceptor with nothing in flight
  * hands the job to the next ring with a free slot, making one when none has
@@ -662,6 +687,10 @@ fail:
  * connections wait in the listener's backlog until a close frees a slot. */
 static void ur_top_up(struct nish_uring_set *s) {
   if (s->accept_stopped || s->nrings == 0) return;
+  if (s->accept_paused) {
+    if (ur_now_ms() < s->resume_ms) return;
+    s->accept_paused = 0;
+  }
   struct ur_ring *r = s->rings[s->acceptor];
   if (r->live + r->accepting >= (long)s->slots && r->accepting == 0) {
     int moved = 0;
@@ -739,9 +768,15 @@ static void ur_drop_sends(struct nish_uring_set *s, struct ur_ring *r, uint32_t 
   }
 }
 
+/* An accept that failed for this one peer; the next is submitted at once. */
 static int ur_transient_accept(int res) {
   return res == -EAGAIN || res == -EINTR || res == -ECONNABORTED || res == -EPROTO;
 }
+
+/* An accept that found the kernel short of memory for a socket (NURING-28).
+ * It clears as memory frees, so accepting pauses and resumes; submitting
+ * again at once would spin on the same answer while the shortage lasts. */
+static int ur_pressure_accept(int res) { return res == -ENOMEM || res == -ENOBUFS; }
 
 static void ur_event(struct nish_uring_event *ev, int kind, int ring, uint32_t slot, int res, const uint8_t *data) {
   ev->kind = kind;
@@ -788,9 +823,11 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
   uint32_t slot = (uint32_t)(ud >> 32);
   if (op == UR_ACCEPT) {
     r->accepting--;
+    res = UR_ACCEPT_RES(res);
     int wrote = 0;
     if (res >= 0 && (uint32_t)res < s->slots) {
       uint32_t at = (uint32_t)res;
+      s->backoff_ms = 0;
       r->st[at] = (r->st[at] & ~(ST_ARMED | ST_PARKED | ST_HELD | ST_HUP)) | ST_OPEN;
       r->live++;
       s->stats.live++;
@@ -801,6 +838,17 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
       /* A slot past the table the set registered; the kernel never answers
        * one, so it is counted rather than trusted. */
       s->stats.bound_violations++;
+    } else if (ur_pressure_accept(res)) {
+      /* Accepts already in flight may fail the same way; one pause covers them. */
+      if (!s->accept_paused) {
+        s->accept_paused = 1;
+        s->backoff_ms = s->backoff_ms ? s->backoff_ms * 2 : ACCEPT_BACKOFF_MIN_MS;
+        if (s->backoff_ms > ACCEPT_BACKOFF_MAX_MS) s->backoff_ms = ACCEPT_BACKOFF_MAX_MS;
+        s->resume_ms = ur_now_ms() + s->backoff_ms;
+        s->stats.accept_pauses++;
+        ur_event(ev, NISH_URING_ACCEPT_PAUSED, ri, 0, res, NULL);
+        wrote = 1;
+      }
     } else if (!ur_transient_accept(res)) {
       s->stats.accept_errors++;
       if (res == -ENFILE) s->stats.bound_violations++;
@@ -1007,12 +1055,19 @@ int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms) 
     if (r->nparked) parked = 1;
   }
   if (s->nlent || (room && (parked || s->stalled_sends))) return 0;
-  return timeout_ms < 0 || timeout_ms > UR_SLEEP_MAX_MS ? UR_SLEEP_MAX_MS : timeout_ms;
+  int32_t bound = UR_SLEEP_MAX_MS;
+  if (s->accept_paused) {
+    int64_t left = s->resume_ms - ur_now_ms();
+    if (left <= 0) return 0;
+    if (left < bound) bound = (int32_t)left;
+  }
+  return timeout_ms < 0 || timeout_ms > bound ? bound : timeout_ms;
 }
 
 /* What the last wait left to do: give back the buffers it lent, re-arm the
  * recvs it parked, and submit the sends that found the SQ full. */
 static void ur_catch_up(struct nish_uring_set *s) {
+  if (s->accept_paused) ur_top_up(s); /* accepting resumes once the back-off ends */
   for (int i = 0; i < s->nlent; i++) ur_recycle(s, s->rings[s->lent_ring[i]], s->lent_bid[i]);
   s->nlent = 0;
   for (int ri = 0; ri < s->nrings; ri++) {
@@ -1169,7 +1224,7 @@ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t 
  * then waits in the listener's backlog, and tcpAccept answers -23
  * (NURING-6). A close frees a slot and starts accepting again. */
 int32_t nish_uring_full(const struct nish_uring_set *s) {
-  if (s->accept_stopped) return 0;
+  if (s->accept_stopped || s->accept_paused) return 0;
   for (int i = 0; i < s->nrings; i++) {
     const struct ur_ring *r = s->rings[i];
     if (r->accepting > 0 || r->live < (long)s->slots) return 0;

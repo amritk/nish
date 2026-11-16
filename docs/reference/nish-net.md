@@ -1061,9 +1061,11 @@ The connection's descriptor (a slot handle from a
   when none is waiting, `-23` when a ring listener's slots are all
   taken, `-22` for a `peer` shorter than 18 bytes before anything is
   accepted (so no connection is taken and lost), or `-95` for a
-  datagram socket. A ring listener whose accept failed with any errno
-  but `-11`, `-4`, `-103` or `-71` stops accepting and answers that
-  errno from then on; close it and listen again.
+  datagram socket. A ring listener whose accept found memory short
+  answers `-12` or `-105` once, pauses for a back-off (10 ms, doubling
+  to 640 ms while it recurs) and accepts again. Any other errno but
+  `-11`, `-4`, `-103` or `-71` stops it accepting and is answered from
+  then on; close it and listen again.
 
 </scalar-field>
 

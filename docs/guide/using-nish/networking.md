@@ -252,9 +252,14 @@ loop written for descriptors runs unchanged. What differs:
   Each ring listener holds up to 64 rings of as many slots as the descriptor
   limit, at most 16,384 a ring. Close a connection and the next waiting one
   takes its slot.
-- If the listener's accept fails with any error but `-11`, `-4`, `-103` or
-  `-71`, the listener stops accepting and `tcpAccept` answers that error from
-  then on. Close the listener and listen again.
+- If the kernel is short of memory for a new connection, `tcpAccept`
+  answers `-12` or `-105` once, as it does for a plain listener. The
+  listener then pauses for a moment (10 ms, doubling to 640 ms while the
+  shortage lasts) and goes on accepting; waiting connections stay queued.
+- If the listener's accept fails with any other error but `-11`, `-4`,
+  `-103` or `-71`, the listener is broken: it stops accepting and
+  `tcpAccept` answers that error from then on. Close the listener and listen
+  again.
 - A process opens at most 31 ring listeners in its life, closed ones
   included; the 32nd `tcpListenFlags` with `NET_LISTEN_RING` answers `-23`.
 - Each connection holds at most 256 KiB that the peer has not taken yet. A

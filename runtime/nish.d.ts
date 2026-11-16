@@ -1668,9 +1668,11 @@ declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i3
  *   taken and lost.
  * @returns the connection's descriptor, or a slot handle at or above 2^20 from a `NET_LISTEN_RING`
  *   listener, whose `peer` is written as zeros; -11 when none waits; -23 when a ring listener's
- *   slots are all taken; -95 for a datagram socket. A ring listener whose accept failed with any
- *   errno but -11, -4, -103 or -71 stops accepting and answers that errno from then on, where a
- *   descriptor answers it once: close the listener and listen again.
+ *   slots are all taken; -95 for a datagram socket. A ring listener whose accept found memory
+ *   short answers -12 or -105 once, as a descriptor does, then pauses accepting for a back-off of
+ *   10 ms, doubling to 640 ms while it recurs, and accepts again. Any other errno but -11, -4,
+ *   -103 or -71 means the listener is broken: it stops accepting and answers that errno from then
+ *   on, so close it and listen again.
  */
 declare function tcpAccept(fd: i32, peer: u8[]): i32;
 /**
@@ -3184,9 +3186,11 @@ declare module "nish:net" {
    *   when none is waiting, `-23` when a ring listener's slots are all
    *   taken, `-22` for a `peer` shorter than 18 bytes before anything is
    *   accepted (so no connection is taken and lost), or `-95` for a
-   *   datagram socket. A ring listener whose accept failed with any errno
-   *   but `-11`, `-4`, `-103` or `-71` stops accepting and answers that
-   *   errno from then on; close it and listen again.
+   *   datagram socket. A ring listener whose accept found memory short
+   *   answers `-12` or `-105` once, pauses for a back-off (10 ms, doubling
+   *   to 640 ms while it recurs) and accepts again. Any other errno but
+   *   `-11`, `-4`, `-103` or `-71` stops it accepting and is answered from
+   *   then on; close it and listen again.
    */
   export function tcpAccept(fd: i32, peer: u8[]): i32;
   /**
