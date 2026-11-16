@@ -29,9 +29,10 @@ the prover has already discharged. That is the lexer's hot loop.
 The port wrote `const CLASS: u8[] = [...]`, which is refused with
 `` must be declared `readonly u8[]` `` (`reject_const_array`). The diagnostic
 names the fix. What the port's author remembered was the older rule, "number,
-boolean or string". The remaining work is in the docs: the cookbook and the
-guide page on module constants should show a byte-class table as their example
-of a constant table, so a lexer author finds it by looking. That docs change
+boolean or string". The guide (`docs/guide/language/arrays-and-strings.md`) and
+the cookbook (`docs/IR_COOKBOOK.md`, "Constant tables") already describe
+constant tables. What neither shows is the lexer's case: a 256-entry
+byte-class table indexed by a `u8`, with the bounds check gone. That example
 lands with S1.
 
 ## 2. Byte search on `u8[]` (S1)
@@ -60,7 +61,8 @@ range compare. Both `memchr` and `memcmp` are already reserved in
   be wrong.
 
 **Security.** All three are variable-time. Their doc comments say so, as
-`skipBlank`'s does, and point to the constant-time compare in `std/crypto`. No
+`skipBlank`'s does, and point to `timingSafeEqualAt` in `std/crypto/ct.ts` for
+secret data. No
 record is needed, because none of them reads the network, the terminal or
 another process.
 
