@@ -5537,6 +5537,7 @@ struct HttpHandler (class) size=264 align=8 exported
   method release -> @nish.HttpHandler.release
   method releaseReading -> @nish.HttpHandler.releaseReading
   method closeSlot -> @nish.HttpHandler.closeSlot
+  method endAcceptRest -> @nish.HttpHandler.endAcceptRest
   method forget -> @nish.HttpHandler.forget
   method expireBodies -> @nish.HttpHandler.expireBodies
   method sweep -> @nish.HttpHandler.sweep
@@ -5727,26 +5728,27 @@ function HttpHandler.wait(this: HttpHandler, timeoutMs: i32): i32 -> @nish.HttpH
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: timeoutMs
-  calls: nish.Http1Server.expire nish.Http1Server.holds nish.Http1Server.readable nish.Http1Server.writable nish.HttpHandler.acceptAll nish.HttpHandler.drive nish.HttpHandler.expireBodies nish.HttpHandler.flush nish.HttpHandler.sweep nish_monotonic_nanos nish_panic_div nish_panic_index nish_panic_overflow nish_poll_add nish_poll_wait
-  pointer this: size=264 writesThrough=true captured=false passedTo=nish.HttpHandler.flush#0 nish.HttpHandler.acceptAll#0 nish.HttpHandler.drive#0 nish.HttpHandler.sweep#0 nish.HttpHandler.expireBodies#0
+  calls: nish.Http1Server.expire nish.Http1Server.holds nish.Http1Server.readable nish.Http1Server.writable nish.HttpHandler.acceptAll nish.HttpHandler.drive nish.HttpHandler.endAcceptRest nish.HttpHandler.expireBodies nish.HttpHandler.flush nish.HttpHandler.sweep nish_monotonic_nanos nish_panic_div nish_panic_index nish_panic_overflow nish_poll_wait
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.HttpHandler.flush#0 nish.HttpHandler.endAcceptRest#0 nish.HttpHandler.acceptAll#0 nish.HttpHandler.drive#0 nish.HttpHandler.sweep#0 nish.HttpHandler.expireBodies#0
   stackSites=0 stackLocals=0
   callee -2:5 HttpHandler.flush -> @nish.HttpHandler.flush
   local -1:14 id: i32 (let)
-  local +8:9 timeout: i32 (let)
-  local +11:13 rest: i32 (const)
-  local +22:11 n: i32 (const)
-  local +23:11 now: i64 (const)
-  local +25:14 k: i32 (let)
-  local +26:13 token: i32 (const)
-  callee +28:9 HttpHandler.acceptAll -> @nish.HttpHandler.acceptAll
-  local +30:15 id: i32 (const)
-  callee +34:32 Http1Server.holds -> @nish.Http1Server.holds
-  callee +36:11 Http1Server.readable -> @nish.Http1Server.readable
-  callee +38:11 Http1Server.writable -> @nish.Http1Server.writable
-  callee +40:9 HttpHandler.drive -> @nish.HttpHandler.drive
-  callee +43:9 Http1Server.expire -> @nish.Http1Server.expire
-  callee +44:7 HttpHandler.sweep -> @nish.HttpHandler.sweep
-  callee +48:7 HttpHandler.expireBodies -> @nish.HttpHandler.expireBodies
+  callee +3:7 HttpHandler.endAcceptRest -> @nish.HttpHandler.endAcceptRest
+  local +5:9 timeout: i32 (let)
+  local +8:13 rest: i32 (const)
+  local +19:11 n: i32 (const)
+  local +20:11 now: i64 (const)
+  local +22:14 k: i32 (let)
+  local +23:13 token: i32 (const)
+  callee +25:9 HttpHandler.acceptAll -> @nish.HttpHandler.acceptAll
+  local +27:15 id: i32 (const)
+  callee +31:32 Http1Server.holds -> @nish.Http1Server.holds
+  callee +33:11 Http1Server.readable -> @nish.Http1Server.readable
+  callee +35:11 Http1Server.writable -> @nish.Http1Server.writable
+  callee +37:9 HttpHandler.drive -> @nish.HttpHandler.drive
+  callee +40:9 Http1Server.expire -> @nish.Http1Server.expire
+  callee +41:7 HttpHandler.sweep -> @nish.HttpHandler.sweep
+  callee +45:7 HttpHandler.expireBodies -> @nish.HttpHandler.expireBodies
 function HttpHandler.deferSends(this: HttpHandler): void -> @nish.HttpHandler.deferSends [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -5983,16 +5985,23 @@ function HttpHandler.closeSlot(this: HttpHandler, slot: i32): void -> @nish.Http
   stackSites=0 stackLocals=0
   callee +0:5 Http1Server.close -> @nish.Http1Server.close
   callee +1:5 HttpHandler.forget -> @nish.HttpHandler.forget
+function HttpHandler.endAcceptRest(this: HttpHandler): void -> @nish.HttpHandler.endAcceptRest [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_poll_add
+  pointer this: size=264 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function HttpHandler.forget(this: HttpHandler, slot: i32): void -> @nish.HttpHandler.forget [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
+  sharedWrite: +0:5
   escaping: slot
-  calls: nish.HttpHandler.release nish_panic_index nish_panic_overflow nish_poll_add
-  pointer this: size=264 writesThrough=true captured=false passedTo=nish.HttpHandler.release#0
+  calls: nish.HttpHandler.endAcceptRest nish.HttpHandler.release nish_panic_index nish_panic_overflow
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.HttpHandler.endAcceptRest#0 nish.HttpHandler.release#0
   stackSites=0 stackLocals=0
-  local +5:11 at: i32 (const)
-  local +8:13 r: HttpRequest (const)
-  callee +10:9 HttpHandler.release -> @nish.HttpHandler.release
+  callee -2:7 HttpHandler.endAcceptRest -> @nish.HttpHandler.endAcceptRest
+  local +2:11 at: i32 (const)
+  local +5:13 r: HttpRequest (const)
+  callee +7:9 HttpHandler.release -> @nish.HttpHandler.release
 function HttpHandler.expireBodies(this: HttpHandler, now: i64): void -> @nish.HttpHandler.expireBodies [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HttpHandler.closeSlot

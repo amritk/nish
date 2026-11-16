@@ -690,10 +690,7 @@ export class HttpHandler {
       this.watchedFired[id] = false
     }
     if (this.acceptRestUntil > 0 && monotonicNanos() >= this.acceptRestUntil) {
-      this.acceptRestUntil = 0
-      if (!this.draining) {
-        pollAdd(this.loop, this.listener, H1_WANT_READ, HANDLER_LISTENER)
-      }
+      this.endAcceptRest()
     }
     let timeout: i32 = timeoutMs
     if (this.acceptRestUntil > 0 && !this.draining) {
@@ -1127,14 +1124,21 @@ export class HttpHandler {
     this.forget(slot)
   }
 
+  /** Ends the listener's rest: it is back in the loop unless the handler is draining. */
+  private endAcceptRest(): void {
+    this.acceptRestUntil = 0
+    if (!this.draining) {
+      pollAdd(this.loop, this.listener, H1_WANT_READ, HANDLER_LISTENER)
+    }
+  }
+
   /**
    * The bookkeeping of a slot the carrier has closed. Its descriptor or ring
    * slot is free again, so a listener resting for want of one comes back.
    */
   private forget(slot: i32): void {
     if (this.acceptRestUntil > 0 && !this.draining) {
-      this.acceptRestUntil = 0
-      pollAdd(this.loop, this.listener, H1_WANT_READ, HANDLER_LISTENER)
+      this.endAcceptRest()
     }
     this.open[slot] = false
     this.slotGen[slot] = this.slotGen[slot] + 1
