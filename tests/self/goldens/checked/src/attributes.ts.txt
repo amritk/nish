@@ -2088,13 +2088,13 @@ function FactCollector.noteBuiltin(this: FactCollector, name: string, call: Node
   pointer this: size=72 writesThrough=false captured=false
   pointer call: size=40 writesThrough=true captured=true passedTo=FunctionFacts.offerCapability#3 listenFlagsMayRing#1
   stackSites=0 stackLocals=0
-  local -14:11 label: i32 (const)
-  callee -14:75 builtinCapability -> @builtinCapability
-  callee -9:25 isBuiltinFunction -> @isBuiltinFunction
-  callee -9:53 isResultConstructor -> @isResultConstructor
-  callee -6:20 unlabelledBuiltinError -> @unlabelledBuiltinError
-  callee -3:7 FunctionFacts.offerCapability -> @FunctionFacts.offerCapability
-  callee -1:76 listenFlagsMayRing -> @listenFlagsMayRing
+  local -17:11 label: i32 (const)
+  callee -17:75 builtinCapability -> @builtinCapability
+  callee -12:25 isBuiltinFunction -> @isBuiltinFunction
+  callee -12:53 isResultConstructor -> @isResultConstructor
+  callee -9:20 unlabelledBuiltinError -> @unlabelledBuiltinError
+  callee -6:7 FunctionFacts.offerCapability -> @FunctionFacts.offerCapability
+  callee -2:7 listenFlagsMayRing -> @listenFlagsMayRing
 function FactCollector.addCallees(this: FactCollector, names: string[]): void -> @FactCollector.addCallees [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
