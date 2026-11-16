@@ -14,7 +14,7 @@ functions rather than lines, so it has no `file:line` anchors to move.
 | File | What |
 | --- | --- |
 | `runtime/runtime-sandbox.c` | `nish_sandbox` (the seven steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_scope`, `nish_sb_rule`, `nish_sb_seccomp` and its syscall tables; `nish_sb_keep_marks` and `nish_sb_spawn_open`, the spawn-target check, and `nish_sb_spawn_once`, `nish_sb_supervisor`, `nish_sb_spawner`, `nish_sb_start`, `nish_sb_answer`, `nish_sb_lift` and `nish_sb_refuse_spawn`, the one exec a spawn's subtree is held to (SBX-1); the non-Linux stubs |
-| `runtime/runtime-net.c`, `runtime/runtime-uring.c` | step 5, the rings made before the filter (WP63 S3): `nish_net_ring_premake`, `nr_slots` and `nr_open`'s latch on a pooled failure; `nish_uring_premake`, `nish_uring_pooled`, `ur_make_ring`, `ur_restrict`, `ur_ops_ok`, `ur_pool` and `ur_add_ring`'s pool path. The io_uring side of those rings, what a restricted ring still reaches in the kernel, is [net-uring.md](net-uring.md)'s |
+| `runtime/runtime-net.c`, `runtime/runtime-uring.c` | step 5, the rings made before the filter (WP63 S3): `nish_net_ring_premake`, `nr_slots` and `nr_open`'s latch on a pooled failure; `nish_uring_premake`, `nish_uring_pooled`, `ur_make_ring`, `ur_restrict`, `ur_ops_ok`, `ur_pool` and `ur_add_ring`'s pool path. The io_uring side of those rings, what a restricted ring still reaches in the kernel, is [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)'s |
 | `src/attributes.ts`, `src/manifest.ts` | the ring fact: `listenFlagsValue`, `listenFlagsMayRing` and `FunctionFacts.ringListen`, carried by `relaxEdge`, which say whether `main` can reach `tcpListenFlags` with `NET_LISTEN_RING`; `netRingsAt`, the position NL3058 names |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, the call of `@nish_sandbox_check` first in `@main`, and the scope constants `@.sandbox.read`, `@.sandbox.write` and `@.sandbox.exec` (`sandboxDirs`) |
 | `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main`; the scopes (`capabilityListMask`, `capabilityScopes`): which are accepted, and each directory's resolution |
@@ -100,7 +100,7 @@ first as well, and the program then refuses to run (§3, §7).
   restricted to ACCEPT, RECV, SEND, CLOSE, ASYNC_CANCEL and NOP, with no
   SQE flag but FIXED_FILE, BUFFER_SELECT and CQE_SKIP_SUCCESS, and no
   register call after it was enabled; what those opcodes reach in the kernel
-  is [net-uring.md](net-uring.md)'s;
+  is [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)'s;
 - the same-uid routes no row kills: SysV shared memory and message queues
   (`shmget`, `shmat`, `msgget`) shared with an unconfined process of the
   same user, `perf_event_open` within what `perf_event_paranoid` allows,
@@ -252,7 +252,7 @@ counted. One finding is counted, and it is fixed:
   rings a closed listener held are not made again. The ring flags lose
   `SINGLE_ISSUER` and `DEFER_TASKRUN`, which tie a ring to the thread that
   made it, the preinit thread here. Both are recorded in
-  [net-uring.md](net-uring.md) (NURING-30, NURING-31), with the silent
+  [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md) (NURING-30, NURING-31), with the silent
   premake failure (NURING-32). The probe still holds a premade set to the
   unsandboxed floor (NURING-33), and a spent set answers without counting
   (NURING-34).

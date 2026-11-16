@@ -847,13 +847,13 @@ void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char 
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) nish_sb_fail("cannot set no_new_privs");
   nish_sb_drop_capabilities();
   nish_sb_landlock(caps, mode, read_dirs, write_dirs, exec_paths);
-  /* Metadata writes stay EPERM inside a scoped write directory (open
-   * question 1): Landlock has no right for chmod, chown or xattrs. */
   /* The filter kills io_uring_setup unless `net` and `process.spawn` are
    * both granted, so the rings a ring listener takes are made now, or the
    * ring layer is told it may make none (WP63 S3). */
   if ((caps & (CAP_BIT_NET | CAP_BIT_SPAWN)) != (CAP_BIT_NET | CAP_BIT_SPAWN))
     (void)nish_net_ring_premake(caps & CAP_BIT_NET ? net_rings : 0);
+  /* Metadata writes stay EPERM inside a scoped write directory (open
+   * question 1): Landlock has no right for chmod, chown or xattrs. */
   nish_sb_seccomp(write_dirs ? caps & ~CAP_BIT_FS_WRITE : caps);
   __atomic_store_n(&nish_sb_applied, 1, __ATOMIC_RELEASE);
 }
