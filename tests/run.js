@@ -30430,7 +30430,7 @@ if (!only || "net_fd_limit".includes(only)) {
 }
 
 // WP63 S2: a `NET_LISTEN_RING` listener accepts into io_uring slots, not
-// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Six
+// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Seven
 // programs in tests/link/net_ring_*, each judged by its own exit status:
 // `echo.ts` serves 3,000 connections under a descriptor limit of 1,024 with
 // fewer than 64 descriptors open; `full.ts`, under a limit of 32, takes
@@ -30443,8 +30443,10 @@ if (!only || "net_fd_limit".includes(only)) {
 // -11 once the kernel's buffers and the slot's 256 KiB send area are full
 // (NURING-2); `halfclose.ts` closes a slot whose peer has sent its FIN while
 // 256 KiB are still queued, and every byte must reach the peer, and checks
-// that a slot in a loop the program closed joins a new one; and
-// `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
+// that a slot in a loop the program closed joins a new one; `starve.ts`
+// holds 80 slots that are always ready to write in one loop beside one
+// descriptor, which waits with room for 64 and with room for one must still
+// report (NURING-18); and `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
 // io_uring_setup, and must serve descriptors with netRingState() at -1. The
 // clients run in node (`client.mjs`), outside the limit. A ring program that
 // exits 2 found rings refused here, and the deny wrapper exits 3 where the
@@ -30541,6 +30543,15 @@ if (!only || "net_ring".includes(only)) {
         const got = /^halfclose: received (\d+) bytes$/m.exec(out)
         return sent !== null && got !== null && sent[1] === got[1]
       }
+    )
+    ring(
+      "net_ring: a descriptor is reported beside more ready slots than one wait holds",
+      "net_ring_starve",
+      "starve.ts",
+      256,
+      80,
+      "hold",
+      (out) => /^starve: the descriptor came after \d+ and \d+ waits beside 80 ready slots$/m.test(out)
     )
     const deny = path.join(dir, "deny")
     const d = spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {

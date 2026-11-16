@@ -366,13 +366,13 @@ static struct nr_set *nr_set_of(struct nr_vent *v) {
   return (struct nr_set *)(void *)((char *)v - offsetof(struct nr_set, v));
 }
 
-/* The readiness bits a source holds now: 1 readable, 2 writable, 4 an error. */
 /* Whether the slot's connection has failed: a receive's error or a send's.
    A peer's FIN alone (`hup_res` 0) is not a failure. */
 static int nr_failed(const struct nr_conn *c) {
   return c->werr || (c->hup && c->hup_res < 0);
 }
 
+/* The readiness bits a source holds now: 1 readable, 2 writable, 4 an error. */
 static int32_t nr_bits(struct nr_vent *v) {
   if (v->is_listener) {
     struct nr_set *S = nr_set_of(v);
@@ -603,7 +603,9 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   int32_t r = nish_uring_open(&S->u, fd, &o);
   if (r < 0) {
     free(S);
-    if (nr_nsets == 0) {
+    /* Only a refusal decides for the process. A failure that may pass, such
+       as -12 for memory, is the caller's, and a later listener asks again. */
+    if (nr_nsets == 0 && (r == -1 || r == -38 || r == -22 || r == -95)) {
       nr_state = r;
       return 0;
     }
@@ -836,6 +838,9 @@ static int64_t nr_now_ms(void) {
    descriptor, no longer than the sets allow (NURING-8). A wake by the bound,
    or an EINTR, with nothing to report sleeps again until the caller's timeout
    is spent. */
+/* Whose turn a full wait with room for one gives: 1 the epoll set's. */
+static int nr_turn;
+
 static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout_ms) {
   int64_t deadline = timeout_ms > 0 ? nr_now_ms() + timeout_ms : 0;
   for (;;) {
@@ -848,8 +853,13 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
       for (int32_t i = 0; i < nr_nsets; i++)
         if (!nr_sets[i]->dead) t = nish_uring_sleep_ms(nr_sets[i]->u, t);
     }
+    /* Ready slots that fill the batch still leave the epoll set a share of
+       it, half, or every other wait with room for one, so a descriptor such
+       as `signalFd()` is not starved by them (NURING-18). */
+    int room = max - n;
+    if (room == 0) room = max > 1 ? max / 2 : (nr_turn ^= 1);
     struct epoll_event e[NR_EVENTS];
-    int k = n < max ? epoll_wait(loop, e, max - n, t) : 0;
+    int k = room > 0 ? epoll_wait(loop, e, room, t) : 0;
     int woke = 0;
     /* io_uring's task work interrupts the wait with no signal behind it, so
        EINTR is a wake to pump for, not an answer of 0 before the timeout. */
@@ -858,6 +868,10 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
       k = 0;
       woke = 1;
     }
+    int got_fds = 0;
+    for (int i = 0; i < k; i++) got_fds += !(e[i].data.u64 >> 32);
+    /* The slots this drops stay listed and ready, and a later wait reports them. */
+    if (n + got_fds > max) n = max - got_fds;
     for (int i = 0; i < k; i++) {
       if (e[i].data.u64 >> 32) {
         woke = 1;

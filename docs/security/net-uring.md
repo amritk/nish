@@ -40,8 +40,10 @@ close after the peer's FIN that dropped the slot's queued sends (NURING-10)
 and a closed loop whose slots stayed registered to it (NURING-11), both fixed
 before landing, and left two bounds open: a lingering close has no deadline
 (NURING-12), and accepting at once takes peers out of the listener's backlog
-(NURING-13). Seventeen findings (NURING-1 to NURING-17): eight fixed, two
-open, seven decided. The
+(NURING-13). A second round found that a wait whose batch the ready slots
+filled never asked the epoll set, so a descriptor beside them, `signalFd()`
+among them, was never reported (NURING-18), fixed before landing. Twenty
+findings (NURING-1 to NURING-20): ten fixed, two open, eight decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -56,7 +58,7 @@ fix them, are under "The kernel's record" below.
 | `tests/runtime/uring-test.c` | the test: an echo server on the layer in a forked child, driven by plain-socket clients, one mode a check; and the `UR_SYS_SETUP` and `UR_SYS_REGISTER` hooks it compiles the layer with, which stand in for the two syscalls to force the answers a seccomp filter cannot |
 
 Out of scope: `runtime/runtime-net.c`'s descriptor and epoll paths, which a
-slot handle never reaches (`net.md` holds them), and `bench/fd-limit/`, the
+slot handle never reaches (`runtime.md` holds them), and `bench/fd-limit/`, the
 prototype the design measured. The rule for
 rings under `--sandbox` is S3's and lands with `sandbox.md`.
 
@@ -100,6 +102,9 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-15 | Low | `runtime/runtime-net.c` (`nr_open`) | A process opens at most 31 ring listeners in its life: a closed listener's set entry is not reused, so the 32nd `tcpListenFlags` with `NET_LISTEN_RING` answers -23 however many are open. A program that opens and closes ring listeners in a loop runs out. Found in S2's review. | **Decided.** A server opens its listeners once; reusing an entry would have to prove no handle of the old set is still held, since a handle names its set by index. The limit is in `tcpListenFlags`'s contract (`runtime/nish.d.ts`) and the networking guide. |
 | NURING-16 | Low | `runtime/runtime-net.c` (`nish_net_raise_nofile`, the `NR_BASE` tests) | Slot handles start at 2^20, and the runtime raises the descriptor limit no higher than that, but a process that inherits a soft limit above 2^20 keeps it, and the kernel could then hand out a real descriptor at or above 2^20 that the network calls take for a slot handle. Found in S2's review. | **Decided.** The kernel hands out the lowest free descriptor, so it takes over a million open descriptors before one reaches 2^20; `fs.nr_open` defaults to 2^20 on Linux, so a limit above it needs a raised sysctl as well. Lowering an inherited limit would take descriptors from a program that asked for them. |
 | NURING-17 | Low | `runtime/runtime-net.c` (`nr_note_loop`, `nr_forget_loop`) | The layer tracks up to 64 loops a slot or listener was added to; past that it marks the table spilled, and from then on, for the rest of the process's life, every descriptor close scans every set's slots for registrations to it. Found in S2's review. | **Decided.** A cost, not a fault: the scan is bounded by the slots the sets hold and finds the registrations a closed loop leaves, which NURING-11 requires. A program with more than 64 loops holding ring handles at once is not one S2 serves. |
+| NURING-18 | Medium | `runtime/runtime-net.c` (`nr_poll_wait`) | A wait took the loop's ready slots first and called `epoll_wait` only with the room they left, so once a loop held as many slots ready as the wait could report, 64 or fewer when its array is smaller, it never asked the epoll set: a descriptor in the same loop, `signalFd()` among them, was never reported while the slots stayed ready, which a slot that can be written to always is. That broke what NURING-14 rests on. Found in S2's second review. | **Fixed before landing**: when the slots fill the batch, the epoll set still gets half of it, or every other wait when there is room for one entry, and the slots it displaces stay listed for the next wait. Before (the share mutated out): "with 80 slots ready, 4 waits with room for 64 never reported the descriptor". After: `net_ring_starve`, which holds 80 slots ready to write beside one connecting descriptor and requires the descriptor within four waits with room for 64, then for one, and a slot as well. |
+| NURING-19 | Low | `runtime/runtime-net.c` (`nr_dispatch`) | When the table for a new ring cannot be allocated, the accepted slot is closed at once, and a close that finds the submission queue full after flushing it answers -11, which is dropped: the slot stays open in the ring, unreachable, until the listener is closed. Found in S2's second review. | **Decided.** It needs a failed allocation and a queue still full after `nish_uring_close` has submitted it, which leaves room as soon as the kernel takes the entries; one slot is held, and the set's close releases it. Queueing the close would need memory in the path that ran out of it. |
+| NURING-20 | Low | `runtime/runtime-net.c` (`nr_open`) | The first ring listener's failure to open its set was latched as the process's answer whatever it was, so a transient failure, such as -12 when locked memory was short, left every later listener on descriptors and `netRingState()` at -12 for good. Found in S2's second review. | **Fixed before landing**: only a refusal is latched, -1, -38, -22 or -95, the answers `netRingState()` documents; any other failure is `tcpListenFlags`'s own answer, and a later listener asks again. Not tested: the failure cannot be forced from a program, and the latching answers stay covered by `net_ring_fallback`. |
 
 ## Properties verified
 
