@@ -3767,13 +3767,14 @@ function listenFlagsValue(program: CheckedProgram, node: Node): i32 -> @listenFl
   callee +21:19 netOption -> @netOption
 function listenFlagsMayRing(program: CheckedProgram, call: Node): boolean -> @listenFlagsMayRing
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: listenFlagsValue nish_panic_index
+  calls: listenFlagsValue netOption nish_panic_index
   pointer program: size=912 writesThrough=false captured=false passedTo=listenFlagsValue#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
   local +4:9 flags: i32 (const)
   callee +4:17 listenFlagsValue -> @listenFlagsValue
+  callee +5:32 netOption -> @netOption
 function isNumericLiteral(node: Node): boolean -> @isNumericLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
