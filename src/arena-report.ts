@@ -47,6 +47,12 @@ class ArenaSite {
   placement: string
   /** The callee's name as a diagnostic spells it, for a `call` or a `builtin`; empty otherwise. */
   callee: string
+  /** The scopes around the site, which say where an accumulating site piles up and whether anything bounds it. */
+  around: Around
+  /** The user function a `call` site calls, or null: what `dropOf` is asked about. */
+  target: FunctionSig | null
+  /** What the callee leaves behind, once `pilesUp` has found the site piles up only for that. */
+  drop: DropOrigin | null
   /**
    * The site runs on every pass of a loop whose pass does not release it, and
    * its memory is unreachable before the placement's release, so it piles up
@@ -55,18 +61,12 @@ class ArenaSite {
    * program asks first.
    */
   accumulates: boolean
-  /** The scopes around the site, which say where an accumulating site piles up and whether anything bounds it. */
-  around: Around
-  /** The user function a `call` site calls, or null: what `dropOf` is asked about. */
-  target: FunctionSig | null
   /**
    * A call whose callee returns nothing of the arena's (no `CallSite`): a site
    * only when the callee leaves a temporary behind (`dropOf`), and dropped
    * from the report otherwise.
    */
   plain: boolean
-  /** What the callee leaves behind, once `pilesUp` has found the site piles up only for that. */
-  drop: DropOrigin | null
 
   constructor(
     node: Node,
@@ -1158,7 +1158,7 @@ const reachedFromPasses = (drops: CalleeDrops, listed: ListedFunction[]): String
   while (w < work.length) {
     const at = index.get(work[w], -1)
     w = w + 1
-    if (at >= 0) {
+    if (at >= 0 && at < listed.length) {
       for (const site of listed[at].sites) {
         const target = site.target
         if (

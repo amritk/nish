@@ -38,16 +38,16 @@ const DROPS_UNKNOWN: i32 = -3
 const REST_LEAVES: i32 = 1
 const REST_CONTINUES: i32 = 2
 const REST_FALLS: i32 = 0
-struct ArenaSite (class) size=72 align=8
+struct ArenaSite (class) size=64 align=8
   field node: Node index=0 offset=0
   field kind: string index=1 offset=8
   field placement: string index=2 offset=16
   field callee: string index=3 offset=24
-  field accumulates: boolean index=4 offset=32
-  field around: Around index=5 offset=40
-  field target: FunctionSig | null index=6 offset=48
-  field plain: boolean index=7 offset=56
-  field drop: DropOrigin | null index=8 offset=64
+  field around: Around index=4 offset=32
+  field target: FunctionSig | null index=5 offset=40
+  field drop: DropOrigin | null index=6 offset=48
+  field accumulates: boolean index=7 offset=56
+  field plain: boolean index=8 offset=57
   constructor -> @ArenaSite.constructor
 struct Around (class) size=40 align=8
   field pass: LoopScope | null index=0 offset=0
@@ -97,7 +97,7 @@ struct UnboundedLoop (class) size=16 align=8
 function ArenaSite.constructor(this: ArenaSite, node: Node, kind: string, placement: string, callee: string, accumulates: boolean, around: Around): void -> @ArenaSite.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: accumulates around callee kind node placement
-  pointer this: size=72 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
   pointer around: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -650,7 +650,7 @@ function freeIn(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts, body: N
 function reachedFromPasses(drops: CalleeDrops, listed: ListedFunction[]): StringSet -> @reachedFromPasses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via reported
-  calls: StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq reported
+  calls: StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor nish_alloc_struct nish_array_grow nish_str_eq reported
   pointer drops: size=48 writesThrough=true captured=false passedTo=reported#0 reported#0
   pointer listed: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=2
@@ -678,7 +678,7 @@ function reported(drops: CalleeDrops, site: ArenaSite): boolean -> @reported
   sharedWrite: via dropOf
   calls: dropOf
   pointer drops: size=48 writesThrough=true captured=false passedTo=dropOf#0
-  pointer site: size=72 writesThrough=false captured=false
+  pointer site: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 target: FunctionSig | null (const)
   callee +1:45 dropOf -> @dropOf
@@ -694,7 +694,7 @@ function UnboundedLoop.constructor(this: UnboundedLoop, first: ArenaSite): void 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: first
   pointer this: size=16 writesThrough=true captured=false
-  pointer first: size=72 writesThrough=true captured=true
+  pointer first: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function unboundedPassFindings(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, named: i32[], drops: CalleeDrops): ArenaFinding[] -> @unboundedPassFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -737,7 +737,7 @@ function pilesUp(walk: ArenaWalk, site: ArenaSite): boolean -> @pilesUp
   sharedWrite: +0:3
   calls: FactsTable.get dropOf leavesUnbounded nish_panic_index nish_str_eq
   pointer walk: size=120 writesThrough=false captured=false
-  pointer site: size=72 writesThrough=true captured=false passedTo=leavesUnbounded#1
+  pointer site: size=64 writesThrough=true captured=false passedTo=leavesUnbounded#1
   stackSites=0 stackLocals=0
   callee -23:52 leavesUnbounded -> @leavesUnbounded
   local -20:9 id: i32 (const)
@@ -750,7 +750,7 @@ function leavesUnbounded(unit: AnalysisUnit, site: ArenaSite): boolean -> @leave
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: leavesLoop
   pointer unit: size=16 writesThrough=false captured=false passedTo=leavesLoop#0
-  pointer site: size=72 writesThrough=false captured=false
+  pointer site: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 loop: Node (const)
   callee +1:10 leavesLoop -> @leavesLoop
@@ -839,7 +839,7 @@ function noteUnbounded(loops: UnboundedLoop[], site: ArenaSite): void -> @noteUn
   sharedWrite: +0:7
   calls: UnboundedLoop.constructor loopId nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer loops: size=0 writesThrough=true captured=false
-  pointer site: size=72 writesThrough=true captured=true passedTo=loopId#0 UnboundedLoop.constructor#1
+  pointer site: size=64 writesThrough=true captured=true passedTo=loopId#0 UnboundedLoop.constructor#1
   stackSites=0 stackLocals=0
   local -2:14 loop: UnboundedLoop (const)
   callee -1:9 loopId -> @loopId
@@ -847,7 +847,7 @@ function noteUnbounded(loops: UnboundedLoop[], site: ArenaSite): void -> @noteUn
   callee +4:14 new UnboundedLoop -> @UnboundedLoop.constructor
 function loopId(site: ArenaSite): i32 -> @loopId
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer site: size=72 writesThrough=false captured=false
+  pointer site: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 loop: Node | null (const)
 function reportedElsewhere(unit: AnalysisUnit, node: Node, named: i32[]): boolean -> @reportedElsewhere
@@ -897,7 +897,7 @@ function sitePhrase(program: CheckedProgram, site: ArenaSite): string -> @sitePh
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf phraseOf
   pointer program: size=912 writesThrough=false captured=false
-  pointer site: size=72 writesThrough=false captured=false
+  pointer site: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 phraseOf -> @phraseOf
   callee +0:12 SourceFile.lineOf -> @SourceFile.lineOf
