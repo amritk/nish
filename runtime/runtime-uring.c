@@ -489,6 +489,11 @@ static int32_t ur_probe_once(void) {
  * made or the errno of the step that failed, and `next` the next ring a set
  * takes. */
 #define UR_POOL_MAX 64
+/* The default sizes, which a pooled ring is made at. */
+#define UR_SQ_DEFAULT 1024
+#define UR_CQ_DEFAULT 8192
+#define UR_BUF_COUNT_DEFAULT 1024
+#define UR_BUF_SIZE_DEFAULT 2048
 struct ur_sizes {
   uint32_t slots, buf_count, buf_size, sq_entries, cq_entries;
 };
@@ -795,7 +800,7 @@ int32_t nish_uring_premake(int32_t n, int32_t slots) {
   if (n > UR_POOL_MAX) n = UR_POOL_MAX;
   if (slots < 1) slots = 1;
   if (slots > UR_MAX_SLOTS) slots = UR_MAX_SLOTS;
-  ur_pool.z = (struct ur_sizes){(uint32_t)slots, 1024, 2048, 1024, 8192};
+  ur_pool.z = (struct ur_sizes){(uint32_t)slots, UR_BUF_COUNT_DEFAULT, UR_BUF_SIZE_DEFAULT, UR_SQ_DEFAULT, UR_CQ_DEFAULT};
   for (int i = 0; i < n; i++) {
     int rc = ur_make_ring(&ur_pool.z, 1, &ur_pool.rings[i]);
     if (rc < 0) {
@@ -1138,11 +1143,11 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
   }
   if (d.slots > UR_MAX_SLOTS) return -EINVAL;
   if (d.rings_max == 0) d.rings_max = 64;
-  if (d.sq_entries == 0) d.sq_entries = 1024;
-  if (d.cq_entries == 0) d.cq_entries = 8192;
+  if (d.sq_entries == 0) d.sq_entries = UR_SQ_DEFAULT;
+  if (d.cq_entries == 0) d.cq_entries = UR_CQ_DEFAULT;
   if (d.cq_entries < d.sq_entries) d.cq_entries = d.sq_entries;
-  if (d.buf_count == 0) d.buf_count = 1024;
-  if (d.buf_size == 0) d.buf_size = 2048;
+  if (d.buf_count == 0) d.buf_count = UR_BUF_COUNT_DEFAULT;
+  if (d.buf_size == 0) d.buf_size = UR_BUF_SIZE_DEFAULT;
   if (d.rings_max > 4096 || d.buf_count > 32768 || (d.buf_count & (d.buf_count - 1)) != 0 || d.buf_size > (1 << 20))
     return -EINVAL;
   /* A pooled ring was made at its own sizes, before the program could ask. */

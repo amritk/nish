@@ -7215,14 +7215,14 @@ const listenFlagsValue = (program: CheckedProgram, node: Node): i32 => {
   return -1
 }
 
-/** Whether a `tcpListenFlags` call may set the ring bit (8): its flags fold to a value that has it, or fold to nothing. */
+/** Whether a `tcpListenFlags` call may set `NET_LISTEN_RING`: its flags fold to a value that has it, or fold to nothing. */
 const listenFlagsMayRing = (program: CheckedProgram, call: Node): boolean => {
   const args = call.children[1].children
   if (args.length < 4) {
     return true
   }
   const flags = listenFlagsValue(program, args[3])
-  return flags < 0 || (flags & 8) !== 0
+  return flags < 0 || (flags & netOption("NET_LISTEN_RING")) !== 0
 }
 
 /** A numeric literal, negated or not: `process.exit(1)`, `process.exit(-1)`. */
