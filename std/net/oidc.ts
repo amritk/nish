@@ -146,18 +146,25 @@ const OIDC_P256_COORD: i32 = 32
 const OIDC_P384_COORD: i32 = 48
 const OIDC_ED25519_KEY: i32 = 32
 /** Members that make a JWK private or symmetric (RFC 7518 §6.2.2, §6.3.2, §6.4.1; RFC 8037 §2). */
-const OIDC_PRIVATE_MEMBERS: string[] = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"]
+const oidcPrivateMembers = (): string[] => ["d", "p", "q", "dp", "dq", "qi", "oth", "k"]
 
 /** How discovery and the key set fetch, and how tokens are checked. */
 export class OidcOptions {
   /** Allow `http://` to `127.0.0.1`, `localhost` or `::1` for the issuer and `jwks_uri`; off by default, for tests. */
   allowLoopbackHttp: boolean = false
   /** The bound on one fetch, connect to last byte, in milliseconds. */
-  timeoutMs: i32 = OIDC_DEFAULT_TIMEOUT_MS
+  timeoutMs: i32
   /** The clock skew allowed on `exp`, `nbf` and `iat`, in seconds. */
-  leeway: i64 = OIDC_DEFAULT_LEEWAY
+  leeway: i64
   /** The longest token verified, in bytes. */
-  maxToken: i32 = JWT_MAX_TOKEN
+  maxToken: i32
+
+  /** The defaults: `OIDC_DEFAULT_TIMEOUT_MS`, `OIDC_DEFAULT_LEEWAY`, `JWT_MAX_TOKEN`, no loopback http. */
+  constructor() {
+    this.timeoutMs = OIDC_DEFAULT_TIMEOUT_MS
+    this.leeway = OIDC_DEFAULT_LEEWAY
+    this.maxToken = JWT_MAX_TOKEN
+  }
 }
 
 /** What discovery found: the issuer as configured and the URL of its key set, or why it failed. */
@@ -187,13 +194,20 @@ export class OidcMetadata {
 /** A JWK Set as taken: each key bound to one algorithm, with its `kid`, or why the set was refused. */
 export class OidcKeySet {
   /** `OIDC_OK`, or the reason the set was refused; a refused set holds no key. */
-  error: i32 = OIDC_OK
+  error: i32 = 0
   /** The keys taken, in the set's order. */
-  keys: JwtKey[] = []
+  keys: JwtKey[]
   /** Each key's `kid`; `""` for a key with none. */
-  kids: string[] = []
+  kids: string[]
   /** Whether each key has a `kid`. */
-  hasKid: boolean[] = []
+  hasKid: boolean[]
+
+  /** An empty set, `OIDC_OK`; `oidcParseJwks` is the way to fill one. */
+  constructor() {
+    this.keys = []
+    this.kids = []
+    this.hasKid = []
+  }
 
   /**
    * The number of keys taken.
@@ -330,9 +344,13 @@ const oidcHttpOptions = (options: OidcOptions, limit: i32): HttpOptions => {
 
 /** What one GET answered: the body, the `Cache-Control` header, or why there is no body. */
 class OidcFetched {
-  error: i32 = OIDC_OK
-  body: u8[] = []
+  error: i32 = 0
+  body: u8[]
   cacheControl: string | null = null
+
+  constructor() {
+    this.body = []
+  }
 }
 
 /** One blocking GET of `url`, its body bounded at `limit` bytes; only a 200 is taken. */
@@ -510,9 +528,9 @@ const oidcMakeKey = (json: JsonDocument, o: JsonValue, alg: i32): JwtKey | null 
 
 /** What one JWK came to: a key, a skip, or the reason the whole set is refused. */
 class OidcEntry {
-  error: i32 = OIDC_OK
   key: JwtKey | null = null
   kid: string = ""
+  error: i32 = 0
   hasKid: boolean = false
 }
 
@@ -523,7 +541,7 @@ const oidcEntry = (json: JsonDocument, o: JsonValue): OidcEntry => {
     out.error = OIDC_ERR_JSON
     return out
   }
-  for (const name of OIDC_PRIVATE_MEMBERS) {
+  for (const name of oidcPrivateMembers()) {
     if (json.get(o, name) >= 0) {
       out.error = OIDC_ERR_PRIVATE
       return out
@@ -644,6 +662,28 @@ export const oidcParseJwks = (doc: u8[]): OidcKeySet => {
   return set
 }
 
+/** The seconds of one `max-age=<digits>` directive, or -1 when `directive` is not one. */
+const oidcMaxAge = (directive: string): i64 => {
+  const eq: i32 = directive.indexOf(String.fromCharCode(OIDC_CH_EQUALS))
+  if (eq < 1 || asciiLower(trim(directive.slice(0, eq))) !== "max-age") {
+    return toI64(-1)
+  }
+  const value: string = trim(directive.slice(eq + 1, toI32(directive.length)))
+  const n: i32 = toI32(value.length)
+  if (n < 1 || n > OIDC_MAX_AGE_DIGITS) {
+    return toI64(-1)
+  }
+  let age: i64 = toI64(0)
+  for (let i: i32 = 0; i < n; i += 1) {
+    const c: i32 = value.charCodeAt(i)
+    if (c < OIDC_CH_0 || c > OIDC_CH_9) {
+      return toI64(-1)
+    }
+    age = age * toI64(10) + toI64(c - OIDC_CH_0)
+  }
+  return age
+}
+
 /**
  * How long a key set fetched with this `Cache-Control` is fresh: its first
  * `max-age` directive of plain digits, clamped to `[OIDC_MIN_LIFETIME,
@@ -658,29 +698,18 @@ export const oidcLifetime = (cacheControl: string | null): i64 => {
   if (cacheControl === null) {
     return OIDC_DEFAULT_LIFETIME
   }
-  const parts: string[] = cacheControl.split(String.fromCharCode(OIDC_CH_COMMA))
-  for (const part of parts) {
-    const directive: string = trim(part)
-    const eq: i32 = directive.indexOf(String.fromCharCode(OIDC_CH_EQUALS))
-    if (eq > 0 && asciiLower(trim(directive.slice(0, eq))) === "max-age") {
-      const value: string = trim(directive.slice(eq + 1, toI32(directive.length)))
-      const n: i32 = toI32(value.length)
-      let digits: boolean = n > 0 && n <= OIDC_MAX_AGE_DIGITS
-      let age: i64 = toI64(0)
-      for (let i: i32 = 0; i < n && digits; i += 1) {
-        const c: i32 = value.charCodeAt(i)
-        if (c < OIDC_CH_0 || c > OIDC_CH_9) {
-          digits = false
-        } else {
-          age = age * toI64(10) + toI64(c - OIDC_CH_0)
-        }
-      }
-      if (digits) {
+  const n: i32 = toI32(cacheControl.length)
+  let from: i32 = 0
+  for (let i: i32 = 0; i <= n; i += 1) {
+    if (i === n || cacheControl.charCodeAt(i) === OIDC_CH_COMMA) {
+      const age: i64 = oidcMaxAge(trim(cacheControl.slice(from, i)))
+      if (age >= toI64(0)) {
         if (age < OIDC_MIN_LIFETIME) {
           return OIDC_MIN_LIFETIME
         }
         return age > OIDC_MAX_LIFETIME ? OIDC_MAX_LIFETIME : age
       }
+      from = i + 1
     }
   }
   return OIDC_DEFAULT_LIFETIME
@@ -709,17 +738,17 @@ export class OidcKeys {
   /** The last set taken, or null before the first. */
   set: OidcKeySet | null = null
   /** When the last set taken stops being fresh. */
-  freshUntil: i64 = toI64(0)
+  freshUntil: i64
   /** When the last set taken stops verifying, if no refresh replaces it. */
-  hardUntil: i64 = toI64(0)
+  hardUntil: i64
   /** When the last fetch was begun. */
-  triedAt: i64 = toI64(0)
+  triedAt: i64
   /** Whether any fetch has been begun. */
   tried: boolean = false
   /** Whether a token named a `kid` the set does not hold since the last fetch. */
   wanted: boolean = false
   /** The result of the last refresh that fetched: `OIDC_OK` or why it failed. */
-  lastError: i32 = OIDC_OK
+  lastError: i32 = 0
   /** The token's bytes, copied for the verifier. */
   private readonly text: u8[]
   /** The token's `kid`, as `peekKid` writes it. */
@@ -735,6 +764,9 @@ export class OidcKeys {
   constructor(meta: OidcMetadata, options: OidcOptions) {
     this.meta = meta
     this.options = options
+    this.freshUntil = toI64(0)
+    this.hardUntil = toI64(0)
+    this.triedAt = toI64(0)
     this.verifier = new JwtVerifier(options.maxToken)
     this.text = new Array<u8>(options.maxToken)
     this.kidBytes = new Array<u8>(OIDC_MAX_KID)
