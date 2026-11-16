@@ -225,8 +225,14 @@ body.scalar-app aside.t-doc__sidebar.sidebar-mobile-menu {
   transform-origin: left;
   transition: transform 0.35s var(--nish-ease);
 }
-.t-header__item:hover::after {
+.t-header__item:hover::after,
+.t-header__item--selected::after {
   transform: scaleX(1);
+}
+/* The current page's link keeps the gradient bar in place of Scalar's
+   currentColor border, so a link never shows two underlines. */
+.t-header .t-header__item.t-header__item--selected {
+  border-bottom-color: transparent;
 }
 
 body img.logo.logo {
