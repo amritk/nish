@@ -34252,6 +34252,25 @@ if (!only || "std_compress_node".includes(only)) {
   }
 }
 
+// The Temporal cross-check: `tests/link/std_temporal` (the link loop holds its
+// expected.out, the native answers of nish/temporal) has every case answered
+// again by the engine's own `Temporal`, which must give the same line. It reads
+// only sources, so it needs no native build; it needs a Node with `Temporal`
+// (26 and later), and says so when this one has none.
+if (!only || "std_temporal".includes(only)) {
+  if (globalThis.Temporal === undefined) {
+    skip(`link/std_temporal: Node ${process.version} has no Temporal to answer the cases with`)
+  } else {
+    const temporalCheck = await import(pathToFileURL(path.join(linkDir, "std_temporal", "check.mjs")).href)
+    const judged = temporalCheck.judge(globalThis.Temporal)
+    check(
+      `link/std_temporal: each of the ${judged.count} cases answers under Node's Temporal as expected.out says`,
+      judged.count > 0 && judged.problems.length === 0,
+      judged.problems.join("\n")
+    )
+  }
+}
+
 // The JSON conformance stage: nish/json-tokenizer and JsonWriter together.
 // `tests/link/std_json_conformance` (the link loop holds its expected.out) runs
 // test262's and V8's cases, whose expected values the extractor works out again

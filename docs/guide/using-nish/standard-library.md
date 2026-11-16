@@ -198,6 +198,7 @@ shown).
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
+| [`nish/temporal`](dates-and-times.md) | `PlainDate`, `PlainTime`, `PlainDateTime`, `Instant` and `Duration`: JavaScript's `Temporal`, in the ISO calendar, natively and under Node |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
 | [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |

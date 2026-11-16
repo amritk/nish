@@ -20,7 +20,7 @@ The globals and the 10 `nish:` modules that come with the compiler.
 
 <scalar-card title="Core" icon="phosphor/regular/atom" href="#core">
 
-Numbers, bytes, array loops, sorting, randomness and the test runner: 8 modules.
+Numbers, bytes, array loops, sorting, randomness, dates and times, and the test runner: 9 modules.
 
 </scalar-card>
 
@@ -121,6 +121,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/pair`](pair.md) | Two values answered by one call. |
 | [`nish/random`](random.md) | A seeded generator of pseudo-random numbers whose every answer is the same natively and under Node. |
 | [`nish/sort`](sort.md) | `xs.sort(cmp)` on an array, in Nish: a stable merge sort, compiled once per comparator. |
+| [`nish/temporal`](temporal.md) | Dates, times, instants and durations in the ISO 8601 calendar, under the names and the rules of TC39's `Temporal` (`docs/wp64-temporal.md`). |
 | [`nish/testing`](testing.md) | A test runner for Nish programs, written in Nish. |
 
 ### Collections
