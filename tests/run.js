@@ -31685,10 +31685,12 @@ if (!only || "net_ring".includes(only)) {
       const c = spawnSync(NISH, [path.join(linkDir, sub, file), ...flags, "--link", exe], { cwd: root, encoding: "utf8" })
       return c.status === 0 ? { exe, c } : { exe: null, c }
     }
-    const ring = (name, sub, file, limit, count, mode, want, flags = [], suffix = "") => {
+    // Answers false when it skipped. `mustRun` makes "rings refused" a
+    // failure: the run it twins made rings on this kernel.
+    const ring = (name, sub, file, limit, count, mode, want, flags = [], suffix = "", mustRun = false) => {
       if (!(room >= limit)) {
         skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the ${limit} the check sets`)
-        return
+        return false
       }
       const b = build(sub, file, flags, suffix)
       const r =
@@ -31698,15 +31700,16 @@ if (!only || "net_ring".includes(only)) {
               encoding: "utf8",
               timeout: 180000,
             })
-      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      if (!mustRun && r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
         skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
-        return
+        return false
       }
       check(
         name,
         r !== null && r.status === 0 && (typeof want === "string" ? r.stdout.includes(want) : want(r.stdout)),
         r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
       )
+      return true
     }
     ring(
       "net_ring: a ring listener serves 3,000 connections under a limit of 1,024 with fewer than 64 descriptors",
@@ -31717,7 +31720,7 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
-    ring(
+    const fullRan = ring(
       "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
       "net_ring_full",
       "full.ts",
@@ -31729,6 +31732,7 @@ if (!only || "net_ring".includes(only)) {
     // WP63 S3: under --sandbox the set is the rings made before the filter
     // loaded (`nish.netRings`, 1 here), so it answers -23 once that ring's 32
     // slots are taken, where the unsandboxed run above grows to more rings.
+    // Once that run made rings, "rings refused" here is a failure, not a skip.
     ring(
       "net_ring: under --sandbox a full set of premade rings answers -23 and makes no ring past them",
       "net_ring_full",
@@ -31738,7 +31742,8 @@ if (!only || "net_ring".includes(only)) {
       "hold",
       "took 32 connections, answered -23, then reused the freed slot\n",
       ["--sandbox"],
-      "-sandbox"
+      "-sandbox",
+      fullRan
     )
     ring(
       "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads",
@@ -32093,6 +32098,13 @@ if (!only || "sandbox".includes(only)) {
     )
     if (!ringsWork) {
       skip(`sandbox: this kernel refuses io_uring_setup unconfined; the premade-ring checks did not run (${said(unconfined).trim()})`)
+    } else {
+      const inheritPlain = run(plainRing, ["inherit-ring", plainRing])
+      check(
+        "sandbox: without --sandbox a ring inherited across exec is entered (the control)",
+        inheritPlain !== null && inheritPlain.status === 0 && inheritPlain.stdout === "foreign-enter: start\nforeign-enter: ok\ninherit-ring: exit 0\n",
+        said(inheritPlain)
+      )
     }
     // A refused opcode or flag on a restricted ring completes with -EACCES.
     const refusedOps = [
@@ -32145,11 +32157,20 @@ if (!only || "sandbox".includes(only)) {
         const r = run(none, [op])
         check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
       }
-      const enter = run(ring, ["io_uring_enter"])
+      // io_uring_enter is allowed on the premade rings' descriptors alone:
+      // on any other, or with no ring made, the filter kills it.
+      for (const [exe, why] of [
+        [ring, "io_uring_enter from ffi with net on a descriptor that is no premade ring dies of SIGSYS"],
+        [net, "io_uring_enter from ffi with net and no ring premade dies of SIGSYS"],
+      ]) {
+        const r = run(exe, ["io_uring_enter"])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === "io_uring_enter: start\n", said(r))
+      }
+      const bothEnter = run(both, ["io_uring_enter"])
       check(
-        `sandbox: io_uring_enter from ffi with net reaches the kernel (${mode})`,
-        enter !== null && enterPlain !== null && enter.status === 0 && enter.stdout === enterPlain.stdout,
-        said(enter)
+        `sandbox: with net and process.spawn io_uring_enter from ffi reaches the kernel (${mode})`,
+        bothEnter !== null && enterPlain !== null && bothEnter.status === 0 && bothEnter.stdout === enterPlain.stdout,
+        said(bothEnter)
       )
       const probe = run(none, ["ring-probe"])
       check(
@@ -32177,6 +32198,12 @@ if (!only || "sandbox".includes(only)) {
         `${said(bothSetup)}\n${said(bothCount)}`
       )
       if (!ringsWork) continue
+      const foreign = run(plainRing, ["inherit-ring", ring])
+      check(
+        `sandbox: a ring a parent made unconfined and passed across exec cannot be entered: SIGSYS (${mode})`,
+        foreign !== null && foreign.status === 0 && foreign.stdout === "foreign-enter: start\ninherit-ring: SIGSYS\n",
+        said(foreign)
+      )
       const count = run(ring, ["ring-count"])
       check(
         `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring (${mode})`,

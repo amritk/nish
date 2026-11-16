@@ -738,9 +738,13 @@ const RUNTIME_BYTES_TEXT_BUDGET = 2048
  * carry which kind each is, and a spawn of a program granted `exec:` is started by
  * the supervisor itself, without the filter, through the `posix_spawn` call the
  * spawner now shares. Measured 4,507 against 4,409 on 2026-11-13 with clang 18.1.3
- * on linux-x64. The ceiling stands, leaving 101.
+ * on linux-x64. The ceiling stands, leaving 101. **4,789 bytes** on 2026-11-16
+ * once `--sandbox` premakes restricted rings and lets `io_uring_enter` take only
+ * their descriptors (WP63 S3, NURING-35; 4,608 to 4,864): the premake call with
+ * its descriptor array, and the filter's rows comparing `io_uring_enter`'s first
+ * argument with each premade ring. The budget is the 256-byte boundary above it.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
+const RUNTIME_SANDBOX_TEXT_BUDGET = 4864
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`

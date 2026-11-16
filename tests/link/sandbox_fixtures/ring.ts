@@ -3,7 +3,8 @@
 // before the filter loads. `<exe> serve` listens with the flag and serves one
 // loopback connection through a premade ring, printing `serve: ok` or what
 // went wrong; any other operation goes to `sb_probe` (probe.c). Exit 2 from
-// `serve` says the kernel refused rings, the section's skip.
+// `serve` says the kernel refused rings; tests/run.js runs `serve` only once
+// the unconfined probe made a ring, so there it fails the check.
 import {
   NET_LISTEN_RING,
   connectResult,

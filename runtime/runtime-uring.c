@@ -139,7 +139,7 @@ struct nish_uring_stats {
 struct nish_uring_set;
 
 int32_t nish_uring_probe(void);
-int32_t nish_uring_premake(int32_t n, int32_t slots);
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds);
 int32_t nish_uring_pooled(void);
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
 int32_t nish_uring_fd(const struct nish_uring_set *s);
@@ -787,8 +787,10 @@ static int ur_add_ring(struct nish_uring_set *s) {
  * kernel below the probe's floor makes none, and a ring that fails any step
  * closes every ring made; either way the pool answers that step's errno from
  * then on: the process falls back to descriptors for good.
- * Answers the number of rings made or that errno. */
-int32_t nish_uring_premake(int32_t n, int32_t slots) {
+ * Answers the number of rings made or that errno, and writes each ring's
+ * descriptor to `fds`, which holds 64: the only descriptors the filter lets
+ * `io_uring_enter` take. */
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds) {
   if (ur_pool.made) return ur_pool.rc;
   ur_pool.made = 1;
   if (n <= 0) return ur_pool.rc = -EPERM;
@@ -809,6 +811,7 @@ int32_t nish_uring_premake(int32_t n, int32_t slots) {
       return ur_pool.rc = rc;
     }
   }
+  for (int i = 0; i < n; i++) fds[i] = ur_pool.rings[i]->fd;
   ur_pool.n = n;
   return ur_pool.rc = n;
 }
@@ -1466,9 +1469,10 @@ void nish_uring_destroy(struct nish_uring_set *s) {
 #else /* not Linux: no io_uring, so a set is never available */
 
 int32_t nish_uring_probe(void) { return -38; }
-int32_t nish_uring_premake(int32_t n, int32_t slots) {
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds) {
   (void)n;
   (void)slots;
+  (void)fds;
   return -38;
 }
 int32_t nish_uring_pooled(void) { return 0; }

@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -102,17 +103,55 @@ int sb_probe(const char *op, const char *path) {
     say(op, syscall(0x40000000L | 41, AF_INET, SOCK_STREAM, 0));
   } else if (strcmp(op, "io_uring_setup") == 0) {
     start(op);
+    /* R_DISABLED, which the premake makes its rings with, and DEFER_TASKRUN
+     * with the SINGLE_ISSUER it needs, the probe's floor (flags at offset 8):
+     * `ok` unconfined says this kernel takes the rings --sandbox premakes. */
     char params[120];
     memset(params, 0, sizeof params);
+    uint32_t flags = (1u << 6) | (1u << 12) | (1u << 13);
+    memcpy(params + 8, &flags, sizeof flags);
     say(op, syscall(425, 1, params));
   } else if (strcmp(op, "io_uring_register") == 0) {
     start(op);
     say(op, syscall(427, -1, 0, NULL, 0));
   } else if (strcmp(op, "io_uring_enter") == 0) {
-    /* On no ring: the filter lets it through to the kernel, which answers
-     * EBADF, so a kill here is the filter's own. */
+    /* On no ring: unconfined, or with both net and process.spawn, the
+     * kernel answers EBADF; any other sandbox kills it, since -1 is none of
+     * the rings made before the filter. */
     start(op);
     say(op, syscall(426, -1, 0, 0, 0, NULL, 0));
+  } else if (strcmp(op, "inherit-ring") == 0) {
+    /* Run unconfined: makes an unrestricted ring, clears its close-on-exec
+     * flag and runs `path foreign-enter <ring>`, which inherits it; prints
+     * how that child ended: `inherit-ring: SIGSYS`, or its exit status.
+     * (Kernels from 6.7 refuse an io_uring descriptor over SCM_RIGHTS, so
+     * inheritance is the route a parent has on every kernel.) */
+    char params[120];
+    memset(params, 0, sizeof params);
+    int ring = (int)syscall(425, 1, params);
+    if (ring < 0 || fcntl(ring, F_SETFD, 0) != 0) return say(op, -1), 1;
+    char at[16];
+    snprintf(at, sizeof at, "%d", ring);
+    pid_t pid = fork();
+    if (pid == 0) {
+      char *argv[] = {(char *)path, "foreign-enter", at, 0};
+      execv(path, argv);
+      _exit(127);
+    }
+    if (pid < 0) return say(op, -1), 1;
+    close(ring);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGSYS)
+      printf("%s: SIGSYS\n", op);
+    else
+      printf("%s: %s %d\n", op, WIFSIGNALED(status) ? "signal" : "exit", WIFSIGNALED(status) ? WTERMSIG(status) : WEXITSTATUS(status));
+    fflush(stdout);
+  } else if (strcmp(op, "foreign-enter") == 0) {
+    /* `path` is the number of a ring this process inherited: enters it,
+     * submitting nothing, which the kernel answers 0. */
+    start(op);
+    say(op, syscall(426, atoi(path), 0, 0, 0, NULL, 0));
   } else if (strcmp(op, "ring-sqe") == 0) {
     /* `path` is `<opcode>:<sqe flags>`, submitted to premade ring 0 through
      * the runtime's test hook; prints the completion's res. */

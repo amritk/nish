@@ -283,7 +283,7 @@ struct nish_uring_opts {
   int32_t buf_size;
 };
 int32_t nish_uring_probe(void);
-int32_t nish_uring_premake(int32_t n, int32_t slots);
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds);
 int32_t nish_uring_pooled(void);
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
 int32_t nish_uring_fd(const struct nish_uring_set *s);
@@ -947,13 +947,15 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
    has no io_uring, and answers -95. */
 /* WP63 S3: `--sandbox`, before its filter, makes the `n` restricted rings
    every ring listener of this process takes, at the slots `nr_open` would
-   give a set. With `n` of 0 it records that no ring may be made. */
-int32_t nish_net_ring_premake(int32_t n) {
+   give a set, and writes each ring's descriptor to `fds` (64 of them). With
+   `n` of 0 it records that no ring may be made. */
+int32_t nish_net_ring_premake(int32_t n, int32_t *fds) {
 #if defined(__linux__)
   int32_t slots = nr_slots();
-  return nish_uring_premake(n, slots < 0 ? 1 : slots);
+  return nish_uring_premake(n, slots < 0 ? 1 : slots, fds);
 #else
   (void)n;
+  (void)fds;
   return -95;
 #endif
 }

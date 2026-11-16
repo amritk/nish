@@ -52,7 +52,8 @@
  *      a listener's opcodes and flags before it is enabled, or tell the ring
  *      layer it may make none (docs/security/net-uring.md);
  *   6. the seccomp filter of the note's section 4, a denylist, which then
- *      kills io_uring_setup and io_uring_register unless both are granted;
+ *      kills io_uring_setup and io_uring_register unless both are granted,
+ *      and io_uring_enter on any descriptor but step 5's rings;
  *   7. set the flag `nish_sandbox_check` reads at the top of `main`, so a C
  *      library that never ran `.preinit_array` (musl) refuses to run rather
  *      than running unconfined.
@@ -204,8 +205,10 @@ static const uint16_t nish_sb_meta[] = {
 #endif
 static const uint16_t nish_sb_uring[] = {425, 426, 427}; /* io_uring_setup, _enter, _register */
 /* With `net` and without `process.spawn` only the rings step 5 made before
- * the filter are left: no ring may be made or registered (WP63 S3). */
+ * the filter are left: no ring may be made or registered (WP63 S3), and
+ * `io_uring_enter` is allowed on those rings' descriptors alone. */
 static const uint16_t nish_sb_uring_make[] = {425, 427}; /* io_uring_setup, _register */
+#define NISH_SB_ENTER 426
 #define NISH_SB_CLONE3 435
 
 /* Set by step 7 and read by `nish_sandbox_check`. */
@@ -417,7 +420,8 @@ static int nish_sb_rows(struct sock_filter *prog, int at, const uint16_t *nrs, i
 
 #define NISH_SB_ROWS(prog, at, nrs, action) nish_sb_rows(prog, at, nrs, (int)(sizeof nrs / sizeof nrs[0]), action)
 
-/* The low word of `clone`'s flags, where CLONE_THREAD lives. */
+/* The low word of the first argument: `clone`'s flags, where CLONE_THREAD
+ * lives, and `io_uring_enter`'s descriptor. */
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define NISH_SB_ARG0_LOW (offsetof(struct seccomp_data, args) + 4)
 #else
@@ -442,24 +446,36 @@ static int nish_sb_rows(struct sock_filter *prog, int at, const uint16_t *nrs, i
       BPF_STMT(BPF_RET | BPF_K, KILL),                                     \
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)) NISH_SB_X32
 
-/* Step 5: a denylist (open question 4), each row of the note's section 4. */
-static void nish_sb_seccomp(int32_t caps) {
+/* Step 6: a denylist (open question 4), each row of the note's section 4.
+ * `rings` holds the descriptors of the `nrings` rings step 5 made. */
+static void nish_sb_seccomp(int32_t caps, const int32_t *rings, int nrings) {
   uint32_t action = SECCOMP_RET_KILL_PROCESS;
   if (syscall(SYS_seccomp, SECCOMP_GET_ACTION_AVAIL, 0, &action) != 0)
     nish_sb_fail("this kernel has no seccomp filter that kills the process");
   static const struct sock_filter head[] = {NISH_SB_HEAD};
-  struct sock_filter prog[96];
+  struct sock_filter prog[192];
   int at = sizeof head / sizeof head[0];
   memcpy(prog, head, sizeof head);
   at = NISH_SB_ROWS(prog, at, nish_sb_always, KILL);
   if (!(caps & CAP_BIT_NET)) at = NISH_SB_ROWS(prog, at, nish_sb_net, KILL);
   /* io_uring opens, connects and accepts sockets without those calls. With
    * `net`, a ring made before the filter is restricted to accept, recv,
-   * send, close, cancel and nop, so only entering one stays allowed. */
-  if (!(caps & CAP_BIT_NET))
+   * send, close, cancel and nop, so only entering one stays allowed: by its
+   * descriptor, the kernel's `unsigned int`, so a ring made elsewhere and
+   * received over a socket is killed too. With no ring made, entering is
+   * killed outright. The block returns on both paths, so the number loaded
+   * over the accumulator is never compared with a later row. */
+  if (!(caps & CAP_BIT_NET) || (!(caps & CAP_BIT_SPAWN) && nrings <= 0))
     at = NISH_SB_ROWS(prog, at, nish_sb_uring, KILL);
-  else if (!(caps & CAP_BIT_SPAWN))
+  else if (!(caps & CAP_BIT_SPAWN)) {
     at = NISH_SB_ROWS(prog, at, nish_sb_uring_make, KILL);
+    prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ENTER, 0, (uint8_t)(nrings + 3));
+    prog[at++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, NISH_SB_ARG0_LOW);
+    for (int i = 0; i < nrings; i++)
+      prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (uint32_t)rings[i], (uint8_t)(nrings - i), 0);
+    prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, KILL);
+    prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+  }
   if (!(caps & CAP_BIT_FS_WRITE)) at = NISH_SB_ROWS(prog, at, nish_sb_meta, EPERM_RET);
   if (!(caps & CAP_BIT_SPAWN)) {
     at = NISH_SB_ROWS(prog, at, nish_sb_spawn, KILL);
@@ -850,11 +866,13 @@ void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char 
   /* The filter kills io_uring_setup unless `net` and `process.spawn` are
    * both granted, so the rings a ring listener takes are made now, or the
    * ring layer is told it may make none (WP63 S3). */
+  int32_t rings[64];
+  int32_t nrings = 0;
   if ((caps & (CAP_BIT_NET | CAP_BIT_SPAWN)) != (CAP_BIT_NET | CAP_BIT_SPAWN))
-    (void)nish_net_ring_premake(caps & CAP_BIT_NET ? net_rings : 0);
+    nrings = nish_net_ring_premake(caps & CAP_BIT_NET ? net_rings : 0, rings);
   /* Metadata writes stay EPERM inside a scoped write directory (open
    * question 1): Landlock has no right for chmod, chown or xattrs. */
-  nish_sb_seccomp(write_dirs ? caps & ~CAP_BIT_FS_WRITE : caps);
+  nish_sb_seccomp(write_dirs ? caps & ~CAP_BIT_FS_WRITE : caps, rings, nrings);
   __atomic_store_n(&nish_sb_applied, 1, __ATOMIC_RELEASE);
 }
 
