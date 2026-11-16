@@ -15230,11 +15230,14 @@ by the caller.
       one behind by this same rule, on every call that returns.
 
     "Every call" admits one kind of branch: an `if (p === K)`, `if (p !== K)`
-    or `switch (p)` on a parameter `p` against a constant. A handler that
-    dispatches on the event it is handed therefore counts. The warning names
-    the call in the pass and the site, as in "what `readPost` leaves behind on
-    line 102 (the string built on line 69, in `readPost`) piles up". Its
-    rewrite puts the block inside the function that builds the temporary.
+    or `switch (p)` on a parameter `p` against a constant. `K` is a literal,
+    a name that is neither a parameter nor a `let`, or a member of a name
+    that is not a local, such as an enum's. A handler that dispatches on the event it is handed therefore
+    counts. The warning names the call in the pass and the site, as in "what
+    `readPost` leaves behind on line 102 (the string built on line 69, in
+    `readPost`) piles up". Its rewrite puts the block inside the function that
+    builds the temporary. When that function is in `std/` or a dependency, the
+    rewrite puts the block in the loop body instead.
 
     `tests/link/nl9018_server/helper_leaky.ts` builds its reply in a
     `readPost` helper that also answers, so `readPost` is refused a scope of
@@ -15249,7 +15252,8 @@ by the caller.
       return, such as an error message, a table built on first use or one
       step of a handshake;
     - a temporary whose every path ends the program (`panic`,
-      `process.exit`).
+      `process.exit`), whether it is built in the call's arguments or in a
+      statement before it, as in `const msg = ...; panic(msg)`.
 
     A loop is bounded, and NL9018 stays silent for it, when one of these
     holds:

@@ -3249,6 +3249,9 @@ export class Compilation {
     const facts = this.analyze()
     const drops = new CalleeDrops(this.analysisUnits, facts)
     for (const unit of this.analysisUnits) {
+      drops.theirs.push(!this.inRootPackage(unit.program.source))
+    }
+    for (const unit of this.analysisUnits) {
       const source = unit.program.source
       if (!this.inRootPackage(source)) {
         continue
