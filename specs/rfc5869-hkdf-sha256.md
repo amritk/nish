@@ -148,9 +148,10 @@ nish/crypto/hkdf are listed here, each with the reason it is not tested:
   SHA-256.
 - hkdfExtractSha256Secret, hkdfExtractSha384Secret, hkdfExpandSha256Secret,
   hkdfExpandSha384Secret, hkdfSha256Secret, hkdfSha384Secret: the same
-  derivations taking and giving Secret<u8[]>. Their outputs follow the plain
-  functions; what they add is wiping, a non-functional property this profile
-  cannot observe (nish's wipe tests cover it).
+  derivations taking and giving Secret<u8[]>. What they add is wiping, a
+  non-functional property this profile cannot observe; tests/wipes/crypto.js
+  covers the wipes. No test in this contract checks that their outputs equal
+  the plain functions'.
 - hkdfExpandLabelSha256, hkdfExpandLabelSha384, hkdfExpandLabelSha256Secret,
   hkdfExpandLabelSha384Secret: TLS 1.3's HKDF-Expand-Label (RFC 8446 Section
   7.1), not a construction of RFC 5869.
