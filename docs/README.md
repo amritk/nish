@@ -200,11 +200,14 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   colour change re-measures the contrast figures in the file's head.
 - [`site.js`](site/site.js) builds the hero into the empty
   `<div data-nish-hero></div>` at the top of [the landing
-  page](guide/index.md), tracks the pointer for the cards and writes each
-  page's structured data (below). Until it
+  page](guide/index.md) and tracks the pointer for the cards. Until it
   marks the hero's host `data-nish-ready`, `theme.css` holds the page under
   the hero hidden, so the hero's late arrival pushes nothing a reader is
   looking at; the hold ends by itself after 1.2s if `site.js` never runs.
+- [`page.js`](site/page.js) writes each page's structured data (below) and
+  lets a path in a table break after its slashes, where `theme.css` keeps a
+  table's names whole. It draws nothing, and stays out of `site.js` so the
+  hero's script keeps its size budget (`tests/break-web/check.mjs`).
 - The landing page is the site's home, not a page of the guide: its route,
   first under `/` in `scalar.config.json` and out of the sidebar, sets a
   `layout` that drops the outline, the page actions and the previous/next
@@ -227,8 +230,8 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
     `https://nishlang.com/og.png`. A tag set there is on every page, so it
     holds no page's own title; the home page's `<title>` is its route's
     `head.title`. The description repeats the landing page's lead: a change
-    to what Nish is changes both, and `site.js`'s `DESCRIPTION`.
-  - `site.js` writes one schema.org JSON-LD block into the head: the
+    to what Nish is changes both, and `page.js`'s `DESCRIPTION`.
+  - `page.js` writes one schema.org JSON-LD block into the head: the
     `WebSite` and Nish as a `SoftwareApplication` on every page, and a
     `TechArticle` for any other page than the home page, from its title and
     description. Scalar renders none of its own. It names no person.

@@ -1486,7 +1486,10 @@
         { "name": "twitter:image", "content": "https://nishlang.com/og.png" },
         { "name": "twitter:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." }
       ],
-      "scripts": [{ "path": "docs/site/site.js", "defer": true }],
+      "scripts": [
+        { "path": "docs/site/site.js", "defer": true },
+        { "path": "docs/site/page.js", "defer": true }
+      ],
       "links": [
         { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
         { "rel": "icon", "type": "image/svg+xml", "href": "/mark.svg" },

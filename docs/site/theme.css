@@ -397,12 +397,9 @@ table.t-editor__table {
   border: 1px solid var(--scalar-border-color);
   border-radius: 14px;
 }
-/* A table sizes its columns to what they hold, and the name in the first
-   column (a module, a flag, a type) breaks only at a space or, for a path,
-   after a slash (site.js marks those), never inside a word: `nish:async`
-   stays one line and `nish/net/http1-client-codec` breaks after `net/`.
-   Scalar fixes the layout and lets code wrap anywhere, which split names
-   mid-word in a narrow column. */
+/* Columns fit what they hold, and a name in the first column breaks at a
+   space or after a slash (page.js marks those), never mid-word as Scalar's
+   fixed layout made it. */
 table.t-editor__table {
   table-layout: auto;
 }
@@ -583,9 +580,8 @@ table.t-editor__table tbody tr:hover {
 .nish-hero__rest > span {
   transition: 0.6s var(--nish-ease) calc(var(--i) * 0.08s);
 }
-/* A word opens as a one-column grid whose track goes from 0fr to 1fr, which
-   eases it to exactly its own width. A max-width eased to one cap for every
-   word ran short words open in a blink and held them open on the way back. */
+/* A track eased from 0fr to 1fr opens each word to its own width; one
+   max-width cap for all ran short words open in a blink. */
 .nish-hero__rest {
   display: inline-grid;
   grid-template-columns: 0fr;
