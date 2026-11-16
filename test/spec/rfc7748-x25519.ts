@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 43dce3750a3df1a19415dce3d324972665a2c94077b9f1284d4bc91c9927f9a2
+// vector-contract-sha256: 286531837962b5cf71654110761048b6a2f32b7b142ce66e30ab081af7d0e2ec
 
 import { Suite } from "nish/testing";
 import { x25519, x25519Base } from "nish/crypto/x25519";
@@ -262,6 +262,45 @@ const clause_5_2_VECTOR_2 = (t: Suite): boolean => t.eqStr("[5.2-VECTOR-2] RFC 7
  *   to be the old value of k.
  */
 const clause_5_2_ITER_1 = (t: Suite): boolean => t.eqStr("[5.2-ITER-1] RFC 7748 5.2: one iteration from k = u = 9 (R-ITER)", hexOrNull(plain_x25519(unhex("0900000000000000000000000000000000000000000000000000000000000000"), unhex("0900000000000000000000000000000000000000000000000000000000000000"))), "422c8e7a6227d7bca1350b3e2bb7279f7897b87bb6854b783c60e80311ae3079");
+
+/**
+ * RFC 7748 5.2: 1,000 iterations from k = u = 9
+ *
+ * R-ITER — RFC 7748 §5.2, DEFINITION:
+ *   For each iteration, set k to be the result of calling the function and u
+ *   to be the old value of k.
+ */
+const clause_5_2_ITER_1000 = (t: Suite): boolean => {
+  let it_a0: u8[] = unhex("0900000000000000000000000000000000000000000000000000000000000000");
+  let it_a1: u8[] = unhex("0900000000000000000000000000000000000000000000000000000000000000");
+  for (let it_i: i64 = 1; it_i < toI64(1000); it_i += 1) {
+    const it_s = plain_x25519(it_a0, it_a1);
+    if (it_s === null) {
+      return t.fail("[5.2-ITER-1000] RFC 7748 5.2: 1,000 iterations from k = u = 9 (R-ITER)", `step ${it_i} of 1000: x25519 returned null`);
+    }
+    const it_n0 = it_s;
+    const it_n1 = it_a0;
+    it_a0 = it_n0;
+    it_a1 = it_n1;
+  }
+  const it_r = plain_x25519(it_a0, it_a1);
+  if (it_r === null) {
+    return t.fail("[5.2-ITER-1000] RFC 7748 5.2: 1,000 iterations from k = u = 9 (R-ITER)", `step 1000 of 1000: x25519 returned null`);
+  }
+  return t.eqStr("[5.2-ITER-1000] RFC 7748 5.2: 1,000 iterations from k = u = 9 (R-ITER)", hexOrNull(it_r), "684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51");
+};
+
+/**
+ * RFC 7748 5.2: 1,000,000 iterations from k = u = 9
+ *
+ * R-ITER — RFC 7748 §5.2, DEFINITION:
+ *   For each iteration, set k to be the result of calling the function and u
+ *   to be the old value of k.
+ */
+const clause_5_2_ITER_1M = (t: Suite): boolean => {
+  t.skip("[5.2-ITER-1M] RFC 7748 5.2: 1,000,000 iterations from k = u = 9 (R-ITER)", "slow: pass --slow to run");
+  return true;
+};
 
 /**
  * X25519 answers exactly when the scalar and the u-coordinate are both 32 bytes
@@ -969,6 +1008,8 @@ export const main = (): i32 => {
   ran = `${ran}${clause_5_2_VECTOR_1(t) ? "1" : "0"}`;
   ran = `${ran}${clause_5_2_VECTOR_2(t) ? "1" : "0"}`;
   ran = `${ran}${clause_5_2_ITER_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_5_2_ITER_1000(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_5_2_ITER_1M(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_SIZES(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_OUT_32(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_MASK(t) ? "1" : "0"}`;
