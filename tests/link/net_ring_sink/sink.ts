@@ -7,6 +7,8 @@
 // writable before it writes the rest. It prints how much it had written at the
 // first -11, which the section checks is far below 64 MiB, then reads the
 // connection to the client's end, which comes once the client has every byte.
+// At the first -11 it also calls netWrite2 with an empty first range, which
+// must answer -11 too, as `sendmsg` would, never 0 (NURING-21).
 // Exit 0 is a pass, 2 says the kernel refused rings, 1 is a failure, with its
 // line.
 import {
@@ -16,6 +18,7 @@ import {
   netRead,
   netRingState,
   netWrite,
+  netWrite2,
   pollAdd,
   pollCreate,
   pollModify,
@@ -60,6 +63,7 @@ export const main = (): i32 => {
   }
   pollAdd(loop, h, 2, h)
   const chunk: u8[] = new Array<u8>(65536)
+  const empty: u8[] = new Array<u8>(0)
   let written: i32 = 0
   let first: i32 = -1
   while (written < TOTAL) {
@@ -70,6 +74,12 @@ export const main = (): i32 => {
     } else if (sent === -11) {
       if (first < 0) {
         first = written
+        const both: i32 = netWrite2(h, empty, 0, 0, chunk, 0, 65536)
+        if (both !== -11) {
+          console.log(`netWrite2 with an empty first range answered ${both} on a full send area`)
+          return 1
+        }
+        console.log("sink: netWrite2 with an empty first range answered -11")
       }
       const n: i32 = pollWait(loop, ready, 30000)
       if (n <= 0) {

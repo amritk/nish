@@ -30441,12 +30441,15 @@ if (!only || "net_fd_limit".includes(only)) {
 // socket buffers (NURING-9), then reads all 64 MiB; `sink.ts` writes 64 MiB
 // to a connection that reads nothing for a second, and netWrite must answer
 // -11 once the kernel's buffers and the slot's 256 KiB send area are full
-// (NURING-2); `halfclose.ts` closes a slot whose peer has sent its FIN while
+// (NURING-2), as must netWrite2 with an empty first range (NURING-21);
+// `halfclose.ts` closes a slot whose peer has sent its FIN while
 // 256 KiB are still queued, and every byte must reach the peer, and checks
 // that a slot in a loop the program closed joins a new one; `starve.ts`
 // holds 80 slots that are always ready to write in one loop beside one
 // descriptor, which waits with room for 64 and with room for one must still
-// report (NURING-18); and `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
+// report (NURING-18); `transient.ts` runs under `ulimit -n 32` with one
+// descriptor free, so the io_uring probe answers -24, and netRingState() must
+// stay 0 and the next ring listen open rings (NURING-20); and `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
 // io_uring_setup, and must serve descriptors with netRingState() at -1. The
 // clients run in node (`client.mjs`), outside the limit. A ring program that
 // exits 2 found rings refused here, and the deny wrapper exits 3 where the
@@ -30528,7 +30531,12 @@ if (!only || "net_ring".includes(only)) {
       "sink",
       (out) => {
         const m = /^sink: the first -11 came after (\d+) bytes$/m.exec(out)
-        return m !== null && Number(m[1]) < 32 * 1024 * 1024 && out.includes("sink: received 67108864 bytes\n")
+        return (
+          m !== null &&
+          Number(m[1]) < 32 * 1024 * 1024 &&
+          out.includes("sink: netWrite2 with an empty first range answered -11\n") &&
+          out.includes("sink: received 67108864 bytes\n")
+        )
       }
     )
     ring(
@@ -30553,6 +30561,22 @@ if (!only || "net_ring".includes(only)) {
       "hold",
       (out) => /^starve: the descriptor came after \d+ and \d+ waits beside 80 ready slots$/m.test(out)
     )
+    const t = build("net_ring_transient", "transient.ts")
+    const tr =
+      t.exe === null
+        ? null
+        : spawnSync("bash", ["-c", 'ulimit -n 32 && exec "$0"', t.exe], { encoding: "utf8", timeout: 60000 })
+    if (tr !== null && tr.status === 2 && tr.stdout.includes("rings refused: ")) {
+      skip(`net_ring: the transient probe check needs io_uring, and this kernel refuses it (${tr.stdout.trim()})`)
+    } else {
+      check(
+        "net_ring: a probe that fails for want of a descriptor is not kept, and the next ring listen opens rings",
+        tr !== null &&
+          tr.status === 0 &&
+          tr.stdout.includes("transient: the probe's -24 was not kept, and the next listen opened rings\n"),
+        tr === null ? `does not compile and link\n${shown(t.c)}` : `signal ${tr.signal}\n${shown(tr)}`
+      )
+    }
     const deny = path.join(dir, "deny")
     const d = spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
       encoding: "utf8",

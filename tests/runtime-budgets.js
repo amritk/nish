@@ -507,6 +507,12 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * at its DCID byte 0 modulo the group's count (docs/h3-multicore.md), copied from static
  * data so the count can be patched in, its attach, and the flag word's checks; as built
  * on the stack the program measured 4,893.
+ * They are a fifth translation unit rather than more of `runtime-host.c` because the
+ * surface grows -- UDP and the readiness loop were the second and third slices of N5,
+ * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
+ * the rule is a new file with its own measured ceiling, never a raised one. The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here
+ * was set.
  * **10,768 bytes** on 2026-11-16 once WP63 S2's ring slot layer was added (5,120 to
  * 11,008): the slot tables that give a ring connection a descriptor-shaped handle, the
  * dispatch of every socket call on a slot to runtime-uring.c, the readiness loop's
@@ -514,12 +520,6 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * to epoll when the probe or `nr_open` fails (NURING-20), and the room left for ring
  * events when epoll fills the batch (NURING-18). It stays in this unit because
  * `nish_net_poll` and every socket call must branch on the handle kind.
- * They are a fifth translation unit rather than more of `runtime-host.c` because the
- * surface grows -- UDP and the readiness loop were the second and third slices of N5,
- * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
- * the rule is a new file with its own measured ceiling, never a raised one. The
- * budget is the next 256-byte boundary above the measurement, as every ceiling here
- * was set.
  */
 const NET_TEXT_BUDGET = 11008
 /**

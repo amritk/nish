@@ -11678,7 +11678,8 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
   contract runs the same either way.
 
 - *Tests:* `link/net_ring_beyond_limit`, `link/net_ring_full`,
-  `link/net_ring_sink`, `link/net_ring_flood`, `link/net_ring_fallback`.
+  `link/net_ring_sink`, `link/net_ring_flood`, `link/net_ring_halfclose`,
+  `link/net_ring_starve`, `link/net_ring_transient`, `link/net_ring_fallback`.
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 

@@ -581,13 +581,24 @@ static struct nr_set *nr_listener(int32_t fd) {
   return NULL;
 }
 
-/* A ring listener for `fd`, or the reason there is none. The first listen to
-   ask decides for the process: a kernel or a filter that refuses io_uring
-   leaves every later one on descriptors (§5.4). */
+/* Whether `r`, from the probe or the first set's open, refuses io_uring for
+   the process: EPERM, ENOSYS, EINVAL or EOPNOTSUPP, the answers
+   nish_uring_probe keeps (NURING-20). Any other failure, such as EMFILE or
+   ENOMEM, may pass, and a later listen asks again. */
+static int nr_refused(int32_t r) { return r == -1 || r == -38 || r == -22 || r == -95; }
+
+/* A ring listener for `fd`, or the reason there is none. A refusal decides
+   for the process: a kernel or a filter that refuses io_uring leaves every
+   later listen on descriptors (§5.4). A failure for want of a resource
+   leaves only this listener on descriptors. */
 static int32_t nr_open(int32_t fd, int32_t port) {
   if (nr_state == 0) {
     int32_t p = nish_uring_probe();
-    nr_state = p < 0 ? p : 1;
+    if (p < 0) {
+      if (nr_refused(p)) nr_state = p;
+      return 0;
+    }
+    nr_state = 1;
   }
   if (nr_state < 0) return 0;
   if (nr_nsets >= NR_SETS) return -23;
@@ -605,7 +616,7 @@ static int32_t nr_open(int32_t fd, int32_t port) {
     free(S);
     /* Only a refusal decides for the process. A failure that may pass, such
        as -12 for memory, is the caller's, and a later listener asks again. */
-    if (nr_nsets == 0 && (r == -1 || r == -38 || r == -22 || r == -95)) {
+    if (nr_nsets == 0 && nr_refused(r)) {
       nr_state = r;
       return 0;
     }
@@ -833,14 +844,14 @@ static int64_t nr_now_ms(void) {
   return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
+/* Whose turn a full wait with room for one gives: 1 the epoll set's. */
+static int nr_turn;
+
 /* `pollWait` for a loop that may hold virtual sources: pump every set, take
    what is ready, and sleep on the loop's epoll set, which holds each set's
    descriptor, no longer than the sets allow (NURING-8). A wake by the bound,
    or an EINTR, with nothing to report sleeps again until the caller's timeout
    is spent. */
-/* Whose turn a full wait with room for one gives: 1 the epoll set's. */
-static int nr_turn;
-
 static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout_ms) {
   int64_t deadline = timeout_ms > 0 ? nr_now_ms() + timeout_ms : 0;
   for (;;) {
@@ -1209,7 +1220,9 @@ int32_t nish_net_write2(int32_t fd, const nish_array *a, int64_t aoff, int64_t a
     int32_t n = nr_send(S, c, ring, slot, a->data + aoff, alen);
     if (n < 0 || n < alen || blen == 0) return n;
     int32_t m = nr_send(S, c, ring, slot, b->data + boff, blen);
-    return m < 0 ? n : n + m;
+    /* With nothing of the first range sent, the second's answer is the
+       call's, -11 included, as `sendmsg`'s would be. */
+    return n == 0 ? m : m < 0 ? n : n + m;
   }
 #endif
   iov[0].iov_base = a->data + aoff;
@@ -1558,9 +1571,11 @@ int32_t nish_poll_remove(int32_t loop, int32_t fd) { return nish_poll_ctl(loop, 
    `timeout_ms` milliseconds pass, a negative one never, and write a token and
    its events into `ready` per ready descriptor, `ready[2k]` and
    `ready[2k + 1]`. The count is at most `ready.length / 2` and at most
-   `NISH_POLL_CHUNK`. A signal that interrupts the wait answers 0, as a
-   timeout does, rather than waiting again past the deadline; the program's
-   loop comes round and, if it watches `signalFd()`, finds the signal ready.
+   `NISH_POLL_CHUNK`. Until the process has opened a ring listener, a signal
+   that interrupts the wait answers 0, as a timeout does, rather than waiting
+   again past the deadline; the program's loop comes round and, if it watches
+   `signalFd()`, finds the signal ready. From then on, for the rest of the
+   process's life, an interrupted wait sleeps again (NURING-14).
    A `ready` shorter than 2 is -22. */
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   uint64_t room = ready->len / 2;
