@@ -26597,7 +26597,7 @@ if (dealtHere("releaseChecks")) {
           ? []
           : fs.readdirSync(skillsDir).sort().map((n) => `${n}:${lstatOf(path.join(skillsDir, n)).ino}`)
       }
-      const { linkSkills, review } = await import(pathToFileURL(path.join(root, "scripts", "link-skills.mjs")).href)
+      const { clean, linkSkills, review } = await import(pathToFileURL(path.join(root, "scripts", "link-skills.mjs")).href)
       /**
        * An interactive review with the answers injected: `answers` maps a skill name to
        * the line typed for it, or null for end of input; `asked` collects the names asked about.
@@ -26982,6 +26982,108 @@ if (dealtHere("releaseChecks")) {
           !shown.stdout.includes(0x07) &&
           hidden.every((b) => !shown.stdout.includes(b)),
         shown.stderr.toString()
+      )
+
+      // Padding keys: fourteen long unknown keys before `allowed-tools` cannot push it,
+      // or the command that accepts the skill, out of a line the output cap cuts.
+      const padding = Array.from({ length: 14 }, (_, i) => `padding-key-${i}-${"x".repeat(80)}: 1`).join("\n")
+      const padded = project([["nish", {}, [["padded", `---\nname: padded\n${padding}\nallowed-tools: Bash\n---\n`]]]])
+      let paddedShown = ""
+      let paddedSeen = null
+      await review(padded, {
+        write: (t) => {
+          paddedShown += t
+        },
+        ask: async () => {
+          paddedSeen = paddedShown
+          return null
+        },
+      })
+      const paddedCli = linkSkillsCli(["--dir", padded], skillsRoot)
+      check(
+        "a skill with many long unknown keys before allowed-tools shows allowed-tools before it asks, and the exact command that accepts it",
+        paddedSeen !== null &&
+          paddedSeen.includes("allowed-tools: Bash") &&
+          paddedCli.status === 0 &&
+          paddedCli.stdout.includes("allowed-tools: Bash") &&
+          paddedCli.stdout.split("\n").some((line) => line.trim() === "npx nish-skills padded") &&
+          lstatOf(path.join(padded, ".claude", "skills", "padded")) === null,
+        `${paddedSeen}\n${paddedCli.stdout}${paddedCli.stderr}`
+      )
+
+      // clean replaces one character of each invisible class it names, and keeps printable text.
+      const invisible = ["\ue000", "\u0378", "\u2028", "\u034f", "\u3164", "\u{e0100}", "\u180b", "\u180f", "\u17b4"]
+      const cleaned = invisible.map((c) => clean(`a${c}b`))
+      check(
+        "clean replaces a private-use, unassigned, line-separator, grapheme-joiner, Hangul-filler, variation-selector and Khmer-vowel character, and keeps the rest",
+        cleaned.every((t) => t === "a?b") && clean("caf\u00e9 \u65e5\u672c") === "caf\u00e9 \u65e5\u672c",
+        cleaned.map((t) => JSON.stringify(t)).join(" ")
+      )
+
+      // A link planted at the record's temporary name is never written through.
+      const planted = project([nishPkg])
+      const plantedSkills = path.join(planted, ".claude", "skills")
+      fs.mkdirSync(plantedSkills, { recursive: true })
+      const plantTarget = path.join(skillsRoot, `plant-target-${fixtures}`)
+      fs.writeFileSync(plantTarget, "untouched\n")
+      fs.symlinkSync(plantTarget, path.join(plantedSkills, `.nish-skills.json.${process.pid}.tmp`))
+      await review(planted, { yes: true, write: () => {} })
+      const plantedRecord = lstatOf(path.join(plantedSkills, ".nish-skills.json"))
+      check(
+        "a link planted at the record's temporary name leaves its target untouched, and the record is still written",
+        fs.readFileSync(plantTarget, "utf8") === "untouched\n" &&
+          plantedRecord?.isFile() === true &&
+          linkedTo(planted, "writing-nish", "nish"),
+        tree(planted).join("\n")
+      )
+
+      // A FIFO inside a skill is a grant: --yes refuses it, and the run does not hang on it.
+      const fifoAt = project([["nish", {}, ["fifo"]]])
+      const fifoMade = spawnSync("sh", ["-c", "mkfifo pipe"], {
+        cwd: path.join(fifoAt, "node_modules", "nish", "skills", "fifo"),
+        encoding: "utf8",
+      })
+      const fifoRun = linkSkillsCli(["--dir", fifoAt, "--yes"], skillsRoot)
+      check(
+        "--yes links no skill holding a FIFO",
+        fifoMade.status === 0 && fifoRun.status === 0 && lstatOf(path.join(fifoAt, ".claude", "skills", "fifo")) === null,
+        `${fifoMade.stderr}${fifoRun.stdout}${fifoRun.stderr}`
+      )
+
+      // An entry the run cannot read is a grant too. Root reads through mode 0, so only
+      // an unprivileged run can see it.
+      if (process.getuid?.() === 0) {
+        skip("--yes and an unreadable entry in a skill: running as root, which reads through mode 0")
+      } else {
+        const lockedAt = project([["nish", {}, ["locked"]]])
+        const lockedFile = path.join(lockedAt, "node_modules", "nish", "skills", "locked", "secret.txt")
+        fs.writeFileSync(lockedFile, "x\n")
+        fs.chmodSync(lockedFile, 0o000)
+        const lockedRun = linkSkillsCli(["--dir", lockedAt, "--yes"], skillsRoot)
+        fs.chmodSync(lockedFile, 0o644)
+        check(
+          "--yes links no skill holding an entry it cannot read",
+          lockedRun.status === 0 && lstatOf(path.join(lockedAt, ".claude", "skills", "locked")) === null,
+          lockedRun.stdout + lockedRun.stderr
+        )
+      }
+
+      // A package.json that is a FIFO is no package, and the run does not hang reading it.
+      const fifoPkg = project([nishPkg, ["fifo-lib", { ".": { nish: "./f.ts" } }, ["fifo-lib"]]])
+      const fifoPkgDir = path.join(fifoPkg, "node_modules", "fifo-lib")
+      fs.rmSync(path.join(fifoPkgDir, "package.json"))
+      const fifoPkgMade = spawnSync("sh", ["-c", "mkfifo package.json"], { cwd: fifoPkgDir, encoding: "utf8" })
+      const fifoPkgRun = spawnSync(process.execPath, [skillsBin, "--dir", fifoPkg, "--yes"], {
+        encoding: "utf8",
+        timeout: 30000,
+      })
+      check(
+        "a package whose package.json is a FIFO is no Nish package, and the run finishes",
+        fifoPkgMade.status === 0 &&
+          fifoPkgRun.status === 0 &&
+          linkedTo(fifoPkg, "writing-nish", "nish") &&
+          lstatOf(path.join(fifoPkg, ".claude", "skills", "fifo-lib")) === null,
+        `${fifoPkgMade.stderr}${fifoPkgRun.error ?? ""}${fifoPkgRun.stdout}${fifoPkgRun.stderr}`
       )
 
       // An unknown name is a usage error, and nothing is written.

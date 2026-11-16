@@ -2,13 +2,18 @@
 
 A skill from a package is instructions your coding agent follows, written by
 whoever published the package, so Nish links one into your project only after
-you accept it, and only as it is when you accept it. Installing a package
-never links a skill. `npx nish-skills` shows you each one and asks. A skill
-that grants anything, such as `allowed-tools`, `hooks` or a shell command run
-when it loads, is linked only when you answer `y` or name it. Nish never
-follows a link to find a skill. A skill that holds a link, or an entry Nish
-cannot read, counts as a grant too, and accepting one links it for that run
-only.
+you accept it. An acceptance holds for one package, one skill and one hash of
+that skill's contents: when any of the three changes, Nish asks again.
+Installing a package never links a skill. `npx nish-skills` shows you each one
+and asks. A skill that grants anything, such as `allowed-tools`, `hooks` or a
+shell command run when it loads, is linked only when you answer `y` or name
+it. Nish never follows a link to find a skill. A skill that holds a link, or
+an entry Nish cannot read, counts as a grant too, and accepting one links it
+for that run only. The check runs when you run `npx nish-skills`, not when npm
+installs, so between an upgrade and your next run your agent sees the new
+version of a linked skill. And whoever can change a committed
+`.claude/skills/.nish-skills.json` can accept a skill for everyone who clones
+the project.
 
 A coding agent writes better Nish when it has the rules in front of it. Nish
 ships them as an *agent skill*: `writing-nish`, a single `SKILL.md` that
@@ -64,7 +69,8 @@ npx nish-skills
 ```
 
 For each skill you have not accepted at its current hash, it prints the
-package, the skill's description and what it grants, then asks
+package, the skill's description and what it grants, one grant to a line with
+the ones that act first, then asks
 `Link <name>? [y/N]`. Only `y` or `yes` links it. Enter, any other answer and
 the end of input decline. A decline is not recorded, so the next run asks
 again. Ctrl-C at a question stops the command with exit status 130 and writes
@@ -113,8 +119,9 @@ that happens to have a `skills/` directory is left out, and so is a skill
 directory whose name is not a valid skill name: lowercase letters, digits,
 `.`, `_` and `-`, starting with a letter or digit, at most 64 characters.
 
-It prints one line per change, a `found` line for each skill still waiting to
-be accepted, and a summary. Running it again changes nothing on disk, though
+It prints one line per change, a `found` entry for each skill still waiting
+to be accepted (what it grants, and the exact `npx nish-skills <name>` that
+accepts it on a line of its own), and a summary. Running it again changes nothing on disk, though
 the `found` lines repeat until you accept or remove those skills. Run it after
 you add, remove or upgrade a Nish library. It exits 0 when it ran, 1 when a
 write failed, 2 for a usage error, a skill name no installed package ships, or

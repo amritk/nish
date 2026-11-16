@@ -62,17 +62,21 @@ const usesNishCondition = (exports) => {
   return Object.entries(exports).some(([key, value]) => key === "nish" || usesNishCondition(value))
 }
 
-/** Whether the package at `dir` is a Nish package: `nish` itself, or one whose exports use the `nish` condition. */
-const isNishPackage = (name, dir) => {
-  if (name === "nish") {
-    return true
-  }
+/**
+ * The parsed `package.json` in `dir`, or null when it is missing, malformed or
+ * anything but a regular file: a FIFO or a link to `/dev/zero` would hang the read.
+ */
+const packageJson = (dir) => {
+  const file = path.join(dir, "package.json")
   try {
-    return usesNishCondition(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).exports)
+    return fs.lstatSync(file).isFile() ? JSON.parse(fs.readFileSync(file, "utf8")) : null
   } catch {
-    return false
+    return null
   }
 }
+
+/** Whether the package at `dir` is a Nish package: `nish` itself, or one whose exports use the `nish` condition. */
+const isNishPackage = (name, dir) => name === "nish" || usesNishCondition(packageJson(dir)?.exports)
 
 /**
  * The names of the directories in `dir`, links to one included, or none when
@@ -184,6 +188,15 @@ const targetOf = (link) => {
   const raw = fs.readlinkSync(link)
   const target = raw.startsWith("\\\\?\\") ? raw.slice(4) : raw
   return path.resolve(path.dirname(link), target)
+}
+
+/** Whether two paths name one directory: by their real paths where both exist, else as written. */
+const sameDir = (a, b) => {
+  try {
+    return fs.realpathSync(a) === fs.realpathSync(b)
+  } catch {
+    return a === b
+  }
 }
 
 /** The name a link is written under before it is renamed into place; see `tempName`. */
@@ -435,12 +448,8 @@ const frontmatter = (text) => {
 
 /** A package's `version`, or `?` when it has none to show. */
 const versionOf = (dir) => {
-  try {
-    const { version } = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"))
-    return typeof version === "string" ? version : "?"
-  } catch {
-    return "?"
-  }
+  const version = packageJson(dir)?.version
+  return typeof version === "string" ? version : "?"
 }
 
 /**
@@ -635,7 +644,7 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
       })
       continue
     }
-    if (st !== null && targetOf(entry) === skill.dir) {
+    if (st !== null && sameDir(targetOf(entry), skill.dir)) {
       result.kept.push(name)
       continue
     }
@@ -693,7 +702,8 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
   )}\n`
   let current = null
   try {
-    current = fs.readFileSync(file, "utf8")
+    // Only a regular file is read, so a FIFO in its place cannot hang the run.
+    current = fs.lstatSync(file).isFile() ? fs.readFileSync(file, "utf8") : ""
   } catch {
     // No record yet, or one that cannot be read: either way it is rewritten below.
   }
@@ -712,7 +722,7 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
  * braille blank and the variation selectors.
  */
 const INVISIBLE =
-  /͏|[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0\u2800]|[\ufe00-\ufe0f]|[\u{e0100}-\u{e01ef}]/gu
+  /͏|[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0\u2800]|[\ufe00-\ufe0f]|[\u180b-\u180d\u180f]|[\u17b4\u17b5]|[\u{e0100}-\u{e01ef}]/gu
 
 /**
  * A package-controlled string made safe for a terminal: every `INVISIBLE`
@@ -734,9 +744,53 @@ export const clean = (text, max = 300) => {
   return safe.length > max ? `${safe.slice(0, max).join("")}...` : safe.join("")
 }
 
-/** What a skill grants, for the terminal. */
-const grantOf = (skill) =>
-  skill.grants.length === 0 ? "grants nothing" : `grants ${skill.grants.map((g) => clean(g, 80)).join("; ")}`
+/**
+ * The order grants are shown in: the ones that act first, so a long list of
+ * unknown keys can never push `allowed-tools` out of what the user reads.
+ */
+const GRANT_ORDER = [
+  /^allowed[-_]?tools\b/i,
+  /^hooks$/,
+  /^runs shell at load$/,
+  /^contains a link$/,
+  /^unreadable |^contains an unreadable |^contains a special /,
+  /^(context|agent|background)$/,
+]
+
+/** The prefix `frontmatter` gives a key it does not know. */
+const UNKNOWN_KEY = "unknown key "
+
+/**
+ * What a skill grants, for the terminal: one line per grant, those that act
+ * first in `GRANT_ORDER`, and every unknown key folded into one capped line
+ * last, so each line fits whatever the skill holds.
+ *
+ * @param {Skill} skill
+ * @returns {string[]} The lines, cleaned; empty when it grants nothing.
+ */
+const grantLines = (skill) => {
+  const rank = (g) => {
+    const i = GRANT_ORDER.findIndex((re) => re.test(g))
+    return i === -1 ? GRANT_ORDER.length : i
+  }
+  const known = skill.grants.filter((g) => !g.startsWith(UNKNOWN_KEY))
+  const unknown = skill.grants
+    .filter((g) => g.startsWith(UNKNOWN_KEY))
+    .map((g) => g.slice(UNKNOWN_KEY.length))
+  const lines = known
+    .map((g, i) => ({ g, i }))
+    .sort((x, y) => rank(x.g) - rank(y.g) || x.i - y.i)
+    .map(({ g }) => clean(g, 200))
+  if (unknown.length > 0) {
+    lines.push(
+      clean(
+        `${unknown.length === 1 ? "unknown key" : `${unknown.length} unknown keys`}: ${unknown.join(", ")}`,
+        200
+      )
+    )
+  }
+  return lines
+}
 
 /**
  * The `nish-skills` command, without its argument parsing: find the project's
@@ -775,7 +829,11 @@ export const review = async (
     } else if (ask !== null) {
       say(`${clean(skill.name, 100)} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}`)
       say(`  ${clean(skill.description) || "(no description)"}`)
-      say(`  ${grantOf(skill)}`)
+      const lines = grantLines(skill)
+      say(lines.length === 0 ? "  grants nothing" : "  grants:")
+      for (const line of lines) {
+        say(`    - ${line}`)
+      }
       const answer = await ask(`Link ${clean(skill.name, 100)}? [y/N] `, skill.name)
       if (answer !== null && /^y(es)?$/i.test(answer.trim())) {
         accepted.push(skill)
@@ -792,11 +850,17 @@ export const review = async (
     say(
       `found   ${name} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}: ${clean(skill.description) || "(no description)"}`
     )
-    say(
-      skill.grants.length === 0
-        ? `        not linked; accept it with 'npx nish-skills ${name}' or 'npx nish-skills --yes'`
-        : `        not linked: it ${grantOf(skill)}, so only 'npx nish-skills ${name}' accepts it`
-    )
+    // The name is a `NAME`, so the command below is never cut.
+    if (skill.grants.length === 0) {
+      say("        not linked; accept it with 'npx nish-skills --yes' or:")
+    } else {
+      say("        not linked, since it grants:")
+      for (const line of grantLines(skill)) {
+        say(`          - ${line}`)
+      }
+      say("        only naming it accepts it:")
+    }
+    say(`        npx nish-skills ${name}`)
   }
   for (const name of result.linked) {
     say(`linked   ${name}`)
