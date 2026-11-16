@@ -8,12 +8,14 @@
 // has drained for a second it prints `flood: N bytes before the stall` and
 // opens a second connection as its signal, then writes the rest and ends the
 // first. In `sink` mode one connection reads nothing for a second, then reads
-// to the server's 64 MiB, prints `sink: received N bytes` and ends. The
-// client exits with the
+// to the server's 64 MiB, prints `sink: received N bytes` and ends. In
+// `halfclose` mode one connection sends five bytes, ends its writing side at
+// once and reads nothing for a second; when the server's end arrives it prints `halfclose: received N
+// bytes` and opens a second connection as its signal. The client exits with the
 // server's status, after printing the server's output, so the verdict is the
 // server's exit status. A failure of the client's own exits 1.
 //
-//     node client.mjs <exe> <limit> <count> echo|hold|flood|sink
+//     node client.mjs <exe> <limit> <count> echo|hold|flood|sink|halfclose
 import { spawn } from "node:child_process"
 import net from "node:net"
 
@@ -87,7 +89,30 @@ const sink = (port) => {
   s.on("connect", () => setTimeout(() => s.resume(), 1000))
 }
 
+const halfclose = (port) => {
+  const s = net.connect({ host: "127.0.0.1", port, allowHalfOpen: true })
+  sockets.push(s)
+  s.on("error", (e) => done(1, `the half-closed connection: ${e.message}`))
+  let got = 0
+  s.on("data", (d) => {
+    got += d.length
+  })
+  s.on("end", () => {
+    out = `halfclose: received ${got} bytes\n${out}`
+    sockets.push(net.connect({ host: "127.0.0.1", port }))
+  })
+  s.pause()
+  s.on("connect", () => {
+    s.end("ping\n")
+    setTimeout(() => s.resume(), 1000)
+  })
+}
+
 const open = (port) => {
+  if (mode === "halfclose") {
+    halfclose(port)
+    return
+  }
   if (mode === "flood") {
     flood(port)
     return

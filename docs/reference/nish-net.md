@@ -869,7 +869,9 @@ Wait until a watched descriptor is ready or the timeout passes, and write
 one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
 its events, `1` readable and `2` writable, with `4` added for a hang-up or
 an error. A signal that interrupts the wait answers `0`, as a timeout
-does. Not `willreturn`, because it can wait forever. Nothing allocates,
+does, until a `NET_LISTEN_RING` listener has rings: then the wait goes on
+to its deadline, and `signalFd()` is how a loop sees a signal. Not
+`willreturn`, because it can wait forever. Nothing allocates,
 and `ready` is never written past its length.
 
 ```ts

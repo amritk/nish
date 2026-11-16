@@ -446,7 +446,12 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   if (e->ring < 0 || e->ring >= NR_RINGS || e->slot < 0 || e->slot >= S->slots) return;
   if (!S->conns[e->ring]) {
     S->conns[e->ring] = calloc((size_t)S->slots, sizeof(struct nr_conn));
-    if (!S->conns[e->ring]) return;
+    /* With no table to record it in, an accepted slot is closed at once
+       rather than left open in the ring for good. */
+    if (!S->conns[e->ring]) {
+      if (e->kind == 1) (void)nish_uring_close(S->u, e->ring, e->slot);
+      return;
+    }
   }
   struct nr_conn *c = &S->conns[e->ring][e->slot];
   if (e->kind == 1) {
@@ -520,7 +525,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   } else if (e->kind == 4) {
     if (!c->werr) c->werr = e->res < 0 ? e->res : -5;
   }
-  if (c->lingering && (c->hup || c->werr)) (void)nr_finish(S, (uint32_t)e->ring, (uint32_t)e->slot);
+  if (c->lingering && ((c->hup && c->hup_res < 0) || c->werr)) (void)nr_finish(S, (uint32_t)e->ring, (uint32_t)e->slot);
   else nr_touch(&c->v);
 }
 
@@ -542,7 +547,7 @@ static void nr_pump(struct nr_set *S) {
     int64_t q = nish_uring_queued(S->u, (int32_t)ring, (int32_t)slot);
     if (!c->open) continue;
     if (c->lingering) {
-      if ((q <= 0 || c->hup || c->werr || full) && nr_finish(S, ring, slot)) continue;
+      if ((q <= 0 || (c->hup && c->hup_res < 0) || c->werr || full) && nr_finish(S, ring, slot)) continue;
     } else if (c->wblocked) {
       if (q >= NR_AREA) {
         S->pend[keep++] = x;
@@ -662,6 +667,8 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     return (int32_t)n;
   }
   if (c->hup) return c->hup_res < 0 ? c->hup_res : 0;
+  /* A failed send ends the read side too, as recv's error would. */
+  if (c->werr) return c->werr;
   return len == 0 ? 0 : -11;
 }
 
@@ -695,7 +702,9 @@ static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32
   c->rbuf = NULL;
   c->rcap = 0;
   int64_t q = nish_uring_queued(S->u, ring, slot);
-  if (!(q > 0 && !c->hup && !c->werr) && nr_finish(S, (uint32_t)ring, (uint32_t)slot)) {
+  /* A peer that only stopped sending (a FIN, `hup_res` 0) still takes what
+     is queued, so only an error ends the slot before its bytes are sent. */
+  if (!(q > 0 && !(c->hup && c->hup_res < 0) && !c->werr) && nr_finish(S, (uint32_t)ring, (uint32_t)slot)) {
     nr_pump(S);
     return 0;
   }
@@ -706,6 +715,39 @@ static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32
   }
   nr_pump(S);
   return 0;
+}
+
+/* The loops a virtual source has joined, so a close of any other descriptor
+   skips the scan below; past NR_LOOPS of them every close scans. */
+#define NR_LOOPS 64
+static int32_t nr_loops[NR_LOOPS];
+static int32_t nr_nloops, nr_loops_spilled;
+
+static void nr_note_loop(int32_t loop) {
+  for (int32_t i = 0; i < nr_nloops; i++)
+    if (nr_loops[i] == loop) return;
+  if (nr_nloops < NR_LOOPS) nr_loops[nr_nloops++] = loop;
+  else nr_loops_spilled = 1;
+}
+
+/* A closed descriptor may have been a loop: every virtual source in it leaves
+   it, as epoll drops its registrations, so a later loop that gets the same
+   number reports none of them. */
+static void nr_forget_loop(int32_t fd) {
+  int32_t at = -1;
+  for (int32_t i = 0; i < nr_nloops; i++)
+    if (nr_loops[i] == fd) at = i;
+  if (at < 0 && !nr_loops_spilled) return;
+  if (at >= 0) nr_loops[at] = nr_loops[--nr_nloops];
+  for (int32_t si = 0; si < nr_nsets; si++) {
+    struct nr_set *S = nr_sets[si];
+    if (S->v.loop == fd) nr_unregister(&S->v);
+    for (int32_t ring = 0; ring < NR_RINGS; ring++) {
+      if (!S->conns[ring]) continue;
+      for (int32_t slot = 0; slot < S->slots; slot++)
+        if (S->conns[ring][slot].v.loop == fd) nr_unregister(&S->conns[ring][slot].v);
+    }
+  }
 }
 
 /* The virtual source `fd` names in a loop, or NULL for a descriptor. A stale
@@ -736,6 +778,7 @@ static int32_t nr_ctl(int32_t loop, int op, struct nr_vent *v, struct nr_set *S,
     e.data.u64 = (uint64_t)1 << 32 | (uint32_t)si;
     if (epoll_ctl(loop, EPOLL_CTL_ADD, nish_uring_fd(S->u), &e) != 0 && errno != EEXIST) return nish_net_fail();
     v->loop = loop;
+    nr_note_loop(loop);
   } else if (v->loop != loop) {
     return -2;
   }
@@ -1179,6 +1222,7 @@ int32_t nish_net_close(int32_t fd) {
   }
   struct nr_set *R = nr_nsets > 0 ? nr_listener(fd) : NULL;
   if (R) return nr_close_listener(R);
+  if (nr_nsets > 0) nr_forget_loop(fd);
 #endif
   return close(fd) != 0 ? nish_net_fail() : 0;
 }

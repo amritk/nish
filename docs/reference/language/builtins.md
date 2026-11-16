@@ -2891,7 +2891,10 @@ adds it to its loop and shuts down when its token comes back: `readSignal`
 then answers the number without waiting. A signal that interrupts the wait
 itself makes `pollWait` answer **`0`**, as a timeout does, rather than wait on
 past the deadline it was given; the loop comes round and the next wait finds
-the signal descriptor ready (`tests/runtime-test.c`). `net_loop_two` watches
+the signal descriptor ready (`tests/runtime-test.c`). Once a
+`NET_LISTEN_RING` listener has rings, the rings' own work interrupts the wait
+too, so an interrupted wait goes on to its deadline and only the signal
+descriptor reports a signal. `net_loop_two` watches
 two UDP sockets and `signalFd()` in one loop, and the `net_` block of
 `tests/run.js` drives it from Node: it writes to one socket and waits for the
 line that says that socket woke the loop before it writes to the other, in both

@@ -30428,7 +30428,7 @@ if (!only || "net_fd_limit".includes(only)) {
 }
 
 // WP63 S2: a `NET_LISTEN_RING` listener accepts into io_uring slots, not
-// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Five
+// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Six
 // programs in tests/link/net_ring_*, each judged by its own exit status:
 // `echo.ts` serves 3,000 connections under a descriptor limit of 1,024 with
 // fewer than 64 descriptors open; `full.ts`, under a limit of 32, takes
@@ -30439,7 +30439,10 @@ if (!only || "net_fd_limit".includes(only)) {
 // socket buffers (NURING-9), then reads all 64 MiB; `sink.ts` writes 64 MiB
 // to a connection that reads nothing for a second, and netWrite must answer
 // -11 once the kernel's buffers and the slot's 256 KiB send area are full
-// (NURING-2); and `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
+// (NURING-2); `halfclose.ts` closes a slot whose peer has sent its FIN while
+// 256 KiB are still queued, and every byte must reach the peer, and checks
+// that a slot in a loop the program closed joins a new one; and
+// `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
 // io_uring_setup, and must serve descriptors with netRingState() at -1. The
 // clients run in node (`client.mjs`), outside the limit. A ring program that
 // exits 2 found rings refused here, and the deny wrapper exits 3 where the
@@ -30522,6 +30525,19 @@ if (!only || "net_ring".includes(only)) {
       (out) => {
         const m = /^sink: the first -11 came after (\d+) bytes$/m.exec(out)
         return m !== null && Number(m[1]) < 32 * 1024 * 1024 && out.includes("sink: received 67108864 bytes\n")
+      }
+    )
+    ring(
+      "net_ring: a close after the peer's FIN still sends every queued byte, and a closed loop lets its slots go",
+      "net_ring_halfclose",
+      "halfclose.ts",
+      64,
+      1,
+      "halfclose",
+      (out) => {
+        const sent = /^halfclose: wrote (\d+) bytes after the client's end and closed$/m.exec(out)
+        const got = /^halfclose: received (\d+) bytes$/m.exec(out)
+        return sent !== null && got !== null && sent[1] === got[1]
       }
     )
     const deny = path.join(dir, "deny")

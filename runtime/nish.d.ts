@@ -1936,7 +1936,9 @@ declare function pollRemove(loop: i32, fd: i32): i32;
  * `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer
  * 0, as a timeout does, rather than wait past the deadline; the descriptor
  * `signalFd()` answers can be added to the loop, and is readable when SIGTERM
- * or SIGINT arrives.
+ * or SIGINT arrives. Once a `NET_LISTEN_RING` listener has rings, an
+ * interrupted wait goes on to its deadline, since the rings' own work
+ * interrupts it too: watch `signalFd()` to see a signal.
  *
  * A UDP socket is always writable, and on Linux one whose both sides are shut
  * is readable, writable and hung up, 7. On Darwin a descriptor both readable
@@ -3380,7 +3382,9 @@ declare module "nish:net" {
    * one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
    * its events, `1` readable and `2` writable, with `4` added for a hang-up or
    * an error. A signal that interrupts the wait answers `0`, as a timeout
-   * does. Not `willreturn`, because it can wait forever. Nothing allocates,
+   * does, until a `NET_LISTEN_RING` listener has rings: then the wait goes on
+   * to its deadline, and `signalFd()` is how a loop sees a signal. Not
+   * `willreturn`, because it can wait forever. Nothing allocates,
    * and `ready` is never written past its length.
    *
    * @param loop The loop.
