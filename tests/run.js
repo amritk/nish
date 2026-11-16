@@ -16771,6 +16771,7 @@ if (dealtHere("runtimeChecks")) {
         ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
+        ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
         ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
@@ -30585,10 +30586,12 @@ if (!only || "net_ring".includes(only)) {
       skip(`net_ring: the transient probe check needs io_uring, and this kernel refuses it (${tr.stdout.trim()})`)
     } else {
       check(
-        "net_ring: a probe that fails for want of a descriptor is not kept, the next ring listen opens rings, and a later set that fails for one falls back",
+        "net_ring: a probe or first set that fails for want of a descriptor is not kept, the next ring listen opens rings, and a later set that fails for one falls back",
         tr !== null &&
           tr.status === 0 &&
-          tr.stdout.includes("transient: the probe's -24 was not kept, the next listen opened rings, and a later set's -24 fell back to descriptors\n"),
+          tr.stdout.includes(
+            "transient: neither the probe's -24 nor the first set's was kept, the next listen opened rings, and a later set's -24 fell back to descriptors\n"
+          ),
         tr === null ? `does not compile and link\n${shown(t.c)}` : `signal ${tr.signal}\n${shown(tr)}`
       )
     }

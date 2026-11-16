@@ -250,6 +250,9 @@ loop written for descriptors runs unchanged. What differs:
   once and then `0`.
 - When every slot the process may hold is taken, `tcpAccept` answers `-23`.
   Close a connection and the next waiting one takes its slot.
+- If the listener's accept fails with any error but `-11`, `-4`, `-103` or
+  `-71`, the listener stops accepting and `tcpAccept` answers that error from
+  then on. Close the listener and listen again.
 - A process opens at most 31 ring listeners in its life, closed ones
   included; the 32nd `tcpListenFlags` with `NET_LISTEN_RING` answers `-23`.
 - Each connection holds at most 256 KiB that the peer has not taken yet. A

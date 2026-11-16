@@ -341,7 +341,7 @@ struct nr_set {
 
 static struct nr_set *nr_sets[NR_SETS];
 static int32_t nr_nsets;
-/* `netRingState()`: 0 until a listener asks, then 1 or the refusal. */
+/* `netRingState()`: 0 until a listener opens a set (1) or meets a refusal. */
 static int32_t nr_state;
 static struct nr_vent *nr_head, *nr_tail;
 
@@ -493,7 +493,9 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   }
   if (!c->open) return;
   if (e->kind == 2) {
-    if (c->lingering || e->res <= 0) return;
+    /* Bytes after the slot has hung up, here or by the kernel, are dropped,
+       so a read never runs past the failure it reports. */
+    if (c->lingering || c->hup || e->res <= 0) return;
     uint32_t n = (uint32_t)e->res;
     if (c->roff == c->rlen) c->roff = c->rlen = 0;
     if ((uint64_t)(c->rlen - c->roff) + n > NR_RECV_MAX) {
@@ -526,8 +528,12 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
     c->rlen += n;
     if (!c->rheld && c->rlen - c->roff >= NR_AREA && nish_uring_hold(S->u, e->ring, e->slot, 1) == 0) c->rheld = 1;
   } else if (e->kind == 3) {
-    c->hup = 1;
-    c->hup_res = e->res;
+    /* The first hangup is the one a read reports: a later one, such as the
+       kernel's after a -105 here, does not overwrite it (NURING-27). */
+    if (!c->hup) {
+      c->hup = 1;
+      c->hup_res = e->res;
+    }
   } else if (e->kind == 4) {
     if (!c->werr) c->werr = e->res < 0 ? e->res : -5;
   }
@@ -594,15 +600,14 @@ static int nr_refused(int32_t r) { return r == -1 || r == -38 || r == -22 || r =
    every later listen, and any other failure, such as -24 or -12, only for
    this one (NURING-20, NURING-22). */
 static int32_t nr_open(int32_t fd, int32_t port) {
+  if (nr_state < 0) return 0;
   if (nr_state == 0) {
     int32_t p = nish_uring_probe();
     if (p < 0) {
       if (nr_refused(p)) nr_state = p;
       return 0;
     }
-    nr_state = 1;
   }
-  if (nr_state < 0) return 0;
   if (nr_nsets >= NR_SETS) return -23;
   struct rlimit rl;
   if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return 0;
@@ -616,9 +621,12 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   int32_t r = nish_uring_open(&S->u, fd, &o);
   if (r < 0) {
     free(S);
-    if (nr_nsets == 0 && nr_refused(r)) nr_state = r;
+    if (nr_state == 0 && nr_refused(r)) nr_state = r;
     return 0;
   }
+  /* Only an open set decides for rings: a probe that passed before a set
+     that ran short leaves the state at 0 (NURING-26). */
+  nr_state = 1;
   S->listener = fd;
   S->port = port;
   S->slots = o.slots;

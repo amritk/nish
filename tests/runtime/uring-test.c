@@ -6,10 +6,10 @@
  *
  * The layer is included rather than linked so the test reaches it without a
  * header (S2 adds the declarations to runtime-net.c). Each mode but
- * `fallback`, `move` and `nowake` forks an echo server that drives one set on
+ * `fallback`, `move`, `nowake` and `hupheld` forks an echo server that drives one set on
  * a listener the parent made, and the parent plays every client; `move`
  * drives its set and its clients in one process, so it can check the set
- * between waits, and `nowake` forks only its client. The server sets its own
+ * between waits, and `nowake` and `hupheld` fork only their client. The server sets its own
  * RLIMIT_NOFILE, so what the check proves does not depend on the runner's
  * limits, only on the hard limit letting the parent hold its clients.
  *
@@ -41,6 +41,11 @@
  *    for good would leave it (NURING-8). A client that connects while a wait
  *    of -1 sleeps is still accepted, within a second: the sleep's bound, not
  *    the eventfd, ends it.
+ *  - `hupheld`: a client sends a few bytes and resets. Once the set has
+ *    reported the reset's hangup (-ECONNRESET), holding the slot's recv and
+ *    letting it go must arm nothing: a recv armed again on the reset socket
+ *    would end at once with 0, a second hangup that reads as an orderly end
+ *    (NURING-27).
  *  - `fallback`: io_uring refused or incomplete. A seccomp filter answers
  *    io_uring_setup with EPERM, ENOSYS or EINVAL, or io_uring_register with
  *    EPERM or EINVAL; the UR_SYS_SETUP and UR_SYS_REGISTER hooks answer
@@ -811,6 +816,92 @@ static int nowake(void) {
   return 0;
 }
 
+/* A slot whose recv the reset ended is held and let go: no event may follow
+ * the first hangup, which must carry the reset's errno. */
+static int hupheld(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(20);
+  int l = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+  socklen_t al = sizeof a;
+  if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 64) != 0 ||
+      getsockname(l, (struct sockaddr *)&a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_set *s;
+  struct nish_uring_opts o = {8, 1, 0, 0, 0, 0};
+  int rc = nish_uring_open(&s, l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  pid_t kid = fork();
+  if (kid < 0) return fail("fork");
+  if (kid == 0) {
+    /* Send, give the server time to take the bytes, then reset. */
+    int c = socket(AF_INET, SOCK_STREAM, 0);
+    if (c < 0 || connect(c, (const struct sockaddr *)&a, sizeof a) != 0) _exit(1);
+    if (write(c, "hello", 5) != 5) _exit(1);
+    struct timespec d = {0, 200 * 1000 * 1000};
+    nanosleep(&d, NULL);
+    struct linger lg = {1, 0};
+    setsockopt(c, SOL_SOCKET, SO_LINGER, &lg, sizeof lg);
+    close(c);
+    _exit(0);
+  }
+  struct nish_uring_event ev[EVENTS_MAX];
+  int ring = -1, slot = -1, hup = 0, hup_res = 0, bytes = 0;
+  long long deadline = now_ms() + 10000;
+  while (!hup && now_ms() < deadline) {
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    (void)poll(&q, 1, 50);
+    int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+    if (n < 0) {
+      fprintf(stderr, "uring-test: wait answered %d\n", n);
+      return 1;
+    }
+    for (int i = 0; i < n; i++) {
+      if (ev[i].kind == NISH_URING_ACCEPTED) {
+        ring = ev[i].ring;
+        slot = ev[i].slot;
+      } else if (ev[i].kind == NISH_URING_DATA) {
+        bytes += ev[i].res;
+      } else if (ev[i].kind == NISH_URING_HUP) {
+        hup = 1;
+        hup_res = ev[i].res;
+      }
+    }
+  }
+  waitpid(kid, NULL, 0);
+  if (!hup) return fail("the reset's hangup never arrived");
+  if (bytes != 5 || hup_res != -ECONNRESET) {
+    fprintf(stderr, "uring-test: the reset came as %d bytes and a hangup of %d, not 5 and %d\n", bytes, hup_res,
+            -ECONNRESET);
+    return 1;
+  }
+  if (nish_uring_hold(s, ring, slot, 1) != 0 || nish_uring_hold(s, ring, slot, 0) != 0)
+    return fail("the hold or its let-go was refused");
+  long long until = now_ms() + 500;
+  while (now_ms() < until) {
+    struct pollfd q = {nish_uring_fd(s), POLLIN, 0};
+    (void)poll(&q, 1, 50);
+    int n = nish_uring_wait(s, 0, ev, EVENTS_MAX);
+    if (n < 0) {
+      fprintf(stderr, "uring-test: wait answered %d\n", n);
+      return 1;
+    }
+    if (n > 0) {
+      fprintf(stderr, "uring-test: after the hangup and a hold let go, an event of kind %d res %d\n", (int)ev[0].kind,
+              ev[0].res);
+      return 1;
+    }
+  }
+  nish_uring_destroy(s);
+  close(l);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
   signal(SIGPIPE, SIG_IGN);
@@ -818,6 +909,7 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "fallback") == 0) return fallback();
   if (strcmp(argv[1], "move") == 0) return move();
   if (strcmp(argv[1], "nowake") == 0) return nowake();
+  if (strcmp(argv[1], "hupheld") == 0) return hupheld();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},

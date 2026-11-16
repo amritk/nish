@@ -1668,7 +1668,9 @@ declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i3
  *   taken and lost.
  * @returns the connection's descriptor, or a slot handle at or above 2^20 from a `NET_LISTEN_RING`
  *   listener, whose `peer` is written as zeros; -11 when none waits; -23 when a ring listener's
- *   slots are all taken; -95 for a datagram socket.
+ *   slots are all taken; -95 for a datagram socket. A ring listener whose accept failed with any
+ *   errno but -11, -4, -103 or -71 stops accepting and answers that errno from then on, where a
+ *   descriptor answers it once: close the listener and listen again.
  */
 declare function tcpAccept(fd: i32, peer: u8[]): i32;
 /**
@@ -3182,7 +3184,9 @@ declare module "nish:net" {
    *   when none is waiting, `-23` when a ring listener's slots are all
    *   taken, `-22` for a `peer` shorter than 18 bytes before anything is
    *   accepted (so no connection is taken and lost), or `-95` for a
-   *   datagram socket.
+   *   datagram socket. A ring listener whose accept failed with any errno
+   *   but `-11`, `-4`, `-103` or `-71` stops accepting and answers that
+   *   errno from then on; close it and listen again.
    */
   export function tcpAccept(fd: i32, peer: u8[]): i32;
   /**

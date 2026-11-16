@@ -513,13 +513,13 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * the rule is a new file with its own measured ceiling, never a raised one. The
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
- * **10,768 bytes** on 2026-11-16 once WP63 S2's ring slot layer was added (5,120 to
+ * **10,869 bytes** on 2026-11-16 once WP63 S2's ring slot layer was added (5,120 to
  * 11,008): the slot tables that give a ring connection a descriptor-shaped handle, the
  * dispatch of every socket call on a slot to runtime-uring.c, the readiness loop's
  * drain of ring completions, the send backpressure and close of a slot, the fallback
- * to epoll when the probe or `nr_open` fails (NURING-20), and the room left for ring
- * events when epoll fills the batch (NURING-18). It stays in this unit because
- * `nish_net_poll` and every socket call must branch on the handle kind.
+ * to epoll whenever the probe or a set's open fails (NURING-20, NURING-22), and the room
+ * left for epoll's events when ring slots fill the batch (NURING-18). It stays in this
+ * unit because `nish_net_poll` and every socket call must branch on the handle kind.
  */
 const NET_TEXT_BUDGET = 11008
 /**
@@ -766,7 +766,7 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  *
  * Measured **6,299 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
  * `nish_uring_sleep_ms`, the bound on every sleep on a set (NURING-8, a wake 7.0
- * loses); 6,045 before NURING-8. **6,826 bytes** on 2026-11-16 once S2 called it
+ * loses); 6,045 before NURING-8. **6,856 bytes** on 2026-11-16 once S2 called it
  * from `nish:net` (6,400 to 6,912): `nish_uring_hold`, which cancels a slot's receive
  * and arms it again so a peer the program does not read cannot grow its queue
  * (NURING-9), `nish_uring_queued`, the unsent bytes that bound a send area (NURING-2),

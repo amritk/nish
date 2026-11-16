@@ -11673,6 +11673,9 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
   after its `netClose`.
 - `tcpAccept` answers `-23` when every slot the process may hold is taken; a
   slot freed by `netClose` takes a waiting connection again.
+- A ring listener whose accept fails with any errno but `-11`, `-4`, `-103`
+  or `-71` stops accepting: `tcpAccept` answers that errno from then on,
+  where a descriptor answers it once. Close the listener and listen again.
 - A slot holds at most 256 KiB of bytes the kernel has not yet sent: a
   `netWrite` past that copies what fits, and a full slot answers `-11` until
   the peer reads. Its received bytes queue up to the same bound before the

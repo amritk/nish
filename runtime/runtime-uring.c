@@ -289,11 +289,14 @@ _Static_assert(sizeof(struct ur_buf_reg) == 40, "io_uring_buf_reg is 40 bytes");
 enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 
 /* A slot's state word: open, recv armed, recv parked on -ENOBUFS, recv held
- * by its caller (`nish_uring_hold`), and the generation in the 24 bits above. */
+ * by its caller (`nish_uring_hold`), hung up (its recv ended for good, so it
+ * is never armed again until the slot is accepted anew), and the generation
+ * in the 24 bits above. */
 #define ST_OPEN 1u
 #define ST_ARMED 2u
 #define ST_PARKED 4u
 #define ST_HELD 8u
+#define ST_HUP 16u
 #define ST_GEN(st) ((st) >> 8)
 #define GEN_MASK 0xffffffu
 
@@ -505,8 +508,11 @@ static void ur_recycle(struct nish_uring_set *s, struct ur_ring *r, uint32_t bid
 }
 
 /* Arm a slot's multishot recv, or park it for the next wait when the SQ has
- * no room. */
+ * no room. A slot that has hung up is not armed: a recv on its socket would
+ * answer 0 once the kernel has handed over the reset, and a second hangup
+ * would turn the reset into a clean end (NURING-27). */
 static void ur_arm(struct ur_ring *r, uint32_t slot) {
+  if (r->st[slot] & ST_HUP) return;
   struct ur_sqe *e = ur_sqe(r);
   if (!e) {
     if (!(r->st[slot] & ST_PARKED)) {
@@ -786,7 +792,7 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     int wrote = 0;
     if (res >= 0 && (uint32_t)res < s->slots) {
       uint32_t at = (uint32_t)res;
-      r->st[at] = (r->st[at] & ~(ST_ARMED | ST_PARKED | ST_HELD)) | ST_OPEN;
+      r->st[at] = (r->st[at] & ~(ST_ARMED | ST_PARKED | ST_HELD | ST_HUP)) | ST_OPEN;
       r->live++;
       s->stats.live++;
       ur_arm(r, at);
@@ -844,6 +850,7 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     return 0;
   }
   if (more) return 0;
+  r->st[slot] |= ST_HUP;
   ur_event(ev, NISH_URING_HUP, ri, slot, res, NULL);
   return 1;
 }
