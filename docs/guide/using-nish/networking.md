@@ -308,7 +308,8 @@ any listener. `HandlerLimits.slots` is then the cap on connections, not the
 descriptor limit: set it to what the server should hold. When every ring slot
 is taken, the handler rests its listener on the `-23`, as it does on `-24`
 for descriptors, until a connection closes or 100 ms pass, so a full server
-waits rather than spin:
+waits rather than spin. `h.resting()` is true while it does, for a server
+that wants to log or count the times it is full:
 
 ```ts nish:ok
 import { HandlerLimits, HttpHandler } from "nish/net/handler";

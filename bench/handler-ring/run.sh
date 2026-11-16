@@ -84,9 +84,22 @@ echo "rate $rate req/s, warm-up ${warmup}s, window ${seconds}s, $rounds rounds"
 results="$out/results.txt"
 : >"$results"
 
-wait_listening() {
+# The server under test, stopped with its workers when the run ends or fails.
+server=""
+stop_server() {
+  if [ -n "$server" ]; then
+    pkill -P "$server" 2>/dev/null || true
+    kill "$server" 2>/dev/null || true
+    wait "$server" 2>/dev/null || true
+    server=""
+  fi
+}
+trap stop_server EXIT
+
+# wait_for <pattern>: until the server prints a line matching it.
+wait_for() {
   for _ in $(seq 100); do
-    if grep -q listening "$out/server.out" 2>/dev/null; then return 0; fi
+    if grep -q "$1" "$out/server.out" 2>/dev/null; then return 0; fi
     sleep 0.1
   done
   echo "server did not start: $(cat "$out/server.out" "$out/server.err")" >&2
@@ -95,18 +108,18 @@ wait_listening() {
 
 # run <design> <conns> <round>: one server, one load, one result line.
 run() {
-  local design=$1 c=$2 r=$3 server pids n slots bin=$out/server
+  local design=$1 c=$2 r=$3 pids n slots bin=$out/server
   : >"$out/server.out"
   case "$design" in
   ring)
     n=1
     slots=$((c + 1024))
-    BENCH_RING=1 prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    env -u BENCH_CORES BENCH_RING=1 prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
-    wait_listening
+    # `rings` follows `listening`: wait for the line the check reads.
+    wait_for '^rings '
     if ! grep -q '^rings 1$' "$out/server.out"; then
       echo "the kernel refused rings: $(cat "$out/server.out")" >&2
-      kill "$server"
       exit 1
     fi
     pids=$server
@@ -116,9 +129,9 @@ run() {
     # Every descriptor the limit leaves: SO_REUSEPORT does not split C evenly.
     slots=$((limit - 64))
     if [ "$design" = epoll-copy ]; then bin=$out/server-copy; fi
-    BENCH_CORES=5 prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    env -u BENCH_RING BENCH_CORES=5 prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
-    wait_listening
+    wait_for listening
     # Worker 0 prints `listening`; the others bind beside it.
     sleep 1
     pids=$(pgrep -P "$server" | paste -sd, -)
@@ -127,9 +140,7 @@ run() {
   local line
   line=$("$out/loadgen" -c "$c" -r "$rate" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
   echo "round=$r procs=$n $line" | tee -a "$results"
-  pkill -P "$server" 2>/dev/null || true
-  kill "$server" 2>/dev/null || true
-  wait "$server" 2>/dev/null || true
+  stop_server
   sleep 1
 }
 

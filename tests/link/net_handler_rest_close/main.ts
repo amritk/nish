@@ -4,9 +4,11 @@
 // its connection waits in the listener's backlog with no descriptor to accept
 // it into: the handler's accept answers -24 and it rests the listener for up
 // to 100 ms. The first client then closes. The handler closes its end, which
-// frees a descriptor, and must take the waiting connection within turns that
-// do not wait (`wait(0)`), all inside those 100 ms, where a rest that only
-// timed out would leave it in the backlog.
+// frees a descriptor, and must end the rest in the turn it closes (`resting()`
+// falls to false then) and take the waiting connection within turns that do
+// not wait (`wait(0)`). Turns are counted, not timed: fifty `wait(0)` turns
+// cannot sleep, so a slow runner cannot fail a correct handler, and a rest
+// that only timed out would hold the connection in the backlog past them.
 import { HandlerLimits, HttpHandler } from "nish/net/handler"
 import { Router, RouterLimits } from "nish/net/router"
 import {
@@ -78,21 +80,21 @@ export const main = (): i32 => {
   h.wait(toI32(20))
   h.wait(toI32(20))
   check(failures, "with no descriptor free, the second connection waits", h.connections() === 1)
+  check(failures, "and the handler rests its listener on -24", h.resting())
 
-  const start: i64 = monotonicNanos()
   netClose(first)
   let closed: boolean = false
+  let restAtClose: boolean = true
   for (let k: i32 = 0; k < 50 && !(closed && h.connections() === 1); k++) {
     h.wait(toI32(0))
-    closed = closed || h.connections() === 0
+    if (!closed && h.connections() === 0) {
+      closed = true
+      restAtClose = h.resting()
+    }
   }
-  const elapsedMs: i64 = (monotonicNanos() - start) / toI64(1000000)
   check(failures, "the handler closes its end of the first connection", closed)
-  check(
-    failures,
-    "and takes the waiting connection in turns that do not wait, before a timed rest would end",
-    h.connections() === 1 && elapsedMs < toI64(100)
-  )
+  check(failures, "and the close ends the rest in the same turn", closed && !restAtClose)
+  check(failures, "and takes the waiting connection in turns that do not wait", h.connections() === 1)
 
   for (let k: i32 = 0; k < toI32(held.length); k++) {
     netClose(held[k])

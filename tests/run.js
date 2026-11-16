@@ -31833,8 +31833,9 @@ if (!only || "net_ring".includes(only)) {
 // ending the rest (HANDLER-10, docs/security/handler.md). The program in
 // tests/link/net_handler_ring runs under a descriptor limit of 32, and its
 // `client.mjs`, outside the limit, opens 800 connections: the handler must
-// hold them on slot handles up to the set's size, rest on -23, answer each, and
-// take a waiting connection into the slot a close frees. The verdict is the
+// hold them on slot handles up to the set's size, answer each, report
+// `resting()` once the set is full (so the program fails if -23 does not rest
+// the listener), and take a waiting connection into the slot a close frees. The verdict is the
 // program's exit status; 2 says the kernel refused rings, a counted skip.
 if (!only || "net_handler_ring".includes(only)) {
   const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
