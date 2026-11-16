@@ -66,8 +66,9 @@ and `io_nish_import_global` and comparing the two bodies.
 `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`,
 `pollAdd`, `pollModify`, `pollRemove`, `pollWait`, `unixListen`,
 `unixListenMode`, `unixConnect`, `unixAccept`, `unixSocketPair`, `sendFd`,
-`recvFd`, `peerCredentials` and the constants `NET_UNIX_UNLINK_STALE`,
-`NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`. Each is a global too
+`recvFd`, `peerCredentials`, `netRingState` and the constants
+`NET_UNIX_UNLINK_STALE`, `NET_UNIX_STREAM`, `NET_UNIX_SEQPACKET`,
+`NET_LISTEN_RING`. Each is a global too
 ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
 **[`nish:term`](../nish-term.md)** exports `readStdin`, `waitStdin`,
@@ -2432,6 +2433,7 @@ Reference: [`nish:net`](../nish-net.md).
 | `sendFd` | `i32, i32, readonly u8[], i32, i32` | `i32` | write |
 | `recvFd` | `i32, u8[], i32, i32, i32[]` | `i32` | write |
 | `peerCredentials` | `i32, i32[]` | `i32` | write |
+| `netRingState` | none | `i32` | write |
 
 **`netAddress(out: u8[], host: string, port: i32): i32`** writes the
 [address form](#the-address-form) of a **numeric** host and `port` into
@@ -2458,10 +2460,12 @@ answers `tcpListen`'s socket, with flags. `1` is `SO_REUSEPORT`, which
 differs by platform as the table below shows. `2` is `TCP_NODELAY`, which the
 runtime sets on every accepted connection, on every platform, closing one on
 which it cannot. `4`, with `1`, steers each connection to the listener of the
-CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). Any
-other bit is `-22` before a socket is made.
+CPU that received it, Linux only (`-95` elsewhere, `-22` without `1`). `8`
+(`NET_LISTEN_RING`) accepts into io_uring slots on Linux, as
+[slot handles](#slot-handles) say, and does nothing elsewhere. Any other bit
+is `-22` before a socket is made.
 
-- *Tests:* `net_tcp_reuseport`, `net_tcp_nodelay`,
+- *Tests:* `net_tcp_reuseport`, `net_tcp_nodelay`, `net_ring_calls`,
   `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`;
   `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm`.
 
@@ -2589,6 +2593,62 @@ is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it.
 - *Tests:* `net_unix_scm`, `caps_net_peer`; `reject_net_unix_peer_arity`,
   `reject_net_unix_peer_readonly`, `reject_net_unix_peer_element`,
   `reject_net_unix_scm_wasm`.
+
+**`netRingState(): i32`** answers whether `NET_LISTEN_RING` listeners accept
+into rings: `1` when they do, `0` until a listener has found rings or a
+refusal, or the negative errno the kernel refused rings with (`-1` when a
+seccomp filter refuses `io_uring_setup`, `-38` for a kernel without it), and
+then they serve descriptors. The first listener that finds rings or a refusal
+decides for the process; one whose rings fail for want of descriptors or
+memory serves descriptors itself, and a later listener asks again.
+It is `-95` on Darwin.
+
+- *Tests:* `net_ring_calls`, `link/net_ring_fallback`;
+  `reject_net_ring_arity`, `reject_net_ring_wasm`.
+
+### Slot handles
+
+A connection `tcpAccept` takes from a `NET_LISTEN_RING` listener on Linux is
+a **slot handle**: a number at or above 2^20 that names a slot in one of the
+process's io_uring rings, not a descriptor, so a process holds connections
+past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
+
+- `netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort`,
+  `pollAdd`, `pollModify`, `pollRemove` and `pollWait` take a slot handle as
+  they take a descriptor, with the same readiness contract: `-11` until
+  `pollWait` reports it, then progress. A slot is in one loop at a time: a
+  `pollAdd` to a second loop answers `-17` until the first loop removes it
+  or is closed.
+- `netSetOption` answers `-95`: the slot's socket belongs to the ring. Every
+  other call that takes a descriptor (`netShutdown`, `sendFd`, `netMss`,
+  `peerCredentials`, FFI) answers `-9`, and so does every call on a handle
+  after its `netClose`.
+- `tcpAccept` answers `-23` when every slot its listener may hold is taken:
+  up to 64 rings, each of as many slots as the soft descriptor limit, at most
+  16,384. A slot freed by `netClose` takes a waiting connection again.
+- A ring listener whose accept finds memory short (`-12`, `-105`) answers
+  that errno from `tcpAccept` once, as a descriptor does, pauses accepting
+  for 10 ms, doubling to 640 ms while it recurs, and then accepts again.
+  Waiting connections stay in the listener's backlog meanwhile. Any other
+  errno but `-11`, `-4`, `-103` or `-71` means the listener is broken: it
+  stops accepting and `tcpAccept` answers that errno from then on. Close the
+  listener and listen again.
+- A slot holds at most 256 KiB of bytes the kernel has not yet sent: a
+  `netWrite` past that copies what fits, and a full slot answers `-11` until
+  the peer reads. Its received bytes queue up to the same bound before the
+  runtime stops receiving for it.
+- A slot whose connection has failed, a peer's reset or a failed send,
+  answers `netWrite` and `netWrite2` with the errno, `-104` for a reset.
+  `netRead` answers it once the queued bytes are read, and on every read
+  after, where a descriptor answers it once and then `0`.
+- Where the kernel refuses rings, the listener serves descriptors and
+  `netRingState` answers why; a program written against the readiness
+  contract runs the same either way.
+
+- *Tests:* `link/net_ring_beyond_limit`, `link/net_ring_full`,
+  `link/net_ring_sink`, `link/net_ring_flood`, `link/net_ring_halfclose`,
+  `link/net_ring_starve`, `link/net_ring_reset`, `link/net_ring_transient`,
+  `link/net_ring_fallback`.
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -2849,7 +2909,10 @@ adds it to its loop and shuts down when its token comes back: `readSignal`
 then answers the number without waiting. A signal that interrupts the wait
 itself makes `pollWait` answer **`0`**, as a timeout does, rather than wait on
 past the deadline it was given; the loop comes round and the next wait finds
-the signal descriptor ready (`tests/runtime-test.c`). `net_loop_two` watches
+the signal descriptor ready (`tests/runtime-test.c`). Once the process has
+opened a `NET_LISTEN_RING` listener with rings, for the rest of its life,
+closed or not, the rings' own work interrupts the wait too, so an interrupted wait goes on to its deadline and only the signal
+descriptor reports a signal. `net_loop_two` watches
 two UDP sockets and `signalFd()` in one loop, and the `net_` block of
 `tests/run.js` drives it from Node: it writes to one socket and waits for the
 line that says that socket woke the loop before it writes to the other, in both

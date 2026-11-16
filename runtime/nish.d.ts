@@ -1641,13 +1641,18 @@ declare function tcpListen(host: string, port: i32, backlog: i32): i32;
  * (NL2404). Not callable in a `scope()` task or a parallel body. Capability:
  * net.
  *
+ * Flag 8 (`NET_LISTEN_RING` in `nish:net`) accepts into io_uring slots on
+ * Linux, so connections are not bound by the descriptor limit; where rings are
+ * refused the listener serves descriptors and `netRingState` says why. Elsewhere
+ * the flag is accepted and does nothing.
+ *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
  * @param backlog the kernel's queue of unaccepted connections.
- * @param flags 1, 2 and 4 as above.
+ * @param flags 1, 2, 4 and 8 as above.
  * @returns the listener's descriptor, or a negative errno: -22 for any other bit (a negative
  *   `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
- *   for a port in use.
+ *   for a port in use; -23 once the process has opened 31 ring listeners, closed or not.
  */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
 /**
@@ -1661,7 +1666,13 @@ declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i3
  * @param peer at least 18 bytes, receiving the peer's address in the 18-byte form; it must not
  *   be `readonly`. A shorter `peer` is -22 before anything is accepted, so no connection is
  *   taken and lost.
- * @returns the connection's descriptor; -11 when none waits; -95 for a datagram socket.
+ * @returns the connection's descriptor, or a slot handle at or above 2^20 from a `NET_LISTEN_RING`
+ *   listener, whose `peer` is written as zeros; -11 when none waits; -23 when a ring listener's
+ *   slots are all taken; -95 for a datagram socket. A ring listener whose accept found memory
+ *   short answers -12 or -105 once, as a descriptor does, then pauses accepting for a back-off of
+ *   10 ms, doubling to 640 ms while it recurs, and accepts again. Any other errno but -11, -4,
+ *   -103 or -71 means the listener is broken: it stops accepting and answers that errno from then
+ *   on, so close it and listen again.
  */
 declare function tcpAccept(fd: i32, peer: u8[]): i32;
 /**
@@ -1898,8 +1909,8 @@ declare function pollCreate(): i32;
  * @param events 1 readable, 2 writable, 3 both, 0 neither.
  * @param token an `i32` of the program's choosing, which `pollWait` reports it under as it went
  *   in.
- * @returns 0, or a negative errno: -17 for a descriptor the loop already watches, -22 for an
- *   event bit past 2.
+ * @returns 0, or a negative errno: -17 for a descriptor the loop already watches, or for a slot
+ *   handle another loop watches (a slot is in one loop at a time), -22 for an event bit past 2.
  */
 declare function pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32;
 /**
@@ -1931,7 +1942,10 @@ declare function pollRemove(loop: i32, fd: i32): i32;
  * `i32`s) and not `readonly`. A signal that interrupts the wait makes it answer
  * 0, as a timeout does, rather than wait past the deadline; the descriptor
  * `signalFd()` answers can be added to the loop, and is readable when SIGTERM
- * or SIGINT arrives.
+ * or SIGINT arrives. Once the process has opened a `NET_LISTEN_RING`
+ * listener with rings, for the rest of its life, an interrupted wait goes on
+ * to its deadline, since the rings' own work interrupts it too: watch
+ * `signalFd()` to see a signal.
  *
  * A UDP socket is always writable, and on Linux one whose both sides are shut
  * is readable, writable and hung up, 7. On Darwin a descriptor both readable
@@ -2196,6 +2210,28 @@ declare const NET_UNIX_STREAM: i32;
  * Capability: none.
  */
 declare const NET_UNIX_SEQPACKET: i32;
+/**
+ * `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors (WP63 S2, Linux). A
+ * connection accepted from such a listener is a slot handle, a number at or above 2^20 that
+ * `netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort` and the poll loop take as they
+ * take a descriptor, except that a slot is in one poll loop at a time (a second loop's `pollAdd`
+ * answers -17); `netSetOption` answers -95 and every other call -9. A program can so hold
+ * more connections than its descriptor limit. Where the kernel refuses rings the listener serves
+ * descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
+ */
+declare const NET_LISTEN_RING: i32;
+/**
+ * Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 until a
+ * listener has found rings or a refusal, or the negative errno the kernel refused rings with (-1
+ * when a seccomp filter refuses `io_uring_setup`, -38 for a kernel without it), in which case they
+ * serve descriptors. Decided once per process, by the first listener that finds rings or a
+ * refusal; one that finds descriptors or memory short serves descriptors itself and leaves the
+ * state at 0, and a later listener asks again. -95 on Darwin. Refused at
+ * compile time on wasm32 and the WASI profile (NL2404). Capability: net.
+ *
+ * @returns 1, 0 or the negative errno.
+ */
+declare function netRingState(): i32;
 
 // ---- `nish:term` ------------------------------------------------------------------
 //
@@ -3115,14 +3151,27 @@ declare module "nish:net" {
    * the index of the CPU that received it, in the order the group's listeners
    * were bound; a CPU past the group's size falls back to the hash.
    *
+   * Flag 8, `NET_LISTEN_RING`, accepts into io_uring slots on Linux: each
+   * connection is a slot handle at or above 2^20 rather than a descriptor, so
+   * a listener holds connections past `RLIMIT_NOFILE`. `netRead`, `netWrite`,
+   * `netWrite2`, `netClose`, `netLocalPort` and the poll loop take a slot
+   * handle; `netSetOption` answers `-95`, and calls that need a descriptor,
+   * `sendFd` among them, answer `-9`.
+   * The first listener that finds rings or a refusal decides for the process:
+   * where the kernel refuses rings it serves descriptors, and `netRingState`
+   * answers the errno. A listener whose rings fail for want of descriptors or
+   * memory serves descriptors itself, and a later listener asks again. Off
+   * Linux the flag is accepted and does nothing.
+   *
    * @param host A numeric host, as for `tcpListen`.
    * @param port The port.
    * @param backlog The length of the accept queue.
-   * @param flags The sum of the flags: `3` is both, `5` and `7` steer, and `0`
-   *   is `tcpListen` exactly.
+   * @param flags The sum of the flags: `3` is both, `5` and `7` steer, `8`
+   *   accepts into rings, and `0` is `tcpListen` exactly.
    * @returns The listener's descriptor or the failure: `-22` for any other
    *   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
-   *   `-95` for flag 4 off Linux.
+   *   `-95` for flag 4 off Linux; `-23` once the process has opened 31 ring
+   *   listeners, closed or not.
    */
   export function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
   /**
@@ -3132,9 +3181,16 @@ declare module "nish:net" {
    *
    * @param fd The listener.
    * @param peer The array the peer's address form is written into.
-   * @returns The connection's descriptor, `-11` when none is waiting, `-22`
-   *   for a `peer` shorter than 18 bytes before anything is accepted (so no
-   *   connection is taken and lost), or `-95` for a datagram socket.
+   * @returns The connection's descriptor (a slot handle from a
+   *   `NET_LISTEN_RING` listener, whose `peer` is written as zeros), `-11`
+   *   when none is waiting, `-23` when a ring listener's slots are all
+   *   taken, `-22` for a `peer` shorter than 18 bytes before anything is
+   *   accepted (so no connection is taken and lost), or `-95` for a
+   *   datagram socket. A ring listener whose accept found memory short
+   *   answers `-12` or `-105` once, pauses for a back-off (10 ms, doubling
+   *   to 640 ms while it recurs) and accepts again. Any other errno but
+   *   `-11`, `-4`, `-103` or `-71` stops it accepting and is answered from
+   *   then on; close it and listen again.
    */
   export function tcpAccept(fd: i32, peer: u8[]): i32;
   /**
@@ -3316,7 +3372,9 @@ declare module "nish:net" {
    * @param token An `i32` of the program's choosing that comes back as it went
    *   in.
    * @returns `0`, `-17` for a descriptor the loop already watches (on Darwin
-   *   it is left under the new token), or `-22` for an event bit past `2`.
+   *   it is left under the new token) or for a slot handle another loop
+   *   watches (a slot is in one loop at a time), or `-22` for an event bit
+   *   past `2`.
    */
   export function pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32;
   /**
@@ -3342,7 +3400,9 @@ declare module "nish:net" {
    * one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]`
    * its events, `1` readable and `2` writable, with `4` added for a hang-up or
    * an error. A signal that interrupts the wait answers `0`, as a timeout
-   * does. Not `willreturn`, because it can wait forever. Nothing allocates,
+   * does, until the process opens a `NET_LISTEN_RING` listener with rings:
+   * from then on, for the rest of its life, the wait goes on to its deadline, and `signalFd()` is how a loop sees a signal. Not
+   * `willreturn`, because it can wait forever. Nothing allocates,
    * and `ready` is never written past its length.
    *
    * @param loop The loop.
@@ -3540,6 +3600,16 @@ declare module "nish:net" {
   export const NET_UNIX_STREAM: i32;
   /** `unixSocketPair` kind: each write one message (`SOCK_SEQPACKET`). */
   export const NET_UNIX_SEQPACKET: i32;
+  /** `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors. */
+  export const NET_LISTEN_RING: i32;
+  /**
+   * Whether `NET_LISTEN_RING` listeners accept into rings.
+   *
+   * @returns `1` when they do, `0` until a listener has found rings or a
+   *   refusal, or the negative errno rings were refused with, in which case
+   *   they serve descriptors.
+   */
+  export function netRingState(): i32;
 }
 
 /**

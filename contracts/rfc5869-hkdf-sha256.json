@@ -1,0 +1,833 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc5869-hkdf-sha256",
+  "source": {
+    "rfc": 5869,
+    "title": "HMAC-based Extract-and-Expand Key Derivation Function (HKDF)",
+    "sha256": "7a40eb3835b35fc947eb12a2ed614db079d43b26e50dbc537c31fba16397089c"
+  },
+  "sources": [
+    {
+      "id": "rfc5869",
+      "rfc": 5869,
+      "file": "rfcs/rfc5869.txt",
+      "sha256": "7a40eb3835b35fc947eb12a2ed614db079d43b26e50dbc537c31fba16397089c"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/hkdf"
+  },
+  "requirements": [
+    {
+      "id": "R-EXTRACT",
+      "section": "2.2",
+      "level": "DEFINITION",
+      "quote": "PRK = HMAC-Hash(salt, IKM)"
+    },
+    {
+      "id": "R-SALT",
+      "section": "2.2",
+      "level": "DEFINITION",
+      "quote": "if not provided, it is set to a string of HashLen zeros."
+    },
+    {
+      "id": "R-PRK-LEN",
+      "section": "2.2",
+      "level": "DEFINITION",
+      "quote": "PRK a pseudorandom key (of HashLen octets)"
+    },
+    {
+      "id": "R-L",
+      "section": "2.3",
+      "level": "DEFINITION",
+      "quote": "L length of output keying material in octets (<= 255*HashLen)",
+      "note": "The RFC states the bound; refusing a longer L with null is how nish/crypto/hkdf honours it."
+    },
+    {
+      "id": "R-INFO-EMPTY",
+      "section": "2.3",
+      "level": "DEFINITION",
+      "quote": "info optional context and application specific information (can be a zero-length string)"
+    },
+    {
+      "id": "R-OKM-LEN",
+      "section": "2.3",
+      "level": "DEFINITION",
+      "quote": "OKM output keying material (of L octets)"
+    },
+    {
+      "id": "R-OKM-FIRST",
+      "section": "2.3",
+      "level": "DEFINITION",
+      "quote": "OKM = first L octets of T"
+    },
+    {
+      "id": "R-T",
+      "section": "2.3",
+      "level": "DEFINITION",
+      "quote": "T(0) = empty string (zero length) T(1) = HMAC-Hash(PRK, T(0) | info | 0x01) T(2) = HMAC-Hash(PRK, T(1) | info | 0x02)"
+    }
+  ],
+  "functions": [
+    {
+      "name": "hkdfExtractSha256",
+      "params": [
+        {
+          "name": "salt",
+          "type": "bytes"
+        },
+        {
+          "name": "ikm",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "hkdfExpandSha256",
+      "params": [
+        {
+          "name": "prk",
+          "type": "bytes"
+        },
+        {
+          "name": "info",
+          "type": "bytes"
+        },
+        {
+          "name": "length",
+          "type": "i32"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "hmacSha256",
+      "module": "nish/crypto/hmac",
+      "params": [
+        {
+          "name": "key",
+          "type": "bytes"
+        },
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "A.1-PRK",
+      "title": "RFC 5869 A.1: HKDF-Extract gives the printed PRK",
+      "covers": ["R-EXTRACT", "R-PRK-LEN"],
+      "source": {
+        "cite": {
+          "section": "A.1"
+        }
+      },
+      "call": "hkdfExtractSha256",
+      "args": [
+        {
+          "hex": "000102030405060708090a0b0c",
+          "label": "salt"
+        },
+        {
+          "hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+          "label": "IKM"
+        }
+      ],
+      "expect": {
+        "hex": "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
+        "label": "PRK"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.1-OKM",
+      "title": "RFC 5869 A.1: HKDF-Expand gives the printed OKM (L = 42)",
+      "covers": ["R-T", "R-OKM-LEN", "R-OKM-FIRST"],
+      "source": {
+        "cite": {
+          "section": "A.1"
+        }
+      },
+      "call": "hkdfExpandSha256",
+      "args": [
+        {
+          "hex": "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
+          "label": "PRK"
+        },
+        {
+          "hex": "f0f1f2f3f4f5f6f7f8f9",
+          "label": "info"
+        },
+        {
+          "int": 42,
+          "label": "L"
+        }
+      ],
+      "expect": {
+        "hex": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+        "label": "OKM"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.2-PRK",
+      "title": "RFC 5869 A.2: HKDF-Extract gives the printed PRK",
+      "covers": ["R-EXTRACT", "R-PRK-LEN"],
+      "source": {
+        "cite": {
+          "section": "A.2"
+        }
+      },
+      "call": "hkdfExtractSha256",
+      "args": [
+        {
+          "hex": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+          "label": "salt"
+        },
+        {
+          "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+          "label": "IKM"
+        }
+      ],
+      "expect": {
+        "hex": "06a6b88c5853361a06104c9ceb35b45cef760014904671014a193f40c15fc244",
+        "label": "PRK"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.2-OKM",
+      "title": "RFC 5869 A.2: HKDF-Expand gives the printed OKM (L = 82)",
+      "covers": ["R-T", "R-OKM-LEN", "R-OKM-FIRST"],
+      "source": {
+        "cite": {
+          "section": "A.2"
+        }
+      },
+      "call": "hkdfExpandSha256",
+      "args": [
+        {
+          "hex": "06a6b88c5853361a06104c9ceb35b45cef760014904671014a193f40c15fc244",
+          "label": "PRK"
+        },
+        {
+          "hex": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+          "label": "info"
+        },
+        {
+          "int": 82,
+          "label": "L"
+        }
+      ],
+      "expect": {
+        "hex": "b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71cc30c58179ec3e87c14c01d5c1f3434f1d87",
+        "label": "OKM"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.3-PRK",
+      "title": "RFC 5869 A.3: HKDF-Extract gives the printed PRK",
+      "covers": ["R-EXTRACT", "R-PRK-LEN", "R-SALT"],
+      "source": {
+        "cite": {
+          "section": "A.3"
+        }
+      },
+      "call": "hkdfExtractSha256",
+      "args": [
+        {
+          "hex": ""
+        },
+        {
+          "hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+          "label": "IKM"
+        }
+      ],
+      "expect": {
+        "hex": "19ef24a32c717b167f33a91d6f648bdf96596776afdb6377ac434c1c293ccb04",
+        "label": "PRK"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.3-OKM",
+      "title": "RFC 5869 A.3: HKDF-Expand gives the printed OKM (L = 42)",
+      "covers": ["R-T", "R-OKM-LEN", "R-OKM-FIRST", "R-INFO-EMPTY"],
+      "source": {
+        "cite": {
+          "section": "A.3"
+        }
+      },
+      "call": "hkdfExpandSha256",
+      "args": [
+        {
+          "hex": "19ef24a32c717b167f33a91d6f648bdf96596776afdb6377ac434c1c293ccb04",
+          "label": "PRK"
+        },
+        {
+          "hex": ""
+        },
+        {
+          "int": 42,
+          "label": "L"
+        }
+      ],
+      "expect": {
+        "hex": "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8",
+        "label": "OKM"
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-EXTRACT-IS-HMAC",
+      "title": "HKDF-Extract is HMAC-SHA-256 keyed by the salt",
+      "covers": ["R-EXTRACT"],
+      "forall": [
+        {
+          "name": "salt",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 150
+        },
+        {
+          "name": "ikm",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 150
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "hkdfExtractSha256",
+            "args": [
+              {
+                "var": "salt"
+              },
+              {
+                "var": "ikm"
+              }
+            ]
+          },
+          {
+            "call": "hmacSha256",
+            "args": [
+              {
+                "var": "salt"
+              },
+              {
+                "var": "ikm"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-EMPTY-SALT",
+      "title": "an absent salt is HashLen zero octets",
+      "covers": ["R-SALT"],
+      "forall": [
+        {
+          "name": "ikm",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 150
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "hkdfExtractSha256",
+            "args": [
+              {
+                "hex": ""
+              },
+              {
+                "var": "ikm"
+              }
+            ]
+          },
+          {
+            "call": "hmacSha256",
+            "args": [
+              {
+                "op": "zeros",
+                "args": [
+                  {
+                    "int": 32
+                  }
+                ]
+              },
+              {
+                "var": "ikm"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-PRK-LEN",
+      "title": "the PRK is HashLen octets",
+      "covers": ["R-PRK-LEN"],
+      "forall": [
+        {
+          "name": "salt",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 150
+        },
+        {
+          "name": "ikm",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 150
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "call": "hkdfExtractSha256",
+                "args": [
+                  {
+                    "var": "salt"
+                  },
+                  {
+                    "var": "ikm"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 32
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-EXPAND-LENGTH",
+      "title": "Expand gives exactly L octets for L <= 255*HashLen and refuses a longer L",
+      "covers": ["R-L", "R-OKM-LEN"],
+      "forall": [
+        {
+          "name": "prk",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 64
+        },
+        {
+          "name": "info",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "n",
+          "type": "i32",
+          "min": 0,
+          "max": 8300
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "<=",
+                "args": [
+                  {
+                    "var": "n"
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "int": 255
+                      },
+                      {
+                        "int": 32
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "notNull",
+                    "args": [
+                      {
+                        "call": "hkdfExpandSha256",
+                        "args": [
+                          {
+                            "var": "prk"
+                          },
+                          {
+                            "var": "info"
+                          },
+                          {
+                            "var": "n"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "==",
+                    "args": [
+                      {
+                        "op": "len",
+                        "args": [
+                          {
+                            "op": "unwrap",
+                            "args": [
+                              {
+                                "call": "hkdfExpandSha256",
+                                "args": [
+                                  {
+                                    "var": "prk"
+                                  },
+                                  {
+                                    "var": "info"
+                                  },
+                                  {
+                                    "var": "n"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "n"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": ">",
+                "args": [
+                  {
+                    "var": "n"
+                  },
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "int": 255
+                      },
+                      {
+                        "int": 32
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "isNull",
+                "args": [
+                  {
+                    "call": "hkdfExpandSha256",
+                    "args": [
+                      {
+                        "var": "prk"
+                      },
+                      {
+                        "var": "info"
+                      },
+                      {
+                        "var": "n"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-T1-T2",
+      "title": "the first two blocks are T(1) and T(2) as §2.3 defines them",
+      "covers": ["R-T"],
+      "forall": [
+        {
+          "name": "prk",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 64
+        },
+        {
+          "name": "info",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "slice",
+                "args": [
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "hkdfExpandSha256",
+                        "args": [
+                          {
+                            "var": "prk"
+                          },
+                          {
+                            "var": "info"
+                          },
+                          {
+                            "int": 64
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "int": 0
+                  },
+                  {
+                    "int": 32
+                  }
+                ]
+              },
+              {
+                "call": "hmacSha256",
+                "args": [
+                  {
+                    "var": "prk"
+                  },
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "var": "info"
+                      },
+                      {
+                        "hex": "01"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "op": "slice",
+                "args": [
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "hkdfExpandSha256",
+                        "args": [
+                          {
+                            "var": "prk"
+                          },
+                          {
+                            "var": "info"
+                          },
+                          {
+                            "int": 64
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "int": 32
+                  },
+                  {
+                    "int": 64
+                  }
+                ]
+              },
+              {
+                "call": "hmacSha256",
+                "args": [
+                  {
+                    "var": "prk"
+                  },
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "call": "hmacSha256",
+                            "args": [
+                              {
+                                "var": "prk"
+                              },
+                              {
+                                "op": "concat",
+                                "args": [
+                                  {
+                                    "var": "info"
+                                  },
+                                  {
+                                    "hex": "01"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "var": "info"
+                          }
+                        ]
+                      },
+                      {
+                        "hex": "02"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-PREFIX",
+      "title": "OKM is the first L octets of one stream T: a shorter L is a prefix of a longer one",
+      "covers": ["R-OKM-FIRST"],
+      "forall": [
+        {
+          "name": "prk",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 48
+        },
+        {
+          "name": "info",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 32
+        },
+        {
+          "name": "n",
+          "type": "i32",
+          "min": 0,
+          "max": 300
+        },
+        {
+          "name": "m",
+          "type": "i32",
+          "min": 0,
+          "max": 300
+        }
+      ],
+      "where": {
+        "op": "<=",
+        "args": [
+          {
+            "var": "n"
+          },
+          {
+            "var": "m"
+          }
+        ]
+      },
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "slice",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "hkdfExpandSha256",
+                    "args": [
+                      {
+                        "var": "prk"
+                      },
+                      {
+                        "var": "info"
+                      },
+                      {
+                        "var": "m"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": 0
+              },
+              {
+                "var": "n"
+              }
+            ]
+          },
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "hkdfExpandSha256",
+                "args": [
+                  {
+                    "var": "prk"
+                  },
+                  {
+                    "var": "info"
+                  },
+                  {
+                    "var": "n"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

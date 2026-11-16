@@ -157,7 +157,7 @@ function isNetExport(name: string): boolean -> @isNetExport [exported]
   escaping: name
   calls: netSignature nish_str_eq
   stackSites=0 stackLocals=0
-  callee +0:55 netSignature -> @netSignature
+  callee +0:3 netSignature -> @netSignature
 function isTermExport(name: string): boolean -> @isTermExport [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
