@@ -284,51 +284,106 @@ const readSkill = (dir) => {
   const entries = []
   const grants = new Set()
   let bytes = 0
+  /** A file's bytes, or null when they would take `bytes` past `MAX_BYTES`; read no further than that. */
+  const readBounded = (file) => {
+    const room = MAX_BYTES - bytes
+    const stat = fs.lstatSync(file)
+    if (!stat.isFile()) {
+      throw new Error(`${file} changed while it was read`)
+    }
+    if (stat.size > room) {
+      return null
+    }
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0))
+    try {
+      const chunks = []
+      let total = 0
+      const chunk = Buffer.alloc(Math.min(room + 1, 1 << 20))
+      for (;;) {
+        const n = fs.readSync(fd, chunk, 0, Math.min(chunk.length, room + 1 - total), null)
+        if (n === 0) {
+          return Buffer.concat(chunks, total)
+        }
+        chunks.push(Buffer.from(chunk.subarray(0, n)))
+        total += n
+        if (total > room) {
+          return null
+        }
+      }
+    } finally {
+      fs.closeSync(fd)
+    }
+  }
   const walk = (at, rel, depth) => {
-    if (depth > MAX_DEPTH || entries.length > MAX_ENTRIES || bytes > MAX_BYTES) {
+    if (depth > MAX_DEPTH) {
       grants.add(TOO_LARGE)
       return
     }
-    let list
+    let handle
     try {
-      list = fs.readdirSync(at, { withFileTypes: true })
+      handle = fs.opendirSync(at)
     } catch {
       grants.add("contains an unreadable entry")
       entries.push({ name: rel, kind: "unreadable", data: Buffer.alloc(0) })
       return
     }
-    for (const e of list) {
-      const file = path.join(at, e.name)
-      const name = rel === "" ? e.name : `${rel}/${e.name}`
-      if (entries.length > MAX_ENTRIES || bytes > MAX_BYTES) {
-        grants.add(TOO_LARGE)
-        return
-      }
-      if (e.isDirectory()) {
-        entries.push({ name, kind: "dir", data: Buffer.alloc(0) })
-        walk(file, name, depth + 1)
-        continue
-      }
-      let kind = "other"
-      let data = Buffer.alloc(0)
-      try {
-        if (e.isFile()) {
-          kind = "file"
-          data = fs.readFileSync(file)
-          bytes += data.length
-        } else if (e.isSymbolicLink()) {
-          kind = "link"
-          data = Buffer.from(fs.readlinkSync(file))
-          grants.add("contains a link")
-        } else {
-          grants.add("contains a special file")
+    try {
+      // One entry at a time, so a directory of millions stops at MAX_ENTRIES
+      // rather than being listed whole first.
+      for (;;) {
+        let e
+        try {
+          e = handle.readSync()
+        } catch {
+          grants.add("contains an unreadable entry")
+          entries.push({ name: rel, kind: "unreadable", data: Buffer.alloc(0) })
+          return
         }
-      } catch {
-        kind = "unreadable"
-        data = Buffer.alloc(0)
-        grants.add("contains an unreadable entry")
+        if (e === null) {
+          return
+        }
+        if (entries.length >= MAX_ENTRIES) {
+          grants.add(TOO_LARGE)
+          return
+        }
+        const file = path.join(at, e.name)
+        const name = rel === "" ? e.name : `${rel}/${e.name}`
+        if (e.isDirectory()) {
+          entries.push({ name, kind: "dir", data: Buffer.alloc(0) })
+          walk(file, name, depth + 1)
+          if (grants.has(TOO_LARGE)) {
+            return
+          }
+          continue
+        }
+        let kind = "other"
+        let data = Buffer.alloc(0)
+        try {
+          if (e.isFile()) {
+            kind = "file"
+            const read = readBounded(file)
+            if (read === null) {
+              grants.add(TOO_LARGE)
+              return
+            }
+            data = read
+            bytes += data.length
+          } else if (e.isSymbolicLink()) {
+            kind = "link"
+            data = Buffer.from(fs.readlinkSync(file))
+            grants.add("contains a link")
+          } else {
+            grants.add("contains a special file")
+          }
+        } catch {
+          kind = "unreadable"
+          data = Buffer.alloc(0)
+          grants.add("contains an unreadable entry")
+        }
+        entries.push({ name, kind, data })
       }
-      entries.push({ name, kind, data })
+    } finally {
+      handle.closeSync()
     }
   }
   walk(dir, "", 0)
@@ -401,7 +456,7 @@ const unquote = (value) => (/^"[^"]*"$|^'[^']*'$/.test(value) ? value.slice(1, -
 /** The tools an `allowed-tools` key lists, with `<unreadable>` for a form this file does not read. */
 const toolsOf = ({ value, under }) => {
   if (value === "" && under.every((item) => item.startsWith("- "))) {
-    return under.map((item) => unquote(item.slice(2).trim()))
+    return under.flatMap((item) => unquote(item.slice(2).trim()).split(/[,\s]+/))
   }
   if (under.length > 0 || (value.startsWith("[") && !value.endsWith("]"))) {
     return ["<unreadable>"]
@@ -410,7 +465,7 @@ const toolsOf = ({ value, under }) => {
     return value
       .slice(1, -1)
       .split(",")
-      .map((t) => unquote(t.trim()))
+      .flatMap((t) => unquote(t.trim()).split(/[,\s]+/))
   }
   return unquote(value).split(/[,\s]+/)
 }
@@ -430,26 +485,36 @@ const toolsOf = ({ value, under }) => {
 const frontmatter = (text) => {
   const shell = SHELL_AT_LOAD.test(text) ? ["runs shell at load"] : []
   const unreadable = { description: "", grants: [UNREADABLE, ...shell] }
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/)
-  if (lines[0].trimEnd() !== "---") {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/)
+  // The opener and the closer are `---` exactly, and no other line in the
+  // block looks like a document marker, so a reader that ends the block at a
+  // looser `---` or at `...` cannot end it sooner than this one does.
+  if (lines[0] !== "---") {
     return unreadable
   }
-  const end = lines.findIndex((line, i) => i > 0 && line.trimEnd() === "---")
+  const end = lines.findIndex((line, i) => i > 0 && line === "---")
   if (end === -1) {
     return unreadable
   }
-  // A YAML reader may break a line at NEL or a Unicode line or paragraph
-  // separator, where this one does not, so a block holding one is not read.
-  if (lines.slice(1, end).some((line) => /[\u0085\u2028\u2029]/.test(line))) {
+  const block = lines.slice(1, end)
+  // A YAML reader may break a line at a lone CR, NEL or a Unicode line or
+  // paragraph separator, or read a vertical tab or form feed as space, where
+  // this one does not, so a block holding one is not read.
+  if (
+    block.some((line) => /[\r\v\f\u0085\u2028\u2029]/.test(line) || /^\s*(?:-{3}|\.{3})(?:\s|$)/.test(line))
+  ) {
     return unreadable
   }
   /** Each top-level key with its inline value and the indented lines under it. */
   const keys = []
-  for (const line of lines.slice(1, end)) {
-    if (line.trim() === "" || line.startsWith("#")) {
+  for (const line of block) {
+    if (/^[ \t]*$/.test(line) || line.startsWith("#")) {
       continue
     }
-    if (/^\s/.test(line)) {
+    // Only a space indents. A line led by a tab, a no-break space or any
+    // other whitespace is one a reader might take as top-level, or reject,
+    // so the whole block counts as unreadable.
+    if (line.startsWith(" ")) {
       if (keys.length === 0) {
         return unreadable
       }
@@ -457,8 +522,9 @@ const frontmatter = (text) => {
       continue
     }
     // A quoted key, a merge key, a flow mapping: anything else at the top could
-    // hide a grant, so the whole block counts as unreadable.
-    const m = /^([A-Za-z0-9_.-]+):(?:\s+(.*))?$/.exec(line)
+    // hide a grant, so the whole block counts as unreadable. Only a space or a
+    // tab separates a key from its value.
+    const m = /^([A-Za-z0-9_.-]+):(?:[ \t]+(.*))?$/.exec(line)
     if (m === null) {
       return unreadable
     }
@@ -603,16 +669,18 @@ const writeAtomic = (file, data) => {
   } catch {
     temp = `${file}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`
   }
-  let written = false
+  // `wx` either creates the file or throws, so once it opens the file is this
+  // call's own: a failed write or rename removes it, and a refusal removes nothing.
+  const fd = fs.openSync(temp, "wx")
   try {
-    fs.writeFileSync(temp, data, { flag: "wx" })
-    written = true
+    try {
+      fs.writeFileSync(fd, data)
+    } finally {
+      fs.closeSync(fd)
+    }
     fs.renameSync(temp, file)
   } catch (err) {
-    // Only what this call wrote is removed, never what refused the write.
-    if (written) {
-      fs.rmSync(temp, { force: true })
-    }
+    fs.rmSync(temp, { force: true })
     throw err
   }
 }
@@ -810,7 +878,8 @@ const GRANT_ORDER = [
 const UNKNOWN_KEY = "unknown key "
 
 /** Tools that run commands, write files or reach out, shown before the rest. */
-const ACTING_TOOL = /^(<unreadable>|Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|mcp__)/
+const ACTING_TOOL =
+  /^(<unreadable>|Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|Task|Agent|Skill|KillShell|mcp__)/
 
 /** The most code points of one tool or one unknown key shown. */
 const ITEM_MAX = 80

@@ -72,9 +72,11 @@ For each skill you have not accepted at its current hash, it prints the
 package, the skill's description and what it grants, one grant to a line with
 the ones that act first, then asks `Link <name>? [y/N]`. A list of tools shows
 how many entries it has and then each distinct tool on a line of its own, the
-ones that run commands, write files or reach out first, so a long list cannot
-hide one. Only `y` or `yes` links it. Enter, any other answer and
-the end of input decline. A decline is not recorded, so the next run asks
+ones that run commands, write files, start agents or reach out first (`Bash`,
+`PowerShell`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch`,
+`WebSearch`, `Task`, `Agent`, `Skill`, `KillShell` and any `mcp__` tool), so a
+long list cannot hide one. Only `y` or `yes` links it. Enter, any other answer
+and the end of input decline. A decline is not recorded, so the next run asks
 again. Ctrl-C at a question stops the command with exit status 130 and writes
 nothing, since every question is asked before anything is linked.
 
@@ -97,7 +99,12 @@ skill is left for you to name:
 - a shell command the agent runs when the skill loads: `` !`cmd` `` in the
   text, or a code fence opened with `` ```! `` or `~~~!`, spaces before the
   `!` and a list or quote marker before the fence included;
-- frontmatter Nish cannot read, or none at all;
+- frontmatter Nish cannot read, or none at all. Nish reads only plain
+  `key: value` lines between two lines that are exactly `---`, indented with
+  spaces. A carriage return that does not end a line, a vertical tab, a form
+  feed, a tab or any other whitespace at the start of a line, or a `...` or
+  extra `---` line makes the frontmatter unreadable, since another reader
+  might see a key there that Nish does not;
 - a link, a device or other special file, or an entry Nish cannot read,
   anywhere in the skill's directory, or a directory more than 32 levels deep,
   or holding more than 10,000 entries or 64 MiB of files, which Nish stops

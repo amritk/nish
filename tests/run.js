@@ -27076,6 +27076,132 @@ if (dealtHere("releaseChecks")) {
         breaksRun.stdout + breaksRun.stderr
       )
 
+      // Whitespace YAML reads where this reader does not, in each place a grant could
+      // hide behind it: a lone CR before or inside a line, a vertical tab, a form feed, a
+      // tab, a no-break space or another Unicode space leading a line or after the colon,
+      // a byte-order mark mid-block, a CR that would end an indented line early, and a
+      // closer or document marker, indented or loose, that a reader might take and this
+      // one does not. Each makes the frontmatter unreadable, so --yes links none.
+      const spaces = [
+        ["cr-lead", "---\nname: x\n\rallowed-tools: Bash\n---\n"],
+        ["cr-value", "---\nname: x\ndescription:\rallowed-tools: Bash\n---\n"],
+        ["cr-end", "---\nname: x\ndescription: d\r\rallowed-tools: Bash\n---\n"],
+        ["vt-lead", "---\nname: x\n\vallowed-tools: Bash\n---\n"],
+        ["ff-lead", "---\nname: x\n\fallowed-tools: Bash\n---\n"],
+        ["tab-lead", "---\nname: x\n\tallowed-tools: Bash\n---\n"],
+        ["nbsp-lead", "---\nname: x\n allowed-tools: Bash\n---\n"],
+        ["nbsp-value", "---\nname: x\ndescription: d\nallowed-tools: Bash\n---\n"],
+        ["en-quad-lead", "---\nname: x\n allowed-tools: Bash\n---\n"],
+        ["hair-lead", "---\nname: x\n allowed-tools: Bash\n---\n"],
+        ["ideographic-lead", "---\nname: x\n　allowed-tools: Bash\n---\n"],
+        ["bom-lead", "---\nname: x\n﻿allowed-tools: Bash\n---\n"],
+        ["closer-space", "---\nname: x\n--- \nallowed-tools: Bash\n---\n"],
+        ["closer-vt", "---\nname: x\n---\v\nallowed-tools: Bash\n---\n"],
+        ["doc-end", "---\nname: x\n...\nallowed-tools: Bash\n---\n"],
+        ["opener-space", "--- \nname: x\n---\n"],
+        ["cr-under", "---\nname: x\ndescription: d\n  more\rallowed-tools: Bash\n---\n"],
+        ["marker-under", "---\nname: x\ndescription: d\n  ---\n---\n"],
+      ]
+      const spacesDir = project([["nish", {}, spaces]])
+      const spacesRun = linkSkillsCli(["--dir", spacesDir, "--yes"], skillsRoot)
+      const spacesLinked = spaces.filter(([name]) => lstatOf(path.join(spacesDir, ".claude", "skills", name)) !== null)
+      check(
+        "--yes links no skill whose frontmatter hides a key behind a CR, a vertical tab, a form feed, a tab, a Unicode space, a mid-block BOM or a loose marker",
+        spacesRun.status === 0 &&
+          spacesLinked.length === 0 &&
+          spacesRun.stdout.split("\n").filter((line) => line.trim() === "- unreadable frontmatter").length ===
+            spaces.length,
+        `linked: ${spacesLinked.map(([name]) => name).join(", ")}\n${spacesRun.stdout}${spacesRun.stderr}`
+      )
+      // The same frontmatter with CRLF line ends, or a space-indented continuation, still reads as inert.
+      const inertForms = project([
+        [
+          "nish",
+          {},
+          [
+            ["crlf", "---\r\nname: crlf\r\ndescription: d\r\n---\r\nbody\r\n"],
+            ["folded", "---\nname: folded\ndescription: one\n  two\n\t\n---\n"],
+          ],
+        ],
+      ])
+      const inertRun = linkSkillsCli(["--dir", inertForms, "--yes"], skillsRoot)
+      check(
+        "--yes still links a skill with CRLF line ends or a space-indented description",
+        inertRun.status === 0 && linkedTo(inertForms, "crlf", "nish") && linkedTo(inertForms, "folded", "nish"),
+        inertRun.stdout + inertRun.stderr
+      )
+
+      // An entry of a block or flow list holding two tools separated by a space is
+      // two tools, as in the inline form, so the acting one is shown on its own
+      // line, ahead of a name that sorts before it.
+      const actingNew = ["PowerShell", "Task", "Agent", "Skill", "KillShell"]
+      const listed = project([
+        [
+          "nish",
+          {},
+          actingNew.map((tool, i) => [
+            `acting-${i}`,
+            i % 2 === 0
+              ? `---\nname: acting-${i}\nallowed-tools:\n  - Aardvark ${tool}\n---\n`
+              : `---\nname: acting-${i}\nallowed-tools: [Aardvark ${tool}]\n---\n`,
+          ]),
+        ],
+      ])
+      const listedRun = linkSkillsCli(["--dir", listed], skillsRoot)
+      const listedLines = listedRun.stdout.split("\n").map((line) => line.trim())
+      const listedHeads = listedLines.flatMap((line, i) =>
+        line === "- allowed-tools (2 entries, 2 distinct):" ? [listedLines.slice(i + 1, i + 3).join(" ")] : []
+      )
+      check(
+        "a block or flow allowed-tools entry with two tools shows each, PowerShell, Task, Agent, Skill and KillShell first",
+        listedRun.status === 0 &&
+          listedHeads.length === actingNew.length &&
+          actingNew.every((tool) => listedHeads.includes(`- ${tool} - Aardvark`)),
+        listedRun.stdout + listedRun.stderr
+      )
+
+      // A skill of exactly MAX_ENTRIES entries is read whole; one more is too large.
+      const many = project([["nish", {}, ["many"]]])
+      const manyDir = path.join(many, "node_modules", "nish", "skills", "many")
+      for (let i = 1; i < 10_000; i++) {
+        fs.writeFileSync(path.join(manyDir, `f${i}`), "")
+      }
+      const manyAtBound = linkSkillsCli(["--dir", many, "--yes"], skillsRoot)
+      const manyLinked = linkedTo(many, "many", "nish")
+      fs.writeFileSync(path.join(manyDir, "f10000"), "")
+      const manyOver = linkSkillsCli(["--dir", many, "--yes"], skillsRoot)
+      check(
+        "--yes links a skill of 10,000 entries and refuses one of 10,001, naming why",
+        manyAtBound.status === 0 &&
+          manyLinked &&
+          manyOver.status === 0 &&
+          lstatOf(path.join(many, ".claude", "skills", "many")) === null &&
+          manyOver.stdout.includes("- too large to read whole"),
+        manyAtBound.stdout + manyOver.stdout + manyOver.stderr
+      )
+
+      // A skill of exactly MAX_BYTES of files is read whole; one byte more is too large.
+      const big = project([["nish", {}, ["big"]]])
+      const bigDir = path.join(big, "node_modules", "nish", "skills", "big")
+      const bigFill = path.join(bigDir, "fill.bin")
+      const bigSkillMd = fs.statSync(path.join(bigDir, "SKILL.md")).size
+      fs.writeFileSync(bigFill, "")
+      fs.truncateSync(bigFill, 64 * 1024 * 1024 - bigSkillMd)
+      const bigAtBound = linkSkillsCli(["--dir", big, "--yes"], skillsRoot)
+      const bigLinked = linkedTo(big, "big", "nish")
+      fs.truncateSync(bigFill, 64 * 1024 * 1024 - bigSkillMd + 1)
+      const bigOver = linkSkillsCli(["--dir", big, "--yes"], skillsRoot)
+      fs.rmSync(bigFill)
+      check(
+        "--yes links a skill of 64 MiB of files and refuses one a byte larger, naming why",
+        bigAtBound.status === 0 &&
+          bigLinked &&
+          bigOver.status === 0 &&
+          lstatOf(path.join(big, ".claude", "skills", "big")) === null &&
+          bigOver.stdout.includes("- too large to read whole"),
+        bigAtBound.stdout + bigOver.stdout + bigOver.stderr
+      )
+
       // A skill deeper than the walk reads is a grant, not a tree it hashes whole.
       const deep = project([["nish", {}, ["deep"]]])
       const deepDir = path.join(deep, "node_modules", "nish", "skills", "deep", ...Array(40).fill("d"))
