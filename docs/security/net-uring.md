@@ -42,8 +42,11 @@ before landing, and left two bounds open: a lingering close has no deadline
 (NURING-12), and accepting at once takes peers out of the listener's backlog
 (NURING-13). A second round found that a wait whose batch the ready slots
 filled never asked the epoll set, so a descriptor beside them, `signalFd()`
-among them, was never reported (NURING-18), fixed before landing. Twenty-one
-findings (NURING-1 to NURING-21): eleven fixed, two open, eight decided. The
+among them, was never reported (NURING-18), fixed before landing. A fourth round found that
+a later ring listener whose set's open failed answered the failure instead of
+falling back (NURING-22) and that a slot its peer reset still took writes
+(NURING-23), both fixed before landing. Twenty-five findings (NURING-1 to
+NURING-25): thirteen fixed, two open, ten decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -106,6 +109,10 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-19 | Low | `runtime/runtime-net.c` (`nr_dispatch`) | When the table for a new ring cannot be allocated, the accepted slot is closed at once, and a close that finds the submission queue full after flushing it answers -11, which is dropped: the slot stays open in the ring, unreachable, until the listener is closed. Found in S2's second review. | **Decided.** It needs a failed allocation and a queue still full after `nish_uring_close` has submitted it, which leaves room as soon as the kernel takes the entries; one slot is held, and the set's close releases it. Queueing the close would need memory in the path that ran out of it. |
 | NURING-20 | Low | `runtime/runtime-net.c` (`nr_open`, `nr_refused`) | The first ring listener's failure to open rings was latched as the process's answer whatever it was, both from the probe and from the first set's open, so a transient failure, such as -24 when the descriptor table was full or -12 when locked memory was short, left every later listener on descriptors and `netRingState()` at that answer for good. Found in S2's second review for the open, and in its third for the probe. | **Fixed before landing**: on both paths only a refusal is latched, -1, -38, -22 or -95, the answers `netRingState()` documents and `nish_uring_probe` keeps; any other failure leaves the state at 0, and a later listener asks again. Tested by `net_ring_transient`: under `ulimit -n 32` with one descriptor free, the probe answers -24, and `netRingState()` must stay 0 and the next ring listen open rings; before the fix the state stayed -24 and the check failed. |
 | NURING-21 | Low | `runtime/runtime-net.c` (`nish_net_write2`) | `netWrite2` on a slot with an empty first range and a full send area answered 0, where a descriptor's `sendmsg` answers -11, so a program that waits on -11 took it for a written nothing and spun. Found in S2's third review. | **Fixed before landing**: with nothing of the first range sent, the second range's answer is the call's, -11 included. Tested by `net_ring_sink`, which at its first -11 calls `netWrite2` with an empty first range and requires -11; before the fix it answered 0 and the check failed. |
+| NURING-22 | Low | `runtime/runtime-net.c` (`nr_open`) | Once rings were open, a later ring listener whose own set's open failed for any reason other than a refusal, such as -24 when the descriptor table was full or -12 when locked memory was short, failed `tcpListenFlags` with that errno, where §5.4 of the design and the probe's own path fall back to descriptors. Found in S2's fourth review. | **Fixed before landing**: every failure of a set's open falls back to descriptors, as the probe's does; only a refusal before any set has opened decides the process's state, and -23 past the 31st set stays the call's answer. Tested by `net_ring_transient`, which with rings open fills the descriptor table again but for one and requires a third ring listen to succeed with `netRingState()` still 1; before the fix it answered -24 and the check failed. |
+| NURING-23 | Low | `runtime/runtime-net.c` (`nr_send`) | `netWrite` on a slot whose peer had reset it queued the bytes and answered their count, where a descriptor's `send` answers -104 or -32: only a failed send of the slot's own was checked, not a receive's error. A program that writes without reading took a gone peer for a live one until its send area filled. Found in S2's fourth review. | **Fixed before landing**: a failed slot, by a receive's error or a send's, answers `netWrite` and `netWrite2` with that errno. Tested by `net_ring_reset`: the client sends five bytes and resets, the program reads until `netRead` answers the reset, and `netWrite` must then answer an errno; before the fix it answered 64 and the check failed. |
+| NURING-24 | Low | `runtime/runtime-net.c` (`nr_read`) | A slot's receive error is answered by every `netRead` once its queued bytes are read, `len` 0 included, where a descriptor's `recv` answers `ECONNRESET` once and then 0. Found in S2's fourth review. | **Decided.** The error stays the slot's answer: it is what `nr_failed` keeps for the poll loop's error bit, the lingering close and `netWrite` (NURING-23), and answering 0 after it would tell a second reader the peer ended cleanly. A program that stops at the first negative answer, as the readiness contract asks, sees the same on either. Documented in `docs/LANGUAGE.md` and the guide. |
+| NURING-25 | Low | `runtime/runtime-net.c` (`nr_ctl`) | A slot handle is in one poll loop at a time: `pollAdd` of a slot another loop watches answers -17, where epoll lets one descriptor be watched by several loops. Found in S2's fourth review. | **Decided.** A slot's readiness lives in one registration, and a server watches each connection in one loop; the second loop's add is refused, not half kept. Documented in `runtime/nish.d.ts` (`pollAdd`, `NET_LISTEN_RING`), `docs/LANGUAGE.md` and the guide. |
 
 ## Properties verified
 
@@ -186,7 +193,7 @@ where the probe says it is refused.
   runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c,
   runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c
   compile warning-free together and pass the runtime unit test", and its
-  `.text` budget, "runtime-uring.c: .text* at -Oz fits the 6144 byte
+  `.text` budget, "runtime-uring.c: .text* at -Oz fits the 6912 byte
   budget".
 
 ### What S2 adds
@@ -224,11 +231,18 @@ counts as a skip, never a pass.
   beside more ready slots than one wait holds" (NURING-18): `starve.ts` holds
   80 always-writable slots beside one descriptor, and waits with room for 64
   and for one must each report it.
-- **A transient probe failure is not kept.** "net_ring: a probe that fails
-  for want of a descriptor is not kept, and the next ring listen opens
-  rings" (NURING-20): `transient.ts`, under `ulimit -n 32` with one
-  descriptor free, makes the probe answer -24; `netRingState()` must stay 0,
-  and once descriptors are free the next ring listen must answer 1.
+- **A reset slot refuses writes.** "net_ring: a slot whose peer reset it
+  answers netWrite with an errno" (NURING-23): `reset.ts` reads until
+  `netRead` answers the client's reset, and `netWrite` must then answer a
+  negative errno.
+- **A transient ring failure is not kept, nor fatal.** "net_ring: a probe
+  that fails for want of a descriptor is not kept, the next ring listen opens
+  rings, and a later set that fails for one falls back" (NURING-20,
+  NURING-22): `transient.ts`, under `ulimit -n 32` with one descriptor free,
+  makes the probe answer -24; `netRingState()` must stay 0, once descriptors
+  are free the next ring listen must answer 1, and with the table full again
+  but for one a third ring listen must succeed on descriptors with the state
+  still 1.
 - **Refused io_uring, from a program.** "net_ring: with io_uring_setup
   refused, a ring listener serves descriptors and netRingState() is -1":
   under a seccomp filter that answers io_uring_setup with EPERM, the same

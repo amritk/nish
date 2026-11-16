@@ -11,11 +11,13 @@
 // to the server's 64 MiB, prints `sink: received N bytes` and ends. In
 // `halfclose` mode one connection sends five bytes, ends its writing side at
 // once and reads nothing for a second; when the server's end arrives it prints `halfclose: received N
-// bytes` and opens a second connection as its signal. The client exits with the
+// bytes` and opens a second connection as its signal. In `reset` mode one
+// connection sends five bytes and, a moment later, resets the connection.
+// The client exits with the
 // server's status, after printing the server's output, so the verdict is the
 // server's exit status. A failure of the client's own exits 1.
 //
-//     node client.mjs <exe> <limit> <count> echo|hold|flood|sink|halfclose
+//     node client.mjs <exe> <limit> <count> echo|hold|flood|sink|halfclose|reset
 import { spawn } from "node:child_process"
 import net from "node:net"
 
@@ -108,7 +110,21 @@ const halfclose = (port) => {
   })
 }
 
+const reset = (port) => {
+  const s = net.connect({ host: "127.0.0.1", port })
+  sockets.push(s)
+  s.on("error", (e) => done(1, `the reset connection: ${e.message}`))
+  s.on("connect", () => {
+    s.write("ping\n")
+    setTimeout(() => s.resetAndDestroy(), 200)
+  })
+}
+
 const open = (port) => {
+  if (mode === "reset") {
+    reset(port)
+    return
+  }
   if (mode === "halfclose") {
     halfclose(port)
     return

@@ -30447,13 +30447,19 @@ if (!only || "net_fd_limit".includes(only)) {
 // that a slot in a loop the program closed joins a new one; `starve.ts`
 // holds 80 slots that are always ready to write in one loop beside one
 // descriptor, which waits with room for 64 and with room for one must still
-// report (NURING-18); `transient.ts` runs under `ulimit -n 32` with one
+// report (NURING-18); `reset.ts` reads a slot whose peer reset it until
+// netRead answers the reset, and netWrite must then answer an errno
+// (NURING-23); `transient.ts` runs under `ulimit -n 32` with one
 // descriptor free, so the io_uring probe answers -24, and netRingState() must
-// stay 0 and the next ring listen open rings (NURING-20); and `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
-// io_uring_setup, and must serve descriptors with netRingState() at -1. The
-// clients run in node (`client.mjs`), outside the limit. A ring program that
-// exits 2 found rings refused here, and the deny wrapper exits 3 where the
-// kernel takes no filter: each is a counted skip, never a pass.
+// stay 0 and the next ring listen open rings (NURING-20), and with rings open
+// a later set whose open answers -24 must fall back to descriptors
+// (NURING-22); and `fallback.ts` runs under `deny.c`'s seccomp filter, which
+// refuses io_uring_setup, and must serve descriptors with netRingState() at
+// -1. The clients run in node (`client.mjs`), outside the limit. A ring
+// program that exits 2 found rings refused here, the deny wrapper exits 3
+// where the kernel takes no filter, and `deny.c` names io_uring_setup only on
+// x86_64 and aarch64, so another architecture skips it: each is a counted
+// skip, never a pass.
 if (!only || "net_ring".includes(only)) {
   const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
   const room = hardNofile(hard)
@@ -30553,6 +30559,15 @@ if (!only || "net_ring".includes(only)) {
       }
     )
     ring(
+      "net_ring: a slot whose peer reset it answers netWrite with an errno",
+      "net_ring_reset",
+      "reset.ts",
+      64,
+      1,
+      "reset",
+      (out) => /^reset: netRead answered -\d+ and netWrite -\d+$/m.test(out)
+    )
+    ring(
       "net_ring: a descriptor is reported beside more ready slots than one wait holds",
       "net_ring_starve",
       "starve.ts",
@@ -30570,20 +30585,25 @@ if (!only || "net_ring".includes(only)) {
       skip(`net_ring: the transient probe check needs io_uring, and this kernel refuses it (${tr.stdout.trim()})`)
     } else {
       check(
-        "net_ring: a probe that fails for want of a descriptor is not kept, and the next ring listen opens rings",
+        "net_ring: a probe that fails for want of a descriptor is not kept, the next ring listen opens rings, and a later set that fails for one falls back",
         tr !== null &&
           tr.status === 0 &&
-          tr.stdout.includes("transient: the probe's -24 was not kept, and the next listen opened rings\n"),
+          tr.stdout.includes("transient: the probe's -24 was not kept, the next listen opened rings, and a later set's -24 fell back to descriptors\n"),
         tr === null ? `does not compile and link\n${shown(t.c)}` : `signal ${tr.signal}\n${shown(tr)}`
       )
     }
     const deny = path.join(dir, "deny")
-    const d = spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
-      encoding: "utf8",
-    })
-    const b = d.status === 0 ? build("net_ring_fallback", "fallback.ts") : { exe: null, c: d }
+    const known = process.arch === "x64" || process.arch === "arm64"
+    const d = known
+      ? spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
+          encoding: "utf8",
+        })
+      : null
+    const b = d !== null && d.status === 0 ? build("net_ring_fallback", "fallback.ts") : { exe: null, c: d }
     const r = b.exe === null ? null : spawnSync(deny, [b.exe], { encoding: "utf8", timeout: 60000 })
-    if (r !== null && r.status === 3) {
+    if (!known) {
+      skip(`net_ring: deny.c names io_uring_setup on x86_64 and aarch64 only, not ${process.arch}`)
+    } else if (r !== null && r.status === 3) {
       skip("net_ring: the fallback needs a seccomp filter, and this kernel takes none")
     } else {
       check(

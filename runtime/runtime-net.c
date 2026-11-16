@@ -587,10 +587,12 @@ static struct nr_set *nr_listener(int32_t fd) {
    ENOMEM, may pass, and a later listen asks again. */
 static int nr_refused(int32_t r) { return r == -1 || r == -38 || r == -22 || r == -95; }
 
-/* A ring listener for `fd`, or the reason there is none. A refusal decides
-   for the process: a kernel or a filter that refuses io_uring leaves every
-   later listen on descriptors (§5.4). A failure for want of a resource
-   leaves only this listener on descriptors. */
+/* A ring listener for `fd`: 1 when it has one, 0 when it stays on
+   descriptors, or -23 when the process has opened every set it may hold.
+   Whatever else fails, the probe or this set's open, the listener falls back
+   to descriptors (§5.4); a refusal before any set has opened also decides for
+   every later listen, and any other failure, such as -24 or -12, only for
+   this one (NURING-20, NURING-22). */
 static int32_t nr_open(int32_t fd, int32_t port) {
   if (nr_state == 0) {
     int32_t p = nish_uring_probe();
@@ -603,24 +605,19 @@ static int32_t nr_open(int32_t fd, int32_t port) {
   if (nr_state < 0) return 0;
   if (nr_nsets >= NR_SETS) return -23;
   struct rlimit rl;
-  if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return nish_net_fail();
+  if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return 0;
   struct nish_uring_opts o;
   memset(&o, 0, sizeof o);
   o.slots = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > NR_SLOTS_MAX ? NR_SLOTS_MAX : (int32_t)rl.rlim_cur;
   if (o.slots < 1) o.slots = 1;
   o.rings_max = NR_RINGS;
   struct nr_set *S = calloc(1, sizeof *S);
-  if (!S) return -12;
+  if (!S) return 0;
   int32_t r = nish_uring_open(&S->u, fd, &o);
   if (r < 0) {
     free(S);
-    /* Only a refusal decides for the process. A failure that may pass, such
-       as -12 for memory, is the caller's, and a later listener asks again. */
-    if (nr_nsets == 0 && nr_refused(r)) {
-      nr_state = r;
-      return 0;
-    }
-    return r;
+    if (nr_nsets == 0 && nr_refused(r)) nr_state = r;
+    return 0;
   }
   S->listener = fd;
   S->port = port;
@@ -691,15 +688,21 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
   return len == 0 ? 0 : -11;
 }
 
+/* The errno a failed slot answers a write with: its send's, else its
+   receive's, such as -104 for a peer's reset. */
+static int32_t nr_fail_code(const struct nr_conn *c) {
+  return c->werr ? c->werr : c->hup_res;
+}
+
 /* Copies at most what the slot's send area has room for into the set's send
-   queue. -11 when it has none. */
+   queue. -11 when it has none, or the connection's errno once it has failed. */
 static int32_t nr_send(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot, const char *p, int64_t len) {
-  if (c->werr) return c->werr;
+  if (nr_failed(c)) return nr_fail_code(c);
   int64_t q = nish_uring_queued(S->u, ring, slot);
   if (q < 0) return -9;
   if (q >= NR_AREA) {
     nr_pump(S);
-    if (c->werr) return c->werr;
+    if (nr_failed(c)) return nr_fail_code(c);
     q = nish_uring_queued(S->u, ring, slot);
   }
   int64_t room = NR_AREA - q;

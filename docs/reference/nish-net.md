@@ -511,8 +511,9 @@ function netRingState(): i32
 
 <scalar-field name="returns" type="i32">
 
-`1` when they do, `0` before any listener asked, or the negative
-  errno rings were refused with, in which case they serve descriptors.
+`1` when they do, `0` until a listener has found rings or a
+  refusal, or the negative errno rings were refused with, in which case
+  they serve descriptors.
 
 </scalar-field>
 
@@ -774,7 +775,9 @@ An `i32` of the program's choosing that comes back as it went
 <scalar-field name="returns" type="i32">
 
 `0`, `-17` for a descriptor the loop already watches (on Darwin
-  it is left under the new token), or `-22` for an event bit past `2`.
+  it is left under the new token) or for a slot handle another loop
+  watches (a slot is in one loop at a time), or `-22` for an event bit
+  past `2`.
 
 </scalar-field>
 
@@ -1161,9 +1164,11 @@ a listener holds connections past `RLIMIT_NOFILE`. `netRead`, `netWrite`,
 `netWrite2`, `netClose`, `netLocalPort` and the poll loop take a slot
 handle; `netSetOption` answers `-95`, and calls that need a descriptor,
 `sendFd` among them, answer `-9`.
-The first listener that sets the flag decides for the process: where the
-kernel refuses rings it serves descriptors, and `netRingState` answers the
-errno. Off Linux the flag is accepted and does nothing.
+The first listener that finds rings or a refusal decides for the process:
+where the kernel refuses rings it serves descriptors, and `netRingState`
+answers the errno. A listener whose rings fail for want of descriptors or
+memory serves descriptors itself, and a later listener asks again. Off
+Linux the flag is accepted and does nothing.
 
 ```ts
 function tcpListenFlags(

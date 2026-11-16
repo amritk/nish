@@ -2595,10 +2595,12 @@ is `-1` where the SDK has no `LOCAL_PEERPID` or the kernel refuses it.
   `reject_net_unix_scm_wasm`.
 
 **`netRingState(): i32`** answers whether `NET_LISTEN_RING` listeners accept
-into rings: `1` when they do, `0` before any listener has set the flag, or
-the negative errno the kernel refused rings with (`-1` when a seccomp filter
-refuses `io_uring_setup`, `-38` for a kernel without it), and then they serve
-descriptors. The first listener that sets the flag decides for the process.
+into rings: `1` when they do, `0` until a listener has found rings or a
+refusal, or the negative errno the kernel refused rings with (`-1` when a
+seccomp filter refuses `io_uring_setup`, `-38` for a kernel without it), and
+then they serve descriptors. The first listener that finds rings or a refusal
+decides for the process; one whose rings fail for want of descriptors or
+memory serves descriptors itself, and a later listener asks again.
 It is `-95` on Darwin.
 
 - *Tests:* `net_ring_calls`, `link/net_ring_fallback`;
@@ -2614,7 +2616,9 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
 - `netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort`,
   `pollAdd`, `pollModify`, `pollRemove` and `pollWait` take a slot handle as
   they take a descriptor, with the same readiness contract: `-11` until
-  `pollWait` reports it, then progress.
+  `pollWait` reports it, then progress. A slot is in one loop at a time: a
+  `pollAdd` to a second loop answers `-17` until the first loop removes it
+  or is closed.
 - `netSetOption` answers `-95`: the slot's socket belongs to the ring. Every
   other call that takes a descriptor (`netShutdown`, `sendFd`, `netMss`,
   `peerCredentials`, FFI) answers `-9`, and so does every call on a handle
@@ -2625,12 +2629,18 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
   `netWrite` past that copies what fits, and a full slot answers `-11` until
   the peer reads. Its received bytes queue up to the same bound before the
   runtime stops receiving for it.
+- A slot whose connection has failed, a peer's reset or a failed send,
+  answers `netWrite` and `netWrite2` with the errno, `-104` for a reset.
+  `netRead` answers it once the queued bytes are read, and on every read
+  after, where a descriptor answers it once and then `0`.
 - Where the kernel refuses rings, the listener serves descriptors and
   `netRingState` answers why; a program written against the readiness
   contract runs the same either way.
 
 - *Tests:* `link/net_ring_beyond_limit`, `link/net_ring_full`,
-  `link/net_ring_sink`, `link/net_ring_flood`, `link/net_ring_fallback`.
+  `link/net_ring_sink`, `link/net_ring_flood`, `link/net_ring_halfclose`,
+  `link/net_ring_starve`, `link/net_ring_reset`, `link/net_ring_transient`,
+  `link/net_ring_fallback`.
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 

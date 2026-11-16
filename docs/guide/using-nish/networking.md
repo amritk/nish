@@ -242,6 +242,12 @@ loop written for descriptors runs unchanged. What differs:
   (`sendFd`, `netMss`, `netShutdown`, `peerCredentials`) answers `-9`, as
   does any call on a handle after its `netClose`.
 - `tcpAccept` writes the peer's address as zeros.
+- A slot handle is in one poll loop at a time: `pollAdd` to a second loop
+  answers `-17` until the first removes it or is closed.
+- Once a connection has failed, by a peer's reset or a failed send,
+  `netWrite` answers the errno (`-104` for a reset), and `netRead` answers it
+  on every read once the queued bytes are read, where a descriptor answers it
+  once and then `0`.
 - When every slot the process may hold is taken, `tcpAccept` answers `-23`.
   Close a connection and the next waiting one takes its slot.
 - A process opens at most 31 ring listeners in its life, closed ones
@@ -253,9 +259,12 @@ loop written for descriptors runs unchanged. What differs:
 The kernel may refuse rings: a seccomp filter (some container runtimes), a
 kernel without io_uring, or `io_uring_disabled` set. Then the listener
 serves descriptors as if the flag were not there, and `netRingState()` says
-what happened: `1` for rings, `0` before any listener asked, or the refusal
-as a negative errno (`-1` when a filter or `io_uring_disabled` forbids it,
-`-38` for a kernel without io_uring). The first listener with the flag decides for the whole process.
+what happened: `1` for rings, `0` until a listener has found rings or a
+refusal, or the refusal as a negative errno (`-1` when a filter or
+`io_uring_disabled` forbids it, `-38` for a kernel without io_uring). The
+first listener that finds rings or a refusal decides for the whole process.
+A listener whose rings fail for want of descriptors or memory serves
+descriptors itself, and a later listener asks again.
 On macOS the flag is accepted and does nothing.
 
 ```ts nish:ok

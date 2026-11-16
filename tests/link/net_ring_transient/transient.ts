@@ -5,7 +5,10 @@
 // descriptor, so the probe's io_uring_setup answers -24. The listen must still
 // succeed, as a plain listener, and netRingState() must stay 0. Once the
 // descriptors are free again, a second ring listen must open rings and
-// netRingState() must answer 1. Exit 0 is a pass, 2 says the kernel refused
+// netRingState() must answer 1. With the table filled again but for one
+// descriptor, a third ring listen, whose set's io_uring_setup now answers
+// -24, must still succeed as a plain listener and leave netRingState() at 1
+// (NURING-22). Exit 0 is a pass, 2 says the kernel refused
 // rings, 1 is a failure, with its line.
 import { NET_LISTEN_RING, netClose, netRingState, pollCreate, tcpListenFlags } from "nish:net"
 
@@ -55,7 +58,34 @@ export const main = (): i32 => {
     console.log(`with descriptors free again the listen answered ${second} and netRingState() ${after}, not a listener and 1`)
     return 1
   }
+  count = 0
+  last = 0
+  while (count < 64) {
+    last = pollCreate()
+    if (last < 0) {
+      break
+    }
+    fillers[count] = last
+    count += 1
+  }
+  if (last !== -24 || count === 0) {
+    console.log(`refilling the descriptor table ended at ${count} descriptors with ${last}, not -24`)
+    return 1
+  }
+  count -= 1
+  netClose(fillers[count])
+  const third: i32 = tcpListenFlags("127.0.0.1", 0, 16, NET_LISTEN_RING)
+  const later: i32 = netRingState()
+  while (count > 0) {
+    count -= 1
+    netClose(fillers[count])
+  }
+  if (third < 0 || later !== 1) {
+    console.log(`with rings open and no descriptor left the listen answered ${third} and netRingState() ${later}, not a listener and 1`)
+    return 1
+  }
+  netClose(third)
   netClose(second)
-  console.log("transient: the probe's -24 was not kept, and the next listen opened rings")
+  console.log("transient: the probe's -24 was not kept, the next listen opened rings, and a later set's -24 fell back to descriptors")
   return 0
 }

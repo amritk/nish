@@ -200,7 +200,7 @@ Up to `len` bytes into `buf[off, off + len)`.
 
 <scalar-card title="net​Ring​State" icon="phosphor/regular/function" href="#netringstate">
 
-Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 before any listener has asked, or the negative errno the kernel refused rings with (-1 when a seccomp filter refuses `io_uring_setup`, -38 for a kernel without it), in which case they serve descriptors.
+Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 until a listener has found rings or a refusal, or the negative errno the kernel refused rings with (-1 when a seccomp filter refuses `io_uring_setup`, -38 for a kernel without it), in which case they serve descriptors.
 
 </scalar-card>
 
@@ -1801,10 +1801,12 @@ the count, 0 at end of stream, or -11 when nothing is waiting.
 
 ### netRingState
 
-Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 before any
-listener has asked, or the negative errno the kernel refused rings with (-1 when a seccomp filter
-refuses `io_uring_setup`, -38 for a kernel without it), in which case they serve descriptors.
-Decided once per process, on the first listener that sets the bit. -95 on Darwin. Refused at
+Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 until a
+listener has found rings or a refusal, or the negative errno the kernel refused rings with (-1
+when a seccomp filter refuses `io_uring_setup`, -38 for a kernel without it), in which case they
+serve descriptors. Decided once per process, by the first listener that finds rings or a
+refusal; one that finds descriptors or memory short serves descriptors itself and leaves the
+state at 0, and a later listener asks again. -95 on Darwin. Refused at
 compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
 ```ts
@@ -2173,8 +2175,8 @@ an `i32` of the program's choosing, which `pollWait` reports it under as it went
 
 <scalar-field name="returns" type="i32">
 
-0, or a negative errno: -17 for a descriptor the loop already watches, -22 for an
-  event bit past 2.
+0, or a negative errno: -17 for a descriptor the loop already watches, or for a slot
+  handle another loop watches (a slot is in one loop at a time), -22 for an event bit past 2.
 
 </scalar-field>
 
@@ -3428,7 +3430,9 @@ at least 18 bytes, receiving the peer's address in the 18-byte form; it must not
 
 <scalar-field name="returns" type="i32">
 
-the connection's descriptor; -11 when none waits; -95 for a datagram socket.
+the connection's descriptor, or a slot handle at or above 2^20 from a `NET_LISTEN_RING`
+  listener, whose `peer` is written as zeros; -11 when none waits; -23 when a ring listener's
+  slots are all taken; -95 for a datagram socket.
 
 </scalar-field>
 
@@ -5350,7 +5354,8 @@ type u8 = number
 `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors (WP63 S2, Linux). A
 connection accepted from such a listener is a slot handle, a number at or above 2^20 that
 `netRead`, `netWrite`, `netWrite2`, `netClose`, `netLocalPort` and the poll loop take as they
-take a descriptor; `netSetOption` answers -95 and every other call -9. A program can so hold
+take a descriptor, except that a slot is in one poll loop at a time (a second loop's `pollAdd`
+answers -17); `netSetOption` answers -95 and every other call -9. A program can so hold
 more connections than its descriptor limit. Where the kernel refuses rings the listener serves
 descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
 
