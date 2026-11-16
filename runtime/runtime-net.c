@@ -66,7 +66,7 @@ typedef int nish_net_unused;
 #include <netinet/tcp.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -77,6 +77,7 @@ typedef int nish_net_unused;
 #include <linux/filter.h>
 #include <netinet/udp.h>
 #include <sys/epoll.h>
+#include <time.h>
 /* glibc before 2.29 names neither; the numbers are the kernel's ABI. */
 #ifndef UDP_SEGMENT
 #define UDP_SEGMENT 103
@@ -201,6 +202,9 @@ static void nish_net_raise_nofile(void) {
   rlim_t want = r.rlim_max;
 #if !defined(__linux__)
   if (want > (rlim_t)OPEN_MAX) want = (rlim_t)OPEN_MAX;
+#else
+  /* Every descriptor stays below 2^20, where slot handles begin. */
+  if (want > (rlim_t)(1 << 20)) want = (rlim_t)(1 << 20);
 #endif
   if (r.rlim_cur >= want) return;
   r.rlim_cur = want;
@@ -228,9 +232,606 @@ int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port) {
   return 0;
 }
 
+/* Slot handles (WP63 S2, docs/wp63-iouring-net.md §5). A listener opened
+   with `tcpListenFlags` flag 8 on Linux accepts into an io_uring set
+   (runtime-uring.c) rather than into descriptors, so a connection costs a
+   slot in a ring's file table instead of an entry in the process's: a set of
+   N rings holds N times RLIMIT_NOFILE connections in N + 1 descriptors.
+
+   A handle is still an `i32`. Below 2^20 it is a descriptor, which is why
+   `nish_net_raise_nofile` stops the soft limit at 2^20 on Linux. At or above
+   it, `2^20 + ring * 2^20 + field` names a slot: `ring` is a global ring id,
+   64 per listener (`NR_RINGS`), and `field` is `slot + slots * (gen % G)`,
+   with `G = 2^20 / slots` the generations a slot's handles cycle through. A
+   close moves the slot's generation on, so the handle a program closed
+   answers -9 at once and does not reach the next connection in that slot
+   until the slot has been reused G times (1,024 at a limit of 1,024; never
+   fewer than 64). At most `NR_SETS` ring listeners exist in a process, which
+   keeps every handle below 2^31; their ids are not reused, so a closed
+   listener's handles answer -9 for good.
+
+   Every call that takes a handle and is not one of the slot paths here
+   (`sendFd`, `netShutdown`, `connectResult`, `peerCredentials`, ...) passes it
+   to the kernel as a descriptor, which no process holds at 2^20 or above, so
+   it answers -9 (EBADF) with nothing to check.
+
+   Readiness keeps the descriptor contract: a read with nothing queued, a write
+   to a full send area and an accept with nothing accepted answer -11, and the
+   loop reports a slot level-triggered, in the order it became ready. The set
+   receives on its own (a multishot recv per slot), so what arrives is copied
+   into the slot's receive queue at once and the ring's buffer goes back. A
+   write is copied into the set's send queue; `NR_AREA` bounds what one slot
+   may hold there (NURING-2), and a full area is -11 until the kernel has sent
+   enough. A full set, every ring's table full and no ring left to make, is
+   -23 from `tcpAccept` (NURING-6): the connection waits in the backlog until a
+   close frees a slot. */
+#if defined(__linux__)
+struct nish_uring_set;
+struct nish_uring_event {
+  int32_t kind;
+  int32_t ring;
+  int32_t slot;
+  int32_t res;
+  const uint8_t *data;
+};
+struct nish_uring_opts {
+  int32_t slots;
+  int32_t rings_max;
+  int32_t sq_entries;
+  int32_t cq_entries;
+  int32_t buf_count;
+  int32_t buf_size;
+};
+int32_t nish_uring_probe(void);
+int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
+int32_t nish_uring_fd(const struct nish_uring_set *s);
+int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
+int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
+int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
+int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
+int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
+int32_t nish_uring_full(const struct nish_uring_set *s);
+void nish_uring_destroy(struct nish_uring_set *s);
+
+#define NR_BASE (1 << 20)
+#define NR_RINGS 64
+#define NR_SETS 31
+/* The most bytes one slot may have queued and not yet sent (NURING-2). */
+#define NR_AREA (256 * 1024)
+/* The most slots per ring: a table is the kernel's memory, sized up front. */
+#define NR_SLOTS_MAX 16384
+#define NR_EVENTS 256
+
+/* A loop's record of one virtual source, a slot or a ring listener: the loop
+   it is in (-1 for none), what it watches and its token, and its place on
+   the list of sources that are ready, kept in the order they became so. */
+struct nr_vent {
+  int32_t loop, events, token;
+  uint8_t listed, is_listener;
+  struct nr_vent *prev, *next;
+};
+
+/* One slot's connection. `gen` counts the slot's closes; `lingering` is a
+   close the program made while bytes were still queued, which ends when they
+   are sent, the peer goes or a send fails. */
+struct nr_conn {
+  struct nr_vent v;
+  uint32_t gen;
+  uint8_t open, lingering, hup, wblocked;
+  int32_t hup_res, werr;
+  uint8_t *rbuf;
+  uint32_t rlen, roff, rcap;
+};
+
+struct nr_set {
+  struct nish_uring_set *u;
+  struct nr_vent v; /* the listener's own entry */
+  int32_t listener, port, slots, gens, dead, accept_err;
+  struct nr_conn *conns[NR_RINGS];
+  uint32_t *fifo; /* accepted (ring << 20 | slot), not yet taken */
+  uint32_t fhead, flen, fcap;
+  uint32_t *pend; /* wblocked or lingering slots, checked after each pump */
+  uint32_t npend, pcap;
+};
+
+static struct nr_set *nr_sets[NR_SETS];
+static int32_t nr_nsets;
+/* `netRingState()`: 0 until a listener asks, then 1 or the refusal. */
+static int32_t nr_state;
+static struct nr_vent *nr_head, *nr_tail;
+
+static void nr_unlist(struct nr_vent *v) {
+  if (!v->listed) return;
+  if (v->prev) v->prev->next = v->next; else nr_head = v->next;
+  if (v->next) v->next->prev = v->prev; else nr_tail = v->prev;
+  v->prev = v->next = NULL;
+  v->listed = 0;
+}
+
+static void nr_append(struct nr_vent *v) {
+  v->prev = nr_tail;
+  v->next = NULL;
+  if (nr_tail) nr_tail->next = v; else nr_head = v;
+  nr_tail = v;
+  v->listed = 1;
+}
+
+static struct nr_conn *nr_conn_of(struct nr_vent *v) { return (struct nr_conn *)(void *)v; }
+static struct nr_set *nr_set_of(struct nr_vent *v) {
+  return (struct nr_set *)(void *)((char *)v - offsetof(struct nr_set, v));
+}
+
+/* The readiness bits a source holds now: 1 readable, 2 writable, 4 an error. */
+static int32_t nr_bits(struct nr_vent *v) {
+  if (v->is_listener) {
+    struct nr_set *S = nr_set_of(v);
+    return (S->flen > 0 || S->accept_err) ? 1 : 0;
+  }
+  struct nr_conn *c = nr_conn_of(v);
+  int32_t b = 0;
+  if (c->rlen > c->roff || c->hup || c->werr) b |= 1;
+  if (c->werr || (c->hup && c->hup_res < 0)) b |= 4;
+  else if (!c->wblocked) b |= 2;
+  return b;
+}
+
+/* Puts a source that has become ready at the tail of the list. */
+static void nr_touch(struct nr_vent *v) {
+  if (v->loop >= 0 && !v->listed && (nr_bits(v) & (v->events | 4))) nr_append(v);
+}
+
+static void nr_unregister(struct nr_vent *v) {
+  if (v->loop < 0) return;
+  nr_unlist(v);
+  v->loop = -1;
+}
+
+static int nr_push(uint32_t **a, uint32_t *n, uint32_t *cap, uint32_t x) {
+  if (*n == *cap) {
+    uint32_t c = *cap ? *cap * 2 : 64;
+    uint32_t *p = realloc(*a, (size_t)c * sizeof *p);
+    if (!p) return -12;
+    *a = p;
+    *cap = c;
+  }
+  (*a)[(*n)++] = x;
+  return 0;
+}
+
+/* The connection a handle names, or NULL for a stale or foreign one. */
+static struct nr_conn *nr_decode(int32_t h, struct nr_set **set, int32_t *ring, int32_t *slot) {
+  if (h < NR_BASE) return NULL;
+  uint32_t x = (uint32_t)h - NR_BASE;
+  uint32_t g = x >> 20, field = x & (NR_BASE - 1);
+  uint32_t si = g / NR_RINGS, ri = g % NR_RINGS;
+  if (si >= (uint32_t)nr_nsets) return NULL;
+  struct nr_set *S = nr_sets[si];
+  if (S->dead || !S->conns[ri]) return NULL;
+  uint32_t sl = field % (uint32_t)S->slots, gm = field / (uint32_t)S->slots;
+  struct nr_conn *c = &S->conns[ri][sl];
+  if (gm >= (uint32_t)S->gens || !c->open || c->lingering || c->gen % (uint32_t)S->gens != gm) return NULL;
+  *set = S;
+  *ring = (int32_t)ri;
+  *slot = (int32_t)sl;
+  return c;
+}
+
+static int32_t nr_encode(const struct nr_set *S, int32_t si, uint32_t ring, uint32_t slot) {
+  const struct nr_conn *c = &S->conns[ring][slot];
+  uint32_t field = slot + (uint32_t)S->slots * (c->gen % (uint32_t)S->gens);
+  return (int32_t)((uint32_t)NR_BASE + ((uint32_t)si * NR_RINGS + ring) * (uint32_t)NR_BASE + field);
+}
+
+/* Ends a slot for good: the set closes it and the slot goes back to the
+   accepting job. 1 when done, 0 when the set had no room and it is retried. */
+static int nr_finish(struct nr_set *S, uint32_t ring, uint32_t slot) {
+  struct nr_conn *c = &S->conns[ring][slot];
+  if (nish_uring_close(S->u, (int32_t)ring, (int32_t)slot) == -11) return 0;
+  c->open = 0;
+  c->lingering = 0;
+  return 1;
+}
+
+static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
+  if (e->kind == 5) {
+    S->accept_err = e->res < 0 ? e->res : -5;
+    nr_touch(&S->v);
+    return;
+  }
+  if (e->ring < 0 || e->ring >= NR_RINGS || e->slot < 0 || e->slot >= S->slots) return;
+  if (!S->conns[e->ring]) {
+    S->conns[e->ring] = calloc((size_t)S->slots, sizeof(struct nr_conn));
+    if (!S->conns[e->ring]) return;
+  }
+  struct nr_conn *c = &S->conns[e->ring][e->slot];
+  if (e->kind == 1) {
+    uint32_t gen = c->gen;
+    uint8_t *buf = c->rbuf;
+    uint32_t cap = c->rcap;
+    memset(c, 0, sizeof *c);
+    c->gen = gen;
+    c->rbuf = buf;
+    c->rcap = cap;
+    c->open = 1;
+    c->v.loop = -1;
+    uint32_t i = (S->fhead + S->flen) % (S->fcap ? S->fcap : 1);
+    if (S->flen == S->fcap) {
+      /* Grow the ring buffer, unrolled into the new array from its head. */
+      uint32_t nc = S->fcap ? S->fcap * 2 : 64;
+      uint32_t *p = malloc((size_t)nc * sizeof *p);
+      if (!p) {
+        (void)nr_finish(S, (uint32_t)e->ring, (uint32_t)e->slot);
+        return;
+      }
+      for (uint32_t k = 0; k < S->flen; k++) p[k] = S->fifo[(S->fhead + k) % S->fcap];
+      free(S->fifo);
+      S->fifo = p;
+      S->fcap = nc;
+      S->fhead = 0;
+      i = S->flen;
+    }
+    S->fifo[i] = (uint32_t)e->ring << 20 | (uint32_t)e->slot;
+    S->flen++;
+    nr_touch(&S->v);
+    return;
+  }
+  if (!c->open) return;
+  if (e->kind == 2) {
+    if (c->lingering || e->res <= 0) return;
+    uint32_t n = (uint32_t)e->res;
+    if (c->roff == c->rlen) c->roff = c->rlen = 0;
+    if (c->rlen + n > c->rcap) {
+      if (c->roff > 0) {
+        memmove(c->rbuf, c->rbuf + c->roff, c->rlen - c->roff);
+        c->rlen -= c->roff;
+        c->roff = 0;
+      }
+      if (c->rlen + n > c->rcap) {
+        uint32_t nc = c->rcap ? c->rcap : 4096;
+        while (nc < c->rlen + n) nc *= 2;
+        uint8_t *p = realloc(c->rbuf, nc);
+        if (!p) {
+          c->hup = 1;
+          c->hup_res = -12;
+          nr_touch(&c->v);
+          return;
+        }
+        c->rbuf = p;
+        c->rcap = nc;
+      }
+    }
+    memcpy(c->rbuf + c->rlen, e->data, n);
+    c->rlen += n;
+  } else if (e->kind == 3) {
+    c->hup = 1;
+    c->hup_res = e->res;
+  } else if (e->kind == 4) {
+    if (!c->werr) c->werr = e->res < 0 ? e->res : -5;
+  }
+  if (c->lingering && (c->hup || c->werr)) (void)nr_finish(S, (uint32_t)e->ring, (uint32_t)e->slot);
+  else nr_touch(&c->v);
+}
+
+/* Takes every event the set holds, and hands the set what it has queued.
+   Then the slots waiting on their send areas: a write-blocked one whose area
+   has room is ready again, and a lingering close whose bytes are gone ends. */
+static void nr_pump(struct nr_set *S) {
+  struct nish_uring_event ev[NR_EVENTS];
+  for (int round = 0; round < 64; round++) {
+    int n = nish_uring_wait(S->u, 0, ev, NR_EVENTS);
+    if (n <= 0) break;
+    for (int i = 0; i < n; i++) nr_dispatch(S, &ev[i]);
+  }
+  int full = nish_uring_full(S->u);
+  uint32_t keep = 0;
+  for (uint32_t i = 0; i < S->npend; i++) {
+    uint32_t x = S->pend[i], ring = x >> 20, slot = x & (NR_BASE - 1);
+    struct nr_conn *c = &S->conns[ring][slot];
+    int64_t q = nish_uring_queued(S->u, (int32_t)ring, (int32_t)slot);
+    if (!c->open) continue;
+    if (c->lingering) {
+      if ((q <= 0 || c->hup || c->werr || full) && nr_finish(S, ring, slot)) continue;
+    } else if (c->wblocked) {
+      if (q >= NR_AREA) {
+        S->pend[keep++] = x;
+        continue;
+      }
+      c->wblocked = 0;
+      nr_touch(&c->v);
+      continue;
+    } else {
+      continue;
+    }
+    S->pend[keep++] = x;
+  }
+  S->npend = keep;
+}
+
+static void nr_pump_all(void) {
+  for (int32_t i = 0; i < nr_nsets; i++)
+    if (!nr_sets[i]->dead) nr_pump(nr_sets[i]);
+}
+
+static struct nr_set *nr_listener(int32_t fd) {
+  for (int32_t i = 0; i < nr_nsets; i++)
+    if (!nr_sets[i]->dead && nr_sets[i]->listener == fd) return nr_sets[i];
+  return NULL;
+}
+
+/* A ring listener for `fd`, or the reason there is none. The first listen to
+   ask decides for the process: a kernel or a filter that refuses io_uring
+   leaves every later one on descriptors (§5.4). */
+static int32_t nr_open(int32_t fd, int32_t port) {
+  if (nr_state == 0) {
+    int32_t p = nish_uring_probe();
+    nr_state = p < 0 ? p : 1;
+  }
+  if (nr_state < 0) return 0;
+  if (nr_nsets >= NR_SETS) return -23;
+  struct rlimit rl;
+  if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return nish_net_fail();
+  struct nish_uring_opts o;
+  memset(&o, 0, sizeof o);
+  o.slots = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > NR_SLOTS_MAX ? NR_SLOTS_MAX : (int32_t)rl.rlim_cur;
+  if (o.slots < 1) o.slots = 1;
+  o.rings_max = NR_RINGS;
+  struct nr_set *S = calloc(1, sizeof *S);
+  if (!S) return -12;
+  int32_t r = nish_uring_open(&S->u, fd, &o);
+  if (r < 0) {
+    free(S);
+    if (nr_nsets == 0) {
+      nr_state = r;
+      return 0;
+    }
+    return r;
+  }
+  S->listener = fd;
+  S->port = port;
+  S->slots = o.slots;
+  S->gens = NR_BASE / o.slots;
+  S->v.loop = -1;
+  S->v.is_listener = 1;
+  nr_sets[nr_nsets++] = S;
+  return 1;
+}
+
+/* Closes a ring listener: the set and every slot in it, then the descriptor.
+   The record stays, dead, so its handles answer -9. */
+static int32_t nr_close_listener(struct nr_set *S) {
+  nr_unregister(&S->v);
+  for (int ri = 0; ri < NR_RINGS; ri++) {
+    if (!S->conns[ri]) continue;
+    for (int32_t sl = 0; sl < S->slots; sl++) {
+      nr_unregister(&S->conns[ri][sl].v);
+      free(S->conns[ri][sl].rbuf);
+    }
+    free(S->conns[ri]);
+    S->conns[ri] = NULL;
+  }
+  nish_uring_destroy(S->u);
+  S->u = NULL;
+  free(S->fifo);
+  free(S->pend);
+  S->fifo = S->pend = NULL;
+  S->dead = 1;
+  return close(S->listener) != 0 ? nish_net_fail() : 0;
+}
+
+static int32_t nr_accept(struct nr_set *S, nish_array *peer) {
+  int32_t si = 0;
+  while (nr_sets[si] != S) si++;
+  nr_pump(S);
+  while (S->flen > 0) {
+    uint32_t x = S->fifo[S->fhead];
+    S->fhead = (S->fhead + 1) % S->fcap;
+    S->flen--;
+    uint32_t ring = x >> 20, slot = x & (NR_BASE - 1);
+    if (!S->conns[ring][slot].open) continue;
+    /* A slot has no descriptor to ask its peer of, so the address is the
+       18 zeros `recvmsg` gives for one it does not know. */
+    memset(peer->data, 0, NISH_ADDR_BYTES);
+    return nr_encode(S, si, ring, slot);
+  }
+  if (S->accept_err) return S->accept_err;
+  return nish_uring_full(S->u) ? -23 : -11;
+}
+
+static int32_t nr_read(struct nr_set *S, struct nr_conn *c, nish_array *buf, int64_t off, int64_t len) {
+  if (c->rlen == c->roff && !c->hup) nr_pump(S);
+  uint32_t have = c->rlen - c->roff;
+  if (have > 0) {
+    uint32_t n = len < (int64_t)have ? (uint32_t)len : have;
+    memcpy(buf->data + off, c->rbuf + c->roff, n);
+    c->roff += n;
+    return (int32_t)n;
+  }
+  if (c->hup) return c->hup_res < 0 ? c->hup_res : 0;
+  return len == 0 ? 0 : -11;
+}
+
+/* Copies at most what the slot's send area has room for into the set's send
+   queue. -11 when it has none. */
+static int32_t nr_send(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot, const char *p, int64_t len) {
+  if (c->werr) return c->werr;
+  int64_t q = nish_uring_queued(S->u, ring, slot);
+  if (q < 0) return -9;
+  if (q >= NR_AREA) {
+    nr_pump(S);
+    if (c->werr) return c->werr;
+    q = nish_uring_queued(S->u, ring, slot);
+  }
+  int64_t room = NR_AREA - q;
+  int32_t n = room <= 0 ? 0 : (int32_t)(len < room ? len : room);
+  int32_t r = n > 0 ? nish_uring_send(S->u, ring, slot, (const uint8_t *)p, n) : 0;
+  if (r < 0) return r;
+  if (q + n >= NR_AREA && !c->wblocked) {
+    c->wblocked = 1;
+    if (nr_push(&S->pend, &S->npend, &S->pcap, (uint32_t)ring << 20 | (uint32_t)slot) != 0) c->wblocked = 0;
+  }
+  return len > 0 && n == 0 ? -11 : n;
+}
+
+static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot) {
+  nr_unregister(&c->v);
+  c->gen++;
+  c->roff = c->rlen = 0;
+  free(c->rbuf);
+  c->rbuf = NULL;
+  c->rcap = 0;
+  int64_t q = nish_uring_queued(S->u, ring, slot);
+  if (!(q > 0 && !c->hup && !c->werr) && nr_finish(S, (uint32_t)ring, (uint32_t)slot)) {
+    nr_pump(S);
+    return 0;
+  }
+  c->lingering = 1;
+  if (!c->wblocked && nr_push(&S->pend, &S->npend, &S->pcap, (uint32_t)ring << 20 | (uint32_t)slot) != 0) {
+    while (!nr_finish(S, (uint32_t)ring, (uint32_t)slot)) nr_pump(S);
+    return 0;
+  }
+  nr_pump(S);
+  return 0;
+}
+
+/* The virtual source `fd` names in a loop, or NULL for a descriptor. A stale
+   slot handle sets `*stale`. */
+static struct nr_vent *nr_vent_for(int32_t fd, int *stale, struct nr_set **set) {
+  *stale = 0;
+  if (fd >= NR_BASE) {
+    int32_t ring, slot;
+    struct nr_conn *c = nr_decode(fd, set, &ring, &slot);
+    if (!c) *stale = 1;
+    return c ? &c->v : NULL;
+  }
+  struct nr_set *S = nr_listener(fd);
+  *set = S;
+  return S ? &S->v : NULL;
+}
+
+static int32_t nr_ctl(int32_t loop, int op, struct nr_vent *v, struct nr_set *S, int32_t events, int32_t token) {
+  if (op == EPOLL_CTL_ADD) {
+    if (v->loop >= 0) return -17;
+    /* The set's own epoll descriptor joins the loop, marked so a wake on it
+       is taken as the set's, never reported as a token. */
+    struct epoll_event e;
+    memset(&e, 0, sizeof e);
+    e.events = EPOLLIN;
+    int32_t si = 0;
+    while (nr_sets[si] != S) si++;
+    e.data.u64 = (uint64_t)1 << 32 | (uint32_t)si;
+    if (epoll_ctl(loop, EPOLL_CTL_ADD, nish_uring_fd(S->u), &e) != 0 && errno != EEXIST) return nish_net_fail();
+    v->loop = loop;
+  } else if (v->loop != loop) {
+    return -2;
+  }
+  if (op == EPOLL_CTL_DEL) {
+    nr_unregister(v);
+    return 0;
+  }
+  v->events = events;
+  v->token = token;
+  nr_unlist(v);
+  nr_touch(v);
+  return 0;
+}
+
+/* Writes the loop's ready virtual sources into `out`, at most `max`, in the
+   order they became ready. One reported and still ready goes to the tail,
+   so a busy source does not starve the rest. */
+static int nr_collect(int32_t loop, int32_t *out, int max) {
+  int n = 0;
+  struct nr_vent *again = NULL, *again_tail = NULL;
+  for (struct nr_vent *v = nr_head, *next; v && n < max; v = next) {
+    next = v->next;
+    if (v->loop != loop) continue;
+    int32_t bits = nr_bits(v) & (v->events | 4);
+    nr_unlist(v);
+    if (bits == 0) continue;
+    out[2 * n] = v->token;
+    out[2 * n + 1] = bits;
+    n++;
+    v->next = NULL;
+    if (again_tail) again_tail->next = v; else again = v;
+    again_tail = v;
+  }
+  for (struct nr_vent *v = again, *next; v; v = next) {
+    next = v->next;
+    nr_append(v);
+  }
+  return n;
+}
+
+static int64_t nr_now_ms(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
+/* `pollWait` for a loop that may hold virtual sources: pump every set, take
+   what is ready, and sleep on the loop's epoll set, which holds each set's
+   descriptor, no longer than the sets allow (NURING-8). A wake by the bound
+   with nothing to report sleeps again until the caller's timeout is spent. */
+static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout_ms) {
+  int64_t deadline = timeout_ms > 0 ? nr_now_ms() + timeout_ms : 0;
+  for (;;) {
+    nr_pump_all();
+    int n = nr_collect(loop, out, max);
+    int32_t t = 0;
+    if (n == 0) {
+      t = timeout_ms < 0 ? -1 : timeout_ms == 0 ? 0 : (int32_t)(deadline - nr_now_ms());
+      if (t < -1 || (timeout_ms > 0 && t < 0)) t = 0;
+      for (int32_t i = 0; i < nr_nsets; i++)
+        if (!nr_sets[i]->dead) t = nish_uring_sleep_ms(nr_sets[i]->u, t);
+    }
+    struct epoll_event e[NR_EVENTS];
+    int k = n < max ? epoll_wait(loop, e, max - n, t) : 0;
+    if (k < 0) return errno == EINTR ? n : nish_net_fail();
+    int woke = 0;
+    for (int i = 0; i < k; i++) {
+      if (e[i].data.u64 >> 32) {
+        woke = 1;
+        continue;
+      }
+      uint32_t got = e[i].events;
+      out[2 * n] = (int32_t)e[i].data.u32;
+      out[2 * n + 1] = ((got & EPOLLIN) ? 1 : 0) | ((got & EPOLLOUT) ? 2 : 0) | ((got & (EPOLLHUP | EPOLLERR)) ? 4 : 0);
+      n++;
+    }
+    if (n > 0) return n;
+    if (woke) {
+      nr_pump_all();
+      n = nr_collect(loop, out, max);
+      if (n > 0) return n;
+    }
+    if (timeout_ms == 0 || (timeout_ms > 0 && nr_now_ms() >= deadline)) return 0;
+  }
+}
+#endif
+
+/* `netRingState()`: whether `tcpListenFlags` flag 8 gets rings. 0 before a
+   listener has asked, 1 when it got them, or the negative errno that refused
+   them, after which every listener in the process is a descriptor one: -1
+   (EPERM) for a filter or `io_uring_disabled`, -38 for a kernel without
+   io_uring, -22 or -95 for one too old for the features the set needs. Darwin
+   has no io_uring, and answers -95. */
+int32_t nish_net_ring_state(void) {
+#if defined(__linux__)
+  return nr_state;
+#else
+  return -95;
+#endif
+}
+
 /* `netLocalPort(fd)`: the port the socket is bound to, which is how a
    program that listened on port 0 learns the one the kernel chose. */
 int32_t nish_net_local_port(int32_t fd) {
+#if defined(__linux__)
+  if (fd >= NR_BASE) {
+    struct nr_set *S;
+    int32_t ring, slot;
+    return nr_decode(fd, &S, &ring, &slot) ? S->port : -9;
+  }
+#endif
   nish_sockaddr s;
   socklen_t n = sizeof s;
   if (getsockname(fd, &s.sa, &n) != 0) return nish_net_fail();
@@ -339,13 +940,28 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
    new connection to the group's listener whose index is the CPU that received
    it, the index being the order the group's sockets were bound in, and the
    kernel falls back to its hash when there is no such listener. Linux alone
-   has it; elsewhere flag 4 is -95. Any other bit, or 4 without 1, is -22. */
+   has it; elsewhere flag 4 is -95. Flag 8 asks for io_uring slots: on Linux
+   with io_uring, `tcpAccept` hands out slot handles rather than descriptors,
+   so the listener holds connections past RLIMIT_NOFILE (above). Where rings
+   are refused the listener is a plain one and `netRingState()` says why;
+   Darwin has none, and the flag does nothing there. Any other bit, or 4
+   without 1, is -22. */
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags) {
-  if ((uint32_t)flags > 7 || (flags & 5) == 4) return -22;
+  if ((uint32_t)flags > 15 || (flags & 5) == 4) return -22;
 #if !defined(__linux__)
   if (flags & 4) return -95;
 #endif
-  return nish_net_bound(host, port, SOCK_STREAM, backlog, flags);
+  int32_t fd = nish_net_bound(host, port, SOCK_STREAM, backlog, flags & 7);
+#if defined(__linux__)
+  if (fd >= 0 && (flags & 8)) {
+    int32_t r = nr_open(fd, nish_net_local_port(fd));
+    if (r < 0) {
+      close(fd);
+      return r;
+    }
+  }
+#endif
+  return fd;
 }
 
 /* A socket address of `n` bytes into the caller's 18-byte form. An IPv4 peer
@@ -387,6 +1003,10 @@ static void nish_net_put(nish_array *out, const nish_sockaddr *s, socklen_t n) {
    socket without it. */
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   if (peer->len < NISH_ADDR_BYTES) return -22;
+#if defined(__linux__)
+  struct nr_set *R = nr_nsets > 0 ? nr_listener(fd) : NULL;
+  if (R) return nr_accept(R, peer);
+#endif
   nish_sockaddr s;
   socklen_t n = sizeof s;
 #if defined(__linux__)
@@ -457,6 +1077,14 @@ int32_t nish_connect_result(int32_t fd) {
    The compiled call has already checked `0 <= off <= off + len <=
    buf.length`. */
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len) {
+#if defined(__linux__)
+  if (fd >= NR_BASE) {
+    struct nr_set *S;
+    int32_t ring, slot;
+    struct nr_conn *c = nr_decode(fd, &S, &ring, &slot);
+    return c ? nr_read(S, c, buf, off, len) : -9;
+  }
+#endif
   ssize_t n = recv(fd, buf->data + off, (size_t)len, 0);
   return n < 0 ? nish_net_fail() : (int32_t)n;
 }
@@ -464,6 +1092,14 @@ int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len) {
 /* `netWrite(fd, buf, off, len)`: at most `len` bytes of `buf` from `off`,
    with a peer that has gone answering -32 rather than raising SIGPIPE. */
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len) {
+#if defined(__linux__)
+  if (fd >= NR_BASE) {
+    struct nr_set *S;
+    int32_t ring, slot;
+    struct nr_conn *c = nr_decode(fd, &S, &ring, &slot);
+    return c ? nr_send(S, c, ring, slot, buf->data + off, len) : -9;
+  }
+#endif
   ssize_t n = send(fd, buf->data + off, (size_t)len, NISH_NOSIGNAL);
   return n < 0 ? nish_net_fail() : (int32_t)n;
 }
@@ -479,6 +1115,18 @@ int32_t nish_net_write2(int32_t fd, const nish_array *a, int64_t aoff, int64_t a
   struct iovec iov[2];
   struct msghdr msg;
   if (blen > (int64_t)INT32_MAX - alen) blen = (int64_t)INT32_MAX - alen;
+#if defined(__linux__)
+  if (fd >= NR_BASE) {
+    struct nr_set *S;
+    int32_t ring, slot;
+    struct nr_conn *c = nr_decode(fd, &S, &ring, &slot);
+    if (!c) return -9;
+    int32_t n = nr_send(S, c, ring, slot, a->data + aoff, alen);
+    if (n < 0 || n < alen || blen == 0) return n;
+    int32_t m = nr_send(S, c, ring, slot, b->data + boff, blen);
+    return m < 0 ? n : n + m;
+  }
+#endif
   iov[0].iov_base = a->data + aoff;
   iov[0].iov_len = (size_t)alen;
   iov[1].iov_base = b->data + boff;
@@ -499,7 +1147,19 @@ int32_t nish_net_shutdown(int32_t fd, int32_t how) {
 
 /* `netClose(fd)`. The descriptor is gone whatever this answers, as `close`
    promises on Linux, so a failure is information rather than a retry. */
-int32_t nish_net_close(int32_t fd) { return close(fd) != 0 ? nish_net_fail() : 0; }
+int32_t nish_net_close(int32_t fd) {
+#if defined(__linux__)
+  if (fd >= NR_BASE) {
+    struct nr_set *S;
+    int32_t ring, slot;
+    struct nr_conn *c = nr_decode(fd, &S, &ring, &slot);
+    return c ? nr_close(S, c, ring, slot) : -9;
+  }
+  struct nr_set *R = nr_nsets > 0 ? nr_listener(fd) : NULL;
+  if (R) return nr_close_listener(R);
+#endif
+  return close(fd) != 0 ? nish_net_fail() : 0;
+}
 
 /* `netSetOption(fd, option, value)`: one option from a whitelist, named by
    the runtime's own id rather than a level and an option number, so a
@@ -509,6 +1169,14 @@ int32_t nish_net_close(int32_t fd) { return close(fd) != 0 ? nish_net_fail() : 0
    not keep quick-ACK mode: the kernel leaves it of its own accord, so a
    server that wants it on or off sets it again after each response. */
 int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value) {
+#if defined(__linux__)
+  /* A slot's socket is the ring's; no option reaches it from here. */
+  if (fd >= NR_BASE) {
+    struct nr_set *S;
+    int32_t ring, slot;
+    return nr_decode(fd, &S, &ring, &slot) ? -95 : -9;
+  }
+#endif
   int level = SOL_SOCKET;
   int name;
   switch (option) {
@@ -752,10 +1420,18 @@ static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int
 static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
   if ((uint32_t)events > 3) return -22;
 #if defined(__linux__)
+  if (nr_nsets > 0) {
+    int stale;
+    struct nr_set *S;
+    struct nr_vent *v = nr_vent_for(fd, &stale, &S);
+    if (stale) return -9;
+    if (v) return nr_ctl(loop, op, v, S, events, token);
+  }
   struct epoll_event e;
   memset(&e, 0, sizeof e);
   e.events = ((events & 1) ? EPOLLIN : 0) | ((events & 2) ? EPOLLOUT : 0);
-  e.data.u32 = (uint32_t)token;
+  /* The high word is 0 for a descriptor, and 1 for a ring set's own. */
+  e.data.u64 = (uint32_t)token;
   return epoll_ctl(loop, op, fd, &e) != 0 ? nish_net_fail() : 0;
 #else
   int r, w;
@@ -806,6 +1482,7 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   int max = room < NISH_POLL_CHUNK ? (int)room : NISH_POLL_CHUNK;
   int32_t *out = (int32_t *)ready->data;
 #if defined(__linux__)
+  if (nr_nsets > 0) return nr_poll_wait(loop, out, max, timeout_ms);
   struct epoll_event e[NISH_POLL_CHUNK];
   /* epoll waits forever for any negative timeout, as the language does. */
   int n = epoll_wait(loop, e, max, timeout_ms);

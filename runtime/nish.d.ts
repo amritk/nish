@@ -2196,6 +2196,25 @@ declare const NET_UNIX_STREAM: i32;
  * Capability: none.
  */
 declare const NET_UNIX_SEQPACKET: i32;
+/**
+ * `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors (WP63 S2, Linux). A
+ * connection accepted from such a listener is a slot handle, a number at or above 2^20 that
+ * `netRead`, `netWrite`, `netClose`, `netSetOption`, `netLocalPort` and `pollWait` take as they
+ * take a descriptor, and that no other call takes (each answers -9), so a program can hold more
+ * connections than its descriptor limit. Where the kernel refuses rings the listener serves
+ * descriptors, and `netRingState` says why. Inert on Darwin. Capability: none.
+ */
+declare const NET_LISTEN_RING: i32;
+/**
+ * Whether listeners opened with `NET_LISTEN_RING` accept into rings: 1 when they do, 0 before any
+ * listener has asked, or the negative errno the kernel refused rings with (-1 when a seccomp filter
+ * refuses `io_uring_setup`, -38 for a kernel without it), in which case they serve descriptors.
+ * Decided once per process, on the first listener that sets the bit. -95 on Darwin. Refused at
+ * compile time on wasm32 and the WASI profile (NL2404). Capability: net.
+ *
+ * @returns 1, 0 or the negative errno.
+ */
+declare function netRingState(): i32;
 
 // ---- `nish:term` ------------------------------------------------------------------
 //
@@ -3540,6 +3559,15 @@ declare module "nish:net" {
   export const NET_UNIX_STREAM: i32;
   /** `unixSocketPair` kind: each write one message (`SOCK_SEQPACKET`). */
   export const NET_UNIX_SEQPACKET: i32;
+  /** `tcpListenFlags` flag 8: accept into io_uring slots instead of descriptors. */
+  export const NET_LISTEN_RING: i32;
+  /**
+   * Whether `NET_LISTEN_RING` listeners accept into rings.
+   *
+   * @returns `1` when they do, `0` before any listener asked, or the negative
+   *   errno rings were refused with, in which case they serve descriptors.
+   */
+  export function netRingState(): i32;
 }
 
 /**

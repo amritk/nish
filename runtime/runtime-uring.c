@@ -143,6 +143,9 @@ int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
+int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
+int32_t nish_uring_full(const struct nish_uring_set *s);
+int32_t nish_uring_slots(const struct nish_uring_set *s);
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
 void nish_uring_destroy(struct nish_uring_set *s);
 
@@ -324,6 +327,7 @@ struct ur_ring {
   uint32_t *st;               /* per slot */
   struct ur_send **sq_first;  /* per slot: the head of its send queue */
   struct ur_send **sq_last;   /* per slot: the tail */
+  uint32_t *qbytes;           /* per slot: bytes queued and not yet sent */
   uint32_t *parked;           /* slots whose recv waits for buffers */
   uint32_t nparked;
 };
@@ -529,6 +533,7 @@ static void ur_free_ring(struct nish_uring_set *s, struct ur_ring *r) {
   free(r->sq_first);
   free(r->sq_last);
   free(r->parked);
+  free(r->qbytes);
   free(r);
 }
 
@@ -611,7 +616,8 @@ static int ur_add_ring(struct nish_uring_set *s) {
   r->sq_first = calloc(s->slots, sizeof *r->sq_first);
   r->sq_last = calloc(s->slots, sizeof *r->sq_last);
   r->parked = calloc(s->slots, sizeof *r->parked);
-  if (!r->st || !r->sq_first || !r->sq_last || !r->parked) {
+  r->qbytes = calloc(s->slots, sizeof *r->qbytes);
+  if (!r->st || !r->sq_first || !r->sq_last || !r->parked || !r->qbytes) {
     rc = -ENOMEM;
     goto fail;
   }
@@ -717,6 +723,7 @@ static void ur_unlink_all(struct nish_uring_set *s, struct ur_send *q) {
 static void ur_drop_sends(struct nish_uring_set *s, struct ur_ring *r, uint32_t slot) {
   struct ur_send *q = r->sq_first[slot];
   r->sq_first[slot] = r->sq_last[slot] = NULL;
+  r->qbytes[slot] = 0;
   while (q) {
     struct ur_send *next = q->next;
     q->next = NULL;
@@ -750,6 +757,7 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
       ur_unlink_all(s, q);
       return 0;
     }
+    if (res > 0) r->qbytes[slot] -= (uint32_t)res < r->qbytes[slot] ? (uint32_t)res : r->qbytes[slot];
     if (res > 0 && q->off + (uint32_t)res < q->len) {
       q->off += (uint32_t)res;
       s->stats.send_requeues++;
@@ -1087,6 +1095,7 @@ int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, co
   q->off = 0;
   q->len = (uint32_t)n;
   q->in_flight = 0;
+  r->qbytes[slot] += (uint32_t)n;
   if (r->sq_last[slot]) {
     r->sq_last[slot]->next = q;
   } else {
@@ -1129,6 +1138,31 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   ur_top_up(s);
   return 0;
 }
+
+/* The bytes queued for (ring, slot) that the kernel has not yet sent, or -1
+ * for a slot that is not open. runtime-net.c bounds a connection's send area
+ * with it (NURING-2): a successful send makes no event, so the caller asks. */
+int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot) {
+  if (ring < 0 || ring >= s->nrings || slot < 0 || (uint32_t)slot >= s->slots) return -1;
+  const struct ur_ring *r = s->rings[ring];
+  return (r->st[slot] & ST_OPEN) ? (int64_t)r->qbytes[slot] : -1;
+}
+
+/* 1 when no accept is in flight and none can be: every ring's table is full
+ * and the set has `rings_max` rings or could not make another. A connection
+ * then waits in the listener's backlog, and tcpAccept answers -23
+ * (NURING-6). A close frees a slot and starts accepting again. */
+int32_t nish_uring_full(const struct nish_uring_set *s) {
+  if (s->accept_stopped) return 0;
+  for (int i = 0; i < s->nrings; i++) {
+    const struct ur_ring *r = s->rings[i];
+    if (r->accepting > 0 || r->live < (long)s->slots) return 0;
+  }
+  return 1;
+}
+
+/* The file-table slots each ring holds. */
+int32_t nish_uring_slots(const struct nish_uring_set *s) { return (int32_t)s->slots; }
 
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) { *st = s->stats; }
 
@@ -1184,6 +1218,20 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   (void)ring;
   (void)slot;
   return -38;
+}
+int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot) {
+  (void)s;
+  (void)ring;
+  (void)slot;
+  return -1;
+}
+int32_t nish_uring_full(const struct nish_uring_set *s) {
+  (void)s;
+  return 0;
+}
+int32_t nish_uring_slots(const struct nish_uring_set *s) {
+  (void)s;
+  return 0;
 }
 void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) {
   (void)s;
