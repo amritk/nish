@@ -3,7 +3,7 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasm-host|wasi|napi]
 #
-# The C runtime is seventeen translation units and is named as one: an input
+# The C runtime is eighteen translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-text.c, the strings and the digits
 # of numbers, <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
@@ -11,6 +11,7 @@
 # threads, <dir>/runtime-cross.c, the copies that carry a string or an array
 # from one thread's arena to another's, <dir>/runtime-host.c, the wall clock, entropy, file times and
 # signals, <dir>/runtime-net.c, the sockets of `nish:net`,
+# <dir>/runtime-uring.c, the io_uring rings that will hold them past RLIMIT_NOFILE,
 # <dir>/runtime-simd.c, the byte searches that read a vector at a time and
 # the SSE4.1 rounding of `Math.floor` and its kin,
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
@@ -127,7 +128,7 @@
 #
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
-#   --runtime-objects <dir>  compile the runtime.c input, its sixteen halves and runtime-async.c,
+#   --runtime-objects <dir>  compile the runtime.c input, its seventeen halves and runtime-async.c,
 #                            one $CC -c each and all at once, into
 #                            <dir>/<unit>.o with the profile's compile flags,
 #                            and link nothing. speed and size store LTO bitcode,
@@ -272,9 +273,9 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is seventeen translation units, and a caller names one: whoever passes
+# The runtime is eighteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-text.c, <dir>/runtime-os.c, <dir>/runtime-parallel.c,
-# <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
+# <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-uring.c, <dir>/runtime-simd.c,
 # <dir>/runtime-aes.c, <dir>/runtime-sha256.c, <dir>/runtime-chacha20.c, <dir>/runtime-checksum.c, <dir>/runtime-term.c,
 # <dir>/runtime-bytes.c, <dir>/runtime-sandbox.c, <dir>/runtime-shm.c and <dir>/runtime-region.c compiled beside it, on every profile,
 # wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
@@ -283,7 +284,7 @@ fi
 # stubs that nothing calls, because the compiler emits no call to their kernels for wasm32, and
 # runtime-term.c reads stdin and answers "not a terminal", and runtime-sandbox.c
 # compiles to two functions that refuse to run, which no wasm build calls, and
-# runtime-shm.c answers -95 for every region. They were one file until the
+# runtime-shm.c answers -95 for every region, and runtime-uring.c compiles to nothing. They were one file until the
 # operating-system half was split out for its own size budget, and the parallel
 # and text halves followed for the same reason (each file's header comment says why), and
 # a link line is where those splits
@@ -293,7 +294,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-text.c runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
+halves="runtime-text.c runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-uring.c runtime-simd.c runtime-aes.c runtime-sha256.c runtime-chacha20.c runtime-checksum.c runtime-term.c runtime-bytes.c runtime-sandbox.c runtime-shm.c runtime-region.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)

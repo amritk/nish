@@ -284,6 +284,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "erff" ||
   name === "erfl" ||
   name === "errno" ||
+  name === "eventfd" ||
   name === "execl" ||
   name === "execle" ||
   name === "execlp" ||

@@ -108,7 +108,15 @@ three of them, and the runtime has to handle all four:
    four sat with 20,000 connections unaccepted. With
    `IORING_SETUP_TASKRUN_FLAG`, `io_run_local_work_continue` sets
    `IORING_SQ_TASKRUN` while work is left, and the loop enters again until it
-   clears.
+   clears. Correction (S1): the completions an enter posts may signal the
+   eventfd, but a loop may not count on it: on 7.0 a signal deferred from a
+   nested context sets a bit nothing clears, and every later signal for that
+   registration is lost (NURING-8, `docs/security/net-uring.md`). The rule is
+   that a loop does not sleep while a ring is flagged, and never sleeps on a
+   ring set longer than `nish_uring_sleep_ms` answers (at most 10 ms), so the
+   timer wakes it where the eventfd does not. Without the re-entry, S1's layer is the first kind, and one wait
+   took 20 of a ring's 100 queued receives on 6.18.44. The `taskrun` check
+   in `tests/runtime/uring-test.c` asserts that one wait takes all 100.
 
 ## 3. Stage A: the measurement
 
@@ -375,7 +383,11 @@ A loop holds two sets: descriptors in epoll, and slot handles in a table the
 runtime keeps. `pollWait(loop, ready, timeoutMs)` works like this:
 
 1. Each ring's eventfd sits in the loop's epoll set, so one `epoll_wait`
-   sleeps on both kinds.
+   sleeps on both kinds, for no longer than `nish_uring_sleep_ms` answers:
+   0 while a ring is flagged or has work a submission could take, and at
+   most 10 ms otherwise. The eventfd is a hint, not a wake the kernel
+   guarantees (NURING-8); the bound is. A `pollWait` of -1 that wakes by
+   the bound with nothing ready sleeps again.
 2. On wake, for each ring whose eventfd fired, or whose `IORING_SQ_TASKRUN`
    is set (§2, item 4), it enters the ring with `GETEVENTS` and reaps. A recv
    CQE marks its handle readable, and a send's completion that frees area

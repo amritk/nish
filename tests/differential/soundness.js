@@ -145,6 +145,7 @@ const RUNTIME_C = [
   "runtime/runtime-cross.c",
   "runtime/runtime-host.c",
   "runtime/runtime-net.c",
+  "runtime/runtime-uring.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
   "runtime/runtime-sha256.c",
