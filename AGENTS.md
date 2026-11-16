@@ -358,13 +358,14 @@ what is blocking and what you need — and keep watching.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/attributes.ts` beside the code.
 - **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. The C runtime is seventeen translation units
+  commit** and extends a layout test. The C runtime is eighteen translation units
   with a budget each — `runtime.c` for the core, `runtime-text.c` for strings
   and number formatting (freestanding, so a wasm module links it too),
   `runtime-os.c` for the
   syscall wrappers, `runtime-parallel.c` for threads, `runtime-cross.c` for
   the copies between their arenas, `runtime-host.c` for the clock, entropy,
-  file times and signals, `runtime-net.c` for the sockets of `nish:net`,
+  file times and signals, `runtime-net.c` for the sockets of `nish:net`, `runtime-uring.c` for
+  the io_uring rings that hold them past `RLIMIT_NOFILE`,
   `runtime-simd.c` for the vector text search, `runtime-aes.c` for
   AES-GCM, `runtime-sha256.c` for SHA-256's block on SHA-NI and ARMv8,
   `runtime-chacha20.c` for ChaCha20's keystream on AVX2 and NEON,

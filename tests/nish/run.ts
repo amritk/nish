@@ -633,6 +633,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   link.push("runtime/runtime-parallel.c");
   link.push("runtime/runtime-host.c");
   link.push("runtime/runtime-net.c");
+  link.push("runtime/runtime-uring.c");
   link.push("runtime/runtime-simd.c");
   link.push("runtime/runtime-aes.c");
   link.push("runtime/runtime-sha256.c");

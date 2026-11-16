@@ -141,7 +141,8 @@ process.env.XDG_CACHE_HOME = suiteCache
  * system calls, `runtime-parallel.c` divides work across threads,
  * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
- * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
+ * `runtime-net.c` the sockets of `nish:net`, `runtime-uring.c` the io_uring
+ * rings that will hold them past `RLIMIT_NOFILE`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, `runtime-sha256.c` the SHA-256 block on its SHA
  * instructions, `runtime-chacha20.c` ChaCha20's keystream on AVX2 or
@@ -153,7 +154,7 @@ process.env.XDG_CACHE_HOME = suiteCache
  * makes and frees one at a time and `runtime-async.c` the executor `spawn` parks tasks on, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eighteen
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same nineteen
  * (`runtime-async.c` among them, though a link takes its object only for async IR):
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
@@ -172,6 +173,7 @@ const RUNTIME_C = [
   "runtime/runtime-cross.c",
   "runtime/runtime-host.c",
   "runtime/runtime-net.c",
+  "runtime/runtime-uring.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
   "runtime/runtime-sha256.c",
@@ -10706,6 +10708,7 @@ if (dealtHere("runtimeCache")) {
       "runtime-cross.c",
       "runtime-host.c",
       "runtime-net.c",
+      "runtime-uring.c",
       "runtime-simd.c",
       "runtime-aes.c",
       "runtime-sha256.c",
@@ -16765,7 +16768,7 @@ if (dealtHere("runtimeChecks")) {
     )
     const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
     check(
-      "runtime.c, runtime-os.c, runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
+      "runtime.c, runtime-os.c, runtime-text.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-uring.c, runtime-simd.c, runtime-aes.c, runtime-sha256.c, runtime-chacha20.c, runtime-checksum.c, runtime-term.c, runtime-bytes.c, runtime-sandbox.c, runtime-shm.c and runtime-region.c compile warning-free together and pass the runtime unit test",
       rtRun !== null && rtRun.status === 0,
       String(rt.stderr) +
         (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -25513,6 +25516,9 @@ if (dealtHere("releaseChecks")) {
         // And the fifth (WP34 N5): without it every link of a program that
         // imports `nish:net` would fail to find `nish_tcp_listen` and the rest.
         "runtime/runtime-net.c",
+        // And the io_uring rings beside it (WP63 S1), which build.sh pairs with
+        // runtime.c on every native link.
+        "runtime/runtime-uring.c",
         // And the sixth (WP38 S1): build.sh pairs it with runtime.c, and a
         // program that searches for a byte of a set calls into it.
         "runtime/runtime-simd.c",

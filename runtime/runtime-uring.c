@@ -1,0 +1,1094 @@
+/* Nish runtime, the io_uring half of the network layer (WP63 S1): a set of
+ * io_uring rings that holds TCP connections in the rings' registered file
+ * tables instead of the process's descriptor table, so one process can hold
+ * more connections than RLIMIT_NOFILE allows descriptors. The design and its
+ * measurements are docs/wp63-iouring-net.md; the prototype it was measured on
+ * is bench/fd-limit/uring-server.c. Nothing in `nish:net` calls this file yet
+ * (S2 adds the surface), and section GC means a program pays nothing for it.
+ *
+ * A translation unit of its own for the reason runtime-net.c is one: it
+ * carries its own measured `.text*` ceiling in tests/runtime-budgets.js, and
+ * scripts/build.sh pairs it with runtime.c like the other halves.
+ *
+ * **Four kernel behaviours shape it** (the note's §2, each measured):
+ *
+ *  1. A ring's file table is capped at RLIMIT_NOFILE slots
+ *     (io_uring/rsrc.c, io_sqe_files_register answers -EMFILE past it), so a
+ *     set holds C connections in ceil(C / limit) rings, made as they fill.
+ *  2. An accept that finds the table full has already taken the connection
+ *     off the listener, and the kernel drops it (io_accept: the fixed install
+ *     fails and puts the file). A multishot accept keeps accepting while the
+ *     queue is non-empty, so it cannot be bounded. Accepts here are
+ *     single-shot into IORING_FILE_INDEX_ALLOC, and a ring never has more in
+ *     flight than it has free slots.
+ *  3. Accepts on one listener are exclusive waiters, woken one per arriving
+ *     connection, so an accept that is only waiting never learns of the ones
+ *     already queued. Exactly one ring accepts at a time, and moving the job
+ *     to another ring is a fresh submission there, which is tried at once and
+ *     drains the backlog.
+ *  4. A DEFER_TASKRUN ring runs at most 20 queued completions per
+ *     io_uring_enter (IO_LOCAL_TW_DEFAULT_MAX) and does not signal its
+ *     eventfd again for the rest; TASKRUN_FLAG says so in IORING_SQ_TASKRUN.
+ *     `ur_service` enters again while that flag is up, and while
+ *     IORING_SQ_CQ_OVERFLOW says the kernel holds completions the CQ had no
+ *     room for (FEAT_NODROP keeps them rather than dropping them).
+ *
+ * **Every ring** is SINGLE_ISSUER | DEFER_TASKRUN | TASKRUN_FLAG |
+ * SUBMIT_ALL, with COOP_TASKRUN added where a kernel refuses TASKRUN_FLAG
+ * without it; a sparse file table; a provided-buffer ring that every
+ * connection's multishot recv draws from; and one eventfd, which the set's
+ * one epoll descriptor watches. A DEFER_TASKRUN ring signals its eventfd
+ * when work is queued for it, and the work runs only when this thread
+ * enters the ring, so a set belongs to the thread that opened it (the
+ * kernel refuses another thread's submissions under SINGLE_ISSUER).
+ *
+ * **A connection is a (ring, slot) pair.** Its recv is multishot; a recv the
+ * kernel ends with -ENOBUFS (every buffer lent out) is parked and re-armed on
+ * the next `nish_uring_wait`, after the buffers lent by the last one are back,
+ * never closed. A send copies its bytes, and a slot keeps one send in flight
+ * so that a short send's remainder, which is re-queued, goes out before the
+ * bytes queued behind it. A close cancels the slot's armed recv (closing a
+ * fixed slot does not, and the recv would keep the socket alive) and then
+ * closes the slot. Every completion carries the slot's generation, which the
+ * close moves on, so a completion that arrives after the close, or after the
+ * slot was reused, is recognised as stale and only gives back its buffer.
+ *
+ * **Nothing here exits or panics.** A call answers `>= 0` or a negative errno,
+ * Linux's number, the shape runtime-net.c uses. `nish_uring_probe` answers
+ * whether this kernel and this process may use the design at all: a kernel
+ * without io_uring (-ENOSYS), a sandbox or `io_uring_disabled` that refuses
+ * it (-EPERM), a kernel too old for the flags (-EINVAL), or one missing a
+ * feature or an opcode (-EOPNOTSUPP) all answer negative, and the caller
+ * keeps epoll. The calls are raw `syscall()`s against the kernel's ABI, which
+ * this file declares itself, so it builds against any libc's headers and
+ * needs no liburing.
+ *
+ * On any other platform, and on WASI, a set is unavailable: Darwin's stub
+ * answers -38 (Linux's ENOSYS) from every call, and a WASI build is empty.
+ */
+#if defined(__wasi__) || defined(__wasm__)
+/* ISO C wants at least one declaration in a translation unit. */
+typedef int nish_uring_unused;
+#else
+#if defined(__linux__)
+/* glibc declares `syscall` only with this feature macro. */
+#define _GNU_SOURCE
+#endif
+#include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* What a set reports to the loop that waits on it. `data` is the set's own
+ * buffer and stays valid until the next `nish_uring_wait` on the same set. */
+enum {
+  NISH_URING_ACCEPTED = 1, /* a new connection in (ring, slot) */
+  NISH_URING_DATA = 2,     /* `res` bytes at `data` from (ring, slot) */
+  NISH_URING_HUP = 3,      /* the peer closed (`res` 0) or failed (`res` < 0) */
+  NISH_URING_SEND_FAILED = 4, /* a send on (ring, slot) failed with `res` */
+  NISH_URING_ACCEPT_FAILED = 5 /* the listener failed with `res`; accepting stopped */
+};
+
+struct nish_uring_event {
+  int32_t kind;
+  int32_t ring;
+  int32_t slot;
+  int32_t res;
+  const uint8_t *data;
+};
+
+/* Sizes a set is opened with; a field of 0 takes its default. */
+struct nish_uring_opts {
+  int32_t slots;      /* file-table slots per ring; default RLIMIT_NOFILE's soft limit */
+  int32_t rings_max;  /* rings a set may grow to; default 64 */
+  int32_t sq_entries; /* default 1024 */
+  int32_t cq_entries; /* default 8192, at least sq_entries */
+  int32_t buf_count;  /* provided buffers per ring, a power of two; default 1024 */
+  int32_t buf_size;   /* bytes per buffer; default 2048 */
+};
+
+/* Counters the tests read. `max_accepting_rings` is the most rings that ever
+ * had an accept in flight at once, which behaviour 3 says must stay 1, and
+ * `bound_violations` counts accepts the kernel refused for a full table, which
+ * behaviour 2 says must stay 0. */
+struct nish_uring_stats {
+  int64_t rings;
+  int64_t live;
+  int64_t accepting;
+  int64_t slots;
+  int64_t taskrun_reentries;
+  int64_t overflow_drains;
+  int64_t nobufs_rearms;
+  int64_t send_requeues;
+  int64_t accept_errors;
+  int64_t bound_violations;
+  int64_t max_accepting_rings;
+};
+
+struct nish_uring_set;
+
+int32_t nish_uring_probe(void);
+int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
+int32_t nish_uring_fd(const struct nish_uring_set *s);
+int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
+int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
+int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
+void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st);
+void nish_uring_destroy(struct nish_uring_set *s);
+
+#if defined(__linux__)
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
+#include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+/* The kernel's io_uring ABI (include/uapi/linux/io_uring.h), declared here so
+ * the file needs no particular kernel headers: an older sysroot that lacks
+ * DEFER_TASKRUN still builds, and the probe finds out at run time. The
+ * syscall numbers are the same on every architecture but alpha and mips. */
+#ifndef __NR_io_uring_setup
+#define __NR_io_uring_setup 425
+#endif
+#ifndef __NR_io_uring_enter
+#define __NR_io_uring_enter 426
+#endif
+#ifndef __NR_io_uring_register
+#define __NR_io_uring_register 427
+#endif
+
+#define UR_SETUP_CQSIZE (1u << 3)
+#define UR_SETUP_SUBMIT_ALL (1u << 7)
+#define UR_SETUP_COOP_TASKRUN (1u << 8)
+#define UR_SETUP_TASKRUN_FLAG (1u << 9)
+#define UR_SETUP_SINGLE_ISSUER (1u << 12)
+#define UR_SETUP_DEFER_TASKRUN (1u << 13)
+#define UR_FEAT_SINGLE_MMAP (1u << 0)
+#define UR_FEAT_NODROP (1u << 1)
+#define UR_OFF_SQ_RING 0ull
+#define UR_OFF_SQES 0x10000000ull
+#define UR_SQ_CQ_OVERFLOW (1u << 1)
+#define UR_SQ_TASKRUN (1u << 2)
+#define UR_ENTER_GETEVENTS (1u << 0)
+#define UR_SQE_FIXED_FILE (1u << 0)
+#define UR_SQE_BUFFER_SELECT (1u << 5)
+#define UR_SQE_CQE_SKIP_SUCCESS (1u << 6)
+#define UR_CQE_F_BUFFER (1u << 0)
+#define UR_CQE_F_MORE (1u << 1)
+#define UR_CQE_BUFFER_SHIFT 16
+#define UR_OP_ACCEPT 13
+#define UR_OP_ASYNC_CANCEL 14
+#define UR_OP_CLOSE 19
+#define UR_OP_SEND 26
+#define UR_OP_RECV 27
+#define UR_RECV_MULTISHOT (1u << 1)
+#define UR_CANCEL_ALL (1u << 0)
+#define UR_CANCEL_FD (1u << 1)
+#define UR_CANCEL_FD_FIXED (1u << 3)
+#define UR_REGISTER_EVENTFD 4
+#define UR_REGISTER_PROBE 8
+#define UR_REGISTER_FILES2 13
+#define UR_REGISTER_PBUF_RING 22
+#define UR_RSRC_REGISTER_SPARSE (1u << 0)
+#define UR_FILE_INDEX_ALLOC (~0u)
+#define UR_OP_SUPPORTED (1u << 0)
+/* The kernel's own cap on a file table (IORING_MAX_FIXED_FILES). */
+#define UR_MAX_SLOTS (1 << 20)
+
+struct ur_sqring_offsets {
+  uint32_t head, tail, ring_mask, ring_entries, flags, dropped, array, resv1;
+  uint64_t user_addr;
+};
+struct ur_cqring_offsets {
+  uint32_t head, tail, ring_mask, ring_entries, overflow, cqes, flags, resv1;
+  uint64_t user_addr;
+};
+struct ur_params {
+  uint32_t sq_entries, cq_entries, flags, sq_thread_cpu, sq_thread_idle, features, wq_fd, resv[3];
+  struct ur_sqring_offsets sq_off;
+  struct ur_cqring_offsets cq_off;
+};
+/* One submission. The kernel's struct is a nest of unions; these are the
+ * names of the members this file sets, at the kernel's offsets. */
+struct ur_sqe {
+  uint8_t opcode;
+  uint8_t flags;
+  uint16_t ioprio;
+  int32_t fd;
+  uint64_t off;
+  uint64_t addr;
+  uint32_t len;
+  uint32_t op_flags; /* msg_flags, accept_flags, cancel_flags */
+  uint64_t user_data;
+  uint16_t buf_group;
+  uint16_t personality;
+  uint32_t file_index;
+  uint64_t addr3;
+  uint64_t pad;
+};
+struct ur_cqe {
+  uint64_t user_data;
+  int32_t res;
+  uint32_t flags;
+};
+struct ur_rsrc_register {
+  uint32_t nr, flags;
+  uint64_t resv2, data, tags;
+};
+struct ur_buf {
+  uint64_t addr;
+  uint32_t len;
+  uint16_t bid;
+  uint16_t resv; /* in entry 0, the ring's tail */
+};
+struct ur_buf_reg {
+  uint64_t ring_addr;
+  uint32_t ring_entries;
+  uint16_t bgid;
+  uint16_t flags;
+  uint64_t resv[3];
+};
+struct ur_probe_op {
+  uint8_t op, resv;
+  uint16_t flags;
+  uint32_t resv2;
+};
+struct ur_probe {
+  uint8_t last_op, ops_len;
+  uint16_t resv;
+  uint32_t resv2[3];
+  struct ur_probe_op ops[64];
+};
+
+_Static_assert(sizeof(struct ur_params) == 120, "io_uring_params is 120 bytes");
+_Static_assert(sizeof(struct ur_sqe) == 64, "io_uring_sqe is 64 bytes");
+_Static_assert(sizeof(struct ur_cqe) == 16, "io_uring_cqe is 16 bytes");
+_Static_assert(sizeof(struct ur_rsrc_register) == 32, "io_uring_rsrc_register is 32 bytes");
+_Static_assert(sizeof(struct ur_buf) == 16, "io_uring_buf is 16 bytes");
+_Static_assert(sizeof(struct ur_buf_reg) == 40, "io_uring_buf_reg is 40 bytes");
+
+/* What a completion's user_data says. A send's is its record's address, which
+ * malloc aligns to 8, with UR_SEND in the low three bits; every other op's is
+ * the op, the slot's generation and the slot, and none of those ops is 3. */
+enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
+
+/* A slot's state word: open, recv armed, recv parked on -ENOBUFS, and the
+ * generation in the 24 bits above. */
+#define ST_OPEN 1u
+#define ST_ARMED 2u
+#define ST_PARKED 4u
+#define ST_GEN(st) ((st) >> 8)
+#define GEN_MASK 0xffffffu
+
+#define BGID 1
+#define ACCEPT_DEPTH 32
+#define EVENTS_MAX 256
+
+/* One send's bytes, owned by the set until the kernel has taken all of them.
+ * `next` queues it behind the slot's earlier sends; `prev_all`/`next_all`
+ * keep every record on one list so `nish_uring_destroy` can free those the
+ * kernel still held. */
+struct ur_send {
+  struct ur_send *next, *prev_all, *next_all;
+  uint32_t ring, slot, gen;
+  uint32_t off, len;
+  int in_flight;
+  uint8_t data[];
+};
+
+struct ur_ring {
+  int fd, efd;
+  uint32_t *sq_head, *sq_tail, *sq_mask, *sq_array, *sq_flags;
+  uint32_t *cq_head, *cq_tail, *cq_mask;
+  struct ur_sqe *sqes;
+  struct ur_cqe *cqes;
+  void *ring_map;
+  size_t ring_len, sqes_len;
+  uint32_t sq_entries, sq_local_tail, to_submit;
+  struct ur_buf *br;
+  uint8_t *bufs;
+  uint16_t br_tail;
+  long live, accepting;
+  uint32_t *st;               /* per slot */
+  struct ur_send **sq_first;  /* per slot: the head of its send queue */
+  struct ur_send **sq_last;   /* per slot: the tail */
+  uint32_t *parked;           /* slots whose recv waits for buffers */
+  uint32_t nparked;
+};
+
+struct nish_uring_set {
+  int listener, ep;
+  uint32_t slots, buf_count, buf_size, sq_entries, cq_entries;
+  uint32_t setup_flags; /* the flags the probe found this kernel takes */
+  int nrings, rings_max, acceptor;
+  int accept_stopped;
+  struct ur_ring **rings;
+  struct ur_send *all;
+  long stalled_sends; /* heads that found the SQ full */
+  /* Buffers lent to the caller by the last wait, given back by the next. */
+  uint32_t lent_ring[EVENTS_MAX];
+  uint16_t lent_bid[EVENTS_MAX];
+  int nlent;
+  struct nish_uring_stats stats;
+};
+
+static int ur_errno(long rc) { return rc < 0 ? -errno : (int)rc; }
+
+static int ur_setup(uint32_t entries, struct ur_params *p) {
+  return ur_errno(syscall(__NR_io_uring_setup, entries, p));
+}
+
+static int ur_enter(struct ur_ring *r, uint32_t submit, uint32_t wait, uint32_t flags) {
+  return ur_errno(syscall(__NR_io_uring_enter, r->fd, submit, wait, flags, NULL, 0));
+}
+
+static int ur_register(int fd, unsigned op, void *arg, unsigned nr) {
+  return ur_errno(syscall(__NR_io_uring_register, fd, op, arg, nr));
+}
+
+/* Make a ring fd with the set's flags. A kernel that has TASKRUN_FLAG but
+ * wants COOP_TASKRUN beside it, or DEFER_TASKRUN's precondition, answers
+ * -EINVAL, so the second try adds COOP_TASKRUN. */
+static int ur_setup_flags(uint32_t entries, uint32_t cq, struct ur_params *p, uint32_t *flags) {
+  uint32_t base = UR_SETUP_SINGLE_ISSUER | UR_SETUP_DEFER_TASKRUN | UR_SETUP_TASKRUN_FLAG | UR_SETUP_SUBMIT_ALL;
+  if (cq) base |= UR_SETUP_CQSIZE;
+  for (int i = 0; i < 2; i++) {
+    uint32_t f = i ? base | UR_SETUP_COOP_TASKRUN : base;
+    memset(p, 0, sizeof *p);
+    p->flags = f;
+    p->cq_entries = cq;
+    int fd = ur_setup(entries, p);
+    if (fd >= 0) {
+      *flags = f;
+      return fd;
+    }
+    if (fd != -EINVAL) return fd;
+    if (i) return fd;
+  }
+  return -EINVAL;
+}
+
+static int32_t ur_probe_once(void) {
+  struct ur_params p;
+  uint32_t flags = 0;
+  int fd = ur_setup_flags(4, 0, &p, &flags);
+  if (fd < 0) return fd;
+  int32_t rc = 1;
+  if (!(p.features & UR_FEAT_NODROP) || !(p.features & UR_FEAT_SINGLE_MMAP)) rc = -EOPNOTSUPP;
+  if (rc > 0) {
+    struct ur_probe pr;
+    memset(&pr, 0, sizeof pr);
+    int e = ur_register(fd, UR_REGISTER_PROBE, &pr, 64);
+    if (e < 0) {
+      rc = e == -EINVAL ? -EOPNOTSUPP : e;
+    } else {
+      static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_ASYNC_CANCEL, UR_OP_CLOSE, UR_OP_SEND, UR_OP_RECV};
+      for (size_t i = 0; i < sizeof ops; i++) {
+        uint8_t op = ops[i];
+        if (op > pr.last_op || op >= pr.ops_len || !(pr.ops[op].flags & UR_OP_SUPPORTED)) rc = -EOPNOTSUPP;
+      }
+    }
+  }
+  if (rc > 0) {
+    struct ur_rsrc_register files;
+    memset(&files, 0, sizeof files);
+    files.nr = 1;
+    files.flags = UR_RSRC_REGISTER_SPARSE;
+    int e = ur_register(fd, UR_REGISTER_FILES2, &files, sizeof files);
+    if (e < 0) rc = e == -EINVAL ? -EOPNOTSUPP : e;
+  }
+  if (rc > 0) {
+    void *br = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (br == MAP_FAILED) {
+      rc = -ENOMEM;
+    } else {
+      struct ur_buf_reg reg;
+      memset(&reg, 0, sizeof reg);
+      reg.ring_addr = (uint64_t)(uintptr_t)br;
+      reg.ring_entries = 8;
+      reg.bgid = BGID;
+      int e = ur_register(fd, UR_REGISTER_PBUF_RING, &reg, 1);
+      if (e < 0) rc = e == -EINVAL ? -EOPNOTSUPP : e;
+      close(fd);
+      fd = -1;
+      munmap(br, 4096);
+    }
+  }
+  if (fd >= 0) close(fd);
+  return rc;
+}
+
+/* 1 when this process may use a set, else the negative errno that says why
+ * not. The answer is computed once per process: what refuses io_uring (the
+ * kernel, a seccomp filter, the sysctl) does not change under a running
+ * program in a way it could act on. */
+int32_t nish_uring_probe(void) {
+  static int32_t cached;
+  int32_t c = __atomic_load_n(&cached, __ATOMIC_RELAXED);
+  if (c == 0) {
+    c = ur_probe_once();
+    __atomic_store_n(&cached, c, __ATOMIC_RELAXED);
+  }
+  return c;
+}
+
+/* Hand the queued submissions to the kernel. -EINTR is tried again; anything
+ * else (-EAGAIN for memory, -EBUSY on a kernel that refuses submissions while
+ * completions overflow) leaves them queued for the next call to retry. */
+static int ur_flush(struct ur_ring *r) {
+  while (r->to_submit) {
+    int rc = ur_enter(r, r->to_submit, 0, UR_ENTER_GETEVENTS);
+    if (rc == -EINTR) continue;
+    if (rc < 0) return rc;
+    if (rc == 0) return -EAGAIN;
+    r->to_submit -= (uint32_t)rc > r->to_submit ? r->to_submit : (uint32_t)rc;
+  }
+  return 0;
+}
+
+/* The next free submission entry, zeroed, or NULL when the SQ stays full
+ * after a flush. */
+static struct ur_sqe *ur_sqe(struct ur_ring *r) {
+  uint32_t head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
+  if (r->sq_local_tail - head >= r->sq_entries) {
+    (void)ur_flush(r);
+    head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
+    if (r->sq_local_tail - head >= r->sq_entries) return NULL;
+  }
+  uint32_t i = r->sq_local_tail & *r->sq_mask;
+  struct ur_sqe *e = &r->sqes[i];
+  memset(e, 0, sizeof *e);
+  r->sq_array[i] = i;
+  r->sq_local_tail++;
+  __atomic_store_n(r->sq_tail, r->sq_local_tail, __ATOMIC_RELEASE);
+  r->to_submit++;
+  return e;
+}
+
+static uint64_t ur_tag(unsigned op, uint32_t st, uint32_t slot) {
+  return (uint64_t)op | ((uint64_t)(ST_GEN(st) & GEN_MASK) << 8) | ((uint64_t)slot << 32);
+}
+
+static void ur_recycle(struct nish_uring_set *s, struct ur_ring *r, uint32_t bid) {
+  struct ur_buf *b = &r->br[r->br_tail & (s->buf_count - 1)];
+  b->addr = (uint64_t)(uintptr_t)(r->bufs + (size_t)bid * s->buf_size);
+  b->len = s->buf_size;
+  b->bid = (uint16_t)bid;
+  r->br_tail++;
+  __atomic_store_n(&r->br[0].resv, r->br_tail, __ATOMIC_RELEASE);
+}
+
+/* Arm a slot's multishot recv, or park it for the next wait when the SQ has
+ * no room. */
+static void ur_arm(struct ur_ring *r, uint32_t slot) {
+  struct ur_sqe *e = ur_sqe(r);
+  if (!e) {
+    if (!(r->st[slot] & ST_PARKED)) {
+      r->st[slot] |= ST_PARKED;
+      r->parked[r->nparked++] = slot;
+    }
+    return;
+  }
+  e->opcode = UR_OP_RECV;
+  e->fd = (int32_t)slot;
+  e->flags = UR_SQE_FIXED_FILE | UR_SQE_BUFFER_SELECT;
+  e->ioprio = UR_RECV_MULTISHOT;
+  e->buf_group = BGID;
+  e->user_data = ur_tag(UR_RECV, r->st[slot], slot);
+  r->st[slot] |= ST_ARMED;
+}
+
+static void ur_free_ring(struct nish_uring_set *s, struct ur_ring *r) {
+  if (r->efd >= 0) close(r->efd);
+  if (r->fd >= 0) close(r->fd);
+  if (r->ring_map && r->ring_map != MAP_FAILED) munmap(r->ring_map, r->ring_len);
+  if (r->sqes && (void *)r->sqes != MAP_FAILED) munmap(r->sqes, r->sqes_len);
+  if (r->br && (void *)r->br != MAP_FAILED) munmap(r->br, (size_t)s->buf_count * sizeof(struct ur_buf));
+  if (r->bufs && (void *)r->bufs != MAP_FAILED) munmap(r->bufs, (size_t)s->buf_count * s->buf_size);
+  free(r->st);
+  free(r->sq_first);
+  free(r->sq_last);
+  free(r->parked);
+  free(r);
+}
+
+/* A new ring: the SQ and CQ mapped, a sparse table of `slots`, the buffer
+ * ring filled, the eventfd registered and in the set's epoll. Answers the
+ * ring's index or a negative errno, and leaves nothing behind on failure. */
+static int ur_add_ring(struct nish_uring_set *s) {
+  if (s->nrings >= s->rings_max) return -ENOSPC;
+  struct ur_ring *r = calloc(1, sizeof *r);
+  if (!r) return -ENOMEM;
+  r->fd = -1;
+  r->efd = -1;
+  int rc = 0;
+  struct ur_params p;
+  uint32_t flags = 0;
+  r->fd = ur_setup_flags(s->sq_entries, s->cq_entries, &p, &flags);
+  if (r->fd < 0) {
+    rc = r->fd;
+    goto fail;
+  }
+  if (!(p.features & UR_FEAT_SINGLE_MMAP) || !(p.features & UR_FEAT_NODROP)) {
+    rc = -EOPNOTSUPP;
+    goto fail;
+  }
+  s->setup_flags = flags;
+  r->sq_entries = p.sq_entries;
+  size_t sq_len = p.sq_off.array + (size_t)p.sq_entries * sizeof(uint32_t);
+  size_t cq_len = p.cq_off.cqes + (size_t)p.cq_entries * sizeof(struct ur_cqe);
+  r->ring_len = sq_len > cq_len ? sq_len : cq_len;
+  r->ring_map = mmap(NULL, r->ring_len, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, r->fd, UR_OFF_SQ_RING);
+  if (r->ring_map == MAP_FAILED) {
+    rc = -errno;
+    goto fail;
+  }
+  char *m = r->ring_map;
+  r->sq_head = (uint32_t *)(void *)(m + p.sq_off.head);
+  r->sq_tail = (uint32_t *)(void *)(m + p.sq_off.tail);
+  r->sq_mask = (uint32_t *)(void *)(m + p.sq_off.ring_mask);
+  r->sq_array = (uint32_t *)(void *)(m + p.sq_off.array);
+  r->sq_flags = (uint32_t *)(void *)(m + p.sq_off.flags);
+  r->cq_head = (uint32_t *)(void *)(m + p.cq_off.head);
+  r->cq_tail = (uint32_t *)(void *)(m + p.cq_off.tail);
+  r->cq_mask = (uint32_t *)(void *)(m + p.cq_off.ring_mask);
+  r->cqes = (struct ur_cqe *)(void *)(m + p.cq_off.cqes);
+  r->sqes_len = (size_t)p.sq_entries * sizeof(struct ur_sqe);
+  r->sqes = mmap(NULL, r->sqes_len, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, r->fd, UR_OFF_SQES);
+  if ((void *)r->sqes == MAP_FAILED) {
+    rc = -errno;
+    goto fail;
+  }
+  r->sq_local_tail = *r->sq_tail;
+
+  struct ur_rsrc_register files;
+  memset(&files, 0, sizeof files);
+  files.nr = s->slots;
+  files.flags = UR_RSRC_REGISTER_SPARSE;
+  rc = ur_register(r->fd, UR_REGISTER_FILES2, &files, sizeof files);
+  if (rc < 0) goto fail;
+
+  r->br = mmap(NULL, (size_t)s->buf_count * sizeof(struct ur_buf), PROT_READ | PROT_WRITE,
+               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  r->bufs = mmap(NULL, (size_t)s->buf_count * s->buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if ((void *)r->br == MAP_FAILED || (void *)r->bufs == MAP_FAILED) {
+    rc = -ENOMEM;
+    goto fail;
+  }
+  struct ur_buf_reg reg;
+  memset(&reg, 0, sizeof reg);
+  reg.ring_addr = (uint64_t)(uintptr_t)r->br;
+  reg.ring_entries = s->buf_count;
+  reg.bgid = BGID;
+  rc = ur_register(r->fd, UR_REGISTER_PBUF_RING, &reg, 1);
+  if (rc < 0) goto fail;
+  for (uint32_t i = 0; i < s->buf_count; i++) ur_recycle(s, r, i);
+
+  r->st = calloc(s->slots, sizeof *r->st);
+  r->sq_first = calloc(s->slots, sizeof *r->sq_first);
+  r->sq_last = calloc(s->slots, sizeof *r->sq_last);
+  r->parked = calloc(s->slots, sizeof *r->parked);
+  if (!r->st || !r->sq_first || !r->sq_last || !r->parked) {
+    rc = -ENOMEM;
+    goto fail;
+  }
+
+  r->efd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  if (r->efd < 0) {
+    rc = -errno;
+    goto fail;
+  }
+  rc = ur_register(r->fd, UR_REGISTER_EVENTFD, &r->efd, 1);
+  if (rc < 0) goto fail;
+  struct epoll_event ev;
+  memset(&ev, 0, sizeof ev);
+  ev.events = EPOLLIN;
+  ev.data.u32 = (uint32_t)s->nrings;
+  if (epoll_ctl(s->ep, EPOLL_CTL_ADD, r->efd, &ev) != 0) {
+    rc = -errno;
+    goto fail;
+  }
+  s->rings[s->nrings] = r;
+  s->stats.rings = ++s->nrings;
+  s->stats.slots = (int64_t)s->nrings * s->slots;
+  return s->nrings - 1;
+fail:
+  ur_free_ring(s, r);
+  return rc < 0 ? rc : -EINVAL;
+}
+
+/* Keep min(ACCEPT_DEPTH, free slots) accepts in flight on the accepting ring,
+ * and only there (behaviours 2 and 3). A full acceptor with nothing in flight
+ * hands the job to the next ring with a free slot, making one when none has
+ * and the set may grow; with `rings_max` reached and every ring full,
+ * connections wait in the listener's backlog until a close frees a slot. */
+static void ur_top_up(struct nish_uring_set *s) {
+  if (s->accept_stopped || s->nrings == 0) return;
+  struct ur_ring *r = s->rings[s->acceptor];
+  if (r->live + r->accepting >= (long)s->slots && r->accepting == 0) {
+    int moved = 0;
+    for (int i = 1; i <= s->nrings; i++) {
+      int j = (s->acceptor + i) % s->nrings;
+      if (s->rings[j]->live < (long)s->slots) {
+        s->acceptor = j;
+        moved = 1;
+        break;
+      }
+    }
+    if (!moved) {
+      int j = ur_add_ring(s);
+      if (j < 0) return;
+      s->acceptor = j;
+    }
+    r = s->rings[s->acceptor];
+  }
+  while (r->accepting < ACCEPT_DEPTH && r->live + r->accepting < (long)s->slots) {
+    struct ur_sqe *e = ur_sqe(r);
+    if (!e) break;
+    e->opcode = UR_OP_ACCEPT;
+    e->fd = s->listener;
+    e->file_index = UR_FILE_INDEX_ALLOC;
+    e->user_data = UR_ACCEPT;
+    r->accepting++;
+  }
+  long accepting = 0, rings = 0;
+  for (int i = 0; i < s->nrings; i++) {
+    accepting += s->rings[i]->accepting;
+    rings += s->rings[i]->accepting > 0;
+  }
+  s->stats.accepting = accepting;
+  if (rings > s->stats.max_accepting_rings) s->stats.max_accepting_rings = rings;
+}
+
+/* Submit the slot's first queued send, from where the kernel left off. */
+static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set *s) {
+  struct ur_send *q = r->sq_first[slot];
+  if (!q || q->in_flight) return;
+  struct ur_sqe *e = ur_sqe(r);
+  if (!e) {
+    s->stalled_sends++;
+    return;
+  }
+  e->opcode = UR_OP_SEND;
+  e->fd = (int32_t)slot;
+  e->flags = UR_SQE_FIXED_FILE;
+  e->addr = (uint64_t)(uintptr_t)(q->data + q->off);
+  e->len = q->len - q->off;
+  e->op_flags = MSG_NOSIGNAL;
+  e->user_data = (uint64_t)(uintptr_t)q | UR_SEND;
+  q->in_flight = 1;
+}
+
+static void ur_unlink_all(struct nish_uring_set *s, struct ur_send *q) {
+  if (q->prev_all) q->prev_all->next_all = q->next_all;
+  else s->all = q->next_all;
+  if (q->next_all) q->next_all->prev_all = q->prev_all;
+  free(q);
+}
+
+/* Drop a slot's queued sends. The one the kernel holds, if any, is left on
+ * the all-records list; its completion finds the generation moved on and
+ * frees it. */
+static void ur_drop_sends(struct nish_uring_set *s, struct ur_ring *r, uint32_t slot) {
+  struct ur_send *q = r->sq_first[slot];
+  r->sq_first[slot] = r->sq_last[slot] = NULL;
+  while (q) {
+    struct ur_send *next = q->next;
+    q->next = NULL;
+    if (!q->in_flight) ur_unlink_all(s, q);
+    q = next;
+  }
+}
+
+static int ur_transient_accept(int res) {
+  return res == -EAGAIN || res == -EINTR || res == -ECONNABORTED || res == -EPROTO;
+}
+
+static void ur_event(struct nish_uring_event *ev, int kind, int ring, uint32_t slot, int res, const uint8_t *data) {
+  ev->kind = kind;
+  ev->ring = ring;
+  ev->slot = (int32_t)slot;
+  ev->res = res;
+  ev->data = data;
+}
+
+/* One completion. Answers 1 when it wrote an event. */
+static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c, struct nish_uring_event *ev) {
+  struct ur_ring *r = s->rings[ri];
+  uint64_t ud = c->user_data;
+  int res = c->res;
+  if ((ud & 7) == UR_SEND) {
+    struct ur_send *q = (struct ur_send *)(uintptr_t)(ud & ~(uint64_t)7);
+    q->in_flight = 0;
+    uint32_t slot = q->slot;
+    if ((r->st[slot] & ST_OPEN) == 0 || ST_GEN(r->st[slot]) != q->gen || r->sq_first[slot] != q) {
+      ur_unlink_all(s, q);
+      return 0;
+    }
+    if (res > 0 && q->off + (uint32_t)res < q->len) {
+      q->off += (uint32_t)res;
+      s->stats.send_requeues++;
+    } else if (res == -EINTR || res == -EAGAIN || res == -ENOBUFS) {
+      s->stats.send_requeues++;
+    } else if (res < 0) {
+      ur_drop_sends(s, r, slot);
+      ur_unlink_all(s, q);
+      ur_event(ev, NISH_URING_SEND_FAILED, ri, slot, res, NULL);
+      return 1;
+    } else {
+      r->sq_first[slot] = q->next;
+      if (!q->next) r->sq_last[slot] = NULL;
+      ur_unlink_all(s, q);
+    }
+    ur_send_head(r, slot, s);
+    return 0;
+  }
+  unsigned op = (unsigned)(ud & 0xff);
+  uint32_t gen = (uint32_t)(ud >> 8) & GEN_MASK;
+  uint32_t slot = (uint32_t)(ud >> 32);
+  if (op == UR_ACCEPT) {
+    r->accepting--;
+    int wrote = 0;
+    if (res >= 0 && (uint32_t)res < s->slots) {
+      uint32_t at = (uint32_t)res;
+      r->st[at] = (r->st[at] & ~(ST_ARMED | ST_PARKED)) | ST_OPEN;
+      r->live++;
+      s->stats.live++;
+      ur_arm(r, at);
+      ur_event(ev, NISH_URING_ACCEPTED, ri, at, 0, NULL);
+      wrote = 1;
+    } else if (res >= 0) {
+      /* A slot past the table the set registered; the kernel never answers
+       * one, so it is counted rather than trusted. */
+      s->stats.bound_violations++;
+    } else if (!ur_transient_accept(res)) {
+      s->stats.accept_errors++;
+      if (res == -ENFILE) s->stats.bound_violations++;
+      if (!s->accept_stopped) {
+        s->accept_stopped = 1;
+        ur_event(ev, NISH_URING_ACCEPT_FAILED, ri, 0, res, NULL);
+        wrote = 1;
+      }
+    }
+    ur_top_up(s);
+    return wrote;
+  }
+  if (op != UR_RECV) return 0; /* a close or cancel; nothing to report */
+  int stale = slot >= s->slots || (r->st[slot] & ST_OPEN) == 0 || (ST_GEN(r->st[slot]) & GEN_MASK) != gen;
+  int more = (c->flags & UR_CQE_F_MORE) != 0;
+  uint32_t bid = c->flags >> UR_CQE_BUFFER_SHIFT;
+  int has_buf = (c->flags & UR_CQE_F_BUFFER) != 0 && bid < s->buf_count;
+  if (stale) {
+    if (has_buf) ur_recycle(s, r, bid);
+    return 0;
+  }
+  if (!more) r->st[slot] &= ~ST_ARMED;
+  if (res > 0 && has_buf) {
+    s->lent_ring[s->nlent] = (uint32_t)ri;
+    s->lent_bid[s->nlent] = (uint16_t)bid;
+    s->nlent++;
+    if (!more) ur_arm(r, slot);
+    ur_event(ev, NISH_URING_DATA, ri, slot, res, r->bufs + (size_t)bid * s->buf_size);
+    return 1;
+  }
+  if (has_buf) ur_recycle(s, r, bid);
+  if (res == -ENOBUFS) {
+    s->stats.nobufs_rearms++;
+    if (!more && !(r->st[slot] & ST_PARKED)) {
+      r->st[slot] |= ST_PARKED;
+      r->parked[r->nparked++] = slot;
+    }
+    return 0;
+  }
+  if (more) return 0;
+  ur_event(ev, NISH_URING_HUP, ri, slot, res, NULL);
+  return 1;
+}
+
+/* Take completions until the CQ is empty or `cap` events are written; what
+ * does not fit stays in the CQ for the next wait. */
+static int ur_reap(struct nish_uring_set *s, int ri, struct nish_uring_event *ev, int cap) {
+  struct ur_ring *r = s->rings[ri];
+  int n = 0;
+  uint32_t head = *r->cq_head;
+  for (;;) {
+    uint32_t tail = __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE);
+    if (head == tail || n >= cap) break;
+    struct ur_cqe c = r->cqes[head & *r->cq_mask];
+    head++;
+    /* Give the entry back before handling it, so a completion's handler that
+     * flushes (an accept topping up) frees room in the CQ for what it makes. */
+    __atomic_store_n(r->cq_head, head, __ATOMIC_RELEASE);
+    n += ur_complete(s, ri, &c, ev + n);
+  }
+  return n;
+}
+
+/* Reap, submit, and enter again while the kernel says it holds more for this
+ * ring (behaviour 4): IORING_SQ_TASKRUN for completions DEFER_TASKRUN has not
+ * run, IORING_SQ_CQ_OVERFLOW for ones the CQ had no room for. */
+static int ur_service(struct nish_uring_set *s, int ri, struct nish_uring_event *ev, int cap) {
+  struct ur_ring *r = s->rings[ri];
+  int n = 0;
+  for (int guard = 0; guard < 1 << 16; guard++) {
+    n += ur_reap(s, ri, ev + n, cap - n);
+    int rc = ur_flush(r);
+    if (n >= cap) break;
+    uint32_t flags = __atomic_load_n(r->sq_flags, __ATOMIC_ACQUIRE);
+    if (flags & (UR_SQ_TASKRUN | UR_SQ_CQ_OVERFLOW)) {
+      if (flags & UR_SQ_TASKRUN) s->stats.taskrun_reentries++;
+      if (flags & UR_SQ_CQ_OVERFLOW) s->stats.overflow_drains++;
+      rc = ur_enter(r, 0, 0, UR_ENTER_GETEVENTS);
+      if (rc < 0 && rc != -EINTR && rc != -EBUSY && rc != -EAGAIN) break;
+      continue;
+    }
+    if (rc == -EBUSY) continue;
+    if (*r->cq_head == __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE)) break;
+  }
+  return n;
+}
+
+int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *o) {
+  *out = NULL;
+  int32_t ok = nish_uring_probe();
+  if (ok < 0) return ok;
+  struct nish_uring_opts d;
+  memset(&d, 0, sizeof d);
+  if (o) d = *o;
+  if (listener < 0 || d.slots < 0 || d.rings_max < 0 || d.sq_entries < 0 || d.cq_entries < 0 || d.buf_count < 0 ||
+      d.buf_size < 0)
+    return -EINVAL;
+  if (d.slots == 0) {
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) != 0) return -errno;
+    d.slots = rl.rlim_cur == RLIM_INFINITY || rl.rlim_cur > UR_MAX_SLOTS ? UR_MAX_SLOTS : (int32_t)rl.rlim_cur;
+  }
+  if (d.slots > UR_MAX_SLOTS) return -EINVAL;
+  if (d.rings_max == 0) d.rings_max = 64;
+  if (d.sq_entries == 0) d.sq_entries = 1024;
+  if (d.cq_entries == 0) d.cq_entries = 8192;
+  if (d.cq_entries < d.sq_entries) d.cq_entries = d.sq_entries;
+  if (d.buf_count == 0) d.buf_count = 1024;
+  if (d.buf_size == 0) d.buf_size = 2048;
+  if (d.rings_max > 4096 || d.buf_count > 32768 || (d.buf_count & (d.buf_count - 1)) != 0 || d.buf_size > (1 << 20))
+    return -EINVAL;
+  struct nish_uring_set *s = calloc(1, sizeof *s);
+  if (!s) return -ENOMEM;
+  s->listener = listener;
+  s->slots = (uint32_t)d.slots;
+  s->rings_max = d.rings_max;
+  s->sq_entries = (uint32_t)d.sq_entries;
+  s->cq_entries = (uint32_t)d.cq_entries;
+  s->buf_count = (uint32_t)d.buf_count;
+  s->buf_size = (uint32_t)d.buf_size;
+  s->rings = calloc((size_t)d.rings_max, sizeof *s->rings);
+  s->ep = epoll_create1(EPOLL_CLOEXEC);
+  if (!s->rings || s->ep < 0) {
+    int rc = s->ep < 0 ? -errno : -ENOMEM;
+    if (s->ep >= 0) close(s->ep);
+    free(s->rings);
+    free(s);
+    return rc;
+  }
+  int rc = ur_add_ring(s);
+  if (rc < 0) {
+    close(s->ep);
+    free(s->rings);
+    free(s);
+    return rc;
+  }
+  ur_top_up(s);
+  (void)ur_flush(s->rings[0]);
+  *out = s;
+  return 0;
+}
+
+/* The epoll descriptor a caller's own loop may wait on beside other sources:
+ * it is readable when some ring of the set has work. */
+int32_t nish_uring_fd(const struct nish_uring_set *s) { return s->ep; }
+
+/* What the last wait left to do: give back the buffers it lent, re-arm the
+ * recvs it parked, and submit the sends that found the SQ full. */
+static void ur_catch_up(struct nish_uring_set *s) {
+  for (int i = 0; i < s->nlent; i++) ur_recycle(s, s->rings[s->lent_ring[i]], s->lent_bid[i]);
+  s->nlent = 0;
+  for (int ri = 0; ri < s->nrings; ri++) {
+    struct ur_ring *r = s->rings[ri];
+    uint32_t n = r->nparked;
+    r->nparked = 0;
+    for (uint32_t i = 0; i < n; i++) {
+      uint32_t slot = r->parked[i];
+      r->st[slot] &= ~ST_PARKED;
+      if ((r->st[slot] & (ST_OPEN | ST_ARMED)) == ST_OPEN) {
+        s->stats.nobufs_rearms += 0;
+        ur_arm(r, slot);
+      }
+    }
+  }
+  if (s->stalled_sends) {
+    s->stalled_sends = 0;
+    for (int ri = 0; ri < s->nrings; ri++)
+      for (uint32_t slot = 0; slot < s->slots; slot++)
+        if (s->rings[ri]->sq_first[slot]) ur_send_head(s->rings[ri], slot, s);
+  }
+}
+
+/* Wait up to `timeout_ms` (-1 for ever, 0 not at all) for events, and write
+ * at most `cap` of them, at most 256. Answers the count or a negative errno.
+ * A DATA event's bytes are the set's buffer until the next wait. */
+int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap) {
+  if (cap <= 0) return -EINVAL;
+  if (cap > EVENTS_MAX) cap = EVENTS_MAX;
+  ur_catch_up(s);
+  int n = 0;
+  for (int ri = 0; ri < s->nrings && n < cap; ri++) n += ur_service(s, ri, ev + n, cap - n);
+  if (n > 0) return n;
+  struct epoll_event ready[64];
+  int k = epoll_wait(s->ep, ready, 64, timeout_ms);
+  if (k < 0) return errno == EINTR ? 0 : -errno;
+  for (int i = 0; i < k && n < cap; i++) {
+    uint32_t ri = ready[i].data.u32;
+    if (ri >= (uint32_t)s->nrings) continue;
+    struct ur_ring *r = s->rings[ri];
+    uint64_t v;
+    (void)!read(r->efd, &v, sizeof v);
+    (void)ur_enter(r, 0, 0, UR_ENTER_GETEVENTS);
+    n += ur_service(s, (int)ri, ev + n, cap - n);
+  }
+  /* A close or an accept on one ring may have moved the accepting job to a
+   * ring this wait did not service; its new accepts must reach the kernel. */
+  if (s->nrings && s->rings[s->acceptor]->to_submit) (void)ur_flush(s->rings[s->acceptor]);
+  return n;
+}
+
+static struct ur_ring *ur_open_slot(struct nish_uring_set *s, int32_t ring, int32_t slot) {
+  if (ring < 0 || ring >= s->nrings || slot < 0 || (uint32_t)slot >= s->slots) return NULL;
+  struct ur_ring *r = s->rings[ring];
+  return (r->st[slot] & ST_OPEN) ? r : NULL;
+}
+
+/* Queue `n` bytes for (ring, slot). They are copied, so the caller's buffer
+ * is free on return; a failure comes back later as a SEND_FAILED event. */
+int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
+  struct ur_ring *r = ur_open_slot(s, ring, slot);
+  if (!r) return -EBADF;
+  if (n < 0) return -EINVAL;
+  if (n == 0) return 0;
+  struct ur_send *q = malloc(sizeof *q + (size_t)n);
+  if (!q) return -ENOMEM;
+  memcpy(q->data, p, (size_t)n);
+  q->next = NULL;
+  q->prev_all = NULL;
+  q->next_all = s->all;
+  if (s->all) s->all->prev_all = q;
+  s->all = q;
+  q->ring = (uint32_t)ring;
+  q->slot = (uint32_t)slot;
+  q->gen = ST_GEN(r->st[slot]);
+  q->off = 0;
+  q->len = (uint32_t)n;
+  q->in_flight = 0;
+  if (r->sq_last[slot]) {
+    r->sq_last[slot]->next = q;
+  } else {
+    r->sq_first[slot] = q;
+  }
+  r->sq_last[slot] = q;
+  ur_send_head(r, (uint32_t)slot, s);
+  return n;
+}
+
+/* Cancel the slot's recv, close the slot, and move its generation on, so
+ * every completion still on its way for it is stale. The freed slot goes to
+ * the accepting job. -EAGAIN when the SQ has no room for both entries, with
+ * nothing changed. */
+int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
+  struct ur_ring *r = ur_open_slot(s, ring, slot);
+  if (!r) return -EBADF;
+  uint32_t head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
+  if (r->sq_local_tail - head + 2 > r->sq_entries) {
+    (void)ur_flush(r);
+    head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
+    if (r->sq_local_tail - head + 2 > r->sq_entries) return -EAGAIN;
+  }
+  uint32_t st = r->st[slot];
+  struct ur_sqe *e = ur_sqe(r);
+  e->opcode = UR_OP_ASYNC_CANCEL;
+  e->fd = slot;
+  e->op_flags = UR_CANCEL_FD | UR_CANCEL_FD_FIXED | UR_CANCEL_ALL;
+  e->flags = UR_SQE_CQE_SKIP_SUCCESS;
+  e->user_data = ur_tag(UR_CANCEL, st, (uint32_t)slot);
+  e = ur_sqe(r);
+  e->opcode = UR_OP_CLOSE;
+  e->file_index = (uint32_t)slot + 1;
+  e->flags = UR_SQE_CQE_SKIP_SUCCESS;
+  e->user_data = ur_tag(UR_CLOSE, st, (uint32_t)slot);
+  ur_drop_sends(s, r, (uint32_t)slot);
+  r->st[slot] = ((ST_GEN(st) + 1) & GEN_MASK) << 8;
+  r->live--;
+  s->stats.live--;
+  ur_top_up(s);
+  return 0;
+}
+
+void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) { *st = s->stats; }
+
+/* Close every ring, which ends whatever the kernel still held, and free the
+ * sends it held them for. The caller's listener stays open: it is theirs. */
+void nish_uring_destroy(struct nish_uring_set *s) {
+  if (!s) return;
+  for (int i = 0; i < s->nrings; i++) ur_free_ring(s, s->rings[i]);
+  while (s->all) {
+    struct ur_send *q = s->all;
+    s->all = q->next_all;
+    free(q);
+  }
+  close(s->ep);
+  free(s->rings);
+  free(s);
+}
+
+#else /* not Linux: no io_uring, so a set is never available */
+
+int32_t nish_uring_probe(void) { return -38; }
+int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts) {
+  (void)listener;
+  (void)opts;
+  *out = NULL;
+  return -38;
+}
+int32_t nish_uring_fd(const struct nish_uring_set *s) {
+  (void)s;
+  return -38;
+}
+int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap) {
+  (void)s;
+  (void)timeout_ms;
+  (void)ev;
+  (void)cap;
+  return -38;
+}
+int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
+  (void)s;
+  (void)ring;
+  (void)slot;
+  (void)p;
+  (void)n;
+  return -38;
+}
+int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
+  (void)s;
+  (void)ring;
+  (void)slot;
+  return -38;
+}
+void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *st) {
+  (void)s;
+  memset(st, 0, sizeof *st);
+}
+void nish_uring_destroy(struct nish_uring_set *s) { (void)s; }
+#endif
+#endif
