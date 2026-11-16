@@ -769,8 +769,9 @@ static int64_t nr_now_ms(void) {
 
 /* `pollWait` for a loop that may hold virtual sources: pump every set, take
    what is ready, and sleep on the loop's epoll set, which holds each set's
-   descriptor, no longer than the sets allow (NURING-8). A wake by the bound
-   with nothing to report sleeps again until the caller's timeout is spent. */
+   descriptor, no longer than the sets allow (NURING-8). A wake by the bound,
+   or an EINTR, with nothing to report sleeps again until the caller's timeout
+   is spent. */
 static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout_ms) {
   int64_t deadline = timeout_ms > 0 ? nr_now_ms() + timeout_ms : 0;
   for (;;) {
@@ -785,8 +786,14 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
     }
     struct epoll_event e[NR_EVENTS];
     int k = n < max ? epoll_wait(loop, e, max - n, t) : 0;
-    if (k < 0) return errno == EINTR ? n : nish_net_fail();
     int woke = 0;
+    /* io_uring's task work interrupts the wait with no signal behind it, so
+       EINTR is a wake to pump for, not an answer of 0 before the timeout. */
+    if (k < 0 && errno != EINTR) return nish_net_fail();
+    if (k < 0) {
+      k = 0;
+      woke = 1;
+    }
     for (int i = 0; i < k; i++) {
       if (e[i].data.u64 >> 32) {
         woke = 1;

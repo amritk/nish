@@ -30427,6 +30427,92 @@ if (!only || "net_fd_limit".includes(only)) {
   }
 }
 
+// WP63 S2: a `NET_LISTEN_RING` listener accepts into io_uring slots, not
+// descriptors (runtime/runtime-net.c, docs/security/net-uring.md). Three
+// programs in tests/link/net_ring_*, each judged by its own exit status:
+// `echo.ts` serves 3,000 connections under a descriptor limit of 1,024 with
+// fewer than 64 descriptors open; `full.ts`, under a limit of 32, takes
+// connections until tcpAccept answers -23 (NURING-6), then checks that the
+// handle it closed answers -9 and that the freed slot is taken again; and
+// `fallback.ts` runs under `deny.c`'s seccomp filter, which refuses
+// io_uring_setup, and must serve descriptors with netRingState() at -1. The
+// clients run in node (`client.mjs`), outside the limit. A ring program that
+// exits 2 found rings refused here, and the deny wrapper exits 3 where the
+// kernel takes no filter: each is a counted skip, never a pass.
+if (!only || "net_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const room = hard === null || hard.status !== 0 ? 0 : hard.stdout.trim() === "unlimited" ? Infinity : Number(hard.stdout)
+  if (!HAS_CLANG || hard === null) {
+    skip("net_ring: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else {
+    const dir = path.join(buildDir, "net_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const client = path.join(linkDir, "net_ring_beyond_limit", "client.mjs")
+    const build = (sub, file) => {
+      const exe = path.join(dir, file.replace(/\.ts$/, ""))
+      const c = spawnSync(NISH, [path.join(linkDir, sub, file), "--link", exe], { cwd: root, encoding: "utf8" })
+      return c.status === 0 ? { exe, c } : { exe: null, c }
+    }
+    const ring = (name, sub, file, limit, count, mode, want) => {
+      if (!(room >= limit)) {
+        skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the ${limit} the check sets`)
+        return
+      }
+      const b = build(sub, file)
+      const r =
+        b.exe === null
+          ? null
+          : spawnSync(process.execPath, [client, b.exe, String(limit), String(count), mode], {
+              encoding: "utf8",
+              timeout: 180000,
+            })
+      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+        skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+        return
+      }
+      check(
+        name,
+        r !== null && r.status === 0 && r.stdout.includes(want),
+        r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+    ring(
+      "net_ring: a ring listener serves 3,000 connections under a limit of 1,024 with fewer than 64 descriptors",
+      "net_ring_beyond_limit",
+      "echo.ts",
+      1024,
+      3000,
+      "echo",
+      "served 3000 connections with fewer than 64 descriptors\n"
+    )
+    ring(
+      "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
+      "net_ring_full",
+      "full.ts",
+      32,
+      800,
+      "hold",
+      "answered -23, then reused the freed slot\n"
+    )
+    const deny = path.join(dir, "deny")
+    const d = spawnSync("clang", ["-O1", "-o", deny, path.join(linkDir, "net_ring_fallback", "deny.c")], {
+      encoding: "utf8",
+    })
+    const b = d.status === 0 ? build("net_ring_fallback", "fallback.ts") : { exe: null, c: d }
+    const r = b.exe === null ? null : spawnSync(deny, [b.exe], { encoding: "utf8", timeout: 60000 })
+    if (r !== null && r.status === 3) {
+      skip("net_ring: the fallback needs a seccomp filter, and this kernel takes none")
+    } else {
+      check(
+        "net_ring: with io_uring_setup refused, a ring listener serves descriptors and netRingState() is -1",
+        r !== null && r.status === 0 && r.stdout.startsWith("rings refused with -1; served descriptor "),
+        r === null ? `does not build\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its

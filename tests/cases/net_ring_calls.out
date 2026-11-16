@@ -1,0 +1,11 @@
+ring bit: 8
+before a listen: 0
+flags 8: 0
+decided after: yes
+flags 15: 0
+flags 16: -22
+flags -1: -22
+empty accept: -11
+handle 1048576: read -9 write -9 poll -9 send -9 close -9
+handle 1073741829: read -9 write -9 poll -9 send -9 close -9
+handle 2147483647: read -9 write -9 poll -9 send -9 close -9

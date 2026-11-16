@@ -1641,13 +1641,18 @@ declare function tcpListen(host: string, port: i32, backlog: i32): i32;
  * (NL2404). Not callable in a `scope()` task or a parallel body. Capability:
  * net.
  *
+ * Flag 8 (`NET_LISTEN_RING` in `nish:net`) accepts into io_uring slots on
+ * Linux, so connections are not bound by the descriptor limit; where rings are
+ * refused the listener serves descriptors and `netRingState` says why. Elsewhere
+ * the flag is accepted and does nothing.
+ *
  * @param host the numeric address to bind.
  * @param port the port, 0 for any.
  * @param backlog the kernel's queue of unaccepted connections.
- * @param flags 1, 2 and 4 as above.
+ * @param flags 1, 2, 4 and 8 as above.
  * @returns the listener's descriptor, or a negative errno: -22 for any other bit (a negative
  *   `flags` included) or 4 without 1, before a socket is made; -95 for flag 4 off Linux; -98
- *   for a port in use.
+ *   for a port in use; -23 when every ring a process may hold is taken.
  */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
 /**
@@ -3137,11 +3142,21 @@ declare module "nish:net" {
    * @param host A numeric host, as for `tcpListen`.
    * @param port The port.
    * @param backlog The length of the accept queue.
-   * @param flags The sum of the flags: `3` is both, `5` and `7` steer, and `0`
-   *   is `tcpListen` exactly.
+   * Flag 8, `NET_LISTEN_RING`, accepts into io_uring slots on Linux: each
+   * connection is a slot handle at or above 2^20 rather than a descriptor, so
+   * a listener holds connections past `RLIMIT_NOFILE`. `netRead`, `netWrite`,
+   * `netWrite2`, `netClose`, `netLocalPort` and the poll loop take a slot
+   * handle; calls that need a descriptor, `sendFd` among them, answer `-9`.
+   * The first listener that sets the flag decides for the process: where the
+   * kernel refuses rings it serves descriptors, and `netRingState` answers the
+   * errno. Off Linux the flag is accepted and does nothing.
+   *
+   * @param flags The sum of the flags: `3` is both, `5` and `7` steer, `8`
+   *   accepts into rings, and `0` is `tcpListen` exactly.
    * @returns The listener's descriptor or the failure: `-22` for any other
    *   bit, a negative `flags`, or flag 4 without 1, before a socket is made;
-   *   `-95` for flag 4 off Linux.
+   *   `-95` for flag 4 off Linux; `-23` when every ring a process may hold is
+   *   taken.
    */
   export function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
   /**
@@ -3151,9 +3166,12 @@ declare module "nish:net" {
    *
    * @param fd The listener.
    * @param peer The array the peer's address form is written into.
-   * @returns The connection's descriptor, `-11` when none is waiting, `-22`
-   *   for a `peer` shorter than 18 bytes before anything is accepted (so no
-   *   connection is taken and lost), or `-95` for a datagram socket.
+   * @returns The connection's descriptor (a slot handle from a
+   *   `NET_LISTEN_RING` listener, whose `peer` is written as zeros), `-11`
+   *   when none is waiting, `-23` when a ring listener's slots are all
+   *   taken, `-22` for a `peer` shorter than 18 bytes before anything is
+   *   accepted (so no connection is taken and lost), or `-95` for a
+   *   datagram socket.
    */
   export function tcpAccept(fd: i32, peer: u8[]): i32;
   /**
