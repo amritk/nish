@@ -398,10 +398,11 @@ table.t-editor__table {
   border-radius: 14px;
 }
 /* A table sizes its columns to what they hold, and the name in the first
-   column (a module, a flag, a type) breaks only at a space, never inside a
-   word: `nish:async` stays one line. Scalar fixes the layout and lets code
-   wrap anywhere, which split names across two lines in a narrow column. A
-   table too wide for its column scrolls inside its frame. */
+   column (a module, a flag, a type) breaks only at a space or, for a path,
+   after a slash (site.js marks those), never inside a word: `nish:async`
+   stays one line and `nish/net/http1-client-codec` breaks after `net/`.
+   Scalar fixes the layout and lets code wrap anywhere, which split names
+   mid-word in a narrow column. */
 table.t-editor__table {
   table-layout: auto;
 }

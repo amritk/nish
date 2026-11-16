@@ -2,7 +2,8 @@
   The docs site's one script: it builds the animated hero on the landing page
   (the name unfolding into what it stands for, a source file compiling to its
   targets), gives cards a highlight that follows the pointer, and writes the
-  pages' structured data (JSON-LD). Everything it draws is styled, and
+  pages' structured data (JSON-LD), and lets a path in a table break at its
+  slashes. Everything it draws is styled, and
   animated, by theme.css; with this file missing the pages read the same,
   without the hero.
 
@@ -347,6 +348,29 @@
     }
   }
 
+  /**
+   * A path in a table cell, such as `nish/net/http1-client-codec`, may break
+   * after a slash and nowhere else: theme.css keeps a name in a table whole,
+   * and a long path would otherwise widen its column past the page. Only code
+   * with no markup inside is touched, so each is rewritten once; should
+   * Scalar redraw one, the next pass puts its breaks back.
+   */
+  const pathBreaks = () => {
+    for (const code of document.querySelectorAll("table.t-editor__table code")) {
+      if (code.childElementCount > 0 || !code.textContent.includes("/")) {
+        continue
+      }
+      const nodes = []
+      code.textContent.split("/").forEach((part, i) => {
+        if (i > 0) {
+          nodes.push("/", document.createElement("wbr"))
+        }
+        nodes.push(part)
+      })
+      code.replaceChildren(...nodes)
+    }
+  }
+
   let queued = false
   const observer = new MutationObserver(() => {
     if (queued) {
@@ -357,12 +381,14 @@
       queued = false
       fill()
       structuredData()
+      pathBreaks()
     })
   })
 
   const start = () => {
     fill()
     structuredData()
+    pathBreaks()
     observer.observe(document.body, { childList: true, subtree: true })
     // A route change retitles the page in the head, not only in the body.
     observer.observe(document.head, { childList: true, subtree: true, characterData: true })
