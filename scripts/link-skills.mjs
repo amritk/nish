@@ -9,12 +9,19 @@
  * `package.json` `exports` uses a `nish` condition. A plain npm package with a
  * `skills/` directory is not a Nish package and is left alone.
  *
- * **Nothing is linked without consent.** A skill is instructions for Claude
- * plus an optional `allowed-tools` grant, and any package in the tree can ship
- * one, so the unit of consent is one package, one skill name and one hash of
- * the whole skill directory. The accepted triples live in
- * `.claude/skills/.nish-skills.json`; a new package, a rival claiming the same
- * name, or a changed hash is not accepted until the user says so again.
+ * **Nothing is linked without consent.** A skill is instructions for Claude,
+ * and its frontmatter and body can grant tools, register hooks or run shell
+ * commands when it loads; any package in the tree can ship one, so the unit of
+ * consent is one package, one skill name and one hash of the whole skill
+ * directory. The accepted triples live in `.claude/skills/.nish-skills.json`;
+ * a new package, a rival claiming the same name, or a changed hash is not
+ * accepted until the user says so again. What a skill grants is read against an
+ * allowlist of inert frontmatter keys, so a key this file does not know counts
+ * as a grant.
+ *
+ * **Everything a package controls is checked, never trusted**: a skill name
+ * must match `NAME` before it is linked or printed in a command, and every
+ * other package string reaches the terminal only through `clean`.
  *
  * **Links, not copies**: `.claude/skills/<name>` is a relative symlink to
  * `../../node_modules/<pkg>/skills/<name>`, so it survives moving the project.
@@ -104,6 +111,13 @@ const nishPackages = (nodeModules) => {
   const rank = (p) => (p.name === "nish" ? "" : p.name)
   return found.sort((a, b) => Number(rank(a) > rank(b)) - Number(rank(a) < rank(b)))
 }
+
+/**
+ * The names a skill may have: Claude Code's own shape. Anything else is never
+ * linked, so every name that reaches a path, the record or a command the user is
+ * told to run is safe in all three.
+ */
+const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
 /** The skills a package ships: each `skills/<name>/` that holds a `SKILL.md`. */
 const skillsOf = (dir) =>
@@ -203,26 +217,82 @@ const hashSkill = (dir) => {
   return `sha256-${hash.digest("hex")}`
 }
 
-/** What `allowedTools` holds when the frontmatter could not be read: it counts as a grant. */
-const UNREADABLE = "<unreadable frontmatter>"
+/** What a skill grants when its frontmatter could not be read: it counts as a grant. */
+const UNREADABLE = "unreadable frontmatter"
+
+/**
+ * The top-level frontmatter keys Claude Code documents as granting nothing.
+ * Every other key -- `allowed-tools`, `hooks`, `context`, `agent`,
+ * `background`, or one added after this list was written -- counts as a grant,
+ * so a key Claude Code learns later is refused by `--yes` until a person names
+ * the skill.
+ */
+const INERT = new Set([
+  "name",
+  "description",
+  "when_to_use",
+  "argument-hint",
+  "arguments",
+  "metadata",
+  "license",
+  "compatibility",
+  "model",
+  "effort",
+  "disable-model-invocation",
+  "user-invocable",
+  "paths",
+  "disallowed-tools",
+  "shell",
+])
+
+/** Keys Claude Code documents as granting something, named as they are rather than as unknown. */
+const GRANTING = new Set(["hooks", "context", "agent", "background"])
+
+/**
+ * A `SKILL.md` body or frontmatter that runs a shell command when the skill
+ * loads: an inline `` !`cmd` `` anywhere, or a fenced block opened with `!`.
+ * A `!` straight after a letter, digit or `_` is not one: that is code such as
+ * TypeScript's `` `x!` `` (non-null assertion) inside a code span. Every other
+ * `` !` `` counts, so the check errs towards asking.
+ */
+const SHELL_AT_LOAD = /(?<![\p{L}\p{N}_])!`|^[ \t]*(?:`{3,}|~{3,})[ \t]*!/mu
 
 /** A YAML scalar with its quotes taken off. */
 const unquote = (value) => (/^"[^"]*"$|^'[^']*'$/.test(value) ? value.slice(1, -1) : value)
 
+/** The tools an `allowed-tools` key lists, with `<unreadable>` for a form this file does not read. */
+const toolsOf = ({ value, under }) => {
+  if (value === "" && under.every((item) => item.startsWith("- "))) {
+    return under.map((item) => unquote(item.slice(2).trim()))
+  }
+  if (under.length > 0 || (value.startsWith("[") && !value.endsWith("]"))) {
+    return ["<unreadable>"]
+  }
+  if (value.startsWith("[")) {
+    return value
+      .slice(1, -1)
+      .split(",")
+      .map((t) => unquote(t.trim()))
+  }
+  return unquote(value).split(/[,\s]+/)
+}
+
 /**
- * The description and `allowed-tools` of a `SKILL.md`, read from its leading
- * `---` block. It reads only top-level `key: value` scalars, inline `[a, b]`
- * lists and `- item` block lists -- no YAML dependency -- and it fails closed:
- * a block it cannot read, or an `allowed-tools` key in any form it does not
- * know, even an empty one, makes `allowedTools` non-null. Only a block that
- * parsed and has no such key yields null.
+ * The description of a `SKILL.md` and everything it grants, read from its
+ * leading `---` block and its body. It reads only top-level `key: value`
+ * scalars, inline `[a, b]` lists and `- item` block lists -- no YAML
+ * dependency -- and it fails closed: a block it cannot read, a top-level key
+ * not in `INERT`, or a load-time shell command adds to `grants`. Only a block
+ * that parsed, holds inert keys alone, and a text with no `!` command yields
+ * an empty `grants`.
  *
  * @param {string} text The whole `SKILL.md`.
- * @returns {{ description: string, allowedTools: string[] | null }}
+ * @returns {{ description: string, grants: string[] }} Each grant as it is shown, unsanitised.
  */
 const frontmatter = (text) => {
-  const unreadable = { description: "", allowedTools: [UNREADABLE] }
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/)
+  const shell = SHELL_AT_LOAD.test(text) ? ["runs shell at load"] : []
+  const unreadable = { description: "", grants: [UNREADABLE, ...shell] }
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/)
   if (lines[0].trimEnd() !== "---") {
     return unreadable
   }
@@ -244,7 +314,7 @@ const frontmatter = (text) => {
       continue
     }
     // A quoted key, a merge key, a flow mapping: anything else at the top could
-    // hide an allowed-tools, so the whole block counts as unreadable.
+    // hide a grant, so the whole block counts as unreadable.
     const m = /^([A-Za-z0-9_.-]+):(?:\s+(.*))?$/.exec(line)
     if (m === null) {
       return unreadable
@@ -255,33 +325,20 @@ const frontmatter = (text) => {
     .filter((k) => k.key === "description")
     .map((k) => [unquote(k.value.replace(/^[>|][-+]?$/, "")), ...k.under].join(" ").trim())
     .join(" ")
-  // Any spelling a reader might honour counts, so a near-miss key cannot slip a grant past.
-  const grants = keys.filter((k) => /^allowed[-_]?tools$/i.test(k.key))
-  if (grants.length === 0) {
-    return { description, allowedTools: null }
-  }
-  const tools = []
-  for (const { value, under } of grants) {
-    if (value === "" && under.every((item) => item.startsWith("- "))) {
-      tools.push(...under.map((item) => unquote(item.slice(2).trim())))
-    } else if (under.length > 0) {
-      tools.push(UNREADABLE)
-    } else if (value.startsWith("[")) {
-      if (!value.endsWith("]")) {
-        tools.push(UNREADABLE)
-      } else {
-        tools.push(
-          ...value
-            .slice(1, -1)
-            .split(",")
-            .map((t) => unquote(t.trim()))
-        )
-      }
+  const grants = []
+  for (const k of keys) {
+    if (INERT.has(k.key)) {
+      continue
+    }
+    if (/^allowed[-_]?tools$/i.test(k.key)) {
+      // Any spelling a reader might honour is shown as what it is, so a near-miss reads as a grant.
+      const tools = toolsOf(k).filter((t) => t !== "")
+      grants.push(tools.length === 0 ? `${k.key} (present, empty)` : `${k.key}: ${tools.join(", ")}`)
     } else {
-      tools.push(...unquote(value).split(/[,\s]+/))
+      grants.push(GRANTING.has(k.key) ? k.key : `unknown key ${k.key}`)
     }
   }
-  return { description, allowedTools: tools.filter((t) => t !== "") }
+  return { description, grants: [...grants, ...shell] }
 }
 
 /** A package's `version`, or `?` when it has none to show. */
@@ -304,13 +361,14 @@ const versionOf = (dir) => {
  * @property {string} dir The skill directory's absolute path.
  * @property {string} hash `sha256-<hex>` over the whole skill directory.
  * @property {string} description The frontmatter's `description`, unsanitised.
- * @property {string[] | null} allowedTools Null when it grants no tools; otherwise what it grants, unsanitised.
+ * @property {string[]} grants What it grants, as `frontmatter` reads it, unsanitised; empty when it grants nothing.
  */
 
 /**
  * Every skill the project's Nish packages ship. The first package in order to
  * claim a name wins it -- `nish` first, so no library can shadow its skills --
- * and a later claimant is reported as skipped.
+ * and a later claimant is reported as skipped, as is a directory whose name is
+ * not a `NAME`.
  *
  * @param {string} project The project root, the directory holding `node_modules/`.
  * @returns {{ skills: Skill[], skipped: { name: string, reason: string }[] }}
@@ -320,6 +378,10 @@ const findSkills = (project) => {
   const skipped = []
   for (const pkg of nishPackages(path.join(path.resolve(project), "node_modules"))) {
     for (const name of skillsOf(pkg.dir)) {
+      if (!NAME.test(name)) {
+        skipped.push({ name, reason: `in ${pkg.name} is not a valid skill name, so it is not linked` })
+        continue
+      }
       const owner = skills.find((s) => s.name === name)
       if (owner !== undefined) {
         skipped.push({ name, reason: `${owner.pkg} already provides it, so ${pkg.name}'s is not linked` })
@@ -332,7 +394,7 @@ const findSkills = (project) => {
       } catch {
         // Unreadable: fails closed below, like a block that does not parse.
       }
-      const meta = text === null ? { description: "", allowedTools: [UNREADABLE] } : frontmatter(text)
+      const meta = text === null ? { description: "", grants: ["unreadable SKILL.md"] } : frontmatter(text)
       skills.push({ pkg: pkg.name, version: versionOf(pkg.dir), name, dir, hash: hashSkill(dir), ...meta })
     }
   }
@@ -397,13 +459,15 @@ const writeAtomic = (file, data) => {
 
 /**
  * Make `<project>/.claude/skills/` match what is accepted: link every accepted
- * skill, unlink every linker-owned link to a found skill that is not accepted
- * at its current hash, prune owned links whose target is gone, and write the
- * record of what is accepted.
+ * skill, unlink every other linker-owned link (to a skill not accepted at its
+ * current hash, or one no installed Nish package ships any more), and write
+ * the record of what is accepted.
  *
- * A skill in `accepted` counts only if `findSkills` still finds it from the
- * same package at the same hash, so a skill that changed between the question
- * and the link is not linked. Nothing is created under `.claude/` when nothing
+ * A skill in `accepted` counts only if it is in `found` from the same package
+ * at the same hash. The check is against `found`, not the disk: a caller that
+ * asked a question about a skill passes the same `found` it asked about, and a
+ * caller that wants the disk's current state passes a fresh `findSkills`.
+ * Nothing is created under `.claude/` when nothing
  * is accepted. Running it twice changes nothing the second time. A write that
  * fails throws, after cleaning up its temporary entry.
  *
@@ -496,17 +560,23 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
   }
 
   const names = new Set(all.map((s) => s.name))
+  // Every other owned link goes: a temporary one a killed run left behind, one
+  // whose target is gone, and one to a skill that no longer qualifies (its
+  // package dropped `exports.nish`, or the name is no longer valid), which
+  // would otherwise keep serving whatever the package now ships.
   for (const name of fs.readdirSync(skills).sort()) {
     const entry = path.join(skills, name)
     if (names.has(name) || !owned(entry, lstatOrNull(entry))) {
       continue
     }
+    const gone = !fs.existsSync(targetOf(entry))
+    fs.unlinkSync(entry)
     if (TEMP.test(name)) {
-      // A temporary link a killed run left behind: never a skill, whatever it points at.
-      fs.unlinkSync(entry)
-    } else if (!fs.existsSync(targetOf(entry))) {
-      fs.unlinkSync(entry)
+      // Never a skill, whatever it points at: nothing to report.
+    } else if (gone) {
       result.pruned.push(name)
+    } else {
+      result.unlinked.push({ name, reason: "no installed Nish package ships it" })
     }
   }
 
@@ -533,25 +603,32 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
 
 /**
  * A package-controlled string made safe for a terminal: every C0 and C1
- * control, DEL, and the bidirectional overrides become `?` (tab and newline a
- * space), and anything past `max` code points is cut, so a `SKILL.md` cannot
- * move the cursor, recolour or redraw the prompt it is shown in.
+ * control, DEL, the bidirectional marks and overrides, the zero-width and
+ * other invisible characters, and the tag characters become `?` (tab and
+ * newline a space), and anything past `max` code points is cut, so a
+ * `SKILL.md` cannot move the cursor, recolour or redraw the prompt it is shown
+ * in, or hide text inside what it shows.
+ *
+ * @param {unknown} text The string to show.
+ * @param {number} [max] The most code points to keep.
+ * @returns {string} The text, safe to print.
  */
-const clean = (text, max = 300) => {
+export const clean = (text, max = 300) => {
   const safe = Array.from(
     String(text)
       .replace(/[\t\n\r]/g, " ")
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the control characters is the point
-      .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069]/g, "?")
+      .replace(
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the control characters is the point
+        /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2028\u2029\u2060-\u2069\ufeff\u{e0000}-\u{e007f}]/gu,
+        "?"
+      )
   )
   return safe.length > max ? `${safe.slice(0, max).join("")}...` : safe.join("")
 }
 
 /** What a skill grants, for the terminal. */
 const grantOf = (skill) =>
-  skill.allowedTools === null
-    ? "grants no tools"
-    : `allowed-tools: ${skill.allowedTools.length === 0 ? "(present, empty)" : skill.allowedTools.map((t) => clean(t, 80)).join(", ")}`
+  skill.grants.length === 0 ? "grants nothing" : `grants ${skill.grants.map((g) => clean(g, 80)).join("; ")}`
 
 /**
  * The `nish-skills` command, without its argument parsing: find the project's
@@ -561,7 +638,7 @@ const grantOf = (skill) =>
  * asking. Otherwise, with `ask` (an interactive run), each skill is shown and
  * asked about, and only `y` or `yes` accepts; with names or `yes` (a run that
  * cannot ask), a named skill is accepted whatever it grants, `yes` accepts
- * every skill that grants no tools, and a skill that grants tools is linked
+ * every skill that grants nothing, and a skill that grants anything is linked
  * only when named. Declines are not recorded, so an interactive run asks again.
  *
  * @param {string} project The project root.
@@ -595,7 +672,7 @@ export const review = async (
       if (answer !== null && /^y(es)?$/i.test(answer.trim())) {
         accepted.push(skill)
       }
-    } else if (yes && skill.allowedTools === null) {
+    } else if (yes && skill.grants.length === 0) {
       accepted.push(skill)
     } else {
       waiting.push(skill)
@@ -608,9 +685,9 @@ export const review = async (
       `found   ${name} from ${clean(skill.pkg, 100)}@${clean(skill.version, 40)}: ${clean(skill.description) || "(no description)"}`
     )
     say(
-      skill.allowedTools === null
+      skill.grants.length === 0
         ? `        not linked; accept it with 'npx nish-skills ${name}' or 'npx nish-skills --yes'`
-        : `        not linked: it grants tools (${grantOf(skill)}), so only 'npx nish-skills ${name}' accepts it`
+        : `        not linked: it ${grantOf(skill)}, so only 'npx nish-skills ${name}' accepts it`
     )
   }
   for (const name of result.linked) {

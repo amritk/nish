@@ -1,5 +1,10 @@
 # Agent skills
 
+A skill from a package is instructions your coding agent follows, written by
+whoever published the package, so Nish links one into your project only after
+you accept it, and only as it is when you accept it. Installing a package
+never links a skill. `npx nish-skills` shows you each one and asks.
+
 A coding agent writes better Nish when it has the rules in front of it. Nish
 ships them as an *agent skill*: `writing-nish`, a single `SKILL.md` that
 teaches an agent the subset, the compile-and-fix loop and the TypeScript
@@ -35,7 +40,15 @@ whole directory, every file and link in it, in
 `.claude/skills/.nish-skills.json`. When an upgrade changes anything in an
 accepted skill, the next `npx nish-skills` asks again, and a run that cannot
 ask removes the link until you do. The same happens when a different package
-starts shipping a skill under a name you accepted.
+starts shipping a skill under a name you accepted, and when the package that
+shipped a linked skill stops being a Nish package: any link of Nish's that is
+not accepted at a skill found now is removed.
+
+**Run `npx nish-skills` after you upgrade a package that ships skills.** The
+check happens when the command runs, not when npm installs. A link points into
+`node_modules/`, so from the moment `npm update` replaces the package until
+your next `npx nish-skills`, your agent sees the new version of the skill,
+whatever it now grants.
 
 ## Reviewing skills: `npx nish-skills`
 
@@ -46,23 +59,35 @@ npx nish-skills
 ```
 
 For each skill you have not accepted at its current hash, it prints the
-package, the skill's description and the tools it grants, then asks
+package, the skill's description and what it grants, then asks
 `Link <name>? [y/N]`. Only `y` or `yes` links it. Enter, any other answer and
 the end of input decline. A decline is not recorded, so the next run asks
-again.
+again. Ctrl-C at a question stops the command with exit status 130 and writes
+nothing, since every question is asked before anything is linked.
 
 Where there is no terminal to ask in, such as a script or CI, say what to
 accept:
 
 ```bash
 npx nish-skills writing-nish   # link these skills, whatever they grant
-npx nish-skills --yes          # link every skill that grants no tools
+npx nish-skills --yes          # link every skill that grants nothing
 ```
 
-`--yes` links only a skill whose frontmatter grants no tools. A skill with an
-`allowed-tools` key, even an empty one, or with frontmatter Nish cannot read,
-is left for you to name. Run with neither, and with no terminal, the command
-keeps what you accepted before and links nothing new.
+`--yes` links only a skill that grants nothing. Nish reads a skill's
+frontmatter against a list of keys known to be inert, such as `name`,
+`description`, `model` and `paths`. Anything else counts as a grant, and the
+skill is left for you to name:
+
+- an `allowed-tools` key, even an empty one;
+- `hooks`, `context`, `agent` or `background`;
+- any key Nish does not know;
+- a shell command the agent runs when the skill loads: `` !`cmd` `` in the
+  text, or a code fence opened with `` ```! ``;
+- frontmatter Nish cannot read, or none at all.
+
+Run with neither names nor `--yes`, and with no terminal, the command keeps
+what you accepted before and links nothing new. `npx nish-skills --help`
+prints the usage, whatever else is on the line.
 
 It finds the project the same way the install does: the directory whose
 `node_modules/nish` it is running from, which in a workspace is the root Nish
@@ -71,13 +96,16 @@ the nearest directory above you holding a `package.json`. You can also name
 the project with `--dir path/to/app`. It considers the skills of every
 installed Nish package: `nish` and each `node_modules/<pkg>` or
 `node_modules/@scope/<pkg>` with a `nish` condition. An ordinary npm package
-that happens to have a `skills/` directory is left out.
+that happens to have a `skills/` directory is left out, and so is a skill
+directory whose name is not a valid skill name: lowercase letters, digits,
+`.`, `_` and `-`, starting with a letter or digit, at most 64 characters.
 
-It prints one line per change and a summary, and running it again changes
-nothing. Run it after you add, remove or upgrade a Nish library: a link whose
-package is gone is removed. It exits 0 when it ran, 1 when a write failed, and
-2 for a usage error, a skill name no installed package ships, or when it finds
-no project.
+It prints one line per change, a `found` line for each skill still waiting to
+be accepted, and a summary. Running it again changes nothing on disk, though
+the `found` lines repeat until you accept or remove those skills. Run it after
+you add, remove or upgrade a Nish library. It exits 0 when it ran, 1 when a
+write failed, 2 for a usage error, a skill name no installed package ships, or
+when it finds no project, and 130 when Ctrl-C interrupts a question.
 
 When two packages ship a skill with the same name, `nish` wins first, so no
 library can replace `writing-nish`; between libraries, the first by package
@@ -119,7 +147,9 @@ are installed. Most projects leave them out of version control with a line in
 
 Commit `.claude/skills/.nish-skills.json` if you want a fresh clone to keep
 what you accepted: after `npm install`, `npx nish-skills` links those skills
-again without asking, as long as their hashes still match.
+again without asking, as long as their hashes still match. Whoever can change
+that file can accept a skill for everyone who clones the project, one that
+grants tools included, so review a change to it as you would a change to code.
 
 ## For library authors: shipping a skill
 
@@ -158,7 +188,9 @@ another package's, such as your package's own name.
 
 Give the skill frontmatter with a `name` and a `description`: the description
 is what a user reads before accepting it. Grant tools only if the skill needs
-them, since `--yes` skips a skill that grants any. Every release that changes
+them, and keep to the inert frontmatter keys, since `--yes` skips a skill that
+grants anything. Name the skill's directory with lowercase letters, digits,
+`.`, `_` and `-`, or it is not offered at all. Every release that changes
 the skill directory asks your users to accept it again.
 
 Tell your users to run `npx nish-skills` after installing your package; your
