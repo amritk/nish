@@ -734,8 +734,8 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     } else if (res == -EINTR || res == -EAGAIN || res == -ENOBUFS) {
       s->stats.send_requeues++;
     } else if (res < 0) {
+      /* q is the head and no longer in flight, so this frees it with the rest. */
       ur_drop_sends(s, r, slot);
-      ur_unlink_all(s, q);
       ur_event(ev, NISH_URING_SEND_FAILED, ri, slot, res, NULL);
       return 1;
     } else {
@@ -922,10 +922,7 @@ static void ur_catch_up(struct nish_uring_set *s) {
     for (uint32_t i = 0; i < n; i++) {
       uint32_t slot = r->parked[i];
       r->st[slot] &= ~ST_PARKED;
-      if ((r->st[slot] & (ST_OPEN | ST_ARMED)) == ST_OPEN) {
-        s->stats.nobufs_rearms += 0;
-        ur_arm(r, slot);
-      }
+      if ((r->st[slot] & (ST_OPEN | ST_ARMED)) == ST_OPEN) ur_arm(r, slot);
     }
   }
   if (s->stalled_sends) {

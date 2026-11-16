@@ -1675,7 +1675,7 @@ const DEALT_SECTIONS = {
     tail: true,
   },
   runtimeChecks: {
-    name: "the region, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
+    name: "the region, uring, runtime_test, f64 oracle, prelude, wasm-memory and wasi sections",
     selected: true,
     tail: true,
   },
@@ -16741,6 +16741,45 @@ if (dealtHere("runtimeChecks")) {
       wasm.status === 2 && wasm.stderr.includes("uses regions") && wasm.stderr.includes("--profile wasi"),
       `exit ${wasm.status}\n${wasm.stderr}`
     )
+  }
+
+  // ---- The io_uring ring layer (WP63 S1): runtime-uring.c from C -------------------------
+  // tests/runtime/uring-test.c includes the layer and runs one mode a check:
+  // an echo server forked over a listener holds the parent's clients in a set
+  // of rings and answers by exit status (0 a pass, 77 a skip with its reason on
+  // stdout). `fallback` refuses io_uring with a seccomp filter and runs on any
+  // Linux; the others need io_uring and skip where the probe says it is
+  // refused. docs/security/net-uring.md lists what each one proves.
+  if (!only || "uring".includes(only)) {
+    if (process.platform !== "linux") {
+      skip("uring: runtime-uring.c's rings are Linux-only")
+    } else {
+      const exe = path.join(buildDir, "uring-test")
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "tests/runtime/uring-test.c", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      check("uring: tests/runtime/uring-test.c compiles with runtime-uring.c under -Werror", cc.status === 0, cc.stderr)
+      const modes = [
+        ["fallback", "a seccomp-refused io_uring_setup or io_uring_register answers its errno, with no descriptor left"],
+        ["beyond", "3,000 connections held at once under RLIMIT_NOFILE 1,024, in three rings, fewer than 64 descriptors"],
+        ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
+        ["taskrun", "a burst of 500 over four rings completes, entering again while IORING_SQ_TASKRUN is up"],
+        ["overflow", "a CQ of 8 under 256 clients overflows and is drained"],
+        ["nobufs", "a recv that runs out of provided buffers is re-armed, not closed"],
+        ["short", "an 8 MiB send the kernel takes short arrives whole and in order"],
+        ["reset", "a send the peer resets fails once as SEND_FAILED, and its record is freed once"],
+      ]
+      for (const [mode, what] of cc.status === 0 ? modes : []) {
+        const run = spawnSync(exe, [mode], { encoding: "utf8", timeout: 180_000 })
+        if (run.status === 77) {
+          skip(`uring: runtime-uring.c ${mode}: ${run.stdout.trim()}`)
+          continue
+        }
+        check(`uring: runtime-uring.c ${mode}: ${what}`, run.status === 0, `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}`)
+      }
+    }
   }
 
   // ---- B. Pipeline checks -----------------------------------------------------------

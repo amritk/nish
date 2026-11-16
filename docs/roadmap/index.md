@@ -52,6 +52,7 @@ specified.
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
+| [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | In progress | 2 of 6 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
@@ -59,7 +60,6 @@ specified.
 | [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 5 |
 | [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md) | Proposed | 0 of 3 |
 | [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md) | Proposed | 0 of 5 |
-| [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | Proposed | 1 of 6 |
 
 ## Landed
 

@@ -750,6 +750,20 @@ const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
  */
 const RUNTIME_SHM_TEXT_BUDGET = 3072
 /**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-uring.c`
+ * -- the io_uring ring layer of WP63 S1 (docs/wp63-iouring-net.md, docs/security/net-uring.md):
+ * the probe, the ring set's open and destroy, each ring's setup with its registered
+ * file table and provided buffers, the bounded single-shot accept, the receive arm,
+ * the completion drain with its DEFER_TASKRUN re-entry and overflow catch-up, the
+ * send queue with its short-send requeue, and the slot close with its generation.
+ *
+ * Measured **6,138 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64 (the same with
+ * `-DNISH_THREADS=1`: the layer keeps no thread-local state). The budget is the next
+ * 256-byte boundary above the measurement. A unit of its own beside runtime-net.c, so
+ * that the epoll path links none of it: nothing in `nish:net` calls it until S2.
+ */
+const RUNTIME_URING_TEXT_BUDGET = 6144
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
  * table, `nish_region_new`, `_enter`, `_leave` and `_free` with their zero, stale,
@@ -1020,6 +1034,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET, "RUNTIME_SANDBOX_TEXT_BUDGET", []],
   ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", []],
   ["runtime/runtime-shm.c", RUNTIME_SHM_TEXT_BUDGET, "RUNTIME_SHM_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
+  ["runtime/runtime-uring.c", RUNTIME_URING_TEXT_BUDGET, "RUNTIME_URING_TEXT_BUDGET", []],
   ["runtime/runtime-region.c", RUNTIME_REGION_TEXT_BUDGET, "RUNTIME_REGION_TEXT_BUDGET", []],
   [
     "runtime/runtime-region.c",
