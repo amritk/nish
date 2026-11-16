@@ -105,7 +105,7 @@ import {
   routerDecode,
 } from "nish/net/router"
 import { URL_DECODE_ALLOW_NUL, URL_DECODE_ERR_SPACE, URL_DECODE_FORM, percentDecode } from "nish/net/url"
-import { pollAdd, pollCreate, pollModify, pollRemove, pollWait } from "nish:net"
+import { NET_LISTEN_RING, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpListenFlags } from "nish:net"
 
 /** An answer sent, or queued to be sent. */
 export const HANDLER_SENT: i32 = 0
@@ -142,7 +142,10 @@ const HANDLER_ONE_MIB: i32 = 1048576
 /** `tcpAccept`: none is waiting (EAGAIN), or the one that was left before it was taken (ECONNABORTED). */
 const HANDLER_ACCEPT_NONE: i32 = -11
 const HANDLER_ACCEPT_ABORTED: i32 = -103
-/** How long the listener rests after an accept fails for want of descriptors or memory: 100 ms. */
+/**
+ * How long, at most, the listener rests after an accept fails for want of
+ * descriptors, ring slots or memory: 100 ms, or until a connection closes.
+ */
 const HANDLER_ACCEPT_REST: i64 = 100000000
 /** How often, at most, `wait` looks for a body past `bodyTimeout`: a second, in nanoseconds. */
 const HANDLER_BODY_SWEEP: i64 = 1000000000
@@ -160,8 +163,21 @@ const HANDLER_TOOK_THREE: i32 = 768
 export class HandlerLimits {
   /** The carrier's caps and timeouts; `http.maxBody` is the body cap, past which a request is answered 413. */
   http: Http1Config
-  /** The most connections at once. */
+  /**
+   * The most connections at once. It is the handler's own cap, not
+   * `RLIMIT_NOFILE`: with `ring` set the connections live in io_uring slots
+   * and may outnumber the descriptor limit. Past it a connection is accepted
+   * and closed at once.
+   */
   slots: i32 = 256
+  /**
+   * Whether `listen` opens its listener with `NET_LISTEN_RING`, so each
+   * connection is accepted into an io_uring slot rather than a descriptor.
+   * Off by default. Where the kernel refuses rings, the listener serves
+   * descriptors and `netRingState` says why. A connection is then a slot
+   * handle, which `sendFd` and a C library through `nish:ffi` cannot take.
+   */
+  ring: boolean = false
   /**
    * Bytes in the JSON scratch buffer: the largest body `json` and `problem`
    * can write. A value past it makes `sendJson` answer 500. At least 256.
@@ -187,6 +203,19 @@ export class HandlerLimits {
   constructor() {
     this.http = new Http1Config()
     this.http.maxBody = HANDLER_ONE_MIB
+  }
+
+  /**
+   * Opens a TCP listener for an `HttpHandler` with these limits:
+   * `tcpListenFlags` with `flags`, plus `NET_LISTEN_RING` when `ring` is set.
+   * @param host the address to bind, such as "0.0.0.0"
+   * @param port the port to bind, or 0 for one the kernel picks
+   * @param backlog the kernel's queue of connections not yet accepted
+   * @param flags `tcpListenFlags`' other bits: 1 for `SO_REUSEPORT`, 2 for `TCP_NODELAY`
+   * @returns the listener, or a negative errno
+   */
+  listen(host: string, port: i32, backlog: i32, flags: i32): i32 {
+    return tcpListenFlags(host, port, backlog, this.ring ? flags | NET_LISTEN_RING : flags)
   }
 }
 
@@ -523,9 +552,10 @@ export class HttpHandler {
   private problemType: u8[]
   private noFields: u8[][]
   /**
-   * When an accept failed for want of a resource (EMFILE, ENFILE, ENOMEM):
-   * the listener is out of the loop until then, which it would otherwise wake
-   * every turn while its connection waits. 0 while it is in the loop.
+   * When an accept failed for want of a resource (EMFILE for descriptors,
+   * ENFILE for ring slots, ENOMEM): the listener is out of the loop until
+   * then, or until a connection closes (`forget`), which it would otherwise
+   * wake every turn while its connection waits. 0 while it is in the loop.
    */
   private acceptRestUntil: i64 = 0
   /** `bodyTimeout` in nanoseconds. */
@@ -759,8 +789,9 @@ export class HttpHandler {
       slot = this.server.accept()
     }
     if (slot !== HANDLER_ACCEPT_NONE) {
-      // Out of descriptors or memory: the connection stays in the backlog
-      // and the listener stays readable, so rest it rather than spin.
+      // Out of descriptors (-24), ring slots (-23) or memory: the connection
+      // stays in the backlog and the listener stays readable, so rest it
+      // rather than spin, until a close frees one or the rest ends.
       pollRemove(this.loop, this.listener)
       this.acceptRestUntil = monotonicNanos() + HANDLER_ACCEPT_REST
     }
@@ -1088,8 +1119,15 @@ export class HttpHandler {
     this.forget(slot)
   }
 
-  /** The bookkeeping of a slot the carrier has closed. */
+  /**
+   * The bookkeeping of a slot the carrier has closed. Its descriptor or ring
+   * slot is free again, so a listener resting for want of one comes back.
+   */
   private forget(slot: i32): void {
+    if (this.acceptRestUntil > 0 && !this.draining) {
+      this.acceptRestUntil = 0
+      pollAdd(this.loop, this.listener, H1_WANT_READ, HANDLER_LISTENER)
+    }
     this.open[slot] = false
     this.slotGen[slot] = this.slotGen[slot] + 1
     const at: i32 = this.current[slot]
