@@ -1067,32 +1067,36 @@ class TemporalReader {
         this.ok = false
         return
       }
-      const body: string = this.text.substring(start, this.at)
+      // The annotation is `text[start, end)`, read in place: a substring per
+      // pass would be kept until the caller's memory is released (NL9018).
+      const end: i32 = this.at
       this.at = this.at + 1
-      const eq: i32 = toI32(body.indexOf("="))
-      if (eq < 0) {
+      let eq: i32 = start
+      while (eq < end && temporalCharAt(this.text, eq) !== 61) {
+        eq = eq + 1
+      }
+      if (eq === end) {
         // A time zone: only first, only once, and spelled as the grammar's
         // TimeZoneIdentifier. Whether the zone exists is not asked: no type
         // here holds one.
-        if (!first || !temporalIsTimeZoneName(body)) {
+        if (!first || !temporalIsTimeZoneName(this.text, start, end)) {
           this.ok = false
           return
         }
         this.hasZone = true
-      } else if (eq < toI32(body.length)) {
-        const key: string = body.substring(0, eq)
-        const value: string = body.substring(eq + 1, toI32(body.length))
-        if (!temporalIsAnnotationKey(key) || !temporalIsAnnotationValue(value)) {
+      } else {
+        const text: string = this.text
+        if (!temporalIsAnnotationKey(text, start, eq) || !temporalIsAnnotationValue(text, eq + 1, end)) {
           this.ok = false
           return
         }
-        if (key === "u-ca") {
+        if (temporalRangeIs(text, start, eq, "u-ca")) {
           calendars = calendars + 1
           criticalCalendar = criticalCalendar || critical
           // The first calendar is the string's; only a type that holds a
           // calendar refuses one other than iso8601 (`isoCalendar`).
           if (calendars === 1) {
-            this.isoCalendar = temporalIsIsoCalendar(value)
+            this.isoCalendar = temporalRangeIs(text, eq + 1, end, "iso8601")
           }
         } else if (critical) {
           this.ok = false
@@ -1132,15 +1136,18 @@ class TemporalReader {
   }
 }
 
-/** Whether `key` is an annotation key: a lowercase letter or `_`, then lowercase letters, digits, `_` or `-`. */
-const temporalIsAnnotationKey = (key: string): boolean => {
-  if (key.length === 0) {
+// The annotation checks read `text[from, to)` in place, so that reading
+// annotations allocates nothing.
+
+/** Whether `text[from, to)` is an annotation key: a lowercase letter or `_`, then lowercase letters, digits, `_` or `-`. */
+const temporalIsAnnotationKey = (text: string, from: i32, to: i32): boolean => {
+  if (to <= from) {
     return false
   }
-  for (let i: i32 = 0; i < toI32(key.length); i++) {
-    const c: i32 = toI32(key.charCodeAt(i))
+  for (let i: i32 = from; i < to; i++) {
+    const c: i32 = temporalCharAt(text, i)
     const letter: boolean = (c >= 97 && c <= 122) || c === 95
-    if (!letter && (i === 0 || !((c >= 48 && c <= 57) || c === 45))) {
+    if (!letter && (i === from || !((c >= 48 && c <= 57) || c === 45))) {
       return false
     }
   }
@@ -1151,12 +1158,11 @@ const temporalIsAnnotationKey = (key: string): boolean => {
 const temporalIsAlphaNumeric = (c: i32): boolean =>
   (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
 
-/** Whether `value` is an annotation value: runs of ASCII letters and digits joined by single `-`. */
-const temporalIsAnnotationValue = (value: string): boolean => {
-  const n: i32 = toI32(value.length)
+/** Whether `text[from, to)` is an annotation value: runs of ASCII letters and digits joined by single `-`. */
+const temporalIsAnnotationValue = (text: string, from: i32, to: i32): boolean => {
   let run: i32 = 0
-  for (let i: i32 = 0; i < n; i++) {
-    const c: i32 = toI32(value.charCodeAt(i))
+  for (let i: i32 = from; i < to; i++) {
+    const c: i32 = temporalCharAt(text, i)
     if (temporalIsAlphaNumeric(c)) {
       run = run + 1
     } else if (c === 45 && run > 0) {
@@ -1168,31 +1174,37 @@ const temporalIsAnnotationValue = (value: string): boolean => {
   return run > 0
 }
 
+/** The two decimal digits at `at` as a number, or -1, for the annotation checks. */
+const temporalAnnotationTwo = (text: string, at: i32): i32 => {
+  const high: i32 = temporalCharAt(text, at) - 48
+  const low: i32 = temporalCharAt(text, at + 1) - 48
+  return high >= 0 && high <= 9 && low >= 0 && low <= 9 ? high * 10 + low : -1
+}
+
 /**
- * Whether `name` is a TimeZoneIdentifier by Temporal's grammar: an offset,
- * `±HH`, `±HHMM` or `±HH:MM`, or names joined by `/`, each starting with a
- * letter, `.` or `_` and going on in letters, digits, `.`, `_`, `-` or `+`.
+ * Whether `text[from, to)` is a TimeZoneIdentifier by Temporal's grammar: an
+ * offset, `±HH`, `±HHMM` or `±HH:MM`, or names joined by `/`, each starting
+ * with a letter, `.` or `_` and going on in letters, digits, `.`, `_`, `-` or
+ * `+`.
  */
-const temporalIsTimeZoneName = (name: string): boolean => {
-  const n: i32 = toI32(name.length)
-  const first: i32 = temporalCharAt(name, 0)
+const temporalIsTimeZoneName = (text: string, from: i32, to: i32): boolean => {
+  const n: i32 = to - from
+  const first: i32 = temporalCharAt(text, from)
   if (first === 43 || first === 45) {
-    // An offset zone: a hand-written reader rather than `temporalFastTwo`,
-    // whose callers are kept to the fast paths so that it stays inlined there.
-    const r: TemporalReader = new TemporalReader(name)
-    r.at = 1
-    const hours: i32 = r.digits(toI32(2))
-    let minutes: i32 = 0
-    if (!r.done()) {
-      r.eat(toI32(58))
-      minutes = r.digits(toI32(2))
+    const hours: i32 = temporalAnnotationTwo(text, from + 1)
+    if (hours < 0 || hours > 23) {
+      return false
     }
-    const shape: boolean = n === 3 || n === 5 || (n === 6 && temporalCharAt(name, 3) === 58)
-    return r.ok && r.done() && shape && hours <= 23 && minutes <= 59
+    if (n === 3) {
+      return true
+    }
+    const at: i32 = n === 6 && temporalCharAt(text, from + 3) === 58 ? from + 4 : from + 3
+    const minutes: i32 = temporalAnnotationTwo(text, at)
+    return (n === 5 || n === 6) && at + 2 === to && minutes >= 0 && minutes <= 59
   }
   let length: i32 = 0
-  for (let i: i32 = 0; i <= n; i++) {
-    const c: i32 = i < n ? toI32(name.charCodeAt(i)) : 47
+  for (let i: i32 = from; i <= to; i++) {
+    const c: i32 = i < to ? temporalCharAt(text, i) : 47
     if (c === 47) {
       if (length === 0) {
         return false
@@ -1209,18 +1221,17 @@ const temporalIsTimeZoneName = (name: string): boolean => {
   return true
 }
 
-/** Whether `value` is `iso8601` in any case. */
-const temporalIsIsoCalendar = (value: string): boolean => {
-  const want: string = "iso8601"
-  if (value.length !== want.length) {
+/** Whether `text[from, to)` is `want`, ignoring the case of ASCII letters; `want` is lowercase. */
+const temporalRangeIs = (text: string, from: i32, to: i32, want: string): boolean => {
+  if (to - from !== toI32(want.length)) {
     return false
   }
-  for (let i: i32 = 0; i < toI32(want.length) && i < toI32(value.length); i++) {
-    let c: i32 = toI32(value.charCodeAt(i))
+  for (let i: i32 = 0; i < to - from; i++) {
+    let c: i32 = temporalCharAt(text, from + i)
     if (c >= 65 && c <= 90) {
       c = c + 32
     }
-    if (c !== toI32(want.charCodeAt(i))) {
+    if (c !== temporalCharAt(want, i)) {
       return false
     }
   }
