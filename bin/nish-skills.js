@@ -117,26 +117,53 @@ const parse = (args) => {
 class Interrupted extends Error {}
 
 /**
- * A question asked on the terminal: the answer line, or null at end of input.
- * Ctrl-C rejects it with `Interrupted`.
+ * Discard whatever is already waiting on the terminal, for about `ms`
+ * milliseconds: keys typed while the skills were being found must not answer a
+ * question the user has not seen yet. Raw mode lets a part line go too, not
+ * only whole lines.
+ */
+const drainTypeAhead = async (ms) => {
+  const discard = () => {
+    // Typed before the question was shown, so it answers nothing.
+  }
+  process.stdin.setRawMode?.(true)
+  process.stdin.on("data", discard)
+  process.stdin.resume()
+  await new Promise((resolve) => setTimeout(resolve, ms))
+  process.stdin.pause()
+  process.stdin.off("data", discard)
+  process.stdin.setRawMode?.(false)
+}
+
+/**
+ * Questions asked on the terminal: each answers its line, or null at end of
+ * input, and Ctrl-C rejects it with `Interrupted`. The terminal is opened at
+ * the first question, which comes after every skill has been found, and what
+ * was typed before then is thrown away.
  */
 const terminalAsk = () => {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true })
-  const lines = rl[Symbol.asyncIterator]()
-  /** @type {{ promise: Promise<never>, reject: (err: Error) => void }} */
-  const { promise: interrupted, reject } = Promise.withResolvers()
-  interrupted.catch(() => {
-    // Handled where a question awaits it; this keeps a Ctrl-C between questions from being unhandled.
-  })
-  // Without a listener readline only pauses on Ctrl-C, and the question would hang.
-  rl.on("SIGINT", () => reject(new Interrupted("interrupted")))
+  /** @type {{ rl: readline.Interface, lines: AsyncIterator<string>, interrupted: Promise<never> } | null} */
+  let open = null
+  const start = async () => {
+    await drainTypeAhead(50)
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true })
+    /** @type {{ promise: Promise<never>, reject: (err: Error) => void }} */
+    const { promise: interrupted, reject } = Promise.withResolvers()
+    interrupted.catch(() => {
+      // Handled where a question awaits it; this keeps a Ctrl-C between questions from being unhandled.
+    })
+    // Without a listener readline only pauses on Ctrl-C, and the question would hang.
+    rl.on("SIGINT", () => reject(new Interrupted("interrupted")))
+    return { rl, lines: rl[Symbol.asyncIterator](), interrupted }
+  }
   return {
     ask: async (question) => {
+      open ??= await start()
       process.stdout.write(question)
-      const next = await Promise.race([lines.next(), interrupted])
+      const next = await Promise.race([open.lines.next(), open.interrupted])
       return next.done === true ? null : next.value
     },
-    close: () => rl.close(),
+    close: () => open?.rl.close(),
   }
 }
 

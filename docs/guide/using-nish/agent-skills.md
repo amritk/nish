@@ -3,7 +3,12 @@
 A skill from a package is instructions your coding agent follows, written by
 whoever published the package, so Nish links one into your project only after
 you accept it, and only as it is when you accept it. Installing a package
-never links a skill. `npx nish-skills` shows you each one and asks.
+never links a skill. `npx nish-skills` shows you each one and asks. A skill
+that grants anything, such as `allowed-tools`, `hooks` or a shell command run
+when it loads, is linked only when you answer `y` or name it. Nish never
+follows a link to find a skill. A skill that holds a link, or an entry Nish
+cannot read, counts as a grant too, and accepting one links it for that run
+only.
 
 A coding agent writes better Nish when it has the rules in front of it. Nish
 ships them as an *agent skill*: `writing-nish`, a single `SKILL.md` that
@@ -82,8 +87,16 @@ skill is left for you to name:
 - `hooks`, `context`, `agent` or `background`;
 - any key Nish does not know;
 - a shell command the agent runs when the skill loads: `` !`cmd` `` in the
-  text, or a code fence opened with `` ```! ``;
-- frontmatter Nish cannot read, or none at all.
+  text, or a code fence opened with `` ```! `` or `~~~!`, spaces before the
+  `!` and a list or quote marker before the fence included;
+- frontmatter Nish cannot read, or none at all;
+- a link, a device or other special file, or an entry Nish cannot read,
+  anywhere in the skill's directory. Its hash cannot pin what it serves, so
+  accepting it links it for that run only, and the next run removes the link.
+
+A linked `skills/` directory, a linked skill directory and a linked
+`SKILL.md` are no skill at all: Nish does not offer them, and naming one is
+an unknown skill.
 
 Run with neither names nor `--yes`, and with no terminal, the command keeps
 what you accepted before and links nothing new. `npx nish-skills --help`

@@ -26628,8 +26628,9 @@ if (dealtHere("releaseChecks")) {
         nishPkg,
         libPkg,
         plainPkg,
-        ["b-dup", { "./x": { nish: "./x.ts" } }, ["dup"]],
-        ["@a/dup", [{ import: { nish: "./x.ts" } }], ["dup"]],
+        // Byte-identical skills, so only the package tells the two claims apart.
+        ["b-dup", { "./x": { nish: "./x.ts" } }, [["dup", plainSkill("dup", "dup")]]],
+        ["@a/dup", [{ import: { nish: "./x.ts" } }], [["dup", plainSkill("dup", "dup")]]],
         // Sorts before `nish`, so only nish's first claim keeps writing-nish nish's.
         ["@scope/rival", { ".": { nish: "./r.ts" } }, ["writing-nish"]],
       ])
@@ -26679,14 +26680,28 @@ if (dealtHere("releaseChecks")) {
         reasked.asked.length === 0 && JSON.stringify(tree(a)) === JSON.stringify(before),
         `${reasked.asked.join(" ")}\n${tree(a).join(" ")}`
       )
-      // The rival for an accepted name: @a/dup goes, so b-dup's dup now claims the name.
+      // The rival for an accepted name: @a/dup goes, so b-dup's dup, byte for byte
+      // the same skill and so the same hash, now claims the name the record gives @a/dup.
+      const aRecord = path.join(aSkills, ".nish-skills.json")
+      const recordedDup = () => {
+        try {
+          return JSON.parse(fs.readFileSync(aRecord, "utf8")).skills.dup?.package ?? null
+        } catch {
+          return null
+        }
+      }
       fs.rmSync(path.join(a, "node_modules", "@a", "dup"), { recursive: true })
-      const rival = linkSkillsCli(["--dir", a], skillsRoot)
+      const rivalRecorded = recordedDup()
       const rivalAsked = await ask(a, { dup: "n" })
+      const rival = linkSkillsCli(["--dir", a], skillsRoot)
       check(
         "another package's skill under an accepted name is not linked without consent, and is asked about",
-        rival.status === 0 && lstatOf(path.join(aSkills, "dup")) === null && rivalAsked.asked.includes("dup"),
-        tree(a).join("\n") + rival.stdout + rival.stderr
+        rivalRecorded === "@a/dup" &&
+          rivalAsked.asked.includes("dup") &&
+          rival.status === 0 &&
+          lstatOf(path.join(aSkills, "dup")) === null &&
+          recordedDup() === null,
+        `${rivalRecorded} ${rivalAsked.asked.join(" ")}\n${tree(a).join("\n")}${rival.stdout}${rival.stderr}`
       )
       fs.rmSync(path.join(a, "node_modules", "@scope", "lib"), { recursive: true })
       const pruned = linkSkillsCli(["--dir", a], skillsRoot)
@@ -26773,8 +26788,23 @@ if (dealtHere("releaseChecks")) {
           recordedNames() === "md other",
         tree(changing).join("\n") + accepted.stdout + accepted.stderr
       )
-      // SKILL.md alone changes: a run that does not ask unlinks the live link, and leaves the other.
+      // SKILL.md alone changes: while it is still recorded and linked, an interactive run asks
+      // about it, and only it; the question is interrupted, so nothing is written.
       fs.appendFileSync(path.join(changingSkills, "md", "SKILL.md"), "\nallowed-tools: Bash\n")
+      const mdAsked = []
+      await review(changing, {
+        write: () => {},
+        ask: async (_question, name) => {
+          mdAsked.push(name)
+          throw new Error("interrupted")
+        },
+      }).catch(() => {})
+      check(
+        "a recorded, linked skill whose SKILL.md changed is asked about again, and an unchanged one is not",
+        mdAsked.join(" ") === "md" && linkedTo(changing, "md", "nish") && recordedNames() === "md other",
+        `${mdAsked.join(" ")}\n${tree(changing).join("\n")}`
+      )
+      // A run that does not ask unlinks the live link, and leaves the other.
       const mdRun = linkSkillsCli(["--dir", changing], skillsRoot)
       check(
         "a skill whose SKILL.md changed is unlinked without consent, and an unchanged one stays linked",
@@ -26829,14 +26859,17 @@ if (dealtHere("releaseChecks")) {
             ["hooked", "---\nname: hooked\nhooks:\n  PreToolUse:\n    - command: touch pwned\n---\n"],
             ["inline-bang", "---\nname: inline-bang\ndescription: d\n---\n\nRun !`ls` first.\n"],
             ["fence-bang", "---\nname: fence-bang\ndescription: d\n---\n\n```!\nls\n```\n"],
+            ["list-fence", "---\nname: list-fence\ndescription: d\n---\n\n- ```!\n  ls\n  ```\n"],
+            ["quote-fence", "---\nname: quote-fence\ndescription: d\n---\n\n> ~~~~ !\n> ls\n> ~~~~\n"],
+            ["spaced-fence", "---\r\nname: spaced-fence\r\ndescription: d\r\n---\r\n\r\n1. ````\t\u00a0!\r\n   ls\r\n"],
             ["unknown-key", "---\nname: unknown-key\ndescription: d\nsurprise: 1\n---\n"],
           ],
         ],
       ])
-      const beyondNames = ["hooked", "inline-bang", "fence-bang", "unknown-key"]
+      const beyondNames = ["hooked", "inline-bang", "fence-bang", "list-fence", "quote-fence", "spaced-fence", "unknown-key"]
       const beyondYes = linkSkillsCli(["--dir", beyond, "--yes"], skillsRoot)
       check(
-        "--yes links no skill with hooks, a shell command run at load, or an unknown frontmatter key",
+        "--yes links no skill with hooks, a shell command run at load (a fence after a list or quote marker, a tab or a no-break space included), or an unknown frontmatter key",
         beyondYes.status === 0 && beyondNames.every((n) => lstatOf(path.join(beyond, ".claude", "skills", n)) === null),
         tree(beyond).join("\n") + beyondYes.stdout + beyondYes.stderr
       )
@@ -26845,6 +26878,51 @@ if (dealtHere("releaseChecks")) {
         "naming a skill with hooks, a load-time shell command or an unknown key links it",
         beyondNamed.status === 0 && beyondNames.every((n) => linkedTo(beyond, n, "nish")),
         tree(beyond).join("\n") + beyondNamed.stdout + beyondNamed.stderr
+      )
+
+      // A link is never followed into a skill: not as skills/, a skill directory or its
+      // SKILL.md, whose content the hash would not cover; one inside a skill is a grant.
+      const elsewhereSkill = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-skill-"))
+      fs.writeFileSync(path.join(elsewhereSkill, "SKILL.md"), plainSkill("x", "x"))
+      const linking = project([
+        ["nish", {}, ["real", "md-link", "inner-link"]],
+        ["@l/linked", { ".": { nish: "./l.ts" } }, []],
+      ])
+      const linkingSkills = path.join(linking, "node_modules", "nish", "skills")
+      fs.rmSync(path.join(linkingSkills, "md-link", "SKILL.md"))
+      fs.symlinkSync(path.join(elsewhereSkill, "SKILL.md"), path.join(linkingSkills, "md-link", "SKILL.md"))
+      fs.symlinkSync(elsewhereSkill, path.join(linkingSkills, "dir-link"))
+      fs.symlinkSync(path.join(elsewhereSkill, "SKILL.md"), path.join(linkingSkills, "inner-link", "helper.md"))
+      const elsewhereTree = fs.mkdtempSync(path.join(skillsRoot, "elsewhere-tree-"))
+      fs.mkdirSync(path.join(elsewhereTree, "via-link"))
+      fs.writeFileSync(path.join(elsewhereTree, "via-link", "SKILL.md"), plainSkill("x", "via-link"))
+      fs.symlinkSync(elsewhereTree, path.join(linking, "node_modules", "@l", "linked", "skills"))
+      const linkingYes = linkSkillsCli(["--dir", linking, "--yes"], skillsRoot)
+      check(
+        "--yes links a skill with no link in it, and none with an inner link, a linked SKILL.md, a linked skill directory or under a linked skills/",
+        linkingYes.status === 0 &&
+          linkedTo(linking, "real", "nish") &&
+          ["md-link", "dir-link", "inner-link", "via-link"].every((n) => lstatOf(path.join(linking, ".claude", "skills", n)) === null),
+        tree(linking).join("\n") + linkingYes.stdout + linkingYes.stderr
+      )
+      const linkedNames = ["md-link", "dir-link", "via-link"].map((n) => linkSkillsCli(["--dir", linking, n], skillsRoot))
+      check(
+        "a linked SKILL.md, a linked skill directory and a linked skills/ are no skill: naming one exits 2",
+        linkedNames.every((r) => r.status === 2) &&
+          ["md-link", "dir-link", "via-link"].every((n) => lstatOf(path.join(linking, ".claude", "skills", n)) === null),
+        linkedNames.map((r) => r.stdout + r.stderr).join("")
+      )
+      const innerNamed = linkSkillsCli(["--dir", linking, "inner-link"], skillsRoot)
+      const innerWasLinked = linkedTo(linking, "inner-link", "nish")
+      const innerNext = linkSkillsCli(["--dir", linking], skillsRoot)
+      check(
+        "naming a skill with a link inside links it for that run only: the next run, naming nothing, unlinks it",
+        innerNamed.status === 0 &&
+          innerWasLinked &&
+          innerNext.status === 0 &&
+          lstatOf(path.join(linking, ".claude", "skills", "inner-link")) === null &&
+          linkedTo(linking, "real", "nish"),
+        tree(linking).join("\n") + innerNamed.stdout + innerNext.stdout + innerNext.stderr
       )
 
       // A directory name that is not a valid skill name is never a skill.
@@ -26880,14 +26958,29 @@ if (dealtHere("releaseChecks")) {
         tree(interrupted).join("\n")
       )
 
-      // A package-controlled description reaches the terminal with no control byte in it.
+      // A package-controlled name, version and description reach the terminal with no
+      // control byte and no invisible character in them.
+      const hostilePkg = "@h/e\u001b[31mvil\u200b"
       const hostile = project([
-        ["nish", {}, [["evil", "---\nname: evil\ndescription: a\u001b[2J\u001b]0;title\u0007\u009b31m b\n---\n"]]],
+        [
+          hostilePkg,
+          { ".": { nish: "./e.ts" } },
+          [["evil", "---\nname: evil\ndescription: a\u001b[2J\u001b]0;title\u0007\u009b31m\u200b\u2800\ufe0f b\n---\n"]],
+        ],
       ])
+      fs.writeFileSync(
+        path.join(hostile, "node_modules", hostilePkg, "package.json"),
+        JSON.stringify({ name: "e", version: "1.0.0\u001b]0;t\u0007\u202e\u200b", exports: { ".": { nish: "./e.ts" } } })
+      )
       const shown = spawnSync(process.execPath, [skillsBin, "--dir", hostile], { encoding: "buffer" })
+      const hidden = ["\u009b", "\u200b", "\u2800", "\ufe0f", "\u202e"].map((c) => Buffer.from(c))
       check(
-        "a description holding ESC, BEL and a C1 CSI reaches stdout with none of those bytes",
-        shown.status === 0 && shown.stdout.length > 0 && !shown.stdout.includes(0x1b) && !shown.stdout.includes(0x07) && !shown.stdout.includes(Buffer.from("\u009b")),
+        "a package name, version and description holding ESC, BEL, a C1 CSI and invisible characters reach stdout with none of them",
+        shown.status === 0 &&
+          shown.stdout.includes(Buffer.from("evil from @h/e")) &&
+          !shown.stdout.includes(0x1b) &&
+          !shown.stdout.includes(0x07) &&
+          hidden.every((b) => !shown.stdout.includes(b)),
         shown.stderr.toString()
       )
 
@@ -27054,22 +27147,23 @@ if (dealtHere("releaseChecks")) {
       }
       /** How many lines of a postinstall's stdout point at `npx nish-skills`. */
       const hints = (r) => r.stdout.split("\n").filter((line) => line.includes("npx nish-skills")).length
-      const e = project([])
+      // A Nish library shipping a skill is installed too: postinstall links it no more than nish's own.
+      const e = project([libPkg])
       const eNish = installedNish(e)
       const installed = postinstall(eNish, { INIT_CWD: e })
       check(
-        "postinstall in a project's node_modules/nish exits 0, creates no .claude, and points at nish-skills once",
+        "postinstall in a project's node_modules/nish, beside a Nish library with a skill, exits 0, creates no .claude, and points at nish-skills once",
         installed.status === 0 && lstatOf(path.join(e, ".claude")) === null && hints(installed) === 1,
         installed.stdout + installed.stderr
       )
-      const w = project([])
+      const w = project([libPkg])
       const member = path.join(w, "packages", "member")
       fs.mkdirSync(member, { recursive: true })
       fs.writeFileSync(path.join(member, "package.json"), "{}\n")
       const wNish = installedNish(w)
       const hoisted = postinstall(wNish, { INIT_CWD: member })
       check(
-        "postinstall run from a workspace member, nish hoisted to the root, creates no .claude in either",
+        "postinstall run from a workspace member, nish hoisted beside a Nish library with a skill, creates no .claude in either",
         hoisted.status === 0 && lstatOf(path.join(w, ".claude")) === null && lstatOf(path.join(member, ".claude")) === null,
         hoisted.stdout + hoisted.stderr
       )

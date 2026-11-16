@@ -74,7 +74,11 @@ const isNishPackage = (name, dir) => {
   }
 }
 
-/** The names of the directories in `dir`, or none when it cannot be read. */
+/**
+ * The names of the directories in `dir`, links to one included, or none when
+ * it cannot be read. Only for `node_modules`, where a workspace member is a
+ * link; a skill directory is never reached through a link (see `skillsOf`).
+ */
 const subdirectories = (dir) => {
   try {
     return fs
@@ -112,6 +116,9 @@ const nishPackages = (nodeModules) => {
   return found.sort((a, b) => Number(rank(a) > rank(b)) - Number(rank(a) < rank(b)))
 }
 
+/** Code-unit order, not the locale's, so every machine sorts the same way. */
+const byCodeUnit = (a, b) => Number(a > b) - Number(a < b)
+
 /**
  * The names a skill may have: Claude Code's own shape. Anything else is never
  * linked, so every name that reaches a path, the record or a command the user is
@@ -119,18 +126,58 @@ const nishPackages = (nodeModules) => {
  */
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
-/** The skills a package ships: each `skills/<name>/` that holds a `SKILL.md`. */
-const skillsOf = (dir) =>
-  subdirectories(path.join(dir, "skills"))
-    .filter((name) => !name.startsWith("."))
-    .filter((name) => {
-      try {
-        return fs.statSync(path.join(dir, "skills", name, "SKILL.md")).isFile()
-      } catch {
-        return false
-      }
-    })
-    .sort()
+/**
+ * The skills a package ships, read by `lstat` alone: each `skills/<name>/`
+ * that is a real directory holding a regular `SKILL.md`, with `skills/`
+ * itself a real directory. A link at any of those three places is never
+ * followed: what it points at is outside what the hash covers, so the entry is
+ * reported as skipped instead.
+ *
+ * @param {{ name: string, dir: string }} pkg The package.
+ * @param {{ name: string, reason: string }[]} skipped Where an entry left out is reported.
+ * @returns {string[]} The skill names, in code-unit order.
+ */
+const skillsOf = (pkg, skipped) => {
+  const at = path.join(pkg.dir, "skills")
+  const st = lstatOrNull(at)
+  if (st === null || !(st.isDirectory() || st.isSymbolicLink())) {
+    return []
+  }
+  if (st.isSymbolicLink()) {
+    skipped.push({ name: "skills", reason: `in ${pkg.name} is a link, so none of its skills is linked` })
+    return []
+  }
+  let entries
+  try {
+    entries = fs.readdirSync(at, { withFileTypes: true })
+  } catch {
+    skipped.push({ name: "skills", reason: `in ${pkg.name} cannot be read, so none of its skills is linked` })
+    return []
+  }
+  const names = []
+  for (const e of entries) {
+    if (e.name.startsWith(".")) {
+      continue
+    }
+    if (e.isSymbolicLink()) {
+      skipped.push({ name: e.name, reason: `in ${pkg.name} is a link, so it is not linked` })
+      continue
+    }
+    if (!e.isDirectory()) {
+      continue
+    }
+    const md = lstatOrNull(path.join(at, e.name, "SKILL.md"))
+    if (md?.isFile()) {
+      names.push(e.name)
+    } else if (md !== null) {
+      skipped.push({
+        name: e.name,
+        reason: `in ${pkg.name} has a SKILL.md that is ${md.isSymbolicLink() ? "a link" : "not a regular file"}, so it is not linked`,
+      })
+    }
+  }
+  return names.sort(byCodeUnit)
+}
 
 /** A link's target as an absolute path, without the `\\?\` prefix win32 gives a junction's. */
 const targetOf = (link) => {
@@ -180,32 +227,70 @@ export const projectOf = (start, nishRoot) => {
   }
 }
 
-/** Code-unit order, not the locale's, so every machine sorts the same way. */
-const byCodeUnit = (a, b) => Number(a > b) - Number(a < b)
+/**
+ * A skill directory read whole, for its hash and its `SKILL.md`.
+ *
+ * @typedef {object} SkillTree
+ * @property {string} hash `sha256-<hex>` over the directory.
+ * @property {string[]} grants What its shape grants: a link, a special file or an unreadable entry inside it.
+ * @property {Buffer | null} skillMd The bytes of its `SKILL.md`, or null when they could not be read.
+ */
 
 /**
- * The sha256 of a skill directory, as `sha256-<hex>`: every regular file's
- * path relative to `dir` and its bytes, in code-unit order of the path. An
- * inner link contributes its target string and is never followed, and any
- * other entry its path and kind, so nothing in the directory can change
- * without the hash moving. Each part is length-prefixed, so no two trees
- * frame to the same bytes.
+ * Read a skill directory: the sha256 of every entry's path relative to `dir`
+ * and kind, with a regular file's bytes and a link's target string, in
+ * code-unit order of the path, each part length-prefixed so no two trees frame
+ * to the same bytes. Nothing is followed.
+ *
+ * Three kinds of entry hold content the hash cannot pin: a link (its target's
+ * bytes are not hashed), a special file such as a FIFO or a device, and an
+ * entry that cannot be read. Each is a grant, so `--yes` refuses the skill,
+ * and each mixes a fresh random value into the hash, so a name that accepts
+ * such a skill accepts it for that run only: the next run finds it changed and
+ * asks again, rather than keep serving content nobody saw.
+ *
+ * @param {string} dir The skill directory, already known to be a real directory.
+ * @returns {SkillTree}
  */
-const hashSkill = (dir) => {
+const readSkill = (dir) => {
   const entries = []
+  const grants = new Set()
   const walk = (at, rel) => {
-    for (const e of fs.readdirSync(at, { withFileTypes: true })) {
+    let list
+    try {
+      list = fs.readdirSync(at, { withFileTypes: true })
+    } catch {
+      grants.add("contains an unreadable entry")
+      entries.push({ name: rel, kind: "unreadable", data: Buffer.alloc(0) })
+      return
+    }
+    for (const e of list) {
       const file = path.join(at, e.name)
       const name = rel === "" ? e.name : `${rel}/${e.name}`
       if (e.isDirectory()) {
+        entries.push({ name, kind: "dir", data: Buffer.alloc(0) })
         walk(file, name)
-      } else if (e.isFile()) {
-        entries.push({ name, kind: "file", data: fs.readFileSync(file) })
-      } else if (e.isSymbolicLink()) {
-        entries.push({ name, kind: "link", data: Buffer.from(fs.readlinkSync(file)) })
-      } else {
-        entries.push({ name, kind: "other", data: Buffer.alloc(0) })
+        continue
       }
+      let kind = "other"
+      let data = Buffer.alloc(0)
+      try {
+        if (e.isFile()) {
+          kind = "file"
+          data = fs.readFileSync(file)
+        } else if (e.isSymbolicLink()) {
+          kind = "link"
+          data = Buffer.from(fs.readlinkSync(file))
+          grants.add("contains a link")
+        } else {
+          grants.add("contains a special file")
+        }
+      } catch {
+        kind = "unreadable"
+        data = Buffer.alloc(0)
+        grants.add("contains an unreadable entry")
+      }
+      entries.push({ name, kind, data })
     }
   }
   walk(dir, "")
@@ -214,7 +299,11 @@ const hashSkill = (dir) => {
     const head = Buffer.from(name)
     hash.update(`${kind} ${head.length} `).update(head).update(` ${data.length} `).update(data)
   }
-  return `sha256-${hash.digest("hex")}`
+  if (grants.size > 0) {
+    hash.update(crypto.randomBytes(32))
+  }
+  const skillMd = entries.find((e) => e.name === "SKILL.md" && e.kind === "file")?.data ?? null
+  return { hash: `sha256-${hash.digest("hex")}`, grants: [...grants], skillMd }
 }
 
 /** What a skill grants when its frontmatter could not be read: it counts as a grant. */
@@ -250,12 +339,15 @@ const GRANTING = new Set(["hooks", "context", "agent", "background"])
 
 /**
  * A `SKILL.md` body or frontmatter that runs a shell command when the skill
- * loads: an inline `` !`cmd` `` anywhere, or a fenced block opened with `!`.
- * A `!` straight after a letter, digit or `_` is not one: that is code such as
- * TypeScript's `` `x!` `` (non-null assertion) inside a code span. Every other
- * `` !` `` counts, so the check errs towards asking.
+ * loads: an inline `` !`cmd` ``, or a fence of three or more backticks or
+ * tildes followed by `!`. The fence counts anywhere on a line -- after
+ * indentation, a list or quote marker, or any text -- and with any spaces,
+ * tabs and non-breaking spaces included, between it and the `!` on that line. An inline `` !` ``
+ * counts after anything but a letter, digit or `_`: that one is code such as
+ * TypeScript's `` `x!` `` (non-null assertion) inside a code span. Either way
+ * the check errs towards asking.
  */
-const SHELL_AT_LOAD = /(?<![\p{L}\p{N}_])!`|^[ \t]*(?:`{3,}|~{3,})[ \t]*!/mu
+const SHELL_AT_LOAD = /(?<![\p{L}\p{N}_])!`|(?:`{3,}|~{3,})[^\S\r\n]*!/u
 
 /** A YAML scalar with its quotes taken off. */
 const unquote = (value) => (/^"[^"]*"$|^'[^']*'$/.test(value) ? value.slice(1, -1) : value)
@@ -377,7 +469,7 @@ const findSkills = (project) => {
   const skills = []
   const skipped = []
   for (const pkg of nishPackages(path.join(path.resolve(project), "node_modules"))) {
-    for (const name of skillsOf(pkg.dir)) {
+    for (const name of skillsOf(pkg, skipped)) {
       if (!NAME.test(name)) {
         skipped.push({ name, reason: `in ${pkg.name} is not a valid skill name, so it is not linked` })
         continue
@@ -388,14 +480,21 @@ const findSkills = (project) => {
         continue
       }
       const dir = path.join(pkg.dir, "skills", name)
-      let text = null
-      try {
-        text = fs.readFileSync(path.join(dir, "SKILL.md"), "utf8")
-      } catch {
-        // Unreadable: fails closed below, like a block that does not parse.
-      }
-      const meta = text === null ? { description: "", grants: ["unreadable SKILL.md"] } : frontmatter(text)
-      skills.push({ pkg: pkg.name, version: versionOf(pkg.dir), name, dir, hash: hashSkill(dir), ...meta })
+      // The text is the bytes the hash covers, never a second read that could differ.
+      const tree = readSkill(dir)
+      const meta =
+        tree.skillMd === null
+          ? { description: "", grants: ["unreadable SKILL.md"] }
+          : frontmatter(tree.skillMd.toString("utf8"))
+      skills.push({
+        pkg: pkg.name,
+        version: versionOf(pkg.dir),
+        name,
+        dir,
+        hash: tree.hash,
+        description: meta.description,
+        grants: [...meta.grants, ...tree.grants],
+      })
     }
   }
   return { skills, skipped }
@@ -448,8 +547,11 @@ const isAccepted = (record, skill) => {
 /** Write `data` to `file` through a temporary name and a rename, so a reader never sees half of it. */
 const writeAtomic = (file, data) => {
   const temp = `${file}.${process.pid}.tmp`
+  // A leftover of a killed run with this pid goes first; `wx` then refuses
+  // anything that appears in its place, a link above all, rather than write through it.
+  fs.rmSync(temp, { force: true })
   try {
-    fs.writeFileSync(temp, data)
+    fs.writeFileSync(temp, data, { flag: "wx" })
     fs.renameSync(temp, file)
   } catch (err) {
     fs.rmSync(temp, { force: true })
@@ -602,10 +704,20 @@ export const linkSkills = (project, { accepted = [], platform = process.platform
 }
 
 /**
- * A package-controlled string made safe for a terminal: every C0 and C1
- * control, DEL, the bidirectional marks and overrides, the zero-width and
- * other invisible characters, and the tag characters become `?` (tab and
- * newline a space), and anything past `max` code points is cut, so a
+ * What `clean` replaces: every control (`Cc`), format character (`Cf`: the
+ * bidirectional marks and overrides, the zero-width characters, the tag
+ * characters), private-use, unassigned and surrogate code point, the line and
+ * paragraph separators, and the characters that draw nothing yet are not in
+ * those classes -- the combining grapheme joiner, the Hangul fillers, the
+ * braille blank and the variation selectors.
+ */
+const INVISIBLE =
+  /͏|[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0\u2800]|[\ufe00-\ufe0f]|[\u{e0100}-\u{e01ef}]/gu
+
+/**
+ * A package-controlled string made safe for a terminal: every `INVISIBLE`
+ * character becomes `?` (tab, newline and carriage return a space), and
+ * anything past `max` code points is cut, so a
  * `SKILL.md` cannot move the cursor, recolour or redraw the prompt it is shown
  * in, or hide text inside what it shows.
  *
@@ -617,11 +729,7 @@ export const clean = (text, max = 300) => {
   const safe = Array.from(
     String(text)
       .replace(/[\t\n\r]/g, " ")
-      .replace(
-        // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the control characters is the point
-        /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2028\u2029\u2060-\u2069\ufeff\u{e0000}-\u{e007f}]/gu,
-        "?"
-      )
+      .replace(INVISIBLE, "?")
   )
   return safe.length > max ? `${safe.slice(0, max).join("")}...` : safe.join("")
 }
