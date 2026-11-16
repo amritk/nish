@@ -267,40 +267,52 @@
     return term
   }
 
+  /** When the hero on the page was built: see `fill`. */
+  let built = 0
+
   /**
    * The site is a single-page app: the landing page's Markdown is mounted,
    * hydrated and unmounted by the framework, which may replace the host at
-   * any of those moments. So rather than build once on load, every change to
-   * the document refills whichever host is empty.
+   * any of those moments: on a first load the client app swaps the server's
+   * page, hero and all, for its own copy. So every change to the document
+   * refills whichever host is empty, moving in the hero that same change took
+   * off the page rather than building and playing a second one. A host that
+   * comes back on a later navigation gets a fresh hero.
    */
-  const fill = () => {
+  const fill = (records) => {
+    let kept = null
+    for (const { removedNodes } of records) {
+      for (const node of removedNodes) {
+        kept ??= node.querySelector?.(".nish-hero__inner") ?? null
+      }
+    }
     for (const host of document.querySelectorAll("[data-nish-hero]:empty")) {
       host.classList.add("nish-hero")
-      host.append(hero())
-    }
-    // theme.css holds the page under an unready host hidden, so the hero's
-    // arrival moves nothing a reader can see. Ready waits two frames: the
-    // frame that lays the hero out still hides the page it pushed down, and
-    // the page shows where it will stay.
-    for (const host of document.querySelectorAll("[data-nish-hero]:not(:empty):not([data-nish-ready])")) {
-      requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
+      if (kept?.isConnected === false) {
+        // Moving it restarts its CSS animations. All began when it was built,
+        // so one elapsed time puts each back where it was.
+        host.append(kept)
+        for (const animation of kept.getAnimations({ subtree: true })) {
+          animation.currentTime = performance.now() - built
+        }
+        host.setAttribute("data-nish-ready", "")
+        kept = null
+      } else {
+        built = performance.now()
+        host.append(hero())
+        // theme.css hides the page under an unready host, so the hero's
+        // arrival moves nothing a reader sees. Two frames: the one laying it
+        // out still hides the page it pushed down.
+        requestAnimationFrame(() => requestAnimationFrame(() => host.setAttribute("data-nish-ready", "")))
+      }
     }
   }
 
-  let queued = false
-  const observer = new MutationObserver(() => {
-    if (queued) {
-      return
-    }
-    queued = true
-    requestAnimationFrame(() => {
-      queued = false
-      fill()
-    })
-  })
+  // It runs before the browser paints the change, so no frame shows an empty host.
+  const observer = new MutationObserver(fill)
 
   const start = () => {
-    fill()
+    fill([])
     observer.observe(document.body, { childList: true, subtree: true })
   }
   if (document.readyState === "loading") {
