@@ -138,7 +138,9 @@ These parts of `Temporal` are not in this module yet:
 - **Option bags.** `until` with `{ largestUnit: "year" }`, `round`, `total`
   and `with` are missing. Each method uses Temporal's defaults.
 - **Other calendars.** Only `iso8601` is read: a `[u-ca=japanese]` annotation
-  is refused.
+  is refused by `plainDateFrom` and `plainDateTimeFrom`. `instantFrom` and
+  `plainTimeFrom` ignore it, as Temporal does, because neither type holds a
+  calendar.
 - **`PlainYearMonth`, `PlainMonthDay` and `toLocaleString`.**
 - **`epochNanoseconds`,** which is a `bigint` in JavaScript. An `Instant` has
   `epochMilliseconds`.

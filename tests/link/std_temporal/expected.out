@@ -7,6 +7,13 @@ date|2024-01-15[u-ca=iso8601] => 2024-01-15
 date|2024-01-15[!u-ca=ISO8601] => 2024-01-15
 date|2024-01-15[foo=bar] => 2024-01-15
 date|2024-01-15[!foo=bar] => RangeError
+date|2024-01-15[foo=x] => 2024-01-15
+date|2024-01-15[foo=ba!d] => RangeError
+date|2024-01-15[foo=a--b] => RangeError
+date|2024-01-15[u-ca=japanese] => RangeError
+date|2024-01-15T12:00[not a zone!] => RangeError
+date|2024-01-15T12:00[+05:30] => 2024-01-15
+date|2024-01-15T12:00[Etc/GMT+5] => 2024-01-15
 date|2024-01-15[u-ca=iso8601][!u-ca=iso8601] => RangeError
 date|2024-01-15Z => RangeError
 date|2024-01-15T12:00Z => RangeError
@@ -74,6 +81,7 @@ time|2024-01-15T09:05:01.25 => 09:05:01.25
 time|2024-01-15 => RangeError
 time|12:30Z => RangeError
 time|12:30+01:00 => 12:30:00
+time|2024-01-15T12:30[u-ca=japanese] => 12:30:00
 time|1230 => RangeError
 time|1314 => 13:14:00
 time|0230 => RangeError
@@ -143,6 +151,12 @@ duration|PT1.5H30M => RangeError
 duration|P1M1Y => RangeError
 duration|PT1.1234567891S => RangeError
 duration|1D => RangeError
+duration|P4294967295Y => P4294967295Y
+duration|P4294967296Y => RangeError
+duration|PT9007199254740991S => PT9007199254740991S
+duration|PT9007199254740992S => RangeError
+duration|P104249991374D => P104249991374D
+duration|P104249991375D => RangeError
 duration.fields|PT1.5H => 0 0 0 0 1 30 0 0 0 0 1 false
 duration.fields|-P1Y2D => -1 0 0 -2 0 0 0 0 0 0 -1 false
 duration.fields|PT0S => 0 0 0 0 0 0 0 0 0 0 0 true
@@ -167,6 +181,7 @@ instant|2024-01-15T09:05:00.5-02:30 => 2024-01-15T11:35:00.5Z
 instant|2024-01-15T09:05:00.000000001z => 2024-01-15T09:05:00.000000001Z
 instant|2024-01-15T09:05Z[America/New_York] => 2024-01-15T09:05:00Z
 instant|20240115T090500Z => 2024-01-15T09:05:00Z
+instant|2024-01-15T09:05:00Z[u-ca=hebrew] => 2024-01-15T09:05:00Z
 instant|2024-01-15 09:05Z => 2024-01-15T09:05:00Z
 instant|2024-01-15T09:05:60Z => 2024-01-15T09:05:59Z
 instant|2024-01-15T24:00Z => RangeError

@@ -110,9 +110,6 @@ const temporalFloorMod = (a: i64, b: i64): i64 => a - temporalFloorDiv(a, b) * b
 /** `a / b` rounded toward zero, for `b > 0`. */
 const temporalTruncDiv = (a: i64, b: i64): i64 => toI64(a / b)
 
-/** The magnitude of `a`. */
-const temporalAbs = (a: i64): i64 => (a < 0 ? -a : a)
-
 /** -1, 0 or 1 as `a` is negative, zero or positive. */
 const temporalSign = (a: i64): i32 => {
   if (a < 0) {
@@ -830,6 +827,8 @@ class TemporalReader {
   hasOffset: boolean
   /** Whether a bracketed time zone annotation was read. */
   hasZone: boolean
+  /** Whether the string's calendar, if it names one, is `iso8601`. */
+  isoCalendar: boolean
 
   /**
    * A reader at the start of `text`.
@@ -853,6 +852,7 @@ class TemporalReader {
     this.hasOffset = false
     this.offsetNanos = 0
     this.hasZone = false
+    this.isoCalendar = true
   }
 
   /**
@@ -1048,8 +1048,10 @@ class TemporalReader {
 
   /**
    * Read the bracketed annotations: at most one time zone, first, then
-   * `key=value` pairs. A calendar other than `iso8601`, two calendars where
-   * either is critical, and an unknown critical key each fail the parse.
+   * `key=value` pairs, each spelled as the grammar spells them. Two calendars
+   * where either is critical, and an unknown critical key, fail the parse; a
+   * calendar other than `iso8601` only clears `isoCalendar`, for the types
+   * that hold a calendar to refuse.
    */
   readAnnotations(): void {
     let calendars: i32 = 0
@@ -1069,8 +1071,10 @@ class TemporalReader {
       this.at = this.at + 1
       const eq: i32 = toI32(body.indexOf("="))
       if (eq < 0) {
-        // A time zone: only first, and only once.
-        if (!first) {
+        // A time zone: only first, only once, and spelled as the grammar's
+        // TimeZoneIdentifier. Whether the zone exists is not asked: no type
+        // here holds one.
+        if (!first || !temporalIsTimeZoneName(body)) {
           this.ok = false
           return
         }
@@ -1078,16 +1082,17 @@ class TemporalReader {
       } else if (eq < toI32(body.length)) {
         const key: string = body.substring(0, eq)
         const value: string = body.substring(eq + 1, toI32(body.length))
-        if (!temporalIsAnnotationKey(key) || value.length === 0) {
+        if (!temporalIsAnnotationKey(key) || !temporalIsAnnotationValue(value)) {
           this.ok = false
           return
         }
         if (key === "u-ca") {
           calendars = calendars + 1
           criticalCalendar = criticalCalendar || critical
-          if (calendars === 1 && !temporalIsIsoCalendar(value)) {
-            this.ok = false
-            return
+          // The first calendar is the string's; only a type that holds a
+          // calendar refuses one other than iso8601 (`isoCalendar`).
+          if (calendars === 1) {
+            this.isoCalendar = temporalIsIsoCalendar(value)
           }
         } else if (critical) {
           this.ok = false
@@ -1137,6 +1142,68 @@ const temporalIsAnnotationKey = (key: string): boolean => {
     const letter: boolean = (c >= 97 && c <= 122) || c === 95
     if (!letter && (i === 0 || !((c >= 48 && c <= 57) || c === 45))) {
       return false
+    }
+  }
+  return true
+}
+
+/** Whether `c` is an ASCII letter or digit. */
+const temporalIsAlphaNumeric = (c: i32): boolean =>
+  (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+
+/** Whether `value` is an annotation value: runs of ASCII letters and digits joined by single `-`. */
+const temporalIsAnnotationValue = (value: string): boolean => {
+  const n: i32 = toI32(value.length)
+  let run: i32 = 0
+  for (let i: i32 = 0; i < n; i++) {
+    const c: i32 = toI32(value.charCodeAt(i))
+    if (temporalIsAlphaNumeric(c)) {
+      run = run + 1
+    } else if (c === 45 && run > 0) {
+      run = 0
+    } else {
+      return false
+    }
+  }
+  return run > 0
+}
+
+/**
+ * Whether `name` is a TimeZoneIdentifier by Temporal's grammar: an offset,
+ * `±HH`, `±HHMM` or `±HH:MM`, or names joined by `/`, each starting with a
+ * letter, `.` or `_` and going on in letters, digits, `.`, `_`, `-` or `+`.
+ */
+const temporalIsTimeZoneName = (name: string): boolean => {
+  const n: i32 = toI32(name.length)
+  const first: i32 = temporalCharAt(name, 0)
+  if (first === 43 || first === 45) {
+    // An offset zone: a hand-written reader rather than `temporalFastTwo`,
+    // whose callers are kept to the fast paths so that it stays inlined there.
+    const r: TemporalReader = new TemporalReader(name)
+    r.at = 1
+    const hours: i32 = r.digits(toI32(2))
+    let minutes: i32 = 0
+    if (!r.done()) {
+      r.eat(toI32(58))
+      minutes = r.digits(toI32(2))
+    }
+    const shape: boolean = n === 3 || n === 5 || (n === 6 && temporalCharAt(name, 3) === 58)
+    return r.ok && r.done() && shape && hours <= 23 && minutes <= 59
+  }
+  let length: i32 = 0
+  for (let i: i32 = 0; i <= n; i++) {
+    const c: i32 = i < n ? toI32(name.charCodeAt(i)) : 47
+    if (c === 47) {
+      if (length === 0) {
+        return false
+      }
+      length = 0
+    } else {
+      const leading: boolean = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 46 || c === 95
+      if (!leading && (length === 0 || !(temporalIsAlphaNumeric(c) || c === 45 || c === 43))) {
+        return false
+      }
+      length = length + 1
     }
   }
   return true
@@ -1510,7 +1577,7 @@ export const plainDateFromOrNull = (text: string): PlainDate | null => {
     }
   }
   const r: TemporalReader = temporalReadDateTime(text)
-  if (!r.ok || r.utc || !temporalReadInRange(r, false)) {
+  if (!r.ok || r.utc || !r.isoCalendar || !temporalReadInRange(r, false)) {
     return null
   }
   return new PlainDate(r.year, r.month, r.day)
@@ -2113,7 +2180,7 @@ export const plainDateTimeFromOrNull = (text: string): PlainDateTime | null => {
     }
   }
   const r: TemporalReader = temporalReadDateTime(text)
-  if (!r.ok || r.utc || !temporalReadInRange(r, true)) {
+  if (!r.ok || r.utc || !r.isoCalendar || !temporalReadInRange(r, true)) {
     return null
   }
   return new PlainDateTime(
@@ -2206,6 +2273,10 @@ export class Duration {
     microseconds: i64 = 0,
     nanoseconds: i64 = 0
   ) {
+    // The checks are written out here, not a call of `temporalDurationProblem`,
+    // because every `until` and `add` builds a `Duration`: as a call they cost
+    // `until` on a date 70% (bench/temporal.ts). Each bound is tested on both
+    // sides, so the least `i64`, whose magnitude does not fit, is refused too.
     let sign: i32 = temporalSignOf(0, years)
     sign = temporalSignOf(sign, months)
     sign = temporalSignOf(sign, weeks)
@@ -2216,20 +2287,24 @@ export class Duration {
     sign = temporalSignOf(sign, milliseconds)
     sign = temporalSignOf(sign, microseconds)
     sign = temporalSignOf(sign, nanoseconds)
-    if (
-      temporalAbs(years) >= TEMPORAL_MAX_CALENDAR_FIELD ||
-      temporalAbs(months) >= TEMPORAL_MAX_CALENDAR_FIELD ||
-      temporalAbs(weeks) >= TEMPORAL_MAX_CALENDAR_FIELD
-    ) {
+    const c: i64 = TEMPORAL_MAX_CALENDAR_FIELD
+    if (years <= -c || years >= c || months <= -c || months >= c || weeks <= -c || weeks >= c) {
       temporalRangeError("Duration: years, months and weeks must each be below 2^32")
     }
-    // Each field alone below the 2^53-second bound keeps the sum inside an i64.
+    const m: i64 = TEMPORAL_MAX_DURATION_SECONDS
     if (
-      temporalAbs(days) > 104249991374 ||
-      temporalAbs(hours) > 2501999792983 ||
-      temporalAbs(minutes) > 150119987579016 ||
-      temporalAbs(seconds) > TEMPORAL_MAX_DURATION_SECONDS
+      days < -104249991374 ||
+      days > 104249991374 ||
+      hours < -2501999792983 ||
+      hours > 2501999792983 ||
+      minutes < -150119987579016 ||
+      minutes > 150119987579016 ||
+      seconds < -m ||
+      seconds > m
     ) {
+      temporalRangeError("Duration: the time fields come to 2^53 seconds or more")
+    }
+    if (temporalWholeSeconds(days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds) > m) {
       temporalRangeError("Duration: the time fields come to 2^53 seconds or more")
     }
     this.years = years
@@ -2244,27 +2319,6 @@ export class Duration {
     this.nanoseconds = nanoseconds
     this.sign = sign
     this.blank = sign === 0
-    // Every field has one sign, so the whole seconds of the total, rounded
-    // toward zero, are the fields' own, each rounded toward zero, plus the
-    // seconds their remainders carry.
-    const carry: i64 = toI64(
-      (toI64(milliseconds % 1000) * 1000000 +
-        toI64(microseconds % 1000000) * 1000 +
-        (nanoseconds % 1000000000)) /
-        1000000000
-    )
-    const whole: i64 =
-      days * TEMPORAL_SECONDS_PER_DAY +
-      hours * 3600 +
-      minutes * 60 +
-      seconds +
-      toI64(milliseconds / 1000) +
-      toI64(microseconds / 1000000) +
-      toI64(nanoseconds / 1000000000) +
-      carry
-    if (temporalAbs(whole) > TEMPORAL_MAX_DURATION_SECONDS) {
-      temporalRangeError("Duration: the time fields come to 2^53 seconds or more")
-    }
   }
 
   /**
@@ -2419,6 +2473,109 @@ const temporalSignOf = (sign: i32, n: i64): i32 => {
   return s
 }
 
+/**
+ * The magnitude of the whole seconds of the time fields, rounded toward
+ * zero, for fields that share one sign and are each within the bounds the
+ * constructor checks first, so that the sum fits an `i64`: the fields' own
+ * whole seconds plus the seconds their remainders carry.
+ */
+const temporalWholeSeconds = (
+  days: i64,
+  hours: i64,
+  minutes: i64,
+  seconds: i64,
+  milliseconds: i64,
+  microseconds: i64,
+  nanoseconds: i64
+): i64 => {
+  const carry: i64 = toI64(
+    (toI64(milliseconds % 1000) * 1000000 +
+      toI64(microseconds % 1000000) * 1000 +
+      (nanoseconds % 1000000000)) /
+      1000000000
+  )
+  const whole: i64 =
+    days * TEMPORAL_SECONDS_PER_DAY +
+    hours * 3600 +
+    minutes * 60 +
+    seconds +
+    toI64(milliseconds / 1000) +
+    toI64(microseconds / 1000000) +
+    toI64(nanoseconds / 1000000000) +
+    carry
+  return whole < 0 ? -whole : whole
+}
+
+/**
+ * Why the ten fields make no valid `Duration`, or `""` when they make one,
+ * by the constructor's own checks, for `durationFromOrNull` to answer `null`
+ * where the constructor would panic:
+ * two non-zero fields with different signs, `years`, `months` or `weeks` at
+ * 2^32 or past, or the rest coming to 2^53 seconds or more (Temporal's
+ * IsValidDuration). Every bound is tested on both sides, so the least `i64`,
+ * whose magnitude does not fit, is refused too.
+ */
+const temporalDurationProblem = (
+  years: i64,
+  months: i64,
+  weeks: i64,
+  days: i64,
+  hours: i64,
+  minutes: i64,
+  seconds: i64,
+  milliseconds: i64,
+  microseconds: i64,
+  nanoseconds: i64
+): string => {
+  const positive: boolean =
+    years > 0 ||
+    months > 0 ||
+    weeks > 0 ||
+    days > 0 ||
+    hours > 0 ||
+    minutes > 0 ||
+    seconds > 0 ||
+    milliseconds > 0 ||
+    microseconds > 0 ||
+    nanoseconds > 0
+  const negative: boolean =
+    years < 0 ||
+    months < 0 ||
+    weeks < 0 ||
+    days < 0 ||
+    hours < 0 ||
+    minutes < 0 ||
+    seconds < 0 ||
+    milliseconds < 0 ||
+    microseconds < 0 ||
+    nanoseconds < 0
+  if (positive && negative) {
+    return "the fields have mixed signs"
+  }
+  const c: i64 = TEMPORAL_MAX_CALENDAR_FIELD
+  if (years <= -c || years >= c || months <= -c || months >= c || weeks <= -c || weeks >= c) {
+    return "years, months and weeks must each be below 2^32"
+  }
+  // Each field alone within the 2^53-second bound keeps the sum inside an i64.
+  const m: i64 = TEMPORAL_MAX_DURATION_SECONDS
+  if (
+    days < -104249991374 ||
+    days > 104249991374 ||
+    hours < -2501999792983 ||
+    hours > 2501999792983 ||
+    minutes < -150119987579016 ||
+    minutes > 150119987579016 ||
+    seconds < -m ||
+    seconds > m
+  ) {
+    return "the time fields come to 2^53 seconds or more"
+  }
+  if (temporalWholeSeconds(days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds) > m) {
+    return "the time fields come to 2^53 seconds or more"
+  }
+  return ""
+}
+
 /** The largest unit `d` has a non-zero field in, or nanoseconds when it is blank. */
 const temporalLargestUnit = (d: Duration): i32 => {
   if (d.years !== 0) {
@@ -2493,6 +2650,7 @@ export const durationFromOrNull = (text: string): Duration | null => {
   let inTime: boolean = false
   let any: boolean = false
   let fractionSeen: boolean = false
+  let longest: i32 = 0
   while (!r.done()) {
     const c: i32 = r.peek(toI32(0))
     if (c === 84 || c === 116) {
@@ -2518,6 +2676,9 @@ export const durationFromOrNull = (text: string): Duration | null => {
       n = n * 10 + toI64(r.peek(toI32(0)) - 48)
       count = count + 1
       r.at = r.at + 1
+    }
+    if (count > longest) {
+      longest = count
     }
     const beforeFraction: i32 = r.at
     const fraction: i32 = r.fractionDigits()
@@ -2560,6 +2721,26 @@ export const durationFromOrNull = (text: string): Duration | null => {
     return null
   }
   const k: i64 = toI64(negative ? -1 : 1)
+  // Fields of nine digits or fewer cannot reach any of the constructor's
+  // bounds, so only a longer one is checked here first.
+  const problem: string =
+    longest <= 9
+      ? ""
+      : temporalDurationProblem(
+          values[0] * k,
+          values[1] * k,
+          values[2] * k,
+          values[3] * k,
+          values[4] * k,
+          values[5] * k,
+          values[6] * k,
+          values[7] * k,
+          values[8] * k,
+          values[9] * k
+        )
+  if (problem.length > 0) {
+    return null
+  }
   return new Duration(
     values[0] * k,
     values[1] * k,

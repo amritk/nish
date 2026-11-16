@@ -130,7 +130,7 @@ Each stage is one PR.
      with Temporal's defaults. `Duration` also has `negated` and `abs`.
      `Instant` also has `fromEpochMilliseconds` and `Now.instant()` (as
      `nowInstant`).
-   - It lands with `tests/link/std_temporal`: 199 cases, held natively to
+   - It lands with `tests/link/std_temporal`: 214 cases, held natively to
      `expected.out` and by `check.mjs` to Node's own `Temporal`.
 2. **S2: the global `Temporal`.**
    - The checker binds `Temporal.PlainDate.from(...)`, `new
