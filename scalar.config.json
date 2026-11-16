@@ -153,6 +153,11 @@
                 "title": "The CLI",
                 "filepath": "docs/guide/using-nish/cli.md"
               },
+              "/agent-skills": {
+                "type": "page",
+                "title": "Agent skills",
+                "filepath": "docs/guide/using-nish/agent-skills.md"
+              },
               "/compat": {
                 "type": "page",
                 "title": "The compatibility dialect",

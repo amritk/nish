@@ -44,6 +44,12 @@
  * correctly, not that it can still compile on a platform with no binary. A
  * postinstall that can break `npm ci` is a worse bug than the startup cost it
  * exists to remove.
+ *
+ * **Its second half links the package's agent skills** into the installing
+ * project's `.claude/skills/`, through `scripts/link-skills.mjs` (the rules of
+ * what it owns are there). It runs only for a local install into the project
+ * `INIT_CWD` names -- not for `-g`, not for npx's cache, not with
+ * `NISH_NO_SKILLS` set -- and it too only reports a failure, never raises one.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -133,9 +139,45 @@ const swap = async () => {
   return `bin/nish now execs the native compiler in ${name}`
 }
 
+/** Link the installed Nish packages' skills into the project, when every guard passes. */
+const skills = async () => {
+  if (fs.existsSync(path.join(root, "src", "compile.ts"))) {
+    return "a checkout, so no skills are linked"
+  }
+  if (process.env.npm_config_global === "true") {
+    return "a global install has no project to link skills into"
+  }
+  if ((process.env.NISH_NO_SKILLS ?? "") !== "") {
+    return "NISH_NO_SKILLS is set, so no skills are linked"
+  }
+  const initCwd = process.env.INIT_CWD ?? ""
+  if (initCwd === "") {
+    return "INIT_CWD is not set, so there is no project to link skills into"
+  }
+  const linker = path.join(root, "scripts", "link-skills.mjs")
+  if (!fs.existsSync(linker)) {
+    return "scripts/link-skills.mjs is missing, so no skills are linked"
+  }
+  const { linkSkills, projectOf } = await import(pathToFileURL(linker).href)
+  const project = projectOf(initCwd, root)
+  if (project === null) {
+    return "not installed in INIT_CWD's project, so no skills are linked"
+  }
+  const r = linkSkills(project)
+  return `skills: ${r.linked.length} linked, ${r.kept.length} unchanged, ${r.pruned.length} pruned, ${r.skipped.length} skipped in .claude/skills (npx nish-skills to relink)`
+}
+
 try {
   console.log(`nish: ${await swap()}`)
 } catch (err) {
   // Deliberately not an error: the shim is still there and still works.
   console.log(`nish: keeping the node launcher (${err instanceof Error ? err.message : String(err)})`)
+}
+
+// Its own try, so either half failing leaves the other intact; a skill that
+// could not be linked is never a reason to fail the install.
+try {
+  console.log(`nish: ${await skills()}`)
+} catch (err) {
+  console.log(`nish: no skills linked (${err instanceof Error ? err.message : String(err)})`)
 }
