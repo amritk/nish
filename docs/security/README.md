@@ -69,6 +69,7 @@ the record that found it. The notes below the table name each such finding.
 | PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 6 | 0 / 0 / 1 / 8 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²² |
 | JSON Web Tokens, and HMAC's keyed state | [crypto-jwt.md](crypto-jwt.md) | `std/crypto/jwt.ts`; `std/crypto/hmac.ts`'s `HmacKey` section | 0 / 0 / 1 / 2 | 0 / 0 / 0 / 0 ²⁵ |
+| OpenID Connect discovery and the JWK Set | [oidc.md](oidc.md) | `std/net/oidc.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁹ |
 | HTTP request handler | [handler.md](handler.md) | `std/net/handler.ts` | 0 / 0 / 3 / 2 | 0 / 0 / 0 / 0 |
 | Async server | [serve.md](serve.md) | `std/net/serve.ts` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 1 |
 | One HTTP server for HTTP/1.1, 2 and 3 | [http-server.md](http-server.md) | `std/net/http-server.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 1 |
@@ -436,6 +437,11 @@ the record that found it. The notes below the table name each such finding.
 28. WH-10 (Low), the root-storage trace believing a graph the page forged,
     was left open by WP55 and fixed by bounding every pointer and length the
     trace reads to the arena; it is counted as a fixed Low.
+29. OIDC-1 to OIDC-4 (Low) are accepted, with the reason in their record,
+    and are not counted: fetches block where the caller calls them, the
+    transport's body cap is backed by the parser's, discovery is read once,
+    and the `kid` is read unauthenticated to choose a key. OIDC-P1 to
+    OIDC-P5 are properties checked and found to hold.
 
 ## Fuzzed
 

@@ -1,0 +1,201 @@
+# Tokens from an OpenID Connect issuer
+
+An identity provider that speaks OpenID Connect (Auth0, Okta, Keycloak,
+Cognito, Google, Microsoft Entra) signs its tokens with keys it publishes
+and rotates. `nish/net/oidc` finds those keys from the issuer's URL alone,
+keeps them current as the provider rotates them, and verifies a token with
+them. It is a library module
+([`export` and `import`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#export-and-import))
+built on [authentication tokens (JWT)](auth.md), which does the signature
+and claim checks, and on the [HTTP client](http-client.md), which fetches.
+
+It does three things:
+
+1. **Discovery.** `oidcDiscover(issuer, options)` reads
+   `<issuer>/.well-known/openid-configuration` and answers the issuer's
+   `jwks_uri`, the URL of its key set.
+2. **The key set.** `OidcKeys.refresh(now)` fetches that key set (a JWK Set)
+   and keeps it for as long as the response's `Cache-Control: max-age` says,
+   within limits.
+3. **Verification.** `oidcVerify(keys, token, audience, now)` picks the key
+   the token's `kid` names and checks the token with it, without fetching.
+
+## Verifying a provider's tokens
+
+Discover once at start-up, make the `OidcKeys`, take the first key set, and
+then verify each request's token:
+
+```ts nish:ok
+import {
+  OIDC_ERR_STALE,
+  OIDC_ERR_UNKNOWN_KID,
+  OIDC_OK,
+  OidcKeys,
+  OidcMetadata,
+  OidcOptions,
+  oidcDiscover,
+  oidcVerify,
+} from "nish/net/oidc";
+
+export const main = (): i32 => {
+  const options: OidcOptions = new OidcOptions();
+  const meta: OidcMetadata = oidcDiscover("https://auth.example", options);
+  if (meta.error !== OIDC_OK) {
+    console.log(`discovery failed: ${meta.error}`);
+    return 1;
+  }
+  const keys: OidcKeys = new OidcKeys(meta, options);
+  const now: i64 = toI64(Date.now()) / toI64(1000);
+  if (keys.refresh(now) !== OIDC_OK) {
+    console.log(`no key set: ${keys.lastError}`);
+    return 1;
+  }
+
+  // For each request: the token from `Authorization: Bearer <token>`.
+  const token: string = "eyJ...";
+  const code: i32 = oidcVerify(keys, token, "orders-api", now);
+  if (code === OIDC_OK) {
+    console.log(keys.claimsText());
+  } else if (code === OIDC_ERR_UNKNOWN_KID) {
+    console.log("signed by a key we do not have yet");
+  } else if (code === OIDC_ERR_STALE) {
+    console.log("no current key set");
+  } else {
+    console.log(`refused: ${code}`);
+  }
+  return 0;
+};
+```
+
+`audience` is your service's client ID, the value the provider puts in
+`aud`. After `OIDC_OK`, `keys.claimsText()` is the payload's JSON; read
+`sub`, scopes and your own claims from it. After a refusal it is `""`.
+
+`oidcVerify` answers `OIDC_OK` (which is `JWT_OK`), one of the codes below
+when no key could be chosen, or the `JWT_ERR_*` code `nish/crypto/jwt`
+refused the token with: `JWT_ERR_ALG`, `JWT_ERR_SIGNATURE`,
+`JWT_ERR_EXPIRED`, `JWT_ERR_ISSUER`, `JWT_ERR_AUDIENCE` and the rest
+([Verifying a token](auth.md#verifying-a-token) lists them).
+
+| Code | Meaning |
+| --- | --- |
+| `OIDC_ERR_UNKNOWN_KID` | The token's `kid` is not in the key set. The next `refresh` fetches the set early |
+| `OIDC_ERR_KID_REQUIRED` | The token has no `kid` and the set holds more than one key |
+| `OIDC_ERR_STALE` | No key set has been taken yet, or the last one is past its hard expiry |
+
+## What is checked
+
+**The issuer is the one you name.** The discovery document must name the
+same issuer, byte for byte: `https://auth.example/` and `https://auth.example`
+are different issuers, so give the spelling your provider uses in its
+tokens' `iss`. The key set is read only from the `jwks_uri` that document
+gives. Both must be `https`, with no user name or password in the URL;
+redirects are not followed.
+
+**The key decides the algorithm, never the token.** Each key in the set is
+bound to one algorithm by its type and its `alg`:
+
+| Key | Algorithm |
+| --- | --- |
+| `"kty":"RSA"`, 2048 bits or more | its `alg`, one of `RS256`, `RS384`, `RS512`; `RS256` when it has none |
+| `"kty":"EC"`, `"crv":"P-256"` | `ES256` |
+| `"kty":"EC"`, `"crv":"P-384"` | `ES384` |
+| `"kty":"OKP"`, `"crv":"Ed25519"` | `EdDSA` |
+
+A token whose header names any other algorithm is refused: `none`, any
+`HS*` algorithm (so the public key can never be used as an HMAC secret),
+and `RS256` on a key published for `RS384`.
+
+**The key set is read strictly.** Encryption keys (`"use":"enc"`), key types
+and algorithms this module does not verify (`PS256`, X25519) are skipped. A
+set is refused whole when a key's `alg` disagrees with its type, when a key
+carries private material (`d`, `p`, `q`, ...) or is a symmetric `oct` key
+with its secret `k`, when two keys share a `kid`, or when a key's material
+does not make a key, such as an RSA modulus under 2048 bits. A provider that
+publishes such a set is misconfigured, and no key from it is trusted.
+
+**The claims are checked by `nish/crypto/jwt`.** `iss` must be the issuer,
+`aud` must be `audience` or an array holding it, and `exp` is required;
+`exp`, `nbf` and `iat` are allowed `options.leeway` seconds of clock skew
+(60 by default).
+
+## Key rotation
+
+A provider adds a new key to its set before it signs with it, and removes
+the old one some time after. `OidcKeys` follows that:
+
+- A key set is fresh for its response's `max-age`, held between
+  `OIDC_MIN_LIFETIME` (5 minutes) and `OIDC_MAX_LIFETIME` (1 day), or
+  `OIDC_DEFAULT_LIFETIME` (1 hour) when the response gives none.
+- A token whose `kid` the set lacks makes the next `refresh` fetch at once,
+  however fresh the set is, but never more than once per
+  `OIDC_MIN_REFRESH_INTERVAL` (one minute). A flood of tokens with made-up
+  `kid`s costs the provider one request a minute.
+- A key the provider removed stops verifying at the next refresh.
+- When a refresh fails, or the provider serves a set that is refused, the
+  last good set keeps verifying, for up to `OIDC_STALE_GRACE` (1 day) past
+  its freshness. After that `oidcVerify` answers `OIDC_ERR_STALE` until a
+  refresh succeeds. `keys.lastError` says why the last refresh failed.
+
+## Refreshing from a timer
+
+`oidcDiscover` and `refresh` each make one blocking request, bounded by
+`options.timeoutMs` (10 seconds by default). `oidcVerify` and `keys.key`
+never fetch. So call `refresh` where blocking is harmless: from your
+server's own loop or timer, never inside a request. `refresh(now)` answers
+`OIDC_SKIPPED` and does nothing while the set is fresh and no token has
+asked for a new one, so calling it on every turn of the loop is cheap:
+
+```ts nish:ok
+import { OIDC_OK, OIDC_SKIPPED, OidcKeys } from "nish/net/oidc";
+
+// Call once per turn of your server's loop, before or after serving.
+export const tick = (keys: OidcKeys): void => {
+  const now: i64 = toI64(Date.now()) / toI64(1000);
+  const code: i32 = keys.refresh(now);
+  if (code !== OIDC_OK && code !== OIDC_SKIPPED) {
+    console.log(`key set refresh failed: ${code}; still using the last one`);
+  }
+};
+
+export const main = (): i32 => 0;
+```
+
+`keys.due(now)` says whether the next `refresh` would fetch, if you would
+rather run it on a worker. Discovery is read once: if your provider ever
+moves its `jwks_uri`, restart the program, or call `oidcDiscover` again and
+make new `OidcKeys`.
+
+Everything takes the time as a `now` parameter, in seconds since 1970, so a
+test can drive the clock. `keys.refreshWith(doc, cacheControl, now)` takes a
+key set you already hold, for a test or for a set you fetch yourself.
+
+## Local development
+
+A provider running on your own machine over plain http (Keycloak in a
+container, say) is refused unless you allow it:
+
+```ts nish:ok
+import { OidcMetadata, OidcOptions, oidcDiscover } from "nish/net/oidc";
+
+export const main = (): i32 => {
+  const options: OidcOptions = new OidcOptions();
+  options.allowLoopbackHttp = true; // http to 127.0.0.1, ::1 or localhost only
+  const meta: OidcMetadata = oidcDiscover("http://localhost:8080/realms/dev", options);
+  return meta.error;
+};
+```
+
+http to any other host is refused even then.
+
+## Cost
+
+An `OidcKeys` sizes its token buffer once, from `options.maxToken`
+(`JWT_MAX_TOKEN`, 8 KiB, by default), and a key set is at most
+`OIDC_MAX_KEYS` (64) keys from a document of at most `OIDC_MAX_JWKS_BYTES`
+(64 KiB). Verifying allocates what the signature check needs, as in
+[authentication tokens (JWT)](auth.md#cost). An `OidcKeys` holds working
+state, so it is one thread's: give each worker its own.
+
+What was checked and what is left open is in the module's
+[security record](../../security/oidc.md).
