@@ -26562,6 +26562,16 @@ if (dealtHere("releaseChecks")) {
       `${junctionTarget} ${JSON.stringify(kept)}`
     )
 
+    // Postinstall imports the linker, so the linker keeps postinstall's promise too
+    // (tests/fetch-seed.js holds postinstall.mjs itself to it).
+    check(
+      "scripts/link-skills.mjs, which postinstall runs, fetches nothing and spawns nothing",
+      !/from "node:(child_process|http|https|net|tls|dgram)"|\bfetch\(|\bimport\(/.test(
+        fs.readFileSync(path.join(root, "scripts", "link-skills.mjs"), "utf8")
+      ),
+      "link-skills.mjs reaches for the network, a process or a dynamic import"
+    )
+
     // The command's surface.
     const help = linkSkillsCli(["--help"], skillsRoot)
     check("nish-skills --help exits 0 with the usage on stdout", help.status === 0 && help.stdout.length > 0, help.stderr)

@@ -44,6 +44,12 @@
  * correctly, not that it can still compile on a platform with no binary. A
  * postinstall that can break `npm ci` is a worse bug than the startup cost it
  * exists to remove.
+ *
+ * **Its second half links the package's agent skills** into the installing
+ * project's `.claude/skills/`, through `scripts/link-skills.mjs` (the rules of
+ * what it owns are there). It runs only for a local install into the project
+ * `INIT_CWD` names -- not for `-g`, not for npx's cache, not with
+ * `NISH_NO_SKILLS` set -- and it too only reports a failure, never raises one.
  */
 import fs from "node:fs"
 import path from "node:path"
