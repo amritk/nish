@@ -162,7 +162,9 @@ class HandlerLimits
 | `http: Http1Config` | The carrier's caps and timeouts; `http.maxBody` is the body cap, past which a request is answered 413. |
 | `jsonBytes: i32` | Bytes in the JSON scratch buffer: the largest body `json` and `problem` can write. A value past it makes `sendJson` answer 500. At least 256. |
 | `maxEvents: i32` | The most readiness events one `wait` takes. |
-| `slots: i32` | The most connections at once. |
+| `ring: boolean` | Whether `listen` opens its listener with `NET_LISTEN_RING`, so each connection is accepted into an io_uring slot rather than a descriptor. Off by default. Where the kernel refuses rings, the listener serves descriptors and `netRingState` says why. A connection is then a slot handle, which `sendFd` and a C library through `nish:ffi` cannot take. |
+| `slots: i32` | The most connections at once. It is the handler's own cap, not `RLIMIT_NOFILE`: with `ring` set the connections live in io_uring slots and may outnumber the descriptor limit. Past it a connection is accepted and closed at once. |
+| `listen(host: string, port: i32, backlog: i32, flags: i32): i32` | Opens a TCP listener for an `HttpHandler` with these limits: `tcpListenFlags` with `flags`, plus `NET_LISTEN_RING` when `ring` is set. |
 
 ### HttpHandler
 

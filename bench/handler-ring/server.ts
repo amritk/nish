@@ -159,7 +159,11 @@ export const main = (): i32 => {
   }
   const router: Router = new Router(new RouterLimits())
   router.add("GET", "/plaintext")
-  const entry: Entry = new Entry(new HttpHandler(limits, listener, router), prepared.value, 2463534242 + toU32(worker))
+  const entry: Entry = new Entry(
+    new HttpHandler(limits, listener, router),
+    prepared.value,
+    2463534242 + toU32(worker)
+  )
   if (worker === 0) {
     console.log(`listening ${port}`)
     if (limits.ring) {

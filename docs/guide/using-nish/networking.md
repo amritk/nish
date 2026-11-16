@@ -333,7 +333,7 @@ export const main = (): i32 => {
 
 Rings are off by default. What one ring process costs against five processes
 on descriptors, with an SQLite lookup per request, is measured in
-[the benchmarks](../../BENCHMARKS.md#io_uring-under-the-handler).
+[the benchmarks](../../BENCHMARKS.md#io_uring-under-the-handler-wp63-s4).
 
 ## Socket options: `netSetOption`
 
