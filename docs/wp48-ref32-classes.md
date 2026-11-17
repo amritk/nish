@@ -429,5 +429,19 @@ see the same types as today.
 4. **Ports**: the `bench/goose` tree programs, `bench/wp48-refs/sibling.ts`
    and the guide's memory page say what the rule picks and when to override
    it.
-5. **wasm32 layout**: `computeLayout`'s 8-byte class pointer slot on wasm32
-   becomes 4 (a separate fix this survey found, independent of 1 to 4).
+5. **Inside Nish**: where the compiler and `std/` gain from compact
+   classes. The compiler is a native executable built by the seed, so once a
+   release ships the rule, its own linked classes (AST and type nodes,
+   scopes, the call graph) are picked with no source change. `std/` classes
+   compile into user programs and are picked by the same rule there. The
+   stage is a survey of both: `nish --explain-layout` over `src/` and over
+   the nish-cmp corpus's `std/` imports, the classes picked and the ones
+   left wide, and for each its measured effect (the compiler's peak RSS and
+   time on a self-build, and the `std/` benches). A class the rule misses
+   that measures faster compact gets `implements Compact`, and one it picks
+   that measures slower gets `implements Wide`. Under the rolling freeze,
+   `src/` can write either marker only after the release that ships it.
+   `std/net` and `std/crypto` classes stay wide where C sees them or they
+   hold a `Secret`, which rule 5 already refuses.
+6. **wasm32 layout**: `computeLayout`'s 8-byte class pointer slot on wasm32
+   becomes 4 (a separate fix this survey found, independent of 1 to 5).

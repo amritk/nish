@@ -56,7 +56,7 @@ specified.
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | In progress | 3 of 6 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
-| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | Proposed | 1 of 6 |
+| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | Proposed | 1 of 7 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
