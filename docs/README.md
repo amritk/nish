@@ -224,11 +224,26 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   `node scripts/gen-og-image.mjs` from `theme.css` and `site.js`. A change
   to the hero re-renders it (the script's head says what it needs: a
   Playwright and the Inter and JetBrains Mono fonts).
+- [`og.mp4`](site/og.mp4) is the same card in motion, the page's `og:video`:
+  one 12-second cycle of the hero, the code typed, the targets lit, the
+  terminal run and the NISH name unfolding, recorded frame by frame by
+  `node scripts/gen-og-video.mjs`. It needs ffmpeg with libx264 besides what
+  `og.png` needs; nothing else in the repository runs it or needs ffmpeg, and
+  a change to the hero re-renders both. It is committed and served as it is,
+  so it is shaped to play wherever a link unfurls: MP4 with H.264 in yuv420p,
+  because WebM and other pixel formats do not play everywhere; faststart
+  (the index before the data), because an unfurler fetches the head of the
+  file first; silent, with no audio track; and about 0.5 MB, under the 1 MiB
+  that `tests/break-web/check.mjs` holds it to, checked from its bytes.
+  `og.png` stays the `og:image`: the fallback for every unfurler that plays
+  no video, and the poster for those that do.
 - **What a search engine, a link preview or an answer engine reads** is set
   in `scalar.config.json`:
   - `info.description` and the `description`, `og:*` and `twitter:*` tags in
     `siteConfig.head.meta` describe the site and point every page's card at
-    `https://nishlang.com/og.png`. A tag set there is on every page, so it
+    `https://nishlang.com/og.png`, and its `og:video` (with its secure URL,
+    type and size) at `https://nishlang.com/og.mp4`; `twitter:image` stays
+    on `og.png`, since X plays no `og:video`. A tag set there is on every page, so it
     holds no page's own title; the home page's `<title>` is its route's
     `head.title`. The description repeats the landing page's lead: a change
     to what Nish is changes both, and `page.js`'s `DESCRIPTION`.
