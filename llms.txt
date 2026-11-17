@@ -25,6 +25,10 @@ Exit codes: 0 ok, 1 the program was rejected, 2 usage, 3 the C toolchain or the
 prebuilt compiler could not be run (one NL0002 object under --json), 70 a bug in
 the compiler.
 
+The documentation site is https://nishlang.com/: every page is also served as
+Markdown at its route plus `.md`, and https://nishlang.com/llms-full.txt is the
+whole site in one file.
+
 ## Writing Nish
 
 - [Rules card](https://raw.githubusercontent.com/amritk/nish/main/docs/AI.md): the whole language as rules, sized for one read — the traps first, then types, `Result`, nullables, declarations, statements, the complete builtin inventory, and recipes for what is missing. Ships in the npm package as `docs/AI.md`.

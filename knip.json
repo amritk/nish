@@ -41,7 +41,7 @@
     "tests/panic/**",
     "docs/site/break/**"
   ],
-  "ignoreDependencies": ["cookbook-pkg", "elysia", "hono"],
+  "ignoreDependencies": ["cookbook-pkg", "elysia", "hono", "playwright"],
   "ignoreBinaries": ["clang", "ld.lld", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "openssl", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load", "script", "gdb", "lldb", "fish"],
   "ignoreExportsUsedInFile": false
 }
