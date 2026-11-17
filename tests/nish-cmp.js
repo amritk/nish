@@ -504,7 +504,7 @@ const dnsFallback = (why, filesByProgram) =>
 // Autobahn run that grades it.
 const WS_FAIL_FAST = "Autobahn"
 // The H1-3 fix lands under this PR's subject.
-const WS_ACCEPT_FLAT = "accept a WebSocket without leaving bytes in the arena"
+const WS_ACCEPT_FLAT = "Accept a WebSocket without leaving bytes in the arena"
 const wsAcceptFlat = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: WS_ACCEPT_FLAT, why }))
