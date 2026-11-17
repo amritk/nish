@@ -19,10 +19,22 @@
 // takes its connections into io_uring slots and `slots` may pass the
 // descriptor limit; worker 0 prints `rings <netRingState()>` after
 // `listening`, 1 when the kernel took rings.
+//
+// Two knobs for the cheaper wins (WP63 S5; bench/handler-ring/wins.sh):
+// BENCH_MMAP=1 runs `PRAGMA mmap_size=268435456` on each worker's connection
+// after it opens, and worker 0 prints `mmap <the value SQLite reports>`.
+// BENCH_CACHE=shm keeps each post's like count, once looked up, in one
+// `nish/sync/shm` region all the workers map (the supervisor makes it); a
+// request whose id is cached answers without SQLite. BENCH_CACHE=private keeps
+// the same table in each worker's own memory, the cache the shared one
+// replaces. Nothing writes the database, so neither cache goes stale. With
+// either, each worker prints `cache <worker> <hits> <misses>` every 4,096
+// requests.
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
-import { PREFORK_STOPPED, PreforkConfig, preforkArgs, preforkWith } from "nish/net/prefork"
+import { PREFORK_STOPPED, PreforkConfig, preforkArgs, preforkIndex, preforkWith } from "nish/net/prefork"
 import { Router, RouterLimits } from "nish/net/router"
 import { OPEN_READWRITE, Statement, openDatabase } from "nish/sqlite"
+import { RELAXED, SharedRegion, createRegion, openRegion, unlinkRegion } from "nish/sync/shm"
 import { netRingState } from "nish:net"
 import { getenv } from "nish:process"
 
@@ -36,6 +48,16 @@ const LOOKUP_SQL: string =
   "SELECT p.id, p.body, p.created_at, u.username, (SELECT count(*) FROM likes l WHERE l.post_id = p.id) FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?"
 /** The answer's length: loadgen.c's 129-byte response has a 13-byte body. */
 const BODY: i32 = 13
+/** `PRAGMA mmap_size` under BENCH_MMAP=1: 256 MiB, design §9's figure. */
+const MMAP_SQL: string = "PRAGMA mmap_size=268435456"
+const CACHE_NONE: i32 = 0
+const CACHE_SHM: i32 = 1
+const CACHE_PRIVATE: i32 = 2
+/** The shared cache's region: one i32 a post, its like count plus 1, 0 when not yet looked up. */
+const CACHE_REGION: string = "nish-bench-cache"
+const CACHE_BYTES: i32 = (POSTS + 1) * 4
+/** How many requests a worker answers between its `cache` lines. */
+const CACHE_REPORT: i32 = 4096
 
 const bytesOf = (s: string): u8[] => {
   const out: u8[] = new Array<u8>(s.length)
@@ -63,10 +85,24 @@ class Entry {
   values: u8[][]
   /** The lookup's xorshift state: bench/sqlite/main.ts's generator, each worker seeded apart. */
   x: u32
+  /** CACHE_NONE, CACHE_SHM or CACHE_PRIVATE. */
+  mode: i32
+  /** The shared cache under CACHE_SHM. */
+  shared: SharedRegion | null = null
+  /** The private cache under CACHE_PRIVATE, laid out as the region is. */
+  own: i32[]
+  worker: i32
+  hits: i64
+  misses: i64
 
-  constructor(h: HttpHandler, st: Statement, seed: u32) {
+  constructor(h: HttpHandler, st: Statement, seed: u32, mode: i32, worker: i32) {
     this.h = h
     this.st = st
+    this.mode = mode
+    this.own = new Array<i32>(mode === CACHE_PRIVATE ? POSTS + 1 : 0)
+    this.worker = worker
+    this.hits = 0
+    this.misses = 0
     this.body = new Array<u8>(BODY)
     this.body[7] = toU8(32)
     this.oops = bytesOf("lookup failed")
@@ -83,16 +119,61 @@ class Entry {
     x = x ^ (x >> 17)
     x = x ^ (x << 5)
     this.x = x
+    const id: i32 = toI32(x % toU32(POSTS)) + 1
+    const cached: i32 = this.cached(id)
+    if (cached > 0) {
+      this.hits = this.hits + 1
+      this.report()
+      digitsInto(this.body, 0, 7, toI64(id))
+      digitsInto(this.body, 8, 5, toI64(cached - 1))
+      return true
+    }
     const st: Statement = this.st
-    let ok: boolean = st.bindI64(1, toI64(x % toU32(POSTS)) + 1).isOk()
+    let ok: boolean = st.bindI64(1, toI64(id)).isOk()
     const r = st.step()
     if (ok && r.isOk() && r.value) {
+      const likes: i64 = st.columnI64(4)
       digitsInto(this.body, 0, 7, st.columnI64(0))
-      digitsInto(this.body, 8, 5, st.columnI64(4))
+      digitsInto(this.body, 8, 5, likes)
+      this.keep(id, toI32(likes) + 1)
     } else {
       ok = false
     }
+    if (this.mode !== CACHE_NONE) {
+      this.misses = this.misses + 1
+      this.report()
+    }
     return st.reset().isOk() && ok
+  }
+
+  /** Post `id`'s cached like count plus 1, or 0 when it is not cached or there is no cache. */
+  cached(id: i32): i32 {
+    if (this.mode === CACHE_PRIVATE && id < toI32(this.own.length)) {
+      return this.own[id]
+    }
+    const region: SharedRegion | null = this.shared
+    if (region !== null) {
+      return region.loadI32(id * 4, RELAXED)
+    }
+    return 0
+  }
+
+  /** Caches post `id`'s like count plus 1, when there is a cache. */
+  keep(id: i32, value: i32): void {
+    if (this.mode === CACHE_PRIVATE && id < toI32(this.own.length)) {
+      this.own[id] = value
+    }
+    const region: SharedRegion | null = this.shared
+    if (region !== null) {
+      region.storeI32(id * 4, value, RELAXED)
+    }
+  }
+
+  /** The `cache` line, every CACHE_REPORT requests. */
+  report(): void {
+    if ((this.hits + this.misses) % toI64(CACHE_REPORT) === 0) {
+      console.log(`cache ${this.worker} ${this.hits} ${this.misses}`)
+    }
   }
 
   run(): void {
@@ -119,9 +200,41 @@ const benchCores = (): i32 => {
   return n > 1 ? n : 1
 }
 
+/** The cache `BENCH_CACHE` asks for: `shm`, `private`, or none. */
+const benchCache = (): i32 => {
+  const env: string | null = getenv("BENCH_CACHE")
+  if (env !== null && env === "shm") {
+    return CACHE_SHM
+  }
+  return env !== null && env === "private" ? CACHE_PRIVATE : CACHE_NONE
+}
+
+/** Makes the shared cache's region, after removing one a killed run left; null when it cannot. */
+const makeCache = (): SharedRegion | null => {
+  const stale = unlinkRegion(CACHE_REGION)
+  if (stale.isErr()) {
+    // None: the usual case.
+  }
+  const made = createRegion(CACHE_REGION, CACHE_BYTES)
+  if (made.isErr()) {
+    console.error(`server: the cache region: ${made.error.code}`)
+    return null
+  }
+  return made.value
+}
+
 export const main = (): i32 => {
   const cores: i32 = benchCores()
+  const mode: i32 = benchCache()
   let worker: i32 = 0
+  // The supervisor (or the only process) makes the region; workers open it by name.
+  let region: SharedRegion | null = null
+  if (mode === CACHE_SHM && (cores <= 1 || preforkIndex(process.argv) < 0)) {
+    region = makeCache()
+    if (region === null) {
+      return 1
+    }
+  }
   if (cores > 1) {
     const config: PreforkConfig = new PreforkConfig()
     config.workers = cores
@@ -142,6 +255,34 @@ export const main = (): i32 => {
     return 1
   }
   const db = opened.value
+  const mmap: string | null = getenv("BENCH_MMAP")
+  if (mmap !== null && mmap === "1") {
+    if (db.exec(MMAP_SQL).isErr()) {
+      console.error("server: PRAGMA mmap_size failed")
+      return 1
+    }
+    const q = db.prepare("PRAGMA mmap_size")
+    if (q.isErr()) {
+      console.error(`server: ${q.error.message}`)
+      return 1
+    }
+    const st: Statement = q.value
+    const r = st.step()
+    if (worker === 0 && r.isOk() && r.value) {
+      console.log(`mmap ${st.columnI64(0)}`)
+    }
+    if (st.finalize().isErr()) {
+      return 1
+    }
+  }
+  if (mode === CACHE_SHM && cores > 1) {
+    const opened2 = openRegion(CACHE_REGION)
+    if (opened2.isErr()) {
+      console.error(`server: open the cache region: ${opened2.error.code}`)
+      return 1
+    }
+    region = opened2.value
+  }
   const prepared = db.prepare(LOOKUP_SQL)
   if (prepared.isErr()) {
     console.error(`server: ${prepared.error.message}`)
@@ -162,8 +303,11 @@ export const main = (): i32 => {
   const entry: Entry = new Entry(
     new HttpHandler(limits, listener, router),
     prepared.value,
-    2463534242 + toU32(worker)
+    2463534242 + toU32(worker),
+    mode,
+    worker
   )
+  entry.shared = region
   if (worker === 0) {
     console.log(`listening ${port}`)
     if (limits.ring) {

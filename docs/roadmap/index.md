@@ -37,7 +37,6 @@ specified.
 - [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md): the shape of the `constraints` option, whether to record which keyword failed, whether encode checks constraints in a `-g` build, and whether a coerce class may reach a strict one.
 - [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md): whether its typed JSON prerequisites land as its S1 or in WP61, a reverse generator, `readOnly`/`writeOnly`, unknown and `x-*` keywords, nullable `boolean` and type-discriminated unions, presence flags, field-name style, where the generator lives, and whether `format` is checked by default (S5).
 - [WP64: Temporal](wp64-temporal.md): how option bags such as `{ largestUnit: "year" }` get a layout, whether the time zone database is embedded by default, `Duration`'s field width, `epochNanoseconds` without `bigint`, and whether a `RangeError` stays a panic.
-- [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md): how many rings `--sandbox` makes before `main`.
 - [WP65: The surface a lexer port asked for](wp65-lexer-surface.md): whether to build `toString()` on a number, which LANGUAGE.md refuses today, or keep the rule and make the refusal name the template literal.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 - [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
@@ -55,7 +54,6 @@ specified.
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
-| [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | In progress | 3 of 6 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
 | [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | Proposed | 1 of 7 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
@@ -114,6 +112,7 @@ specified.
 | [WP53: Buffers and handles across `declare function`](wp53-ffi-buffers-handles.md) | Landed | 1 of 1 |
 | [WP55: An object graph a WebAssembly module keeps between calls](wp55-persistent-root.md) | Landed | 1 of 1 |
 | [WP58: A discriminated union as a generic's type argument](wp58-generics-over-unions.md) | Landed | 1 of 1 |
+| [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | Landed | 6 of 6 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 
 ## Not built
