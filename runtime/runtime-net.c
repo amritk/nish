@@ -305,6 +305,9 @@ void nish_uring_destroy(struct nish_uring_set *s);
 /* What a held slot's queue may still take from the kernel before the cancel
    lands; past it the connection ends with -105 (ENOBUFS). */
 #define NR_RECV_MAX (16 * 1024 * 1024)
+/* A slot's first receive queue, doubled as it fills: small enough for
+   glibc's thread cache, and freed once drained (NURING-38). */
+#define NR_RECV_FIRST 1024
 /* The most slots per ring: a table is the kernel's memory, sized up front. */
 #define NR_SLOTS_MAX 16384
 #define NR_EVENTS 256
@@ -471,13 +474,12 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   }
   struct nr_conn *c = &S->conns[e->ring][e->slot];
   if (e->kind == 1) {
+    /* A reused slot starts with no receive queue, as a fresh one does: one
+       it still held would be the last connection's capacity (NURING-38). */
     uint32_t gen = c->gen;
-    uint8_t *buf = c->rbuf;
-    uint32_t cap = c->rcap;
+    free(c->rbuf);
     memset(c, 0, sizeof *c);
     c->gen = gen;
-    c->rbuf = buf;
-    c->rcap = cap;
     c->open = 1;
     c->v.loop = -1;
     uint32_t i = (S->fhead + S->flen) % (S->fcap ? S->fcap : 1);
@@ -521,7 +523,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
         c->roff = 0;
       }
       if (c->rlen + n > c->rcap) {
-        uint32_t nc = c->rcap ? c->rcap : 4096;
+        uint32_t nc = c->rcap ? c->rcap : NR_RECV_FIRST;
         while (nc < c->rlen + n) nc *= 2;
         uint8_t *p = realloc(c->rbuf, nc);
         if (!p) {
@@ -712,6 +714,13 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     c->roff += n;
     /* A held receive goes again once the program has read half the queue. */
     if (c->rheld && c->rlen - c->roff < NR_AREA / 2 && nish_uring_hold(S->u, ring, slot, 0) == 0) c->rheld = 0;
+    /* A drained queue is freed, so an idle slot holds none (NURING-38): the
+       next receive allocates again, and a read before it finds nothing. */
+    if (c->roff == c->rlen) {
+      free(c->rbuf);
+      c->rbuf = NULL;
+      c->rcap = c->roff = c->rlen = 0;
+    }
     return (int32_t)n;
   }
   if (c->hup) return c->hup_res < 0 ? c->hup_res : 0;
