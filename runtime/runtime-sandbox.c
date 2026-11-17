@@ -180,6 +180,9 @@ static const uint16_t nish_sb_net[] = {41, 53, 42, 49, 50, 43, 288}; /* socket .
 #define NISH_SB_EXECVEAT 322
 static const uint16_t nish_sb_spawn[] = {NISH_SB_EXECVE, NISH_SB_EXECVEAT, 57, 58}; /* execve, execveat, fork, vfork */
 #define NISH_SB_CLONE 56
+#define NISH_SB_CLOSE 3
+#define NISH_SB_DUP2 33
+#define NISH_SB_DUP3 292
 static const uint16_t nish_sb_meta[] = {
     90, 91, 268, 452,   /* chmod, fchmod, fchmodat, fchmodat2 */
     92, 93, 94, 260,    /* chown, fchown, lchown, fchownat */
@@ -195,6 +198,8 @@ static const uint16_t nish_sb_net[] = {198, 199, 203, 200, 201, 202, 242};
 #define NISH_SB_EXECVEAT 281
 static const uint16_t nish_sb_spawn[] = {NISH_SB_EXECVE, NISH_SB_EXECVEAT};
 #define NISH_SB_CLONE 220
+#define NISH_SB_CLOSE 57
+#define NISH_SB_DUP3 24
 static const uint16_t nish_sb_meta[] = {
     52, 53, 452, /* fchmod, fchmodat, fchmodat2 */
     55, 54,      /* fchown, fchownat */
@@ -210,6 +215,10 @@ static const uint16_t nish_sb_uring[] = {425, 426, 427}; /* io_uring_setup, _ent
 static const uint16_t nish_sb_uring_make[] = {425, 427}; /* io_uring_setup, _register */
 #define NISH_SB_ENTER 426
 #define NISH_SB_CLONE3 435
+/* `close_range`, which would free the premade rings' numbers in bulk
+ * (NURING-36); `close`, `dup2` and `dup3` are above, and AArch64 has no
+ * `dup2`. */
+static const uint16_t nish_sb_close_range[] = {436};
 
 /* Set by step 7 and read by `nish_sandbox_check`. */
 static int nish_sb_applied = 0;
@@ -421,12 +430,45 @@ static int nish_sb_rows(struct sock_filter *prog, int at, const uint16_t *nrs, i
 #define NISH_SB_ROWS(prog, at, nrs, action) nish_sb_rows(prog, at, nrs, (int)(sizeof nrs / sizeof nrs[0]), action)
 
 /* The low word of the first argument: `clone`'s flags, where CLONE_THREAD
- * lives, and `io_uring_enter`'s descriptor. */
+ * lives, `io_uring_enter`'s and `close`'s descriptor and `dup3`'s source;
+ * and of the second: `dup2`'s and `dup3`'s target. */
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define NISH_SB_ARG0_LOW (offsetof(struct seccomp_data, args) + 4)
+#define NISH_SB_ARG1_LOW (offsetof(struct seccomp_data, args) + 12)
 #else
 #define NISH_SB_ARG0_LOW offsetof(struct seccomp_data, args)
+#define NISH_SB_ARG1_LOW (offsetof(struct seccomp_data, args) + 8)
 #endif
+
+/* Writes one instruction at `at` and answers the next index: the filter's
+ * argument blocks are built from it rather than from inline initialisers,
+ * which -Oz would otherwise expand once per instruction. */
+static int nish_sb_put(struct sock_filter *prog, int at, uint16_t code, uint32_t k, int jt, int jf) {
+  prog[at] = (struct sock_filter){code, (uint8_t)jt, (uint8_t)jf, k};
+  return at + 1;
+}
+#define NISH_SB_LD(arg) BPF_LD | BPF_W | BPF_ABS, (arg)
+#define NISH_SB_JEQ BPF_JMP | BPF_JEQ | BPF_K
+#define NISH_SB_RET BPF_RET | BPF_K
+
+/* Appends a block that answers `hit` when call `nr`'s argument word at `arg`
+ * is one of the `n` numbers in `fds`, and `miss` when it is none, or when
+ * `from` is not -1 and the first argument is `from`. Another call skips the
+ * block with its number still loaded; this one returns on both paths, so the
+ * argument loaded over the number is never compared with a later row. */
+static int nish_sb_fd_row(struct sock_filter *prog, int at, uint32_t nr, uint32_t arg, const int32_t *fds, int n,
+                          uint32_t hit, uint32_t miss, int32_t from) {
+  int pre = from < 0 ? 0 : 2;
+  at = nish_sb_put(prog, at, NISH_SB_JEQ, nr, 0, n + 3 + pre);
+  if (pre) {
+    at = nish_sb_put(prog, at, NISH_SB_LD(NISH_SB_ARG0_LOW), 0, 0);
+    at = nish_sb_put(prog, at, NISH_SB_JEQ, (uint32_t)from, n + 1, 0);
+  }
+  at = nish_sb_put(prog, at, NISH_SB_LD(arg), 0, 0);
+  for (int i = 0; i < n; i++) at = nish_sb_put(prog, at, NISH_SB_JEQ, (uint32_t)fds[i], n - i, 0);
+  at = nish_sb_put(prog, at, NISH_SB_RET, miss, 0, 0);
+  return nish_sb_put(prog, at, NISH_SB_RET, hit, 0, 0);
+}
 
 /* How every filter here starts, leaving the syscall number loaded. The arch
  * check comes first and kills on a mismatch, so a 32-bit entry cannot step
@@ -447,13 +489,14 @@ static int nish_sb_rows(struct sock_filter *prog, int at, const uint16_t *nrs, i
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)) NISH_SB_X32
 
 /* Step 6: a denylist (open question 4), each row of the note's section 4.
- * `rings` holds the descriptors of the `nrings` rings step 5 made. */
+ * `rings` holds the descriptors of the `nrings` rings step 5 made, then the
+ * keeper's, the ring the runtime drops a freed one with. */
 static void nish_sb_seccomp(int32_t caps, const int32_t *rings, int nrings) {
   uint32_t action = SECCOMP_RET_KILL_PROCESS;
   if (syscall(SYS_seccomp, SECCOMP_GET_ACTION_AVAIL, 0, &action) != 0)
     nish_sb_fail("this kernel has no seccomp filter that kills the process");
   static const struct sock_filter head[] = {NISH_SB_HEAD};
-  struct sock_filter prog[192];
+  struct sock_filter prog[512];
   int at = sizeof head / sizeof head[0];
   memcpy(prog, head, sizeof head);
   at = NISH_SB_ROWS(prog, at, nish_sb_always, KILL);
@@ -463,18 +506,28 @@ static void nish_sb_seccomp(int32_t caps, const int32_t *rings, int nrings) {
    * send, close, cancel and nop, so only entering one stays allowed: by its
    * descriptor, the kernel's `unsigned int`, so a ring made elsewhere and
    * received over a socket is killed too. With no ring made, entering is
-   * killed outright. The block returns on both paths, so the number loaded
-   * over the accumulator is never compared with a later row. */
+   * killed outright. */
   if (!(caps & CAP_BIT_NET) || (!(caps & CAP_BIT_SPAWN) && nrings <= 0))
     at = NISH_SB_ROWS(prog, at, nish_sb_uring, KILL);
   else if (!(caps & CAP_BIT_SPAWN)) {
     at = NISH_SB_ROWS(prog, at, nish_sb_uring_make, KILL);
-    prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, NISH_SB_ENTER, 0, (uint8_t)(nrings + 3));
-    prog[at++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, NISH_SB_ARG0_LOW);
-    for (int i = 0; i < nrings; i++)
-      prog[at++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (uint32_t)rings[i], (uint8_t)(nrings - i), 0);
-    prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, KILL);
-    prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+    at = nish_sb_fd_row(prog, at, NISH_SB_ENTER, NISH_SB_ARG0_LOW, rings, nrings, SECCOMP_RET_ALLOW, KILL, -1);
+    /* A filter by number holds only while each number stays the ring it was
+     * (NURING-36): a freed one would take the next descriptor made, which may
+     * be a ring from elsewhere. So `close` and `dup2` kill on a ring's or the
+     * keeper's number, and `dup3` onto one kills unless it is from the
+     * keeper, which is how the runtime drops a ring and leaves a ring that
+     * takes only NOP in its place. `close_range` answers ENOSYS, as before
+     * 5.9, so a C library's `closefrom` falls back to `close`. `dup`,
+     * `F_DUPFD`, `recvmsg` and `pidfd_getfd` take a free number only, and
+     * exec is killed without `process.spawn`. */
+    int nfds = nrings + 1;
+    at = nish_sb_fd_row(prog, at, NISH_SB_CLOSE, NISH_SB_ARG0_LOW, rings, nfds, KILL, SECCOMP_RET_ALLOW, -1);
+#ifdef NISH_SB_DUP2
+    at = nish_sb_fd_row(prog, at, NISH_SB_DUP2, NISH_SB_ARG1_LOW, rings, nfds, KILL, SECCOMP_RET_ALLOW, -1);
+#endif
+    at = nish_sb_fd_row(prog, at, NISH_SB_DUP3, NISH_SB_ARG1_LOW, rings, nfds, KILL, SECCOMP_RET_ALLOW, rings[nrings]);
+    at = NISH_SB_ROWS(prog, at, nish_sb_close_range, ENOSYS_RET);
   }
   if (!(caps & CAP_BIT_FS_WRITE)) at = NISH_SB_ROWS(prog, at, nish_sb_meta, EPERM_RET);
   if (!(caps & CAP_BIT_SPAWN)) {
@@ -866,7 +919,7 @@ void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char 
   /* The filter kills io_uring_setup unless `net` and `process.spawn` are
    * both granted, so the rings a ring listener takes are made now, or the
    * ring layer is told it may make none (WP63 S3). */
-  int32_t rings[64];
+  int32_t rings[65];
   int32_t nrings = 0;
   if ((caps & (CAP_BIT_NET | CAP_BIT_SPAWN)) != (CAP_BIT_NET | CAP_BIT_SPAWN))
     nrings = nish_net_ring_premake(caps & CAP_BIT_NET ? net_rings : 0, rings);

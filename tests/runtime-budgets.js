@@ -743,8 +743,13 @@ const RUNTIME_BYTES_TEXT_BUDGET = 2048
  * their descriptors (WP63 S3, NURING-35; 4,608 to 4,864): the premake call with
  * its descriptor array, and the filter's rows comparing `io_uring_enter`'s first
  * argument with each premade ring. The budget is the 256-byte boundary above it.
+ * **5,169 bytes** on 2026-11-17 with clang 18.1.3 on linux-x64 once the filter
+ * keeps a confined program from closing or replacing a premade ring's descriptor
+ * (NURING-36; 4,864 to 5,376): the `close`, `dup2` and `dup3` rows comparing the
+ * descriptor argument with each ring and the keeper, `dup3`'s exception for the
+ * keeper as its source, `close_range` answered ENOSYS, and the row builder they share.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 4864
+const RUNTIME_SANDBOX_TEXT_BUDGET = 5376
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`
@@ -787,11 +792,15 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * before its filter (WP63 S3; 7,424 to 8,192): `nish_uring_premake` with its
  * R_DISABLED setup, the opcode and flag restrictions and ENABLE_RINGS, the pool a
  * ring listener takes its rings from (NURING-33, NURING-34), and `nish_uring_pooled`.
- * The budget is the 256-byte boundary above it. A unit of its own beside runtime-net.c,
+ * The budget is the 256-byte boundary above it. **8,244 bytes** on 2026-11-17 with
+ * clang 18.1.3 on linux-x64 once the premake also makes a keeper ring, enabled and
+ * restricted to NOP, and a freed pooled ring's descriptor is overwritten with it by
+ * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
+ * 8,448). A unit of its own beside runtime-net.c,
  * so that a build whose probe fails
  * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 8192
+const RUNTIME_URING_TEXT_BUDGET = 8448
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle

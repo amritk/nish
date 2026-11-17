@@ -154,6 +154,7 @@ void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *s
 void nish_uring_destroy(struct nish_uring_set *s);
 
 #if defined(__linux__)
+#include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
@@ -487,7 +488,11 @@ static int32_t ur_probe_once(void) {
  * `io_uring_register` kill the process. `made` is set once, before `main`
  * and before any thread, by `nish_uring_premake`; `rc` is the number of rings
  * made or the errno of the step that failed, and `next` the next ring a set
- * takes. */
+ * takes. `keeper` is one more restricted ring, made after them, which takes
+ * only NOP and has no queue mapped: a ring a set frees is dropped by
+ * `dup3`ing the keeper over its number, never by closing it, so every number
+ * the filter lets `io_uring_enter` take holds a restricted ring for the
+ * process's life (NURING-36). -1 when the pool holds no ring. */
 #define UR_POOL_MAX 64
 /* The default sizes, which a pooled ring is made at. */
 #define UR_SQ_DEFAULT 1024
@@ -502,8 +507,10 @@ static struct {
   int32_t rc;
   struct ur_sizes z;
   struct ur_ring *rings[UR_POOL_MAX];
+  int32_t fds[UR_POOL_MAX];
   int n, next;
-} ur_pool;
+  int keeper;
+} ur_pool = {.keeper = -1};
 
 /* 1 when this process may use a set, else the negative errno that says why
  * not. A yes or a static refusal is kept for the process: what refuses
@@ -595,7 +602,13 @@ static void ur_arm(struct ur_ring *r, uint32_t slot) {
 
 static void ur_free_ring(struct ur_ring *r) {
   if (r->efd >= 0) close(r->efd);
-  if (r->fd >= 0) close(r->fd);
+  /* A pooled ring's number stays a restricted ring's: `dup3` drops the ring
+     and puts the keeper there in one step, which the filter allows from the
+     keeper alone, where it kills `close` on that number (NURING-36). */
+  if (r->fd >= 0 && ur_pool.keeper >= 0)
+    syscall(SYS_dup3, ur_pool.keeper, r->fd, O_CLOEXEC);
+  else if (r->fd >= 0)
+    close(r->fd);
   if (r->ring_map && r->ring_map != MAP_FAILED) munmap(r->ring_map, r->ring_len);
   if (r->sqes && (void *)r->sqes != MAP_FAILED) munmap(r->sqes, r->sqes_len);
   if (r->br && (void *)r->br != MAP_FAILED) munmap(r->br, r->br_len);
@@ -622,6 +635,26 @@ static int ur_restrict(int fd) {
   res[sizeof ops].opcode = UR_RESTRICTION_SQE_FLAGS_ALLOWED;
   res[sizeof ops].arg = UR_SQE_FIXED_FILE | UR_SQE_BUFFER_SELECT | UR_SQE_CQE_SKIP_SUCCESS;
   return ur_register(fd, UR_REGISTER_RESTRICTIONS, res, (unsigned)(sizeof res / sizeof res[0]));
+}
+
+/* The pool's keeper: a ring of one entry made disabled, restricted to NOP
+ * with no submission flag, and enabled, with nothing mapped or registered.
+ * Answers its descriptor or the failing step's negative errno. */
+static int ur_make_keeper(void) {
+  struct ur_params p;
+  int fd = ur_setup_try(1, 0, &p, UR_SETUP_R_DISABLED);
+  if (fd < 0) return fd;
+  struct ur_restriction res;
+  memset(&res, 0, sizeof res);
+  res.opcode = UR_RESTRICTION_SQE_OP;
+  res.arg = UR_OP_NOP;
+  int rc = ur_register(fd, UR_REGISTER_RESTRICTIONS, &res, 1);
+  if (rc >= 0) rc = ur_register(fd, UR_REGISTER_ENABLE_RINGS, NULL, 0);
+  if (rc < 0) {
+    close(fd);
+    return rc;
+  }
+  return fd;
 }
 
 /* A new ring of sizes `z`: the SQ and CQ mapped, a sparse table of
@@ -788,8 +821,9 @@ static int ur_add_ring(struct nish_uring_set *s) {
  * closes every ring made; either way the pool answers that step's errno from
  * then on: the process falls back to descriptors for good.
  * Answers the number of rings made or that errno, and writes each ring's
- * descriptor to `fds`, which holds 64: the only descriptors the filter lets
- * `io_uring_enter` take. */
+ * descriptor to `fds`, which holds 65: the only descriptors the filter lets
+ * `io_uring_enter` take, then the keeper's after them, which the filter
+ * keeps every one of those numbers on (NURING-36). */
 int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds) {
   if (ur_pool.made) return ur_pool.rc;
   ur_pool.made = 1;
@@ -811,7 +845,14 @@ int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds) {
       return ur_pool.rc = rc;
     }
   }
-  for (int i = 0; i < n; i++) fds[i] = ur_pool.rings[i]->fd;
+  int keeper = ur_make_keeper();
+  if (keeper < 0) {
+    for (int j = 0; j < n; j++) ur_free_ring(ur_pool.rings[j]);
+    memset(ur_pool.rings, 0, sizeof ur_pool.rings);
+    return ur_pool.rc = keeper;
+  }
+  for (int i = 0; i < n; i++) fds[i] = ur_pool.fds[i] = ur_pool.rings[i]->fd;
+  fds[n] = ur_pool.keeper = keeper;
   ur_pool.n = n;
   return ur_pool.rc = n;
 }
@@ -827,18 +868,18 @@ int32_t nish_uring_pooled(void) {
 /* Test-only: tests/run.js's sandbox section builds the runtime with
  * -DNISH_URING_TEST_HOOKS to ask the kernel what a premade ring takes, and
  * scripts/build.sh never passes it. Submits one entry of opcode `op` with
- * submission flags `flags`, on no file, to premade ring `i` before a listener
- * has taken it, and answers its completion's res: -EACCES is the ring's
- * restriction. -ENOENT when no such ring was made. */
-int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags);
-int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) {
-  if (!ur_pool.made || ur_pool.rc <= 0 || i < 0 || i >= ur_pool.n) return -ENOENT;
+ * submission flags `flags`, on descriptor `fd`, to premade ring `i` before a
+ * listener has taken it, and answers its completion's res: -EACCES is the
+ * ring's restriction. -ENOENT when no such ring was made or it was taken. */
+int32_t nish_uring_test_submit_fd(int32_t i, int32_t op, int32_t flags, int32_t fd);
+int32_t nish_uring_test_submit_fd(int32_t i, int32_t op, int32_t flags, int32_t fd) {
+  if (!ur_pool.made || ur_pool.rc <= 0 || i < 0 || i >= ur_pool.n || ur_pool.rings[i] == NULL) return -ENOENT;
   struct ur_ring *r = ur_pool.rings[i];
   struct ur_sqe *e = ur_sqe(r);
   if (e == NULL) return -EBUSY;
   e->opcode = (uint8_t)op;
   e->flags = (uint8_t)flags;
-  e->fd = -1;
+  e->fd = fd;
   e->user_data = 1;
   int rc;
   do rc = ur_enter(r, r->to_submit, 1, UR_ENTER_GETEVENTS);
@@ -850,6 +891,17 @@ int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) {
   int32_t res = r->cqes[head & *r->cq_mask].res;
   __atomic_store_n(r->cq_head, head + 1, __ATOMIC_RELEASE);
   return res;
+}
+/* As `nish_uring_test_submit_fd`, on no file. */
+int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags);
+int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) { return nish_uring_test_submit_fd(i, op, flags, -1); }
+/* The number premade ring `i` was made at, whether or not a set has taken
+ * it since, or the keeper's for `i` equal to the ring count; -ENOENT for
+ * any other `i`. */
+int32_t nish_uring_test_fd(int32_t i);
+int32_t nish_uring_test_fd(int32_t i) {
+  if (!ur_pool.made || ur_pool.rc <= 0 || i < 0 || i > ur_pool.n) return -ENOENT;
+  return i == ur_pool.n ? ur_pool.keeper : ur_pool.fds[i];
 }
 #endif
 

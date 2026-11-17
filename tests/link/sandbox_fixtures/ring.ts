@@ -5,6 +5,12 @@
 // went wrong; any other operation goes to `sb_probe` (probe.c). Exit 2 from
 // `serve` says the kernel refused rings; tests/run.js runs `serve` only once
 // the unconfined probe made a ring, so there it fails the check.
+//
+// `<exe> fallback` listens with the flag where no ring can be had and accepts
+// one loopback connection: exit 0 when the connection is a descriptor and
+// `netRingState()` is negative, 1 otherwise. `<exe> freed <ring>` opens a ring
+// listener and closes it, which frees premade ring 0, then runs probe.c's
+// `freed-dup` on the inherited ring `<ring>` (NURING-36).
 import {
   NET_LISTEN_RING,
   connectResult,
@@ -106,8 +112,59 @@ const serve = (): i32 => {
   return 0
 }
 
+/** Listens with `NET_LISTEN_RING` where rings are refused, accepts one loopback connection, and answers the exit status. */
+const fallback = (): i32 => {
+  const listener: i32 = tcpListenFlags("127.0.0.1", 0, 16, NET_LISTEN_RING)
+  if (listener < 0) {
+    console.log(`fallback: tcpListenFlags answered ${listener}`)
+    return 1
+  }
+  const addr: u8[] = new Array<u8>(18)
+  if (netAddress(addr, "127.0.0.1", netLocalPort(listener)) < 0) {
+    console.log("fallback: netAddress failed")
+    return 1
+  }
+  const client: i32 = tcpConnect(addr)
+  if (client < 0 || !waitFor(client, 2) || connectResult(client) !== 0) {
+    console.log(`fallback: the connection failed: ${client}`)
+    return 1
+  }
+  const peer: u8[] = new Array<u8>(18)
+  let conn: i32 = -11
+  let tries: i32 = 0
+  while (conn === -11 && tries < 50) {
+    waitFor(listener, 1)
+    conn = tcpAccept(listener, peer)
+    tries += 1
+  }
+  const state: i32 = netRingState()
+  if (conn < 0 || conn >= SLOT_BASE || state >= 0) {
+    console.log(`fallback: tcpAccept answered ${conn} and netRingState() ${state}`)
+    return 1
+  }
+  netClose(conn)
+  netClose(client)
+  netClose(listener)
+  console.log(`fallback: a descriptor, netRingState() ${state}`)
+  return 0
+}
+
+/** Opens a ring listener and closes it, freeing its premade ring, then probes `ring`'s duplicate. */
+const freed = (ring: string): i32 => {
+  const listener: i32 = tcpListenFlags("127.0.0.1", 0, 16, NET_LISTEN_RING)
+  const state: i32 = netRingState()
+  if (listener < 0 || state !== 1) {
+    console.log(`freed: tcpListenFlags answered ${listener} and netRingState() ${state}`)
+    return 1
+  }
+  netClose(listener)
+  return sb_probe("freed-dup", ring)
+}
+
 export const main = (): i32 => {
   const args = process.argv
   if (args[1] === "serve") return serve()
+  if (args[1] === "fallback") return fallback()
+  if (args[1] === "freed") return freed(args.length > 2 ? args[2] : "")
   return sb_probe(args[1], args.length > 2 ? args[2] : "")
 }

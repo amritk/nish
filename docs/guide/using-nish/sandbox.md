@@ -85,8 +85,7 @@ and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
 of another architecture (a 32-bit `int 0x80`), and io_uring unless the
 program reaches `net` (and then only `io_uring_enter`, and only on the rings
 made at start for ring listeners, matched by descriptor number, unless it
-reaches `process.spawn` too; see [Ring listeners](#ring-listeners) and
-[NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)). On a kernel whose Landlock
+reaches `process.spawn` too; see [Ring listeners](#ring-listeners)). On a kernel whose Landlock
 is ABI 6 or later, so is signalling a process outside the sandbox and
 connecting to an abstract Unix socket created outside it, even when `main`
 reaches `signal`; the program can still signal itself. The other
@@ -333,7 +332,13 @@ uses them or not
 ([NURING-32](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
 
 Each premade ring takes only accepting, receiving, sending, closing and
-cancelling; anything else submitted to it fails with `-13`. When a kernel
+cancelling; anything else submitted to it fails with `-13`. The rings'
+descriptors are held for the program: closing one, or putting another
+descriptor at its number with `dup2` or `dup3`, ends the process with
+`SIGSYS`, and `close_range` fails with `ENOSYS`. Other descriptors are not
+affected
+([NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
+When a kernel
 is too old for the rings, or a descriptor limit too low to make them, every
 ring listener serves through plain descriptors, and `netRingState()`
 answers why. A ring listener that falls back because the rings made are all

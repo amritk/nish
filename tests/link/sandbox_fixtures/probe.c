@@ -33,9 +33,13 @@
 #include <termios.h>
 #include <unistd.h>
 
-/* The runtime's test-only submit hook, there only in a runtime built with
- * -DNISH_URING_TEST_HOOKS (runtime/runtime-uring.c), and its probe. */
+/* The runtime's test-only hooks, there only in a runtime built with
+ * -DNISH_URING_TEST_HOOKS (runtime/runtime-uring.c), and its probe:
+ * `nish_uring_test_fd(i)` answers premade ring i's descriptor number, and the
+ * keeper's for i equal to the ring count. */
 extern int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) __attribute__((weak));
+extern int32_t nish_uring_test_submit_fd(int32_t i, int32_t op, int32_t flags, int32_t fd) __attribute__((weak));
+extern int32_t nish_uring_test_fd(int32_t i) __attribute__((weak));
 extern int32_t nish_uring_probe(void);
 
 static int ctor_errno = -1;
@@ -63,6 +67,7 @@ static const char *name(int e) {
   case EINVAL: return "EINVAL";
   case ESRCH: return "ESRCH";
   case EOPNOTSUPP: return "EOPNOTSUPP";
+  case EBADF: return "EBADF";
   }
   return strerror(e);
 }
@@ -75,6 +80,51 @@ static void say(const char *op, long r) {
 static void start(const char *op) {
   printf("%s: start\n", op);
   fflush(stdout);
+}
+
+/* Whether descriptors `a` and `b` name the same open file's inode. */
+static int same_file(int a, int b) {
+  struct stat x, y;
+  return fstat(a, &x) == 0 && fstat(b, &y) == 0 && x.st_dev == y.st_dev && x.st_ino == y.st_ino;
+}
+
+/* After an operation meant to put the inherited foreign ring `foreign` at
+ * premade ring 0's number `at`: prints whether it is there, and what entering
+ * that number answers. Reached only where the filter let the operation by. */
+static void landed(const char *op, int foreign, int at) {
+  printf("%s: the foreign ring is %s ring 0's number\n", op, same_file(foreign, at) ? "at" : "not at");
+  fflush(stdout);
+  say(op, syscall(426, at, 0, 0, 0, NULL, 0));
+}
+
+/* Runs unconfined: makes an unrestricted ring, clears its close-on-exec flag
+ * and runs `path <child> <ring>`, which inherits it; prints how that child
+ * ended: `<op>: SIGSYS`, or its exit status. (Kernels from 6.7 refuse an
+ * io_uring descriptor over SCM_RIGHTS, so inheritance is the route a parent
+ * has on every kernel.) */
+static int inherit(const char *op, const char *child, const char *path) {
+  char params[120];
+  memset(params, 0, sizeof params);
+  int ring = (int)syscall(425, 1, params);
+  if (ring < 0 || fcntl(ring, F_SETFD, 0) != 0) return say(op, -1), 1;
+  char at[16];
+  snprintf(at, sizeof at, "%d", ring);
+  pid_t pid = fork();
+  if (pid == 0) {
+    char *argv[] = {(char *)path, (char *)child, at, 0};
+    execv(path, argv);
+    _exit(127);
+  }
+  if (pid < 0) return say(op, -1), 1;
+  close(ring);
+  int status = 0;
+  waitpid(pid, &status, 0);
+  if (WIFSIGNALED(status) && WTERMSIG(status) == SIGSYS)
+    printf("%s: SIGSYS\n", op);
+  else
+    printf("%s: %s %d\n", op, WIFSIGNALED(status) ? "signal" : "exit", WIFSIGNALED(status) ? WTERMSIG(status) : WEXITSTATUS(status));
+  fflush(stdout);
+  return 0;
 }
 
 static void *thread_socket(void *arg) {
@@ -121,37 +171,99 @@ int sb_probe(const char *op, const char *path) {
     start(op);
     say(op, syscall(426, 2, 0, 0, 0, NULL, 0));
   } else if (strcmp(op, "inherit-ring") == 0) {
-    /* Run unconfined: makes an unrestricted ring, clears its close-on-exec
-     * flag and runs `path foreign-enter <ring>`, which inherits it; prints
-     * how that child ended: `inherit-ring: SIGSYS`, or its exit status.
-     * (Kernels from 6.7 refuse an io_uring descriptor over SCM_RIGHTS, so
-     * inheritance is the route a parent has on every kernel.) */
-    char params[120];
-    memset(params, 0, sizeof params);
-    int ring = (int)syscall(425, 1, params);
-    if (ring < 0 || fcntl(ring, F_SETFD, 0) != 0) return say(op, -1), 1;
-    char at[16];
-    snprintf(at, sizeof at, "%d", ring);
-    pid_t pid = fork();
-    if (pid == 0) {
-      char *argv[] = {(char *)path, "foreign-enter", at, 0};
-      execv(path, argv);
-      _exit(127);
-    }
-    if (pid < 0) return say(op, -1), 1;
-    close(ring);
-    int status = 0;
-    waitpid(pid, &status, 0);
-    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGSYS)
-      printf("%s: SIGSYS\n", op);
-    else
-      printf("%s: %s %d\n", op, WIFSIGNALED(status) ? "signal" : "exit", WIFSIGNALED(status) ? WTERMSIG(status) : WEXITSTATUS(status));
-    fflush(stdout);
+    /* The foreign ring's child enters it at its own number. */
+    return inherit(op, "foreign-enter", path);
+  } else if (strncmp(op, "inherit:", 8) == 0) {
+    /* `inherit:<child>`: the same, with the child running operation <child>. */
+    return inherit(op, op + 8, path);
   } else if (strcmp(op, "foreign-enter") == 0) {
     /* `path` is the number of a ring this process inherited: enters it,
      * submitting nothing, which the kernel answers 0. */
     start(op);
     say(op, syscall(426, atoi(path), 0, 0, 0, NULL, 0));
+  } else if (strcmp(op, "dup2-ring") == 0 || strcmp(op, "dup3-ring") == 0 || strcmp(op, "close-dup") == 0) {
+    /* NURING-36: `path` is an inherited foreign ring's number, put at premade
+     * ring 0's by dup2, by dup3, or by closing ring 0 and duplicating the
+     * foreign ring at the lowest free number from there. Under the filter
+     * each dies of SIGSYS after `<op>: start`. */
+    if (nish_uring_test_fd == NULL) return printf("%s: no hook\n", op), 1;
+    int foreign = atoi(path), at = nish_uring_test_fd(0);
+    start(op);
+    long r;
+    if (op[0] == 'c') {
+      r = close(at);
+      if (r == 0) r = fcntl(foreign, F_DUPFD, at);
+    } else if (op[3] == '3') {
+      r = dup3(foreign, at, 0);
+    } else {
+#ifdef SYS_dup2
+      r = syscall(SYS_dup2, foreign, at);
+#else
+      return printf("%s: no dup2 on this architecture\n", op), 1;
+#endif
+    }
+    if (r < 0) return say(op, r), 1;
+    landed(op, foreign, at);
+  } else if (strcmp(op, "freed-dup") == 0) {
+    /* NURING-36: run after a ring listener has been closed, so premade ring
+     * 0 is freed. `path` is an inherited foreign ring's number, duplicated at
+     * the lowest free number from ring 0's: prints where it landed, whether
+     * ring 0's number still names an io_uring file, and what entering it
+     * answers. */
+    if (nish_uring_test_fd == NULL) return printf("%s: no hook\n", op), 1;
+    int foreign = atoi(path), at = nish_uring_test_fd(0);
+    int d = fcntl(foreign, F_DUPFD, at);
+    char link[64], where[32];
+    snprintf(where, sizeof where, "/proc/self/fd/%d", at);
+    ssize_t n = readlink(where, link, sizeof link - 1);
+    link[n > 0 ? n : 0] = 0;
+    printf("%s: the duplicate took %s; the number holds %s\n", op, d == at ? "ring 0's number" : "another number",
+           strcmp(link, "anon_inode:[io_uring]") == 0 ? (same_file(foreign, at) ? "the foreign ring" : "another ring") : "no ring");
+    fflush(stdout);
+    say(op, syscall(426, at, 0, 0, 0, NULL, 0));
+  } else if (strcmp(op, "keeper-enter") == 0) {
+    /* The keeper, the ring a freed ring's number is pointed at, is on no
+     * list io_uring_enter may name. */
+    if (nish_uring_test_fd == NULL) return printf("%s: no hook\n", op), 1;
+    int keeper = nish_uring_test_fd(1);
+    start(op);
+    say(op, syscall(426, keeper, 0, 0, 0, NULL, 0));
+  } else if (strcmp(op, "close-range") == 0) {
+    /* close_range over premade ring 0's number, which the filter answers
+     * ENOSYS so that a C library falls back to close. */
+    if (nish_uring_test_fd == NULL) return printf("%s: no hook\n", op), 1;
+    int at = nish_uring_test_fd(0);
+    start(op);
+    say(op, syscall(436, at, at, 0));
+  } else if (strcmp(op, "uring-close") == 0) {
+    /* IORING_OP_CLOSE, which the restriction lets through, submitted to ring
+     * 0 on `path`: `ring` (ring 0's own number), `keeper`, or `pipe` (the
+     * control, a pipe's read end). */
+    if (nish_uring_test_fd == NULL || nish_uring_test_submit_fd == NULL) return printf("%s: no hook\n", op), 1;
+    int fd = -1, p[2];
+    if (strcmp(path, "ring") == 0) fd = nish_uring_test_fd(0);
+    else if (strcmp(path, "keeper") == 0) fd = nish_uring_test_fd(1);
+    else if (pipe(p) == 0) fd = p[0];
+    start(op);
+    int32_t res = nish_uring_test_submit_fd(0, 19, 0, fd);
+    if (res < 0) errno = -res;
+    say(op, res);
+  } else if (strcmp(op, "fd-ops") == 0) {
+    /* The control: dup2, dup3, close and F_DUPFD on descriptors that are no
+     * ring still work under the filter. */
+    int p[2];
+    start(op);
+    if (pipe(p) != 0) return say(op, -1), 1;
+    long r = dup3(p[0], 100, 0);
+#ifdef SYS_dup2
+    if (r >= 0) r = syscall(SYS_dup2, p[1], 101);
+#else
+    if (r >= 0) r = dup3(p[1], 101, 0);
+#endif
+    if (r >= 0) r = close(100);
+    if (r >= 0) r = fcntl(p[0], F_DUPFD, 100);
+    if (r >= 0) r = close((int)r) | close(101) | close(p[0]) | close(p[1]);
+    say(op, r);
   } else if (strcmp(op, "ring-sqe") == 0) {
     /* `path` is `<opcode>:<sqe flags>`, submitted to premade ring 0 through
      * the runtime's test hook; prints the completion's res. */
