@@ -3161,9 +3161,29 @@ At the medians the ring process is 25.9% cheaper at 18,000 against a 0.5% band, 
 
 What it costs: memory. The ring process's PSS is 518 MB at 96,000 against 129 MB for the five epoll processes together, about 5.4 KB a connection against 1.3 KB: the slots, their buffers and the rings' own memory. The box as a whole used 1,792 MB against 1,346 MB at 96,000 (the summary's `box MB`, `/proc/meminfo`'s used memory in the last round of each design).
 
-**For D1** (opt-in or default, design §11): the ring path is not dearer at either C measured, so the numbers allow the bit to become the default for the handler's listeners on Linux. Two things stand against doing so here: the memory a connection, which a box sized for epoll may not have (fourfold at 96,000, 517.8 against 128.8 MB; 2.8 times at 18,000, 102.6 against 36.7 MB), and that neither C here is low. A smoke run at 3,000 (`bash bench/handler-ring/run.sh --conns 3000 --rounds 1 --warmup 1 --seconds 2` on the same box) read 23.33 against 33.49 µs with a 0.5% band, but that is a single 2-second window in one round, so it carries no weight here. The bit stays opt-in (`HandlerLimits.ring` defaults to false) until that choice is made on its own.
+**For D1** (opt-in or default, design §11): the ring path is not dearer at either C measured, so the numbers allow the bit to become the default for the handler's listeners on Linux. Two things stand against doing so here: the memory a connection, which a box sized for epoll may not have (fourfold at 96,000 in this run, 517.8 against 128.8 MB, and 141.4 against 128.9 MB once an idle slot frees its receive queue, below; 2.8 times at 18,000, 102.6 against 36.7 MB, not re-measured), and that neither C here is low. A smoke run at 3,000 (`bash bench/handler-ring/run.sh --conns 3000 --rounds 1 --warmup 1 --seconds 2` on the same box) read 23.33 against 33.49 µs with a 0.5% band, but that is a single 2-second window in one round, so it carries no weight here. The bit stays opt-in (`HandlerLimits.ring` defaults to false) until that choice is made on its own.
 
 What this does not say: the stand-in is not the entry itself, which is not in this repository; its route does one SQLite lookup a request and nothing else. Rerun `run.sh` on the entry before it switches.
+
+### An idle slot's receive queue freed (NURING-38)
+
+Most of the ring process's 518 MB was the slots' receive queues: each slot kept a 4,096-byte queue from its first receive to its close, so a keep-alive connection waiting for its next request held one with nothing in it. The ring listener now frees a queue its reader drains and starts the next at 1,024 bytes ([docs/security/net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md), NURING-38). Re-measured with `bash bench/handler-ring/run.sh --conns 96000 --compiler build/nish-test` at commit `f1193f5f`, on the same box shape as above (Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000), 5 rounds at the defaults:
+
+| C | round | ring | epoll | epoll copy | saving | band | ring PSS MB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 96,000 | 1 | 22.00 | 28.43 | 28.53 | 22.6% | 0.4% | 141.4 |
+| 96,000 | 2 | 21.76 | 32.50 | 30.53 | 33.0% | 6.1% | 141.5 |
+| 96,000 | 3 | 22.23 | 29.27 | 32.50 | 24.1% | 11.0% | 141.7 |
+| 96,000 | 4 | 20.37 | 29.80 | 29.03 | 31.6% | 2.6% | 141.6 |
+| 96,000 | 5 | 20.40 | 28.17 | 28.97 | 27.6% | 2.8% | 141.4 |
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB | box MB |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| 96,000 | ring | 1 | 96,000 | 21 | 21.76 (20.37–22.23) | 30.47 | 30,000 | 141.4 | 1,375 |
+| 96,000 | epoll | 5 | 96,000 | 96,040 | 29.27 (28.17–32.50) | 41.07 | 30,001 | 128.9 | 1,333 |
+| 96,000 | epoll copy | 5 | 96,000 | 96,040 | 29.03 (28.53–32.50) | 40.40 | 30,000 | 128.8 | 1,346 |
+
+The ring process's PSS fell from 517.8 MB to 141.4 MB, about 1.5 KB a connection against the five epoll processes' 1.3 KB (128.9 MB, unchanged from 128.8), and every round read between 141.4 and 141.7 MB. The box's used memory in the last round was 1,375 MB against 1,792 MB before. At the medians the ring process is 25.7% cheaper than the five against a 0.8% band (29.5% against 0.7% before), so the verdict above still holds; this run's single-round bands are wider than S4's, up to 11.0%, and its smallest saving in a round was 22.6%. Both sides read lower in absolute terms than S4's run (29.27 against 37.17 µs for the five), which is the box between runs, not the change: compare within a run, not across them. What the free costs, an allocation and a free per drained read, is not separable here from that drift.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->
