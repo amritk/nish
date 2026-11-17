@@ -299,8 +299,9 @@ counts as a skip, never a pass.
   (NURING-38)": `idle.ts`, under a limit of 4,096 so the 3,000 slots share
   one ring, reads each request to -11 and echoes it while the client keeps
   every connection open, and its anonymous resident set, read from
-  `/proc/self/statm` before the first accept and after the last echo, must
-  have grown by under 1,536 bytes a connection.
+  `/proc/self/status` (`RssAnon`, in kB, so no page size is assumed) before
+  the first accept and after the last echo, must have grown by under 1,536
+  bytes a connection.
 - **Refused io_uring, from a program.** "net_ring: with io_uring_setup
   refused, a ring listener serves descriptors and netRingState() is -1":
   under a seccomp filter that answers io_uring_setup with EPERM, the same

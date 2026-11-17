@@ -4,7 +4,7 @@
 // `client.mjs` in `idle` mode opens 3,000 connections to the port it prints;
 // each sends five bytes, reads the
 // echo and then stays open, sending nothing more. With every one echoed and
-// idle the program reads its anonymous resident set from /proc/self/statm
+// idle the program reads its anonymous resident set from /proc/self/status
 // and prints what it grew by per connection since the listener opened, then
 // exits, which ends the client. Exit 0 is a pass, 2 says the kernel refused
 // rings (the section's skip), and 1 is a failure, with its line.
@@ -29,44 +29,46 @@ const EACH: i32 = 5
 /** The token the listener is reported under; a slot handle is never negative. */
 const LISTENER: i32 = -1
 
+/** The /proc/self/status field the anonymous resident set is read from. */
+const FIELD: string = "RssAnon:"
+
 /**
- * The anonymous resident set in bytes, /proc/self/statm's `resident` less its
- * `shared`, or -1. procfs answers the current figures at offset 0 each time.
- * @param fd /proc/self/statm, open
- * @param buf where the line is read
+ * The anonymous resident set in bytes, /proc/self/status's `RssAnon` (which
+ * the kernel gives in kB whatever its page size), or -1. procfs answers the
+ * current figures at offset 0 each time.
+ * @param fd /proc/self/status, open
+ * @param buf where the file is read
  * @returns the bytes, or -1
  */
 const anonResident = (fd: i32, buf: u8[]): i64 => {
   const got: i32 = fileReadAt(fd, buf, 0, toI32(buf.length), 0)
-  let field: i32 = 0
-  let value: i64 = 0
-  let resident: i64 = 0
-  let digits: boolean = false
-  for (let k: i32 = 0; k < got && field < 3; k++) {
-    if (k >= buf.length) {
-      return -1
+  const width: i32 = toI32(FIELD.length)
+  for (let at: i32 = 0; at + width < got && at + width < buf.length; at++) {
+    let same: boolean = true
+    for (let j: i32 = 0; j < width && same; j++) {
+      same = toI32(buf[at + j]) === FIELD.charCodeAt(j)
     }
-    const c: i32 = toI32(buf[k])
-    if (c >= 48 && c <= 57) {
-      value = value * 10 + toI64(c - 48)
-      digits = true
-    } else if (digits) {
-      if (field === 1) {
-        resident = value
-      } else if (field === 2) {
-        return (resident - value) * 4096
+    if (same) {
+      let value: i64 = 0
+      let digits: boolean = false
+      for (let k: i32 = at + width; k < got && k < buf.length; k++) {
+        const c: i32 = toI32(buf[k])
+        if (c >= 48 && c <= 57) {
+          value = value * 10 + toI64(c - 48)
+          digits = true
+        } else if (digits) {
+          return value * 1024
+        }
       }
-      field = field + 1
-      value = 0
-      digits = false
+      return -1
     }
   }
   return -1
 }
 
 export const main = (): i32 => {
-  const statm: i32 = fileOpen("/proc/self/statm")
-  const text: u8[] = new Array<u8>(128)
+  const status: i32 = fileOpen("/proc/self/status")
+  const text: u8[] = new Array<u8>(4096)
   const listener: i32 = tcpListenFlags("127.0.0.1", 0, 4096, NET_LISTEN_RING)
   if (listener < 0) {
     console.log(`tcpListenFlags failed with ${listener}`)
@@ -82,7 +84,7 @@ export const main = (): i32 => {
   const ready: i32[] = new Array<i32>(128)
   const peer: u8[] = new Array<u8>(18)
   const buf: u8[] = new Array<u8>(64)
-  const before: i64 = anonResident(statm, text)
+  const before: i64 = anonResident(status, text)
   console.log(`port ${netLocalPort(listener)}`)
   let accepted: i32 = 0
   let echoed: i32 = 0
@@ -123,10 +125,10 @@ export const main = (): i32 => {
       }
     }
   }
-  const after: i64 = anonResident(statm, text)
-  fileClose(statm)
+  const after: i64 = anonResident(status, text)
+  fileClose(status)
   if (before < 0 || after < 0) {
-    console.log("/proc/self/statm could not be read")
+    console.log("/proc/self/status could not be read")
     return 1
   }
   console.log(`idle: ${(after - before) / toI64(CLIENTS)} bytes per connection`)
