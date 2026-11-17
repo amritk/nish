@@ -55,6 +55,11 @@
 // bench/quickack/ measures: `reset0` to 0 after each response, `once0` to 0
 // once per connection, at its first request, `reset1` to 1 after each
 // response. Unset, or any other value, the server makes no call at all.
+//
+// BENCH_RING=1 sets `HandlerLimits.ring`, so each worker's listener takes its
+// connections into io_uring slots (WP63), and `slots` may then pass the
+// descriptor limit. Where the kernel refuses rings the listener stays on
+// descriptors; the server prints `rings <netRingState()>` after `listening`.
 import { JsonWriter } from "nish/json"
 import { JsonLimits } from "nish/json-tokenizer"
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
@@ -72,11 +77,11 @@ import {
   netAddress,
   NET_TCP_QUICKACK,
   netClose,
+  netRingState,
   netSetOption,
   pollAdd,
   pollCreate,
   pollWait,
-  tcpListenFlags,
   udpBind,
   udpRecvFrom,
   udpSendTo,
@@ -201,11 +206,7 @@ class AppBench {
   /** BENCH_QUICKACK's `QUICKACK_*`, read once in `main`; 0 is `QUICKACK_NONE`. */
   quickack: i32 = 0
 
-  constructor(listener: i32, slots: i32) {
-    const limits: HandlerLimits = new HandlerLimits()
-    limits.slots = slots
-    limits.http.maxBody = MAX_BODY
-    limits.maxEvents = 128
+  constructor(listener: i32, limits: HandlerLimits) {
     const router: Router = new Router(new RouterLimits())
     appAdd(router, "GET", "/plaintext", ROUTE_PLAINTEXT)
     appAdd(router, "GET", "/json", ROUTE_JSON)
@@ -241,8 +242,8 @@ class AppBench {
     this.doc = new JsonDocument(new JsonLimits())
     this.order = new Order()
     this.decoder = new JsonDecoder(this.h.scratch, ZERO, ZERO, new JsonLimits())
-    this.seenGen = new Array<i32>(slots)
-    for (let k: i32 = 0; k < slots; k++) {
+    this.seenGen = new Array<i32>(limits.slots)
+    for (let k: i32 = 0; k < limits.slots; k++) {
       this.seenGen[k] = -1
     }
     this.textNames = [appBytesOf("Server"), appBytesOf("Content-Type")]
@@ -550,12 +551,18 @@ export const main = (): i32 => {
   const port: i32 = args.length > 1 ? parseInt(args[1]) : 8080
   const slots: i32 = args.length > 2 ? parseInt(args[2]) : 1024
   const limit: i32 = args.length > 3 ? parseInt(args[3]) : 0
-  const listener: i32 = tcpListenFlags("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)
+  const limits: HandlerLimits = new HandlerLimits()
+  limits.slots = slots
+  limits.http.maxBody = MAX_BODY
+  limits.maxEvents = 128
+  const ring: string | null = getenv("BENCH_RING")
+  limits.ring = ring !== null && ring === "1"
+  const listener: i32 = limits.listen("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)
   if (listener < 0) {
     console.log(`listen failed ${listener}`)
     return 1
   }
-  const bench: AppBench = new AppBench(listener, slots)
+  const bench: AppBench = new AppBench(listener, limits)
   bench.limit = limit
   bench.quickack = benchQuickack()
   if (count > 1) {
@@ -565,6 +572,9 @@ export const main = (): i32 => {
   // must not time the constructor. One line, from worker 0.
   if (worker === 0) {
     console.log(`listening ${port}`)
+    if (limits.ring) {
+      console.log(`rings ${netRingState()}`)
+    }
   }
   bench.run()
   return 0

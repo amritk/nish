@@ -12020,14 +12020,20 @@ if (dealtHere("fileServer")) {
 // `tests/link/nl9018_server/leaky.ts` builds its reply text in the event loop
 // and warns; `flat.ts` builds it in a `using a = arena()` block and compiles
 // clean, refused nothing; `examples/file-server.ts`, which allocates nothing per
-// request in its own code, stays quiet.
+// request in its own code, stays quiet. `helper_leaky.ts` moves that work into
+// a `readPost` helper that also answers, so the helper is refused a scope of
+// its own and leaves the string in the loop's memory; `method_leaky.ts` reaches
+// the same helper through two methods of a class. Both warn at the loop and
+// name the line that leaves the string behind; `helper_flat.ts` and
+// `method_flat.ts`, with the arena block inside the helper, stay quiet.
 //
 // Then each server answers 2,000 requests on one keep-alive connection, one
 // at a time, and 20,000 more; its VmRSS is read from /proc after each batch.
 // Ten runs of each (Linux x64, `--profile speed`) read flat's at the same kB
-// after both batches and leaky's 1,252 kB higher after the second, every time.
-// The band is 256 kB, a fifth of what leaky gains, so flat must stay within it
-// and leaky must leave it: the second says the measure can see the pile the
+// after both batches and leaky's 1,252 kB higher after the second, every time;
+// five runs of the helper and method pairs read the same, to the kB. The band is 256 kB, a fifth of
+// what a leaky server gains, so each flat server must stay within it and each
+// leaky one must leave it: the second says the measure can see the pile the
 // warning names.
 if (dealtHere("unboundedPass")) {
   const UNBOUNDED_RSS_BAND = 256
@@ -12113,6 +12119,51 @@ if (dealtHere("unboundedPass")) {
     flat.status === 0 && !flat.stderr.includes("performance:") && !flat.stderr.includes("error"),
     shown(flat)
   )
+  // A pile left by a helper the loop calls: the warning is at the loop, names
+  // the call that leaves it and the line it is built on, and sends the arena
+  // block into the function that builds it.
+  for (const [name, at, leaves, built] of [
+    ["helper_leaky", "100:9", "`readPost` leaves behind on line 102", "(the string built on line 69, in `readPost`)"],
+    ["method_leaky", "126:9", "`App.ready` leaves behind on line 127", "(the string built on line 70, in `readPost`)"],
+  ]) {
+    const r = build(name, path.join(serverDir, `${name}.ts`), [])
+    const hits = nl9018Lines(r.stderr)
+    check(
+      `nl9018: ${name}.ts, whose reply text is built in a helper that also answers, warns at the event loop`,
+      r.status === 0 &&
+        hits.length === 1 &&
+        hits[0].includes(`${name}.ts:${at}: `) &&
+        hits[0].includes(`what ${leaves} ${built} piles up`) &&
+        hits[0].includes("into a block inside `readPost` that opens with `using a = arena()`"),
+      shown(r)
+    )
+  }
+  for (const name of ["helper_flat", "method_flat"]) {
+    const r = build(name, path.join(serverDir, `${name}.ts`), [])
+    check(
+      `nl9018: ${name}.ts, with the arena block inside the helper, compiles with no warning and no refusal`,
+      r.status === 0 && !r.stderr.includes("performance:") && !r.stderr.includes("error"),
+      shown(r)
+    )
+  }
+  // The callee summary's edges, one loop each: a recursion `a ⇄ b` warns at
+  // both loops whichever is checked first, a constructor that dispatches on
+  // its parameter is followed, and a comparison against a `let` or a message
+  // built for a `panic` in the next statement is not charged.
+  const callees = build("callees", path.join(root, "tests", "link", "nl9018_callees", "callees.ts"), [])
+  const calleeHits = nl9018Lines(callees.stderr)
+  check(
+    "nl9018: callees.ts warns at the two loops of a recursion and at a constructor's dispatch, and nowhere else",
+    callees.status === 0 &&
+      calleeHits.length === 3 &&
+      calleeHits[0].includes("callees.ts:54:3: ") &&
+      calleeHits[0].includes("what `a` leaves behind on line 56 (the string built on line 37, in `c`) piles up") &&
+      calleeHits[1].includes("callees.ts:61:3: ") &&
+      calleeHits[1].includes("what `b` leaves behind on line 63 (the string built on line 37, in `c`) piles up") &&
+      calleeHits[2].includes("callees.ts:85:3: ") &&
+      calleeHits[2].includes("(the string built on line 72, in `Handler.constructor`) piles up"),
+    shown(callees)
+  )
   const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
@@ -12197,7 +12248,8 @@ if (dealtHere("unboundedPass")) {
         })
       })
     const peaks = {}
-    for (const name of ["leaky", "flat"]) {
+    const SERVERS = ["leaky", "flat", "helper_leaky", "helper_flat", "method_leaky", "method_flat"]
+    for (const name of SERVERS) {
       const exe = path.join(srvDir, name, "server")
       const linked = build(`${name}-exe`, path.join(serverDir, `${name}.ts`), [
         "--link",
@@ -12220,17 +12272,22 @@ if (dealtHere("unboundedPass")) {
         peaks[name] = r.readings
       }
     }
-    if (peaks.flat !== undefined && peaks.leaky !== undefined) {
-      const grew = (name) => peaks[name][1] - peaks[name][0]
+    const grew = (name) => peaks[name][1] - peaks[name][0]
+    for (const prefix of ["", "helper_", "method_"]) {
+      const flatName = `${prefix}flat`
+      const leakyName = `${prefix}leaky`
+      if (peaks[flatName] === undefined || peaks[leakyName] === undefined) {
+        continue
+      }
       check(
-        `nl9018: the arena-block server's RSS stays within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
-        grew("flat") <= UNBOUNDED_RSS_BAND,
-        `VmRSS ${peaks.flat[0]} kB after 2,000 requests, ${peaks.flat[1]} kB after 20,000 more`
+        `nl9018: ${flatName}.ts, the arena-block server, keeps its RSS within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
+        grew(flatName) <= UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks[flatName][0]} kB after 2,000 requests, ${peaks[flatName][1]} kB after 20,000 more`
       )
       check(
-        `nl9018: the warned server's RSS grows past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
-        grew("leaky") > UNBOUNDED_RSS_BAND,
-        `VmRSS ${peaks.leaky[0]} kB after 2,000 requests, ${peaks.leaky[1]} kB after 20,000 more`
+        `nl9018: ${leakyName}.ts, the warned server, grows its RSS past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
+        grew(leakyName) > UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks[leakyName][0]} kB after 2,000 requests, ${peaks[leakyName][1]} kB after 20,000 more`
       )
     }
   }
@@ -12249,7 +12306,7 @@ if (dealtHere("breakWeb")) {
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 147
+  const BREAK_WEB_CHECKS = 152
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))
@@ -16909,6 +16966,143 @@ if (dealtHere("runtimeChecks")) {
         check(`uring: runtime-uring.c ${mode}: ${what}`, run.status === 0, `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}`)
       }
     }
+  }
+
+  // ---- The debug arena: a stale arena reference traps ----------------------------------
+  // docs/security/runtime.md, "The debug arena". tests/runtime/debug-arena-test.c
+  // keeps a pointer across `nish_arena_release` and reads it after the next
+  // allocation: the normal runtime hands that allocation the same slot, so
+  // the read answers its 7, and the -DNISH_ARENA_DEBUG runtime must fault
+  // there, name the arena and die of SIGSEGV. Then the arena and region cases
+  // run linked against that runtime and must still print their `.out`, one
+  // goes through `--debug-arena` end to end, and the flag's refusals hold.
+  if (!only || "debug-arena".includes(only)) {
+    const staleBuild = (name, flags) => {
+      const exe = path.join(buildDir, name)
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", ...flags, ...RUNTIME_C, "tests/runtime/debug-arena-test.c", "-lm", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      return { cc, run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
+    }
+    const plain = staleBuild("debug_arena_plain", [])
+    check(
+      "debug arena: without it, a pointer kept across a release reads the next allocation's value",
+      plain.run !== null && plain.run.status === 0 && plain.run.stdout === "kept 1, next 7\nstale 7\n",
+      plain.shown
+    )
+    const trapped = staleBuild("debug_arena_trap", ["-DNISH_ARENA_DEBUG=1"])
+    check(
+      "debug arena: a pointer kept across a release faults at the read, names the arena and dies of SIGSEGV",
+      trapped.run !== null &&
+        trapped.run.signal === "SIGSEGV" &&
+        trapped.run.stdout === "kept 1, next 7\n" &&
+        /^nish: --debug-arena: stale arena reference at 0x[0-9a-f]{16}: the memory was released by the scope that allocated it\n$/.test(
+          trapped.run.stderr
+        ),
+      trapped.shown
+    )
+
+    // Every case that exercises the arena or a region, linked as section A
+    // links it but against the debug objects. A case that measures the
+    // arena's growth (`mem_loop_scope`) is left out: under the mode every
+    // allocation grows it, by design.
+    const debugDir = path.join(buildDir, "debug-arena")
+    fs.mkdirSync(debugDir, { recursive: true })
+    const debugCases = fs
+      .readdirSync(casesDir)
+      .filter((f) => f.endsWith(".out"))
+      .map((f) => f.slice(0, -".out".length))
+      .filter((name) => /^(arena_|region_)|_arena|_region/.test(name))
+      .sort()
+    const failed = []
+    for (const name of debugCases) {
+      const src = path.join(casesDir, `${name}.ts`)
+      const args = caseArgs(name)
+      const ll = path.join(debugDir, `${name}.ll`)
+      const compiled = spawnSync(NISH, [src, "-o", ll, ...args], { cwd: root, encoding: "utf8" })
+      if (compiled.status !== 0) {
+        failed.push(`${name}: does not compile\n${compiled.stderr}`)
+        continue
+      }
+      const own = path.join(casesDir, `${name}.c`)
+      const hasEntry = /\bexport\s+(?:(?:async\s+)?function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))
+      const defines = ["-DNISH_ARENA_DEBUG=1", ...(args.includes("--threads") ? ["-DNISH_THREADS=1"] : [])]
+      const exe = path.join(debugDir, name)
+      const linked = linkNative(exe, ll, {
+        driver: fs.existsSync(own) ? own : hasEntry ? null : DRIVER_C,
+        defines,
+        libm: true,
+      })
+      if (linked.status !== 0) {
+        failed.push(`${name}: does not link\n${linked.stderr}`)
+        continue
+      }
+      const ran = spawnSync(exe, [], { encoding: "utf8", timeout: 120_000, env: caseEnv(path.join(casesDir, `${name}.env`)) })
+      const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8").trim()
+      if (ran.status !== 0 || ran.stdout.trim() !== want) {
+        failed.push(`${name}: exit ${ran.status} ${ran.signal ?? ""}\n${ran.stdout}${ran.stderr}`)
+      }
+    }
+    check(
+      `debug arena: the ${debugCases.length} arena and region cases print their .out with every released block unmapped`,
+      debugCases.length >= 20 && failed.length === 0,
+      failed.join("\n")
+    )
+
+    // The flag itself. The same program is linked without it and then with it,
+    // so a run or runtime cache keyed without the flag would hand the second
+    // link the first one's runtime; `-g` keeps the symbol table that tells
+    // them apart (the fault handler, `nish_debug_on_fault`), and the debug
+    // build must still print the `.out`.
+    const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+    const flagLink = (exe, flags) => {
+      const linked = spawnSync(
+        NISH,
+        ["-g", ...flags, "tests/cases/arena_placement.ts", "-o", path.join(debugDir, `${path.basename(exe)}.ll`), "--link", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      const symbols = linked.status === 0 && nm !== undefined ? spawnSync(nm, [exe], { encoding: "utf8" }).stdout : ""
+      return {
+        printed: run !== null && run.status === 0 && run.stdout.trim() === fs.readFileSync("tests/cases/arena_placement.out", "utf8").trim(),
+        trapping: / [tT] nish_debug_on_fault$/m.test(symbols),
+        read: / T main$/m.test(symbols),
+        shown: `${linked.stderr}${run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : ""}`,
+      }
+    }
+    if (nm === undefined) {
+      skip("debug arena: no llvm-nm on PATH, so which runtime `--debug-arena --link` linked is not read")
+    } else {
+      const normal = flagLink(path.join(debugDir, "flag_plain"), [])
+      const debugged = flagLink(path.join(debugDir, "flag_debug"), ["--debug-arena"])
+      check(
+        "debug arena: a plain `--link` links the normal runtime, and `--debug-arena --link` of the same program the debug one, which prints its .out",
+        normal.printed && normal.read && !normal.trapping && debugged.printed && debugged.read && debugged.trapping,
+        `--- plain\n${normal.shown}\n--- --debug-arena\n${debugged.shown}`
+      )
+    }
+    const refused = (what, argv, message) => {
+      const r = spawnSync(argv[0], argv.slice(1), { cwd: root, encoding: "utf8" })
+      check(`debug arena: ${what}`, r.status === 2 && r.stderr.includes(message), `exit ${r.status}\n${r.stderr}`)
+    }
+    refused(
+      "without --link or `run` it is a usage error",
+      [NISH, "--debug-arena", "tests/cases/arena_placement.ts", "-o", path.join(debugDir, "refused.ll")],
+      "--debug-arena changes the runtime a binary links"
+    )
+    refused(
+      "`--profile wasi` refuses it",
+      [NISH, "--debug-arena", "--profile", "wasi", "tests/cases/arena_placement.ts", "-o", path.join(debugDir, "refused.ll"), "--link", path.join(debugDir, "refused.wasm")],
+      "--debug-arena"
+    )
+    refused(
+      "scripts/build.sh refuses it with the wasm profile",
+      ["bash", "scripts/build.sh", path.join(debugDir, "arena_placement.ll"), "runtime/runtime-wasm.c", "-o", path.join(debugDir, "refused.wasm"), "--profile", "wasm", "--debug-arena"],
+      "--debug-arena maps pages and catches SIGSEGV, so the wasm profile does not take it"
+    )
   }
 
   // ---- B. Pipeline checks -----------------------------------------------------------
@@ -29426,6 +29620,9 @@ if (dealtHere("cSymbols")) {
       const runtimeBuilds = [
         ["the native runtime leaves undefined", runtimeObjects([])],
         ["the native runtime with -DNISH_THREADS leaves undefined", runtimeObjects(["-DNISH_THREADS=1"])],
+        // `--debug-arena` links this runtime, so its `mprotect` and signal
+        // handler are the runtime's C calls too.
+        ["the native runtime with -DNISH_ARENA_DEBUG leaves undefined", runtimeObjects(["-DNISH_ARENA_DEBUG=1"])],
       ]
       if (WASI_SYSROOT === undefined) {
         skip(
@@ -30349,6 +30546,743 @@ if (dealtHere("runCache")) {
           server.signal === "SIGINT" && serverGone && leftovers().length === 0 && count(server.err, "watch: built in") === 1,
           `${server.status}: ${server.err}`,
         )
+      }
+    }
+  }
+
+  // Cost: two `nish run` compiles (the in-memory program and the loopback
+  // probe), a Node loopback server, and a 300 ms wait on its silent route.
+  if (selects("oidc", "std/net/oidc")) {
+    if (!HAS_CLANG) {
+      skip("std/net/oidc: clang not on PATH, so the probes cannot be linked")
+    } else {
+      const oidcDir = path.join(buildDir, "oidc")
+      fs.rmSync(oidcDir, { recursive: true, force: true })
+      fs.mkdirSync(oidcDir, { recursive: true })
+      // Keys, JWK Sets and tokens, signed by node:crypto for `issuer`.
+      const oidcFixtures = (issuer) => {
+          const b64 = (b) => Buffer.from(b).toString("base64url")
+          const NOW = 1800000000
+          const pair = (type, opts) => crypto.generateKeyPairSync(type, opts)
+          const rsa = pair("rsa", { modulusLength: 2048 })
+          const rsa2 = pair("rsa", { modulusLength: 2048 })
+          const p256 = pair("ec", { namedCurve: "P-256" })
+          const p384 = pair("ec", { namedCurve: "P-384" })
+          const ed = pair("ed25519")
+          const small = pair("rsa", { modulusLength: 1024 })
+          const pub = (k, extra) => ({ ...k.publicKey.export({ format: "jwk" }), ...extra })
+          const priv = (k, extra) => ({ ...k.privateKey.export({ format: "jwk" }), ...extra })
+          const sign = (alg, key, header, claims) => {
+            const h = b64(JSON.stringify({ alg, typ: "JWT", ...header }))
+            const p = b64(JSON.stringify(claims))
+            const data = Buffer.from(`${h}.${p}`)
+            const bits = { RS256: "sha256", RS384: "sha384", RS512: "sha512", ES256: "sha256", ES384: "sha384" }
+            let sig
+            if (alg === "none") sig = Buffer.alloc(0)
+            else if (alg === "HS256") sig = crypto.createHmac("sha256", key).update(data).digest()
+            else if (alg === "EdDSA") sig = crypto.sign(null, data, key)
+            else if (alg.startsWith("ES")) sig = crypto.sign(bits[alg], data, { key, dsaEncoding: "ieee-p1363" })
+            else sig = crypto.sign(bits[alg], data, key)
+            return `${h}.${p}.${b64(sig)}`
+          }
+          const claims = (extra) => ({ iss: issuer, aud: "api", sub: "u1", iat: NOW - 10, exp: NOW + 600, ...extra })
+          const good = claims({})
+          const set = (...keys) => JSON.stringify({ keys })
+          const docs = {
+            // One of each key this module takes, with and without alg.
+            all: set(
+              pub(rsa, { kid: "rsa", use: "sig", alg: "RS256" }),
+              pub(rsa, { kid: "rsa384", alg: "RS384" }),
+              pub(rsa, { kid: "rsa512", alg: "RS512" }),
+              pub(p256, { kid: "p256" }),
+              pub(p384, { kid: "p384", alg: "ES384" }),
+              pub(ed, { kid: "ed", alg: "EdDSA" }),
+            ),
+            one: set(pub(rsa, {})),
+            rsaOnly: set(pub(rsa, { kid: "rsa" })),
+            rotated: set(pub(rsa2, { kid: "rsa2" })),
+            skips: set(
+              pub(rsa, { kid: "enc", use: "enc" }),
+              { kty: "oct-like", kid: "u" },
+              pub(rsa, { kid: "ps", alg: "PS256" }),
+              { ...pub(p256, {}), crv: "P-521", kid: "p521" },
+              pub(ed, { kid: "ed" }),
+            ),
+            octSkip: set({ kty: "oct", kid: "o" }, pub(ed, { kid: "ed" })),
+            octSecret: set({ kty: "oct", kid: "o", k: b64("secret") }, pub(ed, { kid: "ed" })),
+            private: set(priv(p256, { kid: "p256" })),
+            privateRsa: set(pub(rsa, { kid: "a" }), { ...pub(rsa, { kid: "b" }), p: "AQAB" }),
+            private_q: set({ ...pub(rsa, { kid: "x" }), q: "AQAB" }),
+            private_dp: set({ ...pub(rsa, { kid: "x" }), dp: "AQAB" }),
+            private_dq: set({ ...pub(rsa, { kid: "x" }), dq: "AQAB" }),
+            private_qi: set({ ...pub(rsa, { kid: "x" }), qi: "AQAB" }),
+            private_oth: set({ ...pub(rsa, { kid: "x" }), oth: [] }),
+            // The alg names the other type, and the entry also carries that type's material.
+            algEsOnRsaWithEc: set({ ...pub(p256, {}), ...pub(rsa, { kid: "x", alg: "ES256" }) }),
+            algRsaOnEcWithRsa: set({ ...pub(rsa, {}), ...pub(p256, { kid: "x", alg: "RS256" }) }),
+            algRsaOnEc: set(pub(p256, { kid: "x", alg: "RS256" })),
+            algEsOnRsa: set(pub(rsa, { kid: "x", alg: "ES256" })),
+            algEs384OnP256: set(pub(p256, { kid: "x", alg: "ES384" })),
+            algEdOnP256: set(pub(p256, { kid: "x", alg: "EdDSA" })),
+            algHs: set(pub(rsa, { kid: "x", alg: "HS256" })),
+            algEdOnUnknownCrv: set({ kty: "OKP", crv: "X25519", x: pub(ed, {}).x, kid: "x", alg: "EdDSA" }),
+            unknownCrvNoAlg: set({ kty: "OKP", crv: "X25519", x: pub(ed, {}).x, kid: "x" }, pub(ed, { kid: "ed" })),
+            dupKid: set(pub(rsa, { kid: "k" }), pub(p256, { kid: "k" })),
+            dupNoKid: set(pub(rsa, {}), pub(p256, {})),
+            dupSkipped: set(pub(rsa, { kid: "k", use: "enc" }), pub(p256, { kid: "k" })),
+            smallRsa: set(pub(small, { kid: "s" })),
+            badX: set({ ...pub(p256, { kid: "x" }), x: b64(Buffer.alloc(31, 1)) }),
+            badEd: set({ ...pub(ed, { kid: "x" }), x: b64(Buffer.alloc(31, 1)) }),
+            noKty: set({ kid: "x", n: "AQAB" }),
+            algNotString: set({ ...pub(ed, { kid: "x" }), alg: 7 }),
+            entryNotObject: JSON.stringify({ keys: ["x"] }),
+            keysNotArray: JSON.stringify({ keys: {} }),
+            notJson: "{\"keys\": [",
+            longKid: set(pub(ed, { kid: "k".repeat(257) })),
+            maxKid: set(pub(ed, { kid: "k".repeat(256) })),
+            ctlKid: set(pub(ed, { kid: "a\nb" })),
+            emptyKid: set(pub(ed, { kid: "" })),
+            delKid: set(pub(ed, { kid: "a\u007f" })),
+            utf8Kid: set(pub(ed, { kid: "k\u00e9" })),
+            kid31: set(pub(ed, { kid: "a\u001f" })),
+            kid32: set(pub(ed, { kid: " " })),
+            kid126: set(pub(ed, { kid: "~" })),
+            // A use other than sig skips an entry only after the private-member and kid rules.
+            encPrivate: set({ ...pub(rsa, { kid: "e", use: "enc" }), d: "AQAB" }, pub(ed, { kid: "ed" })),
+            encBadKid: set(pub(rsa, { kid: "a\nb", use: "enc" }), pub(ed, { kid: "ed" })),
+            // Rule 3: each member present and not a string refuses the set, where reading it as empty would skip or refuse otherwise.
+            ktyNotString: set({ kty: 5, kid: "u" }, pub(ed, { kid: "ed" })),
+            useNotString: set(pub(ed, { kid: "a", use: 5 }), pub(ed, { kid: "ed" })),
+            kidNotString: set(pub(ed, { kid: 5 }), pub(ed, { kid: "ed" })),
+            crvNotString: set({ ...pub(ed, { kid: "a" }), crv: 5 }, pub(ed, { kid: "ed" })),
+            // An unknown type naming any algorithm nish/crypto/jwt has, HMAC included, is refused.
+            algHs384: set(pub(rsa, { kid: "x", alg: "HS384" }), pub(ed, { kid: "ed" })),
+            algHs512: set(pub(rsa, { kid: "x", alg: "HS512" }), pub(ed, { kid: "ed" })),
+            // A crv this module takes, under the wrong kty, is skipped.
+            p256UnderOkp: set({ ...pub(p256, { kid: "a" }), kty: "OKP" }, pub(ed, { kid: "ed" })),
+            p384UnderOkp: set({ ...pub(p384, { kid: "a" }), kty: "OKP" }, pub(ed, { kid: "ed" })),
+            edUnderEc: set({ ...pub(ed, { kid: "a" }), kty: "EC" }, pub(ed, { kid: "ed" })),
+            // Key material missing, of the wrong type or the wrong length.
+            noX: set({ ...pub(p256, { kid: "x" }), x: undefined }),
+            numX: set({ ...pub(p256, { kid: "x" }), x: 5 }),
+            noY: set({ ...pub(p256, { kid: "x" }), y: undefined }),
+            shortY: set({ ...pub(p256, { kid: "x" }), y: b64(Buffer.alloc(31, 1)) }),
+            // The real point's 64 bytes, split 31 and 33: the whole point is the right length.
+            skewY: (() => {
+              const k = pub(p256, { kid: "x" })
+              const xy = Buffer.concat([Buffer.from(k.x, "base64url"), Buffer.from(k.y, "base64url")])
+              return set({ ...k, x: b64(xy.subarray(0, 31)), y: b64(xy.subarray(31)) })
+            })(),
+            p384ShortX: set({ ...pub(p384, { kid: "x" }), x: b64(Buffer.alloc(47, 1)) }),
+            p384NoY: set({ ...pub(p384, { kid: "x" }), y: undefined }),
+            p384ShortY: set({ ...pub(p384, { kid: "x" }), y: b64(Buffer.alloc(47, 1)) }),
+            p256CoordsOnP384: set({ ...pub(p256, { kid: "x" }), crv: "P-384" }),
+            edNoX: set({ ...pub(ed, { kid: "x" }), x: undefined }),
+            rsaNoN: set({ ...pub(rsa, { kid: "x" }), n: undefined }),
+            rsaNoE: set({ ...pub(rsa, { kid: "x" }), e: undefined }),
+            rsaNumN: set({ ...pub(rsa, { kid: "x" }), n: 5 }),
+            // An 8192-bit modulus is the most RSA takes; one bit more is refused.
+            rsa8192: set({ kty: "RSA", kid: "x", e: "AQAB", n: b64(Buffer.alloc(1024, 0xff)) }),
+            rsa8193: set({ kty: "RSA", kid: "x", e: "AQAB", n: b64(Buffer.concat([Buffer.from([1]), Buffer.alloc(1024, 0xff)])) }),
+            none: set(),
+            tooMany: set(...Array.from({ length: 65 }, (_, i) => pub(ed, { kid: `k${i}`, use: "enc" }))),
+            maxKeys: set(...Array.from({ length: 64 }, (_, i) => pub(ed, { kid: `k${i}` }))),
+          }
+          docs.big = JSON.stringify({ keys: [pub(ed, { kid: "ed" })], pad: "x".repeat(65536) })
+          const rsaKey = rsa.privateKey
+          const tokens = {
+            rs256: sign("RS256", rsaKey, { kid: "rsa" }, good),
+            rs384: sign("RS384", rsaKey, { kid: "rsa384" }, good),
+            rs512: sign("RS512", rsaKey, { kid: "rsa512" }, good),
+            es256: sign("ES256", p256.privateKey, { kid: "p256" }, good),
+            es384: sign("ES384", p384.privateKey, { kid: "p384" }, good),
+            eddsa: sign("EdDSA", ed.privateKey, { kid: "ed" }, good),
+            rs256On384: sign("RS256", rsaKey, { kid: "rsa384" }, good),
+            hs256: sign("HS256", Buffer.from(rsa.publicKey.export({ format: "pem", type: "spki" })), { kid: "rsa" }, good),
+            none: sign("none", null, { kid: "rsa" }, good),
+            wrongIss: sign("RS256", rsaKey, { kid: "rsa" }, claims({ iss: `${issuer}/` })),
+            wrongAud: sign("RS256", rsaKey, { kid: "rsa" }, claims({ aud: "other" })),
+            audArray: sign("RS256", rsaKey, { kid: "rsa" }, claims({ aud: ["x", "api"] })),
+            audArrayMiss: sign("RS256", rsaKey, { kid: "rsa" }, claims({ aud: ["x", "y"] })),
+            expired: sign("RS256", rsaKey, { kid: "rsa" }, claims({ exp: NOW - 61 })),
+            expiredInLeeway: sign("RS256", rsaKey, { kid: "rsa" }, claims({ exp: NOW - 59 })),
+            nbf: sign("RS256", rsaKey, { kid: "rsa" }, claims({ nbf: NOW + 61 })),
+            nbfInLeeway: sign("RS256", rsaKey, { kid: "rsa" }, claims({ nbf: NOW + 59 })),
+            noExp: sign("RS256", rsaKey, { kid: "rsa" }, { iss: issuer, aud: "api", iat: NOW }),
+            noKid: sign("RS256", rsaKey, {}, good),
+            unknownKid: sign("RS256", rsaKey, { kid: "nope" }, good),
+            rotated: sign("RS256", rsa2.privateKey, { kid: "rsa2" }, good),
+            tampered: `${sign("RS256", rsaKey, { kid: "rsa" }, good).slice(0, -4)}AAAA`,
+            nonAscii: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}é`,
+            // Each code unit of this token's header is the signed one plus 0x100, so its low byte is
+            // the signed byte, a base64url character: cut to a byte per unit, it reads as the signed
+            // token. Natively each is two UTF-8 bytes, and without the guard the header is unreadable,
+            // its kid none, and the refusal OIDC_ERR_KID_REQUIRED, not JWT_ERR_FORMAT.
+            lowByte: (() => {
+              const tk = sign("RS256", rsaKey, { kid: "rsa" }, good)
+              const at = tk.indexOf(".")
+              return [...tk.slice(0, at)].map((c) => String.fromCharCode(0x100 + c.charCodeAt(0))).join("") + tk.slice(at)
+            })(),
+            iatFuture: sign("RS256", rsaKey, { kid: "rsa" }, claims({ iat: NOW + 61 })),
+            long: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}${"A".repeat(8192)}`,
+            longKid: sign("RS256", rsaKey, { kid: "k".repeat(300) }, good),
+            kid256: sign("RS256", rsaKey, { kid: "k".repeat(256) }, good),
+            kid257: sign("RS256", rsaKey, { kid: "k".repeat(257) }, good),
+            numKid: sign("RS256", rsaKey, { kid: 7 }, good),
+            emptyKid: sign("RS256", rsaKey, { kid: "" }, good),
+          }
+          const disc = (extra) => JSON.stringify({ issuer, jwks_uri: "https://keys.example/jwks", ...extra })
+          const discovery = {
+            ok: disc({}),
+            slash: disc({ issuer: `${issuer}/` }),
+            case: disc({ issuer: issuer.toUpperCase() }),
+            httpJwks: disc({ jwks_uri: "http://keys.example/jwks" }),
+            loopJwks: disc({ jwks_uri: "http://127.0.0.1:9/jwks" }),
+            httpIssuer: JSON.stringify({ issuer: "http://127.0.0.1:8080", jwks_uri: "http://127.0.0.1:9/jwks" }),
+            httpIssuerRemoteJwks: JSON.stringify({ issuer: "http://127.0.0.1:8080", jwks_uri: "http://keys.example/jwks" }),
+            userJwks: disc({ jwks_uri: "https://u:p@keys.example/jwks" }),
+            userOnlyJwks: disc({ jwks_uri: "https://u@keys.example/jwks" }),
+            passOnlyJwks: disc({ jwks_uri: "https://:p@keys.example/jwks" }),
+            emptyHostJwks: disc({ jwks_uri: "https:///jwks" }),
+            notUrlJwks: disc({ jwks_uri: "keys" }),
+            noJwks: JSON.stringify({ issuer }),
+            numIssuer: JSON.stringify({ issuer: 1, jwks_uri: "https://keys.example/jwks" }),
+            array: "[]",
+            upperHttpIssuer: JSON.stringify({ issuer: "HTTP://127.0.0.1:8080", jwks_uri: "http://127.0.0.1:9/jwks" }),
+          }
+          return { NOW, docs, tokens, discovery }
+      }
+      // The in-memory probe: every rule, with an injected clock and no network.
+      const oidcProbe = (file, fx, issuer) => {
+          const { NOW, docs, tokens, discovery } = fx
+          const lit = (s) => JSON.stringify(s)
+          const consts = []
+          for (const [k, v] of Object.entries(docs)) if (k !== "big") consts.push(`const doc_${k}: string = ${lit(v)}`)
+          for (const [k, v] of Object.entries(tokens)) consts.push(`const tok_${k}: string = ${lit(v)}`)
+          for (const [k, v] of Object.entries(discovery)) consts.push(`const disc_${k}: string = ${lit(v)}`)
+          const src = `import { Suite } from "nish/testing"
+        import {
+          JWT_ERR_ALG, JWT_ERR_AUDIENCE, JWT_ERR_CLAIMS, JWT_ERR_EXPIRED, JWT_ERR_FORMAT, JWT_ERR_IAT, JWT_ERR_ISSUER,
+          JWT_ERR_NOT_YET, JWT_ERR_SIGNATURE, JWT_ERR_SIZE, JWT_OK,
+        } from "nish/crypto/jwt"
+        import {
+          OIDC_DEFAULT_LIFETIME, OIDC_ERR_DUPLICATE_KID, OIDC_ERR_FETCH, OIDC_ERR_ISSUER, OIDC_ERR_JSON,
+          OIDC_ERR_KEY, OIDC_ERR_KID_REQUIRED, OIDC_ERR_NO_KEYS, OIDC_ERR_PRIVATE, OIDC_ERR_SCHEME,
+          OIDC_ERR_SIZE, OIDC_ERR_STALE, OIDC_ERR_TOO_MANY_KEYS, OIDC_ERR_UNKNOWN_KID, OIDC_MAX_JWKS_BYTES,
+          OIDC_MAX_DISCOVERY_BYTES, OIDC_MAX_LIFETIME, OIDC_MIN_LIFETIME, OIDC_MIN_REFRESH_INTERVAL, OIDC_OK,
+          OIDC_SKIPPED, OIDC_STALE_GRACE, OIDC_DEFAULT_TIMEOUT_MS, OidcKeySet, OidcKeys, OidcMetadata, OidcOptions,
+          oidcDiscoveryUrl, oidcHttpOptions, oidcIssuerAllowed, oidcLifetime, oidcParseDiscovery, oidcParseJwks,
+          oidcDiscover, oidcVerify,
+        } from "nish/net/oidc"
+        import { HttpOptions } from "nish/net/fetch"
+
+        const ISSUER: string = ${lit(issuer)}
+        const NOW: i64 = ${NOW}
+        ${consts.join("\n")}
+
+        const bytes = (text: string): u8[] => {
+          const out: u8[] = []
+          for (let i: i32 = 0; i < toI32(text.length); i += 1) {
+            out.push(toU8(text.charCodeAt(i)))
+          }
+          return out
+        }
+
+        /** \`prefix\`, then \`n\` x's, then \`suffix\`. */
+        const padded = (prefix: string, n: i32, suffix: string): u8[] => {
+          const out: u8[] = bytes(prefix)
+          for (let i: i32 = 0; i < n; i += 1) {
+            out.push(toU8(120))
+          }
+          for (const b of bytes(suffix)) {
+            out.push(b)
+          }
+          return out
+        }
+
+        const jwks = (doc: string): i32 => oidcParseJwks(bytes(doc)).error
+
+        /** The fetch options for a \`timeoutMs\` of \`ms\` and a 4096-byte bound. */
+        const fetchOptions = (ms: i32): HttpOptions => {
+          const x: OidcOptions = new OidcOptions()
+          x.timeoutMs = ms
+          return oidcHttpOptions(x, 4096, null)
+        }
+
+        const keysWith = (doc: string, now: i64): OidcKeys => {
+          const keys: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), new OidcOptions())
+          keys.refreshWith(bytes(doc), null, now)
+          return keys
+        }
+
+        export const main = (): number => {
+          const t: Suite = new Suite("oidc")
+          const o: OidcOptions = new OidcOptions()
+          const loop: OidcOptions = new OidcOptions()
+          loop.allowLoopbackHttp = true
+
+          // Discovery.
+          t.eqStr("discovery url", oidcDiscoveryUrl(ISSUER), ISSUER + "/.well-known/openid-configuration")
+          t.eqStr("discovery url, trailing slash", oidcDiscoveryUrl(ISSUER + "/"), ISSUER + "/.well-known/openid-configuration")
+          t.eqI32("discovery ok", oidcParseDiscovery(ISSUER, bytes(disc_ok), o).error, OIDC_OK)
+          t.eqStr("discovery jwks_uri", oidcParseDiscovery(ISSUER, bytes(disc_ok), o).jwksUri, "https://keys.example/jwks")
+          t.eqI32("issuer: trailing slash differs", oidcParseDiscovery(ISSUER, bytes(disc_slash), o).error, OIDC_ERR_ISSUER)
+          t.eqI32("issuer: case differs", oidcParseDiscovery(ISSUER, bytes(disc_case), o).error, OIDC_ERR_ISSUER)
+          t.eqI32("jwks_uri http refused", oidcParseDiscovery(ISSUER, bytes(disc_httpJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri loopback http refused by default", oidcParseDiscovery(ISSUER, bytes(disc_loopJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri http under an https issuer refused even with the option", oidcParseDiscovery(ISSUER, bytes(disc_loopJwks), loop).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri loopback http under a loopback http issuer", oidcParseDiscovery("http://127.0.0.1:8080", bytes(disc_httpIssuer), loop).error, OIDC_OK)
+          t.eqI32("jwks_uri http to a remote host under an http issuer refused", oidcParseDiscovery("http://127.0.0.1:8080", bytes(disc_httpIssuerRemoteJwks), loop).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri http to a remote host refused even with the option", oidcParseDiscovery(ISSUER, bytes(disc_httpJwks), loop).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri userinfo refused", oidcParseDiscovery(ISSUER, bytes(disc_userJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri user without password refused", oidcParseDiscovery(ISSUER, bytes(disc_userOnlyJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri password without user refused", oidcParseDiscovery(ISSUER, bytes(disc_passOnlyJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri empty host refused", oidcParseDiscovery(ISSUER, bytes(disc_emptyHostJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri not a URL refused", oidcParseDiscovery(ISSUER, bytes(disc_notUrlJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("no jwks_uri", oidcParseDiscovery(ISSUER, bytes(disc_noJwks), o).error, OIDC_ERR_JSON)
+          t.eqI32("issuer not a string", oidcParseDiscovery(ISSUER, bytes(disc_numIssuer), o).error, OIDC_ERR_JSON)
+          t.eqI32("discovery not an object", oidcParseDiscovery(ISSUER, bytes(disc_array), o).error, OIDC_ERR_JSON)
+          t.eqI32("discovery over the bound", oidcParseDiscovery(ISSUER, padded("{\\"pad\\":\\"", OIDC_MAX_DISCOVERY_BYTES, "\\"}"), o).error, OIDC_ERR_SIZE)
+          t.eqI32("discovery at the bound is read", oidcParseDiscovery(ISSUER, padded("{\\"pad\\":\\"", OIDC_MAX_DISCOVERY_BYTES - 10, "\\"}"), o).error, OIDC_ERR_JSON)
+          t.ok("issuer http refused", !oidcIssuerAllowed("http://idp.example", o))
+          t.ok("issuer loopback http refused by default", !oidcIssuerAllowed("http://127.0.0.1:8080", o))
+          t.ok("issuer loopback http with the option", oidcIssuerAllowed("http://127.0.0.1:8080", loop))
+          t.ok("issuer localhost http with the option", oidcIssuerAllowed("http://localhost:8080", loop))
+          t.ok("issuer ::1 http with the option", oidcIssuerAllowed("http://[::1]:8080", loop))
+          t.ok("issuer ::1 http refused by default", !oidcIssuerAllowed("http://[::1]:8080", o))
+          t.ok("issuer remote http refused with the option", !oidcIssuerAllowed("http://idp.example", loop))
+          t.ok("issuer userinfo refused", !oidcIssuerAllowed("https://u@idp.example", o))
+          t.ok("issuer uppercase scheme", oidcIssuerAllowed("HTTPS://idp.example", o))
+          t.ok("issuer query refused", !oidcIssuerAllowed("https://idp.example?a=1", o))
+          t.ok("issuer fragment refused", !oidcIssuerAllowed("https://idp.example#a", o))
+          t.ok("issuer https", oidcIssuerAllowed("https://idp.example/tenant", o))
+          t.eqI32("issuer refused before parsing", oidcParseDiscovery("http://idp.example", bytes(disc_ok), o).error, OIDC_ERR_SCHEME)
+          t.ok("issuer of another scheme refused with the option", !oidcIssuerAllowed("ftp://127.0.0.1", loop))
+          t.eqI32("jwks_uri loopback http under an uppercase HTTP issuer", oidcParseDiscovery("HTTP://127.0.0.1:8080", bytes(disc_upperHttpIssuer), loop).error, OIDC_OK)
+          t.eqI32("discover refuses the issuer before fetching", oidcDiscover("http://127.0.0.1:1", o).error, OIDC_ERR_SCHEME)
+          t.eqI32("timeoutMs default", new OidcOptions().timeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+
+          // The key set.
+          const all: OidcKeySet = oidcParseJwks(bytes(doc_all))
+          t.eqI32("jwks all", all.error, OIDC_OK)
+          t.eqI32("jwks all count", all.count(), 6)
+          t.ok("jwks find p256", all.find("p256") !== null)
+          t.ok("jwks find is exact", all.find("P256") === null)
+          const skips: OidcKeySet = oidcParseJwks(bytes(doc_skips))
+          t.eqI32("enc, unknown kty, PS256, unknown crv skipped", skips.error, OIDC_OK)
+          t.eqI32("only the signing key taken", skips.count(), 1)
+          t.ok("the signing key is ed", skips.find("ed") !== null)
+          t.eqI32("oct without k skipped", oidcParseJwks(bytes(doc_octSkip)).count(), 1)
+          t.eqI32("oct with k refused", jwks(doc_octSecret), OIDC_ERR_PRIVATE)
+          t.eqI32("private EC key refused", jwks(doc_private), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member refused", jwks(doc_privateRsa), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member q refused", jwks(doc_private_q), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member dp refused", jwks(doc_private_dp), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member dq refused", jwks(doc_private_dq), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member qi refused", jwks(doc_private_qi), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member oth refused", jwks(doc_private_oth), OIDC_ERR_PRIVATE)
+          t.eqI32("ES256 on an RSA key carrying P-256 coordinates refused", jwks(doc_algEsOnRsaWithEc), OIDC_ERR_KEY)
+          t.eqI32("RS256 on a P-256 key carrying an RSA modulus refused", jwks(doc_algRsaOnEcWithRsa), OIDC_ERR_KEY)
+          t.eqI32("RS256 on an EC key refused", jwks(doc_algRsaOnEc), OIDC_ERR_KEY)
+          t.eqI32("ES256 on an RSA key refused", jwks(doc_algEsOnRsa), OIDC_ERR_KEY)
+          t.eqI32("ES384 on a P-256 key refused", jwks(doc_algEs384OnP256), OIDC_ERR_KEY)
+          t.eqI32("EdDSA on a P-256 key refused", jwks(doc_algEdOnP256), OIDC_ERR_KEY)
+          t.eqI32("HS256 on an RSA key refused", jwks(doc_algHs), OIDC_ERR_KEY)
+          t.eqI32("EdDSA on X25519 refused", jwks(doc_algEdOnUnknownCrv), OIDC_ERR_KEY)
+          t.eqI32("X25519 without alg skipped", oidcParseJwks(bytes(doc_unknownCrvNoAlg)).count(), 1)
+          t.eqI32("duplicate kid refused", jwks(doc_dupKid), OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("two keys without kid refused", jwks(doc_dupNoKid), OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("a skipped key does not collide", jwks(doc_dupSkipped), OIDC_OK)
+          t.eqI32("RSA-1024 refused", jwks(doc_smallRsa), OIDC_ERR_KEY)
+          t.eqI32("short EC coordinate refused", jwks(doc_badX), OIDC_ERR_KEY)
+          t.eqI32("short Ed25519 key refused", jwks(doc_badEd), OIDC_ERR_KEY)
+          t.eqI32("no kty", jwks(doc_noKty), OIDC_ERR_JSON)
+          t.eqI32("alg not a string", jwks(doc_algNotString), OIDC_ERR_JSON)
+          t.eqI32("entry not an object", jwks(doc_entryNotObject), OIDC_ERR_JSON)
+          t.eqI32("keys not an array", jwks(doc_keysNotArray), OIDC_ERR_JSON)
+          t.eqI32("not JSON", jwks(doc_notJson), OIDC_ERR_JSON)
+          t.eqI32("kid over OIDC_MAX_KID refused", jwks(doc_longKid), OIDC_ERR_KEY)
+          t.eqI32("kid at OIDC_MAX_KID", jwks(doc_maxKid), OIDC_OK)
+          t.eqI32("kid with a control byte refused", jwks(doc_ctlKid), OIDC_ERR_KEY)
+          t.eqI32("empty kid refused", jwks(doc_emptyKid), OIDC_ERR_KEY)
+          t.eqI32("kid with 0x7f refused", jwks(doc_delKid), OIDC_ERR_KEY)
+          t.eqI32("kid with a non-ASCII byte refused", jwks(doc_utf8Kid), OIDC_ERR_KEY)
+          t.eqI32("kid with 0x1f refused", jwks(doc_kid31), OIDC_ERR_KEY)
+          t.eqI32("kid of a space (0x20)", jwks(doc_kid32), OIDC_OK)
+          t.eqI32("kid of a tilde (0x7e)", jwks(doc_kid126), OIDC_OK)
+          t.eqI32("enc entry with a private member refused", jwks(doc_encPrivate), OIDC_ERR_PRIVATE)
+          t.eqI32("enc entry with a bad kid refused", jwks(doc_encBadKid), OIDC_ERR_KEY)
+          t.eqI32("kty not a string refused", jwks(doc_ktyNotString), OIDC_ERR_JSON)
+          t.eqI32("use not a string refused", jwks(doc_useNotString), OIDC_ERR_JSON)
+          t.eqI32("kid not a string refused", jwks(doc_kidNotString), OIDC_ERR_JSON)
+          t.eqI32("crv not a string refused", jwks(doc_crvNotString), OIDC_ERR_JSON)
+          t.eqI32("HS384 on an RSA key refused", jwks(doc_algHs384), OIDC_ERR_KEY)
+          t.eqI32("HS512 on an RSA key refused", jwks(doc_algHs512), OIDC_ERR_KEY)
+          for (const doc of [doc_p256UnderOkp, doc_p384UnderOkp, doc_edUnderEc]) {
+            const under: OidcKeySet = oidcParseJwks(bytes(doc))
+            t.eqI32("a crv under the wrong kty: set taken", under.error, OIDC_OK)
+            t.ok("a crv under the wrong kty: key skipped", under.count() === 1 && under.find("a") === null)
+          }
+          t.eqI32("P-256 without x refused", jwks(doc_noX), OIDC_ERR_KEY)
+          t.eqI32("P-256 x not a string refused", jwks(doc_numX), OIDC_ERR_KEY)
+          t.eqI32("P-256 without y refused", jwks(doc_noY), OIDC_ERR_KEY)
+          t.eqI32("P-256 short y refused", jwks(doc_shortY), OIDC_ERR_KEY)
+          t.eqI32("P-256 x short and y long by one byte refused", jwks(doc_skewY), OIDC_ERR_KEY)
+          t.eqI32("P-384 short x refused", jwks(doc_p384ShortX), OIDC_ERR_KEY)
+          t.eqI32("P-384 without y refused", jwks(doc_p384NoY), OIDC_ERR_KEY)
+          t.eqI32("P-384 short y refused", jwks(doc_p384ShortY), OIDC_ERR_KEY)
+          t.eqI32("P-256 coordinates named P-384 refused", jwks(doc_p256CoordsOnP384), OIDC_ERR_KEY)
+          t.eqI32("Ed25519 without x refused", jwks(doc_edNoX), OIDC_ERR_KEY)
+          t.eqI32("RSA without n refused", jwks(doc_rsaNoN), OIDC_ERR_KEY)
+          t.eqI32("RSA without e refused", jwks(doc_rsaNoE), OIDC_ERR_KEY)
+          t.eqI32("RSA n not a string refused", jwks(doc_rsaNumN), OIDC_ERR_KEY)
+          t.eqI32("RSA-8192 taken", jwks(doc_rsa8192), OIDC_OK)
+          t.eqI32("RSA-8193 refused", jwks(doc_rsa8193), OIDC_ERR_KEY)
+          t.ok("an empty kid finds no key", oidcParseJwks(bytes(doc_one)).find("") === null)
+          t.eqI32("empty set", jwks(doc_none), OIDC_ERR_NO_KEYS)
+          t.eqI32("over OIDC_MAX_KEYS entries refused", jwks(doc_tooMany), OIDC_ERR_TOO_MANY_KEYS)
+          t.eqI32("OIDC_MAX_KEYS entries", jwks(doc_maxKeys), OIDC_OK)
+          t.eqI32("set over the bound", oidcParseJwks(padded("{\\"keys\\":[],\\"pad\\":\\"", OIDC_MAX_JWKS_BYTES, "\\"}")).error, OIDC_ERR_SIZE)
+          t.eqI32("set at the bound is read", oidcParseJwks(padded("{\\"keys\\":[],\\"pad\\":\\"", OIDC_MAX_JWKS_BYTES - 20, "\\"}")).error, OIDC_ERR_NO_KEYS)
+
+          // The fetch options: every wait bounded by timeoutMs, or the default for 0 or less.
+          const h: HttpOptions = fetchOptions(250)
+          t.eqI32("connect timeout", h.connectTimeoutMs, 250)
+          t.eqI32("read timeout", h.readTimeoutMs, 250)
+          t.eqI32("total timeout", h.totalTimeoutMs, 250)
+          t.ok("no redirect followed", !h.followRedirects)
+          t.eqI64("body bounded", h.maxBodyBytes, toI64(4096))
+          t.ok("no outbound policy when none is given", h.outbound === null)
+          for (const ms of [0, -5]) {
+            const d: HttpOptions = fetchOptions(ms)
+            t.eqI32(\`connect timeout default for \${ms}\`, d.connectTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+            t.eqI32(\`read timeout default for \${ms}\`, d.readTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+            t.eqI32(\`total timeout default for \${ms}\`, d.totalTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+          }
+
+          // Lifetime.
+          t.eqI64("no cache-control", oidcLifetime(null), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age taken", oidcLifetime("public, max-age=7200"), toI64(7200))
+          t.eqI64("max-age case", oidcLifetime("Max-Age=7200"), toI64(7200))
+          t.eqI64("max-age clamped low", oidcLifetime("max-age=0"), OIDC_MIN_LIFETIME)
+          t.eqI64("max-age clamped high", oidcLifetime("max-age=31536000"), OIDC_MAX_LIFETIME)
+          t.eqI64("max-age too long a number", oidcLifetime("max-age=99999999999999999999"), OIDC_MAX_LIFETIME)
+          t.eqI64("max-age that wraps 2^64 to a small number", oidcLifetime("max-age=18446744073709551916"), OIDC_MAX_LIFETIME)
+          t.eqI64("max-age not a number", oidcLifetime("max-age=soon"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age empty", oidcLifetime("max-age="), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age, space before =", oidcLifetime("max-age =7200"), toI64(7200))
+          t.eqI64("max-age, space after =", oidcLifetime("max-age= 7200"), toI64(7200))
+          t.eqI64("max-age with a sign", oidcLifetime("max-age=+7200"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age with a byte below 0 after the digits", oidcLifetime("max-age=700/"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age with a byte above 9 after the digits", oidcLifetime("max-age=700:"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("s-maxage ignored", oidcLifetime("s-maxage=7200"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("no-store", oidcLifetime("no-store"), OIDC_DEFAULT_LIFETIME)
+
+          // Verification.
+          const k: OidcKeys = keysWith(doc_all, NOW)
+          t.eqI32("RS256", oidcVerify(k, tok_rs256, "api", NOW), JWT_OK)
+          t.contains("claims after OK", k.claimsText(), "\\"sub\\":\\"u1\\"")
+          t.eqI32("RS384", oidcVerify(k, tok_rs384, "api", NOW), JWT_OK)
+          t.eqI32("RS512", oidcVerify(k, tok_rs512, "api", NOW), JWT_OK)
+          t.eqI32("ES256, alg from the key", oidcVerify(k, tok_es256, "api", NOW), JWT_OK)
+          t.eqI32("ES384", oidcVerify(k, tok_es384, "api", NOW), JWT_OK)
+          t.eqI32("EdDSA", oidcVerify(k, tok_eddsa, "api", NOW), JWT_OK)
+          t.eqI32("RS256 token on an RS384 key", oidcVerify(k, tok_rs256On384, "api", NOW), JWT_ERR_ALG)
+          t.eqI32("HS256 with the public key as secret", oidcVerify(k, tok_hs256, "api", NOW), JWT_ERR_ALG)
+          t.eqI32("alg none", oidcVerify(k, tok_none, "api", NOW), JWT_ERR_ALG)
+          t.eqI32("tampered", oidcVerify(k, tok_tampered, "api", NOW), JWT_ERR_SIGNATURE)
+          t.eqI32("a non-ASCII token refused", oidcVerify(k, tok_nonAscii, "api", NOW), JWT_ERR_FORMAT)
+          t.eqI32("a code unit above 0x7f whose low byte is base64url refused", oidcVerify(k, tok_lowByte, "api", NOW), JWT_ERR_FORMAT)
+          t.eqI32("wrong iss", oidcVerify(k, tok_wrongIss, "api", NOW), JWT_ERR_ISSUER)
+          t.eqI32("wrong aud", oidcVerify(k, tok_wrongAud, "api", NOW), JWT_ERR_AUDIENCE)
+          t.eqI32("aud array holds it", oidcVerify(k, tok_audArray, "api", NOW), JWT_OK)
+          t.eqI32("aud array lacks it", oidcVerify(k, tok_audArrayMiss, "api", NOW), JWT_ERR_AUDIENCE)
+          t.eqI32("another audience", oidcVerify(k, tok_rs256, "other", NOW), JWT_ERR_AUDIENCE)
+          t.eqI32("expired past leeway", oidcVerify(k, tok_expired, "api", NOW), JWT_ERR_EXPIRED)
+          t.eqI32("expired within leeway", oidcVerify(k, tok_expiredInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("nbf past leeway", oidcVerify(k, tok_nbf, "api", NOW), JWT_ERR_NOT_YET)
+          t.eqI32("nbf within leeway", oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("no exp", oidcVerify(k, tok_noExp, "api", NOW), JWT_ERR_CLAIMS)
+          t.eqI32("no kid, several keys", oidcVerify(k, tok_noKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("unknown kid", oidcVerify(k, tok_unknownKid, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          const solo: OidcKeys = keysWith(doc_one, NOW)
+          t.eqI32("an empty kid is unknown, even against one key", oidcVerify(solo, tok_emptyKid, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          t.ok("an empty kid marks the set as wanted", solo.due(NOW + OIDC_MIN_REFRESH_INTERVAL))
+          const known: OidcKeys = keysWith(doc_all, NOW)
+          t.eqI32("a known kid verifies", oidcVerify(known, tok_rs256, "api", NOW), JWT_OK)
+          t.ok("a known kid does not mark the set as wanted", !known.due(NOW + OIDC_MIN_REFRESH_INTERVAL + toI64(1)))
+          const atMax: OidcOptions = new OidcOptions()
+          atMax.maxToken = ${tokens.rs256.length}
+          const km: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), atMax)
+          km.refreshWith(bytes(doc_all), null, NOW)
+          t.eqI32("a token of maxToken bytes", oidcVerify(km, tok_rs256, "api", NOW), JWT_OK)
+          const belowMax: OidcOptions = new OidcOptions()
+          belowMax.maxToken = ${tokens.rs256.length - 1}
+          const kb: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), belowMax)
+          kb.refreshWith(bytes(doc_all), null, NOW)
+          t.eqI32("a token one byte over maxToken", oidcVerify(kb, tok_rs256, "api", NOW), JWT_ERR_SIZE)
+          const strict: OidcOptions = new OidcOptions()
+          strict.leeway = toI64(0)
+          const ks: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), strict)
+          ks.refreshWith(bytes(doc_all), null, NOW)
+          t.eqI32("leeway 0 is taken", oidcVerify(ks, tok_expiredInLeeway, "api", NOW), JWT_ERR_EXPIRED)
+          t.eqI32("a kid over OIDC_MAX_KID reads as none", oidcVerify(k, tok_longKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("a kid of OIDC_MAX_KID bytes is read", oidcVerify(k, tok_kid256, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          t.eqI32("a kid of OIDC_MAX_KID + 1 bytes reads as none", oidcVerify(k, tok_kid257, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("a kid that is not a string reads as none", oidcVerify(k, tok_numKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("over maxToken", oidcVerify(k, tok_long, "api", NOW), JWT_ERR_SIZE)
+          t.eqI32("claims cleared after a refusal", toI32(k.claimsText().length), 0)
+          // Every refusal leaves no claims behind, whether decided before the verifier runs or inside
+          // it: each follows an accepted token that carries exp, nbf and iat, and every one is cleared.
+          const refusals: string[] = [
+            "oversize", "kid required", "unknown kid", "stale", "wrong aud", "wrong iss", "expired",
+            "not yet", "iat in the future", "a code unit above 0x7f",
+          ]
+          const refused: string[] = [
+            tok_long, tok_noKid, tok_unknownKid, tok_rs256, tok_wrongAud, tok_wrongIss, tok_expired,
+            tok_nbf, tok_iatFuture, tok_lowByte,
+          ]
+          const codes: i32[] = [
+            JWT_ERR_SIZE, OIDC_ERR_KID_REQUIRED, OIDC_ERR_UNKNOWN_KID, OIDC_ERR_STALE, JWT_ERR_AUDIENCE, JWT_ERR_ISSUER, JWT_ERR_EXPIRED,
+            JWT_ERR_NOT_YET, JWT_ERR_IAT, JWT_ERR_FORMAT,
+          ]
+          for (let i: i32 = 0; i < 10; i += 1) {
+            const name: string = refusals[i]
+            t.eqI32(\`accept before \${name}\`, oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+            t.ok(\`exp, nbf and iat set before \${name}\`, k.verifier.hasExp && k.verifier.hasNbf && k.verifier.hasIat)
+            const at: i64 = i === 3 ? NOW + OIDC_DEFAULT_LIFETIME + OIDC_STALE_GRACE : NOW
+            t.eqI32(\`\${name} after an accept\`, oidcVerify(k, refused[i], "api", at), codes[i])
+            t.eqStr(\`no claims after \${name}\`, k.claimsText(), "")
+            t.ok(\`no exp after \${name}\`, !k.verifier.hasExp)
+            t.ok(\`no nbf after \${name}\`, !k.verifier.hasNbf)
+            t.ok(\`no iat after \${name}\`, !k.verifier.hasIat)
+            t.eqI64(\`exp 0 after \${name}\`, k.verifier.exp, toI64(0))
+            t.eqI64(\`nbf 0 after \${name}\`, k.verifier.nbf, toI64(0))
+            t.eqI64(\`iat 0 after \${name}\`, k.verifier.iat, toI64(0))
+          }
+          // An accepted token's claims are its own: one without nbf, after one with it, leaves none.
+          t.eqI32("accept with nbf", oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("accept without nbf after one with it", oidcVerify(k, tok_rs256, "api", NOW), JWT_OK)
+          t.ok("no nbf left from the token before", !k.verifier.hasNbf)
+          const one: OidcKeys = keysWith(doc_one, NOW)
+          t.eqI32("no kid, one key", oidcVerify(one, tok_noKid, "api", NOW), JWT_OK)
+          const never: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
+          t.eqI32("no set yet", oidcVerify(never, tok_rs256, "api", NOW), OIDC_ERR_STALE)
+
+          // Rotation: the clock is a parameter.
+          const r: OidcKeys = keysWith(doc_rsaOnly, NOW)
+          const fresh: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
+          t.ok("never tried: due", fresh.due(NOW))
+          t.ok("never tried: due near 0", fresh.due(toI64(10)))
+          t.ok("never tried: due at any time", fresh.due(toI64(-5)))
+          t.ok("no set: not usable", !fresh.usable(toI64(-1)))
+          t.ok("fresh after taking", !r.due(NOW + toI64(10)))
+          t.eqI32("not due while fresh", r.refreshWith(bytes(doc_rotated), null, NOW + toI64(100)), OIDC_SKIPPED)
+          t.eqI32("rotated token, unknown kid", oidcVerify(r, tok_rotated, "api", NOW + toI64(100)), OIDC_ERR_UNKNOWN_KID)
+          t.ok("an unknown kid makes a refresh due", r.due(NOW + toI64(100)))
+          t.ok("but not inside the minimum interval", !r.due(NOW + OIDC_MIN_REFRESH_INTERVAL - toI64(1)))
+          t.eqI32("refresh after an unknown kid", r.refreshWith(bytes(doc_rotated), null, NOW + toI64(100)), OIDC_OK)
+          t.ok("the refreshed set is no longer wanted", !r.due(NOW + toI64(100) + OIDC_MIN_REFRESH_INTERVAL))
+          t.eqI32("rotated token verifies", oidcVerify(r, tok_rotated, "api", NOW + toI64(100)), JWT_OK)
+          t.eqI32("removed key stops verifying", oidcVerify(r, tok_rs256, "api", NOW + toI64(100)), OIDC_ERR_UNKNOWN_KID)
+          t.eqI32("unknown kid again: one refresh per interval", r.refreshWith(bytes(doc_rsaOnly), null, NOW + toI64(130)), OIDC_SKIPPED)
+          t.eqI32("unknown kid after the interval", r.refreshWith(bytes(doc_rsaOnly), null, NOW + toI64(160)), OIDC_OK)
+          t.eqI32("a refused set keeps the last", r.refreshWith(bytes(doc_dupKid), null, NOW + toI64(160) + OIDC_DEFAULT_LIFETIME), OIDC_ERR_DUPLICATE_KID)
+          t.ok("last good set still verifies", r.key("rsa", NOW + toI64(160) + OIDC_DEFAULT_LIFETIME) !== null)
+          t.eqI32("a failed fetch keeps the last", r.refreshWith(null, null, NOW + toI64(400) + OIDC_DEFAULT_LIFETIME), OIDC_ERR_FETCH)
+          t.eqI32("lastError", r.lastError, OIDC_ERR_FETCH)
+          const back: OidcKeys = keysWith(doc_rsaOnly, NOW)
+          t.eqI32("a refused set after a good one", back.refreshWith(bytes(doc_dupKid), null, NOW + OIDC_DEFAULT_LIFETIME), OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("a refused set: lastError", back.lastError, OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("a set taken after a failure", back.refreshWith(bytes(doc_rsaOnly), null, NOW + OIDC_DEFAULT_LIFETIME + OIDC_MIN_REFRESH_INTERVAL), OIDC_OK)
+          t.eqI32("a set taken after a failure: lastError", back.lastError, OIDC_OK)
+          const hard: i64 = NOW + toI64(160) + OIDC_DEFAULT_LIFETIME + OIDC_STALE_GRACE
+          t.ok("usable just before the hard expiry", r.usable(hard - toI64(1)))
+          t.ok("not usable at the hard expiry", !r.usable(hard))
+          t.ok("no key at the hard expiry", r.key("rsa", hard) === null)
+          t.eqI32("stale past the hard expiry", oidcVerify(r, tok_rs256, "api", hard), OIDC_ERR_STALE)
+          const m: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
+          m.refreshWith(bytes(doc_rsaOnly), "max-age=600", NOW)
+          t.ok("max-age sets the lifetime", !m.due(NOW + toI64(599)))
+          t.ok("due at max-age", m.due(NOW + toI64(600)))
+          t.ok("a known kid does not make a refresh due", m.key("rsa", NOW + toI64(1)) !== null && !m.due(NOW + toI64(1)))
+          t.ok("an unknown kid inside the interval", m.key("gone", NOW + toI64(1)) === null && !m.due(NOW + toI64(1)))
+          t.ok("a clock stepped back does not block a refresh", m.due(NOW - toI64(1000)))
+          const failed: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_ERR_ISSUER, "", ""), o)
+          const failedWith: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_ERR_ISSUER, "", ""), o)
+          t.eqI32("refreshWith after failed discovery", failedWith.refreshWith(bytes(doc_rsaOnly), null, NOW), OIDC_ERR_ISSUER)
+          t.eqI32("refreshWith after failed discovery: lastError", failedWith.lastError, OIDC_ERR_ISSUER)
+          t.ok("failed discovery takes no set", !failedWith.usable(NOW))
+          t.eqI32("refresh after failed discovery", failed.refresh(NOW), OIDC_ERR_ISSUER)
+          t.eqI32("refresh after failed discovery: lastError", failed.lastError, OIDC_ERR_ISSUER)
+          t.eqI32("failed discovery: rate-limited", failed.refresh(NOW + toI64(1)), OIDC_SKIPPED)
+          return t.done()
+        }
+        `
+          fs.writeFileSync(file, src)
+      }
+      const failures = (r) =>
+        `exit ${r.status}${r.error ? ` (${r.error.message})` : ""}\n${(r.stdout || "").split("\n").filter((l) => !l.startsWith("PASS")).join("\n")}${r.stderr || ""}`
+      const memory = path.join(oidcDir, "memory.ts")
+      oidcProbe(memory, oidcFixtures("https://idp.example/tenant"), "https://idp.example/tenant")
+      const mem = spawnSync(NISH, ["run", memory], { encoding: "utf8", timeout: 120000 })
+      check(
+        "std/net/oidc: discovery, the key set, rotation and verification, in memory",
+        mem.status === 0 && mem.stdout.includes(" 0 failed"),
+        failures(mem),
+      )
+      // The loopback round trip: discovery, refresh and verify over real HTTP.
+      const served = path.join(oidcDir, "served")
+      fs.mkdirSync(served)
+      const serverJs = path.join(oidcDir, "server.cjs")
+      fs.writeFileSync(serverJs, `// Serves the oidc loopback fixtures from a directory, written after the port is known.
+const fs = require("fs")
+const http = require("http")
+const path = require("path")
+const dir = process.argv[2]
+let flaky = 0
+const answer = (req, res) => {
+  const route = req.url
+  // Accepts and never answers: only the client's own timeouts end the fetch.
+  if (route.startsWith("/hang/")) return
+  // The first fetch of the key set answers, every later one fails.
+  if (route === "/flaky/jwks" && flaky++ > 0) {
+    res.writeHead(500)
+    res.end()
+    return
+  }
+  if (route === "/redir/jwks") {
+    res.writeHead(302, { location: "/good/jwks" })
+    res.end()
+    return
+  }
+  const file = path.join(dir, route.replace(/[^a-z]/g, "_"))
+  if (!route.startsWith("/") || !fs.existsSync(file)) {
+    res.writeHead(404)
+    res.end()
+    return
+  }
+  const headers = { "content-type": "application/json" }
+  if (route.endsWith("/jwks")) headers["cache-control"] = "public, max-age=600"
+  res.writeHead(200, headers)
+  res.end(fs.readFileSync(file))
+}
+// Two ports on 127.0.0.1: the second is another origin without a name to resolve.
+const server = http.createServer(answer)
+const other = http.createServer(answer)
+server.listen(0, "127.0.0.1", () =>
+  other.listen(0, "127.0.0.1", () => process.stdout.write(\`\${server.address().port} \${other.address().port}\\n\`)),
+)
+`)
+      const server = spawn(process.execPath, [serverJs, served], { stdio: ["ignore", "pipe", "inherit"] })
+      try {
+        // A server that dies or never listens fails the check rather than hanging the run.
+        const ports = await new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(""), 10000)
+          const fail = () => { clearTimeout(timer); resolve("") }
+          server.once("error", fail)
+          server.once("exit", fail)
+          server.stdout.once("data", (d) => { clearTimeout(timer); resolve(String(d).trim()) })
+        })
+        if (!/^[0-9]+ [0-9]+$/.test(ports)) {
+          check("std/net/oidc: the loopback server started", false, "it printed no ports within 10 s")
+        } else {
+          const [port, otherPort] = ports.split(" ")
+          const base = `http://127.0.0.1:${port}`
+          const fx = oidcFixtures(`${base}/good`)
+          const put = (route, body) => fs.writeFileSync(path.join(served, route.replace(/[^a-z]/g, "_")), body)
+          const wk = "/.well-known/openid-configuration"
+          put(`/good${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
+          put("/good/jwks", fx.docs.all)
+          put(`/big${wk}`, JSON.stringify({ issuer: `${base}/big`, jwks_uri: `${base}/good/jwks`, pad: "x".repeat(70000) }))
+          put(`/redir${wk}`, JSON.stringify({ issuer: `${base}/redir`, jwks_uri: `${base}/redir/jwks` }))
+          put(`/bigkeys${wk}`, JSON.stringify({ issuer: `${base}/bigkeys`, jwks_uri: `${base}/bigkeys/jwks` }))
+          put("/bigkeys/jwks", fx.docs.big)
+          put(`/flaky${wk}`, JSON.stringify({ issuer: `${base}/flaky`, jwks_uri: `${base}/flaky/jwks` }))
+          put("/flaky/jwks", fx.docs.all)
+          put(`/other${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
+          // Another origin for the same server, its second port: fetched under the outbound policy, which refuses loopback.
+          put(`/cross${wk}`, JSON.stringify({ issuer: `${base}/cross`, jwks_uri: `http://127.0.0.1:${otherPort}/good/jwks` }))
+          const loopback = path.join(oidcDir, "loopback.ts")
+          fs.writeFileSync(
+            loopback,
+            `import { Suite } from "nish/testing"
+            import { JWT_OK } from "nish/crypto/jwt"
+            import {
+              OIDC_ERR_FETCH, OIDC_ERR_ISSUER, OIDC_ERR_SCHEME, OIDC_ERR_SIZE, OIDC_OK, OIDC_SKIPPED, OidcKeys, OidcMetadata,
+              OidcOptions, oidcDiscover, oidcVerify,
+            } from "nish/net/oidc"
+
+            const BASE: string = ${JSON.stringify(base)}
+            const NOW: i64 = ${fx.NOW}
+
+            export const main = (): number => {
+              const t: Suite = new Suite("oidc loopback")
+              const o: OidcOptions = new OidcOptions()
+              o.allowLoopbackHttp = true
+              const meta: OidcMetadata = oidcDiscover(BASE + "/good", o)
+              t.eqI32("discover", meta.error, OIDC_OK)
+              const keys: OidcKeys = new OidcKeys(meta, o)
+              t.eqI32("refresh", keys.refresh(NOW), OIDC_OK)
+              t.ok("max-age from the response", !keys.due(NOW + toI64(599)) && keys.due(NOW + toI64(600)))
+              t.eqI32("verify", oidcVerify(keys, ${JSON.stringify(fx.tokens.es256)}, "api", NOW), JWT_OK)
+              t.eqI32("http refused without the option", oidcDiscover(BASE + "/good", new OidcOptions()).error, OIDC_ERR_SCHEME)
+              t.eqI32("discovery over the bound", oidcDiscover(BASE + "/big", o).error, OIDC_ERR_SIZE)
+              t.eqI32("discovery 404", oidcDiscover(BASE + "/gone", o).error, OIDC_ERR_FETCH)
+              t.eqI32("issuer mismatch", oidcDiscover(BASE + "/other", o).error, OIDC_ERR_ISSUER)
+              const redir: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/redir", o), o)
+              t.eqI32("redirect not followed", redir.refresh(NOW), OIDC_ERR_FETCH)
+              const big: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/bigkeys", o), o)
+              t.eqI32("key set over the bound", big.refresh(NOW), OIDC_ERR_SIZE)
+              const crossMeta: OidcMetadata = oidcDiscover(BASE + "/cross", o)
+              t.eqI32("cross-origin discover", crossMeta.error, OIDC_OK)
+              const cross: OidcKeys = new OidcKeys(crossMeta, o)
+              t.eqI32("cross-origin jwks_uri refused by the default outbound policy", cross.refresh(NOW), OIDC_ERR_FETCH)
+              const open: OidcOptions = new OidcOptions()
+              open.allowLoopbackHttp = true
+              open.jwksOutbound = null
+              const crossOpen: OidcKeys = new OidcKeys(crossMeta, open)
+              t.eqI32("cross-origin jwks_uri with jwksOutbound null", crossOpen.refresh(NOW), OIDC_OK)
+              const zero: OidcOptions = new OidcOptions()
+              zero.allowLoopbackHttp = true
+              zero.timeoutMs = 0
+              t.eqI32("timeoutMs 0 takes the default", oidcDiscover(BASE + "/good", zero).error, OIDC_OK)
+              // A server that accepts and never answers: the fetch ends at timeoutMs, not the 10 s default.
+              const short: OidcOptions = new OidcOptions()
+              short.allowLoopbackHttp = true
+              short.timeoutMs = 300
+              const began: i64 = monotonicNanos()
+              t.eqI32("a silent server fails the fetch", oidcDiscover(BASE + "/hang", short).error, OIDC_ERR_FETCH)
+              const tookMs: i64 = (monotonicNanos() - began) / toI64(1000000)
+              t.ok("the silent server is given up within 5 s", tookMs < toI64(5000))
+              // The route did stall: a fetch refused at once would be FETCH too, well under timeoutMs.
+              t.ok("the silent server held the fetch until near timeoutMs", tookMs >= toI64(250))
+              // A failed fetch keeps the last set, through the real refresh.
+              const flaky: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/flaky", o), o)
+              t.eqI32("flaky: first refresh", flaky.refresh(NOW), OIDC_OK)
+              t.eqI32("flaky: a failed refresh", flaky.refresh(NOW + toI64(600)), OIDC_ERR_FETCH)
+              t.eqI32("flaky: lastError", flaky.lastError, OIDC_ERR_FETCH)
+              t.ok("flaky: the last set is kept", flaky.usable(NOW + toI64(600)) && flaky.key("p256", NOW + toI64(600)) !== null)
+              t.eqI32("flaky: no retry inside the interval", flaky.refresh(NOW + toI64(659)), OIDC_SKIPPED)
+              return t.done()
+            }
+            `,
+          )
+          // No proxy variable reaches the probe, so every fetch goes to the loopback server itself.
+          const env = { ...process.env }
+          for (const name of ["http_proxy", "https_proxy", "all_proxy", "no_proxy"]) {
+            delete env[name]
+            delete env[name.toUpperCase()]
+          }
+          const lr = spawnSync(NISH, ["run", loopback], { encoding: "utf8", env, timeout: 120000 })
+          check(
+            "std/net/oidc: discovery, refresh and verify over loopback http",
+            lr.status === 0 && lr.stdout.includes(" 0 failed"),
+            failures(lr),
+          )
+        }
+      } finally {
+        server.kill()
       }
     }
   }
@@ -31680,17 +32614,19 @@ if (!only || "net_ring".includes(only)) {
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
     const client = path.join(linkDir, "net_ring_beyond_limit", "client.mjs")
-    const build = (sub, file) => {
-      const exe = path.join(dir, file.replace(/\.ts$/, ""))
-      const c = spawnSync(NISH, [path.join(linkDir, sub, file), "--link", exe], { cwd: root, encoding: "utf8" })
+    const build = (sub, file, flags = [], suffix = "") => {
+      const exe = path.join(dir, file.replace(/\.ts$/, suffix))
+      const c = spawnSync(NISH, [path.join(linkDir, sub, file), ...flags, "--link", exe], { cwd: root, encoding: "utf8" })
       return c.status === 0 ? { exe, c } : { exe: null, c }
     }
-    const ring = (name, sub, file, limit, count, mode, want) => {
+    // Answers false when it skipped. `mustRun` makes "rings refused" a
+    // failure: the run it twins made rings on this kernel.
+    const ring = (name, sub, file, limit, count, mode, want, flags = [], suffix = "", mustRun = false) => {
       if (!(room >= limit)) {
         skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the ${limit} the check sets`)
-        return
+        return false
       }
-      const b = build(sub, file)
+      const b = build(sub, file, flags, suffix)
       const r =
         b.exe === null
           ? null
@@ -31698,15 +32634,16 @@ if (!only || "net_ring".includes(only)) {
               encoding: "utf8",
               timeout: 180000,
             })
-      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      if (!mustRun && r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
         skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
-        return
+        return false
       }
       check(
         name,
         r !== null && r.status === 0 && (typeof want === "string" ? r.stdout.includes(want) : want(r.stdout)),
         r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
       )
+      return true
     }
     ring(
       "net_ring: a ring listener serves 3,000 connections under a limit of 1,024 with fewer than 64 descriptors",
@@ -31717,7 +32654,7 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
-    ring(
+    const fullRan = ring(
       "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
       "net_ring_full",
       "full.ts",
@@ -31725,6 +32662,22 @@ if (!only || "net_ring".includes(only)) {
       800,
       "hold",
       "answered -23, then reused the freed slot\n"
+    )
+    // WP63 S3: under --sandbox the set is the rings made before the filter
+    // loaded (`nish.netRings`, 1 here), so it answers -23 once that ring's 32
+    // slots are taken, where the unsandboxed run above grows to more rings.
+    // Once that run made rings, "rings refused" here is a failure, not a skip.
+    ring(
+      "net_ring: under --sandbox a full set of premade rings answers -23 and makes no ring past them",
+      "net_ring_full",
+      "full.ts",
+      32,
+      800,
+      "hold",
+      "took 32 connections, answered -23, then reused the freed slot\n",
+      ["--sandbox"],
+      "-sandbox",
+      fullRan
     )
     ring(
       "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads",
@@ -31822,6 +32775,51 @@ if (!only || "net_ring".includes(only)) {
         "net_ring: with io_uring_setup refused, a ring listener serves descriptors and netRingState() is -1",
         r !== null && r.status === 0 && r.stdout.startsWith("rings refused with -1; served descriptor "),
         r === null ? `does not build\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
+// WP63 S4: `nish/net/handler` on io_uring slots. `HandlerLimits.ring` makes
+// `limits.listen` open a `NET_LISTEN_RING` listener, and tcpAccept's -23
+// (ENFILE, a full slot set) must rest the accept loop as -24 does, a close
+// ending the rest (HANDLER-10, docs/security/handler.md). The program in
+// tests/link/net_handler_ring runs under a descriptor limit of 32, and its
+// `client.mjs`, outside the limit, opens 800 connections: the handler must
+// hold them on slot handles up to the set's size, answer each, report
+// `resting()` once the set is full (so the program fails if -23 does not rest
+// the listener), and take a waiting connection into the slot a close frees. The verdict is the
+// program's exit status; 2 says the kernel refused rings, a counted skip.
+if (!only || "net_handler_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const name = "net_handler: on io_uring slots, a full set rests on -23 and a close frees a slot the handler takes"
+  if (!HAS_CLANG || hard === null) {
+    skip("net_handler: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else if (!(hardNofile(hard) >= 32)) {
+    skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the 32 the check sets`)
+  } else {
+    const dir = path.join(buildDir, "net_handler_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const sub = path.join(linkDir, "net_handler_ring")
+    const exe = path.join(dir, "ring")
+    const c = spawnSync(NISH, [path.join(sub, "ring.ts"), "--link", exe], { cwd: root, encoding: "utf8" })
+    const r =
+      c.status === 0
+        ? spawnSync(process.execPath, [path.join(sub, "client.mjs"), exe, "32", "800"], {
+            encoding: "utf8",
+            timeout: 180000,
+          })
+        : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+    } else {
+      check(
+        name,
+        r !== null &&
+          r.status === 0 &&
+          r.stdout.includes("answered -23 with a rest, and took the freed slot after a close\n"),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
       )
     }
   }
@@ -31979,6 +32977,328 @@ if (!only || "sandbox".includes(only)) {
         clone3Spawn.stdout === clone3Plain.stdout,
       `${said(clone3)}\n--- without --sandbox\n${said(clone3Plain)}\n--- with process.spawn\n${said(clone3Spawn)}`
     )
+
+    // WP63 S3: under --sandbox with net granted and process.spawn withheld,
+    // the rings a `NET_LISTEN_RING` listen takes are made before the filter
+    // loads, restricted to the opcodes and submission flags a listener uses,
+    // and the filter then kills io_uring_setup and io_uring_register while it
+    // lets io_uring_enter through (docs/security/net-uring.md). probe.c reaches
+    // a premade ring through the runtime's test-only hook, built in here with
+    // -DNISH_URING_TEST_HOOKS, and prints the completion's res for one entry.
+    const hooks = { defines: ["-DNISH_URING_TEST_HOOKS"] }
+    const ringIr = (file, flags) => {
+      const out = path.join(dir, `${path.basename(path.dirname(file))}-${path.basename(file, ".ts")}-ir.ll`)
+      const c = spawnSync(NISH, [file, ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+      return { c, ir: c.status === 0 ? fs.readFileSync(out, "utf8") : "" }
+    }
+    const ringCall = (ir) => (ir.match(/call void @nish_sandbox\([^\n]*, i32 (\d+)\)/) || [null, "none"])[1]
+    for (const [fixture, flags, want, why] of [
+      ["ring", ["--sandbox"], "1", "a main that reaches NET_LISTEN_RING with net asks for 1 ring"],
+      ["net", ["--sandbox"], "0", "a main that reaches net but never the ring bit asks for no ring"],
+      ["ringspawn", ["--sandbox"], "1", "a main that also reaches process.spawn passes its ring count on"],
+      ["none", ["--sandbox"], "0", "a main without net asks for no ring"],
+    ]) {
+      const { c, ir } = ringIr(path.join(fixtures, `${fixture}.ts`), flags)
+      const got = ringCall(ir)
+      check(`sandbox: ${why} (nish_sandbox's last operand is ${want})`, got === want, c.status === 0 ? `operand ${got}` : shown(c))
+    }
+    // The fold: a literal or `|` of constants without bit 8 asks for none; a
+    // flags value the compiler cannot fold may set it, so it asks.
+    const folds = path.join(dir, "folds")
+    fs.mkdirSync(folds, { recursive: true })
+    for (const [name, flags, want] of [
+      ["literal8", "8", "1"],
+      ["literal1", "1", "0"],
+      ["or", "NET_LISTEN_RING | 1", "1"],
+      ["paren", "(1 | 2)", "0"],
+      ["unknown", "toI32(process.argv.length)", "1"],
+    ]) {
+      const file = path.join(folds, `${name}.ts`)
+      fs.writeFileSync(
+        file,
+        `import { NET_LISTEN_RING, tcpListenFlags } from "nish:net"\n` +
+          `export const main = (): i32 => tcpListenFlags("127.0.0.1", 0, 1, ${flags}) + NET_LISTEN_RING\n`
+      )
+      const { c, ir } = ringIr(file, ["--sandbox"])
+      const got = ringCall(ir)
+      check(`sandbox: tcpListenFlags flags \`${flags}\` ask for ${want} ring${want === "1" ? "" : "s"}`, got === want, c.status === 0 ? `operand ${got}` : shown(c))
+    }
+    // D2: the count is the root package.json's `nish.netRings`, 1 to 64.
+    const counts = (name, value) => {
+      const at = path.join(dir, `rings-${name}`)
+      fs.mkdirSync(at, { recursive: true })
+      fs.writeFileSync(path.join(at, "package.json"), `{ "name": "rings-${name}", "private": true, "nish": { "netRings": ${value} } }\n`)
+      fs.copyFileSync(path.join(fixtures, "ring.ts"), path.join(at, "ring.ts"))
+      return path.join(at, "ring.ts")
+    }
+    for (const [name, value, want] of [
+      ["3", "3", "3"],
+      ["64", "64", "64"],
+    ]) {
+      const { c, ir } = ringIr(counts(name, value), ["--sandbox"])
+      const got = ringCall(ir)
+      check(`sandbox: \`nish.netRings\` ${value} asks for ${want} rings`, got === want, c.status === 0 ? `operand ${got}` : shown(c))
+    }
+    for (const [name, value] of [
+      ["0", "0"],
+      ["65", "65"],
+      ["neg", "-1"],
+      ["frac", "1.5"],
+      ["word", '"4"'],
+    ]) {
+      const { c } = ringIr(counts(name, value), ["--sandbox"])
+      check(
+        `sandbox: \`nish.netRings\` ${value} is refused where package.json writes it`,
+        c.status === 1 && c.stderr.includes(`rings-${name}/package.json:1:`) && c.stderr.includes(`\`nish.netRings\` is \`${value}\``) && c.stderr.includes("an integer from 1 to 64"),
+        shown(c)
+      )
+    }
+
+    const plainRing = build("ring-plain", "ring", [], hooks)
+    const unconfined = run(plainRing, ["io_uring_setup"])
+    const ringsWork = unconfined !== null && unconfined.status === 0 && unconfined.stdout === "io_uring_setup: start\nio_uring_setup: ok\n"
+    const enterPlain = run(plainRing, ["io_uring_enter"])
+    const registerPlain = run(plainRing, ["io_uring_register"])
+    const countPlain = run(plainRing, ["ring-count"])
+    check(
+      "sandbox: without --sandbox a ring program premakes no ring (the control)",
+      countPlain !== null && countPlain.status === 0 && countPlain.stdout === "ring-count: 0\n",
+      said(countPlain)
+    )
+    check(
+      "sandbox: without --sandbox io_uring_register and io_uring_enter reach the kernel (the control)",
+      enterPlain !== null &&
+        enterPlain.status === 0 &&
+        enterPlain.stdout.startsWith("io_uring_enter: start\nio_uring_enter: ") &&
+        registerPlain !== null &&
+        registerPlain.status === 0 &&
+        registerPlain.stdout.startsWith("io_uring_register: start\nio_uring_register: "),
+      `${said(enterPlain)}\n${said(registerPlain)}`
+    )
+    if (!ringsWork) {
+      skip(`sandbox: this kernel refuses io_uring_setup unconfined; the premade-ring checks did not run (${said(unconfined).trim()})`)
+    } else {
+      const inheritPlain = run(plainRing, ["inherit-ring", plainRing])
+      check(
+        "sandbox: without --sandbox a ring inherited across exec is entered (the control)",
+        inheritPlain !== null && inheritPlain.status === 0 && inheritPlain.stdout === "foreign-enter: start\nforeign-enter: ok\ninherit-ring: exit 0\n",
+        said(inheritPlain)
+      )
+    }
+    // A refused opcode or flag on a restricted ring completes with -EACCES.
+    const refusedOps = [
+      [45, "SOCKET"],
+      [16, "CONNECT"],
+      [18, "OPENAT"],
+      [22, "READ"],
+      [23, "WRITE"],
+      [9, "SENDMSG"],
+      [40, "MSG_RING"],
+      [46, "URING_CMD"],
+    ]
+    const refusedFlags = [
+      [2, "IO_DRAIN"],
+      [4, "IO_LINK"],
+      [8, "IO_HARDLINK"],
+      [16, "ASYNC"],
+    ]
+    // The allowed opcodes on no file reach the kernel, which answers for the
+    // descriptor, never the restriction.
+    const allowedOps = [
+      ["13:0", "ACCEPT"],
+      ["27:0", "RECV"],
+      ["26:0", "SEND"],
+      ["19:0", "CLOSE"],
+      ["14:0", "ASYNC_CANCEL"],
+      ["27:1", "RECV with FIXED_FILE"],
+      ["27:32", "RECV with BUFFER_SELECT"],
+      ["27:64", "RECV with CQE_SKIP_SUCCESS"],
+    ]
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const ring = build(`ring-${mode}`, "ring", [flag], hooks)
+      const net = build(`net-${mode}`, "net", [flag], hooks)
+      const both = build(`ringspawn-${mode}`, "ringspawn", [flag], hooks)
+      const none = built.get(`none-${mode}`)
+      for (const [op, why] of [
+        ["io_uring_setup", "io_uring_setup from ffi with net and without process.spawn dies of SIGSYS"],
+        ["io_uring_register", "io_uring_register from ffi with net and without process.spawn dies of SIGSYS"],
+      ]) {
+        const r = run(ring, [op])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+      }
+      for (const [op, why] of [
+        ["io_uring_register", "io_uring_register from ffi without net dies of SIGSYS"],
+        ["io_uring_enter", "io_uring_enter from ffi without net dies of SIGSYS"],
+      ]) {
+        const r = run(none, [op])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+      }
+      // io_uring_enter is allowed on the premade rings' descriptors alone:
+      // on any other, or with no ring made, the filter kills it.
+      for (const [exe, why] of [
+        [ring, "io_uring_enter from ffi with net on a descriptor that is no premade ring dies of SIGSYS"],
+        [net, "io_uring_enter from ffi with net and no ring premade dies of SIGSYS"],
+      ]) {
+        const r = run(exe, ["io_uring_enter"])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === "io_uring_enter: start\n", said(r))
+      }
+      const bothEnter = run(both, ["io_uring_enter"])
+      check(
+        `sandbox: with net and process.spawn io_uring_enter from ffi reaches the kernel (${mode})`,
+        bothEnter !== null && enterPlain !== null && bothEnter.status === 0 && bothEnter.stdout === enterPlain.stdout,
+        said(bothEnter)
+      )
+      const probe = run(none, ["ring-probe"])
+      check(
+        `sandbox: without net the ring probe answers the refusal, not SIGSYS (${mode})`,
+        probe !== null && probe.status === 0 && probe.stdout === "ring-probe: start\nring-probe: -1\n",
+        said(probe)
+      )
+      const noneCount = run(none, ["ring-count"])
+      const netCount = run(net, ["ring-count"])
+      check(
+        `sandbox: a main without net, or with net and never the ring bit, makes no ring (${mode})`,
+        noneCount !== null && noneCount.stdout === "ring-count: 0\n" && netCount !== null && netCount.stdout === "ring-count: 0\n",
+        `${said(noneCount)}\n${said(netCount)}`
+      )
+      const bothSetup = run(both, ["io_uring_setup"])
+      const bothCount = run(both, ["ring-count"])
+      check(
+        `sandbox: with net and process.spawn io_uring_setup from ffi is not killed and no ring is premade (${mode})`,
+        bothSetup !== null &&
+          bothSetup.status === 0 &&
+          unconfined !== null &&
+          bothSetup.stdout === unconfined.stdout &&
+          bothCount !== null &&
+          bothCount.stdout === "ring-count: 0\n",
+        `${said(bothSetup)}\n${said(bothCount)}`
+      )
+      if (!ringsWork) continue
+      const foreign = run(plainRing, ["inherit-ring", ring])
+      check(
+        `sandbox: a ring a parent made unconfined and passed across exec cannot be entered: SIGSYS (${mode})`,
+        foreign !== null && foreign.status === 0 && foreign.stdout === "foreign-enter: start\ninherit-ring: SIGSYS\n",
+        said(foreign)
+      )
+      const count = run(ring, ["ring-count"])
+      check(
+        `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring and its keeper (${mode})`,
+        count !== null && count.status === 0 && count.stdout === "ring-count: 2\n",
+        said(count)
+      )
+      // NURING-36: a premade ring's number cannot be made to name another
+      // ring. close, dup2 and dup3 onto a ring's or the keeper's number die
+      // of SIGSYS, close_range answers ENOSYS, and a freed ring's number holds
+      // the keeper, so a duplicate takes another number.
+      const swaps = [
+        ["dup3-ring", "dup3 of an inherited ring onto premade ring 0's number"],
+        ["close-dup", "close of premade ring 0's descriptor, to free its number for F_DUPFD"],
+      ]
+      if (process.arch === "x64") swaps.push(["dup2-ring", "dup2 of an inherited ring onto premade ring 0's number"])
+      for (const [op, why] of swaps) {
+        const r = run(plainRing, [`inherit:${op}`, ring])
+        check(`sandbox: ${why} dies of SIGSYS (NURING-36, ${mode})`, r !== null && r.status === 0 && r.stdout === `${op}: start\ninherit:${op}: SIGSYS\n`, said(r))
+      }
+      const freedDup = run(plainRing, ["inherit:freed", ring])
+      check(
+        `sandbox: a ring a closed listener freed keeps its number on the keeper, and a duplicate takes another (NURING-36, ${mode})`,
+        freedDup !== null &&
+          freedDup.status === 0 &&
+          freedDup.stdout === "freed-dup: the duplicate took another number; the number holds another ring\nfreed-dup: ok\ninherit:freed: exit 0\n",
+        said(freedDup)
+      )
+      for (const [op, args, want, why] of [
+        ["keeper-enter", [], null, "io_uring_enter on the keeper's number dies of SIGSYS"],
+        ["close-range", [], "ENOSYS", "close_range over a premade ring's number answers ENOSYS"],
+        ["uring-close", ["ring"], "EBADF", "IORING_OP_CLOSE of a premade ring's own number answers EBADF"],
+        ["uring-close", ["keeper"], "EBADF", "IORING_OP_CLOSE of the keeper's number answers EBADF"],
+        ["uring-close", ["pipe"], "ok", "IORING_OP_CLOSE of a pipe's descriptor closes it (the control)"],
+        ["fd-ops", [], "ok", "dup2, dup3, close and F_DUPFD on descriptors that are no ring work (the control)"],
+      ]) {
+        const r = run(ring, [op, ...args])
+        const ok = want === null ? killed(r) && r.stdout === `${op}: start\n` : r !== null && r.status === 0 && r.stdout === `${op}: start\n${op}: ${want}\n`
+        check(`sandbox: ${why} (NURING-36, ${mode})`, ok, said(r))
+      }
+      const control = run(ring, ["ring-sqe", "0:0"])
+      check(
+        `sandbox: a premade ring completes a NOP (${mode}, the control)`,
+        control !== null && control.status === 0 && control.stdout === "ring-sqe: start\nring-sqe: ok\n",
+        said(control)
+      )
+      for (const [code, name] of refusedOps) {
+        const r = run(ring, ["ring-sqe", `${code}:0`])
+        check(
+          `sandbox: a premade ring refuses IORING_OP_${name} with EACCES (${mode})`,
+          r !== null && r.status === 0 && r.stdout === "ring-sqe: start\nring-sqe: EACCES\n",
+          said(r)
+        )
+      }
+      for (const [bit, name] of refusedFlags) {
+        const r = run(ring, ["ring-sqe", `0:${bit}`])
+        check(
+          `sandbox: a premade ring refuses IOSQE_${name} with EACCES (${mode})`,
+          r !== null && r.status === 0 && r.stdout === "ring-sqe: start\nring-sqe: EACCES\n",
+          said(r)
+        )
+      }
+      for (const [sqe, name] of allowedOps) {
+        const r = run(ring, ["ring-sqe", sqe])
+        check(
+          `sandbox: a premade ring takes ${name} past its restriction (${mode})`,
+          r !== null && r.status === 0 && r.stdout.startsWith("ring-sqe: start\nring-sqe: ") && !r.stdout.includes("EACCES") && !r.stdout.includes("no hook"),
+          said(r)
+        )
+      }
+      const serve = run(ring, ["serve"])
+      check(
+        `sandbox: a sandboxed NET_LISTEN_RING listener serves a loopback connection through a premade ring (${mode})`,
+        serve !== null && serve.status === 0 && serve.stdout === "serve: ok\n",
+        said(serve)
+      )
+    }
+    if (ringsWork) {
+      const three = path.join(dir, "rings-3", "ring.ll")
+      const c3 = spawnSync(NISH, [path.join(dir, "rings-3", "ring.ts"), "--sandbox", "-o", three], { cwd: root, encoding: "utf8" })
+      const exe3 = path.join(dir, "rings-3", "ring")
+      const l3 = c3.status === 0 ? linkNative(exe3, three, { driver: probeC, ...hooks }) : c3
+      const n3 = l3.status === 0 ? run(exe3, ["ring-count"]) : null
+      check(
+        "sandbox: `nish.netRings` 3 premakes 3 rings and their keeper",
+        n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 4\n",
+        l3.status === 0 ? said(n3) : shown(l3)
+      )
+    }
+    // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
+    // ring, which drops it; the stand-in refuses the flag as such a kernel
+    // does, and the pool keeps the probe's floor and makes none (NURING-33).
+    // A NET_LISTEN_RING listener there serves descriptors, sandboxed in
+    // either mode: the fallback a program gets wherever no ring is premade.
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const old = build(`ring-old-kernel-${mode}`, "ring", [flag], {
+        defines: [...hooks.defines, "-DUR_SYS_SETUP(e,p)=((p)->flags & (1u << 13) ? (errno = EINVAL, -1L) : syscall(__NR_io_uring_setup, e, p))"],
+      })
+      if (ringsWork) {
+        const oldCount = run(old, ["ring-count"])
+        const oldProbe = run(old, ["ring-probe"])
+        check(
+          `sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33, ${mode})`,
+          oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
+          `${said(oldCount)}\n${said(oldProbe)}`
+        )
+      }
+      const fallback = run(old, ["fallback"])
+      check(
+        `sandbox: where no ring is premade a NET_LISTEN_RING listener accepts a descriptor and netRingState() is negative (${mode})`,
+        fallback !== null && fallback.status === 0 && /^fallback: a descriptor, netRingState\(\) -\d+\n$/.test(fallback.stdout),
+        said(fallback)
+      )
+    }
 
     // seccomp answers EPERM to the metadata calls Landlock does not decide, so
     // a program without fs.write cannot chmod, touch or tag a file.
@@ -32605,7 +33925,7 @@ if (!only || "sandbox".includes(only)) {
         `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
       ) &&
       !scopedText.includes("@.sandbox.write") &&
-      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null)`) &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null, i32 0)`) &&
       (as === null || as.status === 0),
     sc.status === 0
       ? `${scopedText
@@ -32709,7 +34029,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
       check(
         "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.read scope",
         ir(reader).includes(`c"${fs.realpathSync(path.join(linkDir, reader, "data"))}\\00\\00"`) &&
-          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null\)/.test(
+          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null, i32 0\)/.test(
             ir(reader)
           ),
         ir(reader)
@@ -32748,7 +34068,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
         check(
           "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
           ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
-            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null, i32 0\)/.test(
               ir(writer)
             ),
           ir(writer)
@@ -40294,10 +41614,13 @@ if (!only || "hooks".includes(only) || "format".includes(only)) {
 // ---- The spec tests: test/spec/<n>.ts, emitted by vector from contracts/<n>.json --------
 // Each test names the contract it was emitted from by hash on its one
 // `// vector-contract-sha256:` line. A test whose contract is missing or has moved
-// since is a FAIL: regenerate it (contracts/README.md). A test of a module std/ does
+// since is a FAIL, and a current one is a PASS of its own before the run's line:
+// regenerate a stale one (contracts/README.md). A test of a module std/ does
 // not have yet is a SKIP naming the module; otherwise the test is built and run, and
-// passes on exit 0, no FAIL line, and the `vector-done <nonce>` line its main prints
-// last, so a test that stopped early cannot pass. vector itself is not needed here.
+// passes on exit 0, no FAIL line, at least one PASS line, and the `vector-done <nonce>`
+// line its main prints last, so a test that stopped early, or whose every clause was
+// skipped, cannot pass: as in vector's own run, nothing ran. Each `SKIP` line the test
+// prints is a SKIP of its own. vector itself is not needed here.
 if (!only || "spec".includes(only)) {
   const specDir = path.join(root, "test", "spec")
   const tests = fs.existsSync(specDir)
@@ -40321,14 +41644,13 @@ if (!only || "spec".includes(only)) {
       .split("\n")
       .filter((l) => l.startsWith("// vector-contract-sha256:"))
       .map((l) => l.slice("// vector-contract-sha256:".length).trim())
-    if (pins.length !== 1 || pins[0] !== want) {
-      check(
-        `spec: ${rel} was emitted from ${contractRel} as it is now`,
-        false,
-        `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
-      )
-      continue
-    }
+    const fresh = pins.length === 1 && pins[0] === want
+    check(
+      `spec: ${rel} was emitted from ${contractRel} as it is now`,
+      fresh,
+      `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
+    )
+    if (!fresh) continue
     let mod
     try {
       mod = JSON.parse(fs.readFileSync(contractPath, "utf8"))?.target?.module
@@ -40372,13 +41694,18 @@ if (!only || "spec".includes(only)) {
       maxBuffer: 64 * 1024 * 1024,
     })
     const lines = (r.stdout ?? "").split("\n")
+    const ran = lines.some((l) => l.startsWith("PASS  "))
     check(
       `spec: ${rel} passes against ${stdRel}`,
       r.status === 0 &&
         !lines.some((l) => l.startsWith("FAIL")) &&
-        lines.some((l) => l.startsWith(`vector-done ${nonce} `)),
-      shown(r)
+        lines.some((l) => l.startsWith(`vector-done ${nonce} `)) &&
+        ran,
+      ran ? shown(r) : `no clause passed, so nothing was checked\n${shown(r)}`
     )
+    // A clause the test skipped, such as a slow iterated vector emitted without
+    // `--slow`, does not fail the run; each is a SKIP here so the summary counts it.
+    for (const l of lines) if (l.startsWith("SKIP  ")) skip(`spec: ${rel}: ${l.slice("SKIP  ".length)}`)
   }
 }
 

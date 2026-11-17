@@ -4,7 +4,7 @@
   "source": {
     "title": "Spec 0001: nish/hex — hexadecimal encoding and decoding",
     "main": "hex",
-    "sha256": "c504ccba7354a38e0e5cb24e4863de5d8b34566c9bf6c3b5ad56557e9a53d4bb"
+    "sha256": "03aafc66e97c076335b4dcc853f18c71a4af5fcecc81d5178eef2eebe4332920"
   },
   "sources": [
     {
@@ -359,7 +359,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -404,7 +405,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -467,7 +469,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -555,7 +558,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -648,7 +652,8 @@
             }
           ]
         }
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -700,7 +705,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -875,7 +881,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -973,7 +980,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -1125,7 +1133,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     },
     {
       "kind": "property",
@@ -1185,7 +1194,8 @@
             ]
           }
         ]
-      }
+      },
+      "samples": 96
     }
   ]
 }

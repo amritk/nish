@@ -131,40 +131,14 @@ scratch under opt -O2 (tests/wipes/crypto.js, tests/run.js), recorded in
 docs/security/crypto-ecc.md.</t>
         </li>
       </ul>
-      <t>Of Section 7.1, only the public keys are vectors:</t>
-      <ul spacing="normal">
-        <li>
-          <t>Signatures: vector extract refuses every signing row. Under the label
-the section prints, such as "MESSAGE (length 1 byte)", the argument is
-"not a literal", since a <tt>Call</tt> label admits only letters, digits, <tt>-</tt>
-and spaces. Under "MESSAGE", fidelity refuses it because the value is
-printed under "MESSAGE (length 1 byte)". TEST 1's empty message is
-printed only as a length, and fidelity wants "" or "(0 octets)". TEST
-1024's 1023-byte message fits as hex pairs; only its label blocks it.</t>
-        </li>
-        <li>
-          <t>Verification: a row expecting <tt>true</tt> must cover a requirement cited to
-Section 7.1 that states the result, and the section states none.</t>
-        </li>
-      </ul>
-      <t>The properties hold signing and verification instead, and
-tests/link/crypto_ed25519/rfc.ts signs and verifies all five Section 7.1
-tests against the printed signatures.</t>
-      <t>std/crypto/ed25519.ts also exports three <tt>i32</tt> constants, which a vector or
-property cannot call:</t>
-      <ul spacing="normal">
-        <li>
-          <t>ED25519_SEED_SIZE: the 32-octet seed every property draws.</t>
-        </li>
-        <li>
-          <t>ED25519_PUBLIC_KEY_SIZE: held by P-PUB-32.</t>
-        </li>
-        <li>
-          <t>ED25519_SIGNATURE_SIZE: held by P-SIG-FORM.</t>
-        </li>
-      </ul>
-      <t>vector 0.2.1 cannot declare <tt>outOfScope</tt> exports, so this section is their
-record.</t>
+      <t>Section 7.1's public keys and signatures are vectors. Its verifications are
+not: a row expecting <tt>true</tt> has to cover a requirement cited to Section 7.1
+that states the result, and the section states none. The properties hold
+verification instead, and tests/link/crypto_ed25519/rfc.ts verifies all
+five Section 7.1 tests against the printed signatures.</t>
+      <t>Out of scope: ED25519_SEED_SIZE, an <tt>i32</tt> constant a vector or property cannot call; every property draws a 32-octet seed</t>
+      <t>Out of scope: ED25519_PUBLIC_KEY_SIZE, an <tt>i32</tt> constant a vector or property cannot call; P-PUB-32 holds the 32-byte public key</t>
+      <t>Out of scope: ED25519_SIGNATURE_SIZE, an <tt>i32</tt> constant a vector or property cannot call; P-SIG-FORM holds the 64-octet signature</t>
     </section>
     <section anchor="properties">
       <name>Properties</name>
@@ -179,7 +153,7 @@ forall (seed: u8[] /* 32..32 */, msg: u8[] /* 0..130 */) =>
   { const sig = unwrap(ed25519Sign(seed, msg)); return sig.length === 64 && bitAnd(sig.slice(63, 64), fill(224, 1)) === zeros(1); }
 ]]></sourcecode>
       <sourcecode type="ts-property"><![CDATA[
-// P-ROUNDTRIP covers R-VERIFY-EQ, R-PURE — a signature verifies under the seed's public key
+// P-ROUNDTRIP covers R-VERIFY-EQ — a signature verifies under the seed's public key
 forall (seed: u8[] /* 32..32 */, msg: u8[] /* 0..130 */) =>
   ed25519Verify(unwrap(ed25519PublicKey(seed)), msg, unwrap(ed25519Sign(seed, msg))) === true
 ]]></sourcecode>
@@ -274,6 +248,61 @@ forall (seed: u8[] /* 32..32 */, msg: u8[] /* 0..40 */, cut: i32 /* 1..32 */) =>
               <xref section="7.1" sectionFormat="of" target="RFC8032"/></td>
             <td align="left">RFC 8032 7.1 TEST SHA(abc): the public key</td>
           </tr>
+          <tr>
+            <td align="left">7.1-T1-SIG</td>
+            <td align="left">
+              <tt>ed25519Sign(SECRET KEY = 9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60, MESSAGE (length 0 bytes) = (empty))</tt></td>
+            <td align="left">
+              <tt>SIGNATURE = e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b</tt></td>
+            <td align="left">R-SIG-FORM, R-PURE</td>
+            <td align="left">
+              <xref section="7.1" sectionFormat="of" target="RFC8032"/></td>
+            <td align="left">RFC 8032 7.1 TEST 1: the signature</td>
+          </tr>
+          <tr>
+            <td align="left">7.1-T2-SIG</td>
+            <td align="left">
+              <tt>ed25519Sign(SECRET KEY = 4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb, MESSAGE (length 1 byte) = 72)</tt></td>
+            <td align="left">
+              <tt>SIGNATURE = 92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00</tt></td>
+            <td align="left">R-SIG-FORM, R-PURE</td>
+            <td align="left">
+              <xref section="7.1" sectionFormat="of" target="RFC8032"/></td>
+            <td align="left">RFC 8032 7.1 TEST 2: the signature</td>
+          </tr>
+          <tr>
+            <td align="left">7.1-T3-SIG</td>
+            <td align="left">
+              <tt>ed25519Sign(SECRET KEY = c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7, MESSAGE (length 2 bytes) = af82)</tt></td>
+            <td align="left">
+              <tt>SIGNATURE = 6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a</tt></td>
+            <td align="left">R-SIG-FORM, R-PURE</td>
+            <td align="left">
+              <xref section="7.1" sectionFormat="of" target="RFC8032"/></td>
+            <td align="left">RFC 8032 7.1 TEST 3: the signature</td>
+          </tr>
+          <tr>
+            <td align="left">7.1-T1024-SIG</td>
+            <td align="left">
+              <tt>ed25519Sign(SECRET KEY = f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5, MESSAGE (length 1023 bytes) = 08b8b2b733424243760fe426a4b54908632110a66c2f6591eabd3345e3e4eb98fa6e264bf09efe12ee50f8f54e9f77b1e355f6c50544e23fb1433ddf73be84d879de7c0046dc4996d9e773f4bc9efe5738829adb26c81b37c93a1b270b20329d658675fc6ea534e0810a4432826bf58c941efb65d57a338bbd2e26640f89ffbc1a858efcb8550ee3a5e1998bd177e93a7363c344fe6b199ee5d02e82d522c4feba15452f80288a821a579116ec6dad2b3b310da903401aa62100ab5d1a36553e06203b33890cc9b832f79ef80560ccb9a39ce767967ed628c6ad573cb116dbefefd75499da96bd68a8a97b928a8bbc103b6621fcde2beca1231d206be6cd9ec7aff6f6c94fcd7204ed3455c68c83f4a41da4af2b74ef5c53f1d8ac70bdcb7ed185ce81bd84359d44254d95629e9855a94a7c1958d1f8ada5d0532ed8a5aa3fb2d17ba70eb6248e594e1a2297acbbb39d502f1a8c6eb6f1ce22b3de1a1f40cc24554119a831a9aad6079cad88425de6bde1a9187ebb6092cf67bf2b13fd65f27088d78b7e883c8759d2c4f5c65adb7553878ad575f9fad878e80a0c9ba63bcbcc2732e69485bbc9c90bfbd62481d9089beccf80cfe2df16a2cf65bd92dd597b0707e0917af48bbb75fed413d238f5555a7a569d80c3414a8d0859dc65a46128bab27af87a71314f318c782b23ebfe808b82b0ce26401d2e22f04d83d1255dc51addd3b75a2b1ae0784504df543af8969be3ea7082ff7fc9888c144da2af58429ec96031dbcad3dad9af0dcbaaaf268cb8fcffead94f3c7ca495e056a9b47acdb751fb73e666c6c655ade8297297d07ad1ba5e43f1bca32301651339e22904cc8c42f58c30c04aafdb038dda0847dd988dcda6f3bfd15c4b4c4525004aa06eeff8ca61783aacec57fb3d1f92b0fe2fd1a85f6724517b65e614ad6808d6f6ee34dff7310fdc82aebfd904b01e1dc54b2927094b2db68d6f903b68401adebf5a7e08d78ff4ef5d63653a65040cf9bfd4aca7984a74d37145986780fc0b16ac451649de6188a7dbdf191f64b5fc5e2ab47b57f7f7276cd419c17a3ca8e1b939ae49e488acba6b965610b5480109c8b17b80e1b7b750dfc7598d5d5011fd2dcc5600a32ef5b52a1ecc820e308aa342721aac0943bf6686b64b2579376504ccc493d97e6aed3fb0f9cd71a43dd497f01f17c0e2cb3797aa2a2f256656168e6c496afc5fb93246f6b1116398a346f1a641f3b041e989f7914f90cc2c7fff357876e506b50d334ba77c225bc307ba537152f3f1610e4eafe595f6d9d90d11faa933a15ef1369546868a7f3a45a96768d40fd9d03412c091c6315cf4fde7cb68606937380db2eaaa707b4c4185c32eddcdd306705e4dc1ffc872eeee475a64dfac86aba41c0618983f8741c5ef68d3a101e8a3b8cac60c905c15fc910840b94c00a0b9d0)</tt></td>
+            <td align="left">
+              <tt>SIGNATURE = 0aab4c900501b3e24d7cdf4663326a3a87df5e4843b2cbdb67cbf6e460fec350aa5371b1508f9f4528ecea23c436d94b5e8fcd4f681e30a6ac00a9704a188a03</tt></td>
+            <td align="left">R-SIG-FORM, R-PURE</td>
+            <td align="left">
+              <xref section="7.1" sectionFormat="of" target="RFC8032"/></td>
+            <td align="left">RFC 8032 7.1 TEST 1024: the signature</td>
+          </tr>
+          <tr>
+            <td align="left">7.1-TABC-SIG</td>
+            <td align="left">
+              <tt>ed25519Sign(SECRET KEY = 833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42, MESSAGE (length 64 bytes) = ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f)</tt></td>
+            <td align="left">
+              <tt>SIGNATURE = dc2a4459e7369633a52b1bf277839a00201009a3efbf3ecb69bea2186c26b58909351fc9ac90b3ecfdfbc7c66431e0303dca179c138ac17ad9bef1177331a704</tt></td>
+            <td align="left">R-SIG-FORM, R-PURE</td>
+            <td align="left">
+              <xref section="7.1" sectionFormat="of" target="RFC8032"/></td>
+            <td align="left">RFC 8032 7.1 TEST SHA(abc): the signature</td>
+          </tr>
         </tbody>
       </table>
     </section>
@@ -323,88 +352,125 @@ forall (seed: u8[] /* 32..32 */, msg: u8[] /* 0..40 */, cut: i32 /* 1..32 */) =>
     </references>
   </back>
   <!-- ##markdown-source:
-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
-GINPbSdG3gmOrHEPYIPNoRtPPZ4A94kXg7A8V4S2dFw/sD1feIE/CSWSKU38
-ZOLLOI0cZJVHq26cfjs2i1+O+jwWgwP4/B+CcyaAaCQAAA==
+H4sIAAAAAAAAA81Z2XIbR5Z9x1fkyBHdpIeAcl/opYOmaFvR1tKi3DEe22Hl
+SqINAmhUQTLHcsd8xHzAfMt8ynzJnKwqgKBILW3pYaQIEihUZeY9995zzgXH
+4/GonbazfEjunKQXfpWa8fF69TyTe9Ozaetn5HR6NvftepXJ0exssZq25xdk
+7yTdOz3avzPyIazy80Mynzbnd+Pqctku7ubElWJulBZx7i+wcFr50o5XJVoq
++Hj4eEzpKPo2Y8nLQzKdl8Voulwdkna1blpOqaN81KzDxbRppot5e7nM9a6U
+lxk/5u0Im4pRwgKHhFOux4yNmR79nC9fLFbpcETImDzPsV2sxhd+Oh8/+fK4
+7j7y6/Z8seo/70/3EEcnR93lBpcJWazO+oBG88XqwrfT57neP6xwOBqPx8SH
+pl352I5GR2S5WpTpLJNFqfeQehMpi9VtmBySxwCyA4+c9JcIjjw6y/O8wk6L
++QFpgPd0fkb8PCGC1bRMY/fJhJzg7SVZ5b+vp6t8ARDI39eLNjfbbQ9Ie55H
+NV7SLNarmD8huXsmALm6ZoOH8jxeP+veg29Pnx6Q+pM8fIRXp18fffPN8GvU
+XXly8pdv7z85ubdPpg3Bjm1OgInkX+JsnfD6PK/yZNQhczFNaZZHo4/I/Xm7
+WqR1rIcfjZ6e5xoqqelpyJ26252D/nfdtb7e7FJfd5tvX4yGO06/fvTtN/eu
+Xl09efzowYOTh/f6h3GVXLs0uvPg6Dt8UjG98+jx0/uPHh59cwf1BMAQESp1
+3eHpUeXtgoSMj9q8Wq5yjdQ3o5SbuJoGvMEzXxw//p//ZpL8+uu/AETOmPvt
+t+GNZUbizYvzPO93W8xnl8Nb5OZy5JfL7Fd1FT+bkeiXtcca3NuQ5nzxYr6B
+8uPvKzI/HpJPQ1wy+flwoQZ87eIGs2sXO8xuXrnxcA/iLZdu2WaL5rXrryB9
+/bxH3117v8F95+Knf5pN55mMmf3T56PR6JaOIdOL5awr9mbbMf6q4slp7uqL
+qAkjKRes1pBpezB6AZ5CAki+WLaXJIJB8i9tl5H5Ah2bz31zPiG1KJer6XPQ
+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
 
 -->
 

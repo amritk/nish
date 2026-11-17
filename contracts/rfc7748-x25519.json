@@ -207,6 +207,99 @@
       }
     },
     {
+      "kind": "vector",
+      "id": "5.2-ITER-1000",
+      "title": "RFC 7748 5.2: 1,000 iterations from k = u = 9",
+      "covers": ["R-ITER"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        },
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        }
+      ],
+      "expect": {
+        "hex": "684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51",
+        "label": "After 1,000 iterations"
+      },
+      "iterate": {
+        "count": 1000,
+        "names": ["k", "u"],
+        "next": [
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "var": "u"
+              }
+            ]
+          },
+          {
+            "var": "k"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "5.2-ITER-1M",
+      "title": "RFC 7748 5.2: 1,000,000 iterations from k = u = 9",
+      "covers": ["R-ITER"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        },
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        }
+      ],
+      "expect": {
+        "hex": "7c3911e0ab2586fd864497297e575e6f3bc601c0883c30df5f4dd2d24f665424",
+        "label": "After 1,000,000 iterations"
+      },
+      "iterate": {
+        "count": 1000000,
+        "names": ["k", "u"],
+        "next": [
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "var": "u"
+              }
+            ]
+          },
+          {
+            "var": "k"
+          }
+        ],
+        "slow": true
+      }
+    },
+    {
       "kind": "property",
       "id": "P-SIZES",
       "title": "X25519 answers exactly when the scalar and the u-coordinate are both 32 bytes",
@@ -1046,6 +1139,80 @@
           ]
         }
       }
+    }
+  ],
+  "outOfScope": [
+    {
+      "name": "f25519Add64",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Sub64",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Mul64",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Zero",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Small",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Copy",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Carry",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Add",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Sub",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Mul",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Square",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519SquareTimes",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Pow250",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Invert",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Swap",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Decode",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Encode",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "X25519_SIZE",
+      "reason": "a constant, not a function; the properties test the 32-byte sizes it names through x25519"
     }
   ]
 }

@@ -204,8 +204,10 @@ check(
 // The terminal's look before it is used ships in theme.css on every docs page
 // too; the rest comes with the shell. The baseline is theme.css on main
 // (c6c797f9b) before the terminal took keys, plus 404 B for the inline-code
-// style added after it, which is no part of the terminal.
-const THEME_GZIP_BEFORE = 8956 + 404
+// style added after it, 180 B for the tables' column layout and the hero
+// name's unfold and 50 B for the current header link's single underline, none
+// of which is part of the terminal.
+const THEME_GZIP_BEFORE = 8956 + 404 + 180 + 50
 const THEME_GZIP_GROWTH = 250
 const themeGzipped = zlib.gzipSync(fs.readFileSync(path.join(root, "docs", "site", "theme.css")), { level: 9 }).length
 check(
@@ -218,6 +220,54 @@ check(
   !/nish-hero__(caret|said|line-in)|nish-hero__terminal--live|nish-caret/.test(
     fs.readFileSync(path.join(root, "docs", "site", "theme.css"), "utf8")
   )
+)
+
+// --- og.mp4: the share card's video ------------------------------------------
+
+// An unfurler fetches og:video itself, often only its first bytes, so the clip
+// stays small and plays from its head: an MP4 (ftyp first) whose index (moov)
+// comes before its data (mdat). scripts/gen-og-video.mjs makes it; the boxes
+// are read here from the bytes, so no ffmpeg is needed.
+const OG_VIDEO_BUDGET = 1024 * 1024
+const ogVideoFile = path.join(root, "docs", "site", "og.mp4")
+const ogVideo = fs.existsSync(ogVideoFile) ? fs.readFileSync(ogVideoFile) : null
+check("docs/site/og.mp4 exists", ogVideo !== null)
+if (ogVideo !== null) {
+  check(
+    `og.mp4 is at most ${OG_VIDEO_BUDGET} B`,
+    ogVideo.length <= OG_VIDEO_BUDGET,
+    `${ogVideo.length} B`
+  )
+  /** The file's top-level box types, in order. */
+  const boxes = []
+  for (let at = 0; at + 8 <= ogVideo.length; ) {
+    const size32 = ogVideo.readUInt32BE(at)
+    boxes.push(ogVideo.toString("latin1", at + 4, at + 8))
+    // A 64-bit size needs 16 bytes; a truncated one ends the walk, and the
+    // checks below fail on what it found, rather than the script throwing.
+    if (size32 === 1 && at + 16 > ogVideo.length) break
+    const size = size32 === 1 ? Number(ogVideo.readBigUInt64BE(at + 8)) : size32 === 0 ? ogVideo.length - at : size32
+    if (size < 8) break
+    at += size
+  }
+  check("og.mp4 starts with an ftyp box", boxes[0] === "ftyp", boxes.join(" "))
+  check(
+    "og.mp4 has its moov before its mdat (faststart)",
+    boxes.includes("moov") && boxes.includes("mdat") && boxes.indexOf("moov") < boxes.indexOf("mdat"),
+    boxes.join(" ")
+  )
+}
+const ogVideoUrls = JSON.parse(fs.readFileSync(path.join(root, "scalar.config.json"), "utf8"))
+  .siteConfig.head.meta.filter((tag) => /^og:video(:secure_url|:url)?$/.test(tag.property ?? ""))
+  .map((tag) => tag.content)
+check(
+  "every og:video URL names a file in docs/site",
+  ogVideoUrls.length > 0 &&
+    ogVideoUrls.every((url) => {
+      const match = /^https:\/\/nishlang\.com\/([^/?#]+)$/.exec(url)
+      return match !== null && fs.existsSync(path.join(root, "docs", "site", match[1]))
+    }),
+  ogVideoUrls.join(", ")
 )
 
 /**

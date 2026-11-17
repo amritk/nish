@@ -5,8 +5,9 @@
 // The program accepts until tcpAccept answers -23, closes the first handle,
 // checks that the closed handle answers -9 to netRead, netWrite and sendFd,
 // and waits for the freed slot to take a connection from the backlog under a
-// handle of its own. Exit 0 is a pass, 2 says the kernel refused rings (the
-// section's skip), and 1 is a failure, with its line.
+// handle of its own. Exit 0 is a pass, 2 says the kernel refused rings (a
+// skip unsandboxed; a failure under --sandbox once the unsandboxed run
+// passed), and 1 is a failure, with its line.
 import {
   NET_LISTEN_RING,
   netClose,

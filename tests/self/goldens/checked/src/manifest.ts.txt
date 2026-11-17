@@ -58,7 +58,7 @@ struct ManifestMembers (class) size=48 align=8
   field valueEnd: i32[] index=4 offset=32
   field broken: i32 index=5 offset=40
   constructor -> @ManifestMembers.constructor
-struct NishManifest (class) size=40 align=8 exported
+struct NishManifest (class) size=48 align=8 exported
   field problem: string index=0 offset=0
   field problemStart: i32 index=1 offset=8
   field problemEnd: i32 index=2 offset=12
@@ -67,6 +67,8 @@ struct NishManifest (class) size=40 align=8 exported
   field hostAt: i32 index=5 offset=24
   field hostEnd: i32 index=6 offset=28
   field compatAt: i32 index=7 offset=32
+  field netRingsAt: i32 index=8 offset=36
+  field netRingsEnd: i32 index=9 offset=40
   constructor -> @NishManifest.constructor
 struct ManifestCompat (class) size=16 align=8 exported
   field all: boolean index=0 offset=0
@@ -233,14 +235,14 @@ function manifestRepeatedMember(members: ManifestMembers): i32 -> @manifestRepea
   local +2:9 j: i32 (let)
 function NishManifest.constructor(this: NishManifest): void -> @NishManifest.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function manifestSpanEnd(start: i32, end: i32): i32 -> @manifestSpanEnd
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end start
   stackSites=0 stackLocals=0
 function manifestNishProblem(problem: string, start: i32, end: i32): NishManifest -> @manifestNishProblem
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   escaping: end problem start
   calls: NishManifest.constructor manifestSpanEnd nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -248,7 +250,7 @@ function manifestNishProblem(problem: string, start: i32, end: i32): NishManifes
   callee +0:15 new NishManifest -> @NishManifest.constructor
   callee +3:20 manifestSpanEnd -> @manifestSpanEnd
 function manifestNish(manifest: string, condition: string): NishManifest -> @manifestNish [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   escaping: manifest
   calls: NishManifest.constructor manifestMalformedAt manifestMembers manifestNishProblem manifestRepeatedMember manifestSkipBlank nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
@@ -275,7 +277,7 @@ function manifestNish(manifest: string, condition: string): NishManifest -> @man
   callee +50:16 manifestNishProblem -> @manifestNishProblem
   local +61:11 shaped: boolean (let)
   callee +68:16 manifestNishProblem -> @manifestNishProblem
-  callee +72:14 manifestNishProblem -> @manifestNishProblem
+  callee +75:14 manifestNishProblem -> @manifestNishProblem
 function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNoPanic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: at manifest

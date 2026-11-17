@@ -499,7 +499,9 @@ runtime restricted before the filter loaded.
    `recvfrom`, `sendto` or `close` on a socket the process holds. The ring
    adds where a connection lives, not what the program may do with it.
 4. **The filter then kills `io_uring_setup` and `io_uring_register`.** It
-   allows `io_uring_enter`. Without `net`, all three stay killed, as now. With
+   allows `io_uring_enter` only when its first argument, the low word of
+   `args[0]`, is the descriptor of a ring step 1 made, and kills it on any
+   other descriptor, or always when no ring was made. Without `net`, all three stay killed, as now. With
    `net` and `process.spawn`, nothing changes. A program cannot make a ring of
    its own, cannot lift a ring's restrictions (they are set once, before the
    ring is enabled: `io_register_restrictions` requires
@@ -510,8 +512,14 @@ runtime restricted before the filter loaded.
 write and close sockets. A restricted ring can do those things and nothing
 else, and only on slots that hold sockets from the process's own listeners.
 `io_uring_enter` on a descriptor that is not one of the runtime's rings
-answers `-EOPNOTSUPP` (`io_uring/io_uring.c:3484`), and the program cannot
-make another ring. A program that gets hold of a ring's descriptor through
+dies of SIGSYS: the kernel's own answer, `-EOPNOTSUPP` for a file that is
+no ring (`io_uring/io_uring.c:3484`), would not stop a ring made outside
+the sandbox and inherited across `exec` (NURING-35), and the program cannot
+make another ring. The filter matches numbers, not files, so it also keeps
+each premade ring's number from being closed or replaced: `close`, `dup2`
+and `dup3` onto one kill, and a closed listener's ring is dropped by
+`dup3` of a keeper ring, which takes only NOP, onto its number, so no ring
+number is ever free for `dup` or `fcntl(F_DUPFD)` (NURING-36). A program that gets hold of a ring's descriptor through
 `nish:ffi` can submit only what the restrictions allow, which is what
 `nish:net` does anyway. A `SEND` with a destination address is a `sendto`
 with one. On a TCP socket the address is ignored, and on a UDP socket it is
@@ -657,16 +665,39 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    past the limit, and `bench/http1-server.ts` gains `BENCH_RING=1`. This
    stage re-measures the entry: one process with rings against five epoll
    processes, with SQLite, at 18k and at the box's C. It is gated on the same
-   rule as §4.
+   rule as §4. *Measured in S4* ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#io_uring-under-the-handler-wp63-s4)): `bash
+   bench/handler-ring/run.sh`, 5 interleaved rounds, a stand-in that answers
+   `GET /plaintext` with one SQLite lookup, under a hard limit of 20,000. One
+   ring process spent 25.63 µs a request against 34.60 for five epoll
+   processes at 18,000 (25.9% less, band 0.5%) and 26.20 against 37.17 at
+   96,000, the box's C (29.5% less, band 0.7%), holding 96,000 connections with
+   21 descriptors. Both halves of §4's rule hold: go. Its PSS was 518 MB
+   against 129 MB at 96,000.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
-   not depend on S1 to S4 and can land first.
+   not depend on S1 to S4 and can land first. *Measured in S5*
+   ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5)):
+   `bash bench/handler-ring/wins.sh --rounds 7`, on S4's stand-in as five
+   epoll processes at 18,000 connections, each win on its own against the
+   unchanged five. `PRAGMA mmap_size=268435456` spent 27.87 µs a request
+   against 33.07 (15.7% less, band 0.6%; at least 11.3% less in every round),
+   all of it system time, and did not lower memory: RSS rose from 49 to
+   1,301 MB and PSS from 37 to 279 MB as the mapped file was counted against
+   the workers, with the box's used memory unchanged. A like-count cache in
+   one `nish/sync/shm` region spent 28.13 µs (14.9% less), answering 30.0% of
+   requests without SQLite; the same cache held in each worker answered 7.3%
+   and its 2.0% was not separable from noise, so the gain is the cache's, and
+   sharing bought its fill rate from cold. Both are gains on the stand-in;
+   rerun `wins.sh` on the entry before it adopts either.
 
 ## 11. Open questions
 
 - **D1: opt-in or default.** This note makes the ring bit opt-in (§5.1). If
   S4 shows the ring path no dearer at low C, the bit could become the default
   for listeners on Linux, with descriptors as the fallback. The cost is the
-  `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers.*
+  `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers. Kept in S4: the ring path is
+  not dearer at 18,000 or 96,000, so the numbers allow a default, but it costs
+  about four times the memory a connection at 96,000 and no low C was measured
+  beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The
   rings must exist before the filter loads, so their number is fixed at
   start-up, and the runtime must know before `main` that the program uses
@@ -674,7 +705,9 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   binary, as it records other capability use. Two candidates: a
   build-time count from a `nish.json` setting, with 1 as the default, or
   `ceil(hard limit × k / limit)` for a declared connection ceiling. Without
-  `--sandbox`, rings are made on demand.
+  `--sandbox`, rings are made on demand. *Decided in S3: `netRings` in the root
+  `package.json`'s `"nish"` field, 1 to 64, default 1 (NL3058 otherwise);
+  the compiler passes 0 when `main` cannot reach the bit or `net`.*
 - **D3: one thread or more.** This design is one thread with N rings, which
   keeps the single-threaded `nish:net` model WP42 §1 fixed. The top entry
   runs a ring per thread. Rings per thread would need `nish:net` inside

@@ -52,7 +52,7 @@ import {
   panicTailCallees,
 } from "./emit-builtins"
 import { isBuiltinFunction } from "./builtins"
-import { isExecutorCall } from "./nish-modules"
+import { isExecutorCall, netOption } from "./nish-modules"
 import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
@@ -924,6 +924,14 @@ export class FunctionFacts {
   /** Every call to a user function, by callee symbol and call node, in walk order: the edges the witnesses follow. */
   capCallees: string[]
   capSites: Node[]
+  /**
+   * WP63 S3: whether this function can reach a `tcpListenFlags` call whose
+   * flags may set `NET_LISTEN_RING`, directly or through a callee, carried
+   * along `caps`'s edges (`propagateCapabilities`). A flags argument the
+   * compiler cannot fold counts (`listenFlagsMayRing`): `--sandbox` makes the
+   * rings before `main`, so the one wrong answer is a ring nobody asked for.
+   */
+  ringListen: boolean
 
   constructor(paramNames: string[], nodeCount: i32) {
     this.hasLoops = false
@@ -1006,6 +1014,7 @@ export class FunctionFacts {
     this.capSite = []
     this.capDist = []
     this.capCallees = []
+    this.ringListen = false
     this.capSites = []
   }
 
@@ -3423,6 +3432,12 @@ class FactCollector {
     }
     if (label !== CAP_NONE) {
       this.facts.offerCapability(label, name, call, 0)
+    }
+    if (
+      (name === "tcpListenFlags" || name.endsWith(".tcpListenFlags")) &&
+      listenFlagsMayRing(this.unit.program, call)
+    ) {
+      this.facts.ringListen = true
     }
   }
 
@@ -6006,6 +6021,10 @@ const relaxEdge = (f: FunctionFacts, e: i32, g: FunctionFacts): boolean => {
     return false
   }
   let moved = false
+  if (g.ringListen && !f.ringListen) {
+    f.ringListen = true
+    moved = true
+  }
   let c = 0
   while (c < CAPABILITY_COUNT && c < g.capDist.length) {
     if ((g.caps & (1 << c)) !== 0 && f.offerCapability(c, f.capCallees[e], f.capSites[e], g.capDist[c] + 1)) {
@@ -7159,6 +7178,51 @@ export const returnAttributes = (
     attrs.push(`align ${align}`) // WP6: may be null
   }
   return attrs
+}
+
+/**
+ * WP63 S3: what `tcpListenFlags`'s flags argument folds to, or -1 when the
+ * compiler cannot say: an integer literal, a `nish:net` constant the checker
+ * bound (`nodeBuiltins`, so a local of the same name is not one), and `|` and
+ * parentheses over those. Anything else is -1.
+ */
+const listenFlagsValue = (program: CheckedProgram, node: Node): i32 => {
+  if (node.kind === NodeKind.Paren && node.children.length === 1) {
+    return listenFlagsValue(program, node.children[0])
+  }
+  if (node.kind === NodeKind.Number) {
+    const value = numericLiteralValue(node.text)
+    return value >= 0 && value < 2147483648.0 && Math.floor(value) === value ? toI32(value) : -1
+  }
+  if (node.kind === NodeKind.Binary && node.text === "|" && node.children.length === 2) {
+    const left = listenFlagsValue(program, node.children[0])
+    const right = listenFlagsValue(program, node.children[1])
+    return left < 0 || right < 0 ? -1 : left | right
+  }
+  if (node.kind === NodeKind.Ident || node.kind === NodeKind.Member) {
+    const bound = node.id >= 0 && node.id < program.nodeBuiltins.length ? program.nodeBuiltins[node.id] : ""
+    if (bound.length === 0) {
+      return -1
+    }
+    let dot = bound.length - 1
+    while (dot >= 0 && bound.charCodeAt(dot) !== 46) {
+      dot = dot - 1
+    }
+    const name = bound.substring(dot + 1)
+    const value = netOption(name)
+    return value > 0 && name.startsWith("NET_") ? value : -1
+  }
+  return -1
+}
+
+/** Whether a `tcpListenFlags` call may set `NET_LISTEN_RING`: its flags fold to a value that has it, or fold to nothing. */
+const listenFlagsMayRing = (program: CheckedProgram, call: Node): boolean => {
+  const args = call.children[1].children
+  if (args.length < 4) {
+    return true
+  }
+  const flags = listenFlagsValue(program, args[3])
+  return flags < 0 || (flags & netOption("NET_LISTEN_RING")) !== 0
 }
 
 /** A numeric literal, negated or not: `process.exit(1)`, `process.exit(-1)`. */

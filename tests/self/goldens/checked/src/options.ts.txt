@@ -38,17 +38,18 @@ struct Options (class) size=248 align=8 exported
   field deterministic: boolean index=32 offset=164
   field sandbox: i32 index=33 offset=168
   field sandboxCapabilities: i32 index=34 offset=172
-  field panicSites: boolean index=35 offset=176
-  field rootSymbols: string[] index=36 offset=184
-  field holdsRoots: boolean index=37 offset=192
-  field sandboxRead: string[] index=38 offset=200
-  field sandboxWrite: string[] index=39 offset=208
-  field sandboxExec: string[] index=40 offset=216
-  field updateCapabilityLock: boolean index=41 offset=224
-  field compat: boolean index=42 offset=225
-  field compatFlag: boolean index=43 offset=226
-  field compatFeatures: string[] index=44 offset=232
-  field numberModeFlag: boolean index=45 offset=240
+  field sandboxNetRings: i32 index=35 offset=176
+  field panicSites: boolean index=36 offset=180
+  field rootSymbols: string[] index=37 offset=184
+  field holdsRoots: boolean index=38 offset=192
+  field sandboxRead: string[] index=39 offset=200
+  field sandboxWrite: string[] index=40 offset=208
+  field sandboxExec: string[] index=41 offset=216
+  field updateCapabilityLock: boolean index=42 offset=224
+  field compat: boolean index=43 offset=225
+  field compatFlag: boolean index=44 offset=226
+  field compatFeatures: string[] index=45 offset=232
+  field numberModeFlag: boolean index=46 offset=240
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]

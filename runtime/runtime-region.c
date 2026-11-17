@@ -89,6 +89,10 @@
 /* runtime.c's: the size of the next chunk `nish_arena_grow` makes for the
    arena in `nish_arena`, or 0 for a thread's own, which takes 64 KiB. */
 extern NISH_TLS uint64_t nish_region_chunk;
+#ifdef NISH_ARENA_DEBUG
+/* runtime.c's: retire a debug arena chunk, or free one C code malloc'd. */
+void nish_debug_drop(void *c);
+#endif
 
 #define NISH_REGION_SLOT_BITS 24
 #define NISH_REGION_SLOTS ((uint64_t)1 << NISH_REGION_SLOT_BITS)
@@ -380,7 +384,11 @@ void nish_region_adopt(uint64_t r) {
        took on entry, 0 in an empty region, keeps that chunk for reuse
        (`nish_reset_arena`), but nothing will bump it again once adopted. */
     nish_chunk_link *next = head->next;
+#ifdef NISH_ARENA_DEBUG
+    if (!(head->cap & NISH_CHUNK_CARVED)) nish_debug_drop(head);
+#else
     if (!(head->cap & NISH_CHUNK_CARVED)) free(head);
+#endif
     head = next;
     uint64_t cap = head ? head->cap & ~(uint64_t)NISH_CHUNK_CARVED : 0;
     s->arena = head ? (struct nish_arena){ (char *)(head + 1), cap, cap, (void *)head } : (struct nish_arena){ 0 };

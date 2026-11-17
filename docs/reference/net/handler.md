@@ -162,7 +162,9 @@ class HandlerLimits
 | `http: Http1Config` | The carrier's caps and timeouts; `http.maxBody` is the body cap, past which a request is answered 413. |
 | `jsonBytes: i32` | Bytes in the JSON scratch buffer: the largest body `json` and `problem` can write. A value past it makes `sendJson` answer 500. At least 256. |
 | `maxEvents: i32` | The most readiness events one `wait` takes. |
-| `slots: i32` | The most connections at once. |
+| `ring: boolean` | Whether `listen` opens its listener with `NET_LISTEN_RING`, so each connection is accepted into an io_uring slot rather than a descriptor. Off by default. Where the kernel refuses rings, the listener serves descriptors and `netRingState` says why. A connection is then a slot handle, which `sendFd` and a C library through `nish:ffi` cannot take. |
+| `slots: i32` | The most connections at once. It is the handler's own cap, not `RLIMIT_NOFILE`: with `ring` set the connections live in io_uring slots and may outnumber the descriptor limit. Past it a connection is accepted and closed at once. |
+| `listen(host: string, port: i32, backlog: i32, flags: i32): i32` | Opens a TCP listener for an `HttpHandler` with these limits: `tcpListenFlags` with `flags`, plus `NET_LISTEN_RING` when `ring` is set. |
 
 ### HttpHandler
 
@@ -175,7 +177,7 @@ class HttpHandler
 
 | Member | |
 | --- | --- |
-| `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. |
+| `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. `limits.ring` acts only through the listener: open it with `limits.listen`, since a listener from `tcpListen` stays on descriptors whatever `ring` says. |
 | `scratch: u8[]` | `json` and `problem` write here. |
 | `connections(): i32` | How many connections are open. |
 | `deferSends(): void` | Lets the handler put a connection's send off until `flush`, so the answers to a pipelined burst go out in one write. Off by default, so an answer is sent as it ends. A program that turns it on calls `flush` (or `wait`, which flushes) after each turn of answers, before it blocks; `nish/net/serve` does. |
@@ -190,6 +192,7 @@ class HttpHandler
 | `problem(r: HttpRequest, status: i32, title: string, detail: string): i32` | Answers `r` with an RFC 9457 problem: `application/problem+json` with `type` `about:blank`, `title` (the status's reason, for that type), `status` and, when not empty, `detail`, a sentence for a person about this occurrence. Nothing of the request is echoed, so a detail is the program's own words. |
 | `ready(): boolean` | Whether a whole request is waiting for `take`. Requests whose connection closed while queued are handed back here. |
 | `refuse(r: HttpRequest): i32` | Answers a request the router refused, by its `route`: 405 with an `Allow` field naming the methods the path has (RFC 9110 §15.5.6), and 404 for anything else. A parameter's malformed escape is the program's to refuse, when it decodes the parameter. |
+| `resting(): boolean` | Whether the listener is resting: an accept failed for want of a resource (EMFILE for descriptors, ENFILE for ring slots, ENOMEM), so the handler takes no connection until one closes or the 100 ms rest ends. During `drain()` a close does not end the rest, so it stays true until the 100 ms pass. |
 | `send(r: HttpRequest, status: i32, contentType: u8[], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, a `Content-Type` of `contentType` and the body `body[off .. off + len)`, in one call. |
 | `sendFields(r: HttpRequest, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32): i32` | Answers `r` with `status`, the fields `names[k]`: `values[k]` and the body `body[off .. off + len)`, in one call. |
 | `sendJson(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and the value `json`'s writer holds, as `application/json`. A value the writer refused or did not finish — it outgrew `jsonBytes`, say — is answered as a 500 problem instead. |

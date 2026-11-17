@@ -96,11 +96,14 @@ module, and touches none of those. CI runs two of vector's gates without
 vector, in `node tests/run.js spec`: a test whose contract is missing or no
 longer matches its `// vector-contract-sha256:` line fails (`stale`), and a
 test whose module is in `std/` is built and run (`run`); one whose module is
-not there yet is a SKIP. The rest are run by hand: `build-spec`, `extract`,
-`check`, `frozen` and `mutate`, with the vector that `.vector-version` pins
-(`bash scripts/fetch-vector.sh`); `contracts/README.md` has the commands and
-the `vector-spec` skill is the walkthrough. Knip takes `test/spec/*.ts` as
-entries, because the module it imports does not exist until the second PR.
+not there yet is a SKIP. Each gate prints its own line per test. A clause the
+test skipped, such as a slow iterated vector, is a SKIP line too, and a run
+that passed no clause fails. The rest are run by hand: `build-spec`,
+`extract`, `check`, `frozen` and `mutate`, with the vector that
+`.vector-version` pins (`bash scripts/fetch-vector.sh`); `contracts/README.md`
+has the commands and the `vector-spec` skill is the walkthrough. Knip takes
+`test/spec/*.ts` as entries, because the module it imports does not exist until
+the second PR.
 
 ## Commands
 

@@ -54,29 +54,26 @@ survive -O2"); the caller's own key array is recorded in
 docs/security/crypto-k1.md (K1-7) and docs/security/secret.md.</t>
       <t>The module's other exports are out of scope here, each for the reason
 given.</t>
-      <t>hmacSha256Verify, hmacSha384Verify and hmacSha512Verify are an API RFC 4231
-does not specify: it defines the tag, not how one is checked. They are held
-by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and their
-compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to
-no branch on the data after clang -O2 (docs/security/ct-verification.md,
-and docs/security/crypto-k1.md K1-8). hmacKeyedVerify is the same check
-over an absorbed HmacKey and a window of a buffer, held by
-tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made").</t>
-      <t>hmacSha256Secret,
-hmacSha384Secret and hmacSha512Secret take the key as a <tt>Secret&lt;u8[]&gt;</tt>,
-which a property cannot construct; they compute the same function as the
-plain exports, and their wiping is held by nish's <tt>nish:secret</tt> tests.
-pbkdf2HmacSha256 is PBKDF2 (RFC 8018), which uses HMAC-SHA-256 as its
-PRF but is a different function, with its own vectors and none in RFC 4231. The
-classes HmacSha256, HmacSha384, HmacSha512, HmacSha256Scratch,
-HmacSha384Scratch and HmacKey are stateful, reusable forms of the same
-functions; a property here calls only functions, so they are left to nish's
-own tests (tests/link/crypto_hmac*). hmacKeyedInto writes the tag of an
-absorbed HmacKey into a caller's array at an offset, a buffer interface RFC
-4231 does not describe, held by tests/link/crypto_jwt. hmacCopySha256 and
-hmacCopySha384 copy a hasher's state into another, a helper for those
-classes that computes no HMAC. HMAC_SHA256, HMAC_SHA384 and HMAC_SHA512 are
-the constants that name a hash for HmacKey, not functions.</t>
+      <t>Out of scope: hmacSha256Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)</t>
+      <t>Out of scope: hmacSha384Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)</t>
+      <t>Out of scope: hmacSha512Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)</t>
+      <t>Out of scope: hmacKeyedVerify, the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made")</t>
+      <t>Out of scope: hmacSha256Secret, takes the key as a <tt>Secret&lt;u8[]&gt;</tt>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's <tt>nish:secret</tt> tests</t>
+      <t>Out of scope: hmacSha384Secret, takes the key as a <tt>Secret&lt;u8[]&gt;</tt>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's <tt>nish:secret</tt> tests</t>
+      <t>Out of scope: hmacSha512Secret, takes the key as a <tt>Secret&lt;u8[]&gt;</tt>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's <tt>nish:secret</tt> tests</t>
+      <t>Out of scope: pbkdf2HmacSha256, PBKDF2 (RFC 8018), which uses HMAC-SHA-256 as its PRF but is a different function, with its own vectors and none in RFC 4231</t>
+      <t>Out of scope: HmacSha256, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)</t>
+      <t>Out of scope: HmacSha384, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)</t>
+      <t>Out of scope: HmacSha512, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)</t>
+      <t>Out of scope: HmacSha256Scratch, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)</t>
+      <t>Out of scope: HmacSha384Scratch, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)</t>
+      <t>Out of scope: HmacKey, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)</t>
+      <t>Out of scope: hmacKeyedInto, writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt</t>
+      <t>Out of scope: hmacCopySha256, copies a hasher's state into another, a helper for the stateful classes that computes no HMAC</t>
+      <t>Out of scope: hmacCopySha384, copies a hasher's state into another, a helper for the stateful classes that computes no HMAC</t>
+      <t>Out of scope: HMAC_SHA256, a constant that names a hash for HmacKey, not a function</t>
+      <t>Out of scope: HMAC_SHA384, a constant that names a hash for HmacKey, not a function</t>
+      <t>Out of scope: HMAC_SHA512, a constant that names a hash for HmacKey, not a function</t>
     </section>
     <section anchor="interface">
       <name>Interface</name>
@@ -464,123 +461,124 @@ forall (n: i32 /* 16..16 */) => hmacSha512(fill(12, 20), utf8("Test With Truncat
     </references>
   </back>
   <!-- ##markdown-source:
-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
+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
+ZydsOq5Pj+384ryZHZ+eGZu4mZ2aM8hzcxOa4TxYKbJ0SPeG9akRQ84Taxr/
+ZDa/OGHjaZgl4/P5CWvmi7oRnJdcJPWiOhvX9Xg2bS7OPfVy/tzjz7RJMGeW
+OAg4YYILNUzTYaqSp/7i+WzuThLGhuyZt81sPjwz4+nwwdc3aP7ELJrT2by9
+367vHlbOrsfmGs2MzeZP2v0k09n8zDTjZ576075PYodNoE7YN/7Cu+FtU5+O
+p09YmM3ZXV/X5omPQrHUMbaJLRzEsev56TPEluoTdnvEvpmb5/ani6fdDdYt
+bvdON+TuiP3BTyZm7i+N2LnRDXgwYjfM1DfN+NKASzdaSNOy1ENoIG7XzJ/4
+5oSdNs15fXJ8/Pz58xHUOfRuDHhHgOuY1HeMNpFyGcfUfj72NTUvtwoFQFPL
++4zdvH8H0/BRqmWhj3G3u9cp6iQZDofMVHUzN7ZJkuvsfD4L44lns0B9GHWK
+aF+2PHZYN26zYdTURydRfcnhy5f0/fr1EYHSGCgH23Xs+bg5ZSuT37T2ztBH
+7NYzP79gc/+3xXjuz8gC/7aYNb5eLWbAoG1Gxsbq2WJu/SAK8HHcasUY0XSG
+GVcPa6h90pzOvWensCEWFlNL5lKzcc1O/cThz9yPkojH2di5iU+S37A702Y+
+c4vYNUkeYWaYPiPbr9nB3e8fPjoYtN/s3v14/eDWv31/58Gtm3SNTX377eoi
+6Xo8vH3/+29vrq/WI2/cv3v31r2b7WC0sq2m5ODu9T8ftLs9uP/dozv3713/
+9gAAY3PYA4hgQXgxmCRrZqzyuNX4+fncE/SmTpyv7Xxc4QfG/OHGd//z36lk
+L1/+SzSKtHz9uvtRwFbw4zmcqp1tNp1cdD+B/UVizs+9mZMUM5kwa87HjZnU
+6Fuz+nT2fLqE8ou/EDI/nLDfV/Y8lV91DbThrcYlZluNEbPdlp3BLYg9TT3T
+rNDcar+E9PZ6r/956/cS943G3//rZDz1bJgW//pVkiQ7fuJfnM/mTQ0UPRh5
+1rCriT/ZJH42g1kzE42ONGHYWUt6A+aNPSXEHy+Kv/zweMTINi3sGcQerRV2
+nSzd8Hf1l9Fr4Nvnft6AMtD17JwsZdy0Xrm5bIobuYqLudSMJbX+d9mHGnKj
+ajGeNNjnaO2HsIsZDC8AoXpj40IOYFBje7pLK26GnlPA1OIGM1oJw6S4wyrE
+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
+/6Tf10wAAA==
 
 -->
 

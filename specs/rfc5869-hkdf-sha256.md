@@ -139,30 +139,47 @@ where n <= m
 
 # Out of Scope
 
-This contract tests only hkdfExtractSha256 and hkdfExpandSha256. vector 0.2.1
-has no spec construct for a contract's outOfScope list, so the other exports of
-nish/crypto/hkdf are listed here, each with the reason it is not tested:
+This contract tests only hkdfExtractSha256 and hkdfExpandSha256; every other
+export of nish/crypto/hkdf is declared out of scope below, with the reason it
+is not tested.
 
-- hkdfExtractSha384, hkdfExpandSha384: HKDF over SHA-384 (HashLen 48). RFC 5869
-  Appendix A has no SHA-384 test case, and this profile fixes the hash to
-  SHA-256.
-- hkdfExtractSha256Secret, hkdfExtractSha384Secret, hkdfExpandSha256Secret,
-  hkdfExpandSha384Secret, hkdfSha256Secret, hkdfSha384Secret: the same
-  derivations taking and giving Secret<u8[]>. What they add is wiping, a
-  non-functional property this profile cannot observe; tests/wipes/crypto.js
-  covers the wipes. No test in this contract checks that their outputs equal
-  the plain functions'.
-- hkdfExpandLabelSha256, hkdfExpandLabelSha384, hkdfExpandLabelSha256Secret,
-  hkdfExpandLabelSha384Secret: TLS 1.3's HKDF-Expand-Label (RFC 8446 Section
-  7.1), not a construction of RFC 5869.
-- hkdfExtractInto, hkdfExpandInto, hkdfExpandLabelInto: allocation-free
-  variants writing into caller buffers through an HkdfScratch; their signatures
-  take a class and output offsets, which a ts-interface block cannot declare.
-- hkdfExpandLabelSha256Held, hkdfExpandLabelSha384Held,
-  hkdfExpandLabelHeldInto: Expand-Label of a held Secret PRK, written in place
-  into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869.
-- HkdfScratch: a class holding reusable buffers, not a function; the profile
-  declares functions only.
+Out of scope: hkdfExtractSha384, HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256
+
+Out of scope: hkdfExpandSha384, HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256
+
+Out of scope: hkdfExtractSha256Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
+
+Out of scope: hkdfExtractSha384Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
+
+Out of scope: hkdfExpandSha256Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
+
+Out of scope: hkdfExpandSha384Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
+
+Out of scope: hkdfSha256Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
+
+Out of scope: hkdfSha384Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
+
+Out of scope: hkdfExpandLabelSha256, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869
+
+Out of scope: hkdfExpandLabelSha384, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869
+
+Out of scope: hkdfExpandLabelSha256Secret, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869
+
+Out of scope: hkdfExpandLabelSha384Secret, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869
+
+Out of scope: hkdfExtractInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare
+
+Out of scope: hkdfExpandInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare
+
+Out of scope: hkdfExpandLabelInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare
+
+Out of scope: hkdfExpandLabelSha256Held, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869
+
+Out of scope: hkdfExpandLabelSha384Held, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869
+
+Out of scope: hkdfExpandLabelHeldInto, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869
+
+Out of scope: HkdfScratch, a class holding reusable buffers, not a function; the profile declares functions only
 
 # Test Vectors
 

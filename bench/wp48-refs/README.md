@@ -11,6 +11,9 @@ climb from every leaf to the root. All five print the same checksum, natively
 and under Node. WP48's recommendation, accepted on 2026-11-11, was to
 build neither 32-bit design and to write ports in `sibling.ts`'s layout, with
 `columns.ts`'s for hot, closed tables.
+WP48 was reopened on 2026-11-17 for a narrower design, 32-bit links for the
+linked classes the compiler picks ([`docs/wp48-ref32-classes.md`](../../docs/wp48-ref32-classes.md)),
+which measures its decode on `sibling.ts`.
 
 | program | a node is | a link is | bytes a node |
 | --- | --- | --- | ---: |

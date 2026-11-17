@@ -3117,3 +3117,97 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. `ben
 
 Noise band (union against its byte-identical copy union2): wall 6.6%, peak resident 0.0%.
 <!-- union-result:end -->
+
+<!-- handler-ring:begin -->
+<a id="io_uring-under-the-handler-wp63-s4"></a>
+
+## io_uring under the handler (WP63 S4)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bench/handler-ring/server.ts` stands in for the entry: an `HttpHandler` that routes `GET /plaintext` and answers each request with a post it looks up by a random id in SQLite (`bench/sqlite`'s `feed.db` and its lookup query), 129 bytes on the wire. One process on io_uring rings (`BENCH_RING=1`, `HandlerLimits.ring`) is set against five processes on descriptors (`BENCH_CORES=5`), the entry's shape, and against a byte-identical copy of the five, whose difference is the noise band. The designs are not alike inside: the ring process has `slots` = C + 1,024 in one handler and one SQLite connection with its one page cache, while each epoll process has `slots` = the limit − 64 and its own connection, five page caches in all; that is the entry's shape, and both sides of the comparison carry it. `bench/handler-ring/run.sh`'s `loadgen` holds C connections open and sends 30,000 requests a second across them; each reading is the server's user plus system CPU over a 10-second window after a 3-second warm-up, divided by the requests answered. The three designs run in turn, in a rotated order, for 5 rounds at each C.
+
+`bash bench/handler-ring/run.sh` at commit `aa0c2058`, on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The edits to `run.sh` after `aa0c2058` (`env -u` for the variable the other design sets, the `trap` that stops a server on any exit, and `wait_for` on the `rings` line) change how the run starts and stops servers, not what it measures.
+
+**C.** 18,000 is the stage's own figure, under the limit. The box's C is the highest where the entry's five epoll processes still fit under the limit: five times the limit less 800 descriptors a process keeps for itself, rounded down to a thousand, 5 × (20,000 − 800) = 96,000. Past it the epoll design would need a sixth process, and the comparison would no longer be against the entry's shape. The ring process holds the same C with its slots as the cap: 96,000 is past 65,535, under a limit of 20,000.
+
+Per round, server CPU µs a request:
+
+| C | round | ring | epoll | epoll copy | saving | band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 18,000 | 1 | 26.00 | 34.27 | 34.23 | 24.1% | 0.1% |
+| 18,000 | 2 | 25.63 | 34.60 | 34.36 | 25.9% | 0.7% |
+| 18,000 | 3 | 25.60 | 35.47 | 34.60 | 27.8% | 2.5% |
+| 18,000 | 4 | 25.83 | 34.23 | 34.83 | 24.5% | 1.8% |
+| 18,000 | 5 | 25.57 | 34.60 | 34.43 | 26.1% | 0.5% |
+| 96,000 | 1 | 25.53 | 36.60 | 35.63 | 30.2% | 2.7% |
+| 96,000 | 2 | 25.77 | 37.10 | 36.90 | 30.5% | 0.5% |
+| 96,000 | 3 | 26.23 | 38.43 | 38.80 | 31.7% | 1.0% |
+| 96,000 | 4 | 26.53 | 37.43 | 36.87 | 29.1% | 1.5% |
+| 96,000 | 5 | 26.20 | 37.17 | 38.63 | 29.5% | 3.9% |
+
+Medians of 5 (min to max). `held` is the fewest connections up in any round, `fds` the server's descriptors (summed over five processes), `box µs` the whole box's CPU a request (the load generator and softirq included) and PSS the server's proportional set size, summed:
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 18,000 | ring | 1 | 18,000 | 13 | 25.63 (25.57–26.00) | 39.37 | 30,000 | 102.6 |
+| 18,000 | epoll | 5 | 18,000 | 18,040 | 34.60 (34.23–35.47) | 51.00 | 30,000 | 36.7 |
+| 18,000 | epoll copy | 5 | 18,000 | 18,040 | 34.43 (34.23–34.83) | 49.93 | 30,000 | 36.8 |
+| 96,000 | ring | 1 | 96,000 | 21 | 26.20 (25.53–26.53) | 37.78 | 30,000 | 517.8 |
+| 96,000 | epoll | 5 | 96,000 | 96,040 | 37.17 (36.60–38.43) | 48.40 | 30,000 | 128.8 |
+| 96,000 | epoll copy | 5 | 96,000 | 96,040 | 36.90 (35.63–38.80) | 49.73 | 29,999 | 128.9 |
+
+At the medians the ring process is 25.9% cheaper at 18,000 against a 0.5% band, and 29.5% cheaper at 96,000 against a 0.7% band. The headline band is the gap between the epoll and epoll-copy medians; a single round's gap is wider, up to 3.9%.
+
+**The verdict against design §4 ([docs/wp63-iouring-net.md](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#4-the-verdict)): go.** Both halves of the rule hold at the box's C. One process held 96,000 connections, past 65,535, under a limit of 20,000, with 21 descriptors; and it spent 29.5% less CPU a request than five epoll processes, against a 0.7% band. The per-round reading holds as well: the smallest saving in any round was 29.1% at 96,000 (24.1% at 18,000), and the largest band in any round 3.9%. With SQLite and the router on top the saving is larger than the transport's alone (20.0% at 96,000, in [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#descriptor-limit)), and a request costs the ring process about the same at both Cs while each epoll process pays more at the higher one. That the epoll side pays for its larger descriptor table is an inference, not measured: the five SQLite page caches against one are the other plausible part.
+
+What it costs: memory. The ring process's PSS is 518 MB at 96,000 against 129 MB for the five epoll processes together, about 5.4 KB a connection against 1.3 KB: the slots, their buffers and the rings' own memory. The box as a whole used 1,792 MB against 1,346 MB at 96,000 (the summary's `box MB`, `/proc/meminfo`'s used memory in the last round of each design).
+
+**For D1** (opt-in or default, design §11): the ring path is not dearer at either C measured, so the numbers allow the bit to become the default for the handler's listeners on Linux. Two things stand against doing so here: the memory a connection, which a box sized for epoll may not have (fourfold at 96,000, 517.8 against 128.8 MB; 2.8 times at 18,000, 102.6 against 36.7 MB), and that neither C here is low. A smoke run at 3,000 (`bash bench/handler-ring/run.sh --conns 3000 --rounds 1 --warmup 1 --seconds 2` on the same box) read 23.33 against 33.49 µs with a 0.5% band, but that is a single 2-second window in one round, so it carries no weight here. The bit stays opt-in (`HandlerLimits.ring` defaults to false) until that choice is made on its own.
+
+What this does not say: the stand-in is not the entry itself, which is not in this repository; its route does one SQLite lookup a request and nothing else. Rerun `run.sh` on the entry before it switches.
+<!-- handler-ring:end -->
+
+<!-- handler-wins:begin -->
+## The cheaper wins for five processes (WP63 S5)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. The stand-in is S4's (`bench/handler-ring/server.ts`, [above](#io_uring-under-the-handler-wp63-s4)), run only as the entry's five SO_REUSEPORT processes on descriptors (`BENCH_CORES=5`). `bench/handler-ring/wins.sh` sets each of design §9's cheaper wins ([docs/wp63-iouring-net.md](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#9-cheaper-wins-for-the-multi-process-model)) against the unchanged five, each on its own, in interleaved rounds with the order rotated each round:
+
+- **epoll**: the baseline, as `run.sh` runs it.
+- **epoll copy**: a byte-identical copy of the baseline's build; its gap to the baseline is the noise band.
+- **mmap**: `BENCH_MMAP=1`, which runs `PRAGMA mmap_size=268435456` on each worker's connection after it opens (each worker reads it back; the run refuses to go on unless SQLite reports 268,435,456). `feed.db` is 268,263,424 bytes, so the whole file fits the map.
+- **shm**: `BENCH_CACHE=shm`, a cache of each post's like count, the part of the lookup that counts rows, in one `nish/sync/shm` region of 2 MB that the supervisor makes and the five workers map. A request whose post is cached is answered from the region without SQLite; a miss runs the lookup and stores the count with a relaxed atomic store.
+- **private**: `BENCH_CACHE=private`, the same cache in each worker's own memory: the per-process state the shared region replaces. It is there to say how much of the shm arm's figure comes from sharing, not to be a win of its own.
+
+Nothing writes the database, so neither cache can go stale here; an entry that writes would have to invalidate. Each cache starts empty with its server and fills as random ids arrive, so its hit rate climbs through a run. `hit` is the cache's hits over every request the workers answered, warm-up included (each worker prints its counts every 4,096 requests; the last line of each is summed).
+
+`bash bench/handler-ring/wins.sh --rounds 7` at commit `6ad0eca5` on this pull request's branch (later commits change only documentation), on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. 18,000 connections, 30,000 requests a second, a 3-second warm-up and a 10-second window, 7 rounds of the five arms. The box may be shared with another session running tests; the load average read 2.0 to 2.5 at the run's end, which the run itself (five servers and the load generator) accounts for. One reading looks disturbed: epoll's whole-box figure in round 5, 65.87 µs against 47 to 51 in every other round, while its server figure that round (33.07) is in line, so the server figures are what this section reads.
+
+Per round, server CPU µs a request, and each win's change against epoll in the same round:
+
+| round | epoll | epoll copy | mmap | shm | private | band | mmap | shm |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 34.40 | 32.33 | 26.77 | 29.70 | 33.23 | 6.0% | −22.2% | −13.7% |
+| 2 | 32.93 | 32.87 | 28.63 | 28.53 | 32.97 | 0.2% | −13.1% | −13.4% |
+| 3 | 32.90 | 32.47 | 27.20 | 28.67 | 32.40 | 1.3% | −17.3% | −12.9% |
+| 4 | 34.20 | 33.07 | 27.87 | 28.10 | 32.67 | 3.3% | −18.5% | −17.8% |
+| 5 | 33.07 | 33.56 | 28.23 | 28.13 | 29.80 | 1.5% | −14.6% | −14.9% |
+| 6 | 32.00 | 33.07 | 28.37 | 27.50 | 31.70 | 3.3% | −11.3% | −14.1% |
+| 7 | 33.30 | 32.87 | 27.63 | 27.80 | 31.44 | 1.3% | −17.0% | −16.5% |
+
+Medians of 7 (min to max). `user` and `sys` are the means of the server's user and system CPU a request; PSS and RSS are summed over the five workers (the supervisor, which maps the shm region too, is not counted); `box MB` is `/proc/meminfo`'s used memory, the median of the rounds:
+
+| arm | server µs/req | user | sys | box µs/req | req/s | PSS MB | RSS MB | box MB | hit |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| epoll | 33.07 (32.00–34.40) | 11.66 | 21.60 | 49.47 | 30,000 | 36.7 | 49.2 | 834 | — |
+| epoll copy | 32.87 (32.33–33.56) | 11.66 | 21.23 | 49.90 | 30,000 | 36.8 | 49.2 | 827 | — |
+| mmap | 27.87 (26.77–28.63) | 11.65 | 16.16 | 44.33 | 30,000 | 279.4 | 1,300.7 | 827 | — |
+| shm | 28.13 (27.50–29.70) | 9.46 | 18.89 | 45.47 | 30,000 | 38.7 | 58.8 | 845 | 30.0% |
+| private | 32.40 (29.80–33.23) | 11.39 | 20.64 | 48.43 | 29,999 | 46.3 | 58.8 | 846 | 7.3% |
+
+The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% in any one round.
+
+**`PRAGMA mmap_size`: a gain.** 15.7% less server CPU a request at the medians (27.87 against 33.07 µs), against a 0.6% band; the smallest saving in any round, 11.3%, is above the largest single-round band, 6.0%. The whole saving is system time (16.16 against 21.60 µs; user time is unchanged), which is what skipping a `pread` and its copy per page read should show. Memory does not fall, on any measure this run took. RSS rises to 1,301 MB, as each worker counts all 256 MB of the mapped file; PSS rises to 279 MB, as the five split those pages between them; and the box's used memory is the same as the baseline's (827 against 834 MB), so the pages the map shows were the page cache the baseline reads through `pread` already, now counted against the processes. A tool that reads RSS or PSS will report the server as larger.
+
+**Shared state in `nish/sync/shm`: a gain, which is mostly the cache's.** The shared cache spent 14.9% less a request at the medians (28.13 against 33.07 µs), against a 0.6% band, and at least 12.9% less in every round, above the largest single-round band. It answered 30.0% of requests without SQLite. The same cache held privately answered 7.3% and saved 2.0% at the medians, which is outside the median band but not outside the per-round one (its per-round change runs from 0.0% to −9.9%), so this run does not separate it from noise. What sharing bought here is the hit rate: five workers fill one table about four times as fast as each fills its own, from cold. The memory is small either way, 38.7 MB PSS shared against 46.3 MB private (2 MB a table, once against five times). Both figures are for a cache that starts empty, over a 13-second run across 500,000 ids. A server that runs long enough to cache every post would answer every request from either cache, and sharing would then save only the four extra copies and the time to fill them. So the 14.9% is the stand-in's figure for this cache at this age, not a property of `nish/sync/shm`. The region's own cost per access, one atomic load on a hit and one store on a miss, did not show as a loss.
+
+What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
+<!-- handler-wins:end -->
