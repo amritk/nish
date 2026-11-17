@@ -7543,10 +7543,10 @@ const LINK_SERIAL = new Map([
  * - The process. Nothing here changes `process.env` or the working
  *   directory; an environment a native run needs (`envWithThreads`) is a copy
  *   handed to that one spawn.
- * - The world the programs run in. The four that write files write paths
- *   named after themselves (`build/net_relay/`, `build/rt_sec_read_cap/`,
- *   `build/rt_sec_wasm_arena/`, and net_relay_soak's server's
- *   `build/net_relay_soak_<n>.*`), and nothing else reads them;
+ * - The world the programs run in. The five that write files write paths
+ *   named after themselves (`build/net_relay/`, `build/net_relay_f64/`,
+ *   `build/rt_sec_read_cap/`, `build/rt_sec_wasm_arena/`, and net_relay_soak's
+ *   server's `build/net_relay_soak_<n>.*`), and nothing else reads them;
  *   net_interop_server writes only when started by hand. Every socket a
  *   program's checks open is bound to port 0, which the kernel picks free; the
  *   literal ports in tests/link are a server's CLI argument or bytes in a

@@ -9,12 +9,17 @@ import { peerChecks } from "./peers";
 import { rebindChecks } from "./rebind";
 import { setupChecks } from "./setup";
 
-/** Every check, in one suite. */
-export const relayChecks = (): i32 => {
+/**
+ * Every check, in one suite.
+ * @param dir the scratch directory the setup checks write under, one per
+ *   program
+ * @returns the suite's exit status
+ */
+export const relayChecks = (dir: string): i32 => {
   const t = new Suite("relay");
   frameChecks(t);
   grantChecks(t);
-  setupChecks(t);
+  setupChecks(t, dir);
   peerChecks(t);
   loopbackChecks(t);
   rebindChecks(t);
