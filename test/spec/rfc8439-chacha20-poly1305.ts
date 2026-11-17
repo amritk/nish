@@ -6,10 +6,10 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: cd527121aded5f7ad9a616542ada5bde1a87a9d827aee429452b633b7b74ab03
+// vector-contract-sha256: fd1184b74e1b8ca397dd99714b9e6f09428e9b7e158928a7cc99c1baf19ead72
 
 import { Suite } from "nish/testing";
-import { chacha20, chacha20Block, chacha20Poly1305Open, chacha20Poly1305Seal, poly1305, poly1305KeyGen } from "nish/crypto/chacha20poly1305";
+import { chacha20, chacha20Block, chacha20Poly1305Open, chacha20Poly1305Seal, chacha20QuarterRound, poly1305, poly1305KeyGen } from "nish/crypto/chacha20poly1305";
 import { wrappingAdd, wrappingSub } from "nish:unsafe";
 
 /** `bytes` as lowercase hex, the way the RFC prints them. */
@@ -151,6 +151,29 @@ const le64 = (n: i32): u8[] => {
   return out;
 };
 
+/** `v`'s low `digits` hex digits, in lowercase. */
+const wordHex = (v: u64, digits: i32): string => {
+  const hex: string = "0123456789abcdef";
+  const parts: string[] = [];
+  for (let i: i32 = digits - 1; i >= 0; i -= 1) {
+    const d: i32 = toI32((v >> toU64(i * 4)) & toU64(15));
+    parts.push(hex.substring(d, d + 1));
+  }
+  return parts.join("");
+};
+
+/** `w` as bracketed hex words, or `null` spelled out. */
+const wordsHex32 = (w: u32[] | null): string => {
+  if (w === null) {
+    return "null";
+  }
+  const parts: string[] = [];
+  for (const x of w) {
+    parts.push(wordHex(toU64(x), 8));
+  }
+  return `[${parts.join(" ")}]`;
+};
+
 /**
  * `unwrap` without exceptions: a null is recorded and stands in as no bytes,
  * and the sample that saw it fails.
@@ -170,6 +193,22 @@ class Unwrap {
     return []
   }
 }
+
+/**
+ * RFC 8439 2.1.1: a quarter round on four numbers
+ *
+ * R-QUARTER-ROUND — RFC 8439 §2.1.1, DEFINITION:
+ *   After running a Quarter Round on these four numbers, we get these:
+ */
+const clause_2_1_1_QUARTER_ROUND = (t: Suite): boolean => t.eqStr("[2.1.1-QUARTER-ROUND] RFC 8439 2.1.1: a quarter round on four numbers (R-QUARTER-ROUND)", wordsHex32(chacha20QuarterRound([(toU32(0) + 0x11111111), (toU32(0) + 0x01020304), (toU32(0) + 0x9b8d6f43), (toU32(0) + 0x01234567)], 0, 1, 2, 3)), "[ea2a92f4 cb1cf8ce 4581472e 5881c4bb]");
+
+/**
+ * RFC 8439 2.2.1: QUARTERROUND(2, 7, 8, 13) on the ChaCha state
+ *
+ * R-QUARTER-ROUND-STATE — RFC 8439 §2.2.1, DEFINITION:
+ *   We will apply the QUARTERROUND(2, 7, 8, 13) operation to this state.
+ */
+const clause_2_2_1_QUARTER_ROUND_STATE = (t: Suite): boolean => t.eqStr("[2.2.1-QUARTER-ROUND-STATE] RFC 8439 2.2.1: QUARTERROUND(2, 7, 8, 13) on the ChaCha state (R-QUARTER-ROUND-STATE)", wordsHex32(chacha20QuarterRound([(toU32(0) + 0x879531e0), (toU32(0) + 0xc5ecf37d), (toU32(0) + 0x516461b1), (toU32(0) + 0xc9a62f8a), (toU32(0) + 0x44c20ef3), (toU32(0) + 0x3390af7f), (toU32(0) + 0xd9fc690b), (toU32(0) + 0x2a5f714c), (toU32(0) + 0x53372767), (toU32(0) + 0xb00a5631), (toU32(0) + 0x974c541a), (toU32(0) + 0x359e9963), (toU32(0) + 0x5c971061), (toU32(0) + 0x3d631689), (toU32(0) + 0x2098d9d6), (toU32(0) + 0x91dbd320)], 2, 7, 8, 13)), "[879531e0 c5ecf37d bdb886dc c9a62f8a 44c20ef3 3390af7f d9fc690b cfacafd2 e46bea80 b00a5631 974c541a 359e9963 5c971061 ccc07c79 2098d9d6 91dbd320]");
 
 /**
  * RFC 8439 2.3.2: the ChaCha20 block function's serialized block
@@ -2401,6 +2440,8 @@ const clause_P_SIZES = (t: Suite): boolean => {
 export const main = (): i32 => {
   const t: Suite = new Suite("rfc8439-chacha20-poly1305");
   let ran: string = "";
+  ran = `${ran}${clause_2_1_1_QUARTER_ROUND(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_2_2_1_QUARTER_ROUND_STATE(t) ? "1" : "0"}`;
   ran = `${ran}${clause_2_3_2_BLOCK(t) ? "1" : "0"}`;
   ran = `${ran}${clause_2_4_2_ENCRYPT(t) ? "1" : "0"}`;
   ran = `${ran}${clause_2_5_2_POLY1305(t) ? "1" : "0"}`;

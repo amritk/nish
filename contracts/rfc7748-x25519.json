@@ -300,6 +300,102 @@
       }
     },
     {
+      "kind": "vector",
+      "id": "6.1-ALICE-PUB",
+      "title": "RFC 7748 6.1: Alice's public key, X25519(a, 9)",
+      "covers": ["R-BASE"],
+      "source": {
+        "cite": {
+          "section": "6.1"
+        }
+      },
+      "call": "x25519Base",
+      "args": [
+        {
+          "hex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+          "label": "Alice's private key, a"
+        }
+      ],
+      "expect": {
+        "hex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+        "label": "Alice's public key, X25519(a, 9)"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "6.1-BOB-PUB",
+      "title": "RFC 7748 6.1: Bob's public key, X25519(b, 9)",
+      "covers": ["R-BASE"],
+      "source": {
+        "cite": {
+          "section": "6.1"
+        }
+      },
+      "call": "x25519Base",
+      "args": [
+        {
+          "hex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+          "label": "Bob's private key, b"
+        }
+      ],
+      "expect": {
+        "hex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+        "label": "Bob's public key, X25519(b, 9)"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "6.1-K-ALICE",
+      "title": "RFC 7748 6.1: Alice computes K from Bob's public key",
+      "covers": ["R-DH"],
+      "source": {
+        "cite": {
+          "section": "6.1"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+          "label": "Alice's private key, a"
+        },
+        {
+          "hex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+          "label": "Bob's public key, X25519(b, 9)"
+        }
+      ],
+      "expect": {
+        "hex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+        "label": "Their shared secret, K"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "6.1-K-BOB",
+      "title": "RFC 7748 6.1: Bob computes K from Alice's public key",
+      "covers": ["R-DH"],
+      "source": {
+        "cite": {
+          "section": "6.1"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+          "label": "Bob's private key, b"
+        },
+        {
+          "hex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+          "label": "Alice's public key, X25519(a, 9)"
+        }
+      ],
+      "expect": {
+        "hex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
+        "label": "Their shared secret, K"
+      }
+    },
+    {
       "kind": "property",
       "id": "P-SIZES",
       "title": "X25519 answers exactly when the scalar and the u-coordinate are both 32 bytes",
@@ -1004,140 +1100,6 @@
             ]
           }
         ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-DH-VECTOR",
-      "title": "the Section 6.1 test vector: Alice's and Bob's public keys and their shared secret K",
-      "covers": ["R-BASE", "R-DH"],
-      "forall": [
-        {
-          "name": "zero",
-          "type": "i32",
-          "min": 0,
-          "max": 0
-        }
-      ],
-      "assert": {
-        "let": [
-          {
-            "name": "a",
-            "value": {
-              "hex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
-            }
-          },
-          {
-            "name": "ka",
-            "value": {
-              "hex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
-            }
-          },
-          {
-            "name": "b",
-            "value": {
-              "hex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"
-            }
-          },
-          {
-            "name": "kb",
-            "value": {
-              "hex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
-            }
-          },
-          {
-            "name": "k",
-            "value": {
-              "hex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
-            }
-          }
-        ],
-        "in": {
-          "op": "and",
-          "args": [
-            {
-              "op": "==",
-              "args": [
-                {
-                  "var": "zero"
-                },
-                {
-                  "int": 0
-                }
-              ]
-            },
-            {
-              "op": "==",
-              "args": [
-                {
-                  "call": "x25519Base",
-                  "args": [
-                    {
-                      "var": "a"
-                    }
-                  ]
-                },
-                {
-                  "var": "ka"
-                }
-              ]
-            },
-            {
-              "op": "==",
-              "args": [
-                {
-                  "call": "x25519Base",
-                  "args": [
-                    {
-                      "var": "b"
-                    }
-                  ]
-                },
-                {
-                  "var": "kb"
-                }
-              ]
-            },
-            {
-              "op": "==",
-              "args": [
-                {
-                  "call": "x25519",
-                  "args": [
-                    {
-                      "var": "a"
-                    },
-                    {
-                      "var": "kb"
-                    }
-                  ]
-                },
-                {
-                  "var": "k"
-                }
-              ]
-            },
-            {
-              "op": "==",
-              "args": [
-                {
-                  "call": "x25519",
-                  "args": [
-                    {
-                      "var": "b"
-                    },
-                    {
-                      "var": "ka"
-                    }
-                  ]
-                },
-                {
-                  "var": "k"
-                }
-              ]
-            }
-          ]
-        }
       }
     }
   ],

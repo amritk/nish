@@ -45,7 +45,16 @@ paragraph, which extracts to `outOfScope`; and a vector run many times over is
 declared with an `Iterate:` paragraph after its table. A row whose section
 prints several numbered test cases under the same labels, as RFC 8439's A.3
 does, cites one of them with the Source cell `{{Section A.3 of RFC8439}}, Test
-Vector #N`: its values must all be printed in that one case. An iterated vector
+Vector #N`: its values must all be printed in that one case (A.1, A.2 and A.4
+are cited the same way). A label is written as the section prints it,
+apostrophe, alias and parentheses included (`Alice's public key, X25519(a, 9)
+= 8520…`, RFC 7748 §6.1). A row whose section prints only the start of a
+result carries a `Truncate: <id> to <N> bits` paragraph after the table (RFC
+4231's test case 5). A `u32[]` argument or result is a word array
+(`[0x11111111 0x01020304]`, RFC 8439's quarter round). A row whose result the
+section does not print cites it apart, `{{Section 7.1 of RFC8032}}; result
+{{Section 5.1.7 of RFC8032}}`, and is accepted when a property derives it
+(Ed25519's `ed25519Verify` rows, from P-ROUNDTRIP). An iterated vector
 marked `slow` is emitted skipped unless `spec emit` is given `--slow`, and the
 committed tests are emitted without it: run one by hand with `spec run --slow`;
 `node tests/run.js spec` prints a SKIP line for each clause a test skipped, and
