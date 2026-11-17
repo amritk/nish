@@ -372,7 +372,7 @@ builds them follows:
   typed-JSON sidecars and `jsonRefusal` (NL2486), and a `Map` key or `Set`
   element (NL2353).
 - **32-bit references (WP48).** WP48 declined a whole-program 32-bit mode,
-  and its narrower opt-in design ([`wp48-ref32-classes.md`](wp48-ref32-classes.md))
+  and its narrower per-class design ([`wp48-ref32-classes.md`](wp48-ref32-classes.md))
   is proposed, not built, so no 64-bit target has a 4-byte reference today.
   That design narrows only fields typed as a compact class, never a `Dyn<I>`. If one lands, the split form is unchanged (an
   `i32` tag beside a 4-byte reference in registers, and SoA's side array if a

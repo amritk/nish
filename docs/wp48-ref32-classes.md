@@ -1,4 +1,4 @@
-# WP48: 32-bit references for an opt-in class — designed and measured
+# WP48: 32-bit references for linked classes — designed and measured
 
 **Status: proposed on 2026-11-17, for the owner to accept or decline.** Nothing
 in the compiler, the runtime or `std/` changes with this note. It reopens
@@ -58,24 +58,78 @@ note narrows.
 
 ## 3. The design
 
-### 3.1 What the program says
+### 3.1 Which classes are compact
 
-A class opts in with a marker interface:
+The compiler picks them. A program says nothing, and a class is compact when
+the compiler can see that narrowing it pays and nothing it can see forbids
+it. What the compiler cannot see is how many instances a run will make, and
+that is what decides whether a compact class is a win (a graph larger than
+cache, §5) or a small loss (a graph in cache). The rule therefore asks for
+the shape that the measured wins share: a small node that links to nodes,
+made over and over.
+
+A class `R` is compact when all of these hold:
+
+1. **The output is a native executable** (`--link`, or `nish run`). A
+   wasm32 build already has 4-byte pointers, so there is nothing to do. A
+   build whose classes C or Node can see (`--emit-header`, `--emit-napi`,
+   `--emit-napi-async`, a C library) is left alone, because a compact class
+   is opaque to C (§4) and the range would be reserved inside a host process
+   Nish does not own.
+2. **Something links to `R`**: some class, `R` itself included, has a field
+   typed exactly `R` or `R | null`.
+3. **Narrowing saves memory on every instance**: `computeLayout` run both
+   ways gives `R`, or the class holding the link, a smaller size after
+   rounding. A class with one link among wide fields that rounding gives back
+   is left alone, because it would pay the decode for nothing.
+4. **`R` is made in a loop or in a recursive function**: some `new R(...)`
+   is lexically inside a loop, or inside a function that can reach itself in
+   the call graph. A class made once or a few times per run is left alone.
+   Layout is fixed when classes are collected, before bodies are checked
+   (`src/structs.ts:1070`), so this is a scan of the parsed bodies: a direct
+   call by name is an edge, a call through a value is not, and a class whose
+   only `new` sits behind one is left alone. A miss costs memory, not
+   correctness.
+5. **Nothing forbids it**: `R` is not, and is not a field of, a `declare
+   class`; `R` does not hold a `Secret`; `R` is not exported in a C or N-API
+   surface.
+
+Two controls override the rule, both erased under Node and `tsc`:
 
 ```ts
-import type { Compact } from "nish:compact"
+import type { Compact, Wide } from "nish:compact"
 
-class TNode implements Compact {
-  v: i32
-  l: TNode | null
-  r: TNode | null
-  // ...
-}
+class TNode implements Compact { /* compact even if the rule says no */ }
+class Big implements Wide { /* never compact */ }
 ```
 
-`import type` erases under Node and `tsc`, and an empty interface has nothing
-to implement, so the file stays legal TypeScript that runs unchanged. The name
-and spelling are open (§7).
+and `--compact off` turns the whole mechanism off for one build, which is
+what to try first when a program hits the range's limit (§3.3) or runs
+slower. `implements Compact` on a class that rule 1 or 5 refuses is a
+compile error naming the reason. Each class the rule picks is listed by
+`nish --explain-layout`, so the decision can be seen and checked.
+
+Against the measured programs: `tree.ts`'s and `bintrees.ts`'s `TNode` are
+made in a recursive build and shrink from 24 to 12 and 16 to 8 bytes, and
+`sibling.ts`'s node is made in the build loop and shrinks from 32 to 20. The
+rule picks all three with no source change.
+
+The rule lands after the mechanism (§8): stage 2 builds compact classes with
+`implements Compact` as the only way in, and stage 3 turns the rule on once
+the corpus shows no program slower beyond its noise band. Until then a
+program that does not write the marker is unchanged.
+
+**Why not every class.** The compiler could narrow every class's links, and
+that is the first note's Design A, measured and declined. Three costs stay
+with any class narrowed: the decode on every link load (up to a quarter more
+time on a pointer-chasing loop in cache, §5.1), the range's 15 GiB cap on
+everything allocated beside the class (§3.3), and a fixed address a host
+process may already hold. Each rule above drops a class that pays those for
+no saving: one with no link, one rounding gives the bytes back, one made a
+handful of times, one C or a `Secret` must see whole. What no rule can see is
+the instance count, which only a run knows; that is why `Wide` and
+`--compact off` exist. `class.ts`'s node also qualifies,
+but its `kids: Node[]` is an array, which stage 2 does not narrow (§7).
 
 ### 3.2 What the compiler does with it
 
@@ -96,7 +150,10 @@ For a compact class `R`:
   same mark and release.
 - **A program with no compact class is unchanged**, down to the byte: no IR
   moves, the runtime does not reserve a range, and no golden changes. The
-  range and the alignment rule are switched on only by a compact class.
+  range and the alignment rule are switched on only by a compact class. A
+  program the rule picks a class in does change, so the stage that turns the
+  rule on carries `DECLARED` nish-cmp entries and regenerated goldens for
+  the programs it moves.
 
 The decode has two shapes, measured in §5:
 
@@ -139,8 +196,8 @@ gets its own inline bump (`@nish_alloc_ref`) that rounds to 4.
 
 The range is 15 GiB of arena: all threads, all regions, everything but big
 exact chunks. Running out is a panic that names the limit and the compact
-classes. The limit is the price of the opt-in, and it is why the mode is per
-class and not the default.
+classes. The limit is why the rule asks for a class made over and over and not
+every class, and the panic names `--compact off`.
 
 ## 4. The invariants, one by one
 
@@ -282,7 +339,8 @@ allocation and release, and the decode is lost in the band.
   Goose (not run in these rounds). At 400k the tree fits in the last-level cache, and zero-compact is
   level with `ptr` (1.02x, band 10%) while based-compact is slower. The win
   this design buys is memory, plus time on graphs larger than cache. It does
-  not make a small graph faster, which is why it is opt-in per class.
+  not make a small graph faster, which is why the rule asks for repeated
+allocation and `Wide` can refuse it.
 
 ## 6. Where the emitter changes
 
@@ -323,10 +381,11 @@ see the same types as today.
 1. **Accept or decline.** Accepting buys 0.5x memory on a 3-field node (12
    against 24 bytes) and 0.63x on sibling, for a decode that costs up to a
    quarter more time on a pointer-chasing loop while the graph is in cache.
-2. **The marker.** `implements Compact` from `nish:compact` (proposed: legal
-   TypeScript, erased by Node, visible at the class) against a JSDoc tag or a
-   compiler flag naming classes. A flag cannot be seen in the source and is
-   not proposed.
+2. **Who decides.** The rule of §3.1 by default, with `implements Compact`
+   and `implements Wide` from `nish:compact` to force or refuse it and
+   `--compact off` per build (proposed), against markers only (every program
+   that wants the saving edits its source). The spellings are open: legal
+   TypeScript, erased by Node, visible at the class.
 3. **The decode shape.** Zero-based on Linux and Windows, based on macOS
    (proposed), or based everywhere (one shape and no fixed address, slower).
 4. **What is narrowed.** Fields only (proposed for stage 2). `R[]` elements
@@ -336,6 +395,10 @@ see the same types as today.
 5. **The range's size.** 15 GiB in 4-byte units, zero-based from 0. With
    8-byte units the range could be 32 GiB, but a 12-byte node would round to
    16 bytes and the `tree.ts` win would be gone. Proposed: 4-byte units.
+6. **A busy fixed address.** When the range cannot be reserved (another
+   mapping holds it), the program panics before `main` naming
+   `--compact off` (proposed), or falls back to the based shape at a
+   cost measured in §5.2 (0.71x against 0.61x on `tree.ts`).
 
 ## 8. Stages
 
@@ -344,14 +407,20 @@ see the same types as today.
    size-class carving, regions, workers, `keep`, the 8-byte realign at every
    bump site, the exhaustion panic, and the runtime unit test under ASan and
    UBSan. `ptr-range` is the gate: it must stay within the band of `ptr`.
-2. **The emitter**: the marker in the checker, `computeLayout` and the struct
+2. **The emitter**: `implements Compact` in the checker, `computeLayout` and the struct
    body, `loadField`/`storeField`, `@nish_alloc_ref`, attributes, TBAA, the
    refusals (`declare class`, `Secret`, stack promotion), the opaque header,
    debug info, and the ASAN build uncompressed. Ships with the construct
    checklist: golden `.ll`, `llvm-as`, a native round trip, negative tests,
    the `docs/LANGUAGE.md` rule, a cookbook entry, a guide page.
    Gate: `tree.ts` at n = 24 within 5% of the prototype's RSS and time.
-3. **Ports**: the `bench/goose` tree programs, `bench/wp48-refs/sibling.ts`
-   and the guide's memory page say when to mark a class compact.
-4. **wasm32 layout**: `computeLayout`'s 8-byte class pointer slot on wasm32
-   becomes 4 (a separate fix this survey found, independent of 1 to 3).
+3. **The rule**: §3.1's five tests, `implements Wide`, `--compact off` and
+   `--explain-layout`. Gate: the nish-cmp corpus and `bench/goose` built
+   both ways, no program slower beyond its noise band and every picked class
+   smaller; the programs it moves carry `DECLARED` entries and regenerated
+   goldens.
+4. **Ports**: the `bench/goose` tree programs, `bench/wp48-refs/sibling.ts`
+   and the guide's memory page say what the rule picks and when to override
+   it.
+5. **wasm32 layout**: `computeLayout`'s 8-byte class pointer slot on wasm32
+   becomes 4 (a separate fix this survey found, independent of 1 to 4).
