@@ -73,8 +73,8 @@ no equivalent:
   variant-sized union array.
 - **`words.ts`** stores the map as three columns. Goose uses one array of
   `Slot` structs. A `Slot[]` version of the port, in which Nish keeps the
-  records inline, measured slower (5,659 ms and 967 MB at 16M words) than
-  the columns.
+  records inline, runs level with the columns since arrays grow in place
+  (see "A map probe" below), so the port keeps the columns.
 
 ## Results
 
@@ -132,12 +132,25 @@ or runtime change.
   with the loop written so the rewrite does not apply. That is far less than
   the 1,100 ms the old reading put on the append. Where the rest of that
   time goes has not been measured.
-- **A map probe misses the cache three times.** The words count phase is
-  most of what is left of the words gap. Each probe touches `keyAt`, `keyLen` and `counts` in three
-  separate columns, where Goose's `Slot` puts all three in one cache line.
-  Nish keeps a `Slot[]` inline, but that version was slower still.
-  - **Fix:** find out why, then make the inline record array as fast as the
-    columns.
+- **The map probe is not the layout.** The words count phase is most of
+  what is left of the words gap. Each probe touches `keyAt`, `keyLen` and
+  `counts` in three separate columns, where Goose's `Slot` puts all three
+  in one 12-byte record. A `Slot[]` port (`interface Slot { key: i32; len:
+  i32; count: i32 }`, probed as `const slot = slots[idx]`) now matches the
+  columns: best of 10, interleaved, at 16M words, 2377 to 2565 ms for
+  `Slot[]` against 2377 to 2536 ms for the columns, with the count phase
+  about 1.7 to 1.8 s either way and the same 410,780 KB RSS. The old
+  5,659 ms and 967 MB came from the array growth leak that in-place
+  growth fixed. Cachegrind shows `Slot[]` cutting D1 misses from 14.0M
+  to 10.3M with no change in time, so cache misses on the map are not
+  what the gap costs. The -O2 probe reads fields in place (no record
+  copy), uses Goose's 12-byte stride and reloads no array header per
+  probe. Its one extra cost, a bounds check on `slots[idx]` that the
+  prover cannot discharge from `idx = h & mask`, measured as nothing when
+  removed by hand (count phase best 1797 ms without it, 1745 ms with it), so no
+  codegen change was made.
+  - **Next:** measure the hash and `same()`, which checks
+    `a + i` and `b + i` for overflow on every byte it compares.
 - **A tree node is twice the size.** A `tree.ts` node is 24 bytes: an `i32`,
   four bytes of padding and two 64-bit pointers. A Goose pool node is 12
   bytes, because its links are 32-bit indices into the pool. The tree at
