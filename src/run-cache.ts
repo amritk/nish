@@ -395,7 +395,7 @@ const addUnitFingerprints = (
 
 /**
  * The recipe flags of every key: the profile, then `--cpu`, `-g`,
- * `--threads` and `--debug-arena` each only when set, so a key for the baseline recipe is the
+ * `--threads`, `--debug-arena` and `--arena-range` each only when set, so a key for the baseline recipe is the
  * bytes it was before any of them existed.
  */
 const profileLine = (
@@ -403,11 +403,12 @@ const profileLine = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
-  debugArena: boolean
+  debugArena: boolean,
+  arenaRange: boolean
 ): string =>
   `profile ${profile}${cpu.length > 0 ? ` --cpu ${cpu}` : ""}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}${
     debugArena ? " --debug-arena" : ""
-  }\n`
+  }${arenaRange ? " --arena-range" : ""}\n`
 
 /**
  * Everything a link's result depends on, as one text: a header line per
@@ -431,13 +432,14 @@ export const runCacheKey = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   cc: string,
   sqlite: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add(`run ${name}\n`)
-  key.add(profileLine(profile, cpu, debugInfo, threads, debugArena))
+  key.add(profileLine(profile, cpu, debugInfo, threads, debugArena, arenaRange))
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
   key.add(sqlite)
@@ -470,13 +472,14 @@ export const runtimeCacheKey = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   cc: string,
   ccVersion: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add("runtime-objects\n")
-  key.add(profileLine(profile, cpu, debugInfo, threads, debugArena))
+  key.add(profileLine(profile, cpu, debugInfo, threads, debugArena, arenaRange))
   key.add(`cc ${cc}\n`)
   key.add(`cc-version ${ccVersion.length}\n`)
   key.add(ccVersion)
@@ -508,7 +511,7 @@ export const sqliteCacheKey = (
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add("sqlite-objects\n")
-  key.add(profileLine(profile, cpu, debugInfo, threads, false))
+  key.add(profileLine(profile, cpu, debugInfo, threads, false, false))
   key.add(`cc ${cc}\n`)
   key.add(`cc-version ${ccVersion.length}\n`)
   key.add(ccVersion)

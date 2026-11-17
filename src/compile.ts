@@ -1581,6 +1581,7 @@ const commandMain = (): number => {
     return 1
   }
   const emitted = compilation.emit()
+  const arenaRange = hasCompactClass(compilation)
   if (runMode && watchStateFile.length > 0) {
     const cached = cachedBinary(
       emitted,
@@ -1591,6 +1592,7 @@ const commandMain = (): number => {
       opts.debugInfo,
       opts.threads,
       debugArena,
+      arenaRange,
       json
     )
     if (cached.status === 0) {
@@ -1608,6 +1610,7 @@ const commandMain = (): number => {
       opts.debugInfo,
       opts.threads,
       debugArena,
+      arenaRange,
       json,
       runArgsFrom
     )
@@ -1653,6 +1656,7 @@ const commandMain = (): number => {
     opts.debugInfo,
     opts.threads,
     debugArena,
+    arenaRange,
     anyCallsSqlite(emitted),
     "",
     json,
@@ -2018,10 +2022,11 @@ const runProgram = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   json: boolean,
   argsFrom: i32
 ): number => {
-  const cached = cachedBinary(emitted, pkg, name, profile, cpu, debugInfo, threads, debugArena, json)
+  const cached = cachedBinary(emitted, pkg, name, profile, cpu, debugInfo, threads, debugArena, arenaRange, json)
   if (cached.status !== 0) {
     return cached.status
   }
@@ -2060,6 +2065,7 @@ const cachedBinary = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   json: boolean
 ): CachedBinary => {
   const cached = new CachedBinary()
@@ -2089,6 +2095,7 @@ const cachedBinary = (
     debugInfo,
     threads,
     debugArena,
+    arenaRange,
     cCompiler(),
     sqliteLines
   )
@@ -2109,6 +2116,7 @@ const cachedBinary = (
       debugInfo,
       threads,
       debugArena,
+      arenaRange,
       sqlite,
       sqliteLines,
       json
@@ -2205,6 +2213,7 @@ const cachedTool = (
     `${CLI}-${name}`,
     "debug",
     "",
+    false,
     false,
     false,
     false,
@@ -2361,6 +2370,7 @@ const buildIntoCache = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   sqlite: boolean,
   sqliteLines: string,
   json: boolean
@@ -2397,6 +2407,7 @@ const buildIntoCache = (
     debugInfo,
     threads,
     debugArena,
+    arenaRange,
     sqlite,
     sqliteLines,
     json,
@@ -2442,6 +2453,7 @@ const linkProgram = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   sqlite: boolean,
   sqliteLines: string,
   json: boolean,
@@ -2467,6 +2479,7 @@ const linkProgram = (
     debugInfo,
     threads,
     debugArena,
+    arenaRange,
     sqlite,
     sqliteLines,
     json
@@ -2510,7 +2523,7 @@ const linkProgram = (
   }
   argv.push("-o")
   argv.push(link)
-  pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena)
+  pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
   const status = spawnSync(argv)
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
@@ -2531,6 +2544,15 @@ const linkProgram = (
 }
 
 /**
+ * Whether a program has a compact class, a class whose references are 32-bit
+ * offsets into the arena's reserved range (WP48, docs/wp48-ref32-classes.md
+ * §3.1), so its binary must link the range runtime (`--arena-range`). Stage 1
+ * ships that runtime and no compact class, so no program has one yet; stage 2
+ * reads the rule here.
+ */
+const hasCompactClass = (_compilation: Compilation): boolean => false
+
+/**
  * The flags that pick `scripts/build.sh`'s recipe, the same for the link and
  * for the runtime it compiles alone.
  */
@@ -2540,7 +2562,8 @@ const pushRecipeFlags = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
-  debugArena: boolean
+  debugArena: boolean,
+  arenaRange: boolean
 ): void => {
   argv.push("--profile")
   argv.push(profile)
@@ -2566,6 +2589,12 @@ const pushRecipeFlags = (
   // -DNISH_ARENA_DEBUG: the IR is the same either way.
   if (debugArena) {
     argv.push("--debug-arena")
+  }
+  // `--arena-range` likewise changes only the runtime: -DNISH_ARENA_RANGE
+  // carves its chunks from the compact-class range (WP48), which a program
+  // with a compact class needs. `hasCompactClass` decides it.
+  if (arenaRange) {
+    argv.push("--arena-range")
   }
 }
 
@@ -2635,6 +2664,7 @@ const cachedRuntime = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   sqlite: boolean,
   sqliteLines: string,
   json: boolean
@@ -2671,7 +2701,7 @@ const cachedRuntime = (
   if (answered !== 0 || version === null || runtimeDir === null) {
     return none
   }
-  const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, debugArena, cc, version)
+  const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, debugArena, arenaRange, cc, version)
   const recipe: string[] = [`${root}/runtime/runtime.c`, "--runtime-objects"]
   const runtime = cachedEntry(
     root,
@@ -2686,6 +2716,7 @@ const cachedRuntime = (
     debugInfo,
     threads,
     debugArena,
+    arenaRange,
     json
   )
   if (runtime === null) {
@@ -2722,7 +2753,8 @@ const cachedRuntime = (
     cpu,
     debugInfo,
     threads,
-    // SQLite reads no arena: its objects are the same with the debug arena.
+    // SQLite reads no arena: its objects are the same with either arena flag.
+    false,
     false,
     json
   )
@@ -2898,6 +2930,7 @@ const cachedEntry = (
   debugInfo: boolean,
   threads: boolean,
   debugArena: boolean,
+  arenaRange: boolean,
   json: boolean
 ): string | null => {
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
@@ -2916,7 +2949,7 @@ const cachedEntry = (
     argv.push(arg)
   }
   argv.push(work)
-  pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena)
+  pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
   const status = spawnSync(argv)
   // A compiler that answers 0 and writes no object (`CC=true`, which turns a
   // link into a no-op) leaves nothing to move, and the entry then gets no key:

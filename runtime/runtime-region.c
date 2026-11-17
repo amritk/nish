@@ -92,6 +92,10 @@ extern NISH_TLS uint64_t nish_region_chunk;
 #ifdef NISH_ARENA_DEBUG
 /* runtime.c's: retire a debug arena chunk, or free one C code malloc'd. */
 void nish_debug_drop(void *c);
+#elif defined NISH_ARENA_RANGE && !defined NISH_ASAN
+/* runtime.c's: put a compact-range chunk on its class's free list, or free
+   one malloc made. */
+void nish_range_drop(void *c);
 #endif
 
 #define NISH_REGION_SLOT_BITS 24
@@ -386,6 +390,8 @@ void nish_region_adopt(uint64_t r) {
     nish_chunk_link *next = head->next;
 #ifdef NISH_ARENA_DEBUG
     if (!(head->cap & NISH_CHUNK_CARVED)) nish_debug_drop(head);
+#elif defined NISH_ARENA_RANGE && !defined NISH_ASAN
+    if (!(head->cap & NISH_CHUNK_CARVED)) nish_range_drop(head);
 #else
     if (!(head->cap & NISH_CHUNK_CARVED)) free(head);
 #endif

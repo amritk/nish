@@ -216,6 +216,8 @@ void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark) {
     if (!x) {
       v = nish_cross_copy(v, esize);
     } else {
+      /* `x->off` needs no realigning under NISH_ARENA_RANGE: only this
+         code bumps a transfer block, by `nish_cross_size`'s 8-byte multiples. */
       uint64_t n = nish_cross_size(v, esize);
       if (!x->block || x->block->cap - x->off < n) {
         uint64_t want = x->block && x->block->cap < 32768 ? x->block->cap * 2 : x->block ? 65536 : 4096;
@@ -243,7 +245,14 @@ void *nish_cross_in(void *p, uint64_t esize) {
   void *v = (void *)((uintptr_t)p & ~(uintptr_t)1);
   nish_xchunk *c = (nish_xchunk *)v - 1;
   uint64_t n = c->cap;
+#ifdef NISH_ARENA_RANGE
+  /* What `nish_alloc_struct` would have left: it starts at `off` rounded up
+     to 8 (runtime.c gives the reason). */
+  uint64_t at = (nish_arena.off + 7) & ~(uint64_t)7;
+  if (n >= 65536 && (at > nish_arena.cap || n > nish_arena.cap - at)) {
+#else
   if (n >= 65536 && n > nish_arena.cap - nish_arena.off) {
+#endif
     nish_cross_link(c);
     return v;
   }

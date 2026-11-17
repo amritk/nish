@@ -70,11 +70,22 @@ extern NISH_TEXT_TLS struct nish_arena nish_arena;
 void *nish_arena_grow(uint64_t size);
 static inline void *nish_text_alloc(uint64_t size) {
   size = (size + 7) & ~(uint64_t)7;
+#ifdef NISH_ARENA_RANGE
+  /* runtime.c's `nish_alloc_struct` gives the reason: `off` may be 4 bytes
+     past an 8-byte boundary once a compact class has been bumped. */
+  uint64_t at = (nish_arena.off + 7) & ~(uint64_t)7;
+  if (at + size <= nish_arena.cap) {
+    void *p = nish_arena.buf + at;
+    nish_arena.off = at + size;
+    return p;
+  }
+#else
   if (nish_arena.off + size <= nish_arena.cap) {
     void *p = nish_arena.buf + nish_arena.off;
     nish_arena.off += size;
     return p;
   }
+#endif
   return nish_arena_grow(size);
 }
 #else
