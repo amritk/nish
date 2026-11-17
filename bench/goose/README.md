@@ -100,11 +100,17 @@ in the same session just before.
 | Time | 0.81 | 0.83 | Goose. Nish wins strlist |
 | Peak RSS | 0.90 | 0.90 | Goose on tree, bintrees and records; Nish on strlist and words |
 
-The time geomean moves inside this machine's noise. Goose's own words binary,
-which no Nish change touches, took 2058 ms in the "before" run and 2032 ms in
-the "after" one. Records'
+The time geomean moves inside this machine's noise. The Goose binaries, which
+no Nish change touches, moved between the two runs by up to 8.5%: tree 1434
+to 1409 ms (1.7%), bintrees 390 to 399 ms (2.3%), records 661 to 605 ms
+(8.5%), strlist 758 to 790 ms (4.2%) and words 2058 to 2032 ms (1.3%). Each
+figure is one best-of-5 after two warm-ups, so a Nish row that moves less
+than that, as tree, records and strlist do, says nothing. Records'
 Goose/Nish went from 0.95 to 0.83 with no change that reaches it. The words
 gain is measured apart, interleaved, below.
+
+The guard costs words 112 bytes of binary (11,848 before, 11,960 after);
+the other four binaries are the same size, byte for byte.
 
 An earlier session moved these programs with the first two fixes below, from
 the 0.41.0 seed. Its times do not compare with the table above:
@@ -167,7 +173,13 @@ or runtime change.
   checked as before and panic where they run (`emitAddGuards`,
   `src/emit-arrays.ts`; `tests/cases/ovf_loop_guard`). LLVM unswitches the
   loop on that test. The same profile after the fix: 1,368.3M instructions
-  (-14.7%), `same()` 239.4M (17.5%), `hash()` 216.5M (15.8%). Words at 16M,
+  (-14.7%), `same()` 239.4M (17.5%), `hash()` 216.5M (15.8%). The total
+  fell 235.2M while `same()` fell 272.6M and `hash()` rose 4.0M. Per line,
+  the 33M left over is +44.0M on instructions callgrind gives no source
+  line, +8.0M on the probe's `while (true)`, +4.0M on the two
+  `uncheckedSet(counts, ...)` lines, -18.7M on the probe's `same(...)` call
+  and -4.0M on `starts.push`. Why the unattributed instructions grew was not
+  measured. Words at 16M,
   best of 10 wall-clock runs, the two `words-nish` binaries `run.mjs` built
   alternating: 3548 ms (3548 to 4053) before against 3110 ms (3110 to
   3423) after, so the ranges do not overlap: 12% faster on the best run.

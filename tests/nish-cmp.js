@@ -7539,6 +7539,7 @@ const DECLARED = [
       "bench/http-app-carrier.ts": ["bytes.ll"],
       "bench/http1-parse/main.ts": ["bytes.ll", "gen.ll"],
       "bench/http1-request/main.ts": ["bytes.ll", "gen.ll"],
+      "bench/http1-server.ts": ["bytes.ll"],
       "bench/json-api/main.ts": ["bytes.ll"],
       "bench/json-compare/main.ts": ["bytes.ll"],
       "bench/json-tokenizer/main.ts": ["bytes.ll"],
@@ -7594,6 +7595,16 @@ const DECLARED = [
       "tests/link/net_handler/main.ts": ["std_bytes.ll"],
       "tests/link/net_handler_descriptors/main.ts": ["std_bytes.ll"],
       "tests/link/net_handler_overlong/main.ts": ["std_bytes.ll"],
+      // The 0.41.0 seed refuses this probe and bench/http1-server.ts (their
+      // `exit` entries); a seed that compiles them sees these modules move.
+      "tests/link/net_handler_rest_close/main.ts": [
+        "handler.ll",
+        "hkdf.ll",
+        "record.ll",
+        "router.ll",
+        "std_bytes.ll",
+        "tls.ll",
+      ],
       "tests/link/net_handler_short/main.ts": ["std_bytes.ll"],
       "tests/link/net_handler_unbegun/main.ts": ["std_bytes.ll"],
       "tests/link/net_hpack/main.ts": ["hpack.ll"],

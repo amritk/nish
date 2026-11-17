@@ -76,10 +76,19 @@ const shrinking = (x: i32, n: i32): i32 => {
   return total
 }
 
-/** A wait that does nothing. */
-const tick = async (): Promise<i32> => 0
+/** An answer at once. */
+const leaf = async (): Promise<i32> => 0
 
-/** The guard of an async loop holds across its awaits. */
+/** A wait that awaits, so a loop that awaits it polls and can suspend there. */
+const tick = async (): Promise<i32> => {
+  const v: i32 = await leaf()
+  return v
+}
+
+/**
+ * The guard of an async loop holds across its awaits: `tick` can suspend, so
+ * the pre-loop flag is spilled to the frame and reloaded after a resume.
+ */
 const later = async (base: i32, n: i32): Promise<i32> => {
   let total: i32 = 0
   for (let i: i32 = 0; i < n; i++) {
@@ -106,6 +115,10 @@ export const main = async (): Promise<i32> => {
   console.log(`${same(s, 0, 3, 3)} ${same(s, 0, 6, 3)} ${same(s, 2, 2, 0)}`)
   console.log(`${moving(MAX, 3)} ${shrinking(MAX - 3, 8)}`)
   const waited = await later(MAX - 3, 4)
-  console.log(`${waited}`)
+  // A base parsed at run time is not bounded at the call, so this loop's
+  // `base + i` takes the guard, across its awaits.
+  const parsed: i32 = parseInt("2147483644")
+  const guarded = await later(parsed, 4)
+  console.log(`${waited} ${guarded}`)
   return 0
 }

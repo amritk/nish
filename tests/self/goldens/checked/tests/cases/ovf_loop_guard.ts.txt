@@ -45,12 +45,18 @@ function shrinking(x: i32, n: i32): i32 -> @shrinking
   local +0:7 to: i32 (let)
   local +1:7 total: i32 (let)
   local +2:12 i: i32 (let)
-function tick(): i32 -> @tick
+function leaf(): i32 -> @leaf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function tick(): i32 -> @tick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: leaf
+  stackSites=0 stackLocals=0
+  local +0:9 v: i32 (const)
+  callee +0:24 leaf -> @leaf
 function later(base: i32, n: i32): i32 -> @later
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: tick
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow tick
   stackSites=0 stackLocals=0
   local +0:7 total: i32 (let)
   local +1:12 i: i32 (let)
@@ -77,3 +83,6 @@ function main(): i32 -> @nish_main [exported entry]
   callee +14:36 shrinking -> @shrinking
   local +15:9 waited: i32 (const)
   callee +15:24 later -> @later
+  local +18:9 parsed: i32 (const)
+  local +19:9 guarded: i32 (const)
+  callee +19:25 later -> @later
