@@ -828,9 +828,10 @@ bool nish_is_executable(const nish_str *path);
  * has asked, or the negative errno that refused them; -95 on Darwin.
  * `nish_net_ring_premake(n, fds)`: `--sandbox`'s call, before its filter,
  * that makes the `n` restricted rings every flag 8 listener then takes (WP63
- * S3), writing each ring's descriptor to `fds` (room for 64); 0 records that
- * no ring may be made. The rings made, or the errno of the step that failed;
- * -95 on Darwin.
+ * S3), writing each ring's descriptor to `fds`, then the descriptor of the
+ * keeper ring a freed one is replaced with (room for 65, NURING-36); 0
+ * records that no ring may be made. The rings made, or the errno of the step
+ * that failed; -95 on Darwin.
  * `nish_tcp_accept(fd, peer)`: a new descriptor and the peer's address.
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a

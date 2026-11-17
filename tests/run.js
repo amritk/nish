@@ -33185,10 +33185,43 @@ if (!only || "sandbox".includes(only)) {
       )
       const count = run(ring, ["ring-count"])
       check(
-        `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring (${mode})`,
-        count !== null && count.status === 0 && count.stdout === "ring-count: 1\n",
+        `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring and its keeper (${mode})`,
+        count !== null && count.status === 0 && count.stdout === "ring-count: 2\n",
         said(count)
       )
+      // NURING-36: a premade ring's number cannot be made to name another
+      // ring. close, dup2 and dup3 onto a ring's or the keeper's number die
+      // of SIGSYS, close_range answers ENOSYS, and a freed ring's number holds
+      // the keeper, so a duplicate takes another number.
+      const swaps = [
+        ["dup3-ring", "dup3 of an inherited ring onto premade ring 0's number"],
+        ["close-dup", "close of premade ring 0's descriptor, to free its number for F_DUPFD"],
+      ]
+      if (process.arch === "x64") swaps.push(["dup2-ring", "dup2 of an inherited ring onto premade ring 0's number"])
+      for (const [op, why] of swaps) {
+        const r = run(plainRing, [`inherit:${op}`, ring])
+        check(`sandbox: ${why} dies of SIGSYS (NURING-36, ${mode})`, r !== null && r.status === 0 && r.stdout === `${op}: start\ninherit:${op}: SIGSYS\n`, said(r))
+      }
+      const freedDup = run(plainRing, ["inherit:freed", ring])
+      check(
+        `sandbox: a ring a closed listener freed keeps its number on the keeper, and a duplicate takes another (NURING-36, ${mode})`,
+        freedDup !== null &&
+          freedDup.status === 0 &&
+          freedDup.stdout === "freed-dup: the duplicate took another number; the number holds another ring\nfreed-dup: ok\ninherit:freed: exit 0\n",
+        said(freedDup)
+      )
+      for (const [op, args, want, why] of [
+        ["keeper-enter", [], null, "io_uring_enter on the keeper's number dies of SIGSYS"],
+        ["close-range", [], "ENOSYS", "close_range over a premade ring's number answers ENOSYS"],
+        ["uring-close", ["ring"], "EBADF", "IORING_OP_CLOSE of a premade ring's own number answers EBADF"],
+        ["uring-close", ["keeper"], "EBADF", "IORING_OP_CLOSE of the keeper's number answers EBADF"],
+        ["uring-close", ["pipe"], "ok", "IORING_OP_CLOSE of a pipe's descriptor closes it (the control)"],
+        ["fd-ops", [], "ok", "dup2, dup3, close and F_DUPFD on descriptors that are no ring work (the control)"],
+      ]) {
+        const r = run(ring, [op, ...args])
+        const ok = want === null ? killed(r) && r.stdout === `${op}: start\n` : r !== null && r.status === 0 && r.stdout === `${op}: start\n${op}: ${want}\n`
+        check(`sandbox: ${why} (NURING-36, ${mode})`, ok, said(r))
+      }
       const control = run(ring, ["ring-sqe", "0:0"])
       check(
         `sandbox: a premade ring completes a NOP (${mode}, the control)`,
@@ -33233,22 +33266,37 @@ if (!only || "sandbox".includes(only)) {
       const l3 = c3.status === 0 ? linkNative(exe3, three, { driver: probeC, ...hooks }) : c3
       const n3 = l3.status === 0 ? run(exe3, ["ring-count"]) : null
       check(
-        "sandbox: `nish.netRings` 3 premakes 3 rings",
-        n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 3\n",
+        "sandbox: `nish.netRings` 3 premakes 3 rings and their keeper",
+        n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 4\n",
         l3.status === 0 ? said(n3) : shown(l3)
       )
-      // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
-      // ring, which drops it; the stand-in refuses the flag as such a kernel
-      // does, and the pool keeps the probe's floor and makes none (NURING-33).
-      const old = build("ring-old-kernel", "ring", ["--sandbox"], {
+    }
+    // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
+    // ring, which drops it; the stand-in refuses the flag as such a kernel
+    // does, and the pool keeps the probe's floor and makes none (NURING-33).
+    // A NET_LISTEN_RING listener there serves descriptors, sandboxed in
+    // either mode: the fallback a program gets wherever no ring is premade.
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const old = build(`ring-old-kernel-${mode}`, "ring", [flag], {
         defines: [...hooks.defines, "-DUR_SYS_SETUP(e,p)=((p)->flags & (1u << 13) ? (errno = EINVAL, -1L) : syscall(__NR_io_uring_setup, e, p))"],
       })
-      const oldCount = run(old, ["ring-count"])
-      const oldProbe = run(old, ["ring-probe"])
+      if (ringsWork) {
+        const oldCount = run(old, ["ring-count"])
+        const oldProbe = run(old, ["ring-probe"])
+        check(
+          `sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33, ${mode})`,
+          oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
+          `${said(oldCount)}\n${said(oldProbe)}`
+        )
+      }
+      const fallback = run(old, ["fallback"])
       check(
-        "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)",
-        oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
-        `${said(oldCount)}\n${said(oldProbe)}`
+        `sandbox: where no ring is premade a NET_LISTEN_RING listener accepts a descriptor and netRingState() is negative (${mode})`,
+        fallback !== null && fallback.status === 0 && /^fallback: a descriptor, netRingState\(\) -\d+\n$/.test(fallback.stdout),
+        said(fallback)
       )
     }
 
