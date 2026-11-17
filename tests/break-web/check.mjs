@@ -243,6 +243,9 @@ if (ogVideo !== null) {
   for (let at = 0; at + 8 <= ogVideo.length; ) {
     const size32 = ogVideo.readUInt32BE(at)
     boxes.push(ogVideo.toString("latin1", at + 4, at + 8))
+    // A 64-bit size needs 16 bytes; a truncated one ends the walk, and the
+    // checks below fail on what it found, rather than the script throwing.
+    if (size32 === 1 && at + 16 > ogVideo.length) break
     const size = size32 === 1 ? Number(ogVideo.readBigUInt64BE(at + 8)) : size32 === 0 ? ogVideo.length - at : size32
     if (size < 8) break
     at += size

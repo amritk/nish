@@ -59,8 +59,10 @@ if (!/\blibx264\b/.test(ffmpeg.stdout)) {
   process.exit(2)
 }
 
-const frames = mkdtempSync(join(tmpdir(), "og-video-"))
 const { browser, page } = await openCard("gen-og-video", "no-preference")
+// Made once the card is up, so a missing Playwright leaves nothing behind,
+// and removed if a frame fails as after the encode.
+const frames = mkdtempSync(join(tmpdir(), "og-video-"))
 try {
   await page.evaluate(() => {
     // Each animation's time zero: 0 for those already running, the frame it
@@ -95,6 +97,9 @@ try {
       clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
     })
   }
+} catch (error) {
+  rmSync(frames, { recursive: true, force: true })
+  throw error
 } finally {
   await browser.close()
 }
