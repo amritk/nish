@@ -133,7 +133,7 @@ export const main = (): number => {
     // `at === -1` leaves the buffer without the byte it is searched for.
     for (let at: i32 = -1; at < n; at += 1) {
       const xs = letters(n, n * 7 + 3);
-      if (at >= 0 && at < toI32(xs.length)) {
+      if (at >= 0) {
         xs[at] = z;
       }
       const runs = runOfA(n, at);
