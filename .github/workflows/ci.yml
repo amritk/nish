@@ -1150,7 +1150,7 @@ jobs:
   runner:
     name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     # The runner walks the corpus one program at a time; `--shard` deals the
     # programs three ways, and the runner's own `--jobs` (one process per core
     # by default) runs each third as several of itself. Four jobs of one
@@ -1158,8 +1158,12 @@ jobs:
     # four idle. Two jobs of four runners each took 8 minutes on a fast
     # machine and passed 15 on a slow one (run 40997535378), when every
     # tests/link program still linked at -O3 with LTO; they now link under the
-    # profile tests/run.js gives them (tests/speed-link.txt). The `/3` below is
-    # this list's length, and tests/run.js checks that the two agree.
+    # profile tests/run.js gives them (tests/speed-link.txt). The corpus step
+    # alone now takes 416 to 609 s (run 43971564670) and, with about four
+    # minutes of setup before it, a slow runner's 770 to 783 s passed every
+    # case and was cancelled at 15 minutes (run 43945641271); 20 is the bound.
+    # The `/3` below is this list's length, and tests/run.js checks that the
+    # two agree.
     strategy:
       fail-fast: false
       matrix:

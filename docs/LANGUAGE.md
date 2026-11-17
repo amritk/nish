@@ -15247,6 +15247,39 @@ by the caller.
     `tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests,
     and the rewrite grew none.
 
+    What a pass keeps counts at any depth of calls. A function the pass calls
+    leaves memory behind in the loop when all of these hold:
+    - it answers no memory (a number, a `boolean`, an enum or nothing);
+    - it has no scope of its own and manages no arena;
+    - it builds a temporary that it drops, or calls a function that leaves
+      one behind by this same rule, on every call that returns.
+
+    "Every call" admits one kind of branch: an `if (p === K)`, `if (p !== K)`
+    or `switch (p)` on a parameter `p` against a constant. `K` is a literal,
+    a name that is neither a parameter nor a `let`, or a member of a name
+    that is not a local, such as an enum's. A handler that dispatches on the event it is handed therefore
+    counts. The warning names the call in the pass and the site, as in "what
+    `readPost` leaves behind on line 102 (the string built on line 69, in
+    `readPost`) piles up". Its rewrite puts the block inside the function that
+    builds the temporary. When that function is in `std/` or a dependency, the
+    rewrite puts the block in the loop body instead.
+
+    `tests/link/nl9018_server/helper_leaky.ts` builds its reply in a
+    `readPost` helper that also answers, so `readPost` is refused a scope of
+    its own. `method_leaky.ts` reaches the same helper from the loop through
+    `App.ready` and `App.onEnd`. Each grew 1,252 kB over 20,000 requests,
+    and each rewrite (`helper_flat.ts`, `method_flat.ts`) grew none.
+
+    These are not charged to the loop:
+    - what a function that answers memory builds, which goes to its caller
+      with the result;
+    - a temporary under any other branch, or after a statement that can
+      return, such as an error message, a table built on first use or one
+      step of a handshake;
+    - a temporary whose every path ends the program (`panic`,
+      `process.exit`), whether it is built in the call's arguments or in a
+      statement before it, as in `const msg = ...; panic(msg)`.
+
     A loop is bounded, and NL9018 stays silent for it, when one of these
     holds:
 
@@ -16284,6 +16317,9 @@ passes is a `function` site that accumulates in a `main` that earns a scope
 through its callees, and an `unscoped` one in a function that has none
 (`tests/cases/arena_placement`, `arena_placement_loops`). A `returned` or `kept`
 site is memory the program holds on purpose, so it is never marked.
+An `unscoped` site in another function is marked too when that function is
+reached from such a pass and leaves the site behind in it, by NL9018's rule for
+callees: what the function leaves in its caller's memory piles up in the loop's.
 
 - **The answer is about the site's own function.** A scope in a caller can
   still release an `unscoped` site's memory: a loop whose pass is scoped takes
@@ -16328,7 +16364,8 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   condition's line follows the lines of the loops in its body.
 - **A listed loop with no bound** — one that is not bounded, by NL9018's rule — is
   the loop NL9018 warns about when what its pass keeps is a temporary the
-  pass drops; the report lists it either way.
+  pass drops, or one a function it calls leaves behind; the report lists it
+  either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not, nor is a constructor,

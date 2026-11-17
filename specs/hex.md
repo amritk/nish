@@ -48,6 +48,7 @@ hexEncode MUST return exactly two characters per input byte.
 
 ~~~ ts-property
 // P-ENC-LEN covers R-ENC-LEN — two characters per byte
+// samples: 96
 forall (b: u8[] /* 0..64 */) => hexEncode(b).length === 2 * b.length
 ~~~
 
@@ -61,6 +62,7 @@ hexEncode MUST NOT emit uppercase digits, separators or a prefix.
 
 ~~~ ts-property
 // P-ENC-LOWER covers R-ENC-ONLY — the encoding has no uppercase digit
+// samples: 96
 forall (b: u8[] /* 0..64 */) => {
   const e = hexEncode(b);
   return e === e.toLowerCase();
@@ -69,6 +71,7 @@ forall (b: u8[] /* 0..64 */) => {
 
 ~~~ ts-property
 // P-ROUND-TRIP covers R-ROUND-TRIP, R-ENC-ONLY — hexDecode(hexEncode(b)) is b
+// samples: 96
 forall (b: u8[] /* 0..64 */) => {
   const d = hexDecode(hexEncode(b));
   return d !== null && unwrap(d) === b;
@@ -84,6 +87,7 @@ hexDecode MUST accept the digits 0-9, a-f and A-F, in any mix of case.
 
 ~~~ ts-property
 // P-CANONICAL covers R-ENC-DIGITS, R-DEC-ACCEPT — lowercase hex of even length re-encodes to itself
+// samples: 96
 forall (t: string /* 0..32 hexdigit */) => {
   const d = hexDecode(t);
   return d !== null && hexEncode(unwrap(d)) === t;
@@ -93,6 +97,7 @@ where t.length % 2 === 0
 
 ~~~ ts-property
 // P-ANY-CASE covers R-DEC-ACCEPT — any mix of case decodes as its lowercase does
+// samples: 96
 forall (t: string /* 0..32 hexdigit HEXDIGIT */) => {
   const d = hexDecode(t);
   return d !== null && hexEncode(unwrap(d)) === t.toLowerCase();
@@ -108,12 +113,14 @@ other character, including whitespace and a "0x" prefix.
 
 ~~~ ts-property
 // P-ODD covers R-DEC-REJECT — an odd length is null
+// samples: 96
 forall (t: string /* 1..33 hexdigit HEXDIGIT */) => hexDecode(t) === null
 where t.length % 2 === 1
 ~~~
 
 ~~~ ts-property
 // P-OTHER covers R-DEC-REJECT — any other printable character or whitespace, anywhere, is null
+// samples: 96
 forall (
   a: string /* 0..16 hexdigit HEXDIGIT */,
   x: string /* 1..1 " \t\n\r!\"#$%&'()*+,-./:;<=>?@GHIJKLMNOPQRSTUVWXYZ[\\]^_`ghijklmnopqrstuvwxyz{|}~" */,
@@ -124,6 +131,7 @@ where (a + (x + z)).length % 2 === 0
 
 ~~~ ts-property
 // P-OTHER-EDGE covers R-DEC-REJECT — the characters next to each digit range are null
+// samples: 96
 forall (
   a: string /* 0..16 hexdigit HEXDIGIT */,
   x: string /* 1..1 "/:@G`g" */,
@@ -134,6 +142,7 @@ where (a + (x + z)).length % 2 === 0
 
 ~~~ ts-property
 // P-CONTROL covers R-DEC-REJECT — a control byte or DEL, anywhere in an even-length text, is null
+// samples: 96
 forall (
   a: string /* 0..16 hexdigit HEXDIGIT */,
   i: i32 /* 0..127 */,
@@ -144,6 +153,7 @@ where (i < 32 || i === 127) && (a.length + z.length) % 2 === 1
 
 ~~~ ts-property
 // P-PREFIX covers R-DEC-REJECT — a "0x" prefix is null
+// samples: 96
 forall (t: string /* 0..32 hexdigit HEXDIGIT */) => hexDecode("0x" + t) === null
 where t.length % 2 === 0
 ~~~

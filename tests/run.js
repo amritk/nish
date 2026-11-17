@@ -12020,14 +12020,20 @@ if (dealtHere("fileServer")) {
 // `tests/link/nl9018_server/leaky.ts` builds its reply text in the event loop
 // and warns; `flat.ts` builds it in a `using a = arena()` block and compiles
 // clean, refused nothing; `examples/file-server.ts`, which allocates nothing per
-// request in its own code, stays quiet.
+// request in its own code, stays quiet. `helper_leaky.ts` moves that work into
+// a `readPost` helper that also answers, so the helper is refused a scope of
+// its own and leaves the string in the loop's memory; `method_leaky.ts` reaches
+// the same helper through two methods of a class. Both warn at the loop and
+// name the line that leaves the string behind; `helper_flat.ts` and
+// `method_flat.ts`, with the arena block inside the helper, stay quiet.
 //
 // Then each server answers 2,000 requests on one keep-alive connection, one
 // at a time, and 20,000 more; its VmRSS is read from /proc after each batch.
 // Ten runs of each (Linux x64, `--profile speed`) read flat's at the same kB
-// after both batches and leaky's 1,252 kB higher after the second, every time.
-// The band is 256 kB, a fifth of what leaky gains, so flat must stay within it
-// and leaky must leave it: the second says the measure can see the pile the
+// after both batches and leaky's 1,252 kB higher after the second, every time;
+// five runs of the helper and method pairs read the same, to the kB. The band is 256 kB, a fifth of
+// what a leaky server gains, so each flat server must stay within it and each
+// leaky one must leave it: the second says the measure can see the pile the
 // warning names.
 if (dealtHere("unboundedPass")) {
   const UNBOUNDED_RSS_BAND = 256
@@ -12113,6 +12119,51 @@ if (dealtHere("unboundedPass")) {
     flat.status === 0 && !flat.stderr.includes("performance:") && !flat.stderr.includes("error"),
     shown(flat)
   )
+  // A pile left by a helper the loop calls: the warning is at the loop, names
+  // the call that leaves it and the line it is built on, and sends the arena
+  // block into the function that builds it.
+  for (const [name, at, leaves, built] of [
+    ["helper_leaky", "100:9", "`readPost` leaves behind on line 102", "(the string built on line 69, in `readPost`)"],
+    ["method_leaky", "126:9", "`App.ready` leaves behind on line 127", "(the string built on line 70, in `readPost`)"],
+  ]) {
+    const r = build(name, path.join(serverDir, `${name}.ts`), [])
+    const hits = nl9018Lines(r.stderr)
+    check(
+      `nl9018: ${name}.ts, whose reply text is built in a helper that also answers, warns at the event loop`,
+      r.status === 0 &&
+        hits.length === 1 &&
+        hits[0].includes(`${name}.ts:${at}: `) &&
+        hits[0].includes(`what ${leaves} ${built} piles up`) &&
+        hits[0].includes("into a block inside `readPost` that opens with `using a = arena()`"),
+      shown(r)
+    )
+  }
+  for (const name of ["helper_flat", "method_flat"]) {
+    const r = build(name, path.join(serverDir, `${name}.ts`), [])
+    check(
+      `nl9018: ${name}.ts, with the arena block inside the helper, compiles with no warning and no refusal`,
+      r.status === 0 && !r.stderr.includes("performance:") && !r.stderr.includes("error"),
+      shown(r)
+    )
+  }
+  // The callee summary's edges, one loop each: a recursion `a ⇄ b` warns at
+  // both loops whichever is checked first, a constructor that dispatches on
+  // its parameter is followed, and a comparison against a `let` or a message
+  // built for a `panic` in the next statement is not charged.
+  const callees = build("callees", path.join(root, "tests", "link", "nl9018_callees", "callees.ts"), [])
+  const calleeHits = nl9018Lines(callees.stderr)
+  check(
+    "nl9018: callees.ts warns at the two loops of a recursion and at a constructor's dispatch, and nowhere else",
+    callees.status === 0 &&
+      calleeHits.length === 3 &&
+      calleeHits[0].includes("callees.ts:54:3: ") &&
+      calleeHits[0].includes("what `a` leaves behind on line 56 (the string built on line 37, in `c`) piles up") &&
+      calleeHits[1].includes("callees.ts:61:3: ") &&
+      calleeHits[1].includes("what `b` leaves behind on line 63 (the string built on line 37, in `c`) piles up") &&
+      calleeHits[2].includes("callees.ts:85:3: ") &&
+      calleeHits[2].includes("(the string built on line 72, in `Handler.constructor`) piles up"),
+    shown(callees)
+  )
   const fileServer = build("file-server", path.join(root, "examples", "file-server.ts"), [])
   check(
     "nl9018: examples/file-server.ts, which allocates nothing per request, compiles with no NL9018",
@@ -12197,7 +12248,8 @@ if (dealtHere("unboundedPass")) {
         })
       })
     const peaks = {}
-    for (const name of ["leaky", "flat"]) {
+    const SERVERS = ["leaky", "flat", "helper_leaky", "helper_flat", "method_leaky", "method_flat"]
+    for (const name of SERVERS) {
       const exe = path.join(srvDir, name, "server")
       const linked = build(`${name}-exe`, path.join(serverDir, `${name}.ts`), [
         "--link",
@@ -12220,17 +12272,22 @@ if (dealtHere("unboundedPass")) {
         peaks[name] = r.readings
       }
     }
-    if (peaks.flat !== undefined && peaks.leaky !== undefined) {
-      const grew = (name) => peaks[name][1] - peaks[name][0]
+    const grew = (name) => peaks[name][1] - peaks[name][0]
+    for (const prefix of ["", "helper_", "method_"]) {
+      const flatName = `${prefix}flat`
+      const leakyName = `${prefix}leaky`
+      if (peaks[flatName] === undefined || peaks[leakyName] === undefined) {
+        continue
+      }
       check(
-        `nl9018: the arena-block server's RSS stays within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
-        grew("flat") <= UNBOUNDED_RSS_BAND,
-        `VmRSS ${peaks.flat[0]} kB after 2,000 requests, ${peaks.flat[1]} kB after 20,000 more`
+        `nl9018: ${flatName}.ts, the arena-block server, keeps its RSS within ${UNBOUNDED_RSS_BAND} kB over 20,000 requests`,
+        grew(flatName) <= UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks[flatName][0]} kB after 2,000 requests, ${peaks[flatName][1]} kB after 20,000 more`
       )
       check(
-        `nl9018: the warned server's RSS grows past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
-        grew("leaky") > UNBOUNDED_RSS_BAND,
-        `VmRSS ${peaks.leaky[0]} kB after 2,000 requests, ${peaks.leaky[1]} kB after 20,000 more`
+        `nl9018: ${leakyName}.ts, the warned server, grows its RSS past ${UNBOUNDED_RSS_BAND} kB over the same requests, so the measure sees the pile`,
+        grew(leakyName) > UNBOUNDED_RSS_BAND,
+        `VmRSS ${peaks[leakyName][0]} kB after 2,000 requests, ${peaks[leakyName][1]} kB after 20,000 more`
       )
     }
   }
@@ -40434,10 +40491,13 @@ if (!only || "hooks".includes(only) || "format".includes(only)) {
 // ---- The spec tests: test/spec/<n>.ts, emitted by vector from contracts/<n>.json --------
 // Each test names the contract it was emitted from by hash on its one
 // `// vector-contract-sha256:` line. A test whose contract is missing or has moved
-// since is a FAIL: regenerate it (contracts/README.md). A test of a module std/ does
+// since is a FAIL, and a current one is a PASS of its own before the run's line:
+// regenerate a stale one (contracts/README.md). A test of a module std/ does
 // not have yet is a SKIP naming the module; otherwise the test is built and run, and
-// passes on exit 0, no FAIL line, and the `vector-done <nonce>` line its main prints
-// last, so a test that stopped early cannot pass. vector itself is not needed here.
+// passes on exit 0, no FAIL line, at least one PASS line, and the `vector-done <nonce>`
+// line its main prints last, so a test that stopped early, or whose every clause was
+// skipped, cannot pass: as in vector's own run, nothing ran. Each `SKIP` line the test
+// prints is a SKIP of its own. vector itself is not needed here.
 if (!only || "spec".includes(only)) {
   const specDir = path.join(root, "test", "spec")
   const tests = fs.existsSync(specDir)
@@ -40461,14 +40521,13 @@ if (!only || "spec".includes(only)) {
       .split("\n")
       .filter((l) => l.startsWith("// vector-contract-sha256:"))
       .map((l) => l.slice("// vector-contract-sha256:".length).trim())
-    if (pins.length !== 1 || pins[0] !== want) {
-      check(
-        `spec: ${rel} was emitted from ${contractRel} as it is now`,
-        false,
-        `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
-      )
-      continue
-    }
+    const fresh = pins.length === 1 && pins[0] === want
+    check(
+      `spec: ${rel} was emitted from ${contractRel} as it is now`,
+      fresh,
+      `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
+    )
+    if (!fresh) continue
     let mod
     try {
       mod = JSON.parse(fs.readFileSync(contractPath, "utf8"))?.target?.module
@@ -40512,13 +40571,18 @@ if (!only || "spec".includes(only)) {
       maxBuffer: 64 * 1024 * 1024,
     })
     const lines = (r.stdout ?? "").split("\n")
+    const ran = lines.some((l) => l.startsWith("PASS  "))
     check(
       `spec: ${rel} passes against ${stdRel}`,
       r.status === 0 &&
         !lines.some((l) => l.startsWith("FAIL")) &&
-        lines.some((l) => l.startsWith(`vector-done ${nonce} `)),
-      shown(r)
+        lines.some((l) => l.startsWith(`vector-done ${nonce} `)) &&
+        ran,
+      ran ? shown(r) : `no clause passed, so nothing was checked\n${shown(r)}`
     )
+    // A clause the test skipped, such as a slow iterated vector emitted without
+    // `--slow`, does not fail the run; each is a SKIP here so the summary counts it.
+    for (const l of lines) if (l.startsWith("SKIP  ")) skip(`spec: ${rel}: ${l.slice("SKIP  ".length)}`)
   }
 }
 
