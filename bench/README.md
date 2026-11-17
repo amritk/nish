@@ -422,6 +422,16 @@ virtual machine when neither its code nor its instruction count has: wall time
 on this suite is sensitive to where the hot loop falls against 64-byte lines.
 Read a timing change here against its instruction count first.
 
+## Goose
+
+`bench/goose/` holds Nish ports of five programs from the benchmark suite of
+[Goose](https://github.com/aardappel/goose): tree, bintrees, records, strlist
+and words. `bench/goose/run.mjs` builds each program with both compilers,
+checks that the checksums match, and compares wall time, peak RSS and
+stripped binary size. Goose is not vendored; its
+[README](goose/README.md) says how to clone and build it, and lists the
+results and the cause of each gap.
+
 ## Instruction counts
 
 Wall time on a virtual machine moves by more than a codegen regression of a few

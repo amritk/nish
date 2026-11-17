@@ -158,6 +158,20 @@ Apache-2.0): the `FxHasher` the map-keys benchmark's Rust baseline reproduces.
 FxHasher reproduced from rustc-hash 1.1.0 (https://github.com/rust-lang/rustc-hash), src/lib.rs. Copyright 2015 The Rust Project Developers. Used under the MIT License; see bench/map-keys/LICENSE-rustc-hash.md.
 ```
 
+### `bench/goose/LICENSE`
+
+[Goose](https://github.com/aardappel/goose), by Wouter van Oortmerssen, under
+the Apache License, Version 2.0. Upstream states no copyright line (its
+`LICENSE` is the licence text alone, and it has no `NOTICE` file), so the notice
+names the project and the licence. The programs of its benchmark suite,
+`bench/goose/*.goose` at commit `3a0aa2e`, ported to Nish: each port also names
+the file it comes from and says it was changed by the port, as the licence's
+section 4(b) asks.
+
+```notice
+Ported to Nish from Goose (https://github.com/aardappel/goose). Licensed under the Apache License, Version 2.0; see bench/goose/LICENSE.
+```
+
 ### `bench/awfy/LICENSE.md`
 
 The [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) benchmarks.
@@ -519,6 +533,11 @@ Copied from vector (https://github.com/amritk/vector), specs/rfc5869-hkdf-sha256
 | `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-simd.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/goose/tree.ts` | Goose at `3a0aa2e`, `tree.goose`: the xorshift64 tree build, its depth, seed and eight passes | Apache-2.0 | `bench/goose/LICENSE` |
+| `bench/goose/bintrees.ts` | Goose at `3a0aa2e`, `bintrees.goose`: its depths and output | Apache-2.0 | `bench/goose/LICENSE` |
+| `bench/goose/records.ts` | Goose at `3a0aa2e`, `records_var.goose`: the event mix, its sizes and the replay; the column layout is not derived from it | Apache-2.0 | `bench/goose/LICENSE` |
+| `bench/goose/strlist.ts` | Goose at `3a0aa2e`, `strlist.goose`: the word generator, split and scan | Apache-2.0 | `bench/goose/LICENSE` |
+| `bench/goose/words.ts` | Goose at `3a0aa2e`, `words.goose`: the vocabulary, the skewed draw and the open-addressed count; the hash is FNV-1a, not Goose's | Apache-2.0 | `bench/goose/LICENSE` |
 | `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `k_sin.c` `__kernel_sin`, `k_cos.c` `__kernel_cos`, `s_tan.c` `tan`, `s_sin.c` `sin`, `s_cos.c` `cos`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot`, `e_exp.c` `__ieee754_exp`, `e_log.c` `__ieee754_log`, `e_pow.c` `__ieee754_pow` (with JavaScript's NaN cases), `e_fmod.c`'s shift-and-subtract and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `trigLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |

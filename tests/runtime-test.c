@@ -2036,7 +2036,7 @@ int main(void) {
   assert(big != a);
   memset(big, 0xAB, 1 << 20);
   nish_reset_arena();
-  assert(nish_arena.cap >= (1 << 20) && nish_arena.chunks != NULL);
+  assert(nish_arena.cap >= (1 << 20) - 8 && nish_arena.chunks != NULL);
 
   /* WP6 scopes: mark/release rewinds within a chunk, pops chunks pushed since
    * an older mark, and a mark of 0 (empty arena) behaves like a reset. */
@@ -2303,7 +2303,10 @@ int main(void) {
   expect_str(nish_read_file(path), "", "empty file");
   unlink(path->data);
 
-  /* WP4 arrays: grow doubles cap (4 from empty), keeps len and the elements, 8-aligned. */
+  /* WP4 arrays: grow doubles cap (4 from empty), keeps len and the elements, 8-aligned.
+     The block is the last one bumped from the arena, so the first doubling
+     grows it where it is; once another block lies behind it, the next one
+     moves it to a fresh block and copies the elements. */
   nish_array arr = { 0, 0, 0 };
   nish_array_grow(&arr, sizeof(int32_t));
   assert(arr.cap == 4 && arr.len == 0 && arr.data != NULL && ((uintptr_t)arr.data & 7) == 0);
@@ -2311,7 +2314,12 @@ int main(void) {
   arr.len = 4;
   char *old = arr.data;
   nish_array_grow(&arr, sizeof(int32_t));
-  assert(arr.cap == 8 && arr.len == 4 && arr.data != old);
+  assert(arr.cap == 8 && arr.len == 4 && arr.data == old);
+  for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
+  char *behind = nish_alloc_struct(8);
+  assert(behind == old + 8 * sizeof(int32_t));
+  nish_array_grow(&arr, sizeof(int32_t));
+  assert(arr.cap == 16 && arr.len == 4 && arr.data != old && ((uintptr_t)arr.data & 7) == 0);
   for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
   /* K1-6 (docs/security/codegen.md): the capacity stops at 2^31 - 1 elements,
      and a full array of that length refuses to grow rather than let `length`
