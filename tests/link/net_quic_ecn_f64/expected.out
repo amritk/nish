@@ -7,4 +7,21 @@ PASS  and none of them counted as marked
 PASS  without ecnMarking the flight is all seven
 PASS  unmarked
 PASS  and no packet counted as marked
-quic ecn flights: 9 passed, 0 failed, 0 skipped
+PASS  an ACK_ECN of two ranges is appended
+PASS  its size is what quicAckEcnSize says
+PASS  and it parses as one frame, the whole of it
+PASS  type 0x03 with ECT(0), ECT(1) and CE as written
+PASS  the ranges are the ACK's
+PASS  a negative count is refused
+PASS  a buffer a byte short takes nothing
+PASS  and is left untouched
+PASS  Not-ECT counts nothing, and the ACK stays type 0x02
+PASS  each codepoint to its own count, the bits above the two ignored
+PASS  putAck writes the same ACK_ECN
+PASS  clear forgets the counts with the ranges: a plain ACK again
+PASS  the client's Initial arrived ECT(0): the server's Initial ACK is an ACK_ECN counting it
+PASS  two 1-RTT packets that arrived CE: Application Data's own counts, without the Initial's ECT(0)
+PASS  a packet delivered again, CE, is a duplicate and counts nothing; two more ECT(1) count two
+PASS  Not-ECT arrivals: the server's ACK is type 0x02
+PASS  and so was its Initial ACK
+quic ecn flights: 26 passed, 0 failed, 0 skipped
