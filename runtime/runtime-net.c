@@ -474,10 +474,8 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   }
   struct nr_conn *c = &S->conns[e->ring][e->slot];
   if (e->kind == 1) {
-    /* A reused slot starts with no receive queue, as a fresh one does: one
-       it still held would be the last connection's capacity (NURING-38). */
+    /* nr_close freed the queue of a slot reused here (NURING-38). */
     uint32_t gen = c->gen;
-    free(c->rbuf);
     memset(c, 0, sizeof *c);
     c->gen = gen;
     c->open = 1;
@@ -509,7 +507,6 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
        so a read never runs past the failure it reports. */
     if (c->lingering || c->hup || e->res <= 0) return;
     uint32_t n = (uint32_t)e->res;
-    if (c->roff == c->rlen) c->roff = c->rlen = 0;
     if ((uint64_t)(c->rlen - c->roff) + n > NR_RECV_MAX) {
       c->hup = 1;
       c->hup_res = -105;
@@ -714,8 +711,8 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     c->roff += n;
     /* A held receive goes again once the program has read half the queue. */
     if (c->rheld && c->rlen - c->roff < NR_AREA / 2 && nish_uring_hold(S->u, ring, slot, 0) == 0) c->rheld = 0;
-    /* A drained queue is freed, so an idle slot holds none (NURING-38): the
-       next receive allocates again, and a read before it finds nothing. */
+    /* A drained queue is freed and emptied, so an idle slot holds none
+       (NURING-38) and a receive never finds roff at rlen past 0. */
     if (c->roff == c->rlen) {
       free(c->rbuf);
       c->rbuf = NULL;
