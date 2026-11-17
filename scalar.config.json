@@ -1398,6 +1398,7 @@
                   "/wp39-http-server": { "type": "page", "title": "WP39: The HTTP server: a TechEmpower entry, then a general-purpose server", "filepath": "docs/roadmap/wp39-http-server.md" },
                   "/wp43-http-app-layer": { "type": "page", "title": "WP43: The HTTP application layer", "filepath": "docs/roadmap/wp43-http-app-layer.md" },
                   "/wp49-async-server": { "type": "page", "title": "WP49: async/await on the server, and the TechEmpower top", "filepath": "docs/roadmap/wp49-async-server.md" },
+                  "/wp48-ref32-classes": { "type": "page", "title": "WP48: 32-bit references for linked classes", "filepath": "docs/roadmap/wp48-ref32-classes.md" },
                   "/wp51-function-references": { "type": "page", "title": "WP51: References to capture-free top-level functions", "filepath": "docs/roadmap/wp51-function-references.md" },
                   "/wp28-compatibility-mode": { "type": "page", "title": "WP28: Compatibility mode", "filepath": "docs/roadmap/wp28-compatibility-mode.md" },
                   "/wp54-async-wasm": { "type": "page", "title": "WP54: async on wasm, with the page as the executor", "filepath": "docs/roadmap/wp54-async-wasm.md" },

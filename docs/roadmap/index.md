@@ -31,6 +31,7 @@ specified.
 - M4: when to declare 1.0.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP57: Module-scoped names](wp57-module-scoped-names.md): whether two exported functions of one package may share a name, and what that does to the C surface (S2).
+- [WP48: 32-bit references for linked classes](wp48-ref32-classes.md): whether to build it, whether the compiler picks the classes by default (and the markers' spelling), zero-based or based decoding per platform, and whether `R[]` elements are narrowed later.
 - [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md): how module storage crosses into the hidden memory, how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` (S3).
 - [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md): whether to build `Dyn<I>`; the design note measures it against the hand-written dispatch and recommends shipping interface method signatures (stage 1) now, with `Dyn<I>` in registers and in stored places each gated on its own build's timing.
 - [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md): the shape of the `constraints` option, whether to record which keyword failed, whether encode checks constraints in a `-g` build, and whether a coerce class may reach a strict one.
@@ -56,12 +57,13 @@ specified.
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | In progress | 3 of 6 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
+| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | Proposed | 1 of 7 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
 | [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md) | Proposed | 0 of 4 |
-| [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 5 |
+| [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 6 |
 | [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md) | Proposed | 0 of 3 |
 | [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md) | Proposed | 0 of 5 |
 
@@ -117,7 +119,7 @@ specified.
 ## Not built
 
 - WP41, a 64×64→128 multiply: measured on Poly1305, 14% to 21% faster natively but 19% to 27% slower on wasm32, so it was declined.
-- WP48, compressed 32-bit references: measured, and neither a whole-program 32-bit mode nor an `i32` pool was built; ports use a tree's first-child and next-sibling links instead, which took about half the memory.
+- WP48's first design, a whole-program 32-bit mode or an `i32` pool: measured and declined on 2026-11-11; ports use a tree's first-child and next-sibling links instead, which took about half the memory. WP48 is reopened above for linked classes the compiler picks.
 
 WP-P, the pipeline prep, landed without a note, and WP11, documentation, is
 folded into every package.
