@@ -7543,10 +7543,10 @@ const LINK_SERIAL = new Map([
  * - The process. Nothing here changes `process.env` or the working
  *   directory; an environment a native run needs (`envWithThreads`) is a copy
  *   handed to that one spawn.
- * - The world the programs run in. The four that write files write paths
- *   named after themselves (`build/net_relay/`, `build/rt_sec_read_cap/`,
- *   `build/rt_sec_wasm_arena/`, and net_relay_soak's server's
- *   `build/net_relay_soak_<n>.*`), and nothing else reads them;
+ * - The world the programs run in. The five that write files write paths
+ *   named after themselves (`build/net_relay/`, `build/net_relay_f64/`,
+ *   `build/rt_sec_read_cap/`, `build/rt_sec_wasm_arena/`, and net_relay_soak's
+ *   server's `build/net_relay_soak_<n>.*`), and nothing else reads them;
  *   net_interop_server writes only when started by hand. Every socket a
  *   program's checks open is bound to port 0, which the kernel picks free; the
  *   literal ports in tests/link are a server's CLI argument or bytes in a
@@ -17221,6 +17221,24 @@ if (dealtHere("runtimeChecks")) {
           trapped.run.stderr
         ),
       trapped.shown
+    )
+    // tests/runtime/debug-arena-grow-test.c: a block that fills its own chunk
+    // grows by a `realloc` of that chunk in a normal build, which aborted on
+    // the debug arena's reserved, never-malloc'd chunks.
+    const grown = (() => {
+      const exe = path.join(buildDir, "debug_arena_grow")
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-DNISH_ARENA_DEBUG=1", ...RUNTIME_C, "tests/runtime/debug-arena-grow-test.c", "-lm", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      return { run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
+    })()
+    check(
+      "debug arena: an array grown past 64 KB takes the copy and keeps every element",
+      grown.run !== null && grown.run.status === 0 && grown.run.stdout === "len 1048576, sum 66584576\n",
+      grown.shown
     )
 
     // Every case that exercises the arena or a region, linked as section A

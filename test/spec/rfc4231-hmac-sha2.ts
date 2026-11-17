@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 2035789c106c8c6c12104474c0b50940001091d7aca619950e230a7e0572a2e6
+// vector-contract-sha256: aed60559e8949d45f551d4ebb80aaee9ac50b92ef377791d7221aa7ea71731d9
 
 import { Suite } from "nish/testing";
 import { hmacSha256, hmacSha384, hmacSha512 } from "nish/crypto/hmac";
@@ -24,6 +24,19 @@ const hexOf = (bytes: u8[]): string => {
     parts.push(digits.substring(v & 15, (v & 15) + 1));
   }
   return parts.join("");
+};
+
+/** The first `n` bytes of `bytes` as hex; a shorter result says so, and never matches. */
+const hexPrefix = (bytes: u8[], n: i32): string => {
+  const have: i32 = toI32(bytes.length);
+  if (have < n) {
+    return `a ${have}-byte result, shorter than the ${n} bytes it is truncated to`;
+  }
+  const head: u8[] = [];
+  for (let i: i32 = 0; i < n; i += 1) {
+    head.push(bytes[i]);
+  }
+  return hexOf(head);
 };
 
 /** The bytes a lowercase hex string spells. */
@@ -73,30 +86,6 @@ const concatBytes = (a: u8[], b: u8[]): u8[] => {
   return out;
 };
 
-/** `b[from, to)`, both ends clamped into the array. */
-const sliceBytes = (b: u8[], from: i32, to: i32): u8[] => {
-  const n: i32 = toI32(b.length);
-  let lo: i32 = from;
-  if (lo < 0) {
-    lo = 0;
-  }
-  if (lo > n) {
-    lo = n;
-  }
-  let hi: i32 = to;
-  if (hi < lo) {
-    hi = lo;
-  }
-  if (hi > n) {
-    hi = n;
-  }
-  const out: u8[] = [];
-  for (let i: i32 = lo; i < hi; i += 1) {
-    out.push(b[i]);
-  }
-  return out;
-};
-
 /** `n` copies of the byte `v` (none when n < 0). */
 const fillBytes = (v: i32, n: i32): u8[] => {
   const out: u8[] = [];
@@ -135,16 +124,6 @@ const bitwiseBytes = (a: u8[], b: u8[], k: i32): u8[] => {
       z = x | y;
     }
     out.push(toU8(z));
-  }
-  return out;
-};
-
-/** The bytes of `s`. */
-const utf8Bytes = (s: string): u8[] => {
-  const out: u8[] = [];
-  const n: i32 = toI32(s.length);
-  for (let i: i32 = 0; i < n; i += 1) {
-    out.push(toU8(toI32(s.charCodeAt(i))));
   }
   return out;
 };
@@ -289,6 +268,45 @@ const clause_TC4_384 = (t: Suite): boolean => t.eqStr("[TC4-384] RFC 4231 test c
  *   (= block-size of SHA-224 and SHA-256).
  */
 const clause_TC4_512 = (t: Suite): boolean => t.eqStr("[TC4-512] RFC 4231 test case 4, HMAC-SHA-512 (R-HMAC-SHA512, R-KEY-DATA-64-TC4)", hexOf(hmacSha512(unhex("0102030405060708090a0b0c0d0e0f10111213141516171819"), unhex("cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"))), "b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd");
+
+/**
+ * RFC 4231 test case 5, HMAC-SHA-256 truncated to 128 bits
+ * Holds the result's first 128 bits to the expected value.
+ *
+ * R-HMAC-SHA256 — RFC 4231 §1, DEFINITION:
+ *   HMAC-SHA-256 is the realization of the HMAC message authentication code
+ *   using the SHA-256 hash function
+ *
+ * R-TRUNC — RFC 4231 §4.6, DEFINITION:
+ *   Test with a truncation of output to 128 bits.
+ */
+const clause_TC5_256 = (t: Suite): boolean => t.eqStr("[TC5-256] RFC 4231 test case 5, HMAC-SHA-256 truncated to 128 bits (R-HMAC-SHA256, R-TRUNC)", hexPrefix(hmacSha256(unhex("0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"), unhex("546573742057697468205472756e636174696f6e")), 16), "a3b6167473100ee06e0c796c2955552b");
+
+/**
+ * RFC 4231 test case 5, HMAC-SHA-384 truncated to 128 bits
+ * Holds the result's first 128 bits to the expected value.
+ *
+ * R-HMAC-SHA384 — RFC 4231 §1, DEFINITION:
+ *   HMAC-SHA-384 is the realization of the HMAC message authentication code
+ *   using the SHA-384 hash function
+ *
+ * R-TRUNC — RFC 4231 §4.6, DEFINITION:
+ *   Test with a truncation of output to 128 bits.
+ */
+const clause_TC5_384 = (t: Suite): boolean => t.eqStr("[TC5-384] RFC 4231 test case 5, HMAC-SHA-384 truncated to 128 bits (R-HMAC-SHA384, R-TRUNC)", hexPrefix(hmacSha384(unhex("0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"), unhex("546573742057697468205472756e636174696f6e")), 16), "3abf34c3503b2a23a46efc619baef897");
+
+/**
+ * RFC 4231 test case 5, HMAC-SHA-512 truncated to 128 bits
+ * Holds the result's first 128 bits to the expected value.
+ *
+ * R-HMAC-SHA512 — RFC 4231 §1, DEFINITION:
+ *   HMAC-SHA-512 is the realization of the HMAC message authentication code
+ *   using the SHA-512 hash function
+ *
+ * R-TRUNC — RFC 4231 §4.6, DEFINITION:
+ *   Test with a truncation of output to 128 bits.
+ */
+const clause_TC5_512 = (t: Suite): boolean => t.eqStr("[TC5-512] RFC 4231 test case 5, HMAC-SHA-512 truncated to 128 bits (R-HMAC-SHA512, R-TRUNC)", hexPrefix(hmacSha512(unhex("0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"), unhex("546573742057697468205472756e636174696f6e")), 16), "415fad6271580a531d4179bc891d87a6");
 
 /**
  * RFC 4231 test case 6, a 131-byte key, HMAC-SHA-256
@@ -999,72 +1017,6 @@ const clause_P_TAG_LEN = (t: Suite): boolean => {
   return t.pass("[P-TAG-LEN] the tags are 32, 48 and 64 bytes, the hash output, for any key and message (R-HMAC-SHA256, R-HMAC-SHA384, R-HMAC-SHA512) — 33 samples");
 };
 
-/**
- * RFC 4231 test case 5: the first 128 bits of HMAC-SHA-256 are a3b6167473100ee06e0c796c2955552b
- *
- * R-TRUNC — RFC 4231 §4.6, DEFINITION:
- *   Test with a truncation of output to 128 bits.
- *
- * R-HMAC-SHA256 — RFC 4231 §1, DEFINITION:
- *   HMAC-SHA-256 is the realization of the HMAC message authentication code
- *   using the SHA-256 hash function
- */
-const clause_P_TRUNC_256 = (t: Suite): boolean => {
-  const table_n: i32[] = [16];
-  for (let i: i32 = 0; i < 1; i += 1) {
-    const v_n: i32 = table_n[i];
-    const holds: boolean = bytesEq(sliceBytes(hmacSha256(fillBytes(12, 20), utf8Bytes("Test With Truncation")), 0, v_n), unhex("a3b6167473100ee06e0c796c2955552b"));
-    if (!holds) {
-      return t.fail("[P-TRUNC-256] RFC 4231 test case 5: the first 128 bits of HMAC-SHA-256 are a3b6167473100ee06e0c796c2955552b (R-TRUNC, R-HMAC-SHA256)", `sample ${i + 1} of 1 (n = ${v_n}): the assertion is false`);
-    }
-  }
-  return t.pass("[P-TRUNC-256] RFC 4231 test case 5: the first 128 bits of HMAC-SHA-256 are a3b6167473100ee06e0c796c2955552b (R-TRUNC, R-HMAC-SHA256) — 1 samples");
-};
-
-/**
- * RFC 4231 test case 5: the first 128 bits of HMAC-SHA-384 are 3abf34c3503b2a23a46efc619baef897
- *
- * R-TRUNC — RFC 4231 §4.6, DEFINITION:
- *   Test with a truncation of output to 128 bits.
- *
- * R-HMAC-SHA384 — RFC 4231 §1, DEFINITION:
- *   HMAC-SHA-384 is the realization of the HMAC message authentication code
- *   using the SHA-384 hash function
- */
-const clause_P_TRUNC_384 = (t: Suite): boolean => {
-  const table_n: i32[] = [16];
-  for (let i: i32 = 0; i < 1; i += 1) {
-    const v_n: i32 = table_n[i];
-    const holds: boolean = bytesEq(sliceBytes(hmacSha384(fillBytes(12, 20), utf8Bytes("Test With Truncation")), 0, v_n), unhex("3abf34c3503b2a23a46efc619baef897"));
-    if (!holds) {
-      return t.fail("[P-TRUNC-384] RFC 4231 test case 5: the first 128 bits of HMAC-SHA-384 are 3abf34c3503b2a23a46efc619baef897 (R-TRUNC, R-HMAC-SHA384)", `sample ${i + 1} of 1 (n = ${v_n}): the assertion is false`);
-    }
-  }
-  return t.pass("[P-TRUNC-384] RFC 4231 test case 5: the first 128 bits of HMAC-SHA-384 are 3abf34c3503b2a23a46efc619baef897 (R-TRUNC, R-HMAC-SHA384) — 1 samples");
-};
-
-/**
- * RFC 4231 test case 5: the first 128 bits of HMAC-SHA-512 are 415fad6271580a531d4179bc891d87a6
- *
- * R-TRUNC — RFC 4231 §4.6, DEFINITION:
- *   Test with a truncation of output to 128 bits.
- *
- * R-HMAC-SHA512 — RFC 4231 §1, DEFINITION:
- *   HMAC-SHA-512 is the realization of the HMAC message authentication code
- *   using the SHA-512 hash function
- */
-const clause_P_TRUNC_512 = (t: Suite): boolean => {
-  const table_n: i32[] = [16];
-  for (let i: i32 = 0; i < 1; i += 1) {
-    const v_n: i32 = table_n[i];
-    const holds: boolean = bytesEq(sliceBytes(hmacSha512(fillBytes(12, 20), utf8Bytes("Test With Truncation")), 0, v_n), unhex("415fad6271580a531d4179bc891d87a6"));
-    if (!holds) {
-      return t.fail("[P-TRUNC-512] RFC 4231 test case 5: the first 128 bits of HMAC-SHA-512 are 415fad6271580a531d4179bc891d87a6 (R-TRUNC, R-HMAC-SHA512)", `sample ${i + 1} of 1 (n = ${v_n}): the assertion is false`);
-    }
-  }
-  return t.pass("[P-TRUNC-512] RFC 4231 test case 5: the first 128 bits of HMAC-SHA-512 are 415fad6271580a531d4179bc891d87a6 (R-TRUNC, R-HMAC-SHA512) — 1 samples");
-};
-
 export const main = (): i32 => {
   const t: Suite = new Suite("rfc4231-hmac-sha2");
   let ran: string = "";
@@ -1080,6 +1032,9 @@ export const main = (): i32 => {
   ran = `${ran}${clause_TC4_256(t) ? "1" : "0"}`;
   ran = `${ran}${clause_TC4_384(t) ? "1" : "0"}`;
   ran = `${ran}${clause_TC4_512(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_TC5_256(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_TC5_384(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_TC5_512(t) ? "1" : "0"}`;
   ran = `${ran}${clause_TC6_256(t) ? "1" : "0"}`;
   ran = `${ran}${clause_TC6_384(t) ? "1" : "0"}`;
   ran = `${ran}${clause_TC6_512(t) ? "1" : "0"}`;
@@ -1093,9 +1048,6 @@ export const main = (): i32 => {
   ran = `${ran}${clause_P_CONSTRUCTION_512(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_LONG_KEY_512(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_TAG_LEN(t) ? "1" : "0"}`;
-  ran = `${ran}${clause_P_TRUNC_256(t) ? "1" : "0"}`;
-  ran = `${ran}${clause_P_TRUNC_384(t) ? "1" : "0"}`;
-  ran = `${ran}${clause_P_TRUNC_512(t) ? "1" : "0"}`;
   const code: i32 = t.done();
   const nonce: string = toI32(process.argv.length) > 1 ? process.argv[1] : "-";
   console.log(`vector-done ${nonce} ${ran}`);

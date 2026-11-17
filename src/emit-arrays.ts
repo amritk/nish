@@ -49,6 +49,7 @@ import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./pa
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
+import { IRBlock } from "./ir"
 import { BYTES_WALK_COPY, bytesKernelOf, JSON_PUT_F64_KERNEL } from "./kernels"
 import { Node, NodeKind, bindsHiddenReceiver } from "./nodes"
 import { simdSuffix, simdTypeLane } from "./nish-modules"
@@ -70,8 +71,10 @@ import {
   intBits,
   isFloat,
   isUnsigned,
+  T_BOOL,
   T_F64,
   T_I32,
+  T_I64,
   T_STRING,
   T_U32,
   T_U8,
@@ -1838,6 +1841,288 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const tail = fn.emitValue(`load i8*, i8** ${cursorSlot}, align 8`)
   fn.emit(`store i8 0, i8* ${tail}, align 1`)
   return out
+}
+
+// ---- An append loop as one copy ----------------------------------------------------------
+
+/**
+ * The parts of `for (let j = J; j < B; j++) dst.push(src[P + j])` that
+ * `emitAppendRange` needs: the loop variable's name and its integer type, the
+ * bound `B`, the offset `P` (`null` for a bare `src[j]`), and the two arrays.
+ */
+class AppendRange {
+  name: string
+  bound: Node
+  offset: Node | null
+  counter: Node
+  dst: Node
+  src: Node
+  type: i32
+  elem: i32
+
+  constructor(
+    name: string,
+    type: i32,
+    bound: Node,
+    offset: Node | null,
+    counter: Node,
+    dst: Node,
+    src: Node,
+    elem: i32
+  ) {
+    this.name = name
+    this.type = type
+    this.bound = bound
+    this.offset = offset
+    this.counter = counter
+    this.dst = dst
+    this.src = src
+    this.elem = elem
+  }
+}
+
+/** `node` is the identifier `name`. */
+const isIdentNamed = (node: Node, name: string): boolean => node.kind === NodeKind.Ident && node.text === name
+
+/**
+ * `node` has the same value on every iteration of the loop and costs nothing
+ * to evaluate twice: a literal, an identifier other than the loop variable,
+ * or `+`, `-` and `*` of those, every part typed `type`. The loop body is one
+ * `push`, which writes an array and never a local, so such a value cannot
+ * move while the loop runs. Its signed arithmetic can still overflow, and
+ * that panics where the first iteration would.
+ */
+const isInvariant = (emitter: Emitter, node: Node, name: string, type: i32): boolean => {
+  if (emitter.typeOf(node) !== type) {
+    return false
+  }
+  if (node.kind === NodeKind.Paren) {
+    return isInvariant(emitter, node.children[0], name, type)
+  }
+  if (node.kind === NodeKind.Number) {
+    return true
+  }
+  if (node.kind === NodeKind.Ident) {
+    return node.text !== name
+  }
+  if (node.kind === NodeKind.Binary && (node.text === "+" || node.text === "-" || node.text === "*")) {
+    return (
+      isInvariant(emitter, node.children[0], name, type) && isInvariant(emitter, node.children[1], name, type)
+    )
+  }
+  return false
+}
+
+/** `j++`, `++j` or `j += 1`. */
+const isUnitStep = (node: Node, name: string): boolean => {
+  if (node.kind === NodeKind.Unary) {
+    return node.text === "++" && isIdentNamed(node.children[0], name)
+  }
+  return (
+    node.kind === NodeKind.Binary &&
+    node.text === "+=" &&
+    isIdentNamed(node.children[0], name) &&
+    node.children[1].kind === NodeKind.Number &&
+    node.children[1].text === "1"
+  )
+}
+
+/** The single expression statement a loop body is, or `null`. */
+const soleExpression = (body: Node): Node | null => {
+  if (body.kind === NodeKind.Block) {
+    return body.children.length === 1 ? soleExpression(body.children[0]) : null
+  }
+  return body.kind === NodeKind.ExprStmt ? body.children[0] : null
+}
+
+/**
+ * `stmt` as an `AppendRange`, or `null` when it is any other loop. The loop
+ * variable is a signed 32- or 64-bit integer, both arrays are named by an
+ * identifier and hold one value type that is a number or a boolean, and the
+ * index is `j`, `P + j` or `j + P` for an invariant `P`.
+ */
+const appendRangeOf = (emitter: Emitter, stmt: Node): AppendRange | null => {
+  const init = stmt.children[0]
+  const cond = stmt.children[1]
+  if (init.kind !== NodeKind.Var || init.children[0].children.length !== 1 || cond.kind !== NodeKind.Binary) {
+    return null
+  }
+  const declared = init.children[0].children[0].children[0]
+  if (declared.kind !== NodeKind.Ident) {
+    return null
+  }
+  const name = declared.text
+  const counter = cond.children[0]
+  const type = emitter.typeOf(counter)
+  if ((type !== T_I32 && type !== T_I64) || cond.text !== "<" || !isIdentNamed(counter, name)) {
+    return null
+  }
+  const bound = cond.children[1]
+  if (!isInvariant(emitter, bound, name, type) || !isUnitStep(stmt.children[2], name)) {
+    return null
+  }
+  const call = soleExpression(stmt.children[3])
+  if (call === null || call.kind !== NodeKind.Call || call.children[1].children.length !== 1) {
+    return null
+  }
+  const callee = call.children[0]
+  const dst = callee.kind === NodeKind.Member ? callee.children[0] : callee
+  const access = call.children[1].children[0]
+  if (callee.kind !== NodeKind.Member || callee.text !== "push" || dst.kind !== NodeKind.Ident) {
+    return null
+  }
+  if (access.kind !== NodeKind.Index || access.children[0].kind !== NodeKind.Ident) {
+    return null
+  }
+  const src = access.children[0]
+  const dstType = emitter.typeOf(dst)
+  const srcType = emitter.typeOf(src)
+  if (!emitter.table.isArray(dstType) || !emitter.table.isArray(srcType)) {
+    return null
+  }
+  const elem = emitter.table.refOf(dstType)
+  if (
+    elem !== emitter.table.refOf(srcType) ||
+    elem < T_I32 ||
+    elem > T_BOOL ||
+    inlineStruct(emitter, elem) !== null
+  ) {
+    return null
+  }
+  const index = access.children[1]
+  if (emitter.typeOf(index) !== type) {
+    return null
+  }
+  if (isIdentNamed(index, name)) {
+    return new AppendRange(name, type, bound, null, counter, dst, src, elem)
+  }
+  if (index.kind !== NodeKind.Binary || index.text !== "+") {
+    return null
+  }
+  const left = index.children[0]
+  const right = index.children[1]
+  if (isIdentNamed(right, name) && isInvariant(emitter, left, name, type)) {
+    return new AppendRange(name, type, bound, left, counter, dst, src, elem)
+  }
+  if (isIdentNamed(left, name) && isInvariant(emitter, right, name, type)) {
+    return new AppendRange(name, type, bound, right, counter, dst, src, elem)
+  }
+  return null
+}
+
+/** `lhs + rhs` over `ty` and its overflow bit, as `{ sum, overflowed }`. */
+const addWithOverflow = (emitter: Emitter, ty: string, lhs: string, rhs: string): string[] => {
+  const fn = emitter.fn
+  const pair = fn.emitValue(
+    `call { ${ty}, i1 } ${emitter.useRuntime(`llvm.sadd.with.overflow.${ty}`)}(${ty} ${lhs}, ${ty} ${rhs})`
+  )
+  return [
+    fn.emitValue(`extractvalue { ${ty}, i1 } ${pair}, 0`),
+    fn.emitValue(`extractvalue { ${ty}, i1 } ${pair}, 1`),
+  ]
+}
+
+/**
+ * `for (let j = J; j < B; j++) dst.push(src[P + j])` as one `llvm.memcpy`,
+ * when every push it would make is known to succeed before the first: the
+ * loop runs at least once, `P + J` and `P + B - 1` do not overflow and both
+ * index `src`, and `dst` can hold the result. Then the capacity is grown
+ * once, up front, the elements `src[P + J .. P + B)` are copied after
+ * `dst`'s last, `dst.length` is stored once, and the loop is skipped.
+ * Anything else falls through to the loop as it is written, which panics or
+ * fails where it always did, so the copy changes no behaviour, only the cost:
+ * a vocabulary word appended to a text was a load of `len` and `cap`, a
+ * bounds check and a store of `len` per byte.
+ *
+ * The copy is a `memcpy` even when `src` is `dst`, because the bytes read lie
+ * below the old length and the bytes written at or above it. The capacity
+ * loop stores the capacity as the length before each `nish_array_grow`, so
+ * that the ASan build, which grows to `len + 1`, makes progress; the real
+ * length is stored after it. `j` is the loop's own `let` and nothing reads it
+ * after the loop, so its final value is never written.
+ *
+ * Answers whether `stmt` matched. The code that follows is then emitted in
+ * the fallback block, and the copy has branched to `end`.
+ */
+export const emitAppendRange = (emitter: Emitter, stmt: Node, end: IRBlock): boolean => {
+  const range = appendRangeOf(emitter, stmt)
+  if (range === null) {
+    return false
+  }
+  const fn = emitter.fn
+  emitter.declareType(ARRAY_TYPE)
+  const ty = emitter.llvm(range.type)
+  const slow = fn.newBlock("append.slow")
+  const check = fn.newBlock("append.check")
+  const inRange = fn.newBlock("append.range")
+  const room = fn.newBlock("append.room")
+  const growTest = fn.newBlock("append.cap")
+  const grow = fn.newBlock("append.grow")
+  const copy = fn.newBlock("append.copy")
+
+  const bound = emitter.emitExpression(range.bound)
+  const first = emitter.emitExpression(range.counter)
+  const runs = fn.emitValue(`icmp slt ${ty} ${first}, ${bound}`)
+  fn.emit(`br i1 ${runs}, label %${check.label}, label %${slow.label}`)
+
+  fn.placeBlock(check)
+  const offsetNode = range.offset
+  const offset = offsetNode === null ? "0" : emitter.emitExpression(offsetNode)
+  // `bound - 1` cannot overflow: `bound` is above `first`.
+  const last = fn.emitValue(`sub nsw ${ty} ${bound}, 1`)
+  const lo = addWithOverflow(emitter, ty, offset, first)
+  const hi = addWithOverflow(emitter, ty, offset, last)
+  const wraps = fn.emitValue(`or i1 ${lo[1]}, ${hi[1]}`)
+  fn.emit(`br i1 ${wraps}, label %${slow.label}, label %${inRange.label}`)
+
+  fn.placeBlock(inRange)
+  const wide = range.type === T_I64
+  const lo64 = wide ? lo[0] : fn.emitValue(`sext ${ty} ${lo[0]} to i64`)
+  const hi64 = wide ? hi[0] : fn.emitValue(`sext ${ty} ${hi[0]} to i64`)
+  const src = emitter.emitExpression(range.src)
+  const below = fn.emitValue(`icmp slt i64 ${lo64}, 0`)
+  const past = fn.emitValue(`icmp uge i64 ${hi64}, ${loadLength(emitter, src)}`)
+  const outside = fn.emitValue(`or i1 ${below}, ${past}`)
+  fn.emit(`br i1 ${outside}, label %${slow.label}, label %${room.label}`)
+
+  fn.placeBlock(room)
+  const count = wide
+    ? fn.emitValue(`sub nsw i64 ${bound}, ${first}`)
+    : fn.emitValue(
+        `sub nsw i64 ${fn.emitValue(`sext ${ty} ${bound} to i64`)}, ${fn.emitValue(`sext ${ty} ${first} to i64`)}`
+      )
+  const dst = emitter.emitExpression(range.dst)
+  const len = loadLength(emitter, dst)
+  const need = fn.emitValue(`add i64 ${len}, ${count}`)
+  const tooLong = fn.emitValue(`icmp ugt i64 ${need}, ${I32_MAX}`)
+  fn.emit(`br i1 ${tooLong}, label %${slow.label}, label %${growTest.label}`)
+
+  fn.placeBlock(growTest)
+  const cap = loadHeaderField(emitter, dst, 1, "i64")
+  const short = fn.emitValue(`icmp ult i64 ${cap}, ${need}`)
+  fn.emit(`br i1 ${short}, label %${grow.label}, label %${copy.label}`)
+
+  fn.placeBlock(grow)
+  storeHeaderField(emitter, dst, 0, cap, "i64")
+  fn.emit(
+    `call void ${emitter.useRuntime("nish_array_grow")}(${HEADER_PTR} ${dst}, i64 ${elementSize(emitter, range.elem)})`
+  )
+  fn.emit(`br label %${growTest.label}`)
+
+  fn.placeBlock(copy)
+  const size = elementSize(emitter, range.elem)
+  const bytes = size === 1 ? count : fn.emitValue(`mul nuw nsw i64 ${count}, ${size}`)
+  emitter.declare(
+    `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
+  )
+  const to = elementBytes(emitter, dst, range.elem, len)
+  const from = elementBytes(emitter, src, range.elem, lo64)
+  fn.emit(`call void @${MEMCPY}(i8* ${to}, i8* ${from}, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)
+  storeHeaderField(emitter, dst, 0, need, "i64")
+  fn.emit(`br label %${end.label}`)
+
+  fn.placeBlock(slow)
+  return true
 }
 
 // ---- WP34 N2: the bulk writes -------------------------------------------------------------

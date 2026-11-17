@@ -19,6 +19,18 @@
   },
   "requirements": [
     {
+      "id": "R-QUARTER-ROUND",
+      "section": "2.1.1",
+      "level": "DEFINITION",
+      "quote": "After running a Quarter Round on these four numbers, we get these:"
+    },
+    {
+      "id": "R-QUARTER-ROUND-STATE",
+      "section": "2.2.1",
+      "level": "DEFINITION",
+      "quote": "We will apply the QUARTERROUND(2, 7, 8, 13) operation to this state."
+    },
+    {
       "id": "R-BLOCK",
       "section": "2.3",
       "level": "DEFINITION",
@@ -111,16 +123,6 @@
   ],
   "exclusions": [
     {
-      "section": "2.1.1",
-      "quote": "After running a Quarter Round on these four numbers, we get these:",
-      "reason": "the quarter round is exported only as chacha20QuarterRound, over a u32[] state, and vector's only array type is u8[]; chacha20Block runs it, so the 2.3.2 and A.1 vectors test it"
-    },
-    {
-      "section": "2.2.1",
-      "quote": "We will apply the QUARTERROUND(2, 7, 8, 13) operation to this state.",
-      "reason": "the vector works on the 16-word u32[] state, for the same reason as Section 2.1.1's; the 2.3.2 and A.1 vectors test it through chacha20Block"
-    },
-    {
       "section": "2.3",
       "quote": "Words 13-15 are a nonce, which MUST not be repeated for the same key.",
       "reason": "an obligation on the caller: a pure function cannot see its other invocations"
@@ -152,6 +154,32 @@
     }
   ],
   "functions": [
+    {
+      "name": "chacha20QuarterRound",
+      "params": [
+        {
+          "name": "state",
+          "type": "words32"
+        },
+        {
+          "name": "a",
+          "type": "i32"
+        },
+        {
+          "name": "b",
+          "type": "i32"
+        },
+        {
+          "name": "c",
+          "type": "i32"
+        },
+        {
+          "name": "d",
+          "type": "i32"
+        }
+      ],
+      "returns": "words32?"
+    },
     {
       "name": "chacha20Block",
       "params": [
@@ -266,6 +294,105 @@
     }
   ],
   "clauses": [
+    {
+      "kind": "vector",
+      "id": "2.1.1-QUARTER-ROUND",
+      "title": "RFC 8439 2.1.1: a quarter round on four numbers",
+      "covers": ["R-QUARTER-ROUND"],
+      "source": {
+        "cite": {
+          "section": "2.1.1"
+        }
+      },
+      "call": "chacha20QuarterRound",
+      "args": [
+        {
+          "words32": ["0x11111111", "0x01020304", "0x9b8d6f43", "0x01234567"]
+        },
+        {
+          "int": 0
+        },
+        {
+          "int": 1
+        },
+        {
+          "int": 2
+        },
+        {
+          "int": 3
+        }
+      ],
+      "expect": {
+        "words32": ["0xea2a92f4", "0xcb1cf8ce", "0x4581472e", "0x5881c4bb"]
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "2.2.1-QUARTER-ROUND-STATE",
+      "title": "RFC 8439 2.2.1: QUARTERROUND(2, 7, 8, 13) on the ChaCha state",
+      "covers": ["R-QUARTER-ROUND-STATE"],
+      "source": {
+        "cite": {
+          "section": "2.2.1"
+        }
+      },
+      "call": "chacha20QuarterRound",
+      "args": [
+        {
+          "words32": [
+            "879531e0",
+            "c5ecf37d",
+            "516461b1",
+            "c9a62f8a",
+            "44c20ef3",
+            "3390af7f",
+            "d9fc690b",
+            "2a5f714c",
+            "53372767",
+            "b00a5631",
+            "974c541a",
+            "359e9963",
+            "5c971061",
+            "3d631689",
+            "2098d9d6",
+            "91dbd320"
+          ],
+          "label": "Sample ChaCha State"
+        },
+        {
+          "int": 2
+        },
+        {
+          "int": 7
+        },
+        {
+          "int": 8
+        },
+        {
+          "int": 13
+        }
+      ],
+      "expect": {
+        "words32": [
+          "879531e0",
+          "c5ecf37d",
+          "bdb886dc",
+          "c9a62f8a",
+          "44c20ef3",
+          "3390af7f",
+          "d9fc690b",
+          "cfacafd2",
+          "e46bea80",
+          "b00a5631",
+          "974c541a",
+          "359e9963",
+          "5c971061",
+          "ccc07c79",
+          "2098d9d6",
+          "91dbd320"
+        ]
+      }
+    },
     {
       "kind": "vector",
       "id": "2.3.2-BLOCK",
@@ -533,7 +660,8 @@
       "covers": ["R-BLOCK"],
       "source": {
         "cite": {
-          "section": "A.1"
+          "section": "A.1",
+          "case": "Test Vector #1"
         }
       },
       "call": "chacha20Block",
@@ -563,7 +691,8 @@
       "covers": ["R-BLOCK"],
       "source": {
         "cite": {
-          "section": "A.1"
+          "section": "A.1",
+          "case": "Test Vector #2"
         }
       },
       "call": "chacha20Block",
@@ -593,7 +722,8 @@
       "covers": ["R-BLOCK"],
       "source": {
         "cite": {
-          "section": "A.1"
+          "section": "A.1",
+          "case": "Test Vector #3"
         }
       },
       "call": "chacha20Block",
@@ -623,7 +753,8 @@
       "covers": ["R-BLOCK"],
       "source": {
         "cite": {
-          "section": "A.1"
+          "section": "A.1",
+          "case": "Test Vector #4"
         }
       },
       "call": "chacha20Block",
@@ -653,7 +784,8 @@
       "covers": ["R-BLOCK"],
       "source": {
         "cite": {
-          "section": "A.1"
+          "section": "A.1",
+          "case": "Test Vector #5"
         }
       },
       "call": "chacha20Block",
@@ -683,7 +815,8 @@
       "covers": ["R-STREAM"],
       "source": {
         "cite": {
-          "section": "A.2"
+          "section": "A.2",
+          "case": "Test Vector #1"
         }
       },
       "call": "chacha20",
@@ -717,7 +850,8 @@
       "covers": ["R-STREAM"],
       "source": {
         "cite": {
-          "section": "A.2"
+          "section": "A.2",
+          "case": "Test Vector #2"
         }
       },
       "call": "chacha20",
@@ -751,7 +885,8 @@
       "covers": ["R-STREAM"],
       "source": {
         "cite": {
-          "section": "A.2"
+          "section": "A.2",
+          "case": "Test Vector #3"
         }
       },
       "call": "chacha20",
@@ -785,7 +920,8 @@
       "covers": ["R-KEYGEN"],
       "source": {
         "cite": {
-          "section": "A.4"
+          "section": "A.4",
+          "case": "Test Vector #1"
         }
       },
       "call": "poly1305KeyGen",
@@ -811,7 +947,8 @@
       "covers": ["R-KEYGEN"],
       "source": {
         "cite": {
-          "section": "A.4"
+          "section": "A.4",
+          "case": "Test Vector #2"
         }
       },
       "call": "poly1305KeyGen",
@@ -837,7 +974,8 @@
       "covers": ["R-KEYGEN"],
       "source": {
         "cite": {
-          "section": "A.4"
+          "section": "A.4",
+          "case": "Test Vector #3"
         }
       },
       "call": "poly1305KeyGen",
@@ -2593,10 +2731,6 @@
     }
   ],
   "outOfScope": [
-    {
-      "name": "chacha20QuarterRound",
-      "reason": "its u32[] state is a type the spec cannot express; the 2.3.2 and A.1 vectors test it through chacha20Block"
-    },
     {
       "name": "chacha20HeaderMask",
       "reason": "QUIC header protection, specified by RFC 9001, not by RFC 8439"

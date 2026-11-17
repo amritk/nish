@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: d8cfc67ca99b15aa3260af49c582d24c1a087e8ba869d01ed2aedb38e3d7d1eb
+// vector-contract-sha256: 9e09b7a02f6508995cad6c756480da58e4352dcf81848f17a0f71d1cc878fc64
 
 import { Suite } from "nish/testing";
 import { x25519, x25519Base } from "nish/crypto/x25519";
@@ -301,6 +301,44 @@ const clause_5_2_ITER_1M = (t: Suite): boolean => {
   t.skip("[5.2-ITER-1M] RFC 7748 5.2: 1,000,000 iterations from k = u = 9 (R-ITER)", "slow: pass --slow to run");
   return true;
 };
+
+/**
+ * RFC 7748 6.1: Alice's public key, X25519(a, 9)
+ *
+ * R-BASE — RFC 7748 §6.1, DEFINITION:
+ *   Alice generates 32 random bytes in a[0] to a[31] and transmits K_A =
+ *   X25519(a, 9) to Bob, where 9 is the u-coordinate of the base point and
+ *   is encoded as a byte with value 9, followed by 31 zero bytes.
+ */
+const clause_6_1_ALICE_PUB = (t: Suite): boolean => t.eqStr("[6.1-ALICE-PUB] RFC 7748 6.1: Alice's public key, X25519(a, 9) (R-BASE)", hexOrNull(plain_x25519Base(unhex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"))), "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a");
+
+/**
+ * RFC 7748 6.1: Bob's public key, X25519(b, 9)
+ *
+ * R-BASE — RFC 7748 §6.1, DEFINITION:
+ *   Alice generates 32 random bytes in a[0] to a[31] and transmits K_A =
+ *   X25519(a, 9) to Bob, where 9 is the u-coordinate of the base point and
+ *   is encoded as a byte with value 9, followed by 31 zero bytes.
+ */
+const clause_6_1_BOB_PUB = (t: Suite): boolean => t.eqStr("[6.1-BOB-PUB] RFC 7748 6.1: Bob's public key, X25519(b, 9) (R-BASE)", hexOrNull(plain_x25519Base(unhex("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"))), "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
+
+/**
+ * RFC 7748 6.1: Alice computes K from Bob's public key
+ *
+ * R-DH — RFC 7748 §6.1, DEFINITION:
+ *   Both now share K = X25519(a, X25519(b, 9)) = X25519(b, X25519(a, 9)) as
+ *   a shared secret.
+ */
+const clause_6_1_K_ALICE = (t: Suite): boolean => t.eqStr("[6.1-K-ALICE] RFC 7748 6.1: Alice computes K from Bob's public key (R-DH)", hexOrNull(plain_x25519(unhex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"), unhex("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"))), "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
+
+/**
+ * RFC 7748 6.1: Bob computes K from Alice's public key
+ *
+ * R-DH — RFC 7748 §6.1, DEFINITION:
+ *   Both now share K = X25519(a, X25519(b, 9)) = X25519(b, X25519(a, 9)) as
+ *   a shared secret.
+ */
+const clause_6_1_K_BOB = (t: Suite): boolean => t.eqStr("[6.1-K-BOB] RFC 7748 6.1: Bob computes K from Alice's public key (R-DH)", hexOrNull(plain_x25519(unhex("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"), unhex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"))), "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
 
 /**
  * X25519 answers exactly when the scalar and the u-coordinate are both 32 bytes
@@ -973,35 +1011,6 @@ const clause_P_DH = (t: Suite): boolean => {
   return t.pass("[P-DH] X25519(a, X25519(b, 9)) equals X25519(b, X25519(a, 9)) (R-DH) — 27 samples");
 };
 
-/**
- * the Section 6.1 test vector: Alice's and Bob's public keys and their shared secret K
- *
- * R-BASE — RFC 7748 §6.1, DEFINITION:
- *   Alice generates 32 random bytes in a[0] to a[31] and transmits K_A =
- *   X25519(a, 9) to Bob, where 9 is the u-coordinate of the base point and
- *   is encoded as a byte with value 9, followed by 31 zero bytes.
- *
- * R-DH — RFC 7748 §6.1, DEFINITION:
- *   Both now share K = X25519(a, X25519(b, 9)) = X25519(b, X25519(a, 9)) as
- *   a shared secret.
- */
-const clause_P_DH_VECTOR = (t: Suite): boolean => {
-  const table_zero: i32[] = [0];
-  for (let i: i32 = 0; i < 1; i += 1) {
-    const v_zero: i32 = table_zero[i];
-    const v_a: u8[] = unhex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a");
-    const v_ka: u8[] = unhex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a");
-    const v_b: u8[] = unhex("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb");
-    const v_kb: u8[] = unhex("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
-    const v_k: u8[] = unhex("4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
-    const holds: boolean = ((v_zero === 0) && bytesEq(plain_x25519Base(v_a), v_ka) && bytesEq(plain_x25519Base(v_b), v_kb) && bytesEq(plain_x25519(v_a, v_kb), v_k) && bytesEq(plain_x25519(v_b, v_ka), v_k));
-    if (!holds) {
-      return t.fail("[P-DH-VECTOR] the Section 6.1 test vector: Alice's and Bob's public keys and their shared secret K (R-BASE, R-DH)", `sample ${i + 1} of 1 (zero = ${v_zero}): the assertion is false`);
-    }
-  }
-  return t.pass("[P-DH-VECTOR] the Section 6.1 test vector: Alice's and Bob's public keys and their shared secret K (R-BASE, R-DH) — 1 samples");
-};
-
 export const main = (): i32 => {
   const t: Suite = new Suite("rfc7748-x25519");
   let ran: string = "";
@@ -1010,6 +1019,10 @@ export const main = (): i32 => {
   ran = `${ran}${clause_5_2_ITER_1(t) ? "1" : "0"}`;
   ran = `${ran}${clause_5_2_ITER_1000(t) ? "1" : "0"}`;
   ran = `${ran}${clause_5_2_ITER_1M(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_6_1_ALICE_PUB(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_6_1_BOB_PUB(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_6_1_K_ALICE(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_6_1_K_BOB(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_SIZES(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_OUT_32(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_MASK(t) ? "1" : "0"}`;
@@ -1019,7 +1032,6 @@ export const main = (): i32 => {
   ran = `${ran}${clause_P_OUT_MSB(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_BASE(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_DH(t) ? "1" : "0"}`;
-  ran = `${ran}${clause_P_DH_VECTOR(t) ? "1" : "0"}`;
   const code: i32 = t.done();
   const nonce: string = toI32(process.argv.length) > 1 ? process.argv[1] : "-";
   console.log(`vector-done ${nonce} ${ran}`);

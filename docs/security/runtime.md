@@ -371,6 +371,11 @@ changes nothing in the IR. Under it:
   the default action and returns, so the access faults again and the process
   dies of `SIGSEGV`. Outside the range it puts back the handler it replaced and
   returns, so a fault that is not the arena's is reported as before.
+- **A grown array always moves.** A normal build grows an array whose block
+  fills its own chunk with a `realloc` of that chunk
+  (`nish_array_grow_here`). The mode's chunks come from the reservation, never
+  from `malloc`, so under it the growth always takes the copy, and a reference
+  kept to the old block is a stale reference like any other.
 
 The first design rewound inside a large chunk and poisoned the partial page
 holding the mark. It was changed to exact chunks because the inline rewind
@@ -385,7 +390,10 @@ profiles refuse it: they have no `mprotect`, or share a host's signal handlers.
 after the next allocation, and must die of `SIGSEGV` with the message. A
 normal runtime hands the same slot to that next allocation. The arena and
 region cases (`tests/cases/arena_*`, `region_*`, `mem_loop_scope*`) run again
-linked under the mode and must print their `.out`. The CLI refusals are pinned
+linked under the mode and must print their `.out`. A second harness grows a
+byte array to 1 MB under the mode and checks every element survived: before
+the copy was forced, the `realloc` of a reserved chunk aborted it with
+`realloc(): invalid pointer`. The CLI refusals are pinned
 too. All of these are in `tests/run.js`, under "debug arena:".
 
 **The pass over the corpus.** When the mode landed, all 935 `tests/cases/`

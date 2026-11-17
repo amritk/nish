@@ -3,4 +3,4 @@
 // integer, so every check of `tests/link/net_relay` is run again, unchanged.
 import { relayChecks } from "../net_relay/checks";
 
-export const main = (): i32 => relayChecks();
+export const main = (): i32 => relayChecks("build/net_relay_f64");
