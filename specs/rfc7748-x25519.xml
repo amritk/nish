@@ -48,22 +48,32 @@ shared secret are <tt>Secret</tt> values; the properties see them as bytes. Both
 functions return null unless every argument is 32 bytes, and an all-zero
 result (Section 6.1) is returned, not refused, so no clause here tests a
 refusal of it.</t>
-      <t>The field helpers the module also exports (<tt>f25519Add64</tt>, <tt>f25519Sub64</tt>,
-<tt>f25519Mul64</tt>, <tt>f25519Zero</tt>, <tt>f25519Small</tt>, <tt>f25519Copy</tt>, <tt>f25519Carry</tt>,
-<tt>f25519Add</tt>, <tt>f25519Sub</tt>, <tt>f25519Mul</tt>, <tt>f25519Square</tt>, <tt>f25519SquareTimes</tt>,
-<tt>f25519Pow250</tt>, <tt>f25519Invert</tt>, <tt>f25519Swap</tt>, <tt>f25519Decode</tt>,
-<tt>f25519Encode</tt>) and <tt>X25519_SIZE</tt> are internal to the ladder and outside this
-profile: RFC 7748 specifies the function, not its field arithmetic.</t>
-      <t>The iterated vectors of Section 5.2 are tested for one iteration only. The
-1,000,000-iteration vector is excluded for its run time: a million calls of
-the ladder on every run. The 1,000-iteration vector is excluded because
-vector 0.2.1 cannot express it: the RFC prints no intermediate value to chain
-vectors through, and a property that names each step as a <tt>const</tt> grows
-exponentially, since each step uses the previous two and consts are expanded
-inline.</t>
+      <t>Out of scope: f25519Add64, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Sub64, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Mul64, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Zero, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Small, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Copy, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Carry, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Add, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Sub, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Mul, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Square, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519SquareTimes, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Pow250, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Invert, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Swap, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Decode, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: f25519Encode, a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic</t>
+      <t>Out of scope: X25519_SIZE, a constant, not a function; the properties test
+the 32-byte sizes it names through <tt>x25519</tt></t>
+      <t>The iterated vectors of Section 5.2 are vector rows, each with an <tt>Iterate:</tt>
+paragraph after the table. The 1,000,000-iteration one is marked slow, so the
+emitted test runs it only with <tt>--slow</tt>.</t>
       <t>The Section 6.1 test vector is the property P-DH-VECTOR rather than vector
 rows: the section prints its values under names such as "Alice's private
-key, a", which a vector label cannot spell, and the profile refuses an
+key, a", which a vector label cannot spell (vector 0.3.1 refuses such a
+row's Call and Expected as "not a literal"), and the profile refuses an
 unlabelled value printed under a name. Its bytes are transcribed from the
 RFC, so fidelity does not check them. Its <tt>zero</tt> argument takes the single
 value 0: a property needs a <tt>forall</tt> argument, and this one has no input to
@@ -262,8 +272,32 @@ forall (zero: i32 /* 0..0 */) => {
               <xref section="5.2" sectionFormat="of" target="RFC7748"/></td>
             <td align="left">RFC 7748 5.2: one iteration from k = u = 9</td>
           </tr>
+          <tr>
+            <td align="left">5.2-ITER-1000</td>
+            <td align="left">
+              <tt>x25519(For X25519 = 0900000000000000000000000000000000000000000000000000000000000000, For X25519 = 0900000000000000000000000000000000000000000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>After 1,000 iterations = 684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51</tt></td>
+            <td align="left">R-ITER</td>
+            <td align="left">
+              <xref section="5.2" sectionFormat="of" target="RFC7748"/></td>
+            <td align="left">RFC 7748 5.2: 1,000 iterations from k = u = 9</td>
+          </tr>
+          <tr>
+            <td align="left">5.2-ITER-1M</td>
+            <td align="left">
+              <tt>x25519(For X25519 = 0900000000000000000000000000000000000000000000000000000000000000, For X25519 = 0900000000000000000000000000000000000000000000000000000000000000)</tt></td>
+            <td align="left">
+              <tt>After 1,000,000 iterations = 7c3911e0ab2586fd864497297e575e6f3bc601c0883c30df5f4dd2d24f665424</tt></td>
+            <td align="left">R-ITER</td>
+            <td align="left">
+              <xref section="5.2" sectionFormat="of" target="RFC7748"/></td>
+            <td align="left">RFC 7748 5.2: 1,000,000 iterations from k = u = 9</td>
+          </tr>
         </tbody>
       </table>
+      <t>Iterate: 5.2-ITER-1000 1,000 times, (k, u) &lt;- (x25519(k, u), k)</t>
+      <t>Iterate: 5.2-ITER-1M 1,000,000 times, slow, (k, u) &lt;- (x25519(k, u), k)</t>
     </section>
   </middle>
   <back>
@@ -312,100 +346,103 @@ forall (zero: i32 /* 0..0 */) => {
     </references>
   </back>
   <!-- ##markdown-source:
-H4sIAAAAAAAAA+Vaa3LcSHL+j1PkUhFr9ri7hTca1FAbFElZjBFFWZTGu8uh
-hwWgQGKJBnrwIEVLmvAhfACfxUfxSfxlFdDdIFuPXY/9w1aESFShKivzy3eB
-k8nEaLImlzu0dZjn2aLJYtpvqxtZU1pWdCrjtsqaux36o+15VrhliCiq5M0O
-FVl99Tiu7hZN+fi9emckZVyIOUgllUibSZXGQeDOJvrtxDSNWDTysqxALSvS
-0sgW1Q41VVs3tmmGpm3UbTTP6jori+ZuIXlVIhcSP4rGwJGOkYDADtmm7U8s
-a2L5xrW8uy2rZMcgmtCNjJuymsxFVkzePN/nww3RNldlpd9r5l6BcdpT0zWm
-icrqUotjFGU1F012I3l9R2HHMCaTCYmobioRN4axR4uqTLNcUpnyIuJVCqyH
-kEC8K9lBR2lbxA1kG1PW1EYdi1xUJIqE2klcQoisgHQki7jE42U9VnuzRlaY
-TqiRddNJWKtdeGscZGmayckLmedzUZB8H1+J4hKcFVqJ6uApHd7I6o4q+Uub
-VXIONOmXtgTBJfvqLIOBo7psq1g+Ian2RFABmKEam8DZUObt43enb8fEP+nV
-CZ5OX+y9fNn9MtTMm8N/fHf05vBgRFmtRIAkQAqM5m2C5ytZySn90QU1LCjK
-hrL5Ilc84i2LiTmjAzyZal3MsyTJpWE8oqOiqcqkVbAaxlvgBYMgtoiatpiv
-rbH+zfzxc88PPys2lw9Gt+L0xcm7lwerp9XO/ZPj48NXB3ozZmkwZWwd7/0J
-b5jnrZPXb49OXu293IIJA1qIBt9oFfKiktSUFEG1kLFaVFJJWhuJrOMqizDA
-nmf7r//j3y2XPnz4HeC2LSv89KkbzKzAxeD2Shb6tLLI77ohtHhniMVCwrJA
-ReQ5xWKRNSKHOYma6qvyttCgG8Z3Z4zM+Q59H8ULy33aTbDAg8kes8Gkwuzh
-zIPNGsQNUxuOWaI5mL+H9JDfvT8Nxj3ua5Pf/yHPCkkTa/aHp4ZhPPRRGOOi
-rJqaLvT4Qjte760Di0c4VHOeQt7odjwTtex21Qgxa1sLNRnhPS1K6Jta2iU4
-JFvqWgBg56uvYBkJHC2GRSgruThVzxd0I/JW1k8ULbjCQlZNBuetpeSpOSs2
-uoNzTelZ2VwZ/fE1PL5pq4KKFnbQFrms686tRXWprRGW6dh6tzYmoaxm8i+y
-Ko1K1m3e0HYvtT+1lB9rsjIZK4etZNrWPKhLjCnOBYbKxpTDI1gZaonIGcqs
-mWpHRdzK2f9ziFMr0ebwZERV2Gq51Mn2Raog3ksS3wXG3fC0jXhodMPjNl9/
-+2cwv7Z2DoFWw/1ycbc2ElV1tyKEYwaHrAY4Yu3NLy0UdH/8NpvLekXrdXlr
-e+Zq0VEB6Ju1TbdisRodSIR9udp9WKjxSCnlQmeQn0+P/nx4oWxDxY4CkCKU
-MHa5SBKpjalsmzpLpAo7feTcWZlwvZBxlrL9rFu5ViXyUqcXgaR/NZeoBjp1
-LfNQn4Kgy6U3TG0d1nR851RYFv0W7Qf5nTJ6wxqbpsn/J6u3miIb1jItMAlm
-pmrhQRlnbYGoj/oEy+E2OR9vrMmNaW3Y2KC9y/r6IZGM2VSN7pU5tacWqBeM
-BOyvYnfJGp3CGb5FBdQ5SWn05zLJOGEr72Q9IPdmhdHj01xVZXt51XlV77d3
-mBeNqkTAiYivCJAt2IMFXcTwWbj7ZVXe1gZ7QAEXzSDuHZwr4+y72gHG6y4g
-yJusbDG4LdVZikqtFAIamJGJkRUcBDtVrrnzelWhMvQqwtzR68nBi8mPh/tv
-T94QUIRHM/M9lAZzqcGpO4IdQKw4HbIQdFg7Wtq6Be8QdGsvz2L5dzUvvwGA
-XMMBJaTO26uMl/T85CKSea8QmG2ej/touSzBdPDhgshAgOMNOduoUoliByPN
-hFBsTOmo6aKlNtlKFH3aTatyrkIxlK2iWQo3ylH8InlLXZzEVzK+VkFXE7rg
-OHmxCqeNuO7UAn1dokbRnJg76xZQSJkofcPKOTQtt/fiQRHsP1eiM7ZFC8ol
-aFV3067qkVUqYpRAv/76KzX1JFvOPH7cxdGNFboOq9pEqEt/u7StU9EO6YTz
-fTs7O386pnaH+Gk0nKePKp9sIsV58HPkRppYvxt8syRvV9Xx8y4SGcZTNb3K
-Ygwq4FrLl2JYMgMnBZKuixeqIpQbFiEyYtUUB3z4sIxdXX7n2Pjpk/Fhhx69
-mTx/92qfLrPdrSgv42tVK299Ysb2crQN8OpB7Ky54LxehmQuxhA81fgSua2r
-41cMaja0/Tn2hI0RPl1xzU/bHPk0IiMulD1/03uUy6OVrXQRPdaBLpEpXF0Z
-YVYtu4lvEJqTy0ah/wmlJRwtltmNagWUH6NMqCoBx13W60JjAcqdRrcj2C17
-jeZX1ZZzUV93yR5mU2eXheIcrhNljS6WuTTgzMZyfwPbx3unP2xk++geY+p8
-EcdywVwVE5xaFjg774NVZzwxx/2+rspSVVPDFzlfKBzYuBLtZGXHLmdMRJv5
-t/D76uTV/h5+bOT5+VL7YwYDxstBt4RSuRrgUg3xKkGY6iIYM90bWucgiFyo
-H5kvZCBUiLkUD5FWatK8V3irTKwPrRs10y3PmRb44bC3OgjxvyySr29Ux2C3
-xWeNtZo5t3XSQRpE2yaXE7T8mSi+Acz9l3vHrzcj2RNXHqAKZdL1LNuwDstC
-Fb/KyzpAgXnHAmketAq+gZPDV/snB5v9Z12pzEZb6Hp5I17KStEcMsLfcOzJ
-u7eT49NnG8/lKBrXqDJXDUnXenHzudZmQ2oVxpkHrrZoO5vK6Xj9+qXXoyLX
-56vR1xh8yNW7QheJO3wQa6Lr+suoltWNiJDSI7QnS465wsWGJyqZ6fTLBUbf
-Wck5tMXeiLqIuzyl6m3VdjyOkY3ws/npZ1HPf/pZp6hpw/FYv28mmofpXzCH
-/rx+XHe3XfwO5eQyqE7nyYMVKq9OZBzj5UjlMi6lftxYHfdWoMq3ZU2qHei6
-uw1YGShv5iKX4Rl0ouquaG15mfelDnZc31MGavIN9nL09vDNBrU8ouFNks51
-KNPoUhaq8K8fBB++Xzgzz5kfceZY5zqAcD015wDzw08/76EY0Ia/LcaEhIal
-z8qICz3uDsO+4hzk6c7Q1npmpst1u3LkRNfKKpSoNKsBgGulZZ6Xt1zX35Fj
-KQfq2uIBMFz1bgDm2d7pZu/llhomekuqQacfBjJ1TxFLN1q9icYDuUea50GH
-/01MHbzYrCvJ7UcGl+Db2n/QGlornfiiUgH5vCojWWRtvbyj0/dO9MEck/Vp
-kGIq7r3LVkd00TSCPW1wJ3VWz0XVnI/xIJry6lyXq2e1nAt5cz7WZRidRRXa
-oEVZ5ufde5Gy09zI+lwLvbfgoJK9p72/KmBwMI7y7LJvKRENypLLbECr6PcN
-xOrmk0ReSZHc0VzKpn7CkeZKbSjulS1rVYuq9RGOCUJmdXrH+QENVs62mTUM
-8fHJj1DBJSfXM1UOgOT5ThePgJW6ME30gj6cYwACXQO1rUGfkDWix2ShIf5/
-g93+MSIN2xTMF+lmh5K1ER1sxsv+53WM/o9h8oheL6/0lv1c3ytyO/daVean
-yG03fFOmu5MxdQX7f/7rv/UnIfLe8gr5XsRNdyWsk/bgpvFeW4SYFnGI668B
-Dd2V0vZ117E9/o7M6dQ16bvHy55wfRJx76lBWD/NZXEJSru7u0zt97+ndjg1
-Ur+3dSbevga1Ef0OM9wRjnRLuFF+LnJAcAkAC84AdDUXQ6DSoeqrhuKt3W9u
-Esyxp1O8vyfZcrYTrS1uK7EY8D0aSvYF5lV/smRdjXqGv1Qwr3ognmnXryDU
-F55VufC3yzVQBAuymkjzbPEsa7bbMWFu9CXtLBuapZDLGRaUb7wX9PekL/WY
-bZjqxv7rMrvpLk+6Oog38PbkKyLCmTM8apu0Zp2A9AEi6uuJBYikWZ5v207A
-rCD5jaZ4hepuW8973pgcc7ScPQvS89ETEOiu0FfILB5AxQQGJLn0qLcdazQC
-iU/fAJ0yi8ODhwiO101G3IOt1QWQavXKhTIeLihh8txlc4fRXK061v8lDK3R
-/zxsuutbgqWHvVN1XS8Ktq/0uYwZ35muL1NtalL+po62huG1lAzjWTo7/4r5
-OZ356X2s1l1a4rNc5ZqfMdKhP0PCk4p/7hUJv2U2Rqr7GPHSL4Pdd5hLuPuJ
-b4liXUiGSaoPSn9zpOp43xiIa+5TAMuYMwyK0xlAUdKfmeb5FwRTFf9SKjVi
-kVZXmdtCfe1ar+TH2uXCvgOBmF3/8fn244tSDyKxOvT6vqOcmeH5Bhf5gmRo
-G5Zy4XlVIjxsWeQvrcjrz/UtS9bFRoVFX00tIDPQmZIwGo2G5rlpkfiaiP2X
-iYEGxyuJm89/6dih/hMExwJ0pPwxokUtGPOfDyz/uiKrhi0b/bDEg/WwHjDN
-h74u2NGDgMyA/IRMQYFDiKvCoyAhJybLp9iiwCbPosgm3yfXoyQlNyY7pVlA
-MqLYpDAkG8aGlQGlEW+3YGKYxDJxvgoR1+q8mUe2SalJZkizECGFRECeS4FL
-s4gPTmKKXHIQEDEvyAStlBz1YPvkzMgSlLp8tnBJgAjipaAwIleSv35exMd5
-6MYjMmcU4K1NrqCZIBcHhSTBccqHzhyagR/0Rj75OCtiYeyQjwMckU9pQpaW
-OSIbQuJhRtIED+viqfMSOJqkREkSqJ+AEPIkDnkR+RbFNsmYJCT0CGnKSfl4
-16F4xguCGfkBuWAaxUjMTFsu84TzbEiYrp/Hx0EeSBgmvBdwoKe2EyWYzbhA
-EiAF2XCWmaJMYqZB0wYbIbkBJRZz6zgU+KwSgMhql6x5C2zY52uhW4UL9gmT
-6+ZhDOJpqHc4H3Xz0Wqeve26n1+bhn9d92SWsf5Rf1VlGB/pKKGPtM+W/ZEO
-3y/wQqoZ7Vof6VT9TRAe3vKfitFH4+ME/9SP5a/B44MHbOErqc5pJxZodX88
-sX2kvm91PcouLNz1peNHqenZQRwmTmT5ludGM9v1PTTXvm25bmyK2EpjT1gz
-z/SFbbtuJFw3FLE7Jk1w0AbswvqSyJ/5gTdzTMdMIscL3dgSru1GlpcGcWD7
-vu3K2PYjx/FwqClC0xF+YorIit14dMEsn2xoMXYpdhLheU4QJjKM/dCcydCV
-wk1Se5aYMzd1bBnHqem4oRUHVhpAGtcMPC8IhD3zPJtJr9o6Vc6stTcfv3Cr
-xxv7D/t4t7NW6+gPkBP1sbhrELvvqvd0YX9eF27k+zJM3MSKXD9wgHdi235o
-hV6Q+CL1YsuKfNe2pCmFaSWuHQvX8kMZhNYsEmbyOV14tmWmlh3M/JllJU7q
-RkHohYnpOTMh7dixkkgGlumnsenEjkyBf+K5IcDzhBs6X9JF6MUR1OAGvpyF
-ZpAEQiTSxSQsKHDS2SzyQk/4syAMU2F5tvTTWRr4LtbFYCIY6oJr799EJ90n
-knWlaG3wJUNZoylXn3vv1/K9qvjaduA0q28KkNkMzf/WvzH9puS0evbSRt7/
-OxBYlG3HMxkI37ahmygWluOZkSPtKArsIEyDWRhAURF8FV4SzJzYN+XMdCxL
-SMcMQq0edYv9V+lgyIf60s8hXv05FlD+L+6T574HKwAA
+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
 
 -->
 
