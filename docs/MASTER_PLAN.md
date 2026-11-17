@@ -277,7 +277,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 45 | Name resolution for `nish:net`: a DNS stub resolver | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | [wp46](wp46-long-running-memory.md) |
 | 47 | Shared work across cores: regions, atomics and rings | [wp47](wp47-shared-memory.md) |
-| 48 | Compressed 32-bit references: measured and not built; no note kept | — |
+| 48 | 32-bit references for an opt-in class: proposed (the whole-program design was measured and declined) | [wp48](wp48-ref32-classes.md) |
 | 49 | `async`/`await` on the server, and the TechEmpower top | [wp49](wp49-async-server.md) |
 | 50 | A WebAssembly module a TypeScript page drives: imports, handles, shared memory, strings, determinism, size | [wp50](wp50-wasm-host.md) |
 | 51 | References to capture-free top-level functions: a tag and a `switch` over a closed set, measured | [wp51](wp51-function-references.md) |

@@ -371,10 +371,10 @@ builds them follows:
   the refusals already listed: `--emit-header` and the C ABI (NL2772), the
   typed-JSON sidecars and `jsonRefusal` (NL2486), and a `Map` key or `Set`
   element (NL2353).
-- **32-bit references (WP48).** WP48 measured compressed 32-bit references
-  and built neither a whole-program 32-bit mode nor an `i32` pool
-  (`docs/roadmap/index.md`, `MASTER_PLAN.md` row 48), so no 64-bit target has
-  a 4-byte reference today. If one lands, the split form is unchanged (an
+- **32-bit references (WP48).** WP48 declined a whole-program 32-bit mode,
+  and its narrower opt-in design ([`wp48-ref32-classes.md`](wp48-ref32-classes.md))
+  is proposed, not built, so no 64-bit target has a 4-byte reference today.
+  That design narrows only fields typed as a compact class, never a `Dyn<I>`. If one lands, the split form is unchanged (an
   `i32` tag beside a 4-byte reference in registers, and SoA's side array if a
   stored place used it), but the tagged word has no spare high bits: it takes
   the wasm32 form there (the low 3 bits of an 8-aligned offset, at most 7

@@ -11,13 +11,16 @@ climb from every leaf to the root. All five print the same checksum, natively
 and under Node. WP48's recommendation, accepted on 2026-11-11, was to
 build neither 32-bit design and to write ports in `sibling.ts`'s layout, with
 `columns.ts`'s for hot, closed tables.
+WP48 was reopened on 2026-11-17 for a narrower design, 32-bit links for one
+opt-in class ([`docs/wp48-ref32-classes.md`](../../docs/wp48-ref32-classes.md)),
+which measures its decode on `sibling.ts`.
 
 | program | a node is | a link is | bytes a node |
 | --- | --- | --- | ---: |
 | `class.ts` | a class instance with a `kids: Node[]` array, as an idiomatic port writes it | an 8-byte pointer | 63 |
 | `sibling.ts` | a class instance with `first` and `next` sibling links | an 8-byte pointer | 32 |
-| `pool.ts` | an `interface` record in one `Rec[]`, children as a run of a flat `i32[]` | an `i32` index | 50 |
-| `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 41 |
+| `pool.ts` | an `interface` record in one `Rec[]`, children as a run of a flat `i32[]` | an `i32` index | 25 |
+| `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 20 |
 | `columns.ts` | the same five fields, one presized `i32[]` column each | an `i32` index | 20 |
 
 `records.ts` is what a whole-program 32-bit reference mode (Design A in
