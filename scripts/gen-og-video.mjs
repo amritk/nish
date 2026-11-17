@@ -81,12 +81,13 @@ try {
   })
   const name = page.locator(".nish-hero__name")
   const count = (CYCLE_MS / 1000) * FPS
+  let focused = false
   for (let frame = 0; frame < count; frame++) {
     const ms = (frame * 1000) / FPS
-    if (ms >= FOCUS_MS && ms < BLUR_MS && !(await name.evaluate((node) => node === document.activeElement))) {
-      await name.evaluate((node) => node.focus({ focusVisible: false }))
-    } else if (ms >= BLUR_MS) {
-      await name.evaluate((node) => node === document.activeElement && node.blur())
+    const open = ms >= FOCUS_MS && ms < BLUR_MS
+    if (open !== focused) {
+      focused = open
+      await name.evaluate((node, on) => (on ? node.focus({ focusVisible: false }) : node.blur()), open)
     }
     await page.evaluate((at) => window.seekCard(at), ms)
     await page.screenshot({
