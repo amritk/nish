@@ -32043,6 +32043,51 @@ if (!only || "net_ring".includes(only)) {
   }
 }
 
+// WP63 S4: `nish/net/handler` on io_uring slots. `HandlerLimits.ring` makes
+// `limits.listen` open a `NET_LISTEN_RING` listener, and tcpAccept's -23
+// (ENFILE, a full slot set) must rest the accept loop as -24 does, a close
+// ending the rest (HANDLER-10, docs/security/handler.md). The program in
+// tests/link/net_handler_ring runs under a descriptor limit of 32, and its
+// `client.mjs`, outside the limit, opens 800 connections: the handler must
+// hold them on slot handles up to the set's size, answer each, report
+// `resting()` once the set is full (so the program fails if -23 does not rest
+// the listener), and take a waiting connection into the slot a close frees. The verdict is the
+// program's exit status; 2 says the kernel refused rings, a counted skip.
+if (!only || "net_handler_ring".includes(only)) {
+  const hard = process.platform === "linux" ? spawnSync("bash", ["-c", "ulimit -H -n"], { encoding: "utf8" }) : null
+  const name = "net_handler: on io_uring slots, a full set rests on -23 and a close frees a slot the handler takes"
+  if (!HAS_CLANG || hard === null) {
+    skip("net_handler: io_uring slot handles are Linux's, and this host has no clang or is not Linux")
+  } else if (!(hardNofile(hard) >= 32)) {
+    skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the 32 the check sets`)
+  } else {
+    const dir = path.join(buildDir, "net_handler_ring")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const sub = path.join(linkDir, "net_handler_ring")
+    const exe = path.join(dir, "ring")
+    const c = spawnSync(NISH, [path.join(sub, "ring.ts"), "--link", exe], { cwd: root, encoding: "utf8" })
+    const r =
+      c.status === 0
+        ? spawnSync(process.execPath, [path.join(sub, "client.mjs"), exe, "32", "800"], {
+            encoding: "utf8",
+            timeout: 180000,
+          })
+        : null
+    if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
+    } else {
+      check(
+        name,
+        r !== null &&
+          r.status === 0 &&
+          r.stdout.includes("answered -23 with a rest, and took the freed slot after a close\n"),
+        r === null ? `does not compile and link\n${shown(c)}` : `signal ${r.signal}\n${shown(r)}`
+      )
+    }
+  }
+}
+
 // WP37 stage 1: `--sandbox` confines a native program to main's capability set
 // (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
 // Nish programs whose main reaches a chosen set of capabilities and hands its

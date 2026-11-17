@@ -7382,7 +7382,68 @@ const DECLARED = [
       "tests/link/std_json_typed/main.ts": ["keys.ll"],
     }
   ),
-  ...byFinding("restricted io_uring rings before the --sandbox filter")(
+  // WP63 S4: `HandlerLimits` can listen on io_uring rings. The bench server
+  // calls `netRingState`, which the 0.41.0 seed's `nish:net` lacks; the new
+  // probe links the handler whose close ends an accept rest; and the
+  // `ring` field moves `HandlerLimits` in the header of every program that
+  // links nish/net/http-server.
+  {
+    program: "bench/http1-server.ts",
+    file: "exit",
+    changelog: "HandlerLimits listen on io_uring rings",
+    why: "the bench prints `netRingState()`, which is new to `nish:net` in this release, so the 0.41.0 seed refuses it (WP63 S4)",
+  },
+  {
+    program: "tests/link/net_handler_rest_close/main.ts",
+    file: "exit",
+    changelog: "HandlerLimits listen on io_uring rings",
+    why: "a probe new with this change: it reads `HttpHandler.resting()`, which the seed's handler lacks, so the 0.41.0 seed refuses it (WP63 S4)",
+  },
+  ...[
+    "tests/link/net_http_server/main.ts",
+    "tests/link/net_http_server_bad_limit/main.ts",
+    "tests/link/net_http_server_bad_param/main.ts",
+    "tests/link/net_http_server_bad_watch/main.ts",
+    "tests/link/net_http_server_caps/main.ts",
+    "tests/link/net_http_server_carriers/main.ts",
+    "tests/link/net_http_server_end_short/main.ts",
+    "tests/link/net_http_server_end_unstarted/main.ts",
+    "tests/link/net_http_server_foreign/main.ts",
+    "tests/link/net_http_server_h1_fields/main.ts",
+    "tests/link/net_http_server_h1_head/main.ts",
+    "tests/link/net_http_server_h1_slots/main.ts",
+    "tests/link/net_http_server_h1_twice/main.ts",
+    "tests/link/net_http_server_h2_connect/main.ts",
+    "tests/link/net_http_server_h2_head/main.ts",
+    "tests/link/net_http_server_h2_refused/main.ts",
+    "tests/link/net_http_server_h2_slots/main.ts",
+    "tests/link/net_http_server_h2_twice/main.ts",
+    "tests/link/net_http_server_h2c/main.ts",
+    "tests/link/net_http_server_h3_head/main.ts",
+    "tests/link/net_http_server_h3_slots/main.ts",
+    "tests/link/net_http_server_h3_twice/main.ts",
+    "tests/link/net_http_server_h3_webtransport/main.ts",
+    "tests/link/net_http_server_lifecycle/main.ts",
+    "tests/link/net_http_server_matrix/main.ts",
+    "tests/link/net_http_server_start_fields/main.ts",
+    "tests/link/net_http_server_start_length/main.ts",
+    "tests/link/net_http_server_start_refused/main.ts",
+    "tests/link/net_http_server_start_status/main.ts",
+    "tests/link/net_http_server_start_twice/main.ts",
+    "tests/link/net_http_server_take_none/main.ts",
+    "tests/link/net_http_server_timeouts/main.ts",
+    "tests/link/net_http_server_unbegun/main.ts",
+    "tests/link/net_http_server_wait_tls/main.ts",
+    "tests/link/net_http_server_write_long/main.ts",
+    "tests/link/net_http_server_write_unstarted/main.ts",
+    "tests/link/net_http_server_write_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "HandlerLimits listen on io_uring rings",
+    why: "`HandlerLimits` gains its `ring` field, so its struct in the header of a program that links nish/net/http-server moves (WP63 S4)",
+  })),
+  ...byFinding("restricted io_uring rings under --sandbox")(
     "`nish_sandbox` takes the number of rings to premake as a sixth `i32` argument, so its declaration and its call in `main` gain `i32 0` where the program cannot reach a ring listener (WP63 S3)",
     {
       "tests/cases/sandbox_hello.ts": ["sandbox_hello.ll"],

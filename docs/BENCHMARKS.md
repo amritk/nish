@@ -3117,3 +3117,51 @@ Not measured by `bench/run.mjs`, which carries this section over unchanged. `ben
 
 Noise band (union against its byte-identical copy union2): wall 6.6%, peak resident 0.0%.
 <!-- union-result:end -->
+
+<!-- handler-ring:begin -->
+<a id="io_uring-under-the-handler-wp63-s4"></a>
+
+## io_uring under the handler (WP63 S4)
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bench/handler-ring/server.ts` stands in for the entry: an `HttpHandler` that routes `GET /plaintext` and answers each request with a post it looks up by a random id in SQLite (`bench/sqlite`'s `feed.db` and its lookup query), 129 bytes on the wire. One process on io_uring rings (`BENCH_RING=1`, `HandlerLimits.ring`) is set against five processes on descriptors (`BENCH_CORES=5`), the entry's shape, and against a byte-identical copy of the five, whose difference is the noise band. The designs are not alike inside: the ring process has `slots` = C + 1,024 in one handler and one SQLite connection with its one page cache, while each epoll process has `slots` = the limit − 64 and its own connection, five page caches in all; that is the entry's shape, and both sides of the comparison carry it. `bench/handler-ring/run.sh`'s `loadgen` holds C connections open and sends 30,000 requests a second across them; each reading is the server's user plus system CPU over a 10-second window after a 3-second warm-up, divided by the requests answered. The three designs run in turn, in a rotated order, for 5 rounds at each C.
+
+`bash bench/handler-ring/run.sh` at commit `aa0c2058`, on an Intel Xeon @ 2.10GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, with a hard `RLIMIT_NOFILE` of 20,000 that every server runs under. The edits to `run.sh` after `aa0c2058` (`env -u` for the variable the other design sets, the `trap` that stops a server on any exit, and `wait_for` on the `rings` line) change how the run starts and stops servers, not what it measures.
+
+**C.** 18,000 is the stage's own figure, under the limit. The box's C is the highest where the entry's five epoll processes still fit under the limit: five times the limit less 800 descriptors a process keeps for itself, rounded down to a thousand, 5 × (20,000 − 800) = 96,000. Past it the epoll design would need a sixth process, and the comparison would no longer be against the entry's shape. The ring process holds the same C with its slots as the cap: 96,000 is past 65,535, under a limit of 20,000.
+
+Per round, server CPU µs a request:
+
+| C | round | ring | epoll | epoll copy | saving | band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 18,000 | 1 | 26.00 | 34.27 | 34.23 | 24.1% | 0.1% |
+| 18,000 | 2 | 25.63 | 34.60 | 34.36 | 25.9% | 0.7% |
+| 18,000 | 3 | 25.60 | 35.47 | 34.60 | 27.8% | 2.5% |
+| 18,000 | 4 | 25.83 | 34.23 | 34.83 | 24.5% | 1.8% |
+| 18,000 | 5 | 25.57 | 34.60 | 34.43 | 26.1% | 0.5% |
+| 96,000 | 1 | 25.53 | 36.60 | 35.63 | 30.2% | 2.7% |
+| 96,000 | 2 | 25.77 | 37.10 | 36.90 | 30.5% | 0.5% |
+| 96,000 | 3 | 26.23 | 38.43 | 38.80 | 31.7% | 1.0% |
+| 96,000 | 4 | 26.53 | 37.43 | 36.87 | 29.1% | 1.5% |
+| 96,000 | 5 | 26.20 | 37.17 | 38.63 | 29.5% | 3.9% |
+
+Medians of 5 (min to max). `held` is the fewest connections up in any round, `fds` the server's descriptors (summed over five processes), `box µs` the whole box's CPU a request (the load generator and softirq included) and PSS the server's proportional set size, summed:
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 18,000 | ring | 1 | 18,000 | 13 | 25.63 (25.57–26.00) | 39.37 | 30,000 | 102.6 |
+| 18,000 | epoll | 5 | 18,000 | 18,040 | 34.60 (34.23–35.47) | 51.00 | 30,000 | 36.7 |
+| 18,000 | epoll copy | 5 | 18,000 | 18,040 | 34.43 (34.23–34.83) | 49.93 | 30,000 | 36.8 |
+| 96,000 | ring | 1 | 96,000 | 21 | 26.20 (25.53–26.53) | 37.78 | 30,000 | 517.8 |
+| 96,000 | epoll | 5 | 96,000 | 96,040 | 37.17 (36.60–38.43) | 48.40 | 30,000 | 128.8 |
+| 96,000 | epoll copy | 5 | 96,000 | 96,040 | 36.90 (35.63–38.80) | 49.73 | 29,999 | 128.9 |
+
+At the medians the ring process is 25.9% cheaper at 18,000 against a 0.5% band, and 29.5% cheaper at 96,000 against a 0.7% band. The headline band is the gap between the epoll and epoll-copy medians; a single round's gap is wider, up to 3.9%.
+
+**The verdict against design §4 ([docs/wp63-iouring-net.md](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#4-the-verdict)): go.** Both halves of the rule hold at the box's C. One process held 96,000 connections, past 65,535, under a limit of 20,000, with 21 descriptors; and it spent 29.5% less CPU a request than five epoll processes, against a 0.7% band. The per-round reading holds as well: the smallest saving in any round was 29.1% at 96,000 (24.1% at 18,000), and the largest band in any round 3.9%. With SQLite and the router on top the saving is larger than the transport's alone (20.0% at 96,000, in [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#descriptor-limit)), and a request costs the ring process about the same at both Cs while each epoll process pays more at the higher one. That the epoll side pays for its larger descriptor table is an inference, not measured: the five SQLite page caches against one are the other plausible part.
+
+What it costs: memory. The ring process's PSS is 518 MB at 96,000 against 129 MB for the five epoll processes together, about 5.4 KB a connection against 1.3 KB: the slots, their buffers and the rings' own memory. The box as a whole used 1,792 MB against 1,346 MB at 96,000 (the summary's `box MB`, `/proc/meminfo`'s used memory in the last round of each design).
+
+**For D1** (opt-in or default, design §11): the ring path is not dearer at either C measured, so the numbers allow the bit to become the default for the handler's listeners on Linux. Two things stand against doing so here: the memory a connection, which a box sized for epoll may not have (fourfold at 96,000, 517.8 against 128.8 MB; 2.8 times at 18,000, 102.6 against 36.7 MB), and that neither C here is low. A smoke run at 3,000 (`bash bench/handler-ring/run.sh --conns 3000 --rounds 1 --warmup 1 --seconds 2` on the same box) read 23.33 against 33.49 µs with a 0.5% band, but that is a single 2-second window in one round, so it carries no weight here. The bit stays opt-in (`HandlerLimits.ring` defaults to false) until that choice is made on its own.
+
+What this does not say: the stand-in is not the entry itself, which is not in this repository; its route does one SQLite lookup a request and nothing else. Rerun `run.sh` on the entry before it switches.
+<!-- handler-ring:end -->

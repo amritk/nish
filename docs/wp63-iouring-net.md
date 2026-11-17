@@ -664,7 +664,14 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    past the limit, and `bench/http1-server.ts` gains `BENCH_RING=1`. This
    stage re-measures the entry: one process with rings against five epoll
    processes, with SQLite, at 18k and at the box's C. It is gated on the same
-   rule as §4.
+   rule as §4. *Measured in S4* ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#io_uring-under-the-handler-wp63-s4)): `bash
+   bench/handler-ring/run.sh`, 5 interleaved rounds, a stand-in that answers
+   `GET /plaintext` with one SQLite lookup, under a hard limit of 20,000. One
+   ring process spent 25.63 µs a request against 34.60 for five epoll
+   processes at 18,000 (25.9% less, band 0.5%) and 26.20 against 37.17 at
+   96,000, the box's C (29.5% less, band 0.7%), holding 96,000 connections with
+   21 descriptors. Both halves of §4's rule hold: go. Its PSS was 518 MB
+   against 129 MB at 96,000.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
    not depend on S1 to S4 and can land first.
 
@@ -673,7 +680,10 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
 - **D1: opt-in or default.** This note makes the ring bit opt-in (§5.1). If
   S4 shows the ring path no dearer at low C, the bit could become the default
   for listeners on Linux, with descriptors as the fallback. The cost is the
-  `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers.*
+  `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers. Kept in S4: the ring path is
+  not dearer at 18,000 or 96,000, so the numbers allow a default, but it costs
+  about four times the memory a connection at 96,000 and no low C was measured
+  beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The
   rings must exist before the filter loads, so their number is fixed at
   start-up, and the runtime must know before `main` that the program uses
