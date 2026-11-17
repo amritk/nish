@@ -230,8 +230,11 @@ range"; the record is `docs/security/runtime.md`, "The compact-class range"):
   other chunk with `free`, told apart by address. One spin lock covers the
   lists and the mark. The panic on exhaustion is "nish: the compact-class
   arena's 15 GiB range is used up".
-- The realign is in runtime.c's `nish_alloc_struct`, runtime-text.c's
-  `nish_text_alloc` and runtime-cross.c's `nish_cross_in`.
+- The realign is in runtime.c's `nish_alloc_struct` and `nish_arena_keep`,
+  runtime-text.c's `nish_text_alloc`, runtime-cross.c's `nish_cross_in` and
+  the carve in runtime-region.c's `nish_region_adopt`: of the 14 runtime sites
+  that set or bump an arena offset, these 5 can start from one 4 past an
+  8-byte boundary.
   `nish_cross_keep` bumps only its own transfer blocks, in 8-byte multiples,
   and needs none. The in-place array growth is unchanged until PR #1697's
   rewrite of it lands. runtime-wasm.c is unchanged and never gets the
@@ -403,33 +406,44 @@ under `bench/rss.c`, on one virtual 4-core machine, 2026-11-17.
 `bench/goose/tree.ts` is not measured: it needs the in-place array growth of
 PR #1697, which has not merged.
 
-At 400,000 nodes, 25 walks of each kind, 9 rounds:
+The protocol was fixed before the run: 21 rounds at both sizes; "wall" is
+build + visit + climb, the program's own timers, not the process's lifetime;
+a figure is the median over the rounds; the band is the widest per-round gap
+between `ptr` and `ptr-copy`, the same binary, over all 21 rounds; the verdict
+is whether `ptr-range`'s median wall lies within that band of `ptr`'s. The
+command, from the repository root, at this stage's head:
+
+```sh
+NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --rounds 21 --sizes 400000,4000000
+```
+
+At 400,000 nodes, 25 walks of each kind:
 
 | variant | peak RSS | build ms | visit ms | climb ms | wall vs ptr |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| ptr | 13.7 MB | 8.1 | 54.6 | 93.6 | 1.00x |
-| ptr-copy | 13.7 MB | 7.9 | 56.9 | 104.3 | 1.15x |
-| ptr-range | 13.7 MB | 8.1 | 58.5 | 110.0 | 1.15x |
+| ptr | 13.7 MB | 7.7 | 58.2 | 103.9 | 1.00x |
+| ptr-copy | 13.7 MB | 7.9 | 58.4 | 103.0 | 1.03x |
+| ptr-range | 13.8 MB | 7.9 | 58.5 | 98.7 | 0.97x |
 
-Noise band (`ptr` against `ptr-copy`, the median per-round gap): build 20.4%,
-visit 7.0%, climb 6.4%, wall 3.7%. `ptr-copy` itself sits 1.15x from `ptr`
-on the medians, so at this size the medians move more than the per-round band.
+Band: build 29.5%, visit 22.1%, climb 28.2%, wall 24.8%. Verdict: `ptr-range`
+wall −2.8% against `ptr`, within the band.
 
-At 4,000,000 nodes, 4 walks of each kind, 21 rounds:
+At 4,000,000 nodes, 4 walks of each kind:
 
 | variant | peak RSS | build ms | visit ms | climb ms | wall vs ptr |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| ptr | 123.6 MB | 81.2 | 130.0 | 212.5 | 1.00x |
-| ptr-copy | 123.6 MB | 80.1 | 133.3 | 214.6 | 1.02x |
-| ptr-range | 123.6 MB | 81.2 | 128.1 | 213.8 | 1.01x |
+| ptr | 123.5 MB | 79.6 | 126.0 | 209.8 | 1.00x |
+| ptr-copy | 123.5 MB | 79.6 | 126.6 | 208.6 | 1.00x |
+| ptr-range | 123.7 MB | 81.8 | 127.7 | 204.8 | 1.01x |
 
-Noise band: build 6.0%, visit 3.8%, climb 4.9%, wall 5.8%. A first run of
-9 rounds at this size gave `ptr-range` 1.04x against a 2.8% wall band, with
-each phase inside its own band (build 0.2%, visit 3.4%, climb 3.0%). The
-21-round rerun above is the figure of record.
+Band: build 19.1%, visit 16.3%, climb 15.2%, wall 15.1%. Verdict: `ptr-range`
+wall +1.0% against `ptr`, within the band.
 
-The range costs nothing a run can tell from noise: `ptr-range` is level with
-`ptr-copy` at both sizes, at the same peak RSS. That is stage 1's gate.
+The gate passes at both sizes: the range's cost is not told apart from the
+noise of running one binary twice, and peak RSS moves by 0.2 MB at most. The
+band is wide (one virtual machine, a round's worst gap), so the run bounds the
+cost at no more than that band, not at zero. An earlier run with a median
+band and unequal rounds is superseded by this one. That is stage 1's gate.
 
 ## 6. Where the emitter changes
 

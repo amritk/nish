@@ -250,9 +250,15 @@ const RUNTIME_THREADS_TEXT_BUDGET = 2025
  * Measured 2,299 and 2,517 on 2026-11-17 with clang 18.1.3 on linux-x64, against 1,805
  * and 2,010 for the default build the same day. The ceilings are the measurements, so
  * any growth of the variant is a decision recorded here.
+ *
+ * Raised to 2,353 and 2,571 (54 more each) the same day by RT-55, RT-56 and RT-57
+ * (docs/security/runtime.md): the realign of the mark in `nish_arena_keep`, the panic
+ * that names a refused fixed mapping, the debug fault handler's first-page window, and
+ * the exhaustion check's guard against a test size under one span. The default rows
+ * still measure 1,805 and 2,010.
  */
-const RUNTIME_RANGE_TEXT_BUDGET = 2299
-const RUNTIME_RANGE_THREADS_TEXT_BUDGET = 2517
+const RUNTIME_RANGE_TEXT_BUDGET = 2353
+const RUNTIME_RANGE_THREADS_TEXT_BUDGET = 2571
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -842,6 +848,11 @@ const RUNTIME_URING_TEXT_BUDGET = 8448
  * links its parent and children, `free` cascades deepest first and unlinks, and adopt
  * refuses a region in a tree. Measured **1,486 bytes** against 850 on 2026-11-10 with
  * clang 18.1.3 on linux-x64; the next 256-byte boundary.
+ *
+ * The compact-class runtime (`-DNISH_ARENA_RANGE=1`, WP48 stage 1) measured **1,501
+ * bytes** on 2026-11-17 with clang 18.1.3 on linux-x64, 15 more for the 8-byte realign
+ * of the caller's offset before adopt carves its chunk (RT-55). It shares this ceiling,
+ * as its threads build shares the one below (1,748 against 1,733).
  */
 const RUNTIME_REGION_TEXT_BUDGET = 1536
 /**
@@ -1121,6 +1132,18 @@ export const RUNTIME_BUDGETS = [
     RUNTIME_REGION_THREADS_TEXT_BUDGET,
     "RUNTIME_REGION_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
+  ],
+  [
+    "runtime/runtime-region.c",
+    RUNTIME_REGION_TEXT_BUDGET,
+    "RUNTIME_REGION_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1"],
+  ],
+  [
+    "runtime/runtime-region.c",
+    RUNTIME_REGION_THREADS_TEXT_BUDGET,
+    "RUNTIME_REGION_THREADS_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1", "-DNISH_THREADS=1"],
   ],
   ["runtime/runtime-async.c", RUNTIME_ASYNC_TEXT_BUDGET, "RUNTIME_ASYNC_TEXT_BUDGET", []],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
