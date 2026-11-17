@@ -16990,13 +16990,13 @@ if (dealtHere("runtimeChecks")) {
       const label = flags.length > 0 ? "the compact-class range, -DNISH_THREADS" : "the compact-class range"
       const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
       check(
-        `${label}: chunks of 2 MiB or less are power-of-two classes in the range past its first 64 bytes, a freed chunk is reused, larger ones are malloc's, and regions, keep and the cross copies work`,
+        `${label}: chunks of 2 MiB or less are power-of-two classes in the range past its first 64 bytes, a freed chunk is reused, larger ones are malloc's, and regions, keep and the cross copies work, and an array past 64 KB grows without reallocating a range chunk`,
         run !== null && run.status === 0 && run.stdout === "range ok\n",
         shown(built, run)
       )
       const skewed = built.ok ? spawnSync(built.exe, ["misaligned"], { encoding: "utf8" }) : null
       check(
-        `${label}: from an offset 4 past an 8-byte boundary, the struct and text bumps, nish_cross_in, keep and region adopt each hand out an 8-aligned block`,
+        `${label}: from an offset 4 past an 8-byte boundary, the struct and text bumps, an array grow in place and by a copy, nish_cross_in, keep and region adopt each hand out an 8-aligned block`,
         skewed !== null && skewed.status === 0 && skewed.stdout === "misaligned ok\n",
         shown(built, skewed)
       )

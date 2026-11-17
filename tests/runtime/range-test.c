@@ -11,8 +11,11 @@
  * the next one its class hands out; a larger chunk lies outside the range; a
  * region's and a worker thread's chunks lie in it; keep and the cross-thread
  * copies still work, a copied block adopted as a chunk is freed by malloc and
- * not put on a class list. The plain Linux build checks the range starts at
- * 1 GiB.
+ * not put on a class list; an array past 64 KB grows in place in a range
+ * chunk with room, is copied out of a range chunk it fills rather than
+ * `realloc`ed (which would abort, the chunk being no malloc's), and only a
+ * malloc'd chunk past 2 MiB is reallocated. The plain Linux build checks the
+ * range starts at 1 GiB.
  *
  * `exhaust` (built with a small `-DNISH_RANGE_TEST_SIZE`) takes chunks until
  * the range is used up: it must exit 1 and never print "reached". `busy`
@@ -24,7 +27,8 @@
  * work. `misaligned` leaves the arena's offset 4 past an 8-byte boundary, as
  * compiled code's bump of a compact class does, before each runtime site that
  * bumps or moves a block in the current chunk (the struct and text bumps,
- * `nish_cross_in`, `nish_arena_keep`, `nish_region_adopt`'s carve), and checks
+ * `nish_array_grow` in place and by a copy, `nish_cross_in`,
+ * `nish_arena_keep`, `nish_region_adopt`'s carve), and checks
  * each block it hands out is 8-aligned: "misaligned ok", exit 0. */
 
 #define _GNU_SOURCE
@@ -117,6 +121,65 @@ static nish_str *make_str(uint64_t len, char fill) {
   memset(s->data, fill, (size_t)len);
   s->data[len] = 0;
   return s;
+}
+
+static void fill(nish_array *a) {
+  for (uint64_t i = a->len; i < a->cap; i++) ((int64_t *)a->data)[i] = (int64_t)i * 3 + 1;
+  a->len = a->cap;
+}
+static int intact(const nish_array *a) {
+  for (uint64_t i = 0; i < a->len; i++)
+    if (((int64_t *)a->data)[i] != (int64_t)i * 3 + 1) return 0;
+  return 1;
+}
+
+/* `nish_array_grow` past 64 KB: in place by a bump in a range chunk with
+   room, by a copy (never `realloc`) from a range chunk the array fills, and
+   by `realloc` only of a malloc'd chunk past 2 MiB. */
+static void grow(void) {
+  /* A region's 2 MiB chunk with room: a 128 KiB block at its end grows to
+     256 KiB where it is. */
+  uint64_t r = nish_region_new();
+  nish_region_enter(r);
+  memset(nish_alloc_struct(((uint64_t)1 << 20) + 8), 5, 64);
+  nish_array a = { 0, 16384, nish_alloc_struct(16384 * 8) };
+  fill(&a);
+  char *was = a.data;
+  nish_array_grow(&a, 8);
+  CHECK(a.data == was && a.cap == 32768, "a 128 KiB block with room did not grow in place");
+  CHECK(intact(&a), "the in-place grow corrupted the array");
+  fill(&a);
+  check_chunk("in-place grow", a.data);
+  CHECK(intact(&a), "the grown bytes were not the array's");
+  nish_region_leave(r, a.data);
+  nish_region_free(r);
+
+  /* A block that fills a class chunk exactly: each doubling from 128 KiB to
+     2 MiB copies into a chunk of the next class and leaves every chunk's
+     `cap` its class. Past 2 MiB the block is malloc's, and growing that one
+     reallocates it as the head chunk. */
+  nish_free_arena();
+  uint64_t mark = nish_arena_mark();
+  nish_array b = { 0, 16384, nish_alloc_struct(16384 * 8) };
+  CHECK(((struct chunk *)nish_arena.chunks)->cap == 131072 && (char *)nish_arena.chunks + 16 == b.data,
+        "the 128 KiB block is not alone in a 128 KiB chunk");
+  fill(&b);
+  while (b.cap * 8 <= ((uint64_t)1 << 21)) {
+    nish_array_grow(&b, 8);
+    CHECK(intact(&b), "growing to %llu elements corrupted the array", (unsigned long long)b.cap);
+    fill(&b);
+    if (b.cap * 8 <= ((uint64_t)1 << 21)) check_chunk("class-filling grow", b.data);
+  }
+  CHECK(!in_range(b.data), "a 4 MiB array is in the range");
+  for (struct chunk *c = (struct chunk *)nish_arena.chunks; c; c = c->next)
+    if (in_range(c)) CHECK(is_class(c->cap), "a range chunk's cap became %llu", (unsigned long long)c->cap);
+  nish_array_grow(&b, 8);
+  CHECK(b.cap == ((uint64_t)1 << 20) && (char *)nish_arena.chunks + 16 == b.data && !in_range(b.data),
+        "the 8 MiB grow is not the reallocated head chunk");
+  CHECK(intact(&b), "the reallocating grow corrupted the array");
+  fill(&b);
+  nish_arena_release(mark);
+  nish_free_arena();
 }
 
 static int positive(void) {
@@ -229,6 +292,8 @@ static int positive(void) {
     nish_arena_release(mark);
   }
 
+  grow();
+
 #ifdef NISH_THREADS
   {
     pthread_t t;
@@ -269,6 +334,23 @@ static int misaligned(void) {
   skew();
   nish_str *t = nish_str_new("abcdef", 6);
   CHECK(aligned(t) && nish_str_len(t) == 6, "nish_str_new (the text bump): %p", (void *)t);
+
+  /* An array grow from a skewed `off`: the block ending at `off` grows by
+     the in-place bump, and once compiled code's 4 bytes follow it, by a copy
+     to a block `nish_alloc_struct` realigns. */
+  skew();
+  nish_array arr = { 4, 4, nish_alloc_struct(32) };
+  memset(arr.data, 6, 32);
+  char *here = arr.data;
+  nish_array_grow(&arr, 8);
+  CHECK(arr.data == here && aligned(arr.data) && aligned(nish_arena.buf + nish_arena.off),
+        "nish_array_grow in place: %p, off %llu", (void *)arr.data, (unsigned long long)nish_arena.off);
+  nish_arena.off += 4;
+  nish_array_grow(&arr, 8);
+  CHECK(arr.data != here && aligned(arr.data) && arr.cap == 16 && arr.data[31] == 6, "nish_array_grow by a copy: %p",
+        (void *)arr.data);
+  void *after_grow = nish_alloc_struct(8);
+  CHECK(aligned(after_grow), "after nish_array_grow: %p", after_grow);
 
   skew();
   nish_str *b = nish_str_new("xyz", 3);

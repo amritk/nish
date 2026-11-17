@@ -271,9 +271,15 @@ const RUNTIME_THREADS_TEXT_BUDGET = 2300
  * that names a refused fixed mapping, the debug fault handler's first-page window, and
  * the exhaustion check's guard against a test size under one span. The default rows
  * still measure 1,805 and 2,010.
+ *
+ * Raised to 2,695 and 2,917 the same day by the merge of growing an array where it is
+ * (#1697) and RT-58: `nish_array_grow_here`, which the default rows above took for 289
+ * and 290, and its guard that copies an array out of a range chunk instead of passing
+ * the chunk to `realloc`. Measured 2,695 and 2,917 against 2,094 and 2,300 for the
+ * default build, which is byte-identical to main's.
  */
-const RUNTIME_RANGE_TEXT_BUDGET = 2353
-const RUNTIME_RANGE_THREADS_TEXT_BUDGET = 2571
+const RUNTIME_RANGE_TEXT_BUDGET = 2695
+const RUNTIME_RANGE_THREADS_TEXT_BUDGET = 2917
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across

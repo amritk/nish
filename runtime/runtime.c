@@ -985,6 +985,12 @@ static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
 #endif
   char *data = a->data, *buf = nish_arena.buf;
   uint64_t more = want - old;
+  /* Under the compact-class range this bump needs no realign: it hands out no
+     new block, only lengthens the one that ends at `off`, by an 8-rounded
+     `more`; the block keeps the alignment it had, and every runtime bump
+     after it realigns `off` itself. An array from `nish_alloc_struct` ends
+     8-aligned, so an `off` compiled code left 4 past a boundary is never its
+     end, and that array takes the copy. */
   if (buf && data >= buf && data + old == buf + nish_arena.off && more <= nish_arena.cap - nish_arena.off) {
     nish_arena.off += more;
     return 1;
@@ -1009,6 +1015,13 @@ static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
   for (int i = 0; c && i < NISH_GROW_WALK; i++, prev = c, c = c->next) {
     if ((char *)(c + 1) != data) continue;
     if ((c->cap & NISH_CHUNK_CARVED) || c->cap != old) return 0;
+#if defined NISH_ARENA_RANGE && !defined NISH_ARENA_DEBUG
+    /* A chunk of the compact-class range is no malloc's, so `realloc` may not
+       touch it: an array that fills one of its class exactly (a power-of-two
+       block of 128 KiB to 2 MiB) takes the copy. Its chunk keeps its class's
+       `cap` for the release that puts it back on its list. */
+    if (nish_range_owns(c)) return 0;
+#endif
     if (want > (uint64_t)(SIZE_MAX - sizeof(nish_chunk))) nish_oom();
     nish_chunk *n = realloc(c, sizeof *n + (size_t)want);
     if (!n) nish_oom();
