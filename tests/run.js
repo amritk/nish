@@ -31877,17 +31877,19 @@ if (!only || "net_ring".includes(only)) {
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
     const client = path.join(linkDir, "net_ring_beyond_limit", "client.mjs")
-    const build = (sub, file) => {
-      const exe = path.join(dir, file.replace(/\.ts$/, ""))
-      const c = spawnSync(NISH, [path.join(linkDir, sub, file), "--link", exe], { cwd: root, encoding: "utf8" })
+    const build = (sub, file, flags = [], suffix = "") => {
+      const exe = path.join(dir, file.replace(/\.ts$/, suffix))
+      const c = spawnSync(NISH, [path.join(linkDir, sub, file), ...flags, "--link", exe], { cwd: root, encoding: "utf8" })
       return c.status === 0 ? { exe, c } : { exe: null, c }
     }
-    const ring = (name, sub, file, limit, count, mode, want) => {
+    // Answers false when it skipped. `mustRun` makes "rings refused" a
+    // failure: the run it twins made rings on this kernel.
+    const ring = (name, sub, file, limit, count, mode, want, flags = [], suffix = "", mustRun = false) => {
       if (!(room >= limit)) {
         skip(`${name}: the hard descriptor limit here is ${hard.stdout.trim()}, under the ${limit} the check sets`)
-        return
+        return false
       }
-      const b = build(sub, file)
+      const b = build(sub, file, flags, suffix)
       const r =
         b.exe === null
           ? null
@@ -31895,15 +31897,16 @@ if (!only || "net_ring".includes(only)) {
               encoding: "utf8",
               timeout: 180000,
             })
-      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+      if (!mustRun && r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
         skip(`${name}: this kernel refuses io_uring (${r.stdout.trim().split("\n").pop()})`)
-        return
+        return false
       }
       check(
         name,
         r !== null && r.status === 0 && (typeof want === "string" ? r.stdout.includes(want) : want(r.stdout)),
         r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
       )
+      return true
     }
     ring(
       "net_ring: a ring listener serves 3,000 connections under a limit of 1,024 with fewer than 64 descriptors",
@@ -31914,7 +31917,7 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
-    ring(
+    const fullRan = ring(
       "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
       "net_ring_full",
       "full.ts",
@@ -31922,6 +31925,22 @@ if (!only || "net_ring".includes(only)) {
       800,
       "hold",
       "answered -23, then reused the freed slot\n"
+    )
+    // WP63 S3: under --sandbox the set is the rings made before the filter
+    // loaded (`nish.netRings`, 1 here), so it answers -23 once that ring's 32
+    // slots are taken, where the unsandboxed run above grows to more rings.
+    // Once that run made rings, "rings refused" here is a failure, not a skip.
+    ring(
+      "net_ring: under --sandbox a full set of premade rings answers -23 and makes no ring past them",
+      "net_ring_full",
+      "full.ts",
+      32,
+      800,
+      "hold",
+      "took 32 connections, answered -23, then reused the freed slot\n",
+      ["--sandbox"],
+      "-sandbox",
+      fullRan
     )
     ring(
       "net_ring: a peer the program does not read stalls within the kernel's buffers, and every byte arrives once it reads",
@@ -32176,6 +32195,280 @@ if (!only || "sandbox".includes(only)) {
         clone3Spawn.stdout === clone3Plain.stdout,
       `${said(clone3)}\n--- without --sandbox\n${said(clone3Plain)}\n--- with process.spawn\n${said(clone3Spawn)}`
     )
+
+    // WP63 S3: under --sandbox with net granted and process.spawn withheld,
+    // the rings a `NET_LISTEN_RING` listen takes are made before the filter
+    // loads, restricted to the opcodes and submission flags a listener uses,
+    // and the filter then kills io_uring_setup and io_uring_register while it
+    // lets io_uring_enter through (docs/security/net-uring.md). probe.c reaches
+    // a premade ring through the runtime's test-only hook, built in here with
+    // -DNISH_URING_TEST_HOOKS, and prints the completion's res for one entry.
+    const hooks = { defines: ["-DNISH_URING_TEST_HOOKS"] }
+    const ringIr = (file, flags) => {
+      const out = path.join(dir, `${path.basename(path.dirname(file))}-${path.basename(file, ".ts")}-ir.ll`)
+      const c = spawnSync(NISH, [file, ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+      return { c, ir: c.status === 0 ? fs.readFileSync(out, "utf8") : "" }
+    }
+    const ringCall = (ir) => (ir.match(/call void @nish_sandbox\([^\n]*, i32 (\d+)\)/) || [null, "none"])[1]
+    for (const [fixture, flags, want, why] of [
+      ["ring", ["--sandbox"], "1", "a main that reaches NET_LISTEN_RING with net asks for 1 ring"],
+      ["net", ["--sandbox"], "0", "a main that reaches net but never the ring bit asks for no ring"],
+      ["ringspawn", ["--sandbox"], "1", "a main that also reaches process.spawn passes its ring count on"],
+      ["none", ["--sandbox"], "0", "a main without net asks for no ring"],
+    ]) {
+      const { c, ir } = ringIr(path.join(fixtures, `${fixture}.ts`), flags)
+      const got = ringCall(ir)
+      check(`sandbox: ${why} (nish_sandbox's last operand is ${want})`, got === want, c.status === 0 ? `operand ${got}` : shown(c))
+    }
+    // The fold: a literal or `|` of constants without bit 8 asks for none; a
+    // flags value the compiler cannot fold may set it, so it asks.
+    const folds = path.join(dir, "folds")
+    fs.mkdirSync(folds, { recursive: true })
+    for (const [name, flags, want] of [
+      ["literal8", "8", "1"],
+      ["literal1", "1", "0"],
+      ["or", "NET_LISTEN_RING | 1", "1"],
+      ["paren", "(1 | 2)", "0"],
+      ["unknown", "toI32(process.argv.length)", "1"],
+    ]) {
+      const file = path.join(folds, `${name}.ts`)
+      fs.writeFileSync(
+        file,
+        `import { NET_LISTEN_RING, tcpListenFlags } from "nish:net"\n` +
+          `export const main = (): i32 => tcpListenFlags("127.0.0.1", 0, 1, ${flags}) + NET_LISTEN_RING\n`
+      )
+      const { c, ir } = ringIr(file, ["--sandbox"])
+      const got = ringCall(ir)
+      check(`sandbox: tcpListenFlags flags \`${flags}\` ask for ${want} ring${want === "1" ? "" : "s"}`, got === want, c.status === 0 ? `operand ${got}` : shown(c))
+    }
+    // D2: the count is the root package.json's `nish.netRings`, 1 to 64.
+    const counts = (name, value) => {
+      const at = path.join(dir, `rings-${name}`)
+      fs.mkdirSync(at, { recursive: true })
+      fs.writeFileSync(path.join(at, "package.json"), `{ "name": "rings-${name}", "private": true, "nish": { "netRings": ${value} } }\n`)
+      fs.copyFileSync(path.join(fixtures, "ring.ts"), path.join(at, "ring.ts"))
+      return path.join(at, "ring.ts")
+    }
+    for (const [name, value, want] of [
+      ["3", "3", "3"],
+      ["64", "64", "64"],
+    ]) {
+      const { c, ir } = ringIr(counts(name, value), ["--sandbox"])
+      const got = ringCall(ir)
+      check(`sandbox: \`nish.netRings\` ${value} asks for ${want} rings`, got === want, c.status === 0 ? `operand ${got}` : shown(c))
+    }
+    for (const [name, value] of [
+      ["0", "0"],
+      ["65", "65"],
+      ["neg", "-1"],
+      ["frac", "1.5"],
+      ["word", '"4"'],
+    ]) {
+      const { c } = ringIr(counts(name, value), ["--sandbox"])
+      check(
+        `sandbox: \`nish.netRings\` ${value} is refused where package.json writes it`,
+        c.status === 1 && c.stderr.includes(`rings-${name}/package.json:1:`) && c.stderr.includes(`\`nish.netRings\` is \`${value}\``) && c.stderr.includes("an integer from 1 to 64"),
+        shown(c)
+      )
+    }
+
+    const plainRing = build("ring-plain", "ring", [], hooks)
+    const unconfined = run(plainRing, ["io_uring_setup"])
+    const ringsWork = unconfined !== null && unconfined.status === 0 && unconfined.stdout === "io_uring_setup: start\nio_uring_setup: ok\n"
+    const enterPlain = run(plainRing, ["io_uring_enter"])
+    const registerPlain = run(plainRing, ["io_uring_register"])
+    const countPlain = run(plainRing, ["ring-count"])
+    check(
+      "sandbox: without --sandbox a ring program premakes no ring (the control)",
+      countPlain !== null && countPlain.status === 0 && countPlain.stdout === "ring-count: 0\n",
+      said(countPlain)
+    )
+    check(
+      "sandbox: without --sandbox io_uring_register and io_uring_enter reach the kernel (the control)",
+      enterPlain !== null &&
+        enterPlain.status === 0 &&
+        enterPlain.stdout.startsWith("io_uring_enter: start\nio_uring_enter: ") &&
+        registerPlain !== null &&
+        registerPlain.status === 0 &&
+        registerPlain.stdout.startsWith("io_uring_register: start\nio_uring_register: "),
+      `${said(enterPlain)}\n${said(registerPlain)}`
+    )
+    if (!ringsWork) {
+      skip(`sandbox: this kernel refuses io_uring_setup unconfined; the premade-ring checks did not run (${said(unconfined).trim()})`)
+    } else {
+      const inheritPlain = run(plainRing, ["inherit-ring", plainRing])
+      check(
+        "sandbox: without --sandbox a ring inherited across exec is entered (the control)",
+        inheritPlain !== null && inheritPlain.status === 0 && inheritPlain.stdout === "foreign-enter: start\nforeign-enter: ok\ninherit-ring: exit 0\n",
+        said(inheritPlain)
+      )
+    }
+    // A refused opcode or flag on a restricted ring completes with -EACCES.
+    const refusedOps = [
+      [45, "SOCKET"],
+      [16, "CONNECT"],
+      [18, "OPENAT"],
+      [22, "READ"],
+      [23, "WRITE"],
+      [9, "SENDMSG"],
+      [40, "MSG_RING"],
+      [46, "URING_CMD"],
+    ]
+    const refusedFlags = [
+      [2, "IO_DRAIN"],
+      [4, "IO_LINK"],
+      [8, "IO_HARDLINK"],
+      [16, "ASYNC"],
+    ]
+    // The allowed opcodes on no file reach the kernel, which answers for the
+    // descriptor, never the restriction.
+    const allowedOps = [
+      ["13:0", "ACCEPT"],
+      ["27:0", "RECV"],
+      ["26:0", "SEND"],
+      ["19:0", "CLOSE"],
+      ["14:0", "ASYNC_CANCEL"],
+      ["27:1", "RECV with FIXED_FILE"],
+      ["27:32", "RECV with BUFFER_SELECT"],
+      ["27:64", "RECV with CQE_SKIP_SUCCESS"],
+    ]
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const ring = build(`ring-${mode}`, "ring", [flag], hooks)
+      const net = build(`net-${mode}`, "net", [flag], hooks)
+      const both = build(`ringspawn-${mode}`, "ringspawn", [flag], hooks)
+      const none = built.get(`none-${mode}`)
+      for (const [op, why] of [
+        ["io_uring_setup", "io_uring_setup from ffi with net and without process.spawn dies of SIGSYS"],
+        ["io_uring_register", "io_uring_register from ffi with net and without process.spawn dies of SIGSYS"],
+      ]) {
+        const r = run(ring, [op])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+      }
+      for (const [op, why] of [
+        ["io_uring_register", "io_uring_register from ffi without net dies of SIGSYS"],
+        ["io_uring_enter", "io_uring_enter from ffi without net dies of SIGSYS"],
+      ]) {
+        const r = run(none, [op])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+      }
+      // io_uring_enter is allowed on the premade rings' descriptors alone:
+      // on any other, or with no ring made, the filter kills it.
+      for (const [exe, why] of [
+        [ring, "io_uring_enter from ffi with net on a descriptor that is no premade ring dies of SIGSYS"],
+        [net, "io_uring_enter from ffi with net and no ring premade dies of SIGSYS"],
+      ]) {
+        const r = run(exe, ["io_uring_enter"])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === "io_uring_enter: start\n", said(r))
+      }
+      const bothEnter = run(both, ["io_uring_enter"])
+      check(
+        `sandbox: with net and process.spawn io_uring_enter from ffi reaches the kernel (${mode})`,
+        bothEnter !== null && enterPlain !== null && bothEnter.status === 0 && bothEnter.stdout === enterPlain.stdout,
+        said(bothEnter)
+      )
+      const probe = run(none, ["ring-probe"])
+      check(
+        `sandbox: without net the ring probe answers the refusal, not SIGSYS (${mode})`,
+        probe !== null && probe.status === 0 && probe.stdout === "ring-probe: start\nring-probe: -1\n",
+        said(probe)
+      )
+      const noneCount = run(none, ["ring-count"])
+      const netCount = run(net, ["ring-count"])
+      check(
+        `sandbox: a main without net, or with net and never the ring bit, makes no ring (${mode})`,
+        noneCount !== null && noneCount.stdout === "ring-count: 0\n" && netCount !== null && netCount.stdout === "ring-count: 0\n",
+        `${said(noneCount)}\n${said(netCount)}`
+      )
+      const bothSetup = run(both, ["io_uring_setup"])
+      const bothCount = run(both, ["ring-count"])
+      check(
+        `sandbox: with net and process.spawn io_uring_setup from ffi is not killed and no ring is premade (${mode})`,
+        bothSetup !== null &&
+          bothSetup.status === 0 &&
+          unconfined !== null &&
+          bothSetup.stdout === unconfined.stdout &&
+          bothCount !== null &&
+          bothCount.stdout === "ring-count: 0\n",
+        `${said(bothSetup)}\n${said(bothCount)}`
+      )
+      if (!ringsWork) continue
+      const foreign = run(plainRing, ["inherit-ring", ring])
+      check(
+        `sandbox: a ring a parent made unconfined and passed across exec cannot be entered: SIGSYS (${mode})`,
+        foreign !== null && foreign.status === 0 && foreign.stdout === "foreign-enter: start\ninherit-ring: SIGSYS\n",
+        said(foreign)
+      )
+      const count = run(ring, ["ring-count"])
+      check(
+        `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring (${mode})`,
+        count !== null && count.status === 0 && count.stdout === "ring-count: 1\n",
+        said(count)
+      )
+      const control = run(ring, ["ring-sqe", "0:0"])
+      check(
+        `sandbox: a premade ring completes a NOP (${mode}, the control)`,
+        control !== null && control.status === 0 && control.stdout === "ring-sqe: start\nring-sqe: ok\n",
+        said(control)
+      )
+      for (const [code, name] of refusedOps) {
+        const r = run(ring, ["ring-sqe", `${code}:0`])
+        check(
+          `sandbox: a premade ring refuses IORING_OP_${name} with EACCES (${mode})`,
+          r !== null && r.status === 0 && r.stdout === "ring-sqe: start\nring-sqe: EACCES\n",
+          said(r)
+        )
+      }
+      for (const [bit, name] of refusedFlags) {
+        const r = run(ring, ["ring-sqe", `0:${bit}`])
+        check(
+          `sandbox: a premade ring refuses IOSQE_${name} with EACCES (${mode})`,
+          r !== null && r.status === 0 && r.stdout === "ring-sqe: start\nring-sqe: EACCES\n",
+          said(r)
+        )
+      }
+      for (const [sqe, name] of allowedOps) {
+        const r = run(ring, ["ring-sqe", sqe])
+        check(
+          `sandbox: a premade ring takes ${name} past its restriction (${mode})`,
+          r !== null && r.status === 0 && r.stdout.startsWith("ring-sqe: start\nring-sqe: ") && !r.stdout.includes("EACCES") && !r.stdout.includes("no hook"),
+          said(r)
+        )
+      }
+      const serve = run(ring, ["serve"])
+      check(
+        `sandbox: a sandboxed NET_LISTEN_RING listener serves a loopback connection through a premade ring (${mode})`,
+        serve !== null && serve.status === 0 && serve.stdout === "serve: ok\n",
+        said(serve)
+      )
+    }
+    if (ringsWork) {
+      const three = path.join(dir, "rings-3", "ring.ll")
+      const c3 = spawnSync(NISH, [path.join(dir, "rings-3", "ring.ts"), "--sandbox", "-o", three], { cwd: root, encoding: "utf8" })
+      const exe3 = path.join(dir, "rings-3", "ring")
+      const l3 = c3.status === 0 ? linkNative(exe3, three, { driver: probeC, ...hooks }) : c3
+      const n3 = l3.status === 0 ? run(exe3, ["ring-count"]) : null
+      check(
+        "sandbox: `nish.netRings` 3 premakes 3 rings",
+        n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 3\n",
+        l3.status === 0 ? said(n3) : shown(l3)
+      )
+      // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
+      // ring, which drops it; the stand-in refuses the flag as such a kernel
+      // does, and the pool keeps the probe's floor and makes none (NURING-33).
+      const old = build("ring-old-kernel", "ring", ["--sandbox"], {
+        defines: [...hooks.defines, "-DUR_SYS_SETUP(e,p)=((p)->flags & (1u << 13) ? (errno = EINVAL, -1L) : syscall(__NR_io_uring_setup, e, p))"],
+      })
+      const oldCount = run(old, ["ring-count"])
+      const oldProbe = run(old, ["ring-probe"])
+      check(
+        "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)",
+        oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
+        `${said(oldCount)}\n${said(oldProbe)}`
+      )
+    }
 
     // seccomp answers EPERM to the metadata calls Landlock does not decide, so
     // a program without fs.write cannot chmod, touch or tag a file.
@@ -32802,7 +33095,7 @@ if (!only || "sandbox".includes(only)) {
         `@.sandbox.read = private unnamed_addr constant [${bytes} x i8] c"${escaped}\\00\\00"\n`
       ) &&
       !scopedText.includes("@.sandbox.write") &&
-      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null)`) &&
+      scopedText.includes(`call void @nish_sandbox(i32 112, i32 1, i8* ${operand}, i8* null, i8* null, i32 0)`) &&
       (as === null || as.status === 0),
     sc.status === 0
       ? `${scopedText
@@ -32906,7 +33199,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
       check(
         "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.read scope",
         ir(reader).includes(`c"${fs.realpathSync(path.join(linkDir, reader, "data"))}\\00\\00"`) &&
-          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null\)/.test(
+          /call void @nish_sandbox\(i32 32, i32 1, i8\* getelementptr [^)]*@\.sandbox\.read[^)]*\), i8\* null, i8\* null, i32 0\)/.test(
             ir(reader)
           ),
         ir(reader)
@@ -32945,7 +33238,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
         check(
           "sandbox dependency grants: the wrapper passes the grant's real directory as the fs.write scope",
           ir(writer).includes(`c"${fs.realpathSync(path.join(linkDir, writer, "out"))}\\00\\00"`) &&
-            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null\)/.test(
+            /call void @nish_sandbox\(i32 64, i32 1, i8\* null, i8\* getelementptr [^)]*@\.sandbox\.write[^)]*\), i8\* null, i32 0\)/.test(
               ir(writer)
             ),
           ir(writer)

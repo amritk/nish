@@ -446,10 +446,10 @@ const manifestRepeatedMember = (members: ManifestMembers): i32 => {
 
 /**
  * The root package's `"nish"` field, read strictly (docs/wp36-capability-policy.md
- * §3): where its `noPanic`, `capabilities`, `host` and `compat` values start, or -1 for one it
+ * §3): where its `noPanic`, `capabilities`, `host`, `compat` and `netRings` values start, or -1 for one it
  * does not write. `problem` is the opening of the NL3036 message when the
  * field is not one object, written once, whose only keys are `noPanic`,
- * `capabilities`, `host` (WP50 stage 2's host modules) and `compat` (WP28), each written once, with the span it is reported at; both
+ * `capabilities`, `host` (WP50 stage 2's host modules), `compat` (WP28) and `netRings` (WP63 S3), each written once, with the span it is reported at; both
  * positions are then -1, so nothing in a field the reader cannot vouch for is
  * honoured. Keys are decoded as JSON.parse decodes them, so an escaped
  * spelling is the key it spells.
@@ -466,6 +466,10 @@ export class NishManifest {
   hostEnd: i32
   /** WP28: where the `compat` value starts, `true` or an array (`manifestCompat`), or -1. */
   compatAt: i32
+  /** WP63 S3: where the `netRings` value starts, or -1; its value is judged by `Compilation.readNetRings`. */
+  netRingsAt: i32
+  /** One past the end of the `netRings` value. */
+  netRingsEnd: i32
 
   constructor() {
     this.problem = ""
@@ -476,6 +480,8 @@ export class NishManifest {
     this.hostAt = -1
     this.hostEnd = -1
     this.compatAt = -1
+    this.netRingsAt = -1
+    this.netRingsEnd = -1
   }
 }
 
@@ -571,6 +577,9 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
         return manifestNishProblem("`compat` is neither `true` nor an array", valueAt, fields.valueEnd[f])
       }
       out.compatAt = valueAt
+    } else if (key === "netRings") {
+      out.netRingsAt = valueAt
+      out.netRingsEnd = fields.valueEnd[f]
     } else {
       return manifestNishProblem(
         `\`${key}\` is no key of \`${condition}\``,
