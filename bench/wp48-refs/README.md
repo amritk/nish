@@ -19,8 +19,8 @@ which measures its decode on `sibling.ts`.
 | --- | --- | --- | ---: |
 | `class.ts` | a class instance with a `kids: Node[]` array, as an idiomatic port writes it | an 8-byte pointer | 63 |
 | `sibling.ts` | a class instance with `first` and `next` sibling links | an 8-byte pointer | 32 |
-| `pool.ts` | an `interface` record in one `Rec[]`, children as a run of a flat `i32[]` | an `i32` index | 25 |
-| `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 20 |
+| `pool.ts` | an `interface` record in one `Rec[]`, children as a run of a flat `i32[]` | an `i32` index | 50 |
+| `records.ts` | `sibling.ts`'s five fields as one `interface` record in one `Rec[]` | an `i32` index | 41 |
 | `columns.ts` | the same five fields, one presized `i32[]` column each | an `i32` index | 20 |
 
 `records.ts` is what a whole-program 32-bit reference mode (Design A in
