@@ -11,7 +11,7 @@ Which gates CI runs and which stay by hand: the spec-first paragraph of
 
 ```bash
 bash scripts/fetch-vector.sh            # the vector .vector-version pins, in build/vector/
-build/vector/dist/vector --version      # vector 0.4.0
+build/vector/dist/vector --version      # the version .vector-version pins
 ```
 
 `scripts/build-spec.sh` also needs kramdown-rfc and xml2rfc, at the versions
@@ -37,7 +37,7 @@ exists only once `scripts/fetch-vector.sh` has run, so `spec extract --check`
 and `spec check` need vector in `build/vector/`. CI's `node tests/run.js spec`
 does not read the schema.
 
-**What a spec declares.** With vector 0.4.0, the pin in `.vector-version`, a
+**What a spec declares.** With the vector `.vector-version` pins, a
 `ts-property` block sets its sample count with `// samples: N` on its second
 line (hex's ten properties set 96, as its hand-written contract did); an export
 no clause tests is declared with an `Out of scope: <export>, <reason>`
