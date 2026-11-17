@@ -1,7 +1,8 @@
 // What an idle keep-alive slot of a `NET_LISTEN_RING` listener costs in
 // memory (NURING-38). tests/run.js's `net_ring` section starts this program
-// under a descriptor limit of 4,096, one ring's slots,, and `client.mjs` in `idle` mode opens
-// 3,000 connections to the port it prints; each sends five bytes, reads the
+// under a descriptor limit of 4,096, so every slot is in one ring, and
+// `client.mjs` in `idle` mode opens 3,000 connections to the port it prints;
+// each sends five bytes, reads the
 // echo and then stays open, sending nothing more. With every one echoed and
 // idle the program reads its anonymous resident set from /proc/self/statm
 // and prints what it grew by per connection since the listener opened, then
