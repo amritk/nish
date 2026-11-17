@@ -205,9 +205,9 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   marks the hero's host `data-nish-ready`, `theme.css` holds the page under
   the hero hidden, so the hero's late arrival pushes nothing a reader is
   looking at; the hold ends by itself after 1.2s if `site.js` never runs.
-- [`page.js`](site/page.js) writes each page's structured data (below) and
-  lets a path in a table break after its slashes, where `theme.css` keeps a
-  table's names whole. It draws nothing, and stays out of `site.js` so the
+- [`page.js`](site/page.js) writes each page's structured data and its
+  `theme-color` (below), and lets a path in a table break after its
+  slashes, where `theme.css` keeps a table's names whole. It draws nothing, and stays out of `site.js` so the
   hero's script keeps its size budget (`tests/break-web/check.mjs`).
 - The landing page is the site's home, not a page of the guide: its route,
   first under `/` in `scalar.config.json` and out of the sidebar, sets a
@@ -244,13 +244,33 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
     `https://nishlang.com/og.png`, and its `og:video` (with its secure URL,
     type and size) at `https://nishlang.com/og.mp4`; `twitter:image` stays
     on `og.png`, since X plays no `og:video`. A tag set there is on every page, so it
-    holds no page's own title; the home page's `<title>` is its route's
-    `head.title`. The description repeats the landing page's lead: a change
-    to what Nish is changes both, and `page.js`'s `DESCRIPTION`.
+    holds no page's own title. The description repeats the landing page's lead: a change
+    to what Nish is changes both, and `page.js`'s `DESCRIPTION`. Nish has no X
+    account, so there is no `twitter:site`. Scalar writes `og:url` itself.
+  - Each page route's `head` holds what is the page's own: its `<title>`
+    (`Installation · Nish`), its `og:title` (the bare name; `og:site_name`
+    already says Nish; X reads it in place of a `twitter:title`) and its
+    `<link rel="canonical">` (`https://nishlang.com` and the route's path,
+    the URL `/sitemap.xml` lists). Scalar has no title template, so these are
+    generated, not hand-written: `node scripts/route-head.mjs` rewrites them
+    and `--check` reports a missing or stale one, and
+    `scripts/gen-reference.mjs` (whose `--check` CI runs) gives every route
+    the same head. A name is the route's title; an Overview takes its
+    group's, and two pages of one name are told apart by the nearest group
+    title that differs (`Types · Language specification`). The home page
+    keeps its hand-written `head.title`, which is also its `og:title`.
   - `page.js` writes one schema.org JSON-LD block into the head: the
     `WebSite` and Nish as a `SoftwareApplication` on every page, and a
-    `TechArticle` for any other page than the home page, from its title and
-    description. Scalar renders none of its own. It names no person.
+    `TechArticle` for any other page than the home page, from its `og:title`
+    and description. It names no person. It is not in the server-rendered
+    HTML, so a crawler that runs no JavaScript misses it: Scalar renders no
+    JSON-LD of its own, its `head.scripts` load a file by path or URL with
+    no inline body, and a crawler reads no JSON-LD from a script's `src`.
+  - `page.js` also writes `<meta name="theme-color">`: the page background
+    (`--scalar-background-1` in `theme.css`) of the mode the page is in,
+    rewritten when the colour-scheme toggle changes `<body>`'s class.
+    Scalar's `head.meta` takes no `media`, so a light and a dark tag cannot
+    be set in the config.
   - Scalar generates `/sitemap.xml`, `/robots.txt`, `/llms.txt`,
     `/llms-full.txt` and a Markdown copy of each page at `<route>.md`.
     `siteConfig.llms.stripComments` takes the HTML comments, such as the
