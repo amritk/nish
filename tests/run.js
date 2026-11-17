@@ -16456,6 +16456,33 @@ if (dealtHere("arrayChecks")) {
         ran.stdout === "",
       ran === null ? built.stderr : shown(ran)
     )
+    // ovf_loop_guard's `x + i` additions test for overflow once before their loop
+    // (src/emit-arrays.ts, emitAddGuards); a loop that may overflow keeps the checked
+    // add, so each case prints every value up to the overflow and then panics there.
+    const guardLl = path.join(buildDir, "ovf_loop_guard.ll")
+    const guardExe = path.join(buildDir, "ovf_loop_guard")
+    const guard = fs.existsSync(guardLl) ? linkNative(guardExe, guardLl) : null
+    if (guard !== null && guard.status === 0) {
+      const wants = [
+        "2147483645\n2147483646\n2147483647\n",
+        "9223372036854775806\n9223372036854775807\n",
+        "",
+      ]
+      const failed = []
+      for (let k = 0; k < wants.length; k++) {
+        const run = spawnSync(guardExe, [String(k)], { encoding: "utf8" })
+        if (run.status !== 1 || !run.stderr.includes("attempt to add with overflow") || run.stdout !== wants[k]) {
+          failed.push(`case ${k}: want ${JSON.stringify(wants[k])}, got ${shown(run)}`)
+        }
+      }
+      check(
+        'ovf_loop_guard: cases 0-2 print each value up to the overflowing `x + i`, then exit 1 with "attempt to add with overflow"',
+        failed.length === 0,
+        failed.join("\n")
+      )
+    } else if (guard !== null) {
+      check("ovf_loop_guard: links", false, String(guard.stderr))
+    }
   }
 
   // ---- Self-recursive checked sums ------------------------------------------------

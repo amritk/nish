@@ -315,6 +315,14 @@ export class Emitter {
   readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
+  /**
+   * The checked `x + i` additions of the counted loops being emitted
+   * (`emitAddGuards`), innermost last: each node's id, the `i1` that is set
+   * when one of its values may overflow, and the function that value is in.
+   */
+  addGuardNodes: i32[]
+  addGuardFlags: string[]
+  addGuardFns: IRFunction[]
   /** The labels around the statement being emitted, innermost last, each with the index in `loops` of what it names. */
   labelNames: string[]
   labelDepths: i32[]
@@ -435,6 +443,9 @@ export class Emitter {
     this.accumulator = null
     this.uncopied = -1
     this.loops = []
+    this.addGuardNodes = []
+    this.addGuardFlags = []
+    this.addGuardFns = []
     this.labelNames = []
     this.labelDepths = []
     this.openScopes = []
@@ -656,6 +667,9 @@ export class Emitter {
     this.chainTests = []
     this.fusedProbes = []
     this.loops = []
+    this.addGuardNodes = []
+    this.addGuardFlags = []
+    this.addGuardFns = []
     this.labelNames = []
     this.labelDepths = []
     this.openScopes = []
