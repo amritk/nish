@@ -86,7 +86,8 @@ first as well, and the program then refuses to run (§3, §7).
 - descriptors open before the call, and any it receives over `SCM_RIGHTS`
   (from Linux 6.7 the kernel refuses to send an io_uring descriptor that
   way; one inherited across `exec` still arrives, and the filter refuses
-  `io_uring_enter` on it unless it is moved onto a premade ring's number,
+  `io_uring_enter` on it, and the `close`, `dup2` and `dup3` that would put
+  it at a premade ring's number,
   [NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md));
 - of `/proc/self`, what needs no open: `stat` and `readlink` on its
   entries, and descriptors to it already open; opening its files needs
@@ -265,12 +266,15 @@ counted. One finding is counted, and it is fixed:
   unsandboxed floor (NURING-33), and a spent set answers without counting
   (NURING-34).
 - **`io_uring_enter` is matched by descriptor number.** The filter lets it
-  take only the numbers of the rings step 5 made (NURING-35), but seccomp
-  cannot see the file behind a number: code holding a ring made outside the
-  sandbox, inherited across `exec`, can `dup2` or `dup3` it onto a premade
-  ring's number, or onto one a closed ring listener freed, or close that
-  number and take it with `dup` or `fcntl(F_DUPFD)`, which reuse the lowest
-  free descriptor, and enter it (NURING-36, open). Landlock's rules still bound what that ring reaches.
+  take only the numbers of the rings step 5 made (NURING-35). seccomp
+  cannot see the file behind a number, so the filter keeps each number on
+  its ring instead: `close`, `dup2` and `dup3` naming a premade ring's
+  number, or the keeper's, as the one they close or replace kill, `dup3`
+  from the keeper excepted, which is how a closed ring listener's ring is
+  dropped with the keeper, a ring that takes only NOP, left at its number;
+  `close_range` answers ENOSYS. `dup`, `fcntl(F_DUPFD)`, `recvmsg` and
+  `pidfd_getfd` take only free numbers, which no ring's number ever is, and
+  exec is killed (NURING-36, fixed).
 - **A pathname Unix listener needs `fs.write`.** Landlock counts binding a
   socket file as MAKE_SOCK, a write, so `unixListen` on a path under `net`
   alone is -13 and leaves no file. The capability pass grants `net` for the

@@ -38,6 +38,7 @@ specified.
 - [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md): whether its typed JSON prerequisites land as its S1 or in WP61, a reverse generator, `readOnly`/`writeOnly`, unknown and `x-*` keywords, nullable `boolean` and type-discriminated unions, presence flags, field-name style, where the generator lives, and whether `format` is checked by default (S5).
 - [WP64: Temporal](wp64-temporal.md): how option bags such as `{ largestUnit: "year" }` get a layout, whether the time zone database is embedded by default, `Duration`'s field width, `epochNanoseconds` without `bigint`, and whether a `RangeError` stays a panic.
 - [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md): how many rings `--sandbox` makes before `main`.
+- [WP65: The surface a lexer port asked for](wp65-lexer-surface.md): whether to build `toString()` on a number, which LANGUAGE.md refuses today, or keep the rule and make the refusal name the template literal.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 - [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
 
@@ -57,6 +58,7 @@ specified.
 | [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | In progress | 3 of 6 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
 | [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | Proposed | 1 of 7 |
+| [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |

@@ -91,6 +91,7 @@ box per stage; the status line at a note's head may lag it.
 | [wp60-dyn-dispatch.md](wp60-dyn-dispatch.md) | Proposed, designed and measured. Dynamic dispatch over interfaces: `Dyn<I>` from `nish:dyn`, a class tag and a pointer (two registers in a local, one tagged word when stored) whose method call lowers to a per-place `switch` of direct calls (WP51's machinery with classes as members), measured against a hand `kind` switch, a discriminated union, a WP51 table and a vtable: on the surface stage 2 can write, 0.72x the hand program in geomean but 2.21x on a set of two chosen at random per call; stored, 1.11x (1.18x on arrays); the escape-join refusal with `this` as an argument; ships interface method signatures (stage 1) now, with stages 2 and 3 each gated on its own build's timing. |
 | [wp61-json-typed-checks.md](wp61-json-typed-checks.md) | Proposed, design only. Typed JSON, constraints and coercion in one pass: a `constraints` option in the class literal checked straight after each field's read with `JSON_DECODE_CONSTRAINT` at the value, patterns through the non-backtracking `nish/regex`; an opt-in `coerce` mode in which `jsonDecode` always answers `OK` with a correct instance (an exact lossless conversion table, otherwise the class's own defaults; malformed JSON and limits stop reading but do not fail; `reason` and `errorAt` stay readable); a per-field converted/defaulted record whose default is settled by measurement; byte-identical IR for a class without either; three stages ending in the guide page and Bun/Node benchmarks. The schema-to-class generator is WP62. |
 | [wp62-json-schema-classes.md](wp62-json-schema-classes.md) | Proposed, design only. Nish classes from a JSON Schema: `nish schema` reads a draft 2020-12 schema or OpenAPI 3.1 components and writes typed JSON classes, every keyword typed, checked through WP61's `constraints` literal, kept as JSDoc, or refused with its JSON Pointer; defaults as initializers and how they meet `required`, names and `rename`, a deterministic file with a header and `--check`, the round trip and a vendored corpus test, a first stage of two typed JSON prerequisites (constructor-assigned optional defaults, per-class unknown keys), and five stages. |
+| [wp65-lexer-surface.md](wp65-lexer-surface.md) | Proposed, design only. The surface a table-driven lexer port asked for: constant tables, already built, and the docs that point a lexer author to them; `indexOf(x, fromIndex)` on arrays, lowered to `memchr` on byte arrays, with `indexOfByte`, `equalBytes` and `compareBytes` in `std/bytes`; `withCapacity` and `grow` in `std/array`, and a zero fill dropped where a counted loop overwrites it (never an uninitialised `length`); field initializers that are not literals, run before the constructor body; and an open question on `toString()` for numbers. |
 
 Two notes record a stage of WP39 rather than a package of their own:
 
@@ -223,11 +224,26 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   `node scripts/gen-og-image.mjs` from `theme.css` and `site.js`. A change
   to the hero re-renders it (the script's head says what it needs: a
   Playwright and the Inter and JetBrains Mono fonts).
+- [`og.mp4`](site/og.mp4) is the same card in motion, the page's `og:video`:
+  one 12-second cycle of the hero, the code typed, the targets lit, the
+  terminal run and the NISH name unfolding, recorded frame by frame by
+  `node scripts/gen-og-video.mjs`. It needs ffmpeg with libx264 besides what
+  `og.png` needs; nothing else in the repository runs it or needs ffmpeg, and
+  a change to the hero re-renders both. It is committed and served as it is,
+  so it is shaped to play wherever a link unfurls: MP4 with H.264 in yuv420p,
+  because WebM and other pixel formats do not play everywhere; faststart
+  (the index before the data), because an unfurler fetches the head of the
+  file first; silent, with no audio track; and about 0.5 MB, under the 1 MiB
+  that `tests/break-web/check.mjs` holds it to, checked from its bytes.
+  `og.png` stays the `og:image`: the fallback for every unfurler that plays
+  no video, and the poster for those that do.
 - **What a search engine, a link preview or an answer engine reads** is set
   in `scalar.config.json`:
   - `info.description` and the `description`, `og:*` and `twitter:*` tags in
     `siteConfig.head.meta` describe the site and point every page's card at
-    `https://nishlang.com/og.png`. A tag set there is on every page, so it
+    `https://nishlang.com/og.png`, and its `og:video` (with its secure URL,
+    type and size) at `https://nishlang.com/og.mp4`; `twitter:image` stays
+    on `og.png`, since X plays no `og:video`. A tag set there is on every page, so it
     holds no page's own title; the home page's `<title>` is its route's
     `head.title`. The description repeats the landing page's lead: a change
     to what Nish is changes both, and `page.js`'s `DESCRIPTION`.

@@ -129,6 +129,9 @@ parser that refuses duplicates or takes the first, never the last.
 
 ## Keys from a provider
 
+To have a provider's keys found, fetched and rotated for you, use
+[tokens from an OpenID Connect issuer](oidc.md). To build them yourself:
+
 A provider publishes its public keys as a JWK set. Decode each JWK's fields
 with `base64urlDecode` from `nish/crypto/base64url` and build the key:
 

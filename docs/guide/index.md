@@ -161,8 +161,9 @@ and the language specification.
   [the HTTP client](using-nish/http-client.md),
   [calling other services](using-nish/calling-services.md),
   [PostgreSQL](using-nish/postgres.md),
-  [password hashing](using-nish/password-hashing.md) and
-  [authentication tokens (JWT)](using-nish/auth.md).
+  [password hashing](using-nish/password-hashing.md),
+  [authentication tokens (JWT)](using-nish/auth.md) and
+  [tokens from an OpenID Connect issuer](using-nish/oidc.md).
 
 This guide teaches; it is not the definition of the language. That is the
 [language reference](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md), and each page here links the section of

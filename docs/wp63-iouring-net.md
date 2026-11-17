@@ -515,10 +515,11 @@ else, and only on slots that hold sockets from the process's own listeners.
 dies of SIGSYS: the kernel's own answer, `-EOPNOTSUPP` for a file that is
 no ring (`io_uring/io_uring.c:3484`), would not stop a ring made outside
 the sandbox and inherited across `exec` (NURING-35), and the program cannot
-make another ring. The filter matches numbers, not files, so code that
-`dup2`s such a ring onto a premade ring's number, or closes that number and
-takes it with `dup` or `fcntl(F_DUPFD)`, still enters it; that is
-recorded open (NURING-36). A program that gets hold of a ring's descriptor through
+make another ring. The filter matches numbers, not files, so it also keeps
+each premade ring's number from being closed or replaced: `close`, `dup2`
+and `dup3` onto one kill, and a closed listener's ring is dropped by
+`dup3` of a keeper ring, which takes only NOP, onto its number, so no ring
+number is ever free for `dup` or `fcntl(F_DUPFD)` (NURING-36). A program that gets hold of a ring's descriptor through
 `nish:ffi` can submit only what the restrictions allow, which is what
 `nish:net` does anyway. A `SEND` with a destination address is a `sendto`
 with one. On a TCP socket the address is ignored, and on a UDP socket it is
