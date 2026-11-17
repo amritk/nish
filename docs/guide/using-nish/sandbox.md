@@ -335,7 +335,8 @@ Each premade ring takes only accepting, receiving, sending, closing and
 cancelling; anything else submitted to it fails with `-13`. The rings'
 descriptors are held for the program: closing one, or putting another
 descriptor at its number with `dup2` or `dup3`, ends the process with
-`SIGSYS`, and `close_range` fails with `ENOSYS`. Other descriptors are not
+`SIGSYS` (the one `dup3` allowed is from the keeper, a ring that takes only
+`NOP`, which the runtime puts at a closed listener's ring's number), and `close_range` fails with `ENOSYS`. Other descriptors are not
 affected
 ([NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
 When a kernel

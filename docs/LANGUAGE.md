@@ -14566,7 +14566,9 @@ entry:
   nothing; a ring a closed listener held has the keeper put at its
   descriptor number, so no premade ring's number is ever free. `close`,
   `dup2` and `dup3` naming a ring's or the keeper's number as the descriptor
-  they close or replace kill, and `close_range` fails with `ENOSYS`, as on
+  they close or replace kill, except a `dup3` from the keeper, which is how
+  the runtime puts the keeper at a freed ring's number, and `close_range`
+  fails with `ENOSYS`, as on
   a kernel older than 5.9; on every other
   descriptor they work as before (NURING-36 in `docs/security/net-uring.md`).
 - **Refusals.** A program whose sandbox cannot be applied prints one line,

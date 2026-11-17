@@ -796,7 +796,8 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * clang 18.1.3 on linux-x64 once the premake also makes a keeper ring, enabled and
  * restricted to NOP, and a freed pooled ring's descriptor is overwritten with it by
  * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
- * 8,448). A unit of its own beside runtime-net.c,
+ * 8,448). **8,274 bytes** on 2026-11-17 once that `dup3` is tried again on `EINTR`
+ * and `EBUSY`. A unit of its own beside runtime-net.c,
  * so that a build whose probe fails
  * runs the epoll path alone.
  */

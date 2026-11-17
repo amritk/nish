@@ -604,10 +604,13 @@ static void ur_free_ring(struct ur_ring *r) {
   if (r->efd >= 0) close(r->efd);
   /* A pooled ring's number stays a restricted ring's: `dup3` drops the ring
      and puts the keeper there in one step, which the filter allows from the
-     keeper alone, where it kills `close` on that number (NURING-36). */
-  if (r->fd >= 0 && ur_pool.keeper >= 0)
-    syscall(SYS_dup3, ur_pool.keeper, r->fd, O_CLOEXEC);
-  else if (r->fd >= 0)
+     keeper alone, where it kills `close` on that number (NURING-36). It is
+     tried again on EINTR and EBUSY; on any other failure the ring is left at
+     its number, still restricted, and its kernel memory is held. */
+  if (r->fd >= 0 && ur_pool.keeper >= 0) {
+    while (syscall(SYS_dup3, ur_pool.keeper, r->fd, O_CLOEXEC) < 0 && (errno == EINTR || errno == EBUSY)) {
+    }
+  } else if (r->fd >= 0)
     close(r->fd);
   if (r->ring_map && r->ring_map != MAP_FAILED) munmap(r->ring_map, r->ring_len);
   if (r->sqes && (void *)r->sqes != MAP_FAILED) munmap(r->sqes, r->sqes_len);
