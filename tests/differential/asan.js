@@ -56,8 +56,12 @@ const runtimeDir = path.join(lib.root, "runtime")
 const asanDir = path.join(lib.buildDir, "asan")
 
 /**
- * The runtime units `scripts/build.sh` links into every native program.
- * runtime-wasm.c is the WASI build's and is never linked here.
+ * The runtime units `scripts/build.sh` links into a native program: runtime.c,
+ * its `halves` in that list's order, and runtime-async.c; soundness.js's
+ * `RUNTIME_C` names the same. A unit left out here fails every link the
+ * moment another unit calls into it, as runtime-net.c began to call
+ * runtime-uring.c. runtime-wasm.c is the WASI build's and is never linked
+ * here.
  */
 const RUNTIME_UNITS = [
   "",
@@ -67,11 +71,18 @@ const RUNTIME_UNITS = [
   "-cross",
   "-host",
   "-net",
+  "-uring",
   "-simd",
   "-aes",
+  "-sha256",
+  "-chacha20",
+  "-checksum",
   "-term",
   "-bytes",
   "-sandbox",
+  "-shm",
+  "-region",
+  "-async",
 ].map((suffix) => path.join(runtimeDir, `runtime${suffix}.c`))
 
 /** The attribute group the instrumented IR adds to every definition. */

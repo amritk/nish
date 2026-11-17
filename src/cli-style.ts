@@ -55,6 +55,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--cpu", "x86-64-v3", "allow AVX2; such a binary needs it to start")
   menu.row("--target", "<triple>|host", "stamp the IR with a target's data layout")
   menu.row("--threads", "", "an arena per thread, for --emit-napi-async")
+  menu.row("--debug-arena", "", "trap a stale arena reference; for tests, slow")
   menu.row("--host", "<file.ts>", "a page module whose functions wasm imports")
   menu.row("--plain", "", "the IR without LLVM's attributes")
   menu.row("--no-strict-exports", "", "keep every function externally visible")

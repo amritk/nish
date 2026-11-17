@@ -137,6 +137,22 @@ the rewrite cannot lose a value you still need. `--deny-retention` turns the
 warning into an error, as it does for the
 [other retention warnings](../language/memory.md#what-you-do-have-to-think-about).
 
+The same holds when the text is built in a handler the loop calls. A helper
+that builds the reply and also answers stores into the server's memory, so it
+has no scope of its own either, and what it drops piles up in the loop. The
+warning sits on the loop and names the helper's line. Put the block inside the
+helper, around the work that builds the text:
+
+```ts
+const readPost = (conn: Http1Connection, heads: Heads): void => {
+  {
+    using a = arena();
+    fill(heads, `request ${heads.served}\n`);
+  }
+  answer(conn, heads);
+};
+```
+
 ## How many connections: the descriptor limit
 
 Every connection a server holds is a file descriptor, and the operating

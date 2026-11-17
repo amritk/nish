@@ -53,6 +53,7 @@ import PanicSite from "./panics" -> struct PanicSite
 import panicsJson from "./panics" -> function @panicsJson
 import reportDeniedPanics from "./panics" -> function @reportDeniedPanics
 import resolvePanicSites from "./panics" -> function @resolvePanicSites
+import CalleeDrops from "./arena-report" -> struct CalleeDrops
 import arenaJson from "./arena-report" -> function @arenaJson
 import unboundedPassFindings from "./arena-report" -> function @unboundedPassFindings
 import allCapabilities from "./capabilities" -> function @allCapabilities
@@ -1746,21 +1747,25 @@ function Compilation.reportArenaLoops(this: Compilation): void -> @Compilation.r
 function Compilation.reportUnboundedPasses(this: Compilation): void -> @Compilation.reportUnboundedPasses [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
-  calls: Compilation.analyze Compilation.inRootPackage DiagnosticSink.reportPerformance codeFor isRetentionCode nish_array_grow unboundedPassFindings
-  pointer this: size=216 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.inRootPackage#0
+  calls: CalleeDrops.constructor Compilation.analyze Compilation.inRootPackage DiagnosticSink.reportPerformance codeFor isRetentionCode nish_alloc_struct nish_array_grow unboundedPassFindings
+  pointer this: size=216 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.inRootPackage#0 Compilation.inRootPackage#0
   stackSites=1 stackLocals=1
   local +0:11 facts: FactsTable (const)
   callee +0:19 Compilation.analyze -> @Compilation.analyze
-  local +1:16 unit: AnalysisUnit (const)
-  local +2:13 source: SourceFile (const)
-  callee +3:12 Compilation.inRootPackage -> @Compilation.inRootPackage
-  local +6:13 named: i32[] (const)
-  local +7:18 warning: Diagnostic (const)
-  callee +8:42 isRetentionCode -> @isRetentionCode
-  callee +8:58 codeFor -> @codeFor
-  local +12:18 finding: ArenaFinding (const)
-  callee +12:29 unboundedPassFindings -> @unboundedPassFindings
-  callee +13:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  local +1:11 drops: CalleeDrops (const)
+  callee +1:19 new CalleeDrops -> @CalleeDrops.constructor
+  local +2:16 unit: AnalysisUnit (const)
+  callee +3:26 Compilation.inRootPackage -> @Compilation.inRootPackage
+  local +5:16 unit: AnalysisUnit (const)
+  local +6:13 source: SourceFile (const)
+  callee +7:12 Compilation.inRootPackage -> @Compilation.inRootPackage
+  local +10:13 named: i32[] (const)
+  local +11:18 warning: Diagnostic (const)
+  callee +12:42 isRetentionCode -> @isRetentionCode
+  callee +12:58 codeFor -> @codeFor
+  local +16:18 finding: ArenaFinding (const)
+  callee +16:29 unboundedPassFindings -> @unboundedPassFindings
+  callee +17:9 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
 function Compilation.reportPortability(this: Compilation): void -> @Compilation.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via portabilityFindings

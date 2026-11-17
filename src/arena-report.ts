@@ -27,6 +27,7 @@ import {
   loopScopeOf,
   reclaimsReturnedString,
 } from "./escape"
+import { StringMap, StringSet } from "./map"
 import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { StringBuilder, addJsonQuoted } from "./strings"
@@ -46,6 +47,12 @@ class ArenaSite {
   placement: string
   /** The callee's name as a diagnostic spells it, for a `call` or a `builtin`; empty otherwise. */
   callee: string
+  /** The scopes around the site, which say where an accumulating site piles up and whether anything bounds it. */
+  around: Around
+  /** The user function a `call` site calls, or null: what `dropOf` is asked about. */
+  target: FunctionSig | null
+  /** What the callee leaves behind, once `pilesUp` has found the site piles up only for that. */
+  drop: DropOrigin | null
   /**
    * The site runs on every pass of a loop whose pass does not release it, and
    * its memory is unreachable before the placement's release, so it piles up
@@ -54,8 +61,12 @@ class ArenaSite {
    * program asks first.
    */
   accumulates: boolean
-  /** The scopes around the site, which say where an accumulating site piles up and whether anything bounds it. */
-  around: Around
+  /**
+   * A call whose callee returns nothing of the arena's (no `CallSite`): a site
+   * only when the callee leaves a temporary behind (`dropOf`), and dropped
+   * from the report otherwise.
+   */
+  plain: boolean
 
   constructor(
     node: Node,
@@ -71,6 +82,9 @@ class ArenaSite {
     this.callee = callee
     this.accumulates = accumulates
     this.around = around
+    this.target = null
+    this.plain = false
+    this.drop = null
   }
 }
 
@@ -129,16 +143,20 @@ class ArenaWalk {
   unit: AnalysisUnit
   /** The type table, or null when nothing asks whether a pile is bounded. */
   table: TypeTable | null
+  /** What the program's functions leave behind in their callers' memory. */
+  drops: CalleeDrops
 
   constructor(
     unit: AnalysisUnit,
     facts: FactsTable,
     sig: FunctionSig,
     f: FunctionFacts,
-    table: TypeTable | null
+    table: TypeTable | null,
+    drops: CalleeDrops
   ) {
     const program = unit.program
     this.unit = unit
+    this.drops = drops
     this.program = program
     this.table = table
     this.facts = facts
@@ -268,17 +286,45 @@ const visitSite = (walk: ArenaWalk, node: Node, scope: i32, around: Around): voi
     const callee = walk.facts.get(call.callee)
     const name = callee === null ? call.callee : callee.sourceName
     const placement = placementAt(walk, scope, call.flow, call.escapes)
-    walk.sites.push(new ArenaSite(node, "call", placement, name, growing && isGarbage(placement), around))
+    const site = new ArenaSite(node, "call", placement, name, growing && isGarbage(placement), around)
+    site.target = userCallee(walk.program, node)
+    walk.sites.push(site)
     return
   }
   const flow = walk.arenaFlow[node.id]
   if (flow < 0) {
+    // A call whose result holds nothing of the arena's may still leave a
+    // temporary behind in this function's memory: kept as a site only if so.
+    const target = userCallee(walk.program, node)
+    if (target !== null) {
+      const placement = placementAt(walk, scope, FLOW_LOCAL, false)
+      const site = new ArenaSite(
+        node,
+        "call",
+        placement,
+        target.sourceName,
+        growing && isGarbage(placement),
+        around
+      )
+      site.target = target
+      site.plain = true
+      walk.sites.push(site)
+    }
     return
   }
   const kind = siteKind(node)
   const name = kind === "builtin" ? builtinName(walk.program, node) : ""
   const placement = placementAt(walk, scope, flow, walk.escapes[node.id])
   walk.sites.push(new ArenaSite(node, kind, placement, name, growing && isGarbage(placement), around))
+}
+
+/** The function of the program `node` calls or constructs with, or null: a builtin, a `declare function`, or not a call. */
+const userCallee = (program: CheckedProgram, node: Node): FunctionSig | null => {
+  if (node.kind !== NodeKind.Call && node.kind !== NodeKind.New) {
+    return null
+  }
+  const sig = program.nodeCallees[node.id]
+  return sig === null || sig.foreign() ? null : sig
 }
 
 /**
@@ -346,7 +392,7 @@ const walkNode = (walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
 
 /** `around` inside `node`, a loop whose pass releases nothing of what `around` holds. */
 const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, around: Around): Around => {
-  if (walk.table === null || boundedPasses(walk, node)) {
+  if (walk.table === null || boundedPasses(walk.unit, walk.facts, node)) {
     return new Around(around.pass, around.block, node, loop, around.unbounded)
   }
   const unbounded: Node[] = []
@@ -369,13 +415,13 @@ const growingAround = (walk: ArenaWalk, node: Node, loop: LoopScope | null, arou
  * condition at all, a top-level `||`, and a chain of equalities or flags. A
  * comparison whose operand the body never moves still counts as a bound.
  */
-const boundedPasses = (walk: ArenaWalk, loop: Node): boolean => {
+const boundedPasses = (unit: AnalysisUnit, facts: FactsTable, loop: Node): boolean => {
   if (loop.kind === NodeKind.ForOf) {
-    return !bodyExtendsWalked(walk.unit, walk.facts, loop)
+    return !bodyExtendsWalked(unit, facts, loop)
   }
   // `while`: condition, body; `do`: body, condition; `for`: initializer, condition, ...
   const condition = loop.kind === NodeKind.While ? loop.children[0] : loop.children[1]
-  if (condition.kind === NodeKind.Empty || !readsOnly(walk.unit.program, condition)) {
+  if (condition.kind === NodeKind.Empty || !readsOnly(unit.program, condition)) {
     return false
   }
   return comparesInChain(condition)
@@ -612,9 +658,8 @@ const outsideLoops = (): Around => new Around(null, null, null, null, [])
  * A generic function is listed once per instantiation, under its own symbol.
  */
 export const arenaJson = (units: AnalysisUnit[], facts: FactsTable): string => {
-  const out = new StringBuilder()
-  out.add('{"functions":[')
-  let first = true
+  const drops = new CalleeDrops(units, facts)
+  const listed: ListedFunction[] = []
   for (const unit of units) {
     const program = unit.program
     for (const sig of program.functions) {
@@ -624,35 +669,704 @@ export const arenaJson = (units: AnalysisUnit[], facts: FactsTable): string => {
       if (f === null || body === null) {
         continue
       }
-      const walk = new ArenaWalk(unit, facts, sig, f, null)
-      walkNode(walk, program, body, SCOPE_NONE, outsideLoops())
-      out.add(first ? "\n" : ",\n")
-      first = false
-      out.add('{"name":')
-      addJsonQuoted(out, sig.sourceName)
-      out.add(',"symbol":')
-      addJsonQuoted(out, sig.name)
-      out.add(',"module":')
-      addJsonQuoted(out, program.source.path)
-      out.add(`,"line":${program.source.lineOf(sig.decl.start)},"sites":[`)
-      let comma = false
-      for (const site of walk.sites) {
-        out.add(comma ? "," : "")
-        comma = true
-        const source = program.source
-        out.add(`{"kind":"${site.kind}","line":${source.lineOf(site.node.start)}`)
-        out.add(`,"column":${source.columnOf(site.node.start)},"placement":"${site.placement}"`)
-        if (site.callee.length > 0) {
-          out.add(',"callee":')
-          addJsonQuoted(out, site.callee)
-        }
-        out.add(site.accumulates ? ',"accumulates":true}' : "}")
+      const instance = sig.instance
+      if (instance !== null) {
+        program.enterInstance(instance)
       }
-      out.add("]}")
+      const walk = new ArenaWalk(unit, facts, sig, f, null, drops)
+      walkNode(walk, program, body, SCOPE_NONE, outsideLoops())
+      if (instance !== null) {
+        program.leaveInstance()
+      }
+      listed.push(new ListedFunction(sig, unit, walk.sites))
     }
+  }
+  const reached = reachedFromPasses(drops, listed)
+  const out = new StringBuilder()
+  out.add('{"functions":[')
+  let first = true
+  for (const entry of listed) {
+    const sig = entry.sig
+    const source = entry.unit.program.source
+    const inherits = reached.has(sig.name)
+    out.add(first ? "\n" : ",\n")
+    first = false
+    out.add('{"name":')
+    addJsonQuoted(out, sig.sourceName)
+    out.add(',"symbol":')
+    addJsonQuoted(out, sig.name)
+    out.add(',"module":')
+    addJsonQuoted(out, source.path)
+    out.add(`,"line":${source.lineOf(sig.decl.start)},"sites":[`)
+    let comma = false
+    for (const site of entry.sites) {
+      if (!reported(drops, site)) {
+        continue
+      }
+      out.add(comma ? "," : "")
+      comma = true
+      out.add(`{"kind":"${site.kind}","line":${source.lineOf(site.node.start)}`)
+      out.add(`,"column":${source.columnOf(site.node.start)},"placement":"${site.placement}"`)
+      if (site.callee.length > 0) {
+        out.add(',"callee":')
+        addJsonQuoted(out, site.callee)
+      }
+      const accumulates =
+        site.accumulates || (inherits && site.placement === "unscoped" && leftBehind(drops, entry, site.node))
+      out.add(accumulates ? ',"accumulates":true}' : "}")
+    }
+    out.add("]}")
   }
   out.add("\n]}\n")
   return out.toText()
+}
+
+// ---- What a callee leaves behind ------------------------------------------------------------
+//
+// A function with no scope of its own leaves the temporaries it drops in its
+// caller's memory: a string it builds and hands to a function that copies it,
+// for one. When the call is in a pass that releases nothing, they pile up
+// there exactly as the pass's own would, however deep the call chain that
+// builds them. This is the summary the walk asks at a call: one answer per
+// function, worked out the first time a call that could pile up asks for it.
+
+/** The site where a function leaves a temporary behind, the function holding it, and how the warning names it. */
+class DropOrigin {
+  node: Node
+  /** The site's `--emit-arena` kind: `string`, `object`, `builtin`, `call`, ... */
+  kind: string
+  /** The builtin or the user function a `builtin` or `call` site names; empty otherwise. */
+  callee: string
+  /** The function the site is in. */
+  holder: FunctionSig
+  unit: AnalysisUnit
+  /** True when `holder` is not the root package's, so the warning cannot ask for a block inside it. */
+  theirs: boolean
+
+  constructor(
+    node: Node,
+    kind: string,
+    callee: string,
+    holder: FunctionSig,
+    unit: AnalysisUnit,
+    theirs: boolean
+  ) {
+    this.node = node
+    this.kind = kind
+    this.callee = callee
+    this.holder = holder
+    this.unit = unit
+    this.theirs = theirs
+  }
+}
+
+/** `CalleeDrops.state`: the function's answer is being worked out, so a call back into it answers "nothing". */
+const DROPS_PENDING: i32 = -1
+/** `CalleeDrops.state`: the function leaves nothing behind. */
+const DROPS_NONE: i32 = -2
+/** `CalleeDrops.state`: not asked yet. */
+const DROPS_UNKNOWN: i32 = -3
+/**
+ * `CalleeDrops.state`: answered "nothing" while a function it calls back into
+ * was still being worked out (`CalleeDrops.depth` holds the shallowest one), so
+ * the answer stands only once that function's does.
+ */
+const DROPS_DEFERRED: i32 = -4
+
+/** The memo of `dropOf`, over every module of the program, since a callee may be in any of them. */
+export class CalleeDrops {
+  units: AnalysisUnit[]
+  facts: FactsTable
+  /**
+   * Per module of `units`, true when it is not the root package's (the
+   * standard library, a dependency). Empty, as `--emit-arena` leaves it, when
+   * every module is the program's own.
+   */
+  theirs: boolean[]
+  /** Symbol -> the index in `units` of the module that defines it, filled on first use. */
+  homes: StringMap
+  homesBuilt: boolean
+  /** Symbol -> a `DROPS_*` state, or the index of its origin in `origins`. */
+  state: StringMap
+  origins: DropOrigin[]
+  /**
+   * Symbol -> how many `dropOf` calls enclose it while it is `DROPS_PENDING`,
+   * or the shallowest pending one it read while it is `DROPS_DEFERRED`.
+   */
+  depth: StringMap
+  /** The `DROPS_DEFERRED` symbols, in the order they were answered. */
+  deferred: string[]
+  /** How many `dropOf` calls are being worked out. */
+  level: i32
+  /** The shallowest pending call the current one has read, or its own level when none. */
+  low: i32
+
+  constructor(units: AnalysisUnit[], facts: FactsTable) {
+    this.units = units
+    this.facts = facts
+    this.theirs = []
+    this.homes = new StringMap()
+    this.homesBuilt = false
+    this.state = new StringMap()
+    this.origins = []
+    this.depth = new StringMap()
+    this.deferred = []
+    this.level = 0
+    this.low = 0
+  }
+}
+
+/** The index in `drops.units` of the module that defines `sig`, or -1. */
+const homeOf = (drops: CalleeDrops, sig: FunctionSig): i32 => {
+  if (!drops.homesBuilt) {
+    drops.homesBuilt = true
+    let u = 0
+    while (u < drops.units.length) {
+      const program = drops.units[u].program
+      for (const defined of program.functions) {
+        if (defined.definedIn(program.source) && !defined.foreign()) {
+          drops.homes.set(defined.name, u)
+        }
+      }
+      u = u + 1
+    }
+  }
+  return drops.homes.get(sig.name, -1)
+}
+
+/**
+ * Where `sig` leaves a temporary in its caller's memory on a call, or null
+ * when it leaves none. It does when it answers no memory (`returnsScalar`: a
+ * function that answers memory hands what it allocates to its caller, whose
+ * line it is, as `--explain-memory` reads it), has no scope of its own, its
+ * callers do not reclaim it, it does not manage the arena itself, and in its
+ * body, outside every scoped pass and `using a = arena()` block (`freeIn`),
+ * it allocates something it neither returns nor stores, calls a function that
+ * returns such a temporary (`netAllocates`, `contained`) and drops it, or calls
+ * a function that leaves one behind itself, and does so on every call that
+ * returns, or on every call handed one value of a parameter (`onEveryCall`).
+ * A temporary built only on some calls (an error message, a table built on
+ * first use, a step of a handshake) is not charged to each pass, while a
+ * handler for one kind of event still is. A call back into a function still
+ * being worked out answers null, so recursion settles on the other paths; a
+ * null that rests on such a call is kept only once that function's answer is
+ * null too, and is asked again when it is not (`settle`).
+ */
+const dropOf = (drops: CalleeDrops, sig: FunctionSig): DropOrigin | null => {
+  const known = drops.state.get(sig.name, DROPS_UNKNOWN)
+  if (known >= 0 && known < drops.origins.length) {
+    return drops.origins[known]
+  }
+  if (known === DROPS_PENDING || known === DROPS_DEFERRED) {
+    const at = drops.depth.get(sig.name, 0)
+    if (at < drops.low) {
+      drops.low = at
+    }
+    return null
+  }
+  if (known !== DROPS_UNKNOWN) {
+    return null
+  }
+  const mine = drops.level
+  const outer = drops.low
+  const mark = drops.deferred.length
+  drops.state.set(sig.name, DROPS_PENDING)
+  drops.depth.set(sig.name, mine)
+  drops.level = mine + 1
+  drops.low = mine
+  const origin = findDrop(drops, sig)
+  const low = drops.low
+  drops.level = mine
+  drops.low = low < outer ? low : outer
+  if (origin !== null) {
+    drops.state.set(sig.name, drops.origins.length)
+    drops.origins.push(origin)
+    settle(drops, mark, DROPS_UNKNOWN)
+  } else if (low >= mine) {
+    drops.state.set(sig.name, DROPS_NONE)
+    settle(drops, mark, DROPS_NONE)
+  } else {
+    drops.state.set(sig.name, DROPS_DEFERRED)
+    drops.depth.set(sig.name, low)
+    drops.deferred.push(sig.name)
+  }
+  return origin
+}
+
+/**
+ * Gives every function deferred since `mark` the state `to`: `DROPS_NONE` once
+ * the call they rested on answers null as well, `DROPS_UNKNOWN` (asked again
+ * on its next call) once it answers a site.
+ */
+const settle = (drops: CalleeDrops, mark: i32, to: i32): void => {
+  let k = mark
+  while (k < drops.deferred.length) {
+    drops.state.set(drops.deferred[k], to)
+    k = k + 1
+  }
+  while (drops.deferred.length > mark) {
+    drops.deferred.pop()
+  }
+}
+
+const findDrop = (drops: CalleeDrops, sig: FunctionSig): DropOrigin | null => {
+  const facts = drops.facts
+  const f: FunctionFacts | null = sig.foreign() ? null : facts.get(sig.name)
+  const body = sig.body()
+  if (f === null || body === null || !f.returnsScalar || !f.netAllocates || f.arenaScope || f.managesArena) {
+    return null
+  }
+  if (reclaimsReturnedString(sig, facts)) {
+    return null
+  }
+  const home = homeOf(drops, sig)
+  if (home < 0 || home >= drops.units.length) {
+    return null
+  }
+  const unit = drops.units[home]
+  const theirs = home < drops.theirs.length && drops.theirs[home]
+  const program = unit.program
+  const instance = sig.instance
+  if (instance !== null) {
+    program.enterInstance(instance)
+  }
+  let origin: DropOrigin | null = null
+  let k = 0
+  while (origin === null && k < f.arenaNodes.length) {
+    const node = f.arenaNodes[k]
+    if (f.arenaFlows[k] === FLOW_LOCAL && !f.stackSites[node.id] && !escapesIn(f, node)) {
+      const kind = siteKind(node)
+      if (kind !== "push" && onEveryCall(unit, body, node) && freeIn(unit, facts, f, body, node)) {
+        origin = new DropOrigin(
+          node,
+          kind,
+          kind === "builtin" ? builtinName(program, node) : "",
+          sig,
+          unit,
+          theirs
+        )
+      }
+    }
+    k = k + 1
+  }
+  for (const call of f.callSites) {
+    const callee = facts.get(call.callee)
+    if (
+      origin === null &&
+      callee !== null &&
+      callee.netAllocates &&
+      callee.contained &&
+      call.flow === FLOW_LOCAL &&
+      !call.escapes &&
+      onEveryCall(unit, body, call.node) &&
+      freeIn(unit, facts, f, body, call.node)
+    ) {
+      origin = new DropOrigin(call.node, "call", callee.sourceName, sig, unit, theirs)
+    }
+  }
+  // The calls are asked about once this instance is left: `enterInstance` does not nest.
+  const calls: FunctionSig[] = []
+  if (origin === null) {
+    freeCalls(unit, facts, f, body, body, calls)
+  }
+  if (instance !== null) {
+    program.leaveInstance()
+  }
+  for (const callee of calls) {
+    if (origin === null) {
+      origin = dropOf(drops, callee)
+    }
+  }
+  return origin
+}
+
+/** True when `node` is one of `f`'s escaping sites: its value outlives the function other than by its return. */
+const escapesIn = (f: FunctionFacts, node: Node): boolean => {
+  for (const escaping of f.escapingNodes) {
+    if (escaping === node) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The functions of the program that `node`, in `body`, calls where `freeIn`
+ * and `onEveryCall` hold, into `out`.
+ */
+const freeCalls = (
+  unit: AnalysisUnit,
+  facts: FactsTable,
+  f: FunctionFacts,
+  body: Node,
+  node: Node,
+  out: FunctionSig[]
+): void => {
+  if (node.kind === NodeKind.Arrow && node !== body) {
+    return
+  }
+  const callee = userCallee(unit.program, node)
+  if (callee !== null && onEveryCall(unit, body, node) && freeIn(unit, facts, f, body, node)) {
+    out.push(callee)
+  }
+  for (const child of node.children) {
+    freeCalls(unit, facts, f, body, child, out)
+  }
+}
+
+/**
+ * True when `node` runs on every call of the function whose body is `body`
+ * that returns, or on every such call handed one value of a parameter: nothing
+ * between them branches (either side of a `?:`, the right of `&&`, `||` or
+ * `??`, the passes of a loop, a `try`'s handlers, an arm of an `if` or a
+ * `switch` other than one that dispatches on a parameter, `dispatches`), and
+ * no statement before it in an enclosing block can leave the function
+ * (`mayLeave`).
+ */
+const onEveryCall = (unit: AnalysisUnit, body: Node, node: Node): boolean => {
+  const fn = unit.parents.parentOf(body)
+  const params = paramListOf(fn)
+  let at = node
+  while (at !== body) {
+    const parent = unit.parents.parentOf(at)
+    if (parent === null || parent.kind === NodeKind.Arrow || parent.kind === NodeKind.FunctionDecl) {
+      return false
+    }
+    const index = childIndex(parent, at)
+    switch (parent.kind) {
+      case NodeKind.If:
+      case NodeKind.Switch:
+        if (
+          index !== 0 &&
+          !dispatches(unit.program, params, parent.kind === NodeKind.If, parent.children[0])
+        ) {
+          return false
+        }
+        break
+      case NodeKind.Conditional:
+      case NodeKind.Try:
+        if (index !== 0) {
+          return false
+        }
+        break
+      case NodeKind.Binary:
+        if (index !== 0 && (parent.text === "&&" || parent.text === "||" || parent.text === "??")) {
+          return false
+        }
+        break
+      case NodeKind.While:
+        if (index !== 0) {
+          return false
+        }
+        break
+      case NodeKind.For:
+        if (index !== 0) {
+          return false
+        }
+        break
+      case NodeKind.ForOf:
+        if (index !== 1) {
+          return false
+        }
+        break
+      case NodeKind.Do:
+        return false
+      case NodeKind.Block:
+        for (const statement of parent.children) {
+          if (statement === at) {
+            break
+          }
+          if (mayLeave(statement, false)) {
+            return false
+          }
+        }
+        break
+      default:
+        break
+    }
+    at = parent
+  }
+  return true
+}
+
+/** The parameter list of `fn`, a function's node: a constructor's comes first, every other kind's second. */
+const paramListOf = (fn: Node | null): Node | null => {
+  if (fn === null || fn.children.length === 0) {
+    return null
+  }
+  if (fn.kind === NodeKind.Constructor) {
+    return fn.children[0]
+  }
+  return fn.children.length < 2 ? null : fn.children[1]
+}
+
+/**
+ * True when `test` picks a branch by a parameter's value alone: an `if`
+ * condition `p === K` or `p !== K`, or a `switch` on `p`, where `p` names one of
+ * the function's `params` and `K` is a literal or a constant's name. A handler
+ * that answers one kind of event is that; a branch on a field or on what a call
+ * answers (a step of a state machine, an error check) is not.
+ */
+const dispatches = (program: CheckedProgram, params: Node | null, isIf: boolean, test: Node): boolean => {
+  if (params === null) {
+    return false
+  }
+  if (!isIf) {
+    return isParam(params, test)
+  }
+  if (test.kind !== NodeKind.Binary || (test.text !== "===" && test.text !== "!==")) {
+    return false
+  }
+  const left = test.children[0]
+  const right = test.children[1]
+  return (
+    (isParam(params, left) && isConstant(program, params, right)) ||
+    (isParam(params, right) && isConstant(program, params, left))
+  )
+}
+
+/** True when `node` is a bare name of one of `params`. */
+const isParam = (params: Node, node: Node): boolean => {
+  if (node.kind !== NodeKind.Ident) {
+    return false
+  }
+  for (const param of params.children) {
+    if (param.kind === NodeKind.Param && param.children[0].text === node.text) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * True when `node` is a literal, a name that is neither one of `params` nor a
+ * `let`, or a member of a name that is no local at all: an enum's, a module
+ * constant's, a namespace's.
+ */
+const isConstant = (program: CheckedProgram, params: Node, node: Node): boolean => {
+  if (node.kind === NodeKind.Number || node.kind === NodeKind.String) {
+    return true
+  }
+  if (node.kind === NodeKind.Ident) {
+    const local = program.nodeLocals[node.id]
+    return !isParam(params, node) && (local === null || !local.mutable)
+  }
+  return (
+    node.kind === NodeKind.Member &&
+    node.children[0].kind === NodeKind.Ident &&
+    !isParam(params, node.children[0]) &&
+    program.nodeLocals[node.children[0].id] === null
+  )
+}
+
+/**
+ * True when running `node` may leave the function before the statement after
+ * it: a `return` or `throw` under it, or a `break` or `continue` that no loop
+ * or `switch` under it takes (`nested` says one does). An arrow is another
+ * function, and a labelled jump is counted wherever it is.
+ */
+const mayLeave = (node: Node, nested: boolean): boolean => {
+  switch (node.kind) {
+    case NodeKind.Arrow:
+      return false
+    case NodeKind.Return:
+    case NodeKind.Throw:
+      return true
+    case NodeKind.Break:
+    case NodeKind.Continue:
+      return !nested || node.text.length > 0
+    default:
+      break
+  }
+  const inner = nested || isLoopKind(node) || node.kind === NodeKind.Switch
+  for (const child of node.children) {
+    if (mayLeave(child, inner)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * True when `node` is a call that ends the program, `panic` or `process.exit`
+ * (unbound, so a function of the program's own by either name does not count):
+ * what is built for it is never left behind for a later pass.
+ */
+const endsProgram = (program: CheckedProgram, node: Node): boolean => {
+  if (node.kind !== NodeKind.Call || program.nodeCallees[node.id] !== null) {
+    return false
+  }
+  const callee = node.children[0]
+  const name = callee.kind === NodeKind.Member ? dottedName(callee) : builtinName(program, node)
+  return name === "panic" || name === "process.exit"
+}
+
+/**
+ * True when `block` ends the program after its statement `at` on every path
+ * that does not throw: a later statement is a call `endsProgram` names, and
+ * neither `at` nor a statement between them can leave the block first. A
+ * message built in a statement of its own before `panic(message)` is that.
+ */
+const endsAfter = (program: CheckedProgram, block: Node, at: Node): boolean => {
+  let after = false
+  for (const statement of block.children) {
+    if (after) {
+      if (
+        statement.kind === NodeKind.ExprStmt &&
+        statement.children.length > 0 &&
+        endsProgram(program, statement.children[0])
+      ) {
+        return true
+      }
+      if (mayLeave(statement, false)) {
+        return false
+      }
+    } else if (statement === at) {
+      if (mayLeave(statement, false)) {
+        return false
+      }
+      after = true
+    }
+  }
+  return false
+}
+
+/**
+ * True when what `node` allocates stays in the memory of whoever called the
+ * function whose body is `body`: no scoped pass and no `using a = arena()`
+ * block of the function's releases it first, and it is not built for a call
+ * that ends the program (`endsProgram`), or before one that ends it
+ * (`endsAfter`). A site under a loop of the
+ * function's own whose passes nothing bounds is not counted: it is that loop's
+ * pile, which NL9018 names at the loop, not the caller's.
+ */
+const freeIn = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts, body: Node, node: Node): boolean => {
+  const program = unit.program
+  let at = node
+  while (at !== body) {
+    const parent = unit.parents.parentOf(at)
+    if (parent === null || parent.kind === NodeKind.Arrow || parent.kind === NodeKind.FunctionDecl) {
+      return false
+    }
+    if (endsProgram(program, parent)) {
+      return false
+    }
+    if (parent.kind === NodeKind.Block) {
+      if (endsAfter(program, parent, at)) {
+        return false
+      }
+      for (const statement of parent.children) {
+        if (statement === at) {
+          break
+        }
+        if (isArenaUsing(program, statement)) {
+          return false
+        }
+      }
+    } else if (isLoopKind(parent)) {
+      const index = childIndex(parent, at)
+      const once =
+        (parent.kind === NodeKind.For && index === 0) || (parent.kind === NodeKind.ForOf && index === 1)
+      if (!once) {
+        const scope = loopScopeOf(f, parent)
+        if ((scope !== null && scope.scoped && at === scope.body) || !boundedPasses(unit, facts, parent)) {
+          return false
+        }
+      }
+    }
+    at = parent
+  }
+  return true
+}
+
+/**
+ * The functions `--emit-arena` marks as reached from a pass that releases
+ * nothing: the callee of every accumulating `call` site that leaves something
+ * behind (`dropOf`), and from each of those the callees of its `unscoped` call
+ * sites that leave something and that NL9018's rule charges to every call
+ * (`leftBehind`), at any depth. Their `unscoped` sites that rule charges pile
+ * up in that pass's memory, so the report marks them too.
+ */
+const reachedFromPasses = (drops: CalleeDrops, listed: ListedFunction[]): StringSet => {
+  const index = new StringMap()
+  let i = 0
+  while (i < listed.length) {
+    index.set(listed[i].sig.name, i)
+    i = i + 1
+  }
+  const reached = new StringSet()
+  const work: string[] = []
+  for (const entry of listed) {
+    for (const site of entry.sites) {
+      const target = site.target
+      if (site.accumulates && target !== null && dropOf(drops, target) !== null && reached.add(target.name)) {
+        work.push(target.name)
+      }
+    }
+  }
+  let w = 0
+  while (w < work.length) {
+    const at = index.get(work[w], -1)
+    w = w + 1
+    if (at >= 0 && at < listed.length) {
+      const entry = listed[at]
+      for (const site of entry.sites) {
+        const target = site.target
+        if (
+          site.placement === "unscoped" &&
+          target !== null &&
+          dropOf(drops, target) !== null &&
+          leftBehind(drops, entry, site.node) &&
+          reached.add(target.name)
+        ) {
+          work.push(target.name)
+        }
+      }
+    }
+  }
+  return reached
+}
+
+/**
+ * True when `node`, a site of `entry`'s, is left in the memory of whoever calls
+ * it on every call that returns, by the rule `findDrop` applies to its own
+ * sites (`onEveryCall`, `freeIn`).
+ */
+const leftBehind = (drops: CalleeDrops, entry: ListedFunction, node: Node): boolean => {
+  const sig = entry.sig
+  const f: FunctionFacts | null = sig.foreign() ? null : drops.facts.get(sig.name)
+  const body = sig.body()
+  if (f === null || body === null) {
+    return false
+  }
+  const instance = sig.instance
+  if (instance !== null) {
+    entry.unit.program.enterInstance(instance)
+  }
+  const left = onEveryCall(entry.unit, body, node) && freeIn(entry.unit, drops.facts, f, body, node)
+  if (instance !== null) {
+    entry.unit.program.leaveInstance()
+  }
+  return left
+}
+
+/** True when `site` belongs in the report: a plain call only when its callee leaves something behind. */
+const reported = (drops: CalleeDrops, site: ArenaSite): boolean => {
+  const target = site.target
+  return !site.plain || (target !== null && dropOf(drops, target) !== null)
+}
+
+/** One function `--emit-arena` lists, and its sites. */
+class ListedFunction {
+  sig: FunctionSig
+  unit: AnalysisUnit
+  sites: ArenaSite[]
+
+  constructor(sig: FunctionSig, unit: AnalysisUnit, sites: ArenaSite[]) {
+    this.sig = sig
+    this.unit = unit
+    this.sites = sites
+  }
 }
 
 // ---- The unbounded-pass diagnostic (NL9018) -----------------------------------------------
@@ -685,7 +1399,8 @@ export const unboundedPassFindings = (
   unit: AnalysisUnit,
   table: TypeTable,
   facts: FactsTable,
-  named: i32[]
+  named: i32[],
+  drops: CalleeDrops
 ): ArenaFinding[] => {
   const out: ArenaFinding[] = []
   const program = unit.program
@@ -701,7 +1416,7 @@ export const unboundedPassFindings = (
     if (instance !== null) {
       program.enterInstance(instance)
     }
-    const walk = new ArenaWalk(unit, facts, sig, f, table)
+    const walk = new ArenaWalk(unit, facts, sig, f, table, drops)
     walkNode(walk, program, body, SCOPE_NONE, outsideLoops())
     if (instance !== null) {
       program.leaveInstance()
@@ -731,21 +1446,37 @@ export const unboundedPassFindings = (
  * passes. A call is a site of `--emit-arena` for the memory its callee may hand
  * over, but only a callee that leaves memory behind (`netAllocates`) and stores
  * none of it (`contained`) adds to the pile: an accessor that returns a pointer
- * it was given allocates nothing.
+ * it was given allocates nothing. Any call, whatever it returns, also adds to
+ * it when its callee drops a temporary it built, itself or at any depth below
+ * (`dropOf`), though it stores other memory: the block then belongs in the
+ * callee, around the work that builds it.
  */
 const pilesUp = (walk: ArenaWalk, site: ArenaSite): boolean => {
   if (!site.accumulates || site.kind === "push" || leavesUnbounded(walk.unit, site)) {
     return false
   }
   const id = site.node.id
-  const call = walk.calls[id]
-  if (call === null) {
+  if (site.kind !== "call") {
     return walk.arenaFlow[id] === FLOW_LOCAL && !walk.escapes[id]
   }
-  const callee = walk.facts.get(call.callee)
-  return (
-    callee !== null && callee.netAllocates && callee.contained && call.flow === FLOW_LOCAL && !call.escapes
-  )
+  const call = walk.calls[id]
+  if (call !== null) {
+    const callee = walk.facts.get(call.callee)
+    if (
+      callee !== null &&
+      callee.netAllocates &&
+      callee.contained &&
+      call.flow === FLOW_LOCAL &&
+      !call.escapes
+    ) {
+      return true
+    }
+  }
+  // A callee that stores some of what it allocates is not `contained`, but the
+  // temporaries it drops on the way, at any depth, are this pass's all the same.
+  const target = site.target
+  site.drop = target === null ? null : dropOf(walk.drops, target)
+  return site.drop !== null
 }
 
 /**
@@ -994,6 +1725,30 @@ const unboundedFinding = (walk: ArenaWalk, isMain: boolean, loop: UnboundedLoop)
   const what = sitePhrase(walk.program, loop.first)
   const more =
     loop.more === 0 ? " piles" : ` and ${loop.more} more allocation${loop.more === 1 ? "" : "s"} pile`
+  const drop = loop.first.drop
+  if (drop !== null) {
+    const holder = drop.holder.sourceName
+    const source = drop.unit.program.source
+    const of = source === walk.program.source ? "" : ` of ${source.path}`
+    const built = phraseOf(source.lineOf(drop.node.start), drop.kind, drop.callee)
+    if (drop.theirs) {
+      return new ArenaFinding(
+        node,
+        `this loop keeps what each pass allocates ${until}, because ${reason}, and nothing bounds how many ` +
+          `passes it runs, so ${what} (${built}${of}, in \`${holder}\`)${more} up for as long as it runs. ` +
+          `\`${holder}\` is not this program's code: move the per-pass work that calls it into a block inside ` +
+          "the loop body that opens with `using a = arena()`, which the compiler refuses if anything allocated " +
+          "there could outlive the block"
+      )
+    }
+    return new ArenaFinding(
+      node,
+      `this loop keeps what each pass allocates ${until}, because ${reason}, and nothing bounds how many passes ` +
+        `it runs, so ${what} (${built}${of}, in \`${holder}\`)${more} up for as long as it runs. Move the work ` +
+        `that builds it into a block inside \`${holder}\` that opens with \`using a = arena()\`, which the ` +
+        "compiler refuses if anything allocated there could outlive the block"
+    )
+  }
   return new ArenaFinding(
     node,
     `this loop keeps what each pass allocates ${until}, because ${reason}, and nothing bounds how many passes it ` +
@@ -1004,16 +1759,19 @@ const unboundedFinding = (walk: ArenaWalk, isMain: boolean, loop: UnboundedLoop)
 }
 
 /** The site the warning names first, in words, by its `--emit-arena` kind. */
-const sitePhrase = (program: CheckedProgram, site: ArenaSite): string => {
-  const line = program.source.lineOf(site.node.start)
-  if (site.kind === "call") {
-    return `what \`${site.callee}\` leaves behind on line ${line}`
+const sitePhrase = (program: CheckedProgram, site: ArenaSite): string =>
+  phraseOf(program.source.lineOf(site.node.start), site.kind, site.callee)
+
+/** A site of `kind` on `line`, in words; `callee` is the function or builtin a `call` or `builtin` names. */
+const phraseOf = (line: i32, kind: string, callee: string): string => {
+  if (kind === "call") {
+    return `what \`${callee}\` leaves behind on line ${line}`
   }
-  if (site.kind === "builtin") {
-    return `what \`${site.callee}\` allocates on line ${line}`
+  if (kind === "builtin") {
+    return `what \`${callee}\` allocates on line ${line}`
   }
-  if (site.kind === "print") {
+  if (kind === "print") {
     return `what printing on line ${line} allocates`
   }
-  return `the ${site.kind === "new" ? "object" : site.kind} built on line ${line}`
+  return `the ${kind === "new" ? "object" : kind} built on line ${line}`
 }

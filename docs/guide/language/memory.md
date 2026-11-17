@@ -108,8 +108,10 @@ has its own warning.
 A loop with nothing bounding its passes, `while (true)` or a server's poll
 loop, has one more: a temporary its pass builds and drops, when something in
 the pass stores into older memory and so keeps the compiler from releasing
-the pass. The warning (NL9018) asks you to build the temporary inside a block
-that opens with `using a = arena()`, which gives it back when the block ends;
+the pass. A temporary that a function the pass calls builds and drops counts
+too, however deep the call. The warning (NL9018) asks you to build the
+temporary inside a block that opens with `using a = arena()`, which gives it
+back when the block ends;
 [Networking](../using-nish/networking.md#keeping-a-request-loops-memory-flat)
 shows it on a request loop.
 
