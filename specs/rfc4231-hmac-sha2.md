@@ -58,30 +58,45 @@ docs/security/crypto-k1.md (K1-7) and docs/security/secret.md.
 The module's other exports are out of scope here, each for the reason
 given.
 
-hmacSha256Verify, hmacSha384Verify and hmacSha512Verify are an API RFC 4231
-does not specify: it defines the tag, not how one is checked. They are held
-by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and their
-compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to
-no branch on the data after clang -O2 (docs/security/ct-verification.md,
-and docs/security/crypto-k1.md K1-8). hmacKeyedVerify is the same check
-over an absorbed HmacKey and a window of a buffer, held by
-tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made").
+Out of scope: hmacSha256Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)
 
-hmacSha256Secret,
-hmacSha384Secret and hmacSha512Secret take the key as a `Secret<u8[]>`,
-which a property cannot construct; they compute the same function as the
-plain exports, and their wiping is held by nish's `nish:secret` tests.
-pbkdf2HmacSha256 is PBKDF2 (RFC 8018), which uses HMAC-SHA-256 as its
-PRF but is a different function, with its own vectors and none in RFC 4231. The
-classes HmacSha256, HmacSha384, HmacSha512, HmacSha256Scratch,
-HmacSha384Scratch and HmacKey are stateful, reusable forms of the same
-functions; a property here calls only functions, so they are left to nish's
-own tests (tests/link/crypto_hmac*). hmacKeyedInto writes the tag of an
-absorbed HmacKey into a caller's array at an offset, a buffer interface RFC
-4231 does not describe, held by tests/link/crypto_jwt. hmacCopySha256 and
-hmacCopySha384 copy a hasher's state into another, a helper for those
-classes that computes no HMAC. HMAC_SHA256, HMAC_SHA384 and HMAC_SHA512 are
-the constants that name a hash for HmacKey, not functions.
+Out of scope: hmacSha384Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)
+
+Out of scope: hmacSha512Verify, an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)
+
+Out of scope: hmacKeyedVerify, the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt ("HmacKey: hmacKeyedVerify accepts the tag it made")
+
+Out of scope: hmacSha256Secret, takes the key as a `Secret<u8[]>`, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's `nish:secret` tests
+
+Out of scope: hmacSha384Secret, takes the key as a `Secret<u8[]>`, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's `nish:secret` tests
+
+Out of scope: hmacSha512Secret, takes the key as a `Secret<u8[]>`, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's `nish:secret` tests
+
+Out of scope: pbkdf2HmacSha256, PBKDF2 (RFC 8018), which uses HMAC-SHA-256 as its PRF but is a different function, with its own vectors and none in RFC 4231
+
+Out of scope: HmacSha256, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
+
+Out of scope: HmacSha384, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
+
+Out of scope: HmacSha512, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
+
+Out of scope: HmacSha256Scratch, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
+
+Out of scope: HmacSha384Scratch, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
+
+Out of scope: HmacKey, a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)
+
+Out of scope: hmacKeyedInto, writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt
+
+Out of scope: hmacCopySha256, copies a hasher's state into another, a helper for the stateful classes that computes no HMAC
+
+Out of scope: hmacCopySha384, copies a hasher's state into another, a helper for the stateful classes that computes no HMAC
+
+Out of scope: HMAC_SHA256, a constant that names a hash for HmacKey, not a function
+
+Out of scope: HMAC_SHA384, a constant that names a hash for HmacKey, not a function
+
+Out of scope: HMAC_SHA512, a constant that names a hash for HmacKey, not a function
 
 # Interface
 

@@ -1501,5 +1501,87 @@
         ]
       }
     }
+  ],
+  "outOfScope": [
+    {
+      "name": "hmacSha256Verify",
+      "reason": "an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)"
+    },
+    {
+      "name": "hmacSha384Verify",
+      "reason": "an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)"
+    },
+    {
+      "name": "hmacSha512Verify",
+      "reason": "an API RFC 4231 does not specify, since it defines the tag and not how one is checked; held by tests/link/crypto_hmac and tests/link/crypto_hmac_k1_verify, and the compare is timingSafeEqual, whose loop tests/cases/ct_asm_k1_ct.ts holds to no branch on the data after clang -O2 (docs/security/ct-verification.md, and docs/security/crypto-k1.md K1-8)"
+    },
+    {
+      "name": "hmacKeyedVerify",
+      "reason": "the same check as hmacSha256Verify over an absorbed HmacKey and a window of a buffer, held by tests/link/crypto_jwt (\"HmacKey: hmacKeyedVerify accepts the tag it made\")"
+    },
+    {
+      "name": "hmacSha256Secret",
+      "reason": "takes the key as a Secret<u8[]>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's nish:secret tests"
+    },
+    {
+      "name": "hmacSha384Secret",
+      "reason": "takes the key as a Secret<u8[]>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's nish:secret tests"
+    },
+    {
+      "name": "hmacSha512Secret",
+      "reason": "takes the key as a Secret<u8[]>, which a property cannot construct; it computes the same function as the plain export, and its wiping is held by nish's nish:secret tests"
+    },
+    {
+      "name": "pbkdf2HmacSha256",
+      "reason": "PBKDF2 (RFC 8018), which uses HMAC-SHA-256 as its PRF but is a different function, with its own vectors and none in RFC 4231"
+    },
+    {
+      "name": "HmacSha256",
+      "reason": "a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)"
+    },
+    {
+      "name": "HmacSha384",
+      "reason": "a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)"
+    },
+    {
+      "name": "HmacSha512",
+      "reason": "a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)"
+    },
+    {
+      "name": "HmacSha256Scratch",
+      "reason": "a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)"
+    },
+    {
+      "name": "HmacSha384Scratch",
+      "reason": "a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)"
+    },
+    {
+      "name": "HmacKey",
+      "reason": "a stateful, reusable form of the same functions; a property here calls only functions, so it is left to nish's own tests (tests/link/crypto_hmac*)"
+    },
+    {
+      "name": "hmacKeyedInto",
+      "reason": "writes the tag of an absorbed HmacKey into a caller's array at an offset, a buffer interface RFC 4231 does not describe, held by tests/link/crypto_jwt"
+    },
+    {
+      "name": "hmacCopySha256",
+      "reason": "copies a hasher's state into another, a helper for the stateful classes that computes no HMAC"
+    },
+    {
+      "name": "hmacCopySha384",
+      "reason": "copies a hasher's state into another, a helper for the stateful classes that computes no HMAC"
+    },
+    {
+      "name": "HMAC_SHA256",
+      "reason": "a constant that names a hash for HmacKey, not a function"
+    },
+    {
+      "name": "HMAC_SHA384",
+      "reason": "a constant that names a hash for HmacKey, not a function"
+    },
+    {
+      "name": "HMAC_SHA512",
+      "reason": "a constant that names a hash for HmacKey, not a function"
+    }
   ]
 }

@@ -126,43 +126,28 @@ where n <= m
     </section>
     <section anchor="out-of-scope">
       <name>Out of Scope</name>
-      <t>This contract tests only hkdfExtractSha256 and hkdfExpandSha256. vector 0.2.1
-has no spec construct for a contract's outOfScope list, so the other exports of
-nish/crypto/hkdf are listed here, each with the reason it is not tested:</t>
-      <ul spacing="normal">
-        <li>
-          <t>hkdfExtractSha384, hkdfExpandSha384: HKDF over SHA-384 (HashLen 48). RFC 5869
-Appendix A has no SHA-384 test case, and this profile fixes the hash to
-SHA-256.</t>
-        </li>
-        <li>
-          <t>hkdfExtractSha256Secret, hkdfExtractSha384Secret, hkdfExpandSha256Secret,
-hkdfExpandSha384Secret, hkdfSha256Secret, hkdfSha384Secret: the same
-derivations taking and giving Secret&lt;u8[]&gt;. What they add is wiping, a
-non-functional property this profile cannot observe; tests/wipes/crypto.js
-covers the wipes. No test in this contract checks that their outputs equal
-the plain functions'.</t>
-        </li>
-        <li>
-          <t>hkdfExpandLabelSha256, hkdfExpandLabelSha384, hkdfExpandLabelSha256Secret,
-hkdfExpandLabelSha384Secret: TLS 1.3's HKDF-Expand-Label (RFC 8446 Section
-7.1), not a construction of RFC 5869.</t>
-        </li>
-        <li>
-          <t>hkdfExtractInto, hkdfExpandInto, hkdfExpandLabelInto: allocation-free
-variants writing into caller buffers through an HkdfScratch; their signatures
-take a class and output offsets, which a ts-interface block cannot declare.</t>
-        </li>
-        <li>
-          <t>hkdfExpandLabelSha256Held, hkdfExpandLabelSha384Held,
-hkdfExpandLabelHeldInto: Expand-Label of a held Secret PRK, written in place
-into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869.</t>
-        </li>
-        <li>
-          <t>HkdfScratch: a class holding reusable buffers, not a function; the profile
-declares functions only.</t>
-        </li>
-      </ul>
+      <t>This contract tests only hkdfExtractSha256 and hkdfExpandSha256; every other
+export of nish/crypto/hkdf is declared out of scope below, with the reason it
+is not tested.</t>
+      <t>Out of scope: hkdfExtractSha384, HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256</t>
+      <t>Out of scope: hkdfExpandSha384, HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256</t>
+      <t>Out of scope: hkdfExtractSha256Secret, the same derivation taking and giving Secret&lt;u8[]&gt;; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's</t>
+      <t>Out of scope: hkdfExtractSha384Secret, the same derivation taking and giving Secret&lt;u8[]&gt;; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's</t>
+      <t>Out of scope: hkdfExpandSha256Secret, the same derivation taking and giving Secret&lt;u8[]&gt;; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's</t>
+      <t>Out of scope: hkdfExpandSha384Secret, the same derivation taking and giving Secret&lt;u8[]&gt;; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's</t>
+      <t>Out of scope: hkdfSha256Secret, the same derivation taking and giving Secret&lt;u8[]&gt;; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's</t>
+      <t>Out of scope: hkdfSha384Secret, the same derivation taking and giving Secret&lt;u8[]&gt;; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's</t>
+      <t>Out of scope: hkdfExpandLabelSha256, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869</t>
+      <t>Out of scope: hkdfExpandLabelSha384, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869</t>
+      <t>Out of scope: hkdfExpandLabelSha256Secret, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869</t>
+      <t>Out of scope: hkdfExpandLabelSha384Secret, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869</t>
+      <t>Out of scope: hkdfExtractInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare</t>
+      <t>Out of scope: hkdfExpandInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare</t>
+      <t>Out of scope: hkdfExpandLabelInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare</t>
+      <t>Out of scope: hkdfExpandLabelSha256Held, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869</t>
+      <t>Out of scope: hkdfExpandLabelSha384Held, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869</t>
+      <t>Out of scope: hkdfExpandLabelHeldInto, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869</t>
+      <t>Out of scope: HkdfScratch, a class holding reusable buffers, not a function; the profile declares functions only</t>
     </section>
     <section anchor="test-vectors">
       <name>Test Vectors</name>
@@ -293,96 +278,96 @@ declares functions only.</t>
     </references>
   </back>
   <!-- ##markdown-source:
-H4sIAAAAAAAAA61a7XLbRpb9j6fo0VQlUoqk8P1Bx56iJSpimRK1JJ3ElU3V
-NLobIsYkwQCgZK3t1D7EPsD+2/eYR9kn2XMbAEWKUixP1nZRRKP79r3nnvvR
-LbfbbeOv7CRbpUqyJM8W7EaJMsvZ4awsV0X3+Pg6LWfruCOyxTFf5Gn5/ria
-cdRixUqJ4jhPhBf6UXv2XibtYsZtz+8sJKTykt2YHbtjtdgthDC+ZKN1ybKE
-TUS2UqyAnDRbMi6lkh1S4i5Pr2clOxRHzDZtn/VoQ/aGz+bZsgOJbwtouV5K
-lbNyptjFYMqGqVDLQmGLWVYoVqoPJUuy+Ty7LbACa65UvkiLgjZKCzZTuYrv
-2HXOl6WSLZisFGkkZjy/hpQyg5p3bKXyAguyuOTpMl1eM86g8h3EYW45g6Ai
-S8pbnitMl4wXRSZSDolMZmK9UMuSa9OSdK4KdkjKHkzqFQdHehup+Bzy0qU2
-pXmpkcqAUq6KMk81QC1MEvO1JD2a1/N0kdZ70HKNWwFxELwmNEjbFltkMk3o
-p9LGrdbxPC1mLSZTEh6vSwwWNFhjCFuO4ftCzUk1QawoKovvNdSzaJ8VAVvW
-UBU0Ahcsdq1JSadknS+xrdKrZAbo9K7/gPtphBZUHiMDRbaUKdlVdLX7pnjL
-4+xGaZMqfiyzEhpXepAvVvcurl+BhvM5i1WNHLYGznzHqpx0KErwIOVztspy
-velDaysOTc/7bDI6m/7UG/fZYMKuxqMfB6f9U3bQm+D5oMV+GkzPR2+nDDPG
-vcvpOzY6Y73Ld+zN4PK0xfo/X437kwkbjSFscHE1HPQxOrg8Gb49HVz+wF5j
-5eUIZB6A0hA7Hekta2GD/oTEXfTHJ+d47L0eDAfTdy2IOhtML0nu2WjMeuyq
-N54OTt4Oe2N29XZ8NZr0ocIpBF8OLs/G2Kd/0b+cdrAvxlj/RzywyXlvOKTN
-IK33FjaMSUt2Mrp6Nx78cD5l56PhaR+Dr/vQrvd62K82g2knw97gosVOexe9
-H/p61QhyyEKaWOnIfjrv0yDt2cO/k+lgdEnGnIwup2M8tmDreLpZ/NNg0m+x
-3ngwIVjOxqMLMpOAxZqRFoOVl/1KDoG+6xtMoee3k/5GJDvt94aQNqHFlaHN
-9I5RpuVcddnB+UXvpB1zSi/9D2XORdkGu9r9Dysi2Rt1x05Vnt5UAXe2XlaJ
-6/D8zenZ0YHB4zhXN11GLD8W+d2qzI4pGxpIBku+wAYy50nZfiRTtk3TEEgc
-11l+1wVJk8xIV3mXlfm6KG3TjEzbAE9repd3K0WzpFopfCxLA7s6hoSArs6Y
-bctqW7bxXt3dZrnsGoy164TeXiCTtcdnJ6SBwddII3n1vtLwxyrt9/SLAi8Y
-QuS6W682llm+gPU3itbUUrpGu91GcBYaMMPosVWeUcajIMIcRpMQ2vkeMF1G
-yMGQOv4ocVJmM0DHNlBBfsjYOS9mQ6WztmN3WP9G5XdIi7+t01xRhmW/rbMS
-kdzs1NKBS2YaRbbOhXrBlF4TAzBKLQUWqaXYVe/w4u0ELKRPCsFWFRH1D0OP
-jPv/9nYw7p8ekSrYkbSFUepDnVqopnQMDcYilXKuDIryZZlncq2JYhiUxeAU
-Rl4p2AHthqRx0OxK35td6LvefPPFqGdMkGGGp/ff7leejC4Q2qfVYkokO0PG
-wUXv3UGVtw9GVxQ6veFBVXlgUVOxGCVs5GOdNUuVr3JFlvLCkKoQKBdVFn19
-cvXP/7Zc9vHjXwCibVnR58/1Q2gFLh5uZ2pZ7ZYt53f1I3xzZ/DVSvG8zsVM
-8BVq2LzAXNTTWXa7bKD87hdC5tcu+z4WK8t9VQ+QwTuDDWY7gxqz/ZG9xRWI
-jww9ss0GzZ3xB0jv6tt7t/Pc4L41+P3f5ulSsbYV/u2VYRgPgwQEo6pU6Fhp
-12lJw1oP6NxE4VVHTYeKpYEYRD0sqcahZ1tpp87UomrBdvZYcFHFjM5+tRDt
-KKKCEa/TObo1NF4VnVWecAFu//7776ws2ulm5PiYGo01JdK9DFjZQFW9KBmN
-1HZMdPZjL9lhwedll63DX35Fn/N+UX09qn48tpysvl+9yt9vFiN5Nt/nanld
-zpAqHbsWxT6x5RoNwFPKAowHu2Hkfh8EbyMb2ZbvaglECKPaNMN4hQbhDVZp
-XCmNaSNR8N9cHOHlx4+TuvO1O3adjCgXff5sfOyyv47b/Z91bWTX6cuDeJ6J
-9zrTHXzeYF/7+I6suWqmtweTNu0I/ZH2kBc3cv73P/9rl0SI+h2fwzoEN/pi
-YgPpaoBWFKJb3mHH3zGr07E8k313vOUqGjeb8SP28tW+m2vzsQTvX77cgnbr
-TYXiK5Ym1MRRKblJJbXoqda3ULpZ5Iw6VyRzwNYUiP9QeYZm/xnATnrD56N6
-cTV9V63YAKqfCE0cZVD3KGmSARrPLWVYJkqFdrwB8auwquNgDylt5SH4vAsX
-MY2zVaHWErstJTpwKjSHW/hU2jyLeZDWHvYvn4tRM30DUDNAGBGXSLstcB7g
-sksu80+Tq1OFvUbOse/DklIGYTWs8wJZjkPUCucoYEVsQm+D/g7ngLRRkh1+
-/5LZnvddrftD+JzH4Bs+AtxlRs0ZNQDUc6DhoZ6FsIkznGRfoKNJ1kV1xMQp
-9xpH22Gdq5Gu9JE1u93LqxhcoscpEBwdHTTIfSxbkW4wAglMn4P10XS1wvGu
-alzpvJ4mqdDTdT9HTawAmVHzuaZuu0aoirJnGY3DxaiKlkesf8VGby6eAptI
-OnyCno9uBVlfQ08cu3AAohU/4KCwISm6u3tRxNS6lF6jvS1QdUEttC2NYrrC
-DtkuGzS02nNYce+4DbM3ZYkIjO6147sVsTc1qma2WxF+qUtVPRY6ZkN3NNvp
-Ag5UxeGyVoGRwNZeMaQtK/mQdsT+ghDQBPrmG7Ze3uZ8dfjHK3aCBwK++WZn
-71fP3/plvfUmRREDXrIkzVFVN6jCu9PnuvxsMJ48lrdfsemhiQ2ZWqzKu6Yy
-6ExZR/qRnmMd7RRjJKVWtfLfP1WRg5/mB9OqZtuPzrYezrafxdhnl5up1Z7a
-9xydblJohVt5i8acpBS6Tdf6EAe1umif//k/pIBUCTpKnV4WX89Fa5t2zyCN
-74I1BV0eHZotSN4rWZu5HWQk5KDDX0zr16OaW1+3AfEOj4/u8OUdmyd6c3T/
-ysariqRPVLf+2eDne5/cU5F8Q6xOiy0XbVM7Q18POiq+YNMuNS04VJc6taeU
-L3C0StIPNHGTO7DiaY+54eMeQ8rYyx5V8mixxf6gLqDPwH2x7dc6op+XRIxb
-OsExnasWTQHevvSlo3Ba6AqlO1E6ThfVOXH/dEAEf7hhp7mg1jfLxgzcX2a6
-slV9e44jt07ZfLPJtwUVoFFS3TrP06LU9wvkuQwf+eaglSX7hzCKNlpSn/Nb
-THExqwq0vnhVnC6Kqx6V+tbqfqBrGO0HBjmh+yB1YqS+CCGG6VMchthhU2Pc
-8KizuahAxPRWdOsD3vRYbXazhDbFcbpoLmf1pWh9FwOi1Q0HFkHpDJKaA+Oe
-khhEQsPBv7Wv/e6Le4/U4xD70LrtFfvCt+d065PHQkGM3Fy1QW/+XvdGVXmm
-r9WC7ykKXnXYTzNe1kdWKckHt+kKs4ADBC2zZTupL+vojreO7l180P6Q3zK0
-8/mNelEx8hhiVFETofMPug+r0wDpqV922GVWAd9cpGxILWaKEnVZ65bmdQOE
-5uK3NZ9DGElZzTlWNvoV3957gxAc8ljNK9Bajww/YNPW7MfcsbWqwXs6nOA4
-53xbbN8mtPVEdkikC13XZ3V1g7CgY+HkQUjx+0Cjwrd1mfaAT4NlmW0r+fBZ
-b0aDXboOyqomtU2/kcF+Nxwt4hKQ3eZpSX5PMRHOms8RKvE6SSpn5Nn6Wv9m
-6ZwYJXJeitmLGvQivV7ycp0rch+IRD2umPOiqO6mqp40SxIcLQv6/VGKwOY7
-VxtVyW0oIhVW0/3UE346V3P5hK/0q32X0HAFwA7+ui7M8K4mO9M9CAFR0n3o
-kqgjCCSNCW9mVUlvG6EXSF3v1W1aVIcPcmnlw22PbSHX3SA0y+b6zjRX64LH
-CJMa8oYCDW1fVFSuYknHrsaouOe1Tu76DmlKwVLdMxeG8YkNJPvETqjifSL7
-8ULpkSrQPrGJvsXFlynd0rNPxqc2/uiPzY+dr3tfsIT1OhYdSyHm74+fHdHt
-maZpmbbpmK7pmb4ZmKEZmdyMTaEvbWhG/Py/R3+nzaorIDMIAjNyfFvYyrFl
-YkopHHwKN4hj7juRGfsicOLYM5NIOJZtKwE3cRkIO3aUR6I2FzmtrRP2p63e
-Eybu9J60prnfxrvu7uVPdcyp3EZMl/qU3kBFbc0Gqq06//9jTtUq0GnATKzE
-TpzETbzET4IkTKIW2qOXzLUr/KpTgyNi20vwj3MhvYBHpuu4ie9KE0okNrel
-LU2MisTiHneFJ2PTlp6vhMBDnDiuaQa2GUovDsPACoFJjel06xTY2unu/hVo
-tw6Q28iSEYe1VTXE9hfZ6Ju+5du+47u+5/t+4GMzn/tA1pe+AlhmYAV24ARu
-4AU+PBIGUcCDOBCBDBSgNEMrtEOkHTI3DMIwjEIexqEIZagAtBlZkR05kRt5
-kR8FURhFEY/iSEQyUlHCTW5xmzvcBaQ+D3jII855zAWXXPFkExNPRo0pTQUH
-m5Zl2ZZjuZZn+RbQtyKLW7ElLGkpuN+0QRDbsV3bs307sEM7gkdjkEvaCuQw
-HcuxHcdxHc/xncAJncjhTuwIRzoK1DFdy7XBB9f1XN8N3NCNXO7GrnClq9xk
-Jw4JwDAUXug5jm9xQGy6IhIqdrzY9YRKAh/muOCXH0Bxl1sR7SAsLxG26z4z
-Du0/IIv9FXFofykO/6Q5mzhEurJihGbsxl7sx0EcxlHM4zgWsYxVnAgsEbZw
-KJoEQluE2IWLWAghhRKJNKWFEHSkKz3py0CGMpJcxlJI+l8diTKVpZArlKs8
-5atAhSpSXMVKKKmUSh7LAwlPsHGCxUlS5YRwJyfElqWcKJQiNB074JYIQfoA
-YCBK3Ah0SEzLVhK5wVUJlyEHPSkdWBFPeBRgnul6PCI7ghC0CywRu5bwPYU3
-yoT+EOsBP2EnZhSHDmIMxIvAf0fGmC0cE8hbQaSEo8JAWK4wLekJC+kG2cmS
-YfB1OeZ5tPlSjgk3OcZ5OsfQ9fKfK2lWpBLbBUYCaSi2/CBxAI4lfaTlMJZJ
-5MMRQeDzRMaI2oALgEIsihwhYvPJUGo1F+y72Dh/gI3zFSHlfCGk/qxZLUbQ
-7lewUHJXBYHHPd8RVpgECMHQtBGyjvC4Y8Uht6zEE55SVqgphWymvMRBHQ0R
-WpG0TcuJqAK6MUI98kX4BXbRw9at7L+C5/Pq2f8BGWCfbT4mAAA=
+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
+d01l0JmyjvQ9Pcfa2yrGSEqtauW/v68iB7/Nt6ZVzbYfnW19PNt+FmOfXW4m
+Vnti33N0sk6hFW7lLRpzklLoNl3bQxzU5qJ9/vt/kwFSJegodXqZfz4XrU3a
+PYM0vgvWFHR5tGu2IPlByVrP7SAjIQft/mhaP+3V3Po8BcQ7fH1Uw6c1Nt/o
+yd79IxuPKpI+Ud16J/0f7vfknoq0N8TqtNjYok1qZ+jrQUfF52xyQE0LDtWl
+Tu0p5QscrZL0LU1c5w6seHrH3PDxHUPKeJA9quTRYvOHg7qAPgP3+ea+1hH9
+vCRi3NIJjulcNW8K8OalLx2F00JXKN2J0nG6qM6JD08HRPCPFTaH+gzA503H
+DukPKiSdbJWYIVok1R+aU+hr51jNstv6SlrfnSpOd71paWAJtZ7VER91dbix
+7OAj+5zQbVW3GEQPfQTDENttCoQb7r24v2XoLunCBlveZVNOWtYLSBlOwkVz
+r6rvM+trFHCk7hWwaErtb92wP25aDdLv0LKNTUW+zFXZqk8ac4VNWl+slfxa
+N0JVLaaP1exviPIvX7DbKS/pOMClLGh/b9MlJsE8mL1oJ/W1HN3m1nG8bTQa
+HdreDI17fqPvyIFPfe4hGu5DnipqEnX+WlR+AxGNRHNdsqaumCpKx2VlVNE0
+OernFZ9V2CxnHKsau/5UfJJRX8B5gtNfiPOr8f4Fm21svjDmCVS+cOWJOBpw
+tAUVbdDtD8bM6jh/KjZvWtt6Ctulyhm6rs+azj/oWHst3Tjw6uowr279N18z
+fFqxrtr/DMUbgfJP8vv/W71mT39RZi19jzfDsUrTv63/GOCG5ylflOw2T0uK
+gBQTwdzZDL1UvEoSOguU0zxbXem/aDilwBI5L8X0hWZhkV4teLmia3d+rW8H
+0IQWRfU+pGJoliQFDgr0NwupgJSt6/TqmNfESt3CPo3jv4ofepv/pZypYutU
+zWSLbXFZH/umGK+zK9NXDORaSa87F5S2hKp85M2cLCejNz1+wWbptbpNi+pm
+kYKjiofPCr7fr31kWUWI34V1G5xqrfkzzWb61XKuVgWPUeJqMjaJqSk9L6py
+VNfBmj/F+nF1Aqaz8oQqXfUuHtXqPetL9p4d0a3Ae4IBD5Qeqe4k3rOxftON
+DxP6Swb23njfxn/6x/rX1scHH7CEdTsWXd1DzF8ev19nh8w0Tcu0Tcd0Tc/0
+zcAMzcjkZmwK/WKLZsTP/3/vL6Ssek1mBkFgRo5vC1s5tkxMKYWDn8IN4pj7
+TmTGvgicOPbMJBKOZdtKYL+4DIQdO8ojUeuXXa2NtxDvN+7n4OLW/RytWZ+B
+O9bB9guy6iq42jNKAlK/yWigoqufNVQbdyH/N+5U1yl0Y2omVmInTuImXuIn
+QRImUYsN8MS1K/yqm1VHxLaX4B/nQnoBj0zXcRPflSaMSGxuS1uaGBWJxT3u
+Ck/Gpi09XwmBL3HiuKYZ2GYovTgMAysEJjWmk42b8tbWDdg/Au3GJfsmsuTE
+bu1VDbH9STb6pm/5tu/4ru/5vh/4UOZzH8j60lcAywyswA6cwA28wMeOhEEU
+8CAORCADBSjN0ArtEAmQ3A2DMAyjkIdxKEIZKgBtRlZkR07kRl7kR0EURlHE
+ozgSkYxUlHCTW9zmDncBqc8DHvKIcx5zwSVXPFnHxJNRY0pTYYNNy7Jsy7Fc
+y7N8C+hbkcWt2BKWtBS237RBENuxXduzfTuwQzvCjsYgl7QVyGE6lmM7juM6
+nuM7gRM6kcOd2BGOdBSoY7qWa4MPruu5vhu4oRu53I1d4UpXuclWHBKAYSi8
+0HMc3+KA2HRFJFTseLHrCZUEPtxxwS8/gOEutyLSICwvEbbrPjMO7V8hi/0Z
+cWh/Kg5/ozvrOES6smKEZuzGXuzHQRzGUczjOBaxjFWcCCwRtnAomgRCW4TQ
+wkUshJBCiUSa0kIIOtKVnvRlIEMZSS5jKST95WuiTGUp5ArlKk/5KlChihRX
+sRJKKqWSx/JAwhMoTrA4SaqcEG7lhNiylBOFUoSmYwfcEiFIHwAMRIkbgQ6J
+adlKIje4KuEy5KAnpQMr4gmPAswzXY9H5EcQgnaBJWLXEr6n8ESZsB9iPeAn
+7MSM4tBBjIF4EfjvyBizhWMCeSuIlHBUGAjLFaYlPWEh3SA7WTIMPi/HPI82
+n8ox4TrHOE/nGHoF/9tKmhWpxHaBkUAaii0/SByAY0kfaTmMZRL52Igg8Hki
+Y0RtwAVAIRZFjhCx+WQotZo/QtjGxvkVbJzPCCnnEyH1W91qMYL2YQULJXdV
+EHjc8x1hhUmAEAxNGyHrCI87Vhxyy0o84SllhZpSyGbKSxzU0RChFUnbtJyI
+KqAbI9QjX4SfYBd92Xhz/Y/g+bx69r+u99JNYi8AAA==
 
 -->
 
