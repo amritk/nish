@@ -7443,7 +7443,7 @@ const DECLARED = [
     changelog: "HandlerLimits listen on io_uring rings",
     why: "`HandlerLimits` gains its `ring` field, so its struct in the header of a program that links nish/net/http-server moves (WP63 S4)",
   })),
-  ...byFinding("restricted io_uring rings before the --sandbox filter")(
+  ...byFinding("restricted io_uring rings under --sandbox")(
     "`nish_sandbox` takes the number of rings to premake as a sixth `i32` argument, so its declaration and its call in `main` gain `i32 0` where the program cannot reach a ring listener (WP63 S3)",
     {
       "tests/cases/sandbox_hello.ts": ["sandbox_hello.ll"],
