@@ -79,27 +79,35 @@ no equivalent:
 ## Results
 
 Large size, on a 4-core cloud container, built by `build/nish` at this
-branch's head. All five checksums are identical.
+branch's head: `node bench/goose/run.mjs --compiler build/nish --runs 5`.
+All five checksums are identical.
 
 | Program | n | Nish ms | Goose ms | Goose/Nish | Nish RSS KB | Goose RSS KB | Nish bytes | Goose bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| tree | 24 | 2632 | 1437 | 0.55 | 788,320 | 395,308 | 7,800 | 18,864 |
-| bintrees | 19 | 535 | 401 | 0.75 | 34,020 | 26,540 | 12,824 | 18,880 |
-| records | 16000000 | 725 | 748 | 1.03 | 179,424 | 146,604 | 9,928 | 18,888 |
-| strlist | 8000000 | 536 | 598 | 1.12 | 161,632 | 220,652 | 9,288 | 18,888 |
-| words | 16000000 | 2532 | 1628 | 0.64 | 410,852 | 542,348 | 11,752 | 18,904 |
+| tree | 24 | 2134 | 1409 | 0.66 | 788,256 | 395,148 | 7,832 | 18,864 |
+| bintrees | 19 | 504 | 399 | 0.79 | 33,956 | 26,552 | 12,856 | 18,880 |
+| records | 16000000 | 726 | 605 | 0.83 | 179,616 | 146,616 | 9,960 | 18,888 |
+| strlist | 8000000 | 547 | 790 | 1.45 | 161,696 | 220,684 | 9,320 | 18,888 |
+| words | 16000000 | 3199 | 2032 | 0.64 | 410,788 | 542,332 | 11,960 | 18,904 |
 
 Geometric means, Goose over Nish (above 1 means Nish ahead). The "before"
-column is the 0.41.0 seed, run on the same machine in the same session. It
-has neither fix below.
+column is `main` without the loop-guarded additions below, run the same way
+in the same session just before.
 
 | Measure | Before | After | Who is ahead |
 | --- | ---: | ---: | --- |
-| Binary size | 1.90 | 1.86 | Nish, on every program |
-| Time | 0.72 | 0.79 | Goose. Nish now wins records and strlist |
-| Peak RSS | 0.57 | 0.90 | Goose on tree, bintrees and records; Nish on strlist and words |
+| Binary size | 1.85 | 1.85 | Nish, on every program |
+| Time | 0.81 | 0.83 | Goose. Nish wins strlist |
+| Peak RSS | 0.90 | 0.90 | Goose on tree, bintrees and records; Nish on strlist and words |
 
-The fixes moved these programs:
+The time geomean moves inside this machine's noise. Goose's own words binary,
+which no Nish change touches, took 2058 ms in the "before" run and 2032 ms in
+the "after" one. Records'
+Goose/Nish went from 0.95 to 0.83 with no change that reaches it. The words
+gain is measured apart, interleaved, below.
+
+An earlier session moved these programs with the first two fixes below, from
+the 0.41.0 seed. Its times do not compare with the table above:
 
 | Program | Seed ms | Now ms | Seed RSS KB | Now RSS KB |
 | --- | ---: | ---: | ---: | ---: |
@@ -107,12 +115,9 @@ The fixes moved these programs:
 | strlist | 628 | 536 | 358,112 | 161,632 |
 | words | 3020 | 2532 | 803,936 | 410,852 |
 
-tree and bintrees build no arrays, so the fixes do not touch them. Their
-times are the same from either compiler. This machine runs tree slower
-against Goose (0.55) than the machine of the first run did (0.72), with the
-same 7,800-byte binary. Only ratios taken in one session compare. The binaries
-that grow arrays are 376 to 440 bytes larger, which is the in-place growth
-path in the runtime.
+tree and bintrees build no arrays, so those fixes do not touch them. Only
+ratios taken in one session compare. The binaries that grow arrays are 376 to
+440 bytes larger, which is the in-place growth path in the runtime.
 
 ## Where Nish loses
 
@@ -149,8 +154,27 @@ or runtime change.
   prover cannot discharge from `idx = h & mask`, measured as nothing when
   removed by hand (count phase best 1797 ms without it, 1745 ms with it), so no
   codegen change was made.
-  - **Next:** measure the hash and `same()`, which checks
-    `a + i` and `b + i` for overflow on every byte it compares.
+- **Fixed: `same()` checked `a + i` and `b + i` on every byte.** A profile
+  of words at 4M words (`build/nish words.ts --link words-g --profile speed
+  -g`, then `valgrind --tool=callgrind ./words-g` and `callgrind_annotate
+  --auto=yes`, with the `bench:n` line set to 4000000) put 512.0M of 1,603.5M
+  instructions (31.9%) on `same()` and 212.5M (13.25%) on `hash()`. In
+  `same()` each byte paid two `llvm.sadd.with.overflow` branches and two
+  sign extensions before its loads. A counted loop
+  `for (let i = J; i < B; i++)` now tests each `x + i` in its body, with `x`
+  and `B` loop-invariant, once before the loop: when `x + J` and
+  `x + (B - 1)` both fit, the additions are `add nsw`, and otherwise they are
+  checked as before and panic where they run (`emitAddGuards`,
+  `src/emit-arrays.ts`; `tests/cases/ovf_loop_guard`). LLVM unswitches the
+  loop on that test. The same profile after the fix: 1,368.3M instructions
+  (-14.7%), `same()` 239.4M (17.5%), `hash()` 216.5M (15.8%). Words at 16M,
+  best of 10 wall-clock runs, the two `words-nish` binaries `run.mjs` built
+  alternating: 3548 ms (3548 to 4053) before against 3110 ms (3110 to
+  3423) after, so the ranges do not overlap: 12% faster on the best run.
+  - **Next:** `same()` and `hash()` are now within two points of each other
+    (17.5% and 15.8%). `same()` still compares one byte per iteration where
+    a word-at-a-time compare (or `memcmp`) would do eight; `hash()` is a
+    serial FNV-1a multiply chain per byte.
 - **A tree node is twice the size.** A `tree.ts` node is 24 bytes: an `i32`,
   four bytes of padding and two 64-bit pointers. A Goose pool node is 12
   bytes, because its links are 32-bit indices into the pool. The tree at
