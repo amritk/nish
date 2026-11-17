@@ -314,6 +314,14 @@ static void nish_grown_put(char *data, const void *owner, uint64_t native) {
 }
 #endif
 void nish_free_arena(void);
+/* The bytes of a chunk the arena reuses from its start, after a reset or a
+   release to a mark there: all but the last word. A scope may have marked that
+   start, and a block that began there and filled the chunk exactly would be
+   one `nish_array_grow_here` reallocates -- which would either keep the grown
+   chunk for good (the release keeps the chunk its mark is in) or move it from
+   under the mark, which then names no chunk and frees nothing. Eight bytes
+   short, no block from the start fills it, so the grow copies instead. */
+#define NISH_REUSE_CAP(cap) ((cap) > 8 ? (cap) - 8 : 0)
 static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
 #ifdef NISH_ASAN
   /* A freed block's address comes back from malloc: forget the grown ones. */
@@ -354,7 +362,7 @@ void nish_reset_arena(void) {
   }
   nish_free_until(keep->next, 0);
   keep->next = 0;
-  nish_arena = (struct nish_arena){ (char *)(keep + 1), 0, keep->cap, keep };
+  nish_arena = (struct nish_arena){ (char *)(keep + 1), 0, NISH_REUSE_CAP(keep->cap), keep };
 }
 
 void nish_free_arena(void) {
@@ -382,7 +390,8 @@ void nish_arena_release(uint64_t mark) {
   }
   if (!c) return;
   nish_free_until(nish_arena.chunks, c);
-  nish_arena = (struct nish_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), NISH_CHUNK_CAP(c), c };
+  uint64_t off = mark - (uintptr_t)(c + 1), cap = NISH_CHUNK_CAP(c);
+  nish_arena = (struct nish_arena){ (char *)(c + 1), off, off ? cap : NISH_REUSE_CAP(cap), c };
 }
 
 /* Release back to `mark` while keeping the newest allocation; returns where it
@@ -611,18 +620,33 @@ static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
     nish_arena.off += more;
     return 1;
   }
-  nish_chunk **link = &nish_arena.chunks;
-  for (int i = 0; *link && i < NISH_GROW_WALK; i++, link = &(*link)->next) {
-    nish_chunk *c = *link;
+  /* A block of 64 KB or less never has a chunk to itself in the thread's arena
+     (`nish_arena_grow`'s floor), so it skips the walk and takes the copy, as it
+     also does in a region whose chunks are smaller. Walking for every small
+     array cost Bounce, which grows about ten thousand, 0.6% instructions.
+
+     The head is relinked by assigning the whole arena, never through a pointer
+     to `nish_arena.chunks`: a link pointer the walk rewrites, or a phi or select
+     of that field and a chunk's `next`, takes the arena's address, which costs
+     every program LTO's GlobalsAA (see `nish_reset_arena`) -- Queens' setup
+     reloaded the arena around each header store and filled an array with a
+     `memset` it had folded, +0.35% instructions. The assignment makes the grown
+     chunk the buffer, full, as the head already was: the buffer is always the
+     head's (`nish_arena_grow`, a release, a reset and a region's adoption all
+     leave it there), and a block that fills it has no room left after it. So a
+     chunk further down is never the buffer, and its relink is the `next` alone. */
+  if (old <= 65536) return 0;
+  nish_chunk *prev = 0, *c = nish_arena.chunks;
+  for (int i = 0; c && i < NISH_GROW_WALK; i++, prev = c, c = c->next) {
     if ((char *)(c + 1) != data) continue;
     if ((c->cap & NISH_CHUNK_CARVED) || c->cap != old) return 0;
     if (want > (uint64_t)(SIZE_MAX - sizeof(nish_chunk))) nish_oom();
     nish_chunk *n = realloc(c, sizeof *n + (size_t)want);
     if (!n) nish_oom();
     n->cap = want;
-    *link = n;
-    if (buf == data) nish_arena = (struct nish_arena){ (char *)(n + 1), want, want, nish_arena.chunks };
     a->data = (char *)(n + 1);
+    if (prev) prev->next = n;
+    else nish_arena = (struct nish_arena){ (char *)(n + 1), want, want, n };
     return 1;
   }
   return 0;

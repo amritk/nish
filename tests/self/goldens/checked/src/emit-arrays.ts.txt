@@ -98,15 +98,15 @@ struct ArrayUse (class) size=32 align=8
   field len: boolean index=3 offset=24
   field data: boolean index=4 offset=25
   constructor -> @ArrayUse.constructor
-struct AppendRange (class) size=64 align=8
+struct AppendRange (class) size=56 align=8
   field name: string index=0 offset=0
-  field type: i32 index=1 offset=8
-  field bound: Node index=2 offset=16
-  field offset: Node | null index=3 offset=24
-  field counter: Node index=4 offset=32
-  field dst: Node index=5 offset=40
-  field src: Node index=6 offset=48
-  field elem: i32 index=7 offset=56
+  field bound: Node index=1 offset=8
+  field offset: Node | null index=2 offset=16
+  field counter: Node index=3 offset=24
+  field dst: Node index=4 offset=32
+  field src: Node index=5 offset=40
+  field type: i32 index=6 offset=48
+  field elem: i32 index=7 offset=52
   constructor -> @AppendRange.constructor
 function allocRefusedBytes(): i64 -> @allocRefusedBytes
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -1595,7 +1595,7 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
 function AppendRange.constructor(this: AppendRange, name: string, type: i32, bound: Node, offset: Node | null, counter: Node, dst: Node, src: Node, elem: i32): void -> @AppendRange.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: bound counter dst elem name offset src type
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   pointer bound: size=40 writesThrough=true captured=true
   pointer offset: size=40 writesThrough=true captured=true
   pointer counter: size=40 writesThrough=true captured=true

@@ -1852,12 +1852,12 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
  */
 class AppendRange {
   name: string
-  type: i32
   bound: Node
   offset: Node | null
   counter: Node
   dst: Node
   src: Node
+  type: i32
   elem: i32
 
   constructor(

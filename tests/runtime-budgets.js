@@ -75,9 +75,21 @@
  * and `nish_arena_keep` leaves a carved head alone. Measured 1,819 against 1,723 on
  * 2026-11-09 with clang 18.1.3 on linux-x64. It is not a unit of its own because those
  * walkers are the core's.
+ *
+ * Raised by 279, to 2,098, for growing an array where it is (`nish_array_grow_here`):
+ * bumping the arena past the block when it is the last one, or `realloc`ing the exact
+ * chunk a block over 64 KB fills, and `NISH_REUSE_CAP`, which keeps a chunk reused from
+ * its start a word short so that a scope's mark at that start is never under a
+ * reallocated chunk. Measured 1,805 before and 2,098 after on 2026-11-17 with clang
+ * 18.1.3 on linux-x64 (the 1,805 is what the 1,819 had left in hand). A walk 12 bytes
+ * smaller relinked the head through a pointer to `nish_arena.chunks`, which took the
+ * arena's address and cost Queens 0.35% instructions under LTO (the function's comment).
+ * It is the core's because both cases read the arena and its chunk list, and it took the
+ * large Goose benchmarks' peak resident size from 392 to 179 MB (records), 358 to 162
+ * (strlist) and 804 to 411 (words) (bench/goose/README.md).
  */
 // TEXT here is the .text section of the core runtime.c, not runtime-text.c (next).
-const RUNTIME_TEXT_BUDGET = 1819
+const RUNTIME_TEXT_BUDGET = 2098
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-text.c`:
  * strings (`nish_str_*`) and the number formatting (`nish_f64_format`, the Zmij tables'
@@ -234,8 +246,11 @@ const RUNTIME_OS_TEXT_BUDGET = 5888
  *
  * Raised by 87, to 2,025, by ASYNC-15's carved chunk (as above), measured 2,025 against
  * 1,938 on 2026-11-09 with clang 18.1.3 on linux-x64.
+ *
+ * Raised by 269, to 2,294, for growing an array where it is and the reuse cap (as above),
+ * measured 2,294 against 2,010 on 2026-11-17 with clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 2025
+const RUNTIME_THREADS_TEXT_BUDGET = 2294
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -997,8 +1012,12 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * choice and its eight CUBIC fields (the window before the last reduction, K,
  * the epoch start, the Reno-friendly estimate and its carry, the step carry,
  * the prior window and the idle start).
+ *
+ * Moved to **111,080 bytes** (-8) by growing an array where it is
+ * (`nish_array_grow_here`, runtime.c): an array the build pushes to extends its
+ * block instead of leaving the smaller one behind it in the arena.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111088
+export const HTTP3_SERVER_SLOT_BYTES = 111080
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

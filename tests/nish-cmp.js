@@ -1313,6 +1313,41 @@ const DECLARED = [
     changelog: APPEND_RANGE,
     why: "the program has a push loop over an array range, so the candidate copies it in one guarded memcpy before the loop and the 0.41.0 seed does not",
   })),
+  ...[
+    "tests/link/sha256_hw_vectors/main.ts",
+    "tests/link/std_compress/main.ts",
+    "tests/link/std_compress_node/main.ts",
+    "tests/link/std_term_events/main.ts",
+    "tests/link/std_term_probe/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: APPEND_RANGE,
+    why: "the program's main module copies a byte range with a push loop, so the candidate copies it in one guarded memcpy before the loop and the 0.41.0 seed does not",
+  })),
+  // tests/link/net_http3/peer.ts slices a byte range with a push loop, and
+  // every program importing it writes that module as `peer.ll` or, where the
+  // name is qualified by its directory, `net_http3_peer.ll`.
+  ...[
+    ["net_http3_bad_reset_budget", "peer.ll"],
+    ["net_http3_server_bad_head_timeout", "peer.ll"],
+    ["net_http3_server_bad_idle_timeout", "peer.ll"],
+    ["net_http_server_h3_head", "peer.ll"],
+    ["net_http_server_h3_slots", "peer.ll"],
+    ["net_http_server_h3_twice", "peer.ll"],
+    ["net_http_server_h3_webtransport", "peer.ll"],
+    ["net_http_server_caps", "net_http3_peer.ll"],
+    ["net_http_server_carriers", "net_http3_peer.ll"],
+    ["net_http_server_h2_refused", "net_http3_peer.ll"],
+    ["net_http_server_lifecycle", "net_http3_peer.ll"],
+    ["net_http_server_matrix", "net_http3_peer.ll"],
+    ["net_http_server_timeouts", "net_http3_peer.ll"],
+  ].map(([name, file]) => ({
+    program: `tests/link/${name}/main.ts`,
+    file,
+    changelog: APPEND_RANGE,
+    why: "tests/link/net_http3/peer.ts copies a byte range with a push loop, so the peer module this program imports gains the guarded memcpy before the loop and renumbered values",
+  })),
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
