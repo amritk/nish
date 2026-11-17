@@ -673,7 +673,20 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    21 descriptors. Both halves of §4's rule hold: go. Its PSS was 518 MB
    against 129 MB at 96,000.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
-   not depend on S1 to S4 and can land first.
+   not depend on S1 to S4 and can land first. *Measured in S5*
+   ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5)):
+   `bash bench/handler-ring/wins.sh --rounds 7`, on S4's stand-in as five
+   epoll processes at 18,000 connections, each win on its own against the
+   unchanged five. `PRAGMA mmap_size=268435456` spent 27.87 µs a request
+   against 33.07 (15.7% less, band 0.6%; at least 11.3% less in every round),
+   all of it system time, and did not lower memory: RSS rose from 49 to
+   1,301 MB and PSS from 37 to 279 MB as the mapped file was counted against
+   the workers, with the box's used memory unchanged. A like-count cache in
+   one `nish/sync/shm` region spent 28.13 µs (14.9% less), answering 30.0% of
+   requests without SQLite; the same cache held in each worker answered 7.3%
+   and its 2.0% was not separable from noise, so the gain is the cache's, and
+   sharing bought its fill rate from cold. Both are gains on the stand-in;
+   rerun `wins.sh` on the entry before it adopts either.
 
 ## 11. Open questions
 
