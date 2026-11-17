@@ -1,7 +1,8 @@
 // Writes each page route's `head` in scalar.config.json: the page's <title>
-// ("Installation · Nish"), its og:title and twitter:title, and its canonical
-// link. Scalar has no title template and its site-wide `head.meta` is on every
-// page, so a per-page value can only come from the route. The values follow
+// ("Installation · Nish"), its og:title and its canonical link. No
+// twitter:title is written: X falls back to og:title. Scalar has no title
+// template and its site-wide `head.meta` is on every page, so a per-page value
+// can only come from the route. The values follow
 // from the routes themselves, so they are generated rather than hand-written:
 //
 //   node scripts/route-head.mjs           rewrite scalar.config.json
@@ -12,8 +13,8 @@
 //
 // A page's name is its route title; an "Overview" takes its group's title, and
 // a name two pages share takes " · <group title>". The home page keeps its
-// hand-written head.title, which is also its og:title and twitter:title. Only
-// page routes' own lines are rewritten; every other line is kept byte for byte.
+// hand-written head.title, which is also its og:title. Only page routes' own
+// lines are rewritten; every other line is kept byte for byte.
 import fs from "node:fs"
 import path from "node:path"
 
@@ -121,13 +122,9 @@ const headsFor = (config) => {
     if (!title) {
       throw new Error(`${configFile}: the home route needs a hand-written head.title`)
     }
-    const social = home ? title : p.name
     heads.set(p.route, {
       title,
-      meta: [
-        { property: "og:title", content: social },
-        { name: "twitter:title", content: social },
-      ],
+      meta: [{ property: "og:title", content: home ? title : p.name }],
       links: [{ rel: "canonical", href: home ? `${site}/` : `${site}${p.url}` }],
     })
   }

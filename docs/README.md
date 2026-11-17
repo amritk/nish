@@ -248,8 +248,8 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
     to what Nish is changes both, and `page.js`'s `DESCRIPTION`. Nish has no X
     account, so there is no `twitter:site`. Scalar writes `og:url` itself.
   - Each page route's `head` holds what is the page's own: its `<title>`
-    (`Installation · Nish`), its `og:title` and `twitter:title` (the bare
-    name; `og:site_name` already says Nish) and its
+    (`Installation · Nish`), its `og:title` (the bare name; `og:site_name`
+    already says Nish; X reads it in place of a `twitter:title`) and its
     `<link rel="canonical">` (`https://nishlang.com` and the route's path,
     the URL `/sitemap.xml` lists). Scalar has no title template, so these are
     generated, not hand-written: `node scripts/route-head.mjs` rewrites them
