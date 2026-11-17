@@ -177,6 +177,22 @@ likely to add to it:
   exit 2. What your program computes does not change. A binary built with it
   **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
   that stay on machines you know; ship anything else without it.
+- **`--debug-arena`** — links a runtime that catches a stale reference to
+  arena memory. Every allocation gets memory pages of its own, and when the
+  scope that made it ends, those pages are made unreadable and never handed
+  out again. A program that still reads such a value stops at that read
+  instead of seeing whatever was allocated there next:
+
+  ```text
+  nish: --debug-arena: stale arena reference at 0x00007e9a73001010: the memory was released by the scope that allocated it
+  ```
+
+  and it dies of `SIGSEGV` (exit status 139 in a shell). The compiler's
+  escape rules mean a correct compiler never builds such a program, so this
+  is a mode for tests and fuzzing, to catch a compiler or runtime bug, not for
+  a binary you ship: each allocation takes at least a page and no address is
+  reused, so a program runs slower and uses more memory under it. It needs
+  `--link` or `nish run`, and is refused with `--profile wasi`.
 - **`-g`** — DWARF debug info, so `gdb` and `lldb` step through your `.ts`
   source.
 

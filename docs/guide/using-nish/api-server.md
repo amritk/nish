@@ -136,10 +136,12 @@ handler's pool, so do not keep it after answering.
 | `slots` | 256 | a new connection is accepted and closed at once |
 | `jsonBytes` | 64 KiB | `sendJson` answers 500 |
 | `maxEvents` | 256 | readiness events wait for the next turn |
+| `ring` | false | not a limit: open the listener with `limits.listen`, and on Linux it takes connections into io_uring slots, so `slots` may pass the descriptor limit; a kernel that refuses rings serves descriptors, and `netRingState()` says why ([networking](networking.md#more-connections-than-descriptors-net_listen_ring)) |
 
-When the process runs out of descriptors, a waiting connection stays in the
-listener's backlog: the handler stops accepting for 100 ms, then tries
-again, rather than spin.
+When the process runs out of descriptors, or a ring listener out of slots, a
+waiting connection stays in the listener's backlog: the handler stops
+accepting until a connection closes or 100 ms pass, rather than spin.
+`h.resting()` is true while it does.
 
 `http` is the HTTP/1.1 carrier's own configuration (`Http1Config`): its head
 size and field count caps, its head timeout and its idle timeout. The idle

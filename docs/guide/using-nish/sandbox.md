@@ -47,7 +47,7 @@ Each capability `main` does not reach is withheld:
 | `fs.read` | opening a file or a directory to read it |
 | `fs.write` | writing, creating, removing, renaming and truncating files, and changing their mode, owner, times or extended attributes |
 | `process.spawn` | starting a program or forking a process (threads are fine), and executing a file |
-| `net` | creating, connecting, binding and accepting sockets |
+| `net` | creating, connecting, binding and accepting sockets, and every io_uring call (reaching it lets a ring listener use the rings made for it at start; see [Ring listeners](#ring-listeners)) |
 
 Reaching `process.spawn` grants back executing, reading and device `ioctl`s
 on every file beneath `/`, since a child has to load its program and
@@ -83,7 +83,9 @@ A few things are refused whatever `main` reaches: attaching to, reading or
 writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
 and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
 of another architecture (a 32-bit `int 0x80`), and io_uring unless the
-program reaches both `net` and `process.spawn`. On a kernel whose Landlock
+program reaches `net` (and then only `io_uring_enter`, and only on the rings
+made at start for ring listeners, matched by descriptor number, unless it
+reaches `process.spawn` too; see [Ring listeners](#ring-listeners)). On a kernel whose Landlock
 is ABI 6 or later, so is signalling a process outside the sandbox and
 connecting to an abstract Unix socket created outside it, even when `main`
 reaches `signal`; the program can still signal itself. The other
@@ -299,6 +301,51 @@ but changing a file's mode, owner, times or extended attributes is still
 refused (`EPERM`): that check cannot see which directory a file is in. A
 program that reaches `process.spawn` can still read every file beneath `/`,
 scope or not, as above.
+
+## Ring listeners
+
+A server that listens with `NET_LISTEN_RING` accepts into io_uring rings.
+Under `--sandbox`, when `main` reaches `net` but not `process.spawn`, those
+rings are made before anything is confined, and making more is refused
+afterwards. Say how many rings to make in the root `package.json` (an
+integer from 1 to 64; 1 when it is not written):
+
+```json
+{ "nish": { "netRings": 2 } }
+```
+
+`netRings` counts rings, not listeners. Each ring holds as many
+connections as the soft descriptor limit (`ulimit -n`) the program started
+with, at most 16,384, and a busy listener takes another ring each time the
+ones it holds are full, so one listener can use several. Once every ring
+made is in use, a listener whose rings are full answers `-23` from
+`tcpAccept` until a connection closes, and a ring listener opened after
+that serves through plain descriptors. To size it, divide the connections
+the process will hold at once by the smaller of `ulimit -n` and 16,384, and
+round up: 40,000 connections under a limit of 65,536 need 3 rings.
+
+A ring a closed listener held is not given back to the pool, so a program
+that closes and reopens ring listeners spends rings each time
+([NURING-31](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
+The rings' memory is held for the life of the process whether a listener
+uses them or not
+([NURING-32](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
+
+Each premade ring takes only accepting, receiving, sending, closing and
+cancelling; anything else submitted to it fails with `-13`. The rings'
+descriptors are held for the program: closing one, or putting another
+descriptor at its number with `dup2` or `dup3`, ends the process with
+`SIGSYS` (the one `dup3` allowed is from the keeper, a ring that takes only
+`NOP`, which the runtime puts at a closed listener's ring's number), and `close_range` fails with `ENOSYS`. Other descriptors are not
+affected
+([NURING-36](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md)).
+When a kernel
+is too old for the rings, or a descriptor limit too low to make them, every
+ring listener serves through plain descriptors, and `netRingState()`
+answers why. A ring listener that falls back because the rings made are all
+taken does not change `netRingState()`: once a ring listener has opened, it
+stays `1`. Any other value of `netRings` is refused with NL3058. The rules are in
+[The sandbox](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-sandbox).
 
 ## When the sandbox cannot be applied
 

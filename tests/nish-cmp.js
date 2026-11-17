@@ -512,6 +512,12 @@ const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
+// The redirect sink lands under this PR's subject: the NL9018 sweep that found it.
+const NL9018_DEPTH = "NL9018 warns when a handler the loop calls drops a temporary"
+const nl9018Depth = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: NL9018_DEPTH, why }))
+  )
 const RESULT_LOOP =
   "Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind"
 const resultLoop = (why, filesByProgram) =>
@@ -1292,6 +1298,27 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // First, so it is the entry a fetch program's file reports: older entries of
+  // this release name the same files.
+  ...nl9018Depth(
+    "FetchSyncClient keeps the sink a redirect's body is drained into, so the class gains a field and its layout grows 8 bytes (160 to 168)",
+    {
+      "examples/http-get-json.ts": ["fetch.ll", "http-get-json.h", "http-get-json.ll"],
+      "tests/link/net_fetch_async/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_flat/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_https/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_policy/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_http_fetch/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_outbound/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+    }
+  ),
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
@@ -7353,6 +7380,74 @@ const DECLARED = [
     {
       "tests/link/json_encode_keys/main.ts": ["json-typed.ll", "json.ll", "main.ll"],
       "tests/link/std_json_typed/main.ts": ["keys.ll"],
+    }
+  ),
+  // WP63 S4: `HandlerLimits` can listen on io_uring rings. The bench server
+  // calls `netRingState`, which the 0.41.0 seed's `nish:net` lacks; the new
+  // probe links the handler whose close ends an accept rest; and the
+  // `ring` field moves `HandlerLimits` in the header of every program that
+  // links nish/net/http-server.
+  {
+    program: "bench/http1-server.ts",
+    file: "exit",
+    changelog: "HandlerLimits listen on io_uring rings",
+    why: "the bench prints `netRingState()`, which is new to `nish:net` in this release, so the 0.41.0 seed refuses it (WP63 S4)",
+  },
+  {
+    program: "tests/link/net_handler_rest_close/main.ts",
+    file: "exit",
+    changelog: "HandlerLimits listen on io_uring rings",
+    why: "a probe new with this change: it reads `HttpHandler.resting()`, which the seed's handler lacks, so the 0.41.0 seed refuses it (WP63 S4)",
+  },
+  ...[
+    "tests/link/net_http_server/main.ts",
+    "tests/link/net_http_server_bad_limit/main.ts",
+    "tests/link/net_http_server_bad_param/main.ts",
+    "tests/link/net_http_server_bad_watch/main.ts",
+    "tests/link/net_http_server_caps/main.ts",
+    "tests/link/net_http_server_carriers/main.ts",
+    "tests/link/net_http_server_end_short/main.ts",
+    "tests/link/net_http_server_end_unstarted/main.ts",
+    "tests/link/net_http_server_foreign/main.ts",
+    "tests/link/net_http_server_h1_fields/main.ts",
+    "tests/link/net_http_server_h1_head/main.ts",
+    "tests/link/net_http_server_h1_slots/main.ts",
+    "tests/link/net_http_server_h1_twice/main.ts",
+    "tests/link/net_http_server_h2_connect/main.ts",
+    "tests/link/net_http_server_h2_head/main.ts",
+    "tests/link/net_http_server_h2_refused/main.ts",
+    "tests/link/net_http_server_h2_slots/main.ts",
+    "tests/link/net_http_server_h2_twice/main.ts",
+    "tests/link/net_http_server_h2c/main.ts",
+    "tests/link/net_http_server_h3_head/main.ts",
+    "tests/link/net_http_server_h3_slots/main.ts",
+    "tests/link/net_http_server_h3_twice/main.ts",
+    "tests/link/net_http_server_h3_webtransport/main.ts",
+    "tests/link/net_http_server_lifecycle/main.ts",
+    "tests/link/net_http_server_matrix/main.ts",
+    "tests/link/net_http_server_start_fields/main.ts",
+    "tests/link/net_http_server_start_length/main.ts",
+    "tests/link/net_http_server_start_refused/main.ts",
+    "tests/link/net_http_server_start_status/main.ts",
+    "tests/link/net_http_server_start_twice/main.ts",
+    "tests/link/net_http_server_take_none/main.ts",
+    "tests/link/net_http_server_timeouts/main.ts",
+    "tests/link/net_http_server_unbegun/main.ts",
+    "tests/link/net_http_server_wait_tls/main.ts",
+    "tests/link/net_http_server_write_long/main.ts",
+    "tests/link/net_http_server_write_unstarted/main.ts",
+    "tests/link/net_http_server_write_window/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.h",
+    changelog: "HandlerLimits listen on io_uring rings",
+    why: "`HandlerLimits` gains its `ring` field, so its struct in the header of a program that links nish/net/http-server moves (WP63 S4)",
+  })),
+  ...byFinding("restricted io_uring rings under --sandbox")(
+    "`nish_sandbox` takes the number of rings to premake as a sixth `i32` argument, so its declaration and its call in `main` gain `i32 0` where the program cannot reach a ring listener (WP63 S3)",
+    {
+      "tests/cases/sandbox_hello.ts": ["sandbox_hello.ll"],
+      "docs/cookbook/sandbox.ts": ["sandbox.ll"],
     }
   ),
 ]

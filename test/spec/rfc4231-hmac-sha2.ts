@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: a47ea59d498687a89ea06a281edda43fb775d13fc231b7d77dbd10ebcfbca02e
+// vector-contract-sha256: 2035789c106c8c6c12104474c0b50940001091d7aca619950e230a7e0572a2e6
 
 import { Suite } from "nish/testing";
 import { hmacSha256, hmacSha384, hmacSha512 } from "nish/crypto/hmac";

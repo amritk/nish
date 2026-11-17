@@ -12,7 +12,7 @@
 import { Secret } from "nish:secret";
 import { netClose, netLocalPort, pollAdd, pollModify, tcpListen } from "nish:net";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
-import { TlsServerConfig } from "nish/net/tls";
+import { TLS_STATE_CONNECTED, TlsServerConfig } from "nish/net/tls";
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN, TLS_RECORD_STATE_OPEN, TLS_RECORD_TICKET } from "nish/net/tls/record-server";
 import { TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketStrikes, tlsTicketKeyDraw } from "nish/net/tls/ticket";
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp";
@@ -189,10 +189,10 @@ export class InteropH2 {
         turn = 4;
       }
     }
+    this.tell(slot);
     if (!this.server.holds(slot)) {
       return;
     }
-    this.tell(slot);
     const conn: Http2Connection = this.server.connection(slot);
     let event: i32 = this.server.next(slot);
     while (event !== H2_NEED_MORE && event !== H2_ERROR) {
@@ -240,9 +240,15 @@ export class InteropH2 {
     return null;
   }
 
-  /** Logs, once per connection with tickets on, whether its handshake resumed. */
+  /**
+   * Logs, once per connection with tickets on, whether its handshake resumed.
+   * It asks the handshake, not the record layer: a connection the client
+   * closed (or that failed) in the same read that finished its handshake has
+   * left `TLS_RECORD_STATE_OPEN` but still resumed or not, and its slot may
+   * already be free, so this runs before `serve` checks that it is held.
+   */
   tell(slot: i32): void {
-    if (!this.tickets || this.told[slot] || this.server.tls.connection(slot).state !== TLS_RECORD_STATE_OPEN) {
+    if (!this.tickets || this.told[slot] || this.server.tls.connection(slot).tls.state !== TLS_STATE_CONNECTED) {
       return;
     }
     this.told[slot] = true;

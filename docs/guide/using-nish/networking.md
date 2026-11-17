@@ -137,6 +137,22 @@ the rewrite cannot lose a value you still need. `--deny-retention` turns the
 warning into an error, as it does for the
 [other retention warnings](../language/memory.md#what-you-do-have-to-think-about).
 
+The same holds when the text is built in a handler the loop calls. A helper
+that builds the reply and also answers stores into the server's memory, so it
+has no scope of its own either, and what it drops piles up in the loop. The
+warning sits on the loop and names the helper's line. Put the block inside the
+helper, around the work that builds the text:
+
+```ts
+const readPost = (conn: Http1Connection, heads: Heads): void => {
+  {
+    using a = arena();
+    fill(heads, `request ${heads.served}\n`);
+  }
+  answer(conn, heads);
+};
+```
+
 ## How many connections: the descriptor limit
 
 Every connection a server holds is a file descriptor, and the operating
@@ -159,8 +175,8 @@ Past the hard limit is the operator's to set: `ulimit -Hn` in the shell that
 starts the server, `LimitNOFILE=` in a systemd unit, or the container's
 `nofile` limit (`docker run --ulimit nofile=…`). At the limit, a call that
 wants a descriptor answers -24 (`EMFILE`), and `nish/net/handler` waits for
-one to close rather than spin. On Linux a listener can serve past the limit
-instead: see
+one to close rather than spin (on `-23`, a full set of ring slots, too). On
+Linux a listener can serve past the limit instead: see
 [More connections than descriptors](#more-connections-than-descriptors-net_listen_ring).
 
 A child the program starts with `spawn` inherits the raised soft limit, as
@@ -299,6 +315,42 @@ export const main = (): i32 => {
 Use the flag when a server needs more connections than its limit allows and
 nothing it does with a connection needs a descriptor. A server that hands
 connections to another process with `sendFd` keeps descriptors.
+
+`nish/net/handler` takes the flag through its limits. Set
+`HandlerLimits.ring` and open the listener with `limits.listen(host, port,
+backlog, flags)`, which is `tcpListenFlags` with `NET_LISTEN_RING` added when
+`ring` is set, then hand it to `new HttpHandler(limits, listener, router)` as
+any listener. `HandlerLimits.slots` is then the cap on connections, not the
+descriptor limit: set it to what the server should hold. When every ring slot
+is taken, the handler rests its listener on the `-23`, as it does on `-24`
+for descriptors, until a connection closes or 100 ms pass, so a full server
+waits rather than spin. `h.resting()` is true while it does, for a server
+that wants to log or count the times it is full:
+
+```ts nish:ok
+import { HandlerLimits, HttpHandler } from "nish/net/handler";
+import { Router, RouterLimits } from "nish/net/router";
+import { netClose, netRingState } from "nish:net";
+
+export const main = (): i32 => {
+  const limits = new HandlerLimits();
+  limits.ring = true;
+  limits.slots = 100000;
+  const listener = limits.listen("127.0.0.1", 0, 4096, 0);
+  if (listener < 0) {
+    return 1;
+  }
+  const h = new HttpHandler(limits, listener, new Router(new RouterLimits()));
+  console.log(netRingState() === 1 ? "connections go into rings" : "descriptors");
+  h.drain();
+  netClose(listener);
+  return 0;
+};
+```
+
+Rings are off by default. What one ring process costs against five processes
+on descriptors, with an SQLite lookup per request, is measured in
+[the benchmarks](../../BENCHMARKS.md#io_uring-under-the-handler-wp63-s4).
 
 ## Socket options: `netSetOption`
 

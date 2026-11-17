@@ -1,0 +1,7 @@
+{
+  "name": "net-ring-rings-refused",
+  "private": true,
+  "nish": {
+    "netRings": 65
+  }
+}

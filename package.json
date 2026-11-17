@@ -92,7 +92,7 @@
   "bugs": {
     "url": "https://github.com/amritk/nish/issues"
   },
-  "homepage": "https://github.com/amritk/nish#readme",
+  "homepage": "https://nishlang.com/",
   "keywords": [
     "typescript",
     "compiler",

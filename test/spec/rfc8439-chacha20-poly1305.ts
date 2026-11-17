@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: b09668f0d9b347344b2324944fce5e56156aa5625bb44df761e2ef86f020db3d
+// vector-contract-sha256: cd527121aded5f7ad9a616542ada5bde1a87a9d827aee429452b633b7b74ab03
 
 import { Suite } from "nish/testing";
 import { chacha20, chacha20Block, chacha20Poly1305Open, chacha20Poly1305Seal, poly1305, poly1305KeyGen } from "nish/crypto/chacha20poly1305";
@@ -274,6 +274,214 @@ const clause_A_5_KEYGEN = (t: Suite): boolean => t.eqStr("[A.5-KEYGEN] RFC 8439 
  *   endian integer).
  */
 const clause_A_5_POLY1305 = (t: Suite): boolean => t.eqStr("[A.5-POLY1305] RFC 8439 A.5: Poly1305 over the printed AEAD buffer gives the received tag (R-POLY, R-MAC-INPUT)", hexOrNull(poly1305(unhex("bdf04aa95ce4de8995b14bb6a18fecaf26478f50c054f563dbc0a21e261572aa"), unhex("f33388860000000000004e910000000064a0861575861af460f062c79be643bd5e805cfd345cf389f108670ac76c8cb24c6cfc18755d43eea09ee94e382d26b0bdb7b73c321b0100d4f03b7f355894cf332f830e710b97ce98c8a84abd0b948114ad176e008d33bd60f982b1ff37c8559797a06ef4f0ef61c186324e2b3506383606907b6a7c02b0f9f6157b53c867e4b9166c767b804d46a59b5216cde7a4e99040c5a40433225ee282a1b0a06c523eaf4534d7f83fa1155b0047718cbc546a0d072b04b3564eea1b422273f548271a0bb2316053fa76991955ebd63159434ecebb4e466dae5a1073a6727627097a1049e617d91d361094fa68f0ff77987130305beaba2eda04df997b714d6c6f2c29a6ad5cb4022b02709b000000000000000c000000000000000901000000000000"))), "eead9d67890cbb22392336fea1851f38");
+
+/**
+ * RFC 8439 A.1 Test Vector #1: the ChaCha20 block function
+ *
+ * R-BLOCK — RFC 8439 §2.3, DEFINITION:
+ *   The output is 64 random-looking bytes.
+ */
+const clause_A_1_BLOCK_1 = (t: Suite): boolean => t.eqStr("[A.1-BLOCK-1] RFC 8439 A.1 Test Vector #1: the ChaCha20 block function (R-BLOCK)", hexOrNull(chacha20Block(unhex("0000000000000000000000000000000000000000000000000000000000000000"), toU32(0), unhex("000000000000000000000000"))), "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586");
+
+/**
+ * RFC 8439 A.1 Test Vector #2: the ChaCha20 block function
+ *
+ * R-BLOCK — RFC 8439 §2.3, DEFINITION:
+ *   The output is 64 random-looking bytes.
+ */
+const clause_A_1_BLOCK_2 = (t: Suite): boolean => t.eqStr("[A.1-BLOCK-2] RFC 8439 A.1 Test Vector #2: the ChaCha20 block function (R-BLOCK)", hexOrNull(chacha20Block(unhex("0000000000000000000000000000000000000000000000000000000000000000"), toU32(1), unhex("000000000000000000000000"))), "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed29b721769ce64e43d57133b074d839d531ed1f28510afb45ace10a1f4b794d6f");
+
+/**
+ * RFC 8439 A.1 Test Vector #3: the ChaCha20 block function
+ *
+ * R-BLOCK — RFC 8439 §2.3, DEFINITION:
+ *   The output is 64 random-looking bytes.
+ */
+const clause_A_1_BLOCK_3 = (t: Suite): boolean => t.eqStr("[A.1-BLOCK-3] RFC 8439 A.1 Test Vector #3: the ChaCha20 block function (R-BLOCK)", hexOrNull(chacha20Block(unhex("0000000000000000000000000000000000000000000000000000000000000001"), toU32(1), unhex("000000000000000000000000"))), "3aeb5224ecf849929b9d828db1ced4dd832025e8018b8160b82284f3c949aa5a8eca00bbb4a73bdad192b5c42f73f2fd4e273644c8b36125a64addeb006c13a0");
+
+/**
+ * RFC 8439 A.1 Test Vector #4: the ChaCha20 block function
+ *
+ * R-BLOCK — RFC 8439 §2.3, DEFINITION:
+ *   The output is 64 random-looking bytes.
+ */
+const clause_A_1_BLOCK_4 = (t: Suite): boolean => t.eqStr("[A.1-BLOCK-4] RFC 8439 A.1 Test Vector #4: the ChaCha20 block function (R-BLOCK)", hexOrNull(chacha20Block(unhex("00ff000000000000000000000000000000000000000000000000000000000000"), toU32(2), unhex("000000000000000000000000"))), "72d54dfbf12ec44b362692df94137f328fea8da73990265ec1bbbea1ae9af0ca13b25aa26cb4a648cb9b9d1be65b2c0924a66c54d545ec1b7374f4872e99f096");
+
+/**
+ * RFC 8439 A.1 Test Vector #5: the ChaCha20 block function
+ *
+ * R-BLOCK — RFC 8439 §2.3, DEFINITION:
+ *   The output is 64 random-looking bytes.
+ */
+const clause_A_1_BLOCK_5 = (t: Suite): boolean => t.eqStr("[A.1-BLOCK-5] RFC 8439 A.1 Test Vector #5: the ChaCha20 block function (R-BLOCK)", hexOrNull(chacha20Block(unhex("0000000000000000000000000000000000000000000000000000000000000000"), toU32(0), unhex("000000000000000000000002"))), "c2c64d378cd536374ae204b9ef933fcd1a8b2288b3dfa49672ab765b54ee27c78a970e0e955c14f3a88e741b97c286f75f8fc299e8148362fa198a39531bed6d");
+
+/**
+ * RFC 8439 A.2 Test Vector #1: ChaCha20 encryption
+ *
+ * R-STREAM — RFC 8439 §2.4, DEFINITION:
+ *   ChaCha20 successively calls the ChaCha20 block function, with the same
+ *   key and nonce, and with successively increasing block counter
+ *   parameters. ChaCha20 then serializes the resulting state by writing the
+ *   numbers in little-endian order, creating a keystream block.
+ *   Concatenating the keystream blocks from the successive blocks forms a
+ *   keystream. The ChaCha20 function then performs an XOR of this keystream
+ *   with the plaintext.
+ */
+const clause_A_2_ENCRYPT_1 = (t: Suite): boolean => t.eqStr("[A.2-ENCRYPT-1] RFC 8439 A.2 Test Vector #1: ChaCha20 encryption (R-STREAM)", hexOrNull(chacha20(unhex("0000000000000000000000000000000000000000000000000000000000000000"), toU32(0), unhex("000000000000000000000000"), unhex("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"))), "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7da41597c5157488d7724e03fb8d84a376a43b8f41518a11cc387b669b2ee6586");
+
+/**
+ * RFC 8439 A.2 Test Vector #2: ChaCha20 encryption
+ *
+ * R-STREAM — RFC 8439 §2.4, DEFINITION:
+ *   ChaCha20 successively calls the ChaCha20 block function, with the same
+ *   key and nonce, and with successively increasing block counter
+ *   parameters. ChaCha20 then serializes the resulting state by writing the
+ *   numbers in little-endian order, creating a keystream block.
+ *   Concatenating the keystream blocks from the successive blocks forms a
+ *   keystream. The ChaCha20 function then performs an XOR of this keystream
+ *   with the plaintext.
+ */
+const clause_A_2_ENCRYPT_2 = (t: Suite): boolean => t.eqStr("[A.2-ENCRYPT-2] RFC 8439 A.2 Test Vector #2: ChaCha20 encryption (R-STREAM)", hexOrNull(chacha20(unhex("0000000000000000000000000000000000000000000000000000000000000001"), toU32(1), unhex("000000000000000000000002"), unhex("416e79207375626d697373696f6e20746f20746865204945544620696e74656e6465642062792074686520436f6e7472696275746f7220666f72207075626c69636174696f6e20617320616c6c206f722070617274206f6620616e204945544620496e7465726e65742d4472616674206f722052464320616e6420616e792073746174656d656e74206d6164652077697468696e2074686520636f6e74657874206f6620616e204945544620616374697669747920697320636f6e7369646572656420616e20224945544620436f6e747269627574696f6e222e20537563682073746174656d656e747320696e636c756465206f72616c2073746174656d656e747320696e20494554462073657373696f6e732c2061732077656c6c206173207772697474656e20616e6420656c656374726f6e696320636f6d6d756e69636174696f6e73206d61646520617420616e792074696d65206f7220706c6163652c207768696368206172652061646472657373656420746f"))), "a3fbf07df3fa2fde4f376ca23e82737041605d9f4f4f57bd8cff2c1d4b7955ec2a97948bd3722915c8f3d337f7d370050e9e96d647b7c39f56e031ca5eb6250d4042e02785ececfa4b4bb5e8ead0440e20b6e8db09d881a7c6132f420e52795042bdfa7773d8a9051447b3291ce1411c680465552aa6c405b7764d5e87bea85ad00f8449ed8f72d0d662ab052691ca66424bc86d2df80ea41f43abf937d3259dc4b2d0dfb48a6c9139ddd7f76966e928e635553ba76c5c879d7b35d49eb2e62b0871cdac638939e25e8a1e0ef9d5280fa8ca328b351c3c765989cbcf3daa8b6ccc3aaf9f3979c92b3720fc88dc95ed84a1be059c6499b9fda236e7e818b04b0bc39c1e876b193bfe5569753f88128cc08aaa9b63d1a16f80ef2554d7189c411f5869ca52c5b83fa36ff216b9c1d30062bebcfd2dc5bce0911934fda79a86f6e698ced759c3ff9b6477338f3da4f9cd8514ea9982ccafb341b2384dd902f3d1ab7ac61dd29c6f21ba5b862f3730e37cfdc4fd806c22f221");
+
+/**
+ * RFC 8439 A.2 Test Vector #3: ChaCha20 encryption
+ *
+ * R-STREAM — RFC 8439 §2.4, DEFINITION:
+ *   ChaCha20 successively calls the ChaCha20 block function, with the same
+ *   key and nonce, and with successively increasing block counter
+ *   parameters. ChaCha20 then serializes the resulting state by writing the
+ *   numbers in little-endian order, creating a keystream block.
+ *   Concatenating the keystream blocks from the successive blocks forms a
+ *   keystream. The ChaCha20 function then performs an XOR of this keystream
+ *   with the plaintext.
+ */
+const clause_A_2_ENCRYPT_3 = (t: Suite): boolean => t.eqStr("[A.2-ENCRYPT-3] RFC 8439 A.2 Test Vector #3: ChaCha20 encryption (R-STREAM)", hexOrNull(chacha20(unhex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"), toU32(42), unhex("000000000000000000000002"), unhex("2754776173206272696c6c69672c20616e642074686520736c6974687920746f7665730a446964206779726520616e642067696d626c6520696e2074686520776162653a0a416c6c206d696d737920776572652074686520626f726f676f7665732c0a416e6420746865206d6f6d65207261746873206f757467726162652e"))), "62e6347f95ed87a45ffae7426f27a1df5fb69110044c0d73118effa95b01e5cf166d3df2d721caf9b21e5fb14c616871fd84c54f9d65b283196c7fe4f60553ebf39c6402c42234e32a356b3e764312a61a5532055716ead6962568f87d3f3f7704c6a8d1bcd1bf4d50d6154b6da731b187b58dfd728afa36757a797ac188d1");
+
+/**
+ * RFC 8439 A.4 Test Vector #1: the Poly1305 one-time key
+ *
+ * R-KEYGEN — RFC 8439 §2.6, DEFINITION:
+ *   We take the first 256 bits of the serialized state, and use those as the
+ *   one- time Poly1305 key
+ */
+const clause_A_4_KEYGEN_1 = (t: Suite): boolean => t.eqStr("[A.4-KEYGEN-1] RFC 8439 A.4 Test Vector #1: the Poly1305 one-time key (R-KEYGEN)", hexOrNull(poly1305KeyGen(unhex("0000000000000000000000000000000000000000000000000000000000000000"), unhex("000000000000000000000000"))), "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7");
+
+/**
+ * RFC 8439 A.4 Test Vector #2: the Poly1305 one-time key
+ *
+ * R-KEYGEN — RFC 8439 §2.6, DEFINITION:
+ *   We take the first 256 bits of the serialized state, and use those as the
+ *   one- time Poly1305 key
+ */
+const clause_A_4_KEYGEN_2 = (t: Suite): boolean => t.eqStr("[A.4-KEYGEN-2] RFC 8439 A.4 Test Vector #2: the Poly1305 one-time key (R-KEYGEN)", hexOrNull(poly1305KeyGen(unhex("0000000000000000000000000000000000000000000000000000000000000001"), unhex("000000000000000000000002"))), "ecfa254f845f647473d3cb140da9e87606cb33066c447b87bc2666dde3fbb739");
+
+/**
+ * RFC 8439 A.4 Test Vector #3: the Poly1305 one-time key
+ *
+ * R-KEYGEN — RFC 8439 §2.6, DEFINITION:
+ *   We take the first 256 bits of the serialized state, and use those as the
+ *   one- time Poly1305 key
+ */
+const clause_A_4_KEYGEN_3 = (t: Suite): boolean => t.eqStr("[A.4-KEYGEN-3] RFC 8439 A.4 Test Vector #3: the Poly1305 one-time key (R-KEYGEN)", hexOrNull(poly1305KeyGen(unhex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"), unhex("000000000000000000000002"))), "965e3bc6f9ec7ed9560808f4d229f94b137ff275ca9b3fcbdd59deaad23310ae");
+
+/**
+ * RFC 8439 A.3 Test Vector #1: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_1 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-1] RFC 8439 A.3 Test Vector #1: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0000000000000000000000000000000000000000000000000000000000000000"), unhex("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"))), "00000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #2: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_2 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-2] RFC 8439 A.3 Test Vector #2: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0000000000000000000000000000000036e5f6b5c5e06070f0efca96227a863e"), unhex("416e79207375626d697373696f6e20746f20746865204945544620696e74656e6465642062792074686520436f6e7472696275746f7220666f72207075626c69636174696f6e20617320616c6c206f722070617274206f6620616e204945544620496e7465726e65742d4472616674206f722052464320616e6420616e792073746174656d656e74206d6164652077697468696e2074686520636f6e74657874206f6620616e204945544620616374697669747920697320636f6e7369646572656420616e20224945544620436f6e747269627574696f6e222e20537563682073746174656d656e747320696e636c756465206f72616c2073746174656d656e747320696e20494554462073657373696f6e732c2061732077656c6c206173207772697474656e20616e6420656c656374726f6e696320636f6d6d756e69636174696f6e73206d61646520617420616e792074696d65206f7220706c6163652c207768696368206172652061646472657373656420746f"))), "36e5f6b5c5e06070f0efca96227a863e");
+
+/**
+ * RFC 8439 A.3 Test Vector #3: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_3 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-3] RFC 8439 A.3 Test Vector #3: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("36e5f6b5c5e06070f0efca96227a863e00000000000000000000000000000000"), unhex("416e79207375626d697373696f6e20746f20746865204945544620696e74656e6465642062792074686520436f6e7472696275746f7220666f72207075626c69636174696f6e20617320616c6c206f722070617274206f6620616e204945544620496e7465726e65742d4472616674206f722052464320616e6420616e792073746174656d656e74206d6164652077697468696e2074686520636f6e74657874206f6620616e204945544620616374697669747920697320636f6e7369646572656420616e20224945544620436f6e747269627574696f6e222e20537563682073746174656d656e747320696e636c756465206f72616c2073746174656d656e747320696e20494554462073657373696f6e732c2061732077656c6c206173207772697474656e20616e6420656c656374726f6e696320636f6d6d756e69636174696f6e73206d61646520617420616e792074696d65206f7220706c6163652c207768696368206172652061646472657373656420746f"))), "f3477e7cd95417af89a6b8794c310cf0");
+
+/**
+ * RFC 8439 A.3 Test Vector #4: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_4 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-4] RFC 8439 A.3 Test Vector #4: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"), unhex("2754776173206272696c6c69672c20616e642074686520736c6974687920746f7665730a446964206779726520616e642067696d626c6520696e2074686520776162653a0a416c6c206d696d737920776572652074686520626f726f676f7665732c0a416e6420746865206d6f6d65207261746873206f757467726162652e"))), "4541669a7eaaee61e708dc7cbcc5eb62");
+
+/**
+ * RFC 8439 A.3 Test Vector #5: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_5 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-5] RFC 8439 A.3 Test Vector #5: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0200000000000000000000000000000000000000000000000000000000000000"), unhex("ffffffffffffffffffffffffffffffff"))), "03000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #6: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_6 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-6] RFC 8439 A.3 Test Vector #6: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("02000000000000000000000000000000ffffffffffffffffffffffffffffffff"), unhex("02000000000000000000000000000000"))), "03000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #7: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_7 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-7] RFC 8439 A.3 Test Vector #7: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000000000000000000000000000000000000000000000000000"), unhex("fffffffffffffffffffffffffffffffff0ffffffffffffffffffffffffffffff11000000000000000000000000000000"))), "05000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #8: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_8 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-8] RFC 8439 A.3 Test Vector #8: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000000000000000000000000000000000000000000000000000"), unhex("fffffffffffffffffffffffffffffffffbfefefefefefefefefefefefefefefe01010101010101010101010101010101"))), "00000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #9: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_9 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-9] RFC 8439 A.3 Test Vector #9: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0200000000000000000000000000000000000000000000000000000000000000"), unhex("fdffffffffffffffffffffffffffffff"))), "faffffffffffffffffffffffffffffff");
+
+/**
+ * RFC 8439 A.3 Test Vector #10: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_10 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-10] RFC 8439 A.3 Test Vector #10: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000040000000000000000000000000000000000000000000000"), unhex("e33594d7505e43b900000000000000003394d7505e4379cd01000000000000000000000000000000000000000000000001000000000000000000000000000000"))), "14000000000000005500000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #11: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_11 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-11] RFC 8439 A.3 Test Vector #11: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000040000000000000000000000000000000000000000000000"), unhex("e33594d7505e43b900000000000000003394d7505e4379cd010000000000000000000000000000000000000000000000"))), "13000000000000000000000000000000");
 
 /**
  * the block function outputs 64 bytes for any counter
@@ -2201,6 +2409,28 @@ export const main = (): i32 => {
   ran = `${ran}${clause_A_5_OPEN(t) ? "1" : "0"}`;
   ran = `${ran}${clause_A_5_KEYGEN(t) ? "1" : "0"}`;
   ran = `${ran}${clause_A_5_POLY1305(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_1_BLOCK_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_1_BLOCK_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_1_BLOCK_3(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_1_BLOCK_4(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_1_BLOCK_5(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_2_ENCRYPT_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_2_ENCRYPT_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_2_ENCRYPT_3(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_4_KEYGEN_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_4_KEYGEN_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_4_KEYGEN_3(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_3(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_4(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_5(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_6(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_7(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_8(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_9(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_10(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_11(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_BLOCK_64(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_KEYSTREAM(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_XOR_INVOLUTION(t) ? "1" : "0"}`;

@@ -36,6 +36,18 @@ A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
 narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
 release-note words) in the same PR; run nish-cmp before pushing.
 
+A new diagnostic code lands with a `tests/link` negative that provokes it
+(an `expected.err`): inline `tests/run.js` checks do not count toward "every
+registry code is provoked". A changed diagnostic message is grepped across
+the whole repo (`expected.err`, `expected.json`, the pinned negative cases)
+before pushing.
+
+**A record states only what its code or its recorded run does.** In
+`docs/security/*.md` and `docs/BENCHMARKS.md`, check each "only", "cannot"
+and "never" against the code's real match (a seccomp row matches syscall
+numbers, not descriptors), and each route, figure and command against what
+was run.
+
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
 `node scripts/gen-reference.mjs --check` fails on any gap
@@ -181,3 +193,7 @@ Tests: tests/cases/arr_alias_domains
   the body in public notes.
 - Only conventional subjects become entries; `pr-title.yml` checks the PR
   title, which a squash merge lands.
+- **A squash subject keeps the PR's release-note words.** `tests/nish-cmp.js`
+  `DECLARED` entries match their `changelog` text against `CHANGELOG.md` and
+  the pending notes, so the subject must contain every `changelog:` string
+  the PR adds, verbatim: read them from the diff before writing it.
