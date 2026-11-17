@@ -1,0 +1,669 @@
+{
+  "version": "0.42.0",
+  "date": "2026-11-17",
+  "tag": "v0.42.0",
+  "range": {
+    "from": "v0.41.0",
+    "to": "ae3d9a73"
+  },
+  "entries": [
+    {
+      "id": "link-installed-nish-packages-agent-skills-into-claude",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "link installed Nish packages' agent skills into .claude/skills",
+      "body": "`npm install nish` in a project now links the writing-nish skill into `.claude/skills/`, where coding agents load project skills from. The new `npx nish-skills` command links the skills of every installed Nish package (one whose exports use the `nish` condition) after a library is added. A package ships a skill as `skills/<name>/SKILL.md`. The links are relative symlinks into `node_modules/` (junctions on Windows), so they follow upgrades, and nish claims its own skill names before any library can.\n\nNish only touches its own links, the ones pointing inside the project's `node_modules/`. A skill directory or link you made is never replaced or removed, and a `.claude` that is itself a link is left unwritten. Links to packages you uninstall are pruned. Nothing is linked for a global install, under npx, or with `NISH_NO_SKILLS` set, and a failed link never fails the install. In a workspace, both postinstall and `nish-skills` link at the root nish is installed in. The new Agent skills guide page says what is linked, how to opt out, and how a library ships its own skills.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js skills",
+        "tests/run.js package"
+      ],
+      "commits": [
+        "397b018"
+      ],
+      "pr": 1654,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "http1connection-says-when-it-is-between-requests-1655",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "Http1Connection says when it is between requests",
+      "body": "`Http1Connection.betweenRequests()` answers whether a graceful drain may close the connection without cutting a request short. It is true in the HTTP state with no request open, no head begun to arrive, and nothing waiting to be written.\n\nSince 0.36.0 `requestOpen` is private. A program that drained its own server had to combine that field, the head clock and `wantsWrite()` to answer this question, and it can no longer read the first. The connection now answers the question itself, so those fields stay private. The http-server guide shows the drain loop. A program that feeds a connection itself calls `headArrived` after each feed, as the built-in carriers do, so a head that has begun to arrive counts.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/run.js pins each state the accessor separates (fresh",
+        "head partly read",
+        "request open",
+        "response being written",
+        "flushed",
+        "closing",
+        "upgraded)."
+      ],
+      "commits": [
+        "a779740"
+      ],
+      "pr": 1655,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "pin-vector-0-2-1-and-run-the",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "pin vector 0.2.1 and run the spec tests in CI",
+      "body": "nish now pins @amritk/vector 0.2.1 in .vector-version. scripts/fetch-vector.sh clones that tag and builds build/vector/dist/vector; npm still serves only 0.1.0, so the pin is a git tag. Vector 0.2.1 reads spec sources only as RFC text or kramdown-rfc XML, and it refused the old Markdown hex spec. So specs/hex.md is now kramdown-rfc, built to specs/hex.xml with scripts/build-spec.sh (copied from vector, MIT). contracts/hex.json is extracted from that XML and test/spec/hex.ts is 0.2.1's emit of it. Their requirement, exclusion, function and clause ids are unchanged.\n\ntests/run.js gains a `spec` section, run in CI's first shard. For each generated test it requires the contract and a single vector-contract-sha256 line equal to the contract's hash. When the target module exists in std/, it builds and runs the test. A stale or failing test is a FAIL; a module not landed yet (nish/hex today) is a named SKIP.\n\nrfcs/ holds RFC 4231, 4648, 5869, 7748, 8032 and 8439 unmodified, with their kramdown-rfc references in .refcache/ and their notices in THIRD_PARTY_NOTICES.md. scripts/check-filenames.mjs exempts .refcache/, whose names kramdown-rfc fixes.\n\nVector 0.2.1 cannot set a property's sample count from a spec. The hex properties therefore run vector's default of 26 to 39 samples where the hand-written contract asked for 96; contracts/README.md records this.",
+      "metrics": [],
+      "refs": [
+        "#1653",
+        ".claude/orientation.md",
+        "contracts/README.md"
+      ],
+      "tests": [
+        "node tests/run.js spec",
+        "node tests/run.js third-party-licence"
+      ],
+      "commits": [
+        "9a7be90"
+      ],
+      "pr": 1659,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "set-custom-domain-to-docs-nishlang-com-1662",
+      "type": "chore",
+      "scope": "infra",
+      "breaking": false,
+      "title": "set custom domain to docs.nishlang.com",
+      "body": "* Update site config (siteConfig)\n\n- Update scalar.config.json: siteConfig.customDomain\n\nCo-authored-by: Scalar <bot@scalar.com>\n\n* Set custom domain to docs.nishlang.com\n\nCo-authored-by: Scalar <bot@scalar.com>",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c0414bb"
+      ],
+      "pr": 1662,
+      "author": "scalar-docs[bot]",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-nish-crypto-chacha20poly1305-to-rfc-8439-with",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold nish/crypto/chacha20poly1305 to RFC 8439 with a vector contract",
+      "body": "std/crypto/chacha20poly1305.ts is now held to RFC 8439 by a vector 0.2.1 contract that takes the RFC as its main source. Every requirement is quoted from the RFC, and every MUST in it is tested or excluded with its reason. The test vectors come from sections 2.3.2, 2.4.2, 2.5.2, 2.6.2, 2.8.2 and A.5, and 13 properties sit beside them. All 15 requirements pass, and CI runs the generated test through the `spec` section.\n\nThe spec is vector's own at v0.2.1, copied under its MIT notice and listed in THIRD_PARTY_NOTICES.md. chacha20QuarterRound (whose u32[] state vector's types cannot express) and chacha20HeaderMask (RFC 9001) are recorded as untested in the spec, because vector 0.2.1 cannot declare outOfScope exports from a spec.",
+      "metrics": [],
+      "refs": [
+        "#1653",
+        "rfcs/rfc8439.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc8439-chacha20-poly1305.ts)"
+      ],
+      "commits": [
+        "aa04eeb"
+      ],
+      "pr": 1660,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-nish-crypto-hkdf-to-rfc-5869-with",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold nish/crypto/hkdf to RFC 5869 with a vector contract",
+      "body": "std/crypto/hkdf.ts is now held to RFC 5869 by a vector 0.2.1 contract that takes the RFC as its main source. Every requirement is quoted from the RFC. hkdfExtractSha256 and hkdfExpandSha256 are checked against the PRK and OKM of Appendix A's test cases 1 to 3, and five properties check them against hmacSha256. All 8 requirements pass, and CI runs the generated test through the `spec` section.\n\nThe spec is vector's own at v0.2.1, copied under its MIT notice and listed in THIRD_PARTY_NOTICES.md. The other exports of nish/crypto/hkdf are recorded as untested in the spec, each with its reason, because vector 0.2.1 cannot declare outOfScope exports from a spec: SHA-384, the Secret, Expand-Label (RFC 8446), Into and Held variants, and HkdfScratch.",
+      "metrics": [],
+      "refs": [
+        "#1653",
+        "rfcs/rfc5869.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc5869-hkdf-sha256.ts)"
+      ],
+      "commits": [
+        "b73c054"
+      ],
+      "pr": 1661,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-nish-crypto-hmac-to-rfc-4231-with",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold nish/crypto/hmac to RFC 4231 with a vector contract",
+      "body": "std/crypto/hmac.ts is now held to RFC 4231 by a vector 0.2.1 contract that takes the RFC as its main source. Every requirement is quoted from RFC 4231's section 1 definitions and section 4 test cases. hmacSha256, hmacSha384 and hmacSha512 are checked against the 18 known answers of test cases 1 to 4, 6 and 7. Properties check the HMAC construction over sha256, sha384 and sha512, the long-key path and the tag length, and CI runs the generated test through the `spec` section.\n\nTest case 5 prints only a 128-bit truncation, and a vector row must hold a function's whole return value, so its three answers are properties. The verify functions are recorded as untested, with the other exports of nish/crypto/hmac, because RFC 4231 does not specify them; tests/link/crypto_hmac covers them in nish.",
+      "metrics": [],
+      "refs": [
+        "#1653",
+        "rfcs/rfc4231.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc4231-hmac-sha2.ts)"
+      ],
+      "commits": [
+        "fa922e5"
+      ],
+      "pr": 1663,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-nish-crypto-ed25519-to-rfc-8032-with",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold nish/crypto/ed25519 to RFC 8032 with a vector contract",
+      "body": "std/crypto/ed25519.ts is now held to RFC 8032's PureEdDSA Ed25519 by a vector 0.2.1 contract that takes the RFC as its main source. Every requirement is quoted from sections 5.1, 5.1.5, 5.1.6 and 5.1.7. The public keys of all five section 7.1 tests are vector rows. Properties check signing and verification: the public-key and signature sizes, sign-then-verify, refusal of a flipped signature or message bit, S out of range, and truncated inputs. CI runs the generated test through the `spec` section.\n\nvector 0.2.1 refuses the section 7.1 signature rows. A Call label cannot hold the RFC's \"MESSAGE (length 1 byte)\", a plain \"MESSAGE\" label fails fidelity, and TEST 1's empty message is printed only as a length. Its exact refusals are recorded, and tests/link/crypto_ed25519/rfc.ts still checks those five signatures. Ed25519ctx, Ed25519ph and Ed448 are outside the profile: nish implements PureEdDSA Ed25519 only.",
+      "metrics": [],
+      "refs": [
+        "#1653",
+        "rfcs/rfc8032.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc8032-ed25519.ts)"
+      ],
+      "commits": [
+        "f596ed4"
+      ],
+      "pr": 1668,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-nish-crypto-x25519-to-rfc-7748-with",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold nish/crypto/x25519 to RFC 7748 with a vector contract",
+      "body": "std/crypto/x25519.ts is now held to RFC 7748 by a vector 0.2.1 contract that takes the RFC as its main source. Every requirement is quoted from sections 5, 5.2 and 6.1, and every MUST is tested or excluded with its reason. x25519 and x25519Base, whose scalars are secret-bytes, are checked against section 5.2's two single-step vectors and its 1-iteration vector. Properties cover input and output sizes, top-bit masking, non-canonical inputs, clamping, the base point, and both sides of section 6.1's Diffie-Hellman exchange, whose printed keys and shared secret they assert. CI runs the generated test through the `spec` section.\n\nTwo vector 0.2.1 limits shape the contract. Fidelity needs a row's label to be the RFC's printed name, such as \"Alice's private key, a\", and a label cannot spell the apostrophe, comma or parentheses, so section 6.1 stays a property its bytes are not checked against. The 1,000-iteration vector cannot be chained without printed intermediates. The 1,000,000-iteration vector is excluded for its run time, X448 is outside the profile, and the f25519 internals are recorded as untested.",
+      "metrics": [],
+      "refs": [
+        "#1653",
+        "rfcs/rfc7748.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc7748-x25519.ts)"
+      ],
+      "commits": [
+        "790b1e3"
+      ],
+      "pr": 1664,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "stop-the-docs-landing-hero-playing-twice-on",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "stop the docs landing hero playing twice on a first load",
+      "body": "The docs site arrives server-rendered and site.js fills the hero into it, then\nthe client app mounts and swaps the whole page node, hero and all, for its own\ncopy. site.js saw an empty host a frame later and built a second hero, so on a\nfirst load the hero blinked out and its 12s run started over. site.js now\nfills in the mutation callback, before the browser paints, and moves the hero\nthat same change took off the page into the new host, setting each of its\nanimations back to where it was, so the swap neither shows nor restarts it.\nA later navigation back to the page still gets a fresh hero with its entrance.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/break-web/check.mjs"
+      ],
+      "commits": [
+        "1cad90a"
+      ],
+      "pr": 1670,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "wp63-s2-io-uring-slot-handles-in-nish",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP63 S2 — io_uring slot handles in nish:net",
+      "body": "A `nish:net` listener opened with `NET_LISTEN_RING` (flag 8) on Linux accepts into io_uring ring slots instead of descriptors. Slot handles are `i32`s at 2^20 and above. `netRead`, `netWrite`, `netClose`, `pollAdd`, `pollRemove` and `pollWait` take them as they take descriptors. One listener serves 3,000 loopback connections under a descriptor limit of 1,024, with fewer than 64 entries in `/proc/self/fd`. Where the kernel refuses rings (seccomp, `io_uring_disabled`, an old kernel), the listener serves descriptors, and the new `netRingState()` reports why: 1 for rings, 0 for none yet, a negative errno for a refusal. The bit is opt-in.\n\nA slot's unsent bytes are bounded at 256 KiB, past which `netWrite` answers -11. A full set answers -23 from `tcpAccept`. A slot's receive is held once 256 KiB is queued, so a peer the program does not read stalls in the kernel. A close with sends queued lingers until they are sent. `pollWait` keeps a share of each batch for descriptors when ring slots fill it, so `signalFd()` is still reported. Once a ring listener exists, a signal reaches a loop through `signalFd()` rather than by ending `pollWait` early. A set that fails to open, and a transient failure of the first one, fall back to descriptors without latching. A reset slot fails writes with its errno and is never re-armed. An accept that finds the kernel short of memory (-12, -105) answers that errno once, then pauses accepting for 10 ms, doubling to 640 ms while the shortage lasts, and accepts again.\n\nThe security record is docs/security/net-uring.md, NURING-1 to NURING-29. The guide's networking page and docs/LANGUAGE.md describe the surface. The text budgets of runtime-net.c and runtime-uring.c grow to 11,008 and 7,424 bytes.",
+      "metrics": [],
+      "refs": [
+        "docs/wp63-iouring-net.md"
+      ],
+      "tests": [
+        "tests/link/net_ring_*",
+        "tests/runtime/uring-test.c",
+        "tests/cases/net_ring_calls"
+      ],
+      "commits": [
+        "9d5c50b"
+      ],
+      "pr": 1658,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "link-a-package-s-agent-skills-only-when",
+      "type": "fix",
+      "scope": "cli",
+      "breaking": false,
+      "title": "link a package's agent skills only when the user accepts them",
+      "body": "Installing nish no longer links any agent skill into a project. A skill is instructions for a coding agent plus, optionally, tools it may use without asking: `allowed-tools`, `hooks`, or a shell command run when the skill loads. Linking every installed Nish package's skills at install time let any dependency hand the project's agent that power unasked, and a link silently followed every later upgrade. Postinstall now writes nothing and prints one line pointing at `npx nish-skills`.\n\n`npx nish-skills` lists each skill a Nish package ships, with its package and version, description and every grant, and links only the ones you accept:\n- On a terminal it asks y/N for each one, and the default is no.\n- Without a terminal it links the skills you name, or every grant-free skill with `--yes`.\n- A skill that grants anything is linked only when you name it.\n\nAn acceptance is recorded in `.claude/skills/.nish-skills.json` against the package, the skill and a hash of the skill's whole directory. A changed skill, or another package's skill under the same name, is unlinked until you accept it again.\n\nThe frontmatter reader fails closed. Anything it cannot read as plain `key: value` lines, any key outside a fixed list of inert ones, any load-time shell syntax, and any link, special file or unreadable entry in the skill all count as grants. No display limit can hide a grant from the question. The trust model is on the agent-skills guide page, and SC-35 in docs/security/supply-chain.md records the finding.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/agent-skills.md",
+        "docs/security/supply-chain.md#SC-35"
+      ],
+      "tests": [
+        "tests/run.js skills"
+      ],
+      "commits": [
+        "93d1138"
+      ],
+      "pr": 1669,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "add-debug-arena-which-traps-a-stale-arena",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add --debug-arena, which traps a stale arena reference",
+      "body": "`nish compile --debug-arena --link` and `nish run --debug-arena` link a runtime whose arena never reuses an address. A reference kept past the scope that allocated it faults on its first use and the runtime names it as a stale arena reference, rather than reading whatever the arena wrote there next. The emitted IR is the same either way, and a normal link is unchanged.\n\nEvery arena chunk is exact, one block per chunk, so each allocation and rewind goes through the runtime. Chunks are page-aligned spans of one PROT_NONE reservation, and a release turns them PROT_NONE again (falling back to a 0xDB fill). A SIGSEGV/SIGBUS handler on the alternate stack reports the fault and re-raises it. The flag is native-only: it is refused without a link, and under the wasi and wasm profiles.\n\nAll 935 `tests/cases` programs with an expected output were linked against the debug runtime, and none held a stale reference.",
+      "metrics": [],
+      "refs": [
+        "docs/security/runtime.md",
+        "docs/guide/using-nish/cli.md"
+      ],
+      "tests": [
+        "tests/run.js debug-arena",
+        "tests/runtime/debug-arena-test.c"
+      ],
+      "commits": [
+        "5b2f835"
+      ],
+      "pr": 1676,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "give-the-docs-site-a-share-card-page",
+      "type": "docs",
+      "breaking": false,
+      "title": "give the docs site a share card, page metadata and a clearer header",
+      "body": "Links to nishlang.com unfold into a share card made from the hero (docs/site/og.png, rendered by scripts/gen-og-image.mjs). The new docs/site/page.js writes schema.org structured data on every page and rewrites it on client-side route changes. nishlang.com is now the project's homepage. The header leads with Get started, then GitHub and the Language reference. Module names in tables break only after a slash, and each word of the hero's name eases open to its own width.\n\nThe soundness run's ASan builds now link every runtime unit, runtime-uring.c among them. Without it, every generated program failed to link and the nish-cmp elision rows ran out of time. The golden cases' Nish runner gets 20 minutes instead of 15, since a slow runner passed every case and was then cancelled.",
+      "metrics": [],
+      "refs": [
+        "docs/README.md"
+      ],
+      "tests": [
+        "tests/break-web/check.mjs",
+        "tests/differential/asan.js"
+      ],
+      "commits": [
+        "1800850"
+      ],
+      "pr": 1672,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "nl9018-warns-when-a-handler-the-loop-calls",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "NL9018 warns when a handler the loop calls drops a temporary",
+      "body": "NL9018 now counts what a pass keeps at any depth of calls. A function the loop calls is charged to the loop when it answers no memory, has no scope of its own, and builds and drops a temporary on every call that returns, or calls a function that does. A branch on a parameter against a constant still counts as every call, which is how a handler dispatches on its event. The warning names the call and the site, and its rewrite puts the arena block in the function that builds the temporary. --emit-arena marks that site \"accumulates\": true.\n\nThe sweep this enabled fixed two real leaks: CapabilityLock.readVersion kept a substring per key, and FetchSyncClient.drain built a 4 KiB buffer per redirect hop.",
+      "metrics": [
+        "VmRSS after 2,000 then 20,000 requests on one keep-alive connection, 5 runs each, growth identical to the kB across runs: helper_leaky +1,252 kB and method_leaky +1,252 kB, both unwarned before; each arena rewrite +0 kB"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md (NL9018)"
+      ],
+      "tests": [
+        "tests/link/nl9018_server",
+        "tests/link/nl9018_callees"
+      ],
+      "commits": [
+        "50acd3f"
+      ],
+      "pr": 1675,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "move-to-vector-0-3-1-restore-hex",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "move to vector 0.3.1, restore hex's 96 samples, print the staleness check",
+      "body": "nish now pins @amritk/vector 0.3.1. Every contract passes 0.3.1's build-spec, extract, check and stale gates unchanged, and every test re-emits byte-identical.\n\nvector 0.3.0 lets a spec set a property's sample count, so specs/hex.md gives each property `// samples: 96` again. That restores the count the hand-written contract had before vector 0.2.1 dropped it to vector's default; requirement and clause ids are unchanged.\n\nThe `spec` section of tests/run.js now prints its staleness check as a PASS line of its own, before the run's. A test now passes only if at least one of its clauses passed: a test whose every clause was skipped, such as one made only of slow iterated vectors, fails with \"no clause passed\", as vector's own run calls it an error. Each clause a test skips is reported as a SKIP. CI emits tests without --slow, so slow iterated vectors run by hand with `vector spec run --slow`. contracts/README.md and .claude/orientation.md describe the pin and the 0.3.x spec features (samples, outOfScope, Iterate).",
+      "metrics": [],
+      "refs": [
+        "#1680",
+        "#1671"
+      ],
+      "tests": [
+        "node tests/run.js spec"
+      ],
+      "commits": [
+        "4ebaf0e"
+      ],
+      "pr": 1681,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "draw-one-underline-under-the-current-header-link",
+      "type": "docs",
+      "breaking": false,
+      "title": "draw one underline under the current header link",
+      "body": "Scalar marks the current page's header link with a currentColor bottom\nborder, and the theme's gradient bar showed on hover as well, so a hovered\ncurrent link had a white line and a coloured one. The current link now\nshows the gradient bar instead of the border. The rule's 45 B joins the\nallowances in break-web's theme.css size budget.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6bf6810"
+      ],
+      "pr": 1685,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-chacha20-poly1305-to-rfc-8439-appendix-a",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold ChaCha20-Poly1305 to RFC 8439 Appendix A under vector 0.3.1",
+      "body": "The RFC 8439 contract now holds std/crypto/chacha20poly1305.ts to 19 known answers, up from 8. New are Appendix A.1's five block-function vectors, A.2's three encryption vectors and A.4's three Poly1305 key-generation vectors, each sourced to its section under the RFC's own labels.\n\nvector refuses Appendix A.3's eleven Poly1305 vectors: the section prints them without subsections, so it cannot tell which printing belongs to which test case. Sections 2.5.2 and A.5 still test poly1305. The section 2.1.1 and 2.2.1 quarter-round vectors work on a u32[] state that vector cannot express, so they are recorded untested; chacha20Block, which runs every quarter round, is tested by 2.3.2 and A.1. chacha20QuarterRound and chacha20HeaderMask are now the contract's outOfScope. All 15 requirements pass.",
+      "metrics": [],
+      "refs": [
+        "#1680",
+        "rfcs/rfc8439.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc8439-chacha20-poly1305.ts)"
+      ],
+      "commits": [
+        "ffd47a2"
+      ],
+      "pr": 1683,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "add-rfc-7748-s-iterated-x25519-vectors-under",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "add RFC 7748's iterated X25519 vectors under vector 0.3.1",
+      "body": "The RFC 7748 contract now checks std/crypto/x25519.ts against section 5.2's iterated vectors, written as vector 0.3.0 iterated rows with the step (k, u) <- (x25519(k, u), k). The 1,000-iteration result is checked on every run. The 1,000,000-iteration result is marked slow: emitted tests skip it unless built with --slow, and it was run by hand against nish, where it passes in about 1m45s. The 17 f25519 field helpers and X25519_SIZE are now the contract's outOfScope.\n\nSection 6.1's Diffie-Hellman values stay a property. vector refuses them as rows, because a label cannot spell \"Alice's private key, a\" (an apostrophe and a separating comma), and the refusal is recorded. All 10 requirements pass.",
+      "metrics": [],
+      "refs": [
+        "#1680",
+        "rfcs/rfc7748.txt"
+      ],
+      "tests": [
+        "node tests/run.js spec (test/spec/rfc7748-x25519.ts)"
+      ],
+      "commits": [
+        "de72284"
+      ],
+      "pr": 1682,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "declare-hmac-s-and-hkdf-s-untested-exports",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "declare HMAC's and HKDF's untested exports as outOfScope under vector 0.3.1",
+      "body": "vector 0.3.0 lets a spec declare the exports its contract does not test, so specs/rfc4231-hmac-sha2.md and specs/rfc5869-hkdf-sha256.md now give each one an `Out of scope:` paragraph with its reason. Before, they were listed as prose. The contracts' outOfScope now names every untested export of std/crypto/hmac.ts (20) and std/crypto/hkdf.ts (19), so vector's exports gate can hold a change to any of them. Requirements, vectors and properties are unchanged, and both contracts still pass every requirement.\n\nRFC 4231's test case 5, a 128-bit truncation, stays a property: vector 0.3.x has no row for a truncated result.",
+      "metrics": [],
+      "refs": [
+        "#1680"
+      ],
+      "tests": [
+        "node tests/run.js spec"
+      ],
+      "commits": [
+        "accee66"
+      ],
+      "pr": 1688,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "hold-ed25519-s-rfc-8032-signatures-to-vector",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "hold Ed25519's RFC 8032 signatures to vector rows under vector 0.3.1",
+      "body": "All five Section 7.1 signatures (TEST 1, 2, 3, 1024 and SHA(abc)) are now vector rows sourced to the RFC, covering R-SIG-FORM and R-PURE, with TEST 1's empty message written as a zero-length label. The three size constants move into the contract's outOfScope. Verification rows stay excluded: RFC 8032 Section 7.1 states no \"MUST return true\" for the fidelity gate to cite, and tests/link/crypto_ed25519/rfc.ts still verifies all five.",
+      "metrics": [],
+      "refs": [
+        "#1680"
+      ],
+      "tests": [],
+      "commits": [
+        "0ec6a2c"
+      ],
+      "pr": 1684,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "wp63-s3-restricted-io-uring-rings-under-sandbox",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "WP63 S3 — restricted io_uring rings under --sandbox",
+      "body": "A --sandbox program granted `net` but not `process.spawn` keeps the ring bit. Before the seccomp filter loads, the runtime makes the rings its ring listeners will use. Each ring is created with IORING_SETUP_R_DISABLED and given IORING_REGISTER_RESTRICTIONS:\n- SQE_OP allows ACCEPT, RECV, SEND, CLOSE, ASYNC_CANCEL and NOP only.\n- SQE_FLAGS allows FIXED_FILE, BUFFER_SELECT and CQE_SKIP_SUCCESS only.\n- No register op is allowed.\nIts file table and buffer ring are registered, and then it is enabled.\n\nThe filter then kills io_uring_setup and io_uring_register. It allows io_uring_enter only on a premade ring's descriptor, and kills all three when no ring was made. A sandboxed program cannot make a ring, lift a ring's restrictions, or drive a ring that it inherited or that was moved onto another descriptor number. Without `net` all three stay killed. With `net` and `process.spawn` nothing changes.\n\nHow many rings, and whether to make any, is decided at build time. The ring count is the root package.json's `\"nish\": { \"netRings\": N }`, from 1 to 64 with a default of 1; a value out of range is NL3058. The compiler records whether `main` can reach NET_LISTEN_RING. It counts any flags argument it cannot prove leaves bit 8 clear, and makes no ring when the bit is unreachable.\n\ndocs/security/sandbox.md gives the three-way rule, the new step and its checks. docs/security/net-uring.md records:\n- NURING-33 to NURING-37, including NURING-36, which stays open: a foreign ring moved onto a premade ring's number can still be entered;\n- the io_uring CVEs since 5.10, each with whether a restricted ring reaches it, with the unclassified ones listed.\nThe sandbox guide page explains `netRings` and how to size it. The WP63 roadmap marks S3 done, and D2 is decided.",
+      "metrics": [],
+      "refs": [
+        "docs/wp63-iouring-net.md#62-the-rule-this-note-proposes"
+      ],
+      "tests": [
+        "tests/link/sandbox_fixtures",
+        "tests/link/net_ring_rings_refused"
+      ],
+      "commits": [
+        "e3ba11f"
+      ],
+      "pr": 1679,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "wp63-s4-handlerlimits-listen-on-io-uring-rings",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "WP63 S4 — HandlerLimits listen on io_uring rings, and the entry re-measured",
+      "body": "`nish/net/handler` can hold connections past the descriptor limit. `HandlerLimits` gains `ring`, and `listen(host, port, backlog, flags)` sets NET_LISTEN_RING on the listener when `ring` is on. `slots` is the connection cap, and it is no longer bounded by RLIMIT_NOFILE. A listener whose rings are all full answers -23 from tcpAccept. The handler rests on that the way it rests on -24, and a close ends the rest early. The new `HttpHandler.resting()` reports whether it is resting. A kernel that refuses rings serves descriptors, and `netRingState()` says why. The defaults are unchanged: 256 slots and no ring.\n\n`bench/http1-server.ts` and the new `bench/handler-ring/` take BENCH_RING=1. The entry, with SQLite on every request, was measured as one ring process against five epoll processes, in 5 interleaved rounds against a byte-identical epoll copy:\n- At 18,000 connections, a request costs 25.63 µs against 34.60, 25.9% less.\n- At the box's C of 96,000, it costs 26.20 against 37.17, 29.5% less.\nThe verdict against the design note's §4 is go. The ring process holds about four times the memory a connection at 96,000 (2.8× at 18,000), so D1 stays opt-in. The WP63 roadmap marks S4 done, and the design note records the measurement and D1.\n\nThis also corrects the nish-cmp DECLARED changelog words for #1679's entry to match that PR's merged subject.",
+      "metrics": [
+        "25.9% at 18k and 29.5% at 96k against 0.5% and 0.7% median bands; per-round bands up to 3.9%, smallest per-round saving 24.1%"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md",
+        "docs/wp63-iouring-net.md#10-stages"
+      ],
+      "tests": [
+        "tests/link/net_handler_ring",
+        "tests/link/net_handler_rest_close"
+      ],
+      "commits": [
+        "d17a8ea"
+      ],
+      "pr": 1678,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-16"
+    },
+    {
+      "id": "keep-release-note-words-in-squash-subjects-pin",
+      "type": "docs",
+      "breaking": false,
+      "title": "keep release-note words in squash subjects, pin new diagnostics, and hold records to their code",
+      "body": "Adds three conventions to CLAUDE.md that the WP63 S3-S4 run (#1674) found missing, each of which cost a red CI run or a blocking review round:\n\n- A squash subject keeps every `changelog:` string the PR adds to tests/nish-cmp.js DECLARED entries, verbatim.\n- A new diagnostic code lands with a tests/link negative that provokes it, and a changed diagnostic message is grepped across the whole repo before pushing.\n- A security or benchmark record states only what its code or its recorded run does.\n\nPart of #1674",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "2ab2935"
+      ],
+      "pr": 1691,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "add-rfc-8439-a-3-s-eleven-poly1305",
+      "type": "test",
+      "scope": "spec",
+      "breaking": false,
+      "title": "add RFC 8439 A.3's eleven Poly1305 vectors under vector 0.4.0",
+      "body": "vector 0.4.0 accepts a Source cell `{{Section A.3 of RFC8439}}, Test Vector #N`, which scopes a row's labels to that one numbered case, so the eleven A.3 Poly1305 vectors now have rows (A.3-POLY1305-1 to -11, covering R-POLY). The spec XML, contract and emitted test are regenerated, and contracts/README.md documents the new Source form.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f376fc3"
+      ],
+      "pr": 1692,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "wp65-the-surface-a-lexer-port-asked-for",
+      "type": "docs",
+      "scope": "roadmap",
+      "breaking": false,
+      "title": "WP65 — the surface a lexer port asked for",
+      "body": "A table-driven lexer port hit five gaps. Constant tables already cover its byte-class table. The other four are now planned as stages: byte search on `u8[]` through `memchr` and `memcmp`, allocation without the zero fill plus a standard `grow`, non-literal field initializers, and `toString()` on a number, which is left as an open question because LANGUAGE.md refuses it today.",
+      "metrics": [],
+      "refs": [
+        "docs/wp65-lexer-surface.md"
+      ],
+      "tests": [],
+      "commits": [
+        "e6ac484"
+      ],
+      "pr": 1673,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "add-an-og-video-share-card-recorded-from",
+      "type": "docs",
+      "breaking": false,
+      "title": "add an og:video share card recorded from the hero animation",
+      "body": "A link to nishlang.com now unfurls as the landing page's hero in motion where the platform plays og:video, with og.png kept as the fallback and poster. scripts/gen-og-video.mjs records one 12 s cycle of the hero frame by frame (every CSS animation paused and seeked, so the clip is exactly one loop and a slow machine drops nothing) and encodes it with ffmpeg to H.264 yuv420p, +faststart, silent, about 0.5 MB. tests/break-web/check.mjs holds its 1 MiB budget and box order from the bytes, so no test needs ffmpeg.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6844223"
+      ],
+      "pr": 1696,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "std-net-oidc-openid-connect-discovery-and-a",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "std/net/oidc — OpenID Connect discovery and a rotating JWKS key set",
+      "body": "Adds std/net/oidc (nish/net/oidc). Given an issuer URL, it finds the provider's signing keys through OpenID Connect discovery, keeps them current as they rotate, and verifies tokens with nish/crypto/jwt. The key decides the algorithm, never the token. A cross-origin jwks_uri is fetched under an outbound policy that allows public addresses only. Security record: docs/security/oidc.md.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "afeddde"
+      ],
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "keep-each-premade-ring-s-number-on-its",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "keep each premade ring's number on its ring under --sandbox",
+      "body": "The seccomp filter lets io_uring_enter take only the premade rings' descriptor numbers, but it cannot see the file behind a number. Code holding a ring made outside the sandbox could move it onto a premade ring's number (dup2/dup3, or close plus F_DUPFD, including a number a closed ring listener freed) and enter it (NURING-36).\n\nnish_uring_premake now makes a keeper ring, disabled, restricted to NOP and never enterable. Under --sandbox, close, dup2 and dup3 onto a ring's or the keeper's number kill the process, except dup3 from the keeper. close_range answers ENOSYS. ur_free_ring drops a pooled ring with dup3(keeper, fd), so no ring number is ever free.\n\nAlso from #1690: a --sandbox fallback test where no ring is premade, net_handler_ring running past a descriptor limit of 32, a tls: log line in the h2 interop server, and per-CVE verdicts in the io_uring record. The unclassified CVE records are not listed by ID.\n\nTests: tests/link/sandbox_fixtures (324 passed; the before run fails 10)\nRefs: docs/security/net-uring.md\n\nFixes #1690",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c627b36"
+      ],
+      "pr": 1695,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "propose-wp48-again-as-32-bit-references-for",
+      "type": "docs",
+      "scope": "roadmap",
+      "breaking": false,
+      "title": "propose WP48 again as 32-bit references for linked classes",
+      "body": "WP48 declined a whole-program 32-bit reference mode on 2026-11-11. The Goose\nports show a node with no lean layout left: tree.ts's node is 24 bytes where\nGoose's is 12. This note proposes a narrower design. The compiler picks\ncompact classes (a native executable, a link field that saves bytes, made in a\nloop or recursion, nothing forbidding it), keeps their instances 4-byte aligned\nin one reserved range, and stores only a field typed as that class as an i32\noffset. `implements Compact` and `implements Wide` force or refuse it, and a\nprogram with no compact class compiles to the same IR as before.\n\nIt follows the first note's order: the arena on a reserved range first\n(measured free), then the decode measured on bench/wp48-refs/sibling.ts before\nany emitter work. A stage covers the compiler's and std's own classes. Nothing\nin src/, runtime/ or std/ changes yet.",
+      "metrics": [
+        "tree.ts n=24 RSS 769.8 -> 385.5 MB, wall 0.61x (band 0.3%); bintrees.ts RSS 0.53x, wall 0.94x (band 5.3%); sibling.ts 4M RSS 0.63x, wall 0.91x (band 3.5%), 400k wall 1.02x (band 10.2%); decode alone +10-15% on sibling (climb +25%)"
+      ],
+      "refs": [
+        "docs/wp48-ref32-classes.md"
+      ],
+      "tests": [],
+      "commits": [
+        "e76d13e"
+      ],
+      "pr": 1687,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "measure-mmap-size-and-a-shared-cache-on",
+      "type": "perf",
+      "scope": "interop",
+      "breaking": false,
+      "title": "measure mmap_size and a shared cache on the five-process entry",
+      "body": "WP63 S5 measures the design's two cheaper wins for the multi-process entry against the unchanged five epoll processes, on the S4 stand-in: PRAGMA mmap_size saves 15.7% of server CPU per request, a nish/sync/shm cache 14.9%, and a per-worker private cache shows no measurable change. bench/handler-ring/wins.sh reruns the comparison; WP63 is landed, 6 of 6.",
+      "metrics": [
+        "mmap −15.7%, shm cache −14.9%, private −2.0% (medians of 7 rounds; noise band 0.6% between medians, 6.0% worst single round)"
+      ],
+      "refs": [
+        "docs/BENCHMARKS.md"
+      ],
+      "tests": [],
+      "commits": [
+        "6c9dbff"
+      ],
+      "pr": 1693,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    },
+    {
+      "id": "code-that-decides-what-a-package-may-grant",
+      "type": "docs",
+      "breaking": false,
+      "title": "code that decides what a package may grant fails closed",
+      "body": "A CLAUDE.md rule under Security, from the review of #1669. Anything that reads package-controlled input to decide whether to ask the user uses an allowlist of what is inert. It treats everything else, and anything it cannot parse, as a grant, and it never lets a length cap drop a grant from the question. The same root cause recurred in five review rounds of that PR.",
+      "metrics": [],
+      "refs": [
+        "docs/security/supply-chain.md (SC-35)"
+      ],
+      "tests": [],
+      "commits": [
+        "ae3d9a7"
+      ],
+      "pr": 1677,
+      "author": "Amrit Kahlon",
+      "date": "2026-11-17"
+    }
+  ]
+}
