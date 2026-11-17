@@ -61,7 +61,7 @@ const optionChecks = (t: Suite): void => {
 };
 
 /** The identity checks. */
-const identityChecks = (t: Suite): void => {
+const identityChecks = (t: Suite, dir: string): void => {
   t.eqStr("a certificate without its key is refused", relaySourceFrom("a.pem", "").error, "--cert needs --key: a certificate is not a key pair");
   t.eqStr("a key without its certificate is refused", relaySourceFrom("", "a.key").error, "--key needs --cert: a key is not a certificate");
   const self = relaySourceFrom("", "");
@@ -84,9 +84,9 @@ const identityChecks = (t: Suite): void => {
   t.eqStr("a pinned note carries the hash and when it dies", relayCertOutBody(pinned), '{"hash":"AB:CD","expiresAt":1700000000000}');
   t.eqStr("a trusted note writes a file with no hash in it", relayCertOutBody(new RelayIdentity()), '{"trusted":true}');
 
-  mkdirSync("build/net_relay");
-  const cert: string = "build/net_relay/chain.pem";
-  const keyFile: string = "build/net_relay/key.pem";
+  mkdirSync(dir);
+  const cert: string = `${dir}/chain.pem`;
+  const keyFile: string = `${dir}/key.pem`;
   // The CA certificate and its own key: a pair that belongs together.
   writeFileSync(cert, CA_PEM);
   writeFileSync(keyFile, CA_PKCS8_PEM);
@@ -110,7 +110,7 @@ const identityChecks = (t: Suite): void => {
   writeFileSync(cert, "");
   const half = new RelayIdentity();
   const halfKey: Secret<u8[]> | null = relayRenew(watch, half);
-  t.ok("a chain still being written is an error rather than an empty identity", halfKey === null && half.error === "build/net_relay/chain.pem holds no certificate; it is empty or still being written");
+  t.ok("a chain still being written is an error rather than an empty identity", halfKey === null && half.error === `${cert} holds no certificate; it is empty or still being written`);
   if (halfKey !== null) {
     wipe(halfKey);
   }
@@ -122,7 +122,7 @@ const identityChecks = (t: Suite): void => {
   const crossedKey: Secret<u8[]> | null = relayRenew(watch, crossed);
   t.ok(
     "a renewal whose key is not the certificate's is refused, and the identity serving is kept",
-    crossedKey === null && crossed.error === "could not load build/net_relay/chain.pem and build/net_relay/key.pem: the key is not the one the certificate names" && watch.changed()
+    crossedKey === null && crossed.error === `could not load ${cert} and ${keyFile}: the key is not the one the certificate names` && watch.changed()
   );
   if (crossedKey !== null) {
     wipe(crossedKey);
@@ -139,7 +139,7 @@ const identityChecks = (t: Suite): void => {
   writeFileSync(keyFile, "not a key");
   const badKey = new RelayIdentity();
   const bad: Secret<u8[]> | null = relayRenew(watch, badKey);
-  t.ok("a key file with no P-256 key is an error", bad === null && badKey.error === "could not load build/net_relay/chain.pem and build/net_relay/key.pem: build/net_relay/key.pem holds no P-256 private key");
+  t.ok("a key file with no P-256 key is an error", bad === null && badKey.error === `could not load ${cert} and ${keyFile}: ${keyFile} holds no P-256 private key`);
   if (bad !== null) {
     wipe(bad);
   }
@@ -154,10 +154,10 @@ const identityChecks = (t: Suite): void => {
     wipe(startKey);
   }
 
-  const gone = relaySourceFrom("build/net_relay/none.pem", "build/net_relay/none.key");
+  const gone = relaySourceFrom(`${dir}/none.pem`, `${dir}/none.key`);
   const missing = new RelayIdentity();
   const nothing: Secret<u8[]> | null = relayLoadPem(gone, missing);
-  t.ok("files that are not there are an error rather than a panic", nothing === null && missing.error.startsWith("could not load build/net_relay/none.pem"));
+  t.ok("files that are not there are an error rather than a panic", nothing === null && missing.error.startsWith(`could not load ${dir}/none.pem`));
   if (nothing !== null) {
     wipe(nothing);
   }
@@ -165,8 +165,14 @@ const identityChecks = (t: Suite): void => {
   t.ok("and the watcher reads them as nothing having changed", !goneWatch.mark() && !goneWatch.changed());
 };
 
-/** Every setup check. */
-export const setupChecks = (t: Suite): void => {
+/**
+ * Every setup check.
+ * @param t the suite the checks report to
+ * @param dir the scratch directory the PEM pair is written under; each
+ *   program that runs these checks names its own, since the renewal checks
+ *   read another program's writes to a shared one as a renewal
+ */
+export const setupChecks = (t: Suite, dir: string): void => {
   optionChecks(t);
-  identityChecks(t);
+  identityChecks(t, dir);
 };
