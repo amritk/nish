@@ -829,5 +829,83 @@
         ]
       }
     }
+  ],
+  "outOfScope": [
+    {
+      "name": "hkdfExtractSha384",
+      "reason": "HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256"
+    },
+    {
+      "name": "hkdfExpandSha384",
+      "reason": "HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256"
+    },
+    {
+      "name": "hkdfExtractSha256Secret",
+      "reason": "the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's"
+    },
+    {
+      "name": "hkdfExtractSha384Secret",
+      "reason": "the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's"
+    },
+    {
+      "name": "hkdfExpandSha256Secret",
+      "reason": "the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's"
+    },
+    {
+      "name": "hkdfExpandSha384Secret",
+      "reason": "the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's"
+    },
+    {
+      "name": "hkdfSha256Secret",
+      "reason": "the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's"
+    },
+    {
+      "name": "hkdfSha384Secret",
+      "reason": "the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's"
+    },
+    {
+      "name": "hkdfExpandLabelSha256",
+      "reason": "TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869"
+    },
+    {
+      "name": "hkdfExpandLabelSha384",
+      "reason": "TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869"
+    },
+    {
+      "name": "hkdfExpandLabelSha256Secret",
+      "reason": "TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869"
+    },
+    {
+      "name": "hkdfExpandLabelSha384Secret",
+      "reason": "TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869"
+    },
+    {
+      "name": "hkdfExtractInto",
+      "reason": "an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare"
+    },
+    {
+      "name": "hkdfExpandInto",
+      "reason": "an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare"
+    },
+    {
+      "name": "hkdfExpandLabelInto",
+      "reason": "an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare"
+    },
+    {
+      "name": "hkdfExpandLabelSha256Held",
+      "reason": "Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869"
+    },
+    {
+      "name": "hkdfExpandLabelSha384Held",
+      "reason": "Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869"
+    },
+    {
+      "name": "hkdfExpandLabelHeldInto",
+      "reason": "Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869"
+    },
+    {
+      "name": "HkdfScratch",
+      "reason": "a class holding reusable buffers, not a function; the profile declares functions only"
+    }
   ]
 }

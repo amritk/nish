@@ -54,8 +54,22 @@ once a hold let it go (NURING-27), both fixed before landing. A sixth round
 found that a transient accept error such as `-ENOMEM` stopped a ring listener
 for good (NURING-28), fixed before landing: memory pressure now pauses
 accepting with a back-off, and recorded that a stale handle aliases once its
-slot's generation wraps (NURING-29, decided). Twenty-nine findings
-(NURING-1 to NURING-29): sixteen fixed, two open, eleven decided. The
+slot's generation wraps (NURING-29, decided). S3 makes the layer
+reachable under `--sandbox`: with `net` granted and `process.spawn` withheld,
+the rings a ring listener takes are made before the seccomp filter loads,
+restricted to six operations and three submission flags, and the filter
+then kills `io_uring_setup` and `io_uring_register` and lets
+`io_uring_enter` take only those rings' descriptor numbers (`sandbox.md`
+holds that rule). Its review found that a restricted ring, which drops
+`SINGLE_ISSUER` and `DEFER_TASKRUN`, took a kernel below the probe's floor
+(NURING-33), and that the filter let `io_uring_enter` take any descriptor,
+so a ring made outside the sandbox and inherited across `exec` ran every
+operation (NURING-35), both fixed before landing; recorded open that the
+filter matches numbers, not files (NURING-36); and decided the spent pool's
+counter guard, which no test reaches (NURING-34), the pool's latch on a
+transient failure (NURING-37) and three costs of making the rings at start
+(NURING-30 to NURING-32). Thirty-seven findings (NURING-1 to NURING-37):
+eighteen fixed, three open, sixteen decided. The
 kernel's own io_uring flaws that S1's operations reach, and the kernels that
 fix them, are under "The kernel's record" below.
 
@@ -66,13 +80,16 @@ fix them, are under "The kernel's record" below.
 | `runtime/runtime-uring.c` | the probe (`nish_uring_probe`, `ur_probe_once`, `ur_setup_flags`); the set and its rings (`nish_uring_open` and its option checks, `ur_add_ring`, `ur_free_ring`, `nish_uring_destroy`); the accepting job (`ur_top_up`); completions (`ur_complete`, `ur_reap`, `ur_service`, `ur_catch_up`, `nish_uring_wait`); receives and buffers (`ur_arm`, `ur_recycle`); sends (`nish_uring_send`, `ur_send_head`, `ur_drop_sends`, `ur_unlink_all`); slots (`ur_open_slot`, `nish_uring_close`); and the stubs a native build off Linux links (a wasm build compiles none of the file) |
 | `runtime/runtime-uring.c`, for S2 | what S2 adds for the slot layer: the bytes a slot has queued (`nish_uring_queued`), whether the set can take no more (`nish_uring_full`), and holding a slot's receive (`nish_uring_hold`, with `ur_complete`'s and `ur_catch_up`'s handling of a held slot) |
 | `runtime/runtime-net.c` | the slot layer: the handle encoding and its checks (`nr_encode`, `nr_decode`, `nr_listener`, `nr_vent_for` and the routing in each `nish_net_*` entry), a ring listener's set (`nr_open`, `nr_close_listener`), accepting (`nr_accept`), the events a wait takes in (`nr_pump`, `nr_pump_all`, `nr_dispatch`), a slot's receive and send queues (`nr_read`, `nr_send`), its close and its lingering sends (`nr_close`, `nr_finish`), readiness in a poll loop (`nr_ctl`, `nr_collect`, `nr_poll_wait` and the readiness list, `nr_append`, `nr_unlist`, `nr_touch`, `nr_unregister`, `nr_bits`), and `nish_net_ring_state` |
+| `runtime/runtime-uring.c`, for S3 | the rings made before the filter: `nish_uring_premake` and the pool it fills, a restricted ring's setup in `ur_make_ring` (`ur_ops_ok`, then `ur_restrict`, then enabling it last), `ur_add_ring` taking a premade ring, the pool's answers to the probe (`nish_uring_probe`) and to a set's open (`nish_uring_pooled`, and `nish_uring_open`'s defaults), and `nish_uring_test_submit`, the test-only hook compiled only with `-DNISH_URING_TEST_HOOKS`, which `scripts/build.sh` never passes |
+| `runtime/runtime-net.c`, for S3 | `nish_net_ring_premake`, which `nish_sandbox` calls with the soft descriptor limit as each ring's slots (`nr_slots`), and `nr_open`'s use of the pool: the pool's slots, and a failure that latches for good |
 | `tests/link/net_ring_*` | the S2 tests: Nish programs on ring listeners, each judged by its own exit status, and `client.mjs`, the node client that drives them from outside their descriptor limit |
 | `tests/runtime/uring-test.c` | the test: an echo server on the layer in a forked child, driven by plain-socket clients, one mode a check; and the `UR_SYS_SETUP` and `UR_SYS_REGISTER` hooks it compiles the layer with, which stand in for the two syscalls to force the answers a seccomp filter cannot |
 
 Out of scope: `runtime/runtime-net.c`'s descriptor and epoll paths, which a
 slot handle never reaches (`runtime.md` holds them), and `bench/fd-limit/`, the
-prototype the design measured. The rule for
-rings under `--sandbox` is S3's and lands with `sandbox.md`.
+prototype the design measured. Whether `--sandbox` makes rings at all, how
+many, and the filter's rows for the three io_uring calls are `sandbox.md`'s;
+this record holds the rings themselves.
 
 ## Threat model
 
@@ -126,6 +143,14 @@ authenticated or encrypted; that is TLS's job, above this.
 | NURING-27 | Low | `runtime/runtime-uring.c` (`ur_arm`, `ur_complete`, `nish_uring_hold`), `runtime/runtime-net.c` (`nr_dispatch`) | A slot whose receive a reset ended was armed again when a hold let it go, and its next receive's completion reported a second hangup, `res` 0, over the first: the slot's `-104` became an end of stream, and a program that read on saw a reset peer close cleanly. Found in S2's fifth review. | **Fixed before landing**: the terminal hangup marks the slot `ST_HUP`, which only an accept into the slot clears, and `ur_arm` arms no slot that carries it. In `nr_dispatch` the first hangup's `res` is kept and data after a hangup is dropped; those two guards cover a kernel hangup after a local -105 or -12, which no test can force, and are not tested apart. Before: with both reverted, "uring: runtime-uring.c hupheld" failed with "after the hangup and a hold let go, an event of kind 3 res 0". After: "uring: runtime-uring.c hupheld: a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)". The link-level program first written for it never failed with the fix reverted, since on 6.18.44 the hold's cancel always reaches the kernel before the reset's completion, and was dropped. |
 | NURING-28 | Medium | `runtime/runtime-uring.c` (`ur_transient_accept`, `ur_complete`), `runtime/runtime-net.c` (`nr_dispatch`, `nr_accept`) | An accept completion with an error other than `EAGAIN`, `EINTR`, `ECONNABORTED` or `EPROTO` stops the set accepting for good: `tcpAccept` on that listener answers the errno from then on, where a descriptor listener's `accept` answers each error once and a later call may succeed. That set includes `-ENOMEM` and `-ENOBUFS`, which are transient memory pressure: a resubmit would succeed once memory frees, and a descriptor listener recovers from them. A remote peer that drives the host into memory pressure, for instance with many connections each holding unread receive bytes (NURING-13), can so stop the listener, which the threat model's "stop it accepting" names. Found in S2's fifth review; its first reason, that these errors mean the set is broken, was found false in the sixth. | **Fixed before landing.** `ur_pressure_accept` takes `-ENOMEM` and `-ENOBUFS` as memory pressure: the set reports a `NISH_URING_ACCEPT_PAUSED` event once, submits no accept until a back-off of 10 ms, doubling to 640 ms while the pressure recurs and reset by the next accept that succeeds, has passed, and `nish_uring_sleep_ms` wakes its caller when it ends. Accepts already in flight stay with the kernel. `tcpAccept` answers the errno once, as a descriptor's `accept` does, then `-11` while paused (`nish_uring_full` is 0), then connections again. `EBADF`, `EINVAL` and `ENFILE` past the registered table do mean the listener or the set is broken and stay terminal. Before/after: `uring: runtime-uring.c nomem` turns two accept completions into `-ENOMEM`; before, the first came as `ACCEPT_FAILED` and the set stopped (`client 1's -ENOMEM came as kind 5 res -12, not a pause with -12`); after, each pauses once, the second with twice the first's back-off, a paused set does not ask for a wait at once, and the next client is accepted. The net side's once-only answer has no test of its own: a program cannot make the kernel answer `-ENOMEM`. |
 | NURING-29 | Low | `runtime/runtime-net.c` (`nr_encode`, `nr_decode`) | A slot handle carries its slot's generation in the bits the ring and slot indices leave, G = 2^20 / slots values, never fewer than 64. A stale handle answers `-EBADF` only until its slot has been reused G times; after that its generation matches again and it reaches the newer connection on that slot. Found in S2's sixth review. | **Decided.** A descriptor number is reused at the very next open, so a slot handle is already stricter than the descriptor a fallback listener hands out, and a program that uses a closed handle is in error either way. Widening the handle past 32 bits would change `tcpAccept`'s result type. The "Stale handles" checks below cover reuse within one generation. |
+| NURING-30 | Low | `runtime/runtime-uring.c` (`ur_make_ring`) | A restricted ring is made with `R_DISABLED`, `COOP_TASKRUN`, `TASKRUN_FLAG`, `SUBMIT_ALL` and `CQSIZE`, without `SINGLE_ISSUER` or `DEFER_TASKRUN`: `--sandbox` makes it on the main thread before any other runs, and a listener may take it on another, which `SINGLE_ISSUER` would refuse. So the kernel no longer enforces one submitting thread (the design's D3); the layer alone holds it, by the set's owning thread. A completion's task work runs on the submitting thread at its next transition, as `COOP_TASKRUN` sends it there, not only inside `io_uring_enter`; behaviour 4's cap of 20 completions an enter, which is `DEFER_TASKRUN`'s, does not apply; and a wait can still answer `-EINTR`, which the layer retries. | **Decided.** The alternatives make the ring on the thread that will use it, which needs `io_uring_setup` after the filter, the call S3 exists to kill, or tie `--sandbox` to one listening thread. Every property below holds on a restricted ring: "sandbox: a sandboxed NET_LISTEN_RING listener serves a loopback connection through a premade ring" runs the layer's accept, receive, send and close on one, and the `destroy` note's premise is restated for it there. |
+| NURING-31 | Low | `runtime/runtime-uring.c` (`nish_uring_premake`, `ur_add_ring`), `runtime/runtime-net.c` (`nish_net_ring_premake`, `nr_open`) | A sandboxed process holds a fixed capacity: `nish.netRings` rings (default 1, at most 64) of the soft `RLIMIT_NOFILE` slots read at preinit, before `nish_net_raise_nofile` raises it, capped at 16,384. A set that fills them stops growing and `tcpAccept` answers -23, as NURING-6's full set does; a ring a closed listener held is freed, not given back; and a ring listener opened once the pool is spent falls back to descriptors. A peer can fill the capacity as it can fill any set's. | **Decided** (the design's D2): the program names its capacity in `package.json`, and NL3058 refuses a count outside 1 to 64. Giving a ring back would need its registered table and buffer ring cleared under restrictions that refuse `io_uring_register` after enabling. Tests: "net_ring: under --sandbox a full set of premade rings answers -23 and makes no ring past them", and "sandbox: `nish.netRings` 3 premakes 3 rings". |
+| NURING-32 | Low | `runtime/runtime-sandbox.c` (`nish_sandbox`), `runtime/runtime-uring.c` (`nish_uring_premake`) | The rings are made in `.preinit_array`, before `main`, and their memory (each ring's SQ and CQ, its file table and 1,024 buffers of 2,048 bytes) is held for the life of the process, used or not. A failure there prints nothing and does not stop the program: it leaves the pool at that step's errno. | **Decided.** A sandboxed program that cannot have rings runs on descriptors, which is §5.4's fallback for every ring listener, and `netRingState()` answers the errno, so the cause is visible without a message on every start. Test: "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)" reads the answer of a premake that failed. |
+| NURING-33 | Medium | `runtime/runtime-uring.c` (`nish_uring_premake`) | A premade ring is made by `ur_make_ring` without `SINGLE_ISSUER` and `DEFER_TASKRUN` (NURING-30), and `nish_uring_probe` answers the pool's count under `--sandbox` without calling `ur_probe_once`. So nothing held a sandboxed process to the probe's floor: a 5.19 or 6.0 kernel, which has `R_DISABLED`, `SUBMIT_ALL`, `COOP_TASKRUN`, sparse `FILES2` and `PBUF_RING` but not `DEFER_TASKRUN`, made restricted rings and served on them, and reached CVE-2023-0469 (fixed in 6.1, in `ACCEPT` and `CLOSE` on direct descriptors), which "The kernel's record" puts below the floor. Found in S3's review. | **Fixed before landing**: `nish_uring_premake` runs `ur_probe_once` before it makes a ring, and a probe that fails leaves the pool at its errno, so a sandboxed process takes the same kernels an unsandboxed one does. Before: with the probe call removed, a build whose `UR_SYS_SETUP` refuses `DEFER_TASKRUN` as 6.0 does premade its ring ("ring-count: 1"). After: "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)". |
+| NURING-34 | Medium | `runtime/runtime-uring.c` (`ur_add_ring`) | A set takes a premade ring by `__atomic_fetch_add` on the pool's `next`, and answered `-ENOSPC` once that passed the count, but still counted. `ur_top_up` asks for a ring each time a full set's accepting ring has no room, which a peer holding every slot makes happen on every wait and completion, so the counter grew without bound: past 2^31 asks it overflowed, a signed overflow, and a negative `next` indexed `rings[]` before its start and handed the set a pointer from outside the pool. Found in S3's review. | **Decided, untested.** `ur_add_ring` reads `next` first and answers `-ENOSPC` without counting once the pool is spent, so `next` passes the count by at most the threads that raced to it. No test makes 2^31 asks, and "net_ring: under --sandbox a full set of premade rings answers -23 and makes no ring past them", which pins the spent pool's answer, passes on the code before the guard too: the guard is read, not tested. A hook that set the counter near `INT32_MAX` would test it, at the cost of a test-only entry point in the runtime. |
+| NURING-35 | High | `runtime/runtime-sandbox.c` (`nish_sb_seccomp`) | Under `--sandbox` with `net` and without `process.spawn`, the filter let `io_uring_enter` through on any descriptor, so the restrictions that hold the premade rings to six operations held only those rings. A ring made by an unconfined process, with no restriction, so every operation (`OPENAT`, `CONNECT`, `SENDMSG`, which seccomp's rows for the matching system calls never see; Landlock's rules still apply), entered the sandboxed process by inheritance across `exec`, since Linux 6.7 refuses to pass an io_uring descriptor over `SCM_RIGHTS`, and `io_uring_enter` drove it. A program granted `net` and withheld `process.spawn` with no ring listener got `io_uring_enter` as well, with no ring to use it on. Found in S3's review. | **Fixed before landing**: `nish_uring_premake` writes each ring's descriptor back, and the filter compares `io_uring_enter`'s first argument, the low word of `args[0]` (the kernel's `unsigned int fd`), with each and kills on any other; with no ring made, `io_uring_enter` kills like the other two calls. Before: with the filter letting `io_uring_enter` through by number alone, "sandbox: a ring a parent made unconfined and passed across exec cannot be entered: SIGSYS" answered `foreign-enter: ok` in both modes, and the two "io_uring_enter from ffi with net … dies of SIGSYS" checks answered `Bad file descriptor` from the kernel. After: all three die of SIGSYS, and the control, "sandbox: without --sandbox a ring inherited across exec is entered", shows the fixture enters the ring when no filter stands in the way. |
+| NURING-36 | Medium | `runtime/runtime-sandbox.c` (`nish_sb_seccomp`), `runtime/runtime-uring.c` (`ur_free_ring`) | The filter matches `io_uring_enter`'s descriptor number, not the file behind it. Code in the process that holds a foreign ring, inherited across `exec` as NURING-35 describes, can `dup2` or `dup3` it onto a premade ring's number, which closes the premade ring's descriptor and puts the foreign one there, or onto a number a closed ring listener freed, since `ur_free_ring` closes its ring's descriptor and the number stays on the filter's list. Plain `dup` and `fcntl(F_DUPFD)` reach the same freed number without naming it: each takes the lowest free descriptor, so closing a premade ring's descriptor, or a ring listener's, and duplicating the foreign ring puts it at that number. `io_uring_enter` on that number then drives an unrestricted ring. Found in S3's review, while fixing NURING-35. | **Open.** seccomp cannot see what file a descriptor names. Closing it needs either the premade rings' descriptors held at numbers the program cannot replace, for which we found no Linux interface (`dup2(2)` and `close(2)` take any open number the process holds, and seccomp filters see only the number), or `dup2`, `dup3` and `fcntl(F_DUPFD)` killed under the filter, which descriptor-handling programs need. What the foreign ring reaches is still bounded by Landlock's file and network rules and by the parent that made it, which must run unconfined, as the same user, and exec the sandboxed program with the ring open: the threat model's adversary is code inside the sandboxed process, and this needs a collaborator outside it. |
+| NURING-37 | Low | `runtime/runtime-net.c` (`nr_open`), `runtime/runtime-uring.c` (`nish_uring_premake`) | Under `--sandbox` the first ring listener's failure is latched whatever it is: `nr_open` latches any failure when `pooled` is set, so a transient first-open failure, `epoll_create1` answering `-EMFILE` or `calloc` `-ENOMEM`, taken before any ring was used, leaves every later listener on descriptors for good, and `nish_uring_premake` latches a transient probe errno at start the same way. That is the reverse of NURING-20's rule, under which any failure but a refusal leaves the state at 0. A count of 0, a sandbox that made no ring because `main` cannot reach `NET_LISTEN_RING` or `net` was withheld, answers `-EPERM`, the same as a kernel whose seccomp refuses `io_uring_setup`. Found in S3's review. | **Decided.** Under the filter no ring can be made later, so a pool that failed has nothing to retry with: asking again could only repeat the answer. The premake runs once, in `.preinit_array`, before the program can have filled its descriptor table or its memory, so the transient answers it can meet are the host's, not the program's. `-EPERM` for a count of 0 is the documented "rings not permitted" answer, which is what the sandbox means there; `netRingState()` callers that need the cause read `--sandbox`'s grants. |
 
 ## Properties verified
 
@@ -274,6 +299,32 @@ counts as a skip, never a pass.
   of `NET_LISTEN_RING` and `netRingState()`, and `reject_net_ring_arity` and
   `reject_net_ring_wasm` the programs the checker refuses.
 
+### What S3 adds
+
+S3's tests are in `tests/run.js`'s `sandbox` section, which links
+`tests/link/sandbox_fixtures/probe.c` beside Nish programs built with
+`--sandbox` and the runtime compiled with `-DNISH_URING_TEST_HOOKS`; each
+check that runs a ring runs under `--sandbox` and `--sandbox=best-effort`,
+and they are skipped, by name, on a kernel that refuses `io_uring_setup`
+unconfined. The filter's rows are `sandbox.md`'s; these are the rings'.
+
+- **The restriction.** "sandbox: a premade ring refuses IORING_OP_SOCKET with
+  EACCES", and the same for `CONNECT`, `OPENAT`, `READ`, `WRITE`, `SENDMSG`,
+  `MSG_RING` and `URING_CMD`; "sandbox: a premade ring refuses IOSQE_IO_LINK
+  with EACCES", and the same for `IO_DRAIN`, `IO_HARDLINK` and `ASYNC`. The
+  controls: "sandbox: a premade ring completes a NOP", and "sandbox: a
+  premade ring takes ACCEPT past its restriction", and the same for `RECV`,
+  `SEND`, `CLOSE`, `ASYNC_CANCEL` and `RECV` with each allowed flag.
+- **The layer on a restricted ring.** "sandbox: a sandboxed NET_LISTEN_RING
+  listener serves a loopback connection through a premade ring".
+- **The pool.** "sandbox: a main that reaches NET_LISTEN_RING holds 1 premade
+  ring", "sandbox: `nish.netRings` 3 premakes 3 rings", "sandbox: without
+  --sandbox a ring program premakes no ring (the control)", and in the
+  `net_ring` section "net_ring: under --sandbox a full set of premade rings
+  answers -23 and makes no ring past them" (NURING-31).
+- **The floor.** "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is
+  premade and the probe answers EINVAL (NURING-33)".
+
 ## The kernel's record
 
 The layer's safety rests on the kernel's io_uring as much as on its own
@@ -301,6 +352,25 @@ searched for `io_uring/`) and NVD. Since 2024 the CNA assigns a CVE to most
 io_uring fixes, so the full record is far longer than this; these are the
 memory-safety flaws in code S1 drives.
 
+**What the table covers, and what it does not.** The rows above are the
+records this review classified; each was read on 2026-11-16 in `cvelistV5`
+(a clone at commit `f63b785f`), and its fix commit placed on a mainline tag
+through `github.com/torvalds/linux`. The fixes for CVE-2021-3491,
+CVE-2022-29582, CVE-2022-1116, CVE-2022-3910, CVE-2023-21400 and
+CVE-2023-0240 also come from their CNAs and the Ubuntu, openEuler and Red Hat
+patch threads; where a point release is inferred from an affected range
+rather than read, the row says so. NVD, `git.kernel.org` and the kernel
+CNA's `vulns.git` were not reachable from the review and were not consulted.
+The list is not complete. The same `cvelistV5` clone holds 103 published
+Linux-CNA records from 2021 to 2026 whose `programFiles` name `io_uring/`,
+`fs/io_uring.c` or `fs/io-wq` (30 published in 2024, 37 in 2025 and 37 so far
+in 2026), 145 Linux-CNA records that name io_uring anywhere, and about 35
+from other CNAs (MITRE, Google, Canonical, Red Hat, Android), most from 2021
+to 2023. **Unclassified**: every one of those records not named in this
+section; they were counted, not read one by one, so whether one reaches the
+layer's operations is unknown. A stage that reaches a new operation, flag or
+registration reads them against it.
+
 **The floor the probe sets.** `ur_probe_once` accepts a kernel only if setup
 takes `SINGLE_ISSUER` and `DEFER_TASKRUN` (6.0 and 6.1), sparse file
 registration and `PBUF_RING` register (5.19), and the probe lists the five
@@ -310,15 +380,21 @@ on a vendor kernel that took the feature without the fix.
 
 | CVE | What, in code S1 reaches | Fixed in | S1 |
 | --- | --- | --- | --- |
-| CVE-2023-0469 | use after free installing a fixed file (`io_install_fixed_file`): `ACCEPT` and `CLOSE` on direct descriptors | 6.1 | reached by S1's operations; fixed before 6.1 was released, so below the floor |
+| CVE-2023-0469 | a reference underflow installing a fixed file (`io_install_fixed_file`, an extra `fput`; Red Hat records it as a use after free): `ACCEPT` and `CLOSE` on direct descriptors | 6.1 (fix `9d94c04c0db0`, first in 6.1-rc7; introduced by `61c1b44a21d7` in 5.19, so 5.19 and 6.0 are affected, and no upstream stable backport to either was found) | reached by S1's operations; fixed before 6.1 was released, so below the floor |
 | CVE-2023-1872 | `io_file_get_fixed` without the ring lock in io-wq: a use after free on fixed files | 5.18 | below the floor |
 | CVE-2023-3389 | cancelling a poll request that has a linked timeout races the timeout: a use after free in an hrtimer | 6.4 (5.13 to 6.3 affected; 5.10.162 to 5.10.184 too) | not reached: above the floor, but it needs a linked timeout (`IOSQE_IO_LINK` with `LINK_TIMEOUT`), and the layer links no requests and submits no timeout |
-| CVE-2022-2602 | registered files and the unix socket garbage collector: a use after free | 6.1 | not reached: it needs an io_uring descriptor passed over a unix socket, and a TCP peer cannot pass one |
+| CVE-2022-2602 | registered files and the unix socket garbage collector: a use after free | 6.1 | not reached: it needs an io_uring descriptor passed over a unix socket, and a TCP peer cannot pass one; since CVE-2023-52654's fix (`705318a99a13`, 6.7; 6.6.7, 6.1.68, 5.15.143, 5.10.204, 5.4.264) `sendmsg` refuses one with `EINVAL` |
 | CVE-2024-0582 | `PBUF_RING` with kernel-allocated memory (`IOU_PBUF_RING_MMAP`), unregistered while mapped: a use after free | 6.7 (6.4 to 6.6 affected) | not reached: the layer maps the buffer ring's memory itself and never passes the flag |
 | CVE-2023-6560 | `IORING_SETUP_NO_MMAP`'s ring mapping: out of bounds | 6.7 | not reached: the layer maps its rings |
 | CVE-2023-2598 | registered fixed buffers (`REGISTER_BUFFERS`): out of bounds | 6.4 | not reached: no fixed buffers |
 | CVE-2023-46862 | `SQPOLL` and the fdinfo reader: a null dereference | 6.6 | not reached: no `SQPOLL` |
 | CVE-2021-41073 | classic provided buffers (`IOSQE_BUFFER_SELECT`) on a read: type confusion | 5.15 | not reached: receives only, from a buffer ring |
+| CVE-2021-3491 | `PROVIDE_BUFFERS` lengths past `MAX_RW_COUNT`: a heap overflow | 5.13 (`d1f82808877b`; 5.12.4, 5.11.21, 5.10.37) | not reached: below the floor, and the layer never submits `PROVIDE_BUFFERS` (its buffer ring is registered with `PBUF_RING`) |
+| CVE-2022-29582 | a timeout racing its completion (`TIMEOUT`, `LINK_TIMEOUT`): a use after free | 5.18 (`e677edbcabee`; 5.17.3) | not reached: below the floor, and the layer submits no timeout |
+| CVE-2022-1116 | 5.4 only: `req->fs` taken on async offload and never put, so `fs->users` overflows | 5.4.189 (`1a623d361ffe`, a 5.4-only patch) | not reached: the code exists only in 5.4, far below the floor |
+| CVE-2022-3910 | `MSG_RING` on a fixed file puts the file wrongly | 6.0 (`fc7222c3a9f5`, first in 6.0-rc6; 5.18 to 5.19.10 affected) | not reached: below the floor, and the layer never submits `MSG_RING` |
+| CVE-2023-21400 | `IOPOLL` rings: deferred work run without the lock, a double free | 5.18 (by a larger rework, no single commit); stable fixes `810e401b34c4` (5.10.188) and `fb348857e7b6` (5.15, point release not confirmed) | not reached: the layer never sets `IORING_SETUP_IOPOLL`, and the code is in 5.10 and 5.15 only |
+| CVE-2023-0240 | 5.10 only: the `io_identity` reference count in `io_prep_async_work`: a use after free | 5.10.162 (`788d0824269b`; the CNA marks 5.10 to 5.10.161 affected; no mainline fix was confirmed) | not reached: the code exists only in 5.10, below the floor |
 
 The rows marked "below the floor" are reachable only on a kernel older than
 the probe accepts, or a vendor kernel that backported features without
@@ -343,14 +419,42 @@ time: it sets no `IORING_RECVSEND_BUNDLE`, registers its buffer ring without
 `io_ring_buffers_peek` posted to the io_uring list in July 2026 is in the
 bundle path too.
 
-**What S3 adds.** The framing of this record around a restricted ring is
-S3's, with `sandbox.md` (the design's §6.2): under `--sandbox` each ring is
-created with `IORING_SETUP_R_DISABLED` and given
-`IORING_REGISTER_RESTRICTIONS` (the five operations above and `NOP`; no
-registration after enabling), and the filter then kills `io_uring_setup` and
-`io_uring_register`. S1 makes no restricted ring, so this section lists what
-S1's own rings reach; S3 extends it with the restriction check's own record
-and with which rows a restricted ring of those six opcodes still reaches.
+**What S3 adds.** Under `--sandbox` each ring is created with
+`IORING_SETUP_R_DISABLED`, given `IORING_REGISTER_RESTRICTIONS` (the five
+operations above and `NOP`; the submission flags `FIXED_FILE`,
+`BUFFER_SELECT` and `CQE_SKIP_SUCCESS`; no registration after enabling), its
+table, buffer ring and eventfd registered, and enabled, all before the
+filter loads; the filter then kills `io_uring_setup` and `io_uring_register`.
+The setup flags drop `SINGLE_ISSUER` and `DEFER_TASKRUN` and add
+`COOP_TASKRUN` (NURING-30), and the probe still sets the floor (NURING-33).
+What that changes in the table above, row by row:
+
+- **Still reached**, by the operations a restricted ring allows:
+  CVE-2023-0469 and CVE-2023-1872 (fixed files, below the floor), and the
+  multishot receive from a buffer ring that S2's second look covers. A
+  restriction narrows what a program can submit, not the code these six
+  operations run.
+- **Still not reached, now by the restriction too**: CVE-2023-3389
+  (`IOSQE_IO_LINK` completes with `-EACCES`, and `LINK_TIMEOUT` is not an
+  allowed operation), CVE-2021-41073 (`READ` is refused), CVE-2023-2598
+  (`REGISTER_BUFFERS` needs `io_uring_register`, which the filter kills),
+  CVE-2023-46862 and CVE-2023-6560 (setup flags, and setup is killed after
+  the rings are made), CVE-2024-0582 (the layer's buffer ring is its own
+  memory, and no registration can change it once enabled).
+- **Not reached, by the peer**: CVE-2022-2602, as before.
+
+The setup-time code (`R_DISABLED`, `REGISTER_RESTRICTIONS`,
+`REGISTER_ENABLE_RINGS`) runs before the filter, on the program's own
+arguments, so a remote peer reaches none of it. Its own record, both
+published by the Linux CNA and read in `cvelistV5` on 2026-11-16:
+CVE-2026-99096 (a ring created disabled while its task had task-level
+restrictions, added by `ed82f35b926b`, took any registration before it was
+enabled; 7.0 affected, fixed in 7.2.11 and 7.3; the record says per-ring
+restrictions on a disabled ring work as before) and CVE-2026-80713 (`exec`
+freed a task's task-level restrictions; 7.0 affected, fixed in 7.1.8 and
+7.2). Neither is reached: the layer uses per-ring
+restrictions, never the task-level ones, the filter kills
+`io_uring_register`, and without `process.spawn` it kills `execve`.
 
 ## Notes
 
@@ -366,7 +470,13 @@ send record, in flight or not, and unmaps the buffers. Nothing can copy from
 a freed record or into an unmapped buffer meanwhile: the rings are made with
 `IORING_SETUP_DEFER_TASKRUN`, so a send or receive waiting on its socket is
 retried only as task work on the thread that owns the ring, which is the one
-running `destroy`. This rests on one assumption about the kernel: that
+running `destroy`. Under `--sandbox` a ring has no `DEFER_TASKRUN`
+(NURING-30): there `COOP_TASKRUN` queues the same retries as task work on
+the thread that submitted them, which is still the owning thread, but runs
+them at that thread's next return from the kernel rather than only inside
+`io_uring_enter`; the premise holds because `destroy` runs on that thread,
+and is the layer's to keep, since no `SINGLE_ISSUER` checks it. This rests
+on one assumption about the kernel: that
 closing a ring cancels the task work still queued on it rather than running
 it, from a fallback worker, after `close` returns. The code cannot show that
 window closed on every kernel the probe accepts. S2 makes `destroy`

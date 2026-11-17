@@ -1195,7 +1195,7 @@ struct HttpBodyReader (class) size=16 align=8 exported
   constructor -> @nish.HttpBodyReader.constructor
   method read -> @nish.HttpBodyReader.read
   method readAll -> @nish.HttpBodyReader.readAll
-struct FetchSyncClient (class) size=160 align=8 exported
+struct FetchSyncClient (class) size=168 align=8 exported
   field options: HttpOptions index=0 offset=0
   field errorText: string index=1 offset=8 initialized
   field httpProxy: string index=2 offset=16 initialized
@@ -1209,21 +1209,22 @@ struct FetchSyncClient (class) size=160 align=8 exported
   field ready: i32[] index=10 offset=80
   field rbuf: u8[] index=11 offset=88
   field plain: u8[] index=12 offset=96
-  field deadline: i64 index=13 offset=104 initialized
-  field error: i32 index=14 offset=112 initialized
-  field fd: i32 index=15 offset=116 initialized
-  field loop: i32 index=16 offset=120 initialized
-  field watched: i32 index=17 offset=124 initialized
-  field watchedEvents: i32 index=18 offset=128 initialized
-  field generation: i32 index=19 offset=132 initialized
-  field bodyError: i32 index=20 offset=136 initialized
-  field pendOff: i32 index=21 offset=140 initialized
-  field pendLen: i32 index=22 offset=144 initialized
-  field reused: boolean index=23 offset=148 initialized
-  field gotByte: boolean index=24 offset=149 initialized
-  field lost: boolean index=25 offset=150 initialized
-  field bodyOpen: boolean index=26 offset=151 initialized
-  field once: boolean index=27 offset=152 initialized
+  field sink: u8[] index=13 offset=104
+  field deadline: i64 index=14 offset=112 initialized
+  field error: i32 index=15 offset=120 initialized
+  field fd: i32 index=16 offset=124 initialized
+  field loop: i32 index=17 offset=128 initialized
+  field watched: i32 index=18 offset=132 initialized
+  field watchedEvents: i32 index=19 offset=136 initialized
+  field generation: i32 index=20 offset=140 initialized
+  field bodyError: i32 index=21 offset=144 initialized
+  field pendOff: i32 index=22 offset=148 initialized
+  field pendLen: i32 index=23 offset=152 initialized
+  field reused: boolean index=24 offset=156 initialized
+  field gotByte: boolean index=25 offset=157 initialized
+  field lost: boolean index=26 offset=158 initialized
+  field bodyOpen: boolean index=27 offset=159 initialized
+  field once: boolean index=28 offset=160 initialized
   constructor -> @nish.FetchSyncClient.constructor
   method setProxies -> @nish.FetchSyncClient.setProxies
   method fetch -> @nish.FetchSyncClient.fetch
@@ -1366,7 +1367,7 @@ function HttpBodyReader.constructor(this: HttpBodyReader, client: FetchSyncClien
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: client generation
   pointer this: size=16 writesThrough=true captured=false
-  pointer client: size=160 writesThrough=true captured=true
+  pointer client: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function HttpBodyReader.read(this: HttpBodyReader, buf: u8[], off: i32, n: i32): i32 -> @nish.HttpBodyReader.read [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1403,23 +1404,23 @@ function FetchSyncClient.constructor(this: FetchSyncClient, options: HttpOptions
   sharedWrite: via nish.httpClientEnvProxies
   escaping: options
   calls: nish.httpClientEnvProxies nish.httpClientParser nish_panic
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   pointer options: size=64 writesThrough=true captured=true passedTo=nish.httpClientParser#0 nish.httpClientEnvProxies#0
   stackSites=0 stackLocals=0
   callee +0:19 httpClientParser -> @nish.httpClientParser
-  local +4:11 proxies: string[] (const)
-  callee +4:31 httpClientEnvProxies -> @nish.httpClientEnvProxies
+  local +5:11 proxies: string[] (const)
+  callee +5:31 httpClientEnvProxies -> @nish.httpClientEnvProxies
 function FetchSyncClient.setProxies(this: FetchSyncClient, httpProxy: string, httpsProxy: string, noProxy: string): void -> @nish.FetchSyncClient.setProxies [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: httpProxy httpsProxy noProxy
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function FetchSyncClient.fetch(this: FetchSyncClient, req: HttpRequest): HttpResponse | null -> @nish.FetchSyncClient.fetch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.FetchSyncClient.drain nish.FetchSyncClient.drop nish.FetchSyncClient.exchange nish.FetchSyncClient.fail nish.FetchSyncClient.refuse nish.HttpClientHop.constructor nish.HttpResponse.header nish.httpClientDeadline nish.httpClientIsRedirect nish.httpClientRedirect nish.httpClientTarget nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=true passedTo=nish.FetchSyncClient.drop#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.exchange#0 nish.FetchSyncClient.refuse#0 nish.FetchSyncClient.drain#0
+  pointer this: size=168 writesThrough=true captured=true passedTo=nish.FetchSyncClient.drop#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.exchange#0 nish.FetchSyncClient.refuse#0 nish.FetchSyncClient.drain#0
   pointer req: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   callee +4:7 FetchSyncClient.drop -> @nish.FetchSyncClient.drop
@@ -1443,7 +1444,7 @@ function FetchSyncClient.close(this: FetchSyncClient): void -> @nish.FetchSyncCl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.FetchSyncClient.drop nish_net_close
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.drop#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.drop#0
   stackSites=0 stackLocals=0
   callee -3:5 FetchSyncClient.drop -> @nish.FetchSyncClient.drop
 function FetchSyncClient.exchange(this: FetchSyncClient, url: Url, method: string, names: string[], values: string[], body: u8[] | null): HttpResponse | null -> @nish.FetchSyncClient.exchange [exported method]
@@ -1451,7 +1452,7 @@ function FetchSyncClient.exchange(this: FetchSyncClient, url: Url, method: strin
   sharedWrite: +0:7
   escaping: method
   calls: nish.FetchSyncClient.drop nish.FetchSyncClient.open nish.FetchSyncClient.send nish.httpClientIdempotent
-  pointer this: size=160 writesThrough=true captured=true passedTo=nish.FetchSyncClient.open#0 nish.FetchSyncClient.send#0 nish.FetchSyncClient.drop#0
+  pointer this: size=168 writesThrough=true captured=true passedTo=nish.FetchSyncClient.open#0 nish.FetchSyncClient.send#0 nish.FetchSyncClient.drop#0
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.FetchSyncClient.open#1 nish.FetchSyncClient.send#1
   pointer names: size=0 writesThrough=false captured=false passedTo=nish.FetchSyncClient.send#3
   pointer values: size=0 writesThrough=false captured=false passedTo=nish.FetchSyncClient.send#4
@@ -1468,7 +1469,7 @@ function FetchSyncClient.open(this: FetchSyncClient, url: Url): boolean -> @nish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.FetchSyncClient.dial nish.FetchSyncClient.drop nish.FetchSyncClient.fail nish.FetchSyncClient.loadTrust nish.FetchSyncClient.quiet nish.FetchSyncClient.secure nish.FetchSyncClient.tunnel nish.Http1ResponseParser.tunnelBytes nish.httpClientParser nish.httpClientRoute nish.httpClientSamePolicy nish_str_eq
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.quiet#0 nish.FetchSyncClient.drop#0 nish.FetchSyncClient.loadTrust#0 nish.FetchSyncClient.dial#0 nish.FetchSyncClient.tunnel#0 nish.FetchSyncClient.drop#0 nish.FetchSyncClient.secure#0 nish.FetchSyncClient.drop#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.quiet#0 nish.FetchSyncClient.drop#0 nish.FetchSyncClient.loadTrust#0 nish.FetchSyncClient.dial#0 nish.FetchSyncClient.tunnel#0 nish.FetchSyncClient.drop#0 nish.FetchSyncClient.secure#0 nish.FetchSyncClient.drop#0
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientRoute#0
   stackSites=1 stackLocals=1
   local -22:11 fault: HttpClientFault (const)
@@ -1496,7 +1497,7 @@ function FetchSyncClient.loadTrust(this: FetchSyncClient): boolean -> @nish.Fetc
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.FetchSyncClient.fail nish.httpClientLoadTrust
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
   stackSites=1 stackLocals=1
   local -1:11 fault: HttpClientFault (const)
   callee +0:18 httpClientLoadTrust -> @nish.httpClientLoadTrust
@@ -1506,7 +1507,7 @@ function FetchSyncClient.secure(this: FetchSyncClient, host: string, early: u8[]
   sharedWrite: +0:5
   escaping: host
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.flushTls nish.FetchSyncClient.receiveTls nish.httpClientTlsOpening nish.httpClientTlsStart nish.httpClientTlsVerify nish_panic
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.receiveTls#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.receiveTls#0
   pointer early: size=0 writesThrough=false captured=false passedTo=nish.httpClientTlsStart#1
   stackSites=1 stackLocals=1
   local -6:11 trust: TlsClientTrust | null (const)
@@ -1525,7 +1526,7 @@ function FetchSyncClient.tunnel(this: FetchSyncClient, host: string, port: i32, 
   sharedWrite: +0:5
   escaping: host port
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.head nish.FetchSyncClient.pump nish.FetchSyncClient.writeAll nish.Http1ResponseParser.expect nish.httpClientConnectHead nish.httpClientHostText nish_str_concat nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.head#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.pump#0 nish.FetchSyncClient.pump#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.head#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.pump#0 nish.FetchSyncClient.pump#0
   pointer proxy: size=64 writesThrough=false captured=false passedTo=nish.httpClientConnectHead#2
   stackSites=1 stackLocals=1
   local -6:11 fault: HttpClientFault (const)
@@ -1546,7 +1547,7 @@ function FetchSyncClient.send(this: FetchSyncClient, url: Url, method: string, n
   sharedWrite: +0:5
   escaping: method
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.head nish.FetchSyncClient.writeAll nish.Http1ResponseParser.expect nish.HttpBodyReader.constructor nish.HttpResponse.constructor nish.httpClientRequestHead nish.httpClientUrlText nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_eq
-  pointer this: size=160 writesThrough=true captured=true passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.head#0 nish.HttpBodyReader.constructor#1
+  pointer this: size=168 writesThrough=true captured=true passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.writeAll#0 nish.FetchSyncClient.head#0 nish.HttpBodyReader.constructor#1
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientRequestHead#0 nish.httpClientUrlText#0
   pointer names: size=0 writesThrough=false captured=false passedTo=nish.httpClientRequestHead#2
   pointer values: size=0 writesThrough=false captured=false passedTo=nish.httpClientRequestHead#3
@@ -1570,7 +1571,7 @@ function FetchSyncClient.head(this: FetchSyncClient): i32 -> @nish.FetchSyncClie
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.FetchSyncClient.pump
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.pump nish_str_concat nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.pump#0 nish.FetchSyncClient.pump#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.pump#0 nish.FetchSyncClient.pump#0 nish.FetchSyncClient.fail#0
   stackSites=0 stackLocals=0
   local +0:9 event: i32 (let)
   callee +0:22 FetchSyncClient.pump -> @nish.FetchSyncClient.pump
@@ -1580,7 +1581,7 @@ function FetchSyncClient.pump(this: FetchSyncClient): i32 -> @nish.FetchSyncClie
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.fill nish.Http1ResponseParser.next nish.httpClientParserFault
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fill#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fill#0 nish.FetchSyncClient.fail#0
   stackSites=1 stackLocals=1
   local -9:9 event: i32 (let)
   callee -9:22 Http1ResponseParser.next -> @nish.Http1ResponseParser.next
@@ -1593,7 +1594,7 @@ function FetchSyncClient.fill(this: FetchSyncClient): boolean -> @nish.FetchSync
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.FetchSyncClient.failTls nish.FetchSyncClient.flushTls nish.FetchSyncClient.overdue nish.FetchSyncClient.readRaw nish.FetchSyncClient.receiveTls nish.Http1ResponseParser.feed nish.Http1ResponseParser.finish nish.TlsRecordClient.read
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.overdue#0 nish.FetchSyncClient.readRaw#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.receiveTls#0 nish.FetchSyncClient.failTls#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.overdue#0 nish.FetchSyncClient.readRaw#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.receiveTls#0 nish.FetchSyncClient.failTls#0
   stackSites=0 stackLocals=0
   callee -7:9 FetchSyncClient.overdue -> @nish.FetchSyncClient.overdue
   local -4:11 conn: TlsRecordClient | null (const)
@@ -1613,7 +1614,7 @@ function FetchSyncClient.readRaw(this: FetchSyncClient, want: i32): i32 -> @nish
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:18
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.failWait nish.FetchSyncClient.readDeadline nish.FetchSyncClient.wait nish_net_read nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.readDeadline#0 nish.FetchSyncClient.wait#0 nish.FetchSyncClient.failWait#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.readDeadline#0 nish.FetchSyncClient.wait#0 nish.FetchSyncClient.failWait#0 nish.FetchSyncClient.fail#0
   stackSites=0 stackLocals=0
   local -1:11 until: i64 (const)
   callee -1:24 FetchSyncClient.readDeadline -> @nish.FetchSyncClient.readDeadline
@@ -1626,7 +1627,7 @@ function FetchSyncClient.receiveTls(this: FetchSyncClient, conn: TlsRecordClient
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.FetchSyncClient.fail
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.readRaw nish.TlsRecordClient.abort nish.TlsRecordClient.end nish.TlsRecordClient.receive nish.TlsRecordClient.space
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.readRaw#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.readRaw#0
   pointer conn: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.space#0 nish.TlsRecordClient.abort#0 nish.TlsRecordClient.end#0 nish.TlsRecordClient.receive#0
   stackSites=0 stackLocals=0
   local +0:11 room: i32 (const)
@@ -1642,7 +1643,7 @@ function FetchSyncClient.flushTls(this: FetchSyncClient, conn: TlsRecordClient):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.FetchSyncClient.writeRaw
   calls: nish.FetchSyncClient.writeRaw nish.TlsRecordClient.abort nish.TlsRecordClient.consume nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.writeRaw#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.writeRaw#0
   pointer conn: size=184 writesThrough=true captured=false passedTo=nish.TlsRecordClient.abort#0 nish.TlsRecordClient.consume#0
   stackSites=0 stackLocals=0
   local +0:13 len: i32 (const)
@@ -1653,7 +1654,7 @@ function FetchSyncClient.failTls(this: FetchSyncClient, conn: TlsRecordClient): 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.FetchSyncClient.fail
   calls: nish.FetchSyncClient.fail nish.httpClientTlsFault
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
   pointer conn: size=184 writesThrough=false captured=false passedTo=nish.httpClientTlsFault#0
   stackSites=1 stackLocals=1
   local +0:11 fault: HttpClientFault (const)
@@ -1664,7 +1665,7 @@ function FetchSyncClient.writeAll(this: FetchSyncClient, bytes: u8[], off: i32, 
   sharedWrite: +0:9
   escaping: len off
   calls: nish.FetchSyncClient.failTls nish.FetchSyncClient.flushTls nish.FetchSyncClient.writeRaw nish.TlsRecordClient.write nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.writeRaw#0 nish.FetchSyncClient.failTls#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.flushTls#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.writeRaw#0 nish.FetchSyncClient.failTls#0 nish.FetchSyncClient.flushTls#0 nish.FetchSyncClient.flushTls#0
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.FetchSyncClient.writeRaw#1 nish.TlsRecordClient.write#1
   stackSites=0 stackLocals=0
   local -11:11 conn: TlsRecordClient | null (const)
@@ -1681,7 +1682,7 @@ function FetchSyncClient.writeRaw(this: FetchSyncClient, bytes: u8[], off: i32, 
   sharedWrite: +0:9
   escaping: off
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.failWait nish.FetchSyncClient.overdue nish.FetchSyncClient.readDeadline nish.FetchSyncClient.wait nish_net_write nish_panic_overflow nish_panic_slice nish_str_concat nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.overdue#0 nish.FetchSyncClient.wait#0 nish.FetchSyncClient.readDeadline#0 nish.FetchSyncClient.failWait#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.overdue#0 nish.FetchSyncClient.wait#0 nish.FetchSyncClient.readDeadline#0 nish.FetchSyncClient.failWait#0 nish.FetchSyncClient.fail#0
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -16:9 at: i32 (let)
@@ -1698,7 +1699,7 @@ function FetchSyncClient.dial(this: FetchSyncClient, host: string, port: i32): i
   sharedWrite: via nish_monotonic_nanos
   escaping: host port
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.failWait nish.FetchSyncClient.unwatch nish.FetchSyncClient.wait nish.copyBytes nish.httpClientResolve nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.wait#0 nish.FetchSyncClient.unwatch#0 nish.FetchSyncClient.failWait#0 nish.FetchSyncClient.unwatch#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0 nish.FetchSyncClient.fail#0 nish.FetchSyncClient.wait#0 nish.FetchSyncClient.unwatch#0 nish.FetchSyncClient.failWait#0 nish.FetchSyncClient.unwatch#0 nish.FetchSyncClient.fail#0
   stackSites=1 stackLocals=1
   local +0:11 start: i64 (const)
   local +1:11 budget: i32 (const)
@@ -1727,7 +1728,7 @@ function FetchSyncClient.wait(this: FetchSyncClient, fd: i32, events: i32, until
   sharedWrite: +0:26
   escaping: code events fd until
   calls: nish.FetchSyncClient.watch nish_monotonic_nanos nish_panic_overflow nish_poll_wait
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.watch#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.watch#0
   stackSites=0 stackLocals=0
   callee -15:10 FetchSyncClient.watch -> @nish.FetchSyncClient.watch
   local -12:9 end: i64 (let)
@@ -1740,20 +1741,20 @@ function FetchSyncClient.watch(this: FetchSyncClient, fd: i32, events: i32): boo
   sharedWrite: +0:7
   escaping: events fd
   calls: nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function FetchSyncClient.quiet(this: FetchSyncClient): boolean -> @nish.FetchSyncClient.quiet [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.FetchSyncClient.leftover nish.FetchSyncClient.watch nish_poll_wait
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.leftover#0 nish.FetchSyncClient.watch#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.leftover#0 nish.FetchSyncClient.watch#0
   stackSites=0 stackLocals=0
   callee -2:8 FetchSyncClient.leftover -> @nish.FetchSyncClient.leftover
   callee -1:7 FetchSyncClient.watch -> @nish.FetchSyncClient.watch
 function FetchSyncClient.leftover(this: FetchSyncClient): boolean -> @nish.FetchSyncClient.leftover [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1ResponseParser.buffered
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 conn: TlsRecordClient | null (const)
   callee +4:12 Http1ResponseParser.buffered -> @nish.Http1ResponseParser.buffered
@@ -1761,41 +1762,41 @@ function FetchSyncClient.unwatch(this: FetchSyncClient, fd: i32): void -> @nish.
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_poll_remove
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function FetchSyncClient.readDeadline(this: FetchSyncClient): i64 -> @nish.FetchSyncClient.readDeadline [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   calls: nish_monotonic_nanos nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 ms: i32 (const)
 function FetchSyncClient.drop(this: FetchSyncClient): void -> @nish.FetchSyncClient.drop [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.FetchSyncClient.unwatch nish.httpClientTlsClose nish_net_close
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.unwatch#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.unwatch#0
   stackSites=0 stackLocals=0
   local -3:11 conn: TlsRecordClient | null (const)
   callee -1:7 httpClientTlsClose -> @nish.httpClientTlsClose
   callee +3:7 FetchSyncClient.unwatch -> @nish.FetchSyncClient.unwatch
 function FetchSyncClient.drain(this: FetchSyncClient): void -> @nish.FetchSyncClient.drain [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   calls: nish.FetchSyncClient.drop nish.FetchSyncClient.readBody nish_panic
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.readBody#0 nish.FetchSyncClient.drop#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.readBody#0 nish.FetchSyncClient.drop#0
   stackSites=0 stackLocals=0
-  local -12:11 sink: u8[] (const)
-  local -11:9 left: i32 (let)
-  local -9:13 n: i32 (const)
-  callee -9:22 FetchSyncClient.readBody -> @nish.FetchSyncClient.readBody
-  callee -2:7 FetchSyncClient.drop -> @nish.FetchSyncClient.drop
+  local +2:11 sink: u8[] (const)
+  local +3:9 left: i32 (let)
+  local +5:13 n: i32 (const)
+  callee +5:22 FetchSyncClient.readBody -> @nish.FetchSyncClient.readBody
+  callee +12:7 FetchSyncClient.drop -> @nish.FetchSyncClient.drop
 function FetchSyncClient.readBody(this: FetchSyncClient, generation: i32, buf: u8[], off: i32, n: i32): i32 -> @nish.FetchSyncClient.readBody [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: n off
   calls: nish.FetchSyncClient.leftover nish.FetchSyncClient.pump nish.FetchSyncClient.release nish.Http1ResponseParser.keepAlive nish.copyBytes nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.pump#0 nish.FetchSyncClient.release#0 nish.FetchSyncClient.leftover#0 nish.FetchSyncClient.release#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.pump#0 nish.FetchSyncClient.release#0 nish.FetchSyncClient.leftover#0 nish.FetchSyncClient.release#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0
   stackSites=0 stackLocals=0
   local -3:13 event: i32 (const)
@@ -1810,7 +1811,7 @@ function FetchSyncClient.release(this: FetchSyncClient): void -> @nish.FetchSync
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.FetchSyncClient.close
   calls: nish.FetchSyncClient.close nish.FetchSyncClient.drop
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.close#0 nish.FetchSyncClient.drop#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.close#0 nish.FetchSyncClient.drop#0
   stackSites=0 stackLocals=0
   callee +0:7 FetchSyncClient.close -> @nish.FetchSyncClient.close
   callee +2:7 FetchSyncClient.drop -> @nish.FetchSyncClient.drop
@@ -1818,7 +1819,7 @@ function FetchSyncClient.refuseBody(this: FetchSyncClient, limit: i32): void -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.FetchSyncClient.fail nish.FetchSyncClient.release nish_str_concat nish_str_from_i32
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.release#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.release#0 nish.FetchSyncClient.fail#0
   stackSites=0 stackLocals=0
   callee -2:5 FetchSyncClient.release -> @nish.FetchSyncClient.release
   callee -1:5 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
@@ -1826,7 +1827,7 @@ function FetchSyncClient.overdue(this: FetchSyncClient): boolean -> @nish.FetchS
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   calls: nish.FetchSyncClient.failWait nish_monotonic_nanos
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.failWait#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.failWait#0
   stackSites=0 stackLocals=0
   callee +0:7 FetchSyncClient.failWait -> @nish.FetchSyncClient.failWait
 function FetchSyncClient.failWait(this: FetchSyncClient, code: i32, text: string): void -> @nish.FetchSyncClient.failWait [exported method]
@@ -1834,7 +1835,7 @@ function FetchSyncClient.failWait(this: FetchSyncClient, code: i32, text: string
   sharedWrite: via nish.FetchSyncClient.fail
   escaping: code text
   calls: nish.FetchSyncClient.fail nish.httpClientWaitText
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.fail#0
   stackSites=0 stackLocals=0
   callee +0:5 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
   callee +0:21 httpClientWaitText -> @nish.httpClientWaitText
@@ -1843,7 +1844,7 @@ function FetchSyncClient.refuse(this: FetchSyncClient, code: i32, text: string):
   sharedWrite: via nish.FetchSyncClient.drop
   escaping: code text
   calls: nish.FetchSyncClient.drop nish.FetchSyncClient.fail
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.FetchSyncClient.drop#0 nish.FetchSyncClient.fail#0
+  pointer this: size=168 writesThrough=true captured=false passedTo=nish.FetchSyncClient.drop#0 nish.FetchSyncClient.fail#0
   stackSites=0 stackLocals=0
   callee +0:5 FetchSyncClient.drop -> @nish.FetchSyncClient.drop
   callee +1:5 FetchSyncClient.fail -> @nish.FetchSyncClient.fail
@@ -1852,7 +1853,7 @@ function FetchSyncClient.fail(this: FetchSyncClient, code: i32, text: string): v
   sharedWrite: +0:5
   escaping: code
   calls: nish.httpErrorName nish_str_concat
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +1:25 httpErrorName -> @nish.httpErrorName
 function fetchSync(req: HttpRequest, options: HttpOptions): HttpResponse | null -> @nish.fetchSync [exported]

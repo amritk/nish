@@ -31,7 +31,7 @@
 //     second (`node_api_module_get_api_version_v1`);
 //   - the names `isCLibrarySymbol` lists:
 //       - every symbol the runtime's objects leave undefined, natively, with
-//         `-DNISH_THREADS` and for wasm32-wasi, and every one
+//         `-DNISH_THREADS`, with `-DNISH_ARENA_DEBUG` and for wasm32-wasi, and every one
 //         `runtime/runtime-wasm.c` defines or leaves undefined;
 //       - what the runtime calls only on Darwin and the BSDs, which no Linux
 //         run can list: `accept`, `getentropy`, `kevent`, `kqueue`, `pipe`;
@@ -523,6 +523,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "lseek" ||
   name === "lstat" ||
   name === "lstat64" ||
+  name === "madvise" ||
   name === "malloc" ||
   name === "malloc_trim" ||
   name === "malloc_usable_size" ||
@@ -543,6 +544,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "modf" ||
   name === "modff" ||
   name === "modfl" ||
+  name === "mprotect" ||
   name === "munmap" ||
   name === "nan" ||
   name === "nanf" ||

@@ -3225,8 +3225,10 @@ const holdsFacts = (list: FunctionFacts[], f: FunctionFacts): boolean => {
 // more, so memory grows with every pass however small the function looks, and
 // the fix is in the function. It is found across every module, because the
 // loop is often a dependency's (a server's event loop calls the program's
-// handler). Memory kept deeper in the chain, behind a direct callee that
-// answers memory, is `--explain-memory`'s to name, not this warning's.
+// handler). A temporary dropped deeper in a chain of callees that answer no
+// memory is the arena-loop warning's, at the loop (`CalleeDrops` in
+// `arena-report.ts`). Memory kept behind a direct callee that answers memory
+// is `--explain-memory`'s to name, not this warning's.
 
 /**
  * The functions a loop pass that takes no scope calls directly: memory one of

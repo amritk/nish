@@ -225,8 +225,13 @@ body.scalar-app aside.t-doc__sidebar.sidebar-mobile-menu {
   transform-origin: left;
   transition: transform 0.35s var(--nish-ease);
 }
-.t-header__item:hover::after {
+.t-header__item:hover::after,
+.t-header__item--selected::after {
   transform: scaleX(1);
+}
+/* The current link's underline is the bar, not Scalar's border. */
+.t-header .t-header__item.t-header__item--selected {
+  border-bottom-color: transparent;
 }
 
 body img.logo.logo {
@@ -396,6 +401,15 @@ table.t-editor__table {
   overflow: hidden;
   border: 1px solid var(--scalar-border-color);
   border-radius: 14px;
+}
+/* Columns fit what they hold, and a name in the first column breaks at a
+   space or after a slash (page.js marks those), never mid-word as Scalar's
+   fixed layout made it. */
+table.t-editor__table {
+  table-layout: auto;
+}
+table.t-editor__table td:first-child code {
+  overflow-wrap: normal;
 }
 table.t-editor__table th {
   background: color-mix(in srgb, var(--nish-violet), transparent 90%);
@@ -569,23 +583,28 @@ table.t-editor__table tbody tr:hover {
 }
 .nish-hero__rest,
 .nish-hero__rest > span {
-  display: inline-block;
   transition: 0.6s var(--nish-ease) calc(var(--i) * 0.08s);
-  transition-property: max-width, padding, opacity, transform;
 }
+/* A track eased from 0fr to 1fr opens each word to its own width; one
+   max-width cap for all ran short words open in a blink. */
 .nish-hero__rest {
+  display: inline-grid;
+  grid-template-columns: 0fr;
   overflow: hidden;
-  max-width: 0;
   vertical-align: bottom;
+  transition-property: grid-template-columns, padding;
 }
 .nish-hero__rest > span {
+  display: inline-block;
+  min-width: 0;
   opacity: 0;
   transform: translateX(-0.6em);
+  transition-property: opacity, transform;
 }
 .nish-hero__name:hover .nish-hero__rest,
 .nish-hero__name:focus .nish-hero__rest,
 .nish-hero__name-row--ghost .nish-hero__rest {
-  max-width: 14em;
+  grid-template-columns: 1fr;
 }
 .nish-hero__name:hover .nish-hero__word:not(:last-child) .nish-hero__rest,
 .nish-hero__name:focus .nish-hero__word:not(:last-child) .nish-hero__rest,

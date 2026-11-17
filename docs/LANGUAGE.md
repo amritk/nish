@@ -14226,7 +14226,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities`, `host` and `compat` — is NL3036
+  than `noPanic`, `capabilities`, `host`, `compat` and `netRings` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as
@@ -14325,9 +14325,11 @@ without one grants the capability whole, as before:
   row records narrowed — is NL2593 until the lock is updated; a row that
   records the capability whole accepts any argument (`caps_lock_args`).
 - `@nish_sandbox` takes a fifth operand for the programs a
-  `process.spawn=<program>` grant allows, null when none is named:
-  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)`.
-  The four-operand call in "The sandbox" below predates it.
+  `process.spawn=<program>` grant allows, null when none is named, and a
+  sixth, the number of restricted rings to make before the filter (WP63 S3;
+  0 unless `main` reaches `net` with `NET_LISTEN_RING` and not
+  `process.spawn`):
+  `call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null, i32 0)`.
 - `process.spawn=exec:<program>` grants the program as `process.spawn=<program>`
   does, and lets it start others: under `--sandbox` a granted program is held
   to its own start (no program it starts may exec again), and an `exec:` one
@@ -14453,7 +14455,7 @@ program's code does not reach, `ffi` callees and constructors included
 
 define internal void @.sandbox.apply() {
 entry:
-  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null)
+  call void @nish_sandbox(i32 0, i32 1, i8* null, i8* null, i8* null, i32 0)
   ret void
 }
 
@@ -14540,12 +14542,27 @@ entry:
   is not bounded by that ceiling, so in such a program it no longer sees the
   quota.
 - **Always.** `ptrace`, `process_vm_readv`, `process_vm_writev` and
-  `pidfd_getfd` kill; io_uring kills unless both `net` and `process.spawn`
-  are granted; on x86-64 a system call numbered with bit 30 (x32) kills, and
+  `pidfd_getfd` kill; io_uring kills without `net`, and with `net` but not
+  `process.spawn` only `io_uring_enter` is let through, on the premade
+  rings' descriptors, matched by descriptor number (see the premade rings
+  below, and NURING-36 in `docs/security/net-uring.md`); on x86-64 a system call numbered with bit 30 (x32) kills, and
   a call from any other architecture's entry kills. A killed process ends by
   `SIGSYS`, exit status 159 from a shell. From Landlock ABI 6 a sandboxed
   process cannot signal or reach the abstract sockets of a process outside
   it.
+- **The premade rings.** With `net` granted and `process.spawn` not, a
+  program whose `main` reaches `tcpListenFlags` with `NET_LISTEN_RING` gets
+  its rings before the filter loads: `nish.netRings` in the root
+  `package.json` (an integer from 1 to 64, default 1; anything else is
+  NL3058) restricted rings, each taking only `ACCEPT`, `RECV`, `SEND`,
+  `CLOSE`, `ASYNC_CANCEL` and `NOP`, with the submission flags
+  `FIXED_FILE`, `BUFFER_SELECT` and `CQE_SKIP_SUCCESS`; any other
+  submission completes with `-13`. Ring listeners take them as they fill:
+  once every ring made is in use, a listener whose rings are full answers
+  `-23` from `tcpAccept` until a connection closes, a ring listener opened
+  after that serves descriptors, and a kernel or limit that refuses them
+  leaves the process on descriptors for good, which `netRingState()`
+  reports.
 - **Refusals.** A program whose sandbox cannot be applied prints one line,
   `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
   kernel without Landlock, and one below ABI 3 when `fs.write` is not
@@ -15071,6 +15088,31 @@ by the caller.
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
 
+### The debug arena
+
+- **`--debug-arena`** links the program against a runtime compiled with
+  `-DNISH_ARENA_DEBUG` (`scripts/build.sh --debug-arena`). The IR is byte for
+  byte the IR without it. Under it every arena block is a chunk of its own,
+  on pages no earlier block had, with `cap` exact, so the inline bump never
+  fits again and every allocation and every scope's release reaches the
+  runtime. A release or reset retires each chunk it frees: its pages become
+  `PROT_NONE` and go back to the system, but their addresses stay reserved,
+  so a read or write through a reference that outlived its scope faults at
+  that access. The runtime writes `nish: --debug-arena: stale arena reference
+  at 0x…` to stderr, and the program dies of `SIGSEGV`. A fault elsewhere
+  goes to the handler that was installed before.
+- **It needs a link and a native profile.** Without `--link` and outside
+  `nish run` it is a usage error (exit 2), and so is `--profile wasi`;
+  `scripts/build.sh` refuses it with the `wasm`, `wasm-host`, `wasi` and
+  `napi` profiles. `nish run` takes it, and the run and runtime caches key on
+  it, so a debug-arena build never reuses a normal binary or runtime.
+- **It is for tests, never a release.** Each block takes at least a page and
+  no address is reused, so memory only grows; a process at its limit of
+  mappings fills a retired chunk with `0xDB` instead of unmapping it. The
+  rules in *Memory model* mean no correct program reads released memory, so a
+  trap under the mode is a compiler or runtime bug
+  ([security/runtime.md](security/runtime.md#the-debug-arena)).
+
 ### Diagnostics and debugging flags
 
 - **Errors are collected, not thrown on the first.** Phase 0 reports every
@@ -15221,6 +15263,39 @@ by the caller.
     allocated for as long as the server runs:
     `tests/link/nl9018_server/leaky.ts` grew 1,252 kB over 20,000 requests,
     and the rewrite grew none.
+
+    What a pass keeps counts at any depth of calls. A function the pass calls
+    leaves memory behind in the loop when all of these hold:
+    - it answers no memory (a number, a `boolean`, an enum or nothing);
+    - it has no scope of its own and manages no arena;
+    - it builds a temporary that it drops, or calls a function that leaves
+      one behind by this same rule, on every call that returns.
+
+    "Every call" admits one kind of branch: an `if (p === K)`, `if (p !== K)`
+    or `switch (p)` on a parameter `p` against a constant. `K` is a literal,
+    a name that is neither a parameter nor a `let`, or a member of a name
+    that is not a local, such as an enum's. A handler that dispatches on the event it is handed therefore
+    counts. The warning names the call in the pass and the site, as in "what
+    `readPost` leaves behind on line 102 (the string built on line 69, in
+    `readPost`) piles up". Its rewrite puts the block inside the function that
+    builds the temporary. When that function is in `std/` or a dependency, the
+    rewrite puts the block in the loop body instead.
+
+    `tests/link/nl9018_server/helper_leaky.ts` builds its reply in a
+    `readPost` helper that also answers, so `readPost` is refused a scope of
+    its own. `method_leaky.ts` reaches the same helper from the loop through
+    `App.ready` and `App.onEnd`. Each grew 1,252 kB over 20,000 requests,
+    and each rewrite (`helper_flat.ts`, `method_flat.ts`) grew none.
+
+    These are not charged to the loop:
+    - what a function that answers memory builds, which goes to its caller
+      with the result;
+    - a temporary under any other branch, or after a statement that can
+      return, such as an error message, a table built on first use or one
+      step of a handshake;
+    - a temporary whose every path ends the program (`panic`,
+      `process.exit`), whether it is built in the call's arguments or in a
+      statement before it, as in `const msg = ...; panic(msg)`.
 
     A loop is bounded, and NL9018 stays silent for it, when one of these
     holds:
@@ -16060,7 +16135,7 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic`, `capabilities`, `host` and `compat`, each written once**, and anything
+  keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once**, and anything
   else is an error (NL3036) where `package.json` writes it: a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
@@ -16259,6 +16334,9 @@ passes is a `function` site that accumulates in a `main` that earns a scope
 through its callees, and an `unscoped` one in a function that has none
 (`tests/cases/arena_placement`, `arena_placement_loops`). A `returned` or `kept`
 site is memory the program holds on purpose, so it is never marked.
+An `unscoped` site in another function is marked too when that function is
+reached from such a pass and leaves the site behind in it, by NL9018's rule for
+callees: what the function leaves in its caller's memory piles up in the loop's.
 
 - **The answer is about the site's own function.** A scope in a caller can
   still release an `unscoped` site's memory: a loop whose pass is scoped takes
@@ -16303,7 +16381,8 @@ explain-memory: 7 of 9 allocating loops keep what a pass allocates past the pass
   condition's line follows the lines of the loops in its body.
 - **A listed loop with no bound** — one that is not bounded, by NL9018's rule — is
   the loop NL9018 warns about when what its pass keeps is a temporary the
-  pass drops; the report lists it either way.
+  pass drops, or one a function it calls leaves behind; the report lists it
+  either way.
 - **A function** is listed when it answers a number, a `boolean`, an enum or
   nothing, leaves memory behind, and has no scope of its own. A function that
   answers memory (a string, an array, an object) is not, nor is a constructor,

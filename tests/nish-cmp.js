@@ -512,6 +512,12 @@ const asyncFetch = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
+// The redirect sink lands under this PR's subject: the NL9018 sweep that found it.
+const NL9018_DEPTH = "NL9018 warns when a handler the loop calls drops a temporary"
+const nl9018Depth = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: NL9018_DEPTH, why }))
+  )
 const RESULT_LOOP =
   "Keep a Result made in a loop body and stored in an outer let alive past the pass's arena rewind"
 const resultLoop = (why, filesByProgram) =>
@@ -1292,6 +1298,27 @@ const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
 const DECLARED = [
+  // First, so it is the entry a fetch program's file reports: older entries of
+  // this release name the same files.
+  ...nl9018Depth(
+    "FetchSyncClient keeps the sink a redirect's body is drained into, so the class gains a field and its layout grows 8 bytes (160 to 168)",
+    {
+      "examples/http-get-json.ts": ["fetch.ll", "http-get-json.h", "http-get-json.ll"],
+      "tests/link/net_fetch_async/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_deadline/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_dns_slow/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_flat/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_https/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_fetch_async_https_flat/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_overlap/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_fetch_async_policy/main.ts": ["fetch.ll", "main.h"],
+      "tests/link/net_http_fetch/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_http_fetch_tls/main.ts": ["fetch.ll", "main.h", "main.ll"],
+      "tests/link/net_outbound/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+      "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
+    }
+  ),
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
@@ -7416,6 +7443,13 @@ const DECLARED = [
     changelog: "HandlerLimits listen on io_uring rings",
     why: "`HandlerLimits` gains its `ring` field, so its struct in the header of a program that links nish/net/http-server moves (WP63 S4)",
   })),
+  ...byFinding("restricted io_uring rings before the --sandbox filter")(
+    "`nish_sandbox` takes the number of rings to premake as a sixth `i32` argument, so its declaration and its call in `main` gain `i32 0` where the program cannot reach a ring listener (WP63 S3)",
+    {
+      "tests/cases/sandbox_hello.ts": ["sandbox_hello.ll"],
+      "docs/cookbook/sandbox.ts": ["sandbox.ll"],
+    }
+  ),
 ]
 
 /**

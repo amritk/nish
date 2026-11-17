@@ -139,6 +139,8 @@ struct nish_uring_stats {
 struct nish_uring_set;
 
 int32_t nish_uring_probe(void);
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds);
+int32_t nish_uring_pooled(void);
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts);
 int32_t nish_uring_fd(const struct nish_uring_set *s);
 int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
@@ -176,6 +178,7 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #endif
 
 #define UR_SETUP_CQSIZE (1u << 3)
+#define UR_SETUP_R_DISABLED (1u << 6)
 #define UR_SETUP_SUBMIT_ALL (1u << 7)
 #define UR_SETUP_COOP_TASKRUN (1u << 8)
 #define UR_SETUP_TASKRUN_FLAG (1u << 9)
@@ -194,6 +197,7 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #define UR_CQE_F_BUFFER (1u << 0)
 #define UR_CQE_F_MORE (1u << 1)
 #define UR_CQE_BUFFER_SHIFT 16
+#define UR_OP_NOP 0
 #define UR_OP_ACCEPT 13
 #define UR_OP_ASYNC_CANCEL 14
 #define UR_OP_CLOSE 19
@@ -206,7 +210,11 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #define UR_REGISTER_EVENTFD 4
 #define UR_REGISTER_PROBE 8
 #define UR_REGISTER_FILES2 13
+#define UR_REGISTER_RESTRICTIONS 11
+#define UR_REGISTER_ENABLE_RINGS 12
 #define UR_REGISTER_PBUF_RING 22
+#define UR_RESTRICTION_SQE_OP 1
+#define UR_RESTRICTION_SQE_FLAGS_ALLOWED 2
 #define UR_RSRC_REGISTER_SPARSE (1u << 0)
 #define UR_FILE_INDEX_ALLOC (~0u)
 #define UR_OP_SUPPORTED (1u << 0)
@@ -277,6 +285,14 @@ struct ur_probe {
   uint32_t resv2[3];
   struct ur_probe_op ops[64];
 };
+/* One entry of IORING_REGISTER_RESTRICTIONS: `arg` is the union of
+ * register_op, sqe_op and sqe_flags. */
+struct ur_restriction {
+  uint16_t opcode;
+  uint8_t arg;
+  uint8_t resv;
+  uint32_t resv2[3];
+};
 
 _Static_assert(sizeof(struct ur_params) == 120, "io_uring_params is 120 bytes");
 _Static_assert(sizeof(struct ur_sqe) == 64, "io_uring_sqe is 64 bytes");
@@ -284,6 +300,7 @@ _Static_assert(sizeof(struct ur_cqe) == 16, "io_uring_cqe is 16 bytes");
 _Static_assert(sizeof(struct ur_rsrc_register) == 32, "io_uring_rsrc_register is 32 bytes");
 _Static_assert(sizeof(struct ur_buf) == 16, "io_uring_buf is 16 bytes");
 _Static_assert(sizeof(struct ur_buf_reg) == 40, "io_uring_buf_reg is 40 bytes");
+_Static_assert(sizeof(struct ur_restriction) == 16, "io_uring_restriction is 16 bytes");
 
 /* What a completion's user_data says. A send's is its record's address, which
  * malloc aligns to 8, with UR_SEND in the low three bits; every other op's is
@@ -334,6 +351,7 @@ struct ur_ring {
   uint32_t sq_entries, sq_local_tail, to_submit;
   struct ur_buf *br;
   uint8_t *bufs;
+  size_t br_len, bufs_len;
   uint16_t br_tail;
   long live, accepting;
   uint32_t *st;               /* per slot */
@@ -413,26 +431,28 @@ static int ur_setup_flags(uint32_t entries, uint32_t cq, struct ur_params *p) {
   return fd;
 }
 
+/* Whether the ring `fd` has every opcode the layer submits: 1, -EOPNOTSUPP
+ * when one is missing or the kernel has no probe, or the register's errno. */
+static int32_t ur_ops_ok(int fd) {
+  struct ur_probe pr;
+  memset(&pr, 0, sizeof pr);
+  int e = ur_register(fd, UR_REGISTER_PROBE, &pr, 64);
+  if (e < 0) return e == -EINVAL ? -EOPNOTSUPP : e;
+  static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_ASYNC_CANCEL, UR_OP_CLOSE, UR_OP_SEND, UR_OP_RECV};
+  for (size_t i = 0; i < sizeof ops; i++) {
+    uint8_t op = ops[i];
+    if (op > pr.last_op || op >= pr.ops_len || !(pr.ops[op].flags & UR_OP_SUPPORTED)) return -EOPNOTSUPP;
+  }
+  return 1;
+}
+
 static int32_t ur_probe_once(void) {
   struct ur_params p;
   int fd = ur_setup_flags(4, 0, &p);
   if (fd < 0) return fd;
   int32_t rc = 1;
   if (!(p.features & UR_FEAT_NODROP) || !(p.features & UR_FEAT_SINGLE_MMAP)) rc = -EOPNOTSUPP;
-  if (rc > 0) {
-    struct ur_probe pr;
-    memset(&pr, 0, sizeof pr);
-    int e = ur_register(fd, UR_REGISTER_PROBE, &pr, 64);
-    if (e < 0) {
-      rc = e == -EINVAL ? -EOPNOTSUPP : e;
-    } else {
-      static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_ASYNC_CANCEL, UR_OP_CLOSE, UR_OP_SEND, UR_OP_RECV};
-      for (size_t i = 0; i < sizeof ops; i++) {
-        uint8_t op = ops[i];
-        if (op > pr.last_op || op >= pr.ops_len || !(pr.ops[op].flags & UR_OP_SUPPORTED)) rc = -EOPNOTSUPP;
-      }
-    }
-  }
+  if (rc > 0) rc = ur_ops_ok(fd);
   if (rc > 0) {
     struct ur_rsrc_register files;
     memset(&files, 0, sizeof files);
@@ -462,6 +482,29 @@ static int32_t ur_probe_once(void) {
   return rc;
 }
 
+/* The rings `--sandbox` made before its filter (WP63 S3), which sets take in
+ * place of making their own: under that filter `io_uring_setup` and
+ * `io_uring_register` kill the process. `made` is set once, before `main`
+ * and before any thread, by `nish_uring_premake`; `rc` is the number of rings
+ * made or the errno of the step that failed, and `next` the next ring a set
+ * takes. */
+#define UR_POOL_MAX 64
+/* The default sizes, which a pooled ring is made at. */
+#define UR_SQ_DEFAULT 1024
+#define UR_CQ_DEFAULT 8192
+#define UR_BUF_COUNT_DEFAULT 1024
+#define UR_BUF_SIZE_DEFAULT 2048
+struct ur_sizes {
+  uint32_t slots, buf_count, buf_size, sq_entries, cq_entries;
+};
+static struct {
+  int made;
+  int32_t rc;
+  struct ur_sizes z;
+  struct ur_ring *rings[UR_POOL_MAX];
+  int n, next;
+} ur_pool;
+
 /* 1 when this process may use a set, else the negative errno that says why
  * not. A yes or a static refusal is kept for the process: what refuses
  * io_uring (the kernel, a seccomp filter, the sysctl) does not change under
@@ -469,6 +512,8 @@ static int32_t ur_probe_once(void) {
  * resource (-EMFILE, -ENFILE, -ENOMEM, ...) is not kept, so the next call
  * asks again once descriptors or memory are free. */
 int32_t nish_uring_probe(void) {
+  /* A sandboxed process never calls setup: the pool is the answer. */
+  if (ur_pool.made) return ur_pool.rc > 0 ? 1 : ur_pool.rc;
   static int32_t cached;
   int32_t c = __atomic_load_n(&cached, __ATOMIC_RELAXED);
   if (c == 0) {
@@ -548,13 +593,13 @@ static void ur_arm(struct ur_ring *r, uint32_t slot) {
   r->st[slot] |= ST_ARMED;
 }
 
-static void ur_free_ring(struct nish_uring_set *s, struct ur_ring *r) {
+static void ur_free_ring(struct ur_ring *r) {
   if (r->efd >= 0) close(r->efd);
   if (r->fd >= 0) close(r->fd);
   if (r->ring_map && r->ring_map != MAP_FAILED) munmap(r->ring_map, r->ring_len);
   if (r->sqes && (void *)r->sqes != MAP_FAILED) munmap(r->sqes, r->sqes_len);
-  if (r->br && (void *)r->br != MAP_FAILED) munmap(r->br, (size_t)s->buf_count * sizeof(struct ur_buf));
-  if (r->bufs && (void *)r->bufs != MAP_FAILED) munmap(r->bufs, (size_t)s->buf_count * s->buf_size);
+  if (r->br && (void *)r->br != MAP_FAILED) munmap(r->br, r->br_len);
+  if (r->bufs && (void *)r->bufs != MAP_FAILED) munmap(r->bufs, r->bufs_len);
   free(r->st);
   free(r->sq_first);
   free(r->sq_last);
@@ -563,11 +608,31 @@ static void ur_free_ring(struct nish_uring_set *s, struct ur_ring *r) {
   free(r);
 }
 
-/* A new ring: the SQ and CQ mapped, a sparse table of `slots`, the buffer
- * ring filled, the eventfd registered and in the set's epoll. Answers the
- * ring's index or a negative errno, and leaves nothing behind on failure. */
-static int ur_add_ring(struct nish_uring_set *s) {
-  if (s->nrings >= s->rings_max) return -ENOSPC;
+/* Restrict a ring made with R_DISABLED to what the layer submits (WP63 §6.2):
+ * the five opcodes and NOP, the three flags the layer sets, and no register
+ * opcode at all once it is enabled. */
+static int ur_restrict(int fd) {
+  static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_RECV, UR_OP_SEND, UR_OP_CLOSE, UR_OP_ASYNC_CANCEL, UR_OP_NOP};
+  struct ur_restriction res[sizeof ops + 1];
+  memset(res, 0, sizeof res);
+  for (size_t i = 0; i < sizeof ops; i++) {
+    res[i].opcode = UR_RESTRICTION_SQE_OP;
+    res[i].arg = ops[i];
+  }
+  res[sizeof ops].opcode = UR_RESTRICTION_SQE_FLAGS_ALLOWED;
+  res[sizeof ops].arg = UR_SQE_FIXED_FILE | UR_SQE_BUFFER_SELECT | UR_SQE_CQE_SKIP_SUCCESS;
+  return ur_register(fd, UR_REGISTER_RESTRICTIONS, res, (unsigned)(sizeof res / sizeof res[0]));
+}
+
+/* A new ring of sizes `z`: the SQ and CQ mapped, a sparse table of
+ * `z->slots`, the buffer ring registered, the eventfd registered. A
+ * `restricted` ring is made disabled, restricted before anything else is
+ * registered, and enabled last; it has no SINGLE_ISSUER, which would tie it to
+ * the thread that enabled it, the one that runs `.preinit_array`. Answers 0
+ * with the ring in `*out`, or the failing step's negative errno with nothing
+ * left behind. */
+static int ur_make_ring(const struct ur_sizes *z, int restricted, struct ur_ring **out) {
+  *out = NULL;
   struct ur_ring *r = calloc(1, sizeof *r);
   if (!r) return -ENOMEM;
   r->fd = -1;
@@ -575,7 +640,12 @@ static int ur_add_ring(struct nish_uring_set *s) {
   int rc = 0;
   struct ur_params p;
   /* The ring itself, and the two features the layer cannot do without. */
-  r->fd = ur_setup_flags(s->sq_entries, s->cq_entries, &p);
+  if (restricted)
+    r->fd = ur_setup_try(z->sq_entries, z->cq_entries, &p,
+                         UR_SETUP_R_DISABLED | UR_SETUP_COOP_TASKRUN | UR_SETUP_TASKRUN_FLAG | UR_SETUP_SUBMIT_ALL |
+                             UR_SETUP_CQSIZE);
+  else
+    r->fd = ur_setup_flags(z->sq_entries, z->cq_entries, &p);
   if (r->fd < 0) {
     rc = r->fd;
     goto fail;
@@ -583,6 +653,12 @@ static int ur_add_ring(struct nish_uring_set *s) {
   if (!(p.features & UR_FEAT_SINGLE_MMAP) || !(p.features & UR_FEAT_NODROP)) {
     rc = -EOPNOTSUPP;
     goto fail;
+  }
+  if (restricted) {
+    rc = ur_ops_ok(r->fd);
+    if (rc < 0) goto fail;
+    rc = ur_restrict(r->fd);
+    if (rc < 0) goto fail;
   }
   /* SQ and CQ share one mapping (FEAT_SINGLE_MMAP); the SQEs are another. */
   r->sq_entries = p.sq_entries;
@@ -615,15 +691,16 @@ static int ur_add_ring(struct nish_uring_set *s) {
   /* The sparse file table: one entry per slot, filled by FILE_INDEX_ALLOC. */
   struct ur_rsrc_register files;
   memset(&files, 0, sizeof files);
-  files.nr = s->slots;
+  files.nr = z->slots;
   files.flags = UR_RSRC_REGISTER_SPARSE;
   rc = ur_register(r->fd, UR_REGISTER_FILES2, &files, sizeof files);
   if (rc < 0) goto fail;
 
-  /* The provided-buffer ring every multishot recv draws from, full. */
-  r->br = mmap(NULL, (size_t)s->buf_count * sizeof(struct ur_buf), PROT_READ | PROT_WRITE,
-               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  r->bufs = mmap(NULL, (size_t)s->buf_count * s->buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  /* The provided-buffer ring every multishot recv draws from; the set fills it. */
+  r->br_len = (size_t)z->buf_count * sizeof(struct ur_buf);
+  r->bufs_len = (size_t)z->buf_count * z->buf_size;
+  r->br = mmap(NULL, r->br_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  r->bufs = mmap(NULL, r->bufs_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if ((void *)r->br == MAP_FAILED || (void *)r->bufs == MAP_FAILED) {
     rc = -ENOMEM;
     goto fail;
@@ -631,25 +708,23 @@ static int ur_add_ring(struct nish_uring_set *s) {
   struct ur_buf_reg reg;
   memset(&reg, 0, sizeof reg);
   reg.ring_addr = (uint64_t)(uintptr_t)r->br;
-  reg.ring_entries = s->buf_count;
+  reg.ring_entries = z->buf_count;
   reg.bgid = BGID;
   rc = ur_register(r->fd, UR_REGISTER_PBUF_RING, &reg, 1);
   if (rc < 0) goto fail;
-  for (uint32_t i = 0; i < s->buf_count; i++) ur_recycle(s, r, i);
 
   /* Per-slot state: generation and flags, send queues, parked recvs. */
-  r->st = calloc(s->slots, sizeof *r->st);
-  r->sq_first = calloc(s->slots, sizeof *r->sq_first);
-  r->sq_last = calloc(s->slots, sizeof *r->sq_last);
-  r->parked = calloc(s->slots, sizeof *r->parked);
-  r->qbytes = calloc(s->slots, sizeof *r->qbytes);
+  r->st = calloc(z->slots, sizeof *r->st);
+  r->sq_first = calloc(z->slots, sizeof *r->sq_first);
+  r->sq_last = calloc(z->slots, sizeof *r->sq_last);
+  r->parked = calloc(z->slots, sizeof *r->parked);
+  r->qbytes = calloc(z->slots, sizeof *r->qbytes);
   if (!r->st || !r->sq_first || !r->sq_last || !r->parked || !r->qbytes) {
     rc = -ENOMEM;
     goto fail;
   }
 
-  /* The eventfd the kernel signals for this ring, in the set's epoll with
-   * the ring's index as its data. */
+  /* The eventfd the kernel signals for this ring. */
   r->efd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   if (r->efd < 0) {
     rc = -errno;
@@ -657,22 +732,126 @@ static int ur_add_ring(struct nish_uring_set *s) {
   }
   rc = ur_register(r->fd, UR_REGISTER_EVENTFD, &r->efd, 1);
   if (rc < 0) goto fail;
+  if (restricted) {
+    rc = ur_register(r->fd, UR_REGISTER_ENABLE_RINGS, NULL, 0);
+    if (rc < 0) goto fail;
+  }
+  *out = r;
+  return 0;
+fail:
+  ur_free_ring(r);
+  return rc < 0 ? rc : -EINVAL;
+}
+
+/* A new ring in the set: made, or taken from the pool when `--sandbox` made
+ * one (-ENOSPC when the pool is spent), then its buffer ring filled and its
+ * eventfd in the set's epoll with the ring's index as its data. Answers the
+ * ring's index or a negative errno, and leaves nothing behind on failure. */
+static int ur_add_ring(struct nish_uring_set *s) {
+  if (s->nrings >= s->rings_max) return -ENOSPC;
+  struct ur_ring *r;
+  if (ur_pool.made) {
+    /* A full set asks again on every top-up, so a spent pool answers without
+       counting: `next` stays within the threads past `n` and never wraps to
+       a negative index (NURING-34). */
+    if (__atomic_load_n(&ur_pool.next, __ATOMIC_RELAXED) >= ur_pool.n) return -ENOSPC;
+    int i = __atomic_fetch_add(&ur_pool.next, 1, __ATOMIC_RELAXED);
+    if (i >= ur_pool.n) return -ENOSPC;
+    r = ur_pool.rings[i];
+    ur_pool.rings[i] = NULL;
+  } else {
+    struct ur_sizes z = {s->slots, s->buf_count, s->buf_size, s->sq_entries, s->cq_entries};
+    int rc = ur_make_ring(&z, 0, &r);
+    if (rc < 0) return rc;
+  }
+  for (uint32_t i = 0; i < s->buf_count; i++) ur_recycle(s, r, i);
   struct epoll_event ev;
   memset(&ev, 0, sizeof ev);
   ev.events = EPOLLIN;
   ev.data.u32 = (uint32_t)s->nrings;
   if (epoll_ctl(s->ep, EPOLL_CTL_ADD, r->efd, &ev) != 0) {
-    rc = -errno;
-    goto fail;
+    int rc = -errno;
+    ur_free_ring(r);
+    return rc;
   }
   s->rings[s->nrings] = r;
   s->stats.rings = ++s->nrings;
   s->stats.slots = (int64_t)s->nrings * s->slots;
   return s->nrings - 1;
-fail:
-  ur_free_ring(s, r);
-  return rc < 0 ? rc : -EINVAL;
 }
+
+/* Make `n` restricted rings of `slots` slots, at the sizes a set opens with
+ * by default, for the sets this process opens later (WP63 S3). `--sandbox`
+ * calls it once, before its seccomp filter and before any thread; with `n`
+ * of 0 it only records that this process may not make a ring (-EPERM). A
+ * kernel below the probe's floor makes none, and a ring that fails any step
+ * closes every ring made; either way the pool answers that step's errno from
+ * then on: the process falls back to descriptors for good.
+ * Answers the number of rings made or that errno, and writes each ring's
+ * descriptor to `fds`, which holds 64: the only descriptors the filter lets
+ * `io_uring_enter` take. */
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds) {
+  if (ur_pool.made) return ur_pool.rc;
+  ur_pool.made = 1;
+  if (n <= 0) return ur_pool.rc = -EPERM;
+  /* A restricted ring drops SINGLE_ISSUER and DEFER_TASKRUN, so it alone
+     would take a 5.19 or 6.0 kernel; the probe holds the pool to the floor
+     an unsandboxed set has, 6.1 (NURING-33). */
+  int32_t probed = ur_probe_once();
+  if (probed < 0) return ur_pool.rc = probed;
+  if (n > UR_POOL_MAX) n = UR_POOL_MAX;
+  if (slots < 1) slots = 1;
+  if (slots > UR_MAX_SLOTS) slots = UR_MAX_SLOTS;
+  ur_pool.z = (struct ur_sizes){(uint32_t)slots, UR_BUF_COUNT_DEFAULT, UR_BUF_SIZE_DEFAULT, UR_SQ_DEFAULT, UR_CQ_DEFAULT};
+  for (int i = 0; i < n; i++) {
+    int rc = ur_make_ring(&ur_pool.z, 1, &ur_pool.rings[i]);
+    if (rc < 0) {
+      for (int j = 0; j < i; j++) ur_free_ring(ur_pool.rings[j]);
+      memset(ur_pool.rings, 0, sizeof ur_pool.rings);
+      return ur_pool.rc = rc;
+    }
+  }
+  for (int i = 0; i < n; i++) fds[i] = ur_pool.rings[i]->fd;
+  ur_pool.n = n;
+  return ur_pool.rc = n;
+}
+
+/* The slots of each ring `--sandbox` made, 0 when it made none, or -1 when
+ * it ran and made none: a set must open with the pool's sizes. */
+int32_t nish_uring_pooled(void) {
+  if (!ur_pool.made) return 0;
+  return ur_pool.rc > 0 ? (int32_t)ur_pool.z.slots : -1;
+}
+
+#ifdef NISH_URING_TEST_HOOKS
+/* Test-only: tests/run.js's sandbox section builds the runtime with
+ * -DNISH_URING_TEST_HOOKS to ask the kernel what a premade ring takes, and
+ * scripts/build.sh never passes it. Submits one entry of opcode `op` with
+ * submission flags `flags`, on no file, to premade ring `i` before a listener
+ * has taken it, and answers its completion's res: -EACCES is the ring's
+ * restriction. -ENOENT when no such ring was made. */
+int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags);
+int32_t nish_uring_test_submit(int32_t i, int32_t op, int32_t flags) {
+  if (!ur_pool.made || ur_pool.rc <= 0 || i < 0 || i >= ur_pool.n) return -ENOENT;
+  struct ur_ring *r = ur_pool.rings[i];
+  struct ur_sqe *e = ur_sqe(r);
+  if (e == NULL) return -EBUSY;
+  e->opcode = (uint8_t)op;
+  e->flags = (uint8_t)flags;
+  e->fd = -1;
+  e->user_data = 1;
+  int rc;
+  do rc = ur_enter(r, r->to_submit, 1, UR_ENTER_GETEVENTS);
+  while (rc == -EINTR);
+  if (rc < 0) return rc;
+  r->to_submit = 0;
+  uint32_t head = *r->cq_head;
+  if (head == __atomic_load_n(r->cq_tail, __ATOMIC_ACQUIRE)) return -EAGAIN;
+  int32_t res = r->cqes[head & *r->cq_mask].res;
+  __atomic_store_n(r->cq_head, head + 1, __ATOMIC_RELEASE);
+  return res;
+}
+#endif
 
 static int64_t ur_now_ms(void) {
   struct timespec t;
@@ -967,13 +1146,21 @@ int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const str
   }
   if (d.slots > UR_MAX_SLOTS) return -EINVAL;
   if (d.rings_max == 0) d.rings_max = 64;
-  if (d.sq_entries == 0) d.sq_entries = 1024;
-  if (d.cq_entries == 0) d.cq_entries = 8192;
+  if (d.sq_entries == 0) d.sq_entries = UR_SQ_DEFAULT;
+  if (d.cq_entries == 0) d.cq_entries = UR_CQ_DEFAULT;
   if (d.cq_entries < d.sq_entries) d.cq_entries = d.sq_entries;
-  if (d.buf_count == 0) d.buf_count = 1024;
-  if (d.buf_size == 0) d.buf_size = 2048;
+  if (d.buf_count == 0) d.buf_count = UR_BUF_COUNT_DEFAULT;
+  if (d.buf_size == 0) d.buf_size = UR_BUF_SIZE_DEFAULT;
   if (d.rings_max > 4096 || d.buf_count > 32768 || (d.buf_count & (d.buf_count - 1)) != 0 || d.buf_size > (1 << 20))
     return -EINVAL;
+  /* A pooled ring was made at its own sizes, before the program could ask. */
+  if (ur_pool.made) {
+    d.slots = (int32_t)ur_pool.z.slots;
+    d.sq_entries = (int32_t)ur_pool.z.sq_entries;
+    d.cq_entries = (int32_t)ur_pool.z.cq_entries;
+    d.buf_count = (int32_t)ur_pool.z.buf_count;
+    d.buf_size = (int32_t)ur_pool.z.buf_size;
+  }
   struct nish_uring_set *s = calloc(1, sizeof *s);
   if (!s) return -ENOMEM;
   s->listener = listener;
@@ -1268,7 +1455,7 @@ void nish_uring_stats(const struct nish_uring_set *s, struct nish_uring_stats *s
  * sends it held them for. The caller's listener stays open: it is theirs. */
 void nish_uring_destroy(struct nish_uring_set *s) {
   if (!s) return;
-  for (int i = 0; i < s->nrings; i++) ur_free_ring(s, s->rings[i]);
+  for (int i = 0; i < s->nrings; i++) ur_free_ring(s->rings[i]);
   while (s->all) {
     struct ur_send *q = s->all;
     s->all = q->next_all;
@@ -1282,6 +1469,13 @@ void nish_uring_destroy(struct nish_uring_set *s) {
 #else /* not Linux: no io_uring, so a set is never available */
 
 int32_t nish_uring_probe(void) { return -38; }
+int32_t nish_uring_premake(int32_t n, int32_t slots, int32_t *fds) {
+  (void)n;
+  (void)slots;
+  (void)fds;
+  return -38;
+}
+int32_t nish_uring_pooled(void) { return 0; }
 int32_t nish_uring_open(struct nish_uring_set **out, int32_t listener, const struct nish_uring_opts *opts) {
   (void)listener;
   (void)opts;

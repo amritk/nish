@@ -322,10 +322,11 @@ on `804120e` with CodeQL 2.23.3, raised four alerts and no defect:
 A new alert is triaged the same way: fixed with a before/after test and given
 an RT id, or added here with the reason it is not a defect.
 
-## Design: a debug arena that traps a stale reference
+## The debug arena
 
-*Not built. Recorded so the work can be picked up as one change; it touches
-`scripts/build.sh`, which the binary-hardening work also changes.*
+*Built: `--debug-arena` on `nish run` and `--link`, and
+`scripts/build.sh --debug-arena`. The code is the `NISH_ARENA_DEBUG` block of
+`runtime/runtime.c`.*
 
 **The hazard.** `nish_arena_release` and `nish_reset_arena` (`runtime/runtime.c`)
 free every chunk newer than the mark with `free`, and rewind `off` inside the
@@ -337,36 +338,64 @@ kept chunk to the next bump.
 
 Nothing traps; the program reads whatever was
 written there next. That is the use-after-free a compiler bug in the escape
-analysis would turn into, and today only review and the arena tests stand
-against it.
+analysis would turn into. Without the mode, only review and the arena tests
+stand against it.
 
-**The mode.** A `--debug-arena` flag (on `nish build`, `nish run` and `--link`)
-links a runtime compiled with `-DNISH_ARENA_DEBUG`, and changes nothing in the
-IR. Under it:
+**The mode.** The flag links a runtime compiled with `-DNISH_ARENA_DEBUG`, and
+changes nothing in the IR. Under it:
 
-- `nish_arena_grow` maps each chunk with `mmap`, page-aligned, its header on a
-  page of its own, instead of `malloc`.
-- A release or reset never returns memory for reuse. The whole pages past the
-  mark, in the mark's chunk and in every newer chunk, are `mprotect`ed to
-  `PROT_NONE` and kept mapped; the partial page holding the mark is filled
-  with a poison byte (`0xDB`) from the mark to its end. `cap` is cut to the
-  mark, so the next allocation grows a fresh chunk rather than bumping into the
-  poisoned page.
-- A stale read of a whole freed page traps with SIGSEGV at the read; a read of
-  the poisoned tail reads `0xDB` bytes, which the arena tests can assert.
-- The runtime's SIGSEGV path names the arena when the fault address lies in a
-  protected chunk, so a failure reads as a stale arena reference, not a crash.
+- **One block per chunk, with `cap` exact.** `nish_arena_grow` gives every
+  allocation a chunk of its own, with `cap == off`. Compiled code and
+  `runtime-text.c` bump the arena inline, and a loop's pass scope rewinds
+  inline while `buf` is unchanged. An exact chunk never fits a second bump, so
+  every allocation reaches `nish_arena_grow`, and every release that needs to
+  rewind finds a newer chunk and reaches the runtime. `nish_arena_release` and
+  the copying arm of `nish_arena_keep` cut `cap` back to `off`, and
+  `nish_rewind` (`runtime-cross.c`) always takes the release path.
+- **No address is ever reused.** The first chunk reserves one large
+  `PROT_NONE` range with `MAP_NORESERVE`: 1 TiB, halving down to 1 GiB if the
+  system refuses. Each chunk takes the next page-aligned span of the range with
+  an atomic add, header and block together, and `mprotect`s only that span
+  read-write. Used up, the range is a fatal error, never a wrap.
+- **A release retires the chunk.** Every chunk the release, a reset or
+  `nish_region_adopt` frees is `mprotect`ed back to `PROT_NONE` and
+  `madvise(MADV_DONTNEED)`d, so its memory goes back to the system while its
+  addresses stay reserved. If `mprotect` fails (a process at its mapping limit),
+  the chunk is filled with `0xDB` instead, and a stale read sees that pattern
+  rather than a trap. A chunk `runtime-cross.c` made with `malloc` lies outside
+  the range and is still freed.
+- **A stale access names itself.** A `SIGSEGV` or `SIGBUS` handler, installed
+  with the reservation, checks the fault address. Inside the range it writes
+  `nish: --debug-arena: stale arena reference at 0x…: the memory was released
+  by the scope that allocated it` with `write`, runs the fatal hook, restores
+  the default action and returns, so the access faults again and the process
+  dies of `SIGSEGV`. Outside the range it puts back the handler it replaced and
+  returns, so a fault that is not the arena's is reported as before.
+
+The first design rewound inside a large chunk and poisoned the partial page
+holding the mark. It was changed to exact chunks because the inline rewind
+never calls the runtime, so that version could not see a loop's release at all.
 
 Memory only grows under the mode, which is the cost of never reusing an
-address; it is for tests and fuzzing, never for a release build.
+address: every block takes at least a page plus its header. It is for tests and
+fuzzing, never for a release build. The `wasm`, `wasm-host`, `wasi` and `napi`
+profiles refuse it: they have no `mprotect`, or share a host's signal handlers.
 
-**What it needs.** The flag in `src/compile.ts` and its `--help` line; a
-`debug-arena` runtime variant in `scripts/build.sh` and in the runtime cache's
-key, so a cached normal runtime is never linked under it; a `docs/LANGUAGE.md`
-rule and a guide page for the flag; the arena tests (`tests/cases/arena_*` and the
-runtime's arena checks in `tests/run.js`) run once more under it; and a negative test, a C
-harness that keeps a pointer across `nish_arena_release` and must die with
-SIGSEGV. The fuzzers would then run under it.
+**The tests.** A C harness keeps a pointer across `nish_arena_release`, reads it
+after the next allocation, and must die of `SIGSEGV` with the message. A
+normal runtime hands the same slot to that next allocation. The arena and
+region cases (`tests/cases/arena_*`, `region_*`, `mem_loop_scope*`) run again
+linked under the mode and must print their `.out`. The CLI refusals are pinned
+too. All of these are in `tests/run.js`, under "debug arena:".
+
+**The pass over the corpus.** When the mode landed, all 935 `tests/cases/`
+programs with a `.out` were linked against the debug runtime, the way section A
+links them, and run. None read a released block. 927 printed their `.out`. Of
+the other eight, six (`mem_loop_scope`, `mem_loop_scope_threads`,
+`mem_loop_scope_control`, `mem_join_parts_scope`, `mem_join_parts_same_pass`,
+`mem_return_array_scope`) print the arena's growth, which the mode changes by
+design. The other two (`file_open_errors`, `file_size_large`) need fixtures that
+only the suite makes.
 
 ## Doc corrections for the security-policy stage
 
