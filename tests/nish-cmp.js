@@ -513,7 +513,7 @@ const asyncFetch = (why, filesByProgram) =>
     files.map((file) => ({ program, file, changelog: ASYNC_FETCH, why }))
   )
 // Echoing ECN counts lands under this PR's subject.
-const ECN_ECHO = "echo ECN counts in the QUIC server's ACKs"
+const ECN_ECHO = "ECN counts in the QUIC server's ACKs"
 const ecnEcho = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: ECN_ECHO, why }))
