@@ -1034,8 +1034,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **111,080 bytes** (-8) by growing an array where it is
  * (`nish_array_grow_here`, runtime.c): an array the build pushes to extends its
  * block instead of leaving the smaller one behind it in the arena.
+ *
+ * Moved to **111,160 bytes** (+80) by echoing ECN counts (RFC 9000 §13.4.1,
+ * QUIC-10, `docs/security/quic.md`): each of the three spaces' `QuicAckRanges`
+ * counts ECT(0), ECT(1) and CE, and the connection and the server each keep
+ * the codepoint the datagram in hand arrived with.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111080
+export const HTTP3_SERVER_SLOT_BYTES = 111160
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
