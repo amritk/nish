@@ -400,9 +400,9 @@ The runtime of §3.3 as built, not the prototype's patch:
 `--profile speed`: `ptr` on the default runtime, `ptr-copy` a copy of it, and
 `ptr-range` with `scripts/build.sh --arena-range`. All three print the same
 checksum. The variants run shuffled in every round, each in a fresh process
-under `bench/rss.c`, on one virtual 4-core machine, 2026-11-17.
-`bench/goose/tree.ts` is not measured: it needs the in-place array growth of
-PR #1697, which has not merged.
+under `bench/rss.c`, on one virtual 4-core machine, 2026-11-17. These
+`sibling.ts` runs predate the merge of the in-place array growth (#1697);
+`bench/goose/tree.ts`, below, was run after it.
 
 The protocol was fixed before the run: 21 rounds at both sizes; "wall" is
 build + visit + climb, the program's own timers, not the process's lifetime;
@@ -442,6 +442,26 @@ noise of running one binary twice, and peak RSS moves by 0.2 MB at most. The
 band is wide (one virtual machine, a round's worst gap), so the run bounds the
 cost at no more than that band, not at zero. An earlier run with a median
 band and unequal rounds is superseded by this one. That is stage 1's gate.
+
+`bench/goose/tree.ts`, after #1697 merged and with RT-58's guard, at the
+stage's head, under the same protocol: 21 rounds at depth 24 (33,554,431
+nodes), the program built at that depth from its `bench:n` line. It has no
+timers, so "wall" is the process's lifetime under `bench/rss.c`. The same run
+gives the median of the per-round gaps beside their widest:
+
+```sh
+NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --program tree --rounds 21 --sizes 24
+```
+
+| variant | peak RSS | wall ms | wall vs ptr |
+| --- | ---: | ---: | ---: |
+| ptr | 769.8 MB | 2123.6 | 1.00x |
+| ptr-copy | 769.8 MB | 2131.8 | 1.00x |
+| ptr-range | 769.7 MB | 2175.7 | 1.02x |
+
+All three print 33554431 and 134079322148. Band: widest per-round gap 16.8%,
+median per-round gap 3.5%. Verdict: `ptr-range` wall +2.5% against `ptr`,
+within the widest band and within the median band. Peak RSS moves by 0.1 MB.
 
 ## 6. Where the emitter changes
 
