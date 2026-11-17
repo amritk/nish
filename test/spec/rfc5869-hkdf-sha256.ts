@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: e0f1d6627937f3f518cb72e9079e6c34401c387457ec22512950ed8241d03a44
+// vector-contract-sha256: cf0b4430694ab1989e5d0f3956fbe7edfe7b03188fceeb833720c1ca4e0d0ab8
 
 import { Suite } from "nish/testing";
 import { hkdfExpandSha256, hkdfExtractSha256 } from "nish/crypto/hkdf";
