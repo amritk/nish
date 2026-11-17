@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 5365f17f8d634690ef4e9e18fcdf6695f88ce6628d1da35e5f427f5544560a53
+// vector-contract-sha256: cd527121aded5f7ad9a616542ada5bde1a87a9d827aee429452b633b7b74ab03
 
 import { Suite } from "nish/testing";
 import { chacha20, chacha20Block, chacha20Poly1305Open, chacha20Poly1305Seal, poly1305, poly1305KeyGen } from "nish/crypto/chacha20poly1305";
@@ -383,6 +383,105 @@ const clause_A_4_KEYGEN_2 = (t: Suite): boolean => t.eqStr("[A.4-KEYGEN-2] RFC 8
  *   one- time Poly1305 key
  */
 const clause_A_4_KEYGEN_3 = (t: Suite): boolean => t.eqStr("[A.4-KEYGEN-3] RFC 8439 A.4 Test Vector #3: the Poly1305 one-time key (R-KEYGEN)", hexOrNull(poly1305KeyGen(unhex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"), unhex("000000000000000000000002"))), "965e3bc6f9ec7ed9560808f4d229f94b137ff275ca9b3fcbdd59deaad23310ae");
+
+/**
+ * RFC 8439 A.3 Test Vector #1: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_1 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-1] RFC 8439 A.3 Test Vector #1: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0000000000000000000000000000000000000000000000000000000000000000"), unhex("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"))), "00000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #2: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_2 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-2] RFC 8439 A.3 Test Vector #2: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0000000000000000000000000000000036e5f6b5c5e06070f0efca96227a863e"), unhex("416e79207375626d697373696f6e20746f20746865204945544620696e74656e6465642062792074686520436f6e7472696275746f7220666f72207075626c69636174696f6e20617320616c6c206f722070617274206f6620616e204945544620496e7465726e65742d4472616674206f722052464320616e6420616e792073746174656d656e74206d6164652077697468696e2074686520636f6e74657874206f6620616e204945544620616374697669747920697320636f6e7369646572656420616e20224945544620436f6e747269627574696f6e222e20537563682073746174656d656e747320696e636c756465206f72616c2073746174656d656e747320696e20494554462073657373696f6e732c2061732077656c6c206173207772697474656e20616e6420656c656374726f6e696320636f6d6d756e69636174696f6e73206d61646520617420616e792074696d65206f7220706c6163652c207768696368206172652061646472657373656420746f"))), "36e5f6b5c5e06070f0efca96227a863e");
+
+/**
+ * RFC 8439 A.3 Test Vector #3: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_3 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-3] RFC 8439 A.3 Test Vector #3: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("36e5f6b5c5e06070f0efca96227a863e00000000000000000000000000000000"), unhex("416e79207375626d697373696f6e20746f20746865204945544620696e74656e6465642062792074686520436f6e7472696275746f7220666f72207075626c69636174696f6e20617320616c6c206f722070617274206f6620616e204945544620496e7465726e65742d4472616674206f722052464320616e6420616e792073746174656d656e74206d6164652077697468696e2074686520636f6e74657874206f6620616e204945544620616374697669747920697320636f6e7369646572656420616e20224945544620436f6e747269627574696f6e222e20537563682073746174656d656e747320696e636c756465206f72616c2073746174656d656e747320696e20494554462073657373696f6e732c2061732077656c6c206173207772697474656e20616e6420656c656374726f6e696320636f6d6d756e69636174696f6e73206d61646520617420616e792074696d65206f7220706c6163652c207768696368206172652061646472657373656420746f"))), "f3477e7cd95417af89a6b8794c310cf0");
+
+/**
+ * RFC 8439 A.3 Test Vector #4: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_4 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-4] RFC 8439 A.3 Test Vector #4: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"), unhex("2754776173206272696c6c69672c20616e642074686520736c6974687920746f7665730a446964206779726520616e642067696d626c6520696e2074686520776162653a0a416c6c206d696d737920776572652074686520626f726f676f7665732c0a416e6420746865206d6f6d65207261746873206f757467726162652e"))), "4541669a7eaaee61e708dc7cbcc5eb62");
+
+/**
+ * RFC 8439 A.3 Test Vector #5: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_5 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-5] RFC 8439 A.3 Test Vector #5: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0200000000000000000000000000000000000000000000000000000000000000"), unhex("ffffffffffffffffffffffffffffffff"))), "03000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #6: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_6 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-6] RFC 8439 A.3 Test Vector #6: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("02000000000000000000000000000000ffffffffffffffffffffffffffffffff"), unhex("02000000000000000000000000000000"))), "03000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #7: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_7 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-7] RFC 8439 A.3 Test Vector #7: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000000000000000000000000000000000000000000000000000"), unhex("fffffffffffffffffffffffffffffffff0ffffffffffffffffffffffffffffff11000000000000000000000000000000"))), "05000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #8: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_8 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-8] RFC 8439 A.3 Test Vector #8: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000000000000000000000000000000000000000000000000000"), unhex("fffffffffffffffffffffffffffffffffbfefefefefefefefefefefefefefefe01010101010101010101010101010101"))), "00000000000000000000000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #9: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_9 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-9] RFC 8439 A.3 Test Vector #9: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0200000000000000000000000000000000000000000000000000000000000000"), unhex("fdffffffffffffffffffffffffffffff"))), "faffffffffffffffffffffffffffffff");
+
+/**
+ * RFC 8439 A.3 Test Vector #10: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_10 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-10] RFC 8439 A.3 Test Vector #10: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000040000000000000000000000000000000000000000000000"), unhex("e33594d7505e43b900000000000000003394d7505e4379cd01000000000000000000000000000000000000000000000001000000000000000000000000000000"))), "14000000000000005500000000000000");
+
+/**
+ * RFC 8439 A.3 Test Vector #11: the Poly1305 tag
+ *
+ * R-POLY — RFC 8439 §2.5, DEFINITION:
+ *   Poly1305 takes a 32-byte one-time key and a message and produces a
+ *   16-byte tag.
+ */
+const clause_A_3_POLY1305_11 = (t: Suite): boolean => t.eqStr("[A.3-POLY1305-11] RFC 8439 A.3 Test Vector #11: the Poly1305 tag (R-POLY)", hexOrNull(poly1305(unhex("0100000000000000040000000000000000000000000000000000000000000000"), unhex("e33594d7505e43b900000000000000003394d7505e4379cd010000000000000000000000000000000000000000000000"))), "13000000000000000000000000000000");
 
 /**
  * the block function outputs 64 bytes for any counter
@@ -2321,6 +2420,17 @@ export const main = (): i32 => {
   ran = `${ran}${clause_A_4_KEYGEN_1(t) ? "1" : "0"}`;
   ran = `${ran}${clause_A_4_KEYGEN_2(t) ? "1" : "0"}`;
   ran = `${ran}${clause_A_4_KEYGEN_3(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_3(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_4(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_5(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_6(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_7(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_8(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_9(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_10(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_A_3_POLY1305_11(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_BLOCK_64(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_KEYSTREAM(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_XOR_INVOLUTION(t) ? "1" : "0"}`;

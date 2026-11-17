@@ -233,6 +233,11 @@
                 "title": "Authentication tokens (JWT)",
                 "filepath": "docs/guide/using-nish/auth.md"
               },
+              "/oidc": {
+                "type": "page",
+                "title": "OpenID Connect",
+                "filepath": "docs/guide/using-nish/oidc.md"
+              },
               "/http-router": {
                 "type": "page",
                 "title": "HTTP routing",
@@ -755,6 +760,7 @@
                         "title": "http3-server",
                         "filepath": "docs/reference/net/http3-server.md"
                       },
+                      "/oidc": { "type": "page", "title": "oidc", "filepath": "docs/reference/net/oidc.md" },
                       "/outbound": {
                         "type": "page",
                         "title": "outbound",
@@ -1313,6 +1319,11 @@
                     "title": "HTTP/1.1 client (fetchSync)",
                     "filepath": "docs/security/fetch.md"
                   },
+                  "/oidc": {
+                    "type": "page",
+                    "title": "OpenID Connect discovery and the JWK Set",
+                    "filepath": "docs/security/oidc.md"
+                  },
                   "/upstream": {
                     "type": "page",
                     "title": "Upstream HTTP calls",
@@ -1397,7 +1408,8 @@
                   "/wp61-json-typed-checks": { "type": "page", "title": "WP61: Typed JSON, constraints and coercion in one pass", "filepath": "docs/roadmap/wp61-json-typed-checks.md" },
                   "/wp62-json-schema-classes": { "type": "page", "title": "WP62: Nish classes from a JSON Schema", "filepath": "docs/roadmap/wp62-json-schema-classes.md" },
                   "/wp63-iouring-net": { "type": "page", "title": "WP63: io_uring direct descriptors for nish:net", "filepath": "docs/roadmap/wp63-iouring-net.md" },
-                  "/wp64-temporal": { "type": "page", "title": "WP64: Temporal — dates, times and time zones", "filepath": "docs/roadmap/wp64-temporal.md" }
+                  "/wp64-temporal": { "type": "page", "title": "WP64: Temporal — dates, times and time zones", "filepath": "docs/roadmap/wp64-temporal.md" },
+                  "/wp65-lexer-surface": { "type": "page", "title": "WP65: The surface a lexer port asked for", "filepath": "docs/roadmap/wp65-lexer-surface.md" }
                 }
               },
               "/done/..": {
@@ -1481,6 +1493,11 @@
         { "property": "og:image:width", "content": "1200" },
         { "property": "og:image:height", "content": "630" },
         { "property": "og:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." },
+        { "property": "og:video", "content": "https://nishlang.com/og.mp4" },
+        { "property": "og:video:secure_url", "content": "https://nishlang.com/og.mp4" },
+        { "property": "og:video:type", "content": "video/mp4" },
+        { "property": "og:video:width", "content": "1200" },
+        { "property": "og:video:height", "content": "630" },
         { "name": "twitter:card", "content": "summary_large_image" },
         { "name": "twitter:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
         { "name": "twitter:image", "content": "https://nishlang.com/og.png" },

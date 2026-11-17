@@ -13,12 +13,19 @@
 // slot. A full set's listener is not readable, so the -23 a burst of accepts
 // ends on is the only one the handler sees; the rest it starts is HANDLER-10's,
 // which a close ends early (that path is proven on descriptors, in turns that
-// do not wait, by net_handler_rest_close). Exit 0 is a pass, 2 says the kernel
+// do not wait, by net_handler_rest_close). The set must hold at least
+// `HELD_FLOOR` connections, twice the descriptor limit: a handler on
+// descriptors holds fewer than 32 under it, and one on a single ring holds at
+// most 32 slots, so only a set that grew past one ring (each costs two
+// descriptors, its ring and its eventfd) meets the floor. Measured: 416 held,
+// 13 rings of 32 slots, in three of three runs. Exit 0 is a pass, 2 says the kernel
 // refused rings (the section's skip), and 1 is a failure, with its line.
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { Router, RouterLimits } from "nish/net/router"
 import { netClose, netLocalPort, netRingState } from "nish:net"
 
+/** The fewest connections the set must hold: more than one ring's 32 slots. */
+const HELD_FLOOR: i32 = 64
 /** The connections the client opens. */
 const CLIENTS: i32 = 800
 /** A turn that blocks, in milliseconds. */
@@ -69,8 +76,8 @@ export const main = (): i32 => {
     still = now === held && now > 0 ? still + 1 : 0
     held = now
   }
-  if (held < 32 || held >= CLIENTS) {
-    console.log(`the handler held ${held} of ${CLIENTS} connections`)
+  if (held < HELD_FLOOR || held >= CLIENTS) {
+    console.log(`the handler held ${held} of ${CLIENTS} connections, fewer than ${HELD_FLOOR} or all`)
     return 1
   }
   if (!rested) {

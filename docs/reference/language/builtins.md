@@ -5501,7 +5501,7 @@ entry:
   `pidfd_getfd` kill; io_uring kills without `net`, and with `net` but not
   `process.spawn` only `io_uring_enter` is let through, on the premade
   rings' descriptors, matched by descriptor number (see the premade rings
-  below, and NURING-36 in `docs/security/net-uring.md`); on x86-64 a system call numbered with bit 30 (x32) kills, and
+  below); on x86-64 a system call numbered with bit 30 (x32) kills, and
   a call from any other architecture's entry kills. A killed process ends by
   `SIGSYS`, exit status 159 from a shell. From Landlock ABI 6 a sandboxed
   process cannot signal or reach the abstract sockets of a process outside
@@ -5518,7 +5518,15 @@ entry:
   `-23` from `tcpAccept` until a connection closes, a ring listener opened
   after that serves descriptors, and a kernel or limit that refuses them
   leaves the process on descriptors for good, which `netRingState()`
-  reports.
+  reports. One more ring, the keeper, takes only `NOP` and is entered by
+  nothing; a ring a closed listener held has the keeper put at its
+  descriptor number, so no premade ring's number is ever free. `close`,
+  `dup2` and `dup3` naming a ring's or the keeper's number as the descriptor
+  they close or replace kill, except a `dup3` from the keeper, which is how
+  the runtime puts the keeper at a freed ring's number, and `close_range`
+  fails with `ENOSYS`, as on
+  a kernel older than 5.9; on every other
+  descriptor they work as before (NURING-36 in `docs/security/net-uring.md`).
 - **Refusals.** A program whose sandbox cannot be applied prints one line,
   `nish: --sandbox: ...`, and exits 126 before `main` runs. Strict refuses a
   kernel without Landlock, and one below ABI 3 when `fs.write` is not
