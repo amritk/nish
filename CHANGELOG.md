@@ -16,6 +16,59 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-17
+
+### Added
+
+- cli: Link installed Nish packages' agent skills into .claude/skills ([#1654](https://github.com/amritk/nish/pull/1654))
+- runtime: Http1Connection says when it is between requests ([#1655](https://github.com/amritk/nish/pull/1655))
+- runtime: WP63 S2 — io_uring slot handles in nish:net ([#1658](https://github.com/amritk/nish/pull/1658))
+- runtime: Add --debug-arena, which traps a stale arena reference ([#1676](https://github.com/amritk/nish/pull/1676))
+- runtime: WP63 S3 — restricted io_uring rings under --sandbox ([#1679](https://github.com/amritk/nish/pull/1679))
+- interop: WP63 S4 — HandlerLimits listen on io_uring rings, and the entry re-measured ([#1678](https://github.com/amritk/nish/pull/1678))
+- runtime: Std/net/oidc — OpenID Connect discovery and a rotating JWKS key set ([`afeddde`](https://github.com/amritk/nish/commit/afeddde))
+
+### Fixed
+
+- cli: Stop the docs landing hero playing twice on a first load ([#1670](https://github.com/amritk/nish/pull/1670))
+- cli: Link a package's agent skills only when the user accepts them ([#1669](https://github.com/amritk/nish/pull/1669))
+- checker: NL9018 warns when a handler the loop calls drops a temporary ([#1675](https://github.com/amritk/nish/pull/1675))
+- runtime: Keep each premade ring's number on its ring under --sandbox ([#1695](https://github.com/amritk/nish/pull/1695))
+
+### Performance
+
+- interop: Measure mmap_size and a shared cache on the five-process entry ([#1693](https://github.com/amritk/nish/pull/1693))
+
+### Documentation
+
+- Give the docs site a share card, page metadata and a clearer header ([#1672](https://github.com/amritk/nish/pull/1672))
+- Draw one underline under the current header link ([#1685](https://github.com/amritk/nish/pull/1685))
+- Keep release-note words in squash subjects, pin new diagnostics, and hold records to their code ([#1691](https://github.com/amritk/nish/pull/1691))
+- roadmap: WP65 — the surface a lexer port asked for ([#1673](https://github.com/amritk/nish/pull/1673))
+- Add an og:video share card recorded from the hero animation ([#1696](https://github.com/amritk/nish/pull/1696))
+- roadmap: Propose WP48 again as 32-bit references for linked classes ([#1687](https://github.com/amritk/nish/pull/1687))
+- Code that decides what a package may grant fails closed ([#1677](https://github.com/amritk/nish/pull/1677))
+
+### Tests
+
+- spec: Pin vector 0.2.1 and run the spec tests in CI ([#1659](https://github.com/amritk/nish/pull/1659))
+- spec: Hold nish/crypto/chacha20poly1305 to RFC 8439 with a vector contract ([#1660](https://github.com/amritk/nish/pull/1660))
+- spec: Hold nish/crypto/hkdf to RFC 5869 with a vector contract ([#1661](https://github.com/amritk/nish/pull/1661))
+- spec: Hold nish/crypto/hmac to RFC 4231 with a vector contract ([#1663](https://github.com/amritk/nish/pull/1663))
+- spec: Hold nish/crypto/ed25519 to RFC 8032 with a vector contract ([#1668](https://github.com/amritk/nish/pull/1668))
+- spec: Hold nish/crypto/x25519 to RFC 7748 with a vector contract ([#1664](https://github.com/amritk/nish/pull/1664))
+- spec: Move to vector 0.3.1, restore hex's 96 samples, print the staleness check ([#1681](https://github.com/amritk/nish/pull/1681))
+- spec: Hold ChaCha20-Poly1305 to RFC 8439 Appendix A under vector 0.3.1 ([#1683](https://github.com/amritk/nish/pull/1683))
+- spec: Add RFC 7748's iterated X25519 vectors under vector 0.3.1 ([#1682](https://github.com/amritk/nish/pull/1682))
+- spec: Declare HMAC's and HKDF's untested exports as outOfScope under vector 0.3.1 ([#1688](https://github.com/amritk/nish/pull/1688))
+- spec: Hold Ed25519's RFC 8032 signatures to vector rows under vector 0.3.1 ([#1684](https://github.com/amritk/nish/pull/1684))
+- spec: Add RFC 8439 A.3's eleven Poly1305 vectors under vector 0.4.0 ([#1692](https://github.com/amritk/nish/pull/1692))
+
+### Internal
+
+- infra: Set custom domain to docs.nishlang.com ([#1662](https://github.com/amritk/nish/pull/1662))
+
+
 ## [0.41.0] - 2026-11-16
 
 ### Added
@@ -1979,3 +2032,4 @@ file per release, and each release's notes and downloads are on the
 [0.40.0]: https://github.com/amritk/nish/releases/tag/v0.40.0
 [0.40.1]: https://github.com/amritk/nish/releases/tag/v0.40.1
 [0.41.0]: https://github.com/amritk/nish/releases/tag/v0.41.0
+[0.42.0]: https://github.com/amritk/nish/releases/tag/v0.42.0

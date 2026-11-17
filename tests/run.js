@@ -7543,10 +7543,10 @@ const LINK_SERIAL = new Map([
  * - The process. Nothing here changes `process.env` or the working
  *   directory; an environment a native run needs (`envWithThreads`) is a copy
  *   handed to that one spawn.
- * - The world the programs run in. The four that write files write paths
- *   named after themselves (`build/net_relay/`, `build/rt_sec_read_cap/`,
- *   `build/rt_sec_wasm_arena/`, and net_relay_soak's server's
- *   `build/net_relay_soak_<n>.*`), and nothing else reads them;
+ * - The world the programs run in. The five that write files write paths
+ *   named after themselves (`build/net_relay/`, `build/net_relay_f64/`,
+ *   `build/rt_sec_read_cap/`, `build/rt_sec_wasm_arena/`, and net_relay_soak's
+ *   server's `build/net_relay_soak_<n>.*`), and nothing else reads them;
  *   net_interop_server writes only when started by hand. Every socket a
  *   program's checks open is bound to port 0, which the kernel picks free; the
  *   literal ports in tests/link are a server's CLI argument or bytes in a
@@ -12306,7 +12306,7 @@ if (dealtHere("breakWeb")) {
     encoding: "utf8",
   })
   // The count is pinned, as game-page's is: a check that goes missing is caught.
-  const BREAK_WEB_CHECKS = 147
+  const BREAK_WEB_CHECKS = 152
   const lines = res.stdout.split("\n")
   const results = lines.filter((line) => line.startsWith("ok ") || line.startsWith("not ok "))
   const counted = lines.find((line) => line.startsWith("checks: "))
@@ -17003,6 +17003,24 @@ if (dealtHere("runtimeChecks")) {
           trapped.run.stderr
         ),
       trapped.shown
+    )
+    // tests/runtime/debug-arena-grow-test.c: a block that fills its own chunk
+    // grows by a `realloc` of that chunk in a normal build, which aborted on
+    // the debug arena's reserved, never-malloc'd chunks.
+    const grown = (() => {
+      const exe = path.join(buildDir, "debug_arena_grow")
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-DNISH_ARENA_DEBUG=1", ...RUNTIME_C, "tests/runtime/debug-arena-grow-test.c", "-lm", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      return { run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
+    })()
+    check(
+      "debug arena: an array grown past 64 KB takes the copy and keeps every element",
+      grown.run !== null && grown.run.status === 0 && grown.run.stdout === "len 1048576, sum 66584576\n",
+      grown.shown
     )
 
     // Every case that exercises the arena or a region, linked as section A
@@ -30550,6 +30568,743 @@ if (dealtHere("runCache")) {
     }
   }
 
+  // Cost: two `nish run` compiles (the in-memory program and the loopback
+  // probe), a Node loopback server, and a 300 ms wait on its silent route.
+  if (selects("oidc", "std/net/oidc")) {
+    if (!HAS_CLANG) {
+      skip("std/net/oidc: clang not on PATH, so the probes cannot be linked")
+    } else {
+      const oidcDir = path.join(buildDir, "oidc")
+      fs.rmSync(oidcDir, { recursive: true, force: true })
+      fs.mkdirSync(oidcDir, { recursive: true })
+      // Keys, JWK Sets and tokens, signed by node:crypto for `issuer`.
+      const oidcFixtures = (issuer) => {
+          const b64 = (b) => Buffer.from(b).toString("base64url")
+          const NOW = 1800000000
+          const pair = (type, opts) => crypto.generateKeyPairSync(type, opts)
+          const rsa = pair("rsa", { modulusLength: 2048 })
+          const rsa2 = pair("rsa", { modulusLength: 2048 })
+          const p256 = pair("ec", { namedCurve: "P-256" })
+          const p384 = pair("ec", { namedCurve: "P-384" })
+          const ed = pair("ed25519")
+          const small = pair("rsa", { modulusLength: 1024 })
+          const pub = (k, extra) => ({ ...k.publicKey.export({ format: "jwk" }), ...extra })
+          const priv = (k, extra) => ({ ...k.privateKey.export({ format: "jwk" }), ...extra })
+          const sign = (alg, key, header, claims) => {
+            const h = b64(JSON.stringify({ alg, typ: "JWT", ...header }))
+            const p = b64(JSON.stringify(claims))
+            const data = Buffer.from(`${h}.${p}`)
+            const bits = { RS256: "sha256", RS384: "sha384", RS512: "sha512", ES256: "sha256", ES384: "sha384" }
+            let sig
+            if (alg === "none") sig = Buffer.alloc(0)
+            else if (alg === "HS256") sig = crypto.createHmac("sha256", key).update(data).digest()
+            else if (alg === "EdDSA") sig = crypto.sign(null, data, key)
+            else if (alg.startsWith("ES")) sig = crypto.sign(bits[alg], data, { key, dsaEncoding: "ieee-p1363" })
+            else sig = crypto.sign(bits[alg], data, key)
+            return `${h}.${p}.${b64(sig)}`
+          }
+          const claims = (extra) => ({ iss: issuer, aud: "api", sub: "u1", iat: NOW - 10, exp: NOW + 600, ...extra })
+          const good = claims({})
+          const set = (...keys) => JSON.stringify({ keys })
+          const docs = {
+            // One of each key this module takes, with and without alg.
+            all: set(
+              pub(rsa, { kid: "rsa", use: "sig", alg: "RS256" }),
+              pub(rsa, { kid: "rsa384", alg: "RS384" }),
+              pub(rsa, { kid: "rsa512", alg: "RS512" }),
+              pub(p256, { kid: "p256" }),
+              pub(p384, { kid: "p384", alg: "ES384" }),
+              pub(ed, { kid: "ed", alg: "EdDSA" }),
+            ),
+            one: set(pub(rsa, {})),
+            rsaOnly: set(pub(rsa, { kid: "rsa" })),
+            rotated: set(pub(rsa2, { kid: "rsa2" })),
+            skips: set(
+              pub(rsa, { kid: "enc", use: "enc" }),
+              { kty: "oct-like", kid: "u" },
+              pub(rsa, { kid: "ps", alg: "PS256" }),
+              { ...pub(p256, {}), crv: "P-521", kid: "p521" },
+              pub(ed, { kid: "ed" }),
+            ),
+            octSkip: set({ kty: "oct", kid: "o" }, pub(ed, { kid: "ed" })),
+            octSecret: set({ kty: "oct", kid: "o", k: b64("secret") }, pub(ed, { kid: "ed" })),
+            private: set(priv(p256, { kid: "p256" })),
+            privateRsa: set(pub(rsa, { kid: "a" }), { ...pub(rsa, { kid: "b" }), p: "AQAB" }),
+            private_q: set({ ...pub(rsa, { kid: "x" }), q: "AQAB" }),
+            private_dp: set({ ...pub(rsa, { kid: "x" }), dp: "AQAB" }),
+            private_dq: set({ ...pub(rsa, { kid: "x" }), dq: "AQAB" }),
+            private_qi: set({ ...pub(rsa, { kid: "x" }), qi: "AQAB" }),
+            private_oth: set({ ...pub(rsa, { kid: "x" }), oth: [] }),
+            // The alg names the other type, and the entry also carries that type's material.
+            algEsOnRsaWithEc: set({ ...pub(p256, {}), ...pub(rsa, { kid: "x", alg: "ES256" }) }),
+            algRsaOnEcWithRsa: set({ ...pub(rsa, {}), ...pub(p256, { kid: "x", alg: "RS256" }) }),
+            algRsaOnEc: set(pub(p256, { kid: "x", alg: "RS256" })),
+            algEsOnRsa: set(pub(rsa, { kid: "x", alg: "ES256" })),
+            algEs384OnP256: set(pub(p256, { kid: "x", alg: "ES384" })),
+            algEdOnP256: set(pub(p256, { kid: "x", alg: "EdDSA" })),
+            algHs: set(pub(rsa, { kid: "x", alg: "HS256" })),
+            algEdOnUnknownCrv: set({ kty: "OKP", crv: "X25519", x: pub(ed, {}).x, kid: "x", alg: "EdDSA" }),
+            unknownCrvNoAlg: set({ kty: "OKP", crv: "X25519", x: pub(ed, {}).x, kid: "x" }, pub(ed, { kid: "ed" })),
+            dupKid: set(pub(rsa, { kid: "k" }), pub(p256, { kid: "k" })),
+            dupNoKid: set(pub(rsa, {}), pub(p256, {})),
+            dupSkipped: set(pub(rsa, { kid: "k", use: "enc" }), pub(p256, { kid: "k" })),
+            smallRsa: set(pub(small, { kid: "s" })),
+            badX: set({ ...pub(p256, { kid: "x" }), x: b64(Buffer.alloc(31, 1)) }),
+            badEd: set({ ...pub(ed, { kid: "x" }), x: b64(Buffer.alloc(31, 1)) }),
+            noKty: set({ kid: "x", n: "AQAB" }),
+            algNotString: set({ ...pub(ed, { kid: "x" }), alg: 7 }),
+            entryNotObject: JSON.stringify({ keys: ["x"] }),
+            keysNotArray: JSON.stringify({ keys: {} }),
+            notJson: "{\"keys\": [",
+            longKid: set(pub(ed, { kid: "k".repeat(257) })),
+            maxKid: set(pub(ed, { kid: "k".repeat(256) })),
+            ctlKid: set(pub(ed, { kid: "a\nb" })),
+            emptyKid: set(pub(ed, { kid: "" })),
+            delKid: set(pub(ed, { kid: "a\u007f" })),
+            utf8Kid: set(pub(ed, { kid: "k\u00e9" })),
+            kid31: set(pub(ed, { kid: "a\u001f" })),
+            kid32: set(pub(ed, { kid: " " })),
+            kid126: set(pub(ed, { kid: "~" })),
+            // A use other than sig skips an entry only after the private-member and kid rules.
+            encPrivate: set({ ...pub(rsa, { kid: "e", use: "enc" }), d: "AQAB" }, pub(ed, { kid: "ed" })),
+            encBadKid: set(pub(rsa, { kid: "a\nb", use: "enc" }), pub(ed, { kid: "ed" })),
+            // Rule 3: each member present and not a string refuses the set, where reading it as empty would skip or refuse otherwise.
+            ktyNotString: set({ kty: 5, kid: "u" }, pub(ed, { kid: "ed" })),
+            useNotString: set(pub(ed, { kid: "a", use: 5 }), pub(ed, { kid: "ed" })),
+            kidNotString: set(pub(ed, { kid: 5 }), pub(ed, { kid: "ed" })),
+            crvNotString: set({ ...pub(ed, { kid: "a" }), crv: 5 }, pub(ed, { kid: "ed" })),
+            // An unknown type naming any algorithm nish/crypto/jwt has, HMAC included, is refused.
+            algHs384: set(pub(rsa, { kid: "x", alg: "HS384" }), pub(ed, { kid: "ed" })),
+            algHs512: set(pub(rsa, { kid: "x", alg: "HS512" }), pub(ed, { kid: "ed" })),
+            // A crv this module takes, under the wrong kty, is skipped.
+            p256UnderOkp: set({ ...pub(p256, { kid: "a" }), kty: "OKP" }, pub(ed, { kid: "ed" })),
+            p384UnderOkp: set({ ...pub(p384, { kid: "a" }), kty: "OKP" }, pub(ed, { kid: "ed" })),
+            edUnderEc: set({ ...pub(ed, { kid: "a" }), kty: "EC" }, pub(ed, { kid: "ed" })),
+            // Key material missing, of the wrong type or the wrong length.
+            noX: set({ ...pub(p256, { kid: "x" }), x: undefined }),
+            numX: set({ ...pub(p256, { kid: "x" }), x: 5 }),
+            noY: set({ ...pub(p256, { kid: "x" }), y: undefined }),
+            shortY: set({ ...pub(p256, { kid: "x" }), y: b64(Buffer.alloc(31, 1)) }),
+            // The real point's 64 bytes, split 31 and 33: the whole point is the right length.
+            skewY: (() => {
+              const k = pub(p256, { kid: "x" })
+              const xy = Buffer.concat([Buffer.from(k.x, "base64url"), Buffer.from(k.y, "base64url")])
+              return set({ ...k, x: b64(xy.subarray(0, 31)), y: b64(xy.subarray(31)) })
+            })(),
+            p384ShortX: set({ ...pub(p384, { kid: "x" }), x: b64(Buffer.alloc(47, 1)) }),
+            p384NoY: set({ ...pub(p384, { kid: "x" }), y: undefined }),
+            p384ShortY: set({ ...pub(p384, { kid: "x" }), y: b64(Buffer.alloc(47, 1)) }),
+            p256CoordsOnP384: set({ ...pub(p256, { kid: "x" }), crv: "P-384" }),
+            edNoX: set({ ...pub(ed, { kid: "x" }), x: undefined }),
+            rsaNoN: set({ ...pub(rsa, { kid: "x" }), n: undefined }),
+            rsaNoE: set({ ...pub(rsa, { kid: "x" }), e: undefined }),
+            rsaNumN: set({ ...pub(rsa, { kid: "x" }), n: 5 }),
+            // An 8192-bit modulus is the most RSA takes; one bit more is refused.
+            rsa8192: set({ kty: "RSA", kid: "x", e: "AQAB", n: b64(Buffer.alloc(1024, 0xff)) }),
+            rsa8193: set({ kty: "RSA", kid: "x", e: "AQAB", n: b64(Buffer.concat([Buffer.from([1]), Buffer.alloc(1024, 0xff)])) }),
+            none: set(),
+            tooMany: set(...Array.from({ length: 65 }, (_, i) => pub(ed, { kid: `k${i}`, use: "enc" }))),
+            maxKeys: set(...Array.from({ length: 64 }, (_, i) => pub(ed, { kid: `k${i}` }))),
+          }
+          docs.big = JSON.stringify({ keys: [pub(ed, { kid: "ed" })], pad: "x".repeat(65536) })
+          const rsaKey = rsa.privateKey
+          const tokens = {
+            rs256: sign("RS256", rsaKey, { kid: "rsa" }, good),
+            rs384: sign("RS384", rsaKey, { kid: "rsa384" }, good),
+            rs512: sign("RS512", rsaKey, { kid: "rsa512" }, good),
+            es256: sign("ES256", p256.privateKey, { kid: "p256" }, good),
+            es384: sign("ES384", p384.privateKey, { kid: "p384" }, good),
+            eddsa: sign("EdDSA", ed.privateKey, { kid: "ed" }, good),
+            rs256On384: sign("RS256", rsaKey, { kid: "rsa384" }, good),
+            hs256: sign("HS256", Buffer.from(rsa.publicKey.export({ format: "pem", type: "spki" })), { kid: "rsa" }, good),
+            none: sign("none", null, { kid: "rsa" }, good),
+            wrongIss: sign("RS256", rsaKey, { kid: "rsa" }, claims({ iss: `${issuer}/` })),
+            wrongAud: sign("RS256", rsaKey, { kid: "rsa" }, claims({ aud: "other" })),
+            audArray: sign("RS256", rsaKey, { kid: "rsa" }, claims({ aud: ["x", "api"] })),
+            audArrayMiss: sign("RS256", rsaKey, { kid: "rsa" }, claims({ aud: ["x", "y"] })),
+            expired: sign("RS256", rsaKey, { kid: "rsa" }, claims({ exp: NOW - 61 })),
+            expiredInLeeway: sign("RS256", rsaKey, { kid: "rsa" }, claims({ exp: NOW - 59 })),
+            nbf: sign("RS256", rsaKey, { kid: "rsa" }, claims({ nbf: NOW + 61 })),
+            nbfInLeeway: sign("RS256", rsaKey, { kid: "rsa" }, claims({ nbf: NOW + 59 })),
+            noExp: sign("RS256", rsaKey, { kid: "rsa" }, { iss: issuer, aud: "api", iat: NOW }),
+            noKid: sign("RS256", rsaKey, {}, good),
+            unknownKid: sign("RS256", rsaKey, { kid: "nope" }, good),
+            rotated: sign("RS256", rsa2.privateKey, { kid: "rsa2" }, good),
+            tampered: `${sign("RS256", rsaKey, { kid: "rsa" }, good).slice(0, -4)}AAAA`,
+            nonAscii: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}é`,
+            // Each code unit of this token's header is the signed one plus 0x100, so its low byte is
+            // the signed byte, a base64url character: cut to a byte per unit, it reads as the signed
+            // token. Natively each is two UTF-8 bytes, and without the guard the header is unreadable,
+            // its kid none, and the refusal OIDC_ERR_KID_REQUIRED, not JWT_ERR_FORMAT.
+            lowByte: (() => {
+              const tk = sign("RS256", rsaKey, { kid: "rsa" }, good)
+              const at = tk.indexOf(".")
+              return [...tk.slice(0, at)].map((c) => String.fromCharCode(0x100 + c.charCodeAt(0))).join("") + tk.slice(at)
+            })(),
+            iatFuture: sign("RS256", rsaKey, { kid: "rsa" }, claims({ iat: NOW + 61 })),
+            long: `${sign("RS256", rsaKey, { kid: "rsa" }, good)}${"A".repeat(8192)}`,
+            longKid: sign("RS256", rsaKey, { kid: "k".repeat(300) }, good),
+            kid256: sign("RS256", rsaKey, { kid: "k".repeat(256) }, good),
+            kid257: sign("RS256", rsaKey, { kid: "k".repeat(257) }, good),
+            numKid: sign("RS256", rsaKey, { kid: 7 }, good),
+            emptyKid: sign("RS256", rsaKey, { kid: "" }, good),
+          }
+          const disc = (extra) => JSON.stringify({ issuer, jwks_uri: "https://keys.example/jwks", ...extra })
+          const discovery = {
+            ok: disc({}),
+            slash: disc({ issuer: `${issuer}/` }),
+            case: disc({ issuer: issuer.toUpperCase() }),
+            httpJwks: disc({ jwks_uri: "http://keys.example/jwks" }),
+            loopJwks: disc({ jwks_uri: "http://127.0.0.1:9/jwks" }),
+            httpIssuer: JSON.stringify({ issuer: "http://127.0.0.1:8080", jwks_uri: "http://127.0.0.1:9/jwks" }),
+            httpIssuerRemoteJwks: JSON.stringify({ issuer: "http://127.0.0.1:8080", jwks_uri: "http://keys.example/jwks" }),
+            userJwks: disc({ jwks_uri: "https://u:p@keys.example/jwks" }),
+            userOnlyJwks: disc({ jwks_uri: "https://u@keys.example/jwks" }),
+            passOnlyJwks: disc({ jwks_uri: "https://:p@keys.example/jwks" }),
+            emptyHostJwks: disc({ jwks_uri: "https:///jwks" }),
+            notUrlJwks: disc({ jwks_uri: "keys" }),
+            noJwks: JSON.stringify({ issuer }),
+            numIssuer: JSON.stringify({ issuer: 1, jwks_uri: "https://keys.example/jwks" }),
+            array: "[]",
+            upperHttpIssuer: JSON.stringify({ issuer: "HTTP://127.0.0.1:8080", jwks_uri: "http://127.0.0.1:9/jwks" }),
+          }
+          return { NOW, docs, tokens, discovery }
+      }
+      // The in-memory probe: every rule, with an injected clock and no network.
+      const oidcProbe = (file, fx, issuer) => {
+          const { NOW, docs, tokens, discovery } = fx
+          const lit = (s) => JSON.stringify(s)
+          const consts = []
+          for (const [k, v] of Object.entries(docs)) if (k !== "big") consts.push(`const doc_${k}: string = ${lit(v)}`)
+          for (const [k, v] of Object.entries(tokens)) consts.push(`const tok_${k}: string = ${lit(v)}`)
+          for (const [k, v] of Object.entries(discovery)) consts.push(`const disc_${k}: string = ${lit(v)}`)
+          const src = `import { Suite } from "nish/testing"
+        import {
+          JWT_ERR_ALG, JWT_ERR_AUDIENCE, JWT_ERR_CLAIMS, JWT_ERR_EXPIRED, JWT_ERR_FORMAT, JWT_ERR_IAT, JWT_ERR_ISSUER,
+          JWT_ERR_NOT_YET, JWT_ERR_SIGNATURE, JWT_ERR_SIZE, JWT_OK,
+        } from "nish/crypto/jwt"
+        import {
+          OIDC_DEFAULT_LIFETIME, OIDC_ERR_DUPLICATE_KID, OIDC_ERR_FETCH, OIDC_ERR_ISSUER, OIDC_ERR_JSON,
+          OIDC_ERR_KEY, OIDC_ERR_KID_REQUIRED, OIDC_ERR_NO_KEYS, OIDC_ERR_PRIVATE, OIDC_ERR_SCHEME,
+          OIDC_ERR_SIZE, OIDC_ERR_STALE, OIDC_ERR_TOO_MANY_KEYS, OIDC_ERR_UNKNOWN_KID, OIDC_MAX_JWKS_BYTES,
+          OIDC_MAX_DISCOVERY_BYTES, OIDC_MAX_LIFETIME, OIDC_MIN_LIFETIME, OIDC_MIN_REFRESH_INTERVAL, OIDC_OK,
+          OIDC_SKIPPED, OIDC_STALE_GRACE, OIDC_DEFAULT_TIMEOUT_MS, OidcKeySet, OidcKeys, OidcMetadata, OidcOptions,
+          oidcDiscoveryUrl, oidcHttpOptions, oidcIssuerAllowed, oidcLifetime, oidcParseDiscovery, oidcParseJwks,
+          oidcDiscover, oidcVerify,
+        } from "nish/net/oidc"
+        import { HttpOptions } from "nish/net/fetch"
+
+        const ISSUER: string = ${lit(issuer)}
+        const NOW: i64 = ${NOW}
+        ${consts.join("\n")}
+
+        const bytes = (text: string): u8[] => {
+          const out: u8[] = []
+          for (let i: i32 = 0; i < toI32(text.length); i += 1) {
+            out.push(toU8(text.charCodeAt(i)))
+          }
+          return out
+        }
+
+        /** \`prefix\`, then \`n\` x's, then \`suffix\`. */
+        const padded = (prefix: string, n: i32, suffix: string): u8[] => {
+          const out: u8[] = bytes(prefix)
+          for (let i: i32 = 0; i < n; i += 1) {
+            out.push(toU8(120))
+          }
+          for (const b of bytes(suffix)) {
+            out.push(b)
+          }
+          return out
+        }
+
+        const jwks = (doc: string): i32 => oidcParseJwks(bytes(doc)).error
+
+        /** The fetch options for a \`timeoutMs\` of \`ms\` and a 4096-byte bound. */
+        const fetchOptions = (ms: i32): HttpOptions => {
+          const x: OidcOptions = new OidcOptions()
+          x.timeoutMs = ms
+          return oidcHttpOptions(x, 4096, null)
+        }
+
+        const keysWith = (doc: string, now: i64): OidcKeys => {
+          const keys: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), new OidcOptions())
+          keys.refreshWith(bytes(doc), null, now)
+          return keys
+        }
+
+        export const main = (): number => {
+          const t: Suite = new Suite("oidc")
+          const o: OidcOptions = new OidcOptions()
+          const loop: OidcOptions = new OidcOptions()
+          loop.allowLoopbackHttp = true
+
+          // Discovery.
+          t.eqStr("discovery url", oidcDiscoveryUrl(ISSUER), ISSUER + "/.well-known/openid-configuration")
+          t.eqStr("discovery url, trailing slash", oidcDiscoveryUrl(ISSUER + "/"), ISSUER + "/.well-known/openid-configuration")
+          t.eqI32("discovery ok", oidcParseDiscovery(ISSUER, bytes(disc_ok), o).error, OIDC_OK)
+          t.eqStr("discovery jwks_uri", oidcParseDiscovery(ISSUER, bytes(disc_ok), o).jwksUri, "https://keys.example/jwks")
+          t.eqI32("issuer: trailing slash differs", oidcParseDiscovery(ISSUER, bytes(disc_slash), o).error, OIDC_ERR_ISSUER)
+          t.eqI32("issuer: case differs", oidcParseDiscovery(ISSUER, bytes(disc_case), o).error, OIDC_ERR_ISSUER)
+          t.eqI32("jwks_uri http refused", oidcParseDiscovery(ISSUER, bytes(disc_httpJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri loopback http refused by default", oidcParseDiscovery(ISSUER, bytes(disc_loopJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri http under an https issuer refused even with the option", oidcParseDiscovery(ISSUER, bytes(disc_loopJwks), loop).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri loopback http under a loopback http issuer", oidcParseDiscovery("http://127.0.0.1:8080", bytes(disc_httpIssuer), loop).error, OIDC_OK)
+          t.eqI32("jwks_uri http to a remote host under an http issuer refused", oidcParseDiscovery("http://127.0.0.1:8080", bytes(disc_httpIssuerRemoteJwks), loop).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri http to a remote host refused even with the option", oidcParseDiscovery(ISSUER, bytes(disc_httpJwks), loop).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri userinfo refused", oidcParseDiscovery(ISSUER, bytes(disc_userJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri user without password refused", oidcParseDiscovery(ISSUER, bytes(disc_userOnlyJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri password without user refused", oidcParseDiscovery(ISSUER, bytes(disc_passOnlyJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri empty host refused", oidcParseDiscovery(ISSUER, bytes(disc_emptyHostJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("jwks_uri not a URL refused", oidcParseDiscovery(ISSUER, bytes(disc_notUrlJwks), o).error, OIDC_ERR_SCHEME)
+          t.eqI32("no jwks_uri", oidcParseDiscovery(ISSUER, bytes(disc_noJwks), o).error, OIDC_ERR_JSON)
+          t.eqI32("issuer not a string", oidcParseDiscovery(ISSUER, bytes(disc_numIssuer), o).error, OIDC_ERR_JSON)
+          t.eqI32("discovery not an object", oidcParseDiscovery(ISSUER, bytes(disc_array), o).error, OIDC_ERR_JSON)
+          t.eqI32("discovery over the bound", oidcParseDiscovery(ISSUER, padded("{\\"pad\\":\\"", OIDC_MAX_DISCOVERY_BYTES, "\\"}"), o).error, OIDC_ERR_SIZE)
+          t.eqI32("discovery at the bound is read", oidcParseDiscovery(ISSUER, padded("{\\"pad\\":\\"", OIDC_MAX_DISCOVERY_BYTES - 10, "\\"}"), o).error, OIDC_ERR_JSON)
+          t.ok("issuer http refused", !oidcIssuerAllowed("http://idp.example", o))
+          t.ok("issuer loopback http refused by default", !oidcIssuerAllowed("http://127.0.0.1:8080", o))
+          t.ok("issuer loopback http with the option", oidcIssuerAllowed("http://127.0.0.1:8080", loop))
+          t.ok("issuer localhost http with the option", oidcIssuerAllowed("http://localhost:8080", loop))
+          t.ok("issuer ::1 http with the option", oidcIssuerAllowed("http://[::1]:8080", loop))
+          t.ok("issuer ::1 http refused by default", !oidcIssuerAllowed("http://[::1]:8080", o))
+          t.ok("issuer remote http refused with the option", !oidcIssuerAllowed("http://idp.example", loop))
+          t.ok("issuer userinfo refused", !oidcIssuerAllowed("https://u@idp.example", o))
+          t.ok("issuer uppercase scheme", oidcIssuerAllowed("HTTPS://idp.example", o))
+          t.ok("issuer query refused", !oidcIssuerAllowed("https://idp.example?a=1", o))
+          t.ok("issuer fragment refused", !oidcIssuerAllowed("https://idp.example#a", o))
+          t.ok("issuer https", oidcIssuerAllowed("https://idp.example/tenant", o))
+          t.eqI32("issuer refused before parsing", oidcParseDiscovery("http://idp.example", bytes(disc_ok), o).error, OIDC_ERR_SCHEME)
+          t.ok("issuer of another scheme refused with the option", !oidcIssuerAllowed("ftp://127.0.0.1", loop))
+          t.eqI32("jwks_uri loopback http under an uppercase HTTP issuer", oidcParseDiscovery("HTTP://127.0.0.1:8080", bytes(disc_upperHttpIssuer), loop).error, OIDC_OK)
+          t.eqI32("discover refuses the issuer before fetching", oidcDiscover("http://127.0.0.1:1", o).error, OIDC_ERR_SCHEME)
+          t.eqI32("timeoutMs default", new OidcOptions().timeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+
+          // The key set.
+          const all: OidcKeySet = oidcParseJwks(bytes(doc_all))
+          t.eqI32("jwks all", all.error, OIDC_OK)
+          t.eqI32("jwks all count", all.count(), 6)
+          t.ok("jwks find p256", all.find("p256") !== null)
+          t.ok("jwks find is exact", all.find("P256") === null)
+          const skips: OidcKeySet = oidcParseJwks(bytes(doc_skips))
+          t.eqI32("enc, unknown kty, PS256, unknown crv skipped", skips.error, OIDC_OK)
+          t.eqI32("only the signing key taken", skips.count(), 1)
+          t.ok("the signing key is ed", skips.find("ed") !== null)
+          t.eqI32("oct without k skipped", oidcParseJwks(bytes(doc_octSkip)).count(), 1)
+          t.eqI32("oct with k refused", jwks(doc_octSecret), OIDC_ERR_PRIVATE)
+          t.eqI32("private EC key refused", jwks(doc_private), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member refused", jwks(doc_privateRsa), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member q refused", jwks(doc_private_q), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member dp refused", jwks(doc_private_dp), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member dq refused", jwks(doc_private_dq), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member qi refused", jwks(doc_private_qi), OIDC_ERR_PRIVATE)
+          t.eqI32("private RSA member oth refused", jwks(doc_private_oth), OIDC_ERR_PRIVATE)
+          t.eqI32("ES256 on an RSA key carrying P-256 coordinates refused", jwks(doc_algEsOnRsaWithEc), OIDC_ERR_KEY)
+          t.eqI32("RS256 on a P-256 key carrying an RSA modulus refused", jwks(doc_algRsaOnEcWithRsa), OIDC_ERR_KEY)
+          t.eqI32("RS256 on an EC key refused", jwks(doc_algRsaOnEc), OIDC_ERR_KEY)
+          t.eqI32("ES256 on an RSA key refused", jwks(doc_algEsOnRsa), OIDC_ERR_KEY)
+          t.eqI32("ES384 on a P-256 key refused", jwks(doc_algEs384OnP256), OIDC_ERR_KEY)
+          t.eqI32("EdDSA on a P-256 key refused", jwks(doc_algEdOnP256), OIDC_ERR_KEY)
+          t.eqI32("HS256 on an RSA key refused", jwks(doc_algHs), OIDC_ERR_KEY)
+          t.eqI32("EdDSA on X25519 refused", jwks(doc_algEdOnUnknownCrv), OIDC_ERR_KEY)
+          t.eqI32("X25519 without alg skipped", oidcParseJwks(bytes(doc_unknownCrvNoAlg)).count(), 1)
+          t.eqI32("duplicate kid refused", jwks(doc_dupKid), OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("two keys without kid refused", jwks(doc_dupNoKid), OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("a skipped key does not collide", jwks(doc_dupSkipped), OIDC_OK)
+          t.eqI32("RSA-1024 refused", jwks(doc_smallRsa), OIDC_ERR_KEY)
+          t.eqI32("short EC coordinate refused", jwks(doc_badX), OIDC_ERR_KEY)
+          t.eqI32("short Ed25519 key refused", jwks(doc_badEd), OIDC_ERR_KEY)
+          t.eqI32("no kty", jwks(doc_noKty), OIDC_ERR_JSON)
+          t.eqI32("alg not a string", jwks(doc_algNotString), OIDC_ERR_JSON)
+          t.eqI32("entry not an object", jwks(doc_entryNotObject), OIDC_ERR_JSON)
+          t.eqI32("keys not an array", jwks(doc_keysNotArray), OIDC_ERR_JSON)
+          t.eqI32("not JSON", jwks(doc_notJson), OIDC_ERR_JSON)
+          t.eqI32("kid over OIDC_MAX_KID refused", jwks(doc_longKid), OIDC_ERR_KEY)
+          t.eqI32("kid at OIDC_MAX_KID", jwks(doc_maxKid), OIDC_OK)
+          t.eqI32("kid with a control byte refused", jwks(doc_ctlKid), OIDC_ERR_KEY)
+          t.eqI32("empty kid refused", jwks(doc_emptyKid), OIDC_ERR_KEY)
+          t.eqI32("kid with 0x7f refused", jwks(doc_delKid), OIDC_ERR_KEY)
+          t.eqI32("kid with a non-ASCII byte refused", jwks(doc_utf8Kid), OIDC_ERR_KEY)
+          t.eqI32("kid with 0x1f refused", jwks(doc_kid31), OIDC_ERR_KEY)
+          t.eqI32("kid of a space (0x20)", jwks(doc_kid32), OIDC_OK)
+          t.eqI32("kid of a tilde (0x7e)", jwks(doc_kid126), OIDC_OK)
+          t.eqI32("enc entry with a private member refused", jwks(doc_encPrivate), OIDC_ERR_PRIVATE)
+          t.eqI32("enc entry with a bad kid refused", jwks(doc_encBadKid), OIDC_ERR_KEY)
+          t.eqI32("kty not a string refused", jwks(doc_ktyNotString), OIDC_ERR_JSON)
+          t.eqI32("use not a string refused", jwks(doc_useNotString), OIDC_ERR_JSON)
+          t.eqI32("kid not a string refused", jwks(doc_kidNotString), OIDC_ERR_JSON)
+          t.eqI32("crv not a string refused", jwks(doc_crvNotString), OIDC_ERR_JSON)
+          t.eqI32("HS384 on an RSA key refused", jwks(doc_algHs384), OIDC_ERR_KEY)
+          t.eqI32("HS512 on an RSA key refused", jwks(doc_algHs512), OIDC_ERR_KEY)
+          for (const doc of [doc_p256UnderOkp, doc_p384UnderOkp, doc_edUnderEc]) {
+            const under: OidcKeySet = oidcParseJwks(bytes(doc))
+            t.eqI32("a crv under the wrong kty: set taken", under.error, OIDC_OK)
+            t.ok("a crv under the wrong kty: key skipped", under.count() === 1 && under.find("a") === null)
+          }
+          t.eqI32("P-256 without x refused", jwks(doc_noX), OIDC_ERR_KEY)
+          t.eqI32("P-256 x not a string refused", jwks(doc_numX), OIDC_ERR_KEY)
+          t.eqI32("P-256 without y refused", jwks(doc_noY), OIDC_ERR_KEY)
+          t.eqI32("P-256 short y refused", jwks(doc_shortY), OIDC_ERR_KEY)
+          t.eqI32("P-256 x short and y long by one byte refused", jwks(doc_skewY), OIDC_ERR_KEY)
+          t.eqI32("P-384 short x refused", jwks(doc_p384ShortX), OIDC_ERR_KEY)
+          t.eqI32("P-384 without y refused", jwks(doc_p384NoY), OIDC_ERR_KEY)
+          t.eqI32("P-384 short y refused", jwks(doc_p384ShortY), OIDC_ERR_KEY)
+          t.eqI32("P-256 coordinates named P-384 refused", jwks(doc_p256CoordsOnP384), OIDC_ERR_KEY)
+          t.eqI32("Ed25519 without x refused", jwks(doc_edNoX), OIDC_ERR_KEY)
+          t.eqI32("RSA without n refused", jwks(doc_rsaNoN), OIDC_ERR_KEY)
+          t.eqI32("RSA without e refused", jwks(doc_rsaNoE), OIDC_ERR_KEY)
+          t.eqI32("RSA n not a string refused", jwks(doc_rsaNumN), OIDC_ERR_KEY)
+          t.eqI32("RSA-8192 taken", jwks(doc_rsa8192), OIDC_OK)
+          t.eqI32("RSA-8193 refused", jwks(doc_rsa8193), OIDC_ERR_KEY)
+          t.ok("an empty kid finds no key", oidcParseJwks(bytes(doc_one)).find("") === null)
+          t.eqI32("empty set", jwks(doc_none), OIDC_ERR_NO_KEYS)
+          t.eqI32("over OIDC_MAX_KEYS entries refused", jwks(doc_tooMany), OIDC_ERR_TOO_MANY_KEYS)
+          t.eqI32("OIDC_MAX_KEYS entries", jwks(doc_maxKeys), OIDC_OK)
+          t.eqI32("set over the bound", oidcParseJwks(padded("{\\"keys\\":[],\\"pad\\":\\"", OIDC_MAX_JWKS_BYTES, "\\"}")).error, OIDC_ERR_SIZE)
+          t.eqI32("set at the bound is read", oidcParseJwks(padded("{\\"keys\\":[],\\"pad\\":\\"", OIDC_MAX_JWKS_BYTES - 20, "\\"}")).error, OIDC_ERR_NO_KEYS)
+
+          // The fetch options: every wait bounded by timeoutMs, or the default for 0 or less.
+          const h: HttpOptions = fetchOptions(250)
+          t.eqI32("connect timeout", h.connectTimeoutMs, 250)
+          t.eqI32("read timeout", h.readTimeoutMs, 250)
+          t.eqI32("total timeout", h.totalTimeoutMs, 250)
+          t.ok("no redirect followed", !h.followRedirects)
+          t.eqI64("body bounded", h.maxBodyBytes, toI64(4096))
+          t.ok("no outbound policy when none is given", h.outbound === null)
+          for (const ms of [0, -5]) {
+            const d: HttpOptions = fetchOptions(ms)
+            t.eqI32(\`connect timeout default for \${ms}\`, d.connectTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+            t.eqI32(\`read timeout default for \${ms}\`, d.readTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+            t.eqI32(\`total timeout default for \${ms}\`, d.totalTimeoutMs, OIDC_DEFAULT_TIMEOUT_MS)
+          }
+
+          // Lifetime.
+          t.eqI64("no cache-control", oidcLifetime(null), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age taken", oidcLifetime("public, max-age=7200"), toI64(7200))
+          t.eqI64("max-age case", oidcLifetime("Max-Age=7200"), toI64(7200))
+          t.eqI64("max-age clamped low", oidcLifetime("max-age=0"), OIDC_MIN_LIFETIME)
+          t.eqI64("max-age clamped high", oidcLifetime("max-age=31536000"), OIDC_MAX_LIFETIME)
+          t.eqI64("max-age too long a number", oidcLifetime("max-age=99999999999999999999"), OIDC_MAX_LIFETIME)
+          t.eqI64("max-age that wraps 2^64 to a small number", oidcLifetime("max-age=18446744073709551916"), OIDC_MAX_LIFETIME)
+          t.eqI64("max-age not a number", oidcLifetime("max-age=soon"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age empty", oidcLifetime("max-age="), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age, space before =", oidcLifetime("max-age =7200"), toI64(7200))
+          t.eqI64("max-age, space after =", oidcLifetime("max-age= 7200"), toI64(7200))
+          t.eqI64("max-age with a sign", oidcLifetime("max-age=+7200"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age with a byte below 0 after the digits", oidcLifetime("max-age=700/"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("max-age with a byte above 9 after the digits", oidcLifetime("max-age=700:"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("s-maxage ignored", oidcLifetime("s-maxage=7200"), OIDC_DEFAULT_LIFETIME)
+          t.eqI64("no-store", oidcLifetime("no-store"), OIDC_DEFAULT_LIFETIME)
+
+          // Verification.
+          const k: OidcKeys = keysWith(doc_all, NOW)
+          t.eqI32("RS256", oidcVerify(k, tok_rs256, "api", NOW), JWT_OK)
+          t.contains("claims after OK", k.claimsText(), "\\"sub\\":\\"u1\\"")
+          t.eqI32("RS384", oidcVerify(k, tok_rs384, "api", NOW), JWT_OK)
+          t.eqI32("RS512", oidcVerify(k, tok_rs512, "api", NOW), JWT_OK)
+          t.eqI32("ES256, alg from the key", oidcVerify(k, tok_es256, "api", NOW), JWT_OK)
+          t.eqI32("ES384", oidcVerify(k, tok_es384, "api", NOW), JWT_OK)
+          t.eqI32("EdDSA", oidcVerify(k, tok_eddsa, "api", NOW), JWT_OK)
+          t.eqI32("RS256 token on an RS384 key", oidcVerify(k, tok_rs256On384, "api", NOW), JWT_ERR_ALG)
+          t.eqI32("HS256 with the public key as secret", oidcVerify(k, tok_hs256, "api", NOW), JWT_ERR_ALG)
+          t.eqI32("alg none", oidcVerify(k, tok_none, "api", NOW), JWT_ERR_ALG)
+          t.eqI32("tampered", oidcVerify(k, tok_tampered, "api", NOW), JWT_ERR_SIGNATURE)
+          t.eqI32("a non-ASCII token refused", oidcVerify(k, tok_nonAscii, "api", NOW), JWT_ERR_FORMAT)
+          t.eqI32("a code unit above 0x7f whose low byte is base64url refused", oidcVerify(k, tok_lowByte, "api", NOW), JWT_ERR_FORMAT)
+          t.eqI32("wrong iss", oidcVerify(k, tok_wrongIss, "api", NOW), JWT_ERR_ISSUER)
+          t.eqI32("wrong aud", oidcVerify(k, tok_wrongAud, "api", NOW), JWT_ERR_AUDIENCE)
+          t.eqI32("aud array holds it", oidcVerify(k, tok_audArray, "api", NOW), JWT_OK)
+          t.eqI32("aud array lacks it", oidcVerify(k, tok_audArrayMiss, "api", NOW), JWT_ERR_AUDIENCE)
+          t.eqI32("another audience", oidcVerify(k, tok_rs256, "other", NOW), JWT_ERR_AUDIENCE)
+          t.eqI32("expired past leeway", oidcVerify(k, tok_expired, "api", NOW), JWT_ERR_EXPIRED)
+          t.eqI32("expired within leeway", oidcVerify(k, tok_expiredInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("nbf past leeway", oidcVerify(k, tok_nbf, "api", NOW), JWT_ERR_NOT_YET)
+          t.eqI32("nbf within leeway", oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("no exp", oidcVerify(k, tok_noExp, "api", NOW), JWT_ERR_CLAIMS)
+          t.eqI32("no kid, several keys", oidcVerify(k, tok_noKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("unknown kid", oidcVerify(k, tok_unknownKid, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          const solo: OidcKeys = keysWith(doc_one, NOW)
+          t.eqI32("an empty kid is unknown, even against one key", oidcVerify(solo, tok_emptyKid, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          t.ok("an empty kid marks the set as wanted", solo.due(NOW + OIDC_MIN_REFRESH_INTERVAL))
+          const known: OidcKeys = keysWith(doc_all, NOW)
+          t.eqI32("a known kid verifies", oidcVerify(known, tok_rs256, "api", NOW), JWT_OK)
+          t.ok("a known kid does not mark the set as wanted", !known.due(NOW + OIDC_MIN_REFRESH_INTERVAL + toI64(1)))
+          const atMax: OidcOptions = new OidcOptions()
+          atMax.maxToken = ${tokens.rs256.length}
+          const km: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), atMax)
+          km.refreshWith(bytes(doc_all), null, NOW)
+          t.eqI32("a token of maxToken bytes", oidcVerify(km, tok_rs256, "api", NOW), JWT_OK)
+          const belowMax: OidcOptions = new OidcOptions()
+          belowMax.maxToken = ${tokens.rs256.length - 1}
+          const kb: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), belowMax)
+          kb.refreshWith(bytes(doc_all), null, NOW)
+          t.eqI32("a token one byte over maxToken", oidcVerify(kb, tok_rs256, "api", NOW), JWT_ERR_SIZE)
+          const strict: OidcOptions = new OidcOptions()
+          strict.leeway = toI64(0)
+          const ks: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), strict)
+          ks.refreshWith(bytes(doc_all), null, NOW)
+          t.eqI32("leeway 0 is taken", oidcVerify(ks, tok_expiredInLeeway, "api", NOW), JWT_ERR_EXPIRED)
+          t.eqI32("a kid over OIDC_MAX_KID reads as none", oidcVerify(k, tok_longKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("a kid of OIDC_MAX_KID bytes is read", oidcVerify(k, tok_kid256, "api", NOW), OIDC_ERR_UNKNOWN_KID)
+          t.eqI32("a kid of OIDC_MAX_KID + 1 bytes reads as none", oidcVerify(k, tok_kid257, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("a kid that is not a string reads as none", oidcVerify(k, tok_numKid, "api", NOW), OIDC_ERR_KID_REQUIRED)
+          t.eqI32("over maxToken", oidcVerify(k, tok_long, "api", NOW), JWT_ERR_SIZE)
+          t.eqI32("claims cleared after a refusal", toI32(k.claimsText().length), 0)
+          // Every refusal leaves no claims behind, whether decided before the verifier runs or inside
+          // it: each follows an accepted token that carries exp, nbf and iat, and every one is cleared.
+          const refusals: string[] = [
+            "oversize", "kid required", "unknown kid", "stale", "wrong aud", "wrong iss", "expired",
+            "not yet", "iat in the future", "a code unit above 0x7f",
+          ]
+          const refused: string[] = [
+            tok_long, tok_noKid, tok_unknownKid, tok_rs256, tok_wrongAud, tok_wrongIss, tok_expired,
+            tok_nbf, tok_iatFuture, tok_lowByte,
+          ]
+          const codes: i32[] = [
+            JWT_ERR_SIZE, OIDC_ERR_KID_REQUIRED, OIDC_ERR_UNKNOWN_KID, OIDC_ERR_STALE, JWT_ERR_AUDIENCE, JWT_ERR_ISSUER, JWT_ERR_EXPIRED,
+            JWT_ERR_NOT_YET, JWT_ERR_IAT, JWT_ERR_FORMAT,
+          ]
+          for (let i: i32 = 0; i < 10; i += 1) {
+            const name: string = refusals[i]
+            t.eqI32(\`accept before \${name}\`, oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+            t.ok(\`exp, nbf and iat set before \${name}\`, k.verifier.hasExp && k.verifier.hasNbf && k.verifier.hasIat)
+            const at: i64 = i === 3 ? NOW + OIDC_DEFAULT_LIFETIME + OIDC_STALE_GRACE : NOW
+            t.eqI32(\`\${name} after an accept\`, oidcVerify(k, refused[i], "api", at), codes[i])
+            t.eqStr(\`no claims after \${name}\`, k.claimsText(), "")
+            t.ok(\`no exp after \${name}\`, !k.verifier.hasExp)
+            t.ok(\`no nbf after \${name}\`, !k.verifier.hasNbf)
+            t.ok(\`no iat after \${name}\`, !k.verifier.hasIat)
+            t.eqI64(\`exp 0 after \${name}\`, k.verifier.exp, toI64(0))
+            t.eqI64(\`nbf 0 after \${name}\`, k.verifier.nbf, toI64(0))
+            t.eqI64(\`iat 0 after \${name}\`, k.verifier.iat, toI64(0))
+          }
+          // An accepted token's claims are its own: one without nbf, after one with it, leaves none.
+          t.eqI32("accept with nbf", oidcVerify(k, tok_nbfInLeeway, "api", NOW), JWT_OK)
+          t.eqI32("accept without nbf after one with it", oidcVerify(k, tok_rs256, "api", NOW), JWT_OK)
+          t.ok("no nbf left from the token before", !k.verifier.hasNbf)
+          const one: OidcKeys = keysWith(doc_one, NOW)
+          t.eqI32("no kid, one key", oidcVerify(one, tok_noKid, "api", NOW), JWT_OK)
+          const never: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
+          t.eqI32("no set yet", oidcVerify(never, tok_rs256, "api", NOW), OIDC_ERR_STALE)
+
+          // Rotation: the clock is a parameter.
+          const r: OidcKeys = keysWith(doc_rsaOnly, NOW)
+          const fresh: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
+          t.ok("never tried: due", fresh.due(NOW))
+          t.ok("never tried: due near 0", fresh.due(toI64(10)))
+          t.ok("never tried: due at any time", fresh.due(toI64(-5)))
+          t.ok("no set: not usable", !fresh.usable(toI64(-1)))
+          t.ok("fresh after taking", !r.due(NOW + toI64(10)))
+          t.eqI32("not due while fresh", r.refreshWith(bytes(doc_rotated), null, NOW + toI64(100)), OIDC_SKIPPED)
+          t.eqI32("rotated token, unknown kid", oidcVerify(r, tok_rotated, "api", NOW + toI64(100)), OIDC_ERR_UNKNOWN_KID)
+          t.ok("an unknown kid makes a refresh due", r.due(NOW + toI64(100)))
+          t.ok("but not inside the minimum interval", !r.due(NOW + OIDC_MIN_REFRESH_INTERVAL - toI64(1)))
+          t.eqI32("refresh after an unknown kid", r.refreshWith(bytes(doc_rotated), null, NOW + toI64(100)), OIDC_OK)
+          t.ok("the refreshed set is no longer wanted", !r.due(NOW + toI64(100) + OIDC_MIN_REFRESH_INTERVAL))
+          t.eqI32("rotated token verifies", oidcVerify(r, tok_rotated, "api", NOW + toI64(100)), JWT_OK)
+          t.eqI32("removed key stops verifying", oidcVerify(r, tok_rs256, "api", NOW + toI64(100)), OIDC_ERR_UNKNOWN_KID)
+          t.eqI32("unknown kid again: one refresh per interval", r.refreshWith(bytes(doc_rsaOnly), null, NOW + toI64(130)), OIDC_SKIPPED)
+          t.eqI32("unknown kid after the interval", r.refreshWith(bytes(doc_rsaOnly), null, NOW + toI64(160)), OIDC_OK)
+          t.eqI32("a refused set keeps the last", r.refreshWith(bytes(doc_dupKid), null, NOW + toI64(160) + OIDC_DEFAULT_LIFETIME), OIDC_ERR_DUPLICATE_KID)
+          t.ok("last good set still verifies", r.key("rsa", NOW + toI64(160) + OIDC_DEFAULT_LIFETIME) !== null)
+          t.eqI32("a failed fetch keeps the last", r.refreshWith(null, null, NOW + toI64(400) + OIDC_DEFAULT_LIFETIME), OIDC_ERR_FETCH)
+          t.eqI32("lastError", r.lastError, OIDC_ERR_FETCH)
+          const back: OidcKeys = keysWith(doc_rsaOnly, NOW)
+          t.eqI32("a refused set after a good one", back.refreshWith(bytes(doc_dupKid), null, NOW + OIDC_DEFAULT_LIFETIME), OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("a refused set: lastError", back.lastError, OIDC_ERR_DUPLICATE_KID)
+          t.eqI32("a set taken after a failure", back.refreshWith(bytes(doc_rsaOnly), null, NOW + OIDC_DEFAULT_LIFETIME + OIDC_MIN_REFRESH_INTERVAL), OIDC_OK)
+          t.eqI32("a set taken after a failure: lastError", back.lastError, OIDC_OK)
+          const hard: i64 = NOW + toI64(160) + OIDC_DEFAULT_LIFETIME + OIDC_STALE_GRACE
+          t.ok("usable just before the hard expiry", r.usable(hard - toI64(1)))
+          t.ok("not usable at the hard expiry", !r.usable(hard))
+          t.ok("no key at the hard expiry", r.key("rsa", hard) === null)
+          t.eqI32("stale past the hard expiry", oidcVerify(r, tok_rs256, "api", hard), OIDC_ERR_STALE)
+          const m: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_OK, ISSUER, "https://keys.example/jwks"), o)
+          m.refreshWith(bytes(doc_rsaOnly), "max-age=600", NOW)
+          t.ok("max-age sets the lifetime", !m.due(NOW + toI64(599)))
+          t.ok("due at max-age", m.due(NOW + toI64(600)))
+          t.ok("a known kid does not make a refresh due", m.key("rsa", NOW + toI64(1)) !== null && !m.due(NOW + toI64(1)))
+          t.ok("an unknown kid inside the interval", m.key("gone", NOW + toI64(1)) === null && !m.due(NOW + toI64(1)))
+          t.ok("a clock stepped back does not block a refresh", m.due(NOW - toI64(1000)))
+          const failed: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_ERR_ISSUER, "", ""), o)
+          const failedWith: OidcKeys = new OidcKeys(new OidcMetadata(OIDC_ERR_ISSUER, "", ""), o)
+          t.eqI32("refreshWith after failed discovery", failedWith.refreshWith(bytes(doc_rsaOnly), null, NOW), OIDC_ERR_ISSUER)
+          t.eqI32("refreshWith after failed discovery: lastError", failedWith.lastError, OIDC_ERR_ISSUER)
+          t.ok("failed discovery takes no set", !failedWith.usable(NOW))
+          t.eqI32("refresh after failed discovery", failed.refresh(NOW), OIDC_ERR_ISSUER)
+          t.eqI32("refresh after failed discovery: lastError", failed.lastError, OIDC_ERR_ISSUER)
+          t.eqI32("failed discovery: rate-limited", failed.refresh(NOW + toI64(1)), OIDC_SKIPPED)
+          return t.done()
+        }
+        `
+          fs.writeFileSync(file, src)
+      }
+      const failures = (r) =>
+        `exit ${r.status}${r.error ? ` (${r.error.message})` : ""}\n${(r.stdout || "").split("\n").filter((l) => !l.startsWith("PASS")).join("\n")}${r.stderr || ""}`
+      const memory = path.join(oidcDir, "memory.ts")
+      oidcProbe(memory, oidcFixtures("https://idp.example/tenant"), "https://idp.example/tenant")
+      const mem = spawnSync(NISH, ["run", memory], { encoding: "utf8", timeout: 120000 })
+      check(
+        "std/net/oidc: discovery, the key set, rotation and verification, in memory",
+        mem.status === 0 && mem.stdout.includes(" 0 failed"),
+        failures(mem),
+      )
+      // The loopback round trip: discovery, refresh and verify over real HTTP.
+      const served = path.join(oidcDir, "served")
+      fs.mkdirSync(served)
+      const serverJs = path.join(oidcDir, "server.cjs")
+      fs.writeFileSync(serverJs, `// Serves the oidc loopback fixtures from a directory, written after the port is known.
+const fs = require("fs")
+const http = require("http")
+const path = require("path")
+const dir = process.argv[2]
+let flaky = 0
+const answer = (req, res) => {
+  const route = req.url
+  // Accepts and never answers: only the client's own timeouts end the fetch.
+  if (route.startsWith("/hang/")) return
+  // The first fetch of the key set answers, every later one fails.
+  if (route === "/flaky/jwks" && flaky++ > 0) {
+    res.writeHead(500)
+    res.end()
+    return
+  }
+  if (route === "/redir/jwks") {
+    res.writeHead(302, { location: "/good/jwks" })
+    res.end()
+    return
+  }
+  const file = path.join(dir, route.replace(/[^a-z]/g, "_"))
+  if (!route.startsWith("/") || !fs.existsSync(file)) {
+    res.writeHead(404)
+    res.end()
+    return
+  }
+  const headers = { "content-type": "application/json" }
+  if (route.endsWith("/jwks")) headers["cache-control"] = "public, max-age=600"
+  res.writeHead(200, headers)
+  res.end(fs.readFileSync(file))
+}
+// Two ports on 127.0.0.1: the second is another origin without a name to resolve.
+const server = http.createServer(answer)
+const other = http.createServer(answer)
+server.listen(0, "127.0.0.1", () =>
+  other.listen(0, "127.0.0.1", () => process.stdout.write(\`\${server.address().port} \${other.address().port}\\n\`)),
+)
+`)
+      const server = spawn(process.execPath, [serverJs, served], { stdio: ["ignore", "pipe", "inherit"] })
+      try {
+        // A server that dies or never listens fails the check rather than hanging the run.
+        const ports = await new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(""), 10000)
+          const fail = () => { clearTimeout(timer); resolve("") }
+          server.once("error", fail)
+          server.once("exit", fail)
+          server.stdout.once("data", (d) => { clearTimeout(timer); resolve(String(d).trim()) })
+        })
+        if (!/^[0-9]+ [0-9]+$/.test(ports)) {
+          check("std/net/oidc: the loopback server started", false, "it printed no ports within 10 s")
+        } else {
+          const [port, otherPort] = ports.split(" ")
+          const base = `http://127.0.0.1:${port}`
+          const fx = oidcFixtures(`${base}/good`)
+          const put = (route, body) => fs.writeFileSync(path.join(served, route.replace(/[^a-z]/g, "_")), body)
+          const wk = "/.well-known/openid-configuration"
+          put(`/good${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
+          put("/good/jwks", fx.docs.all)
+          put(`/big${wk}`, JSON.stringify({ issuer: `${base}/big`, jwks_uri: `${base}/good/jwks`, pad: "x".repeat(70000) }))
+          put(`/redir${wk}`, JSON.stringify({ issuer: `${base}/redir`, jwks_uri: `${base}/redir/jwks` }))
+          put(`/bigkeys${wk}`, JSON.stringify({ issuer: `${base}/bigkeys`, jwks_uri: `${base}/bigkeys/jwks` }))
+          put("/bigkeys/jwks", fx.docs.big)
+          put(`/flaky${wk}`, JSON.stringify({ issuer: `${base}/flaky`, jwks_uri: `${base}/flaky/jwks` }))
+          put("/flaky/jwks", fx.docs.all)
+          put(`/other${wk}`, JSON.stringify({ issuer: `${base}/good`, jwks_uri: `${base}/good/jwks` }))
+          // Another origin for the same server, its second port: fetched under the outbound policy, which refuses loopback.
+          put(`/cross${wk}`, JSON.stringify({ issuer: `${base}/cross`, jwks_uri: `http://127.0.0.1:${otherPort}/good/jwks` }))
+          const loopback = path.join(oidcDir, "loopback.ts")
+          fs.writeFileSync(
+            loopback,
+            `import { Suite } from "nish/testing"
+            import { JWT_OK } from "nish/crypto/jwt"
+            import {
+              OIDC_ERR_FETCH, OIDC_ERR_ISSUER, OIDC_ERR_SCHEME, OIDC_ERR_SIZE, OIDC_OK, OIDC_SKIPPED, OidcKeys, OidcMetadata,
+              OidcOptions, oidcDiscover, oidcVerify,
+            } from "nish/net/oidc"
+
+            const BASE: string = ${JSON.stringify(base)}
+            const NOW: i64 = ${fx.NOW}
+
+            export const main = (): number => {
+              const t: Suite = new Suite("oidc loopback")
+              const o: OidcOptions = new OidcOptions()
+              o.allowLoopbackHttp = true
+              const meta: OidcMetadata = oidcDiscover(BASE + "/good", o)
+              t.eqI32("discover", meta.error, OIDC_OK)
+              const keys: OidcKeys = new OidcKeys(meta, o)
+              t.eqI32("refresh", keys.refresh(NOW), OIDC_OK)
+              t.ok("max-age from the response", !keys.due(NOW + toI64(599)) && keys.due(NOW + toI64(600)))
+              t.eqI32("verify", oidcVerify(keys, ${JSON.stringify(fx.tokens.es256)}, "api", NOW), JWT_OK)
+              t.eqI32("http refused without the option", oidcDiscover(BASE + "/good", new OidcOptions()).error, OIDC_ERR_SCHEME)
+              t.eqI32("discovery over the bound", oidcDiscover(BASE + "/big", o).error, OIDC_ERR_SIZE)
+              t.eqI32("discovery 404", oidcDiscover(BASE + "/gone", o).error, OIDC_ERR_FETCH)
+              t.eqI32("issuer mismatch", oidcDiscover(BASE + "/other", o).error, OIDC_ERR_ISSUER)
+              const redir: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/redir", o), o)
+              t.eqI32("redirect not followed", redir.refresh(NOW), OIDC_ERR_FETCH)
+              const big: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/bigkeys", o), o)
+              t.eqI32("key set over the bound", big.refresh(NOW), OIDC_ERR_SIZE)
+              const crossMeta: OidcMetadata = oidcDiscover(BASE + "/cross", o)
+              t.eqI32("cross-origin discover", crossMeta.error, OIDC_OK)
+              const cross: OidcKeys = new OidcKeys(crossMeta, o)
+              t.eqI32("cross-origin jwks_uri refused by the default outbound policy", cross.refresh(NOW), OIDC_ERR_FETCH)
+              const open: OidcOptions = new OidcOptions()
+              open.allowLoopbackHttp = true
+              open.jwksOutbound = null
+              const crossOpen: OidcKeys = new OidcKeys(crossMeta, open)
+              t.eqI32("cross-origin jwks_uri with jwksOutbound null", crossOpen.refresh(NOW), OIDC_OK)
+              const zero: OidcOptions = new OidcOptions()
+              zero.allowLoopbackHttp = true
+              zero.timeoutMs = 0
+              t.eqI32("timeoutMs 0 takes the default", oidcDiscover(BASE + "/good", zero).error, OIDC_OK)
+              // A server that accepts and never answers: the fetch ends at timeoutMs, not the 10 s default.
+              const short: OidcOptions = new OidcOptions()
+              short.allowLoopbackHttp = true
+              short.timeoutMs = 300
+              const began: i64 = monotonicNanos()
+              t.eqI32("a silent server fails the fetch", oidcDiscover(BASE + "/hang", short).error, OIDC_ERR_FETCH)
+              const tookMs: i64 = (monotonicNanos() - began) / toI64(1000000)
+              t.ok("the silent server is given up within 5 s", tookMs < toI64(5000))
+              // The route did stall: a fetch refused at once would be FETCH too, well under timeoutMs.
+              t.ok("the silent server held the fetch until near timeoutMs", tookMs >= toI64(250))
+              // A failed fetch keeps the last set, through the real refresh.
+              const flaky: OidcKeys = new OidcKeys(oidcDiscover(BASE + "/flaky", o), o)
+              t.eqI32("flaky: first refresh", flaky.refresh(NOW), OIDC_OK)
+              t.eqI32("flaky: a failed refresh", flaky.refresh(NOW + toI64(600)), OIDC_ERR_FETCH)
+              t.eqI32("flaky: lastError", flaky.lastError, OIDC_ERR_FETCH)
+              t.ok("flaky: the last set is kept", flaky.usable(NOW + toI64(600)) && flaky.key("p256", NOW + toI64(600)) !== null)
+              t.eqI32("flaky: no retry inside the interval", flaky.refresh(NOW + toI64(659)), OIDC_SKIPPED)
+              return t.done()
+            }
+            `,
+          )
+          // No proxy variable reaches the probe, so every fetch goes to the loopback server itself.
+          const env = { ...process.env }
+          for (const name of ["http_proxy", "https_proxy", "all_proxy", "no_proxy"]) {
+            delete env[name]
+            delete env[name.toUpperCase()]
+          }
+          const lr = spawnSync(NISH, ["run", loopback], { encoding: "utf8", env, timeout: 120000 })
+          check(
+            "std/net/oidc: discovery, refresh and verify over loopback http",
+            lr.status === 0 && lr.stdout.includes(" 0 failed"),
+            failures(lr),
+          )
+        }
+      } finally {
+        server.kill()
+      }
+    }
+  }
+
   // `nish upgrade` and the update notice (src/upgrade.ts, std/release.ts,
   // docs/security/release.md). A local server stands in for GitHub: its
   // `/<name>/releases/latest` answers as the name says, and every request is
@@ -32448,10 +33203,43 @@ if (!only || "sandbox".includes(only)) {
       )
       const count = run(ring, ["ring-count"])
       check(
-        `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring (${mode})`,
-        count !== null && count.status === 0 && count.stdout === "ring-count: 1\n",
+        `sandbox: a main that reaches NET_LISTEN_RING holds 1 premade ring and its keeper (${mode})`,
+        count !== null && count.status === 0 && count.stdout === "ring-count: 2\n",
         said(count)
       )
+      // NURING-36: a premade ring's number cannot be made to name another
+      // ring. close, dup2 and dup3 onto a ring's or the keeper's number die
+      // of SIGSYS, close_range answers ENOSYS, and a freed ring's number holds
+      // the keeper, so a duplicate takes another number.
+      const swaps = [
+        ["dup3-ring", "dup3 of an inherited ring onto premade ring 0's number"],
+        ["close-dup", "close of premade ring 0's descriptor, to free its number for F_DUPFD"],
+      ]
+      if (process.arch === "x64") swaps.push(["dup2-ring", "dup2 of an inherited ring onto premade ring 0's number"])
+      for (const [op, why] of swaps) {
+        const r = run(plainRing, [`inherit:${op}`, ring])
+        check(`sandbox: ${why} dies of SIGSYS (NURING-36, ${mode})`, r !== null && r.status === 0 && r.stdout === `${op}: start\ninherit:${op}: SIGSYS\n`, said(r))
+      }
+      const freedDup = run(plainRing, ["inherit:freed", ring])
+      check(
+        `sandbox: a ring a closed listener freed keeps its number on the keeper, and a duplicate takes another (NURING-36, ${mode})`,
+        freedDup !== null &&
+          freedDup.status === 0 &&
+          freedDup.stdout === "freed-dup: the duplicate took another number; the number holds another ring\nfreed-dup: ok\ninherit:freed: exit 0\n",
+        said(freedDup)
+      )
+      for (const [op, args, want, why] of [
+        ["keeper-enter", [], null, "io_uring_enter on the keeper's number dies of SIGSYS"],
+        ["close-range", [], "ENOSYS", "close_range over a premade ring's number answers ENOSYS"],
+        ["uring-close", ["ring"], "EBADF", "IORING_OP_CLOSE of a premade ring's own number answers EBADF"],
+        ["uring-close", ["keeper"], "EBADF", "IORING_OP_CLOSE of the keeper's number answers EBADF"],
+        ["uring-close", ["pipe"], "ok", "IORING_OP_CLOSE of a pipe's descriptor closes it (the control)"],
+        ["fd-ops", [], "ok", "dup2, dup3, close and F_DUPFD on descriptors that are no ring work (the control)"],
+      ]) {
+        const r = run(ring, [op, ...args])
+        const ok = want === null ? killed(r) && r.stdout === `${op}: start\n` : r !== null && r.status === 0 && r.stdout === `${op}: start\n${op}: ${want}\n`
+        check(`sandbox: ${why} (NURING-36, ${mode})`, ok, said(r))
+      }
       const control = run(ring, ["ring-sqe", "0:0"])
       check(
         `sandbox: a premade ring completes a NOP (${mode}, the control)`,
@@ -32496,22 +33284,37 @@ if (!only || "sandbox".includes(only)) {
       const l3 = c3.status === 0 ? linkNative(exe3, three, { driver: probeC, ...hooks }) : c3
       const n3 = l3.status === 0 ? run(exe3, ["ring-count"]) : null
       check(
-        "sandbox: `nish.netRings` 3 premakes 3 rings",
-        n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 3\n",
+        "sandbox: `nish.netRings` 3 premakes 3 rings and their keeper",
+        n3 !== null && n3.status === 0 && n3.stdout === "ring-count: 4\n",
         l3.status === 0 ? said(n3) : shown(l3)
       )
-      // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
-      // ring, which drops it; the stand-in refuses the flag as such a kernel
-      // does, and the pool keeps the probe's floor and makes none (NURING-33).
-      const old = build("ring-old-kernel", "ring", ["--sandbox"], {
+    }
+    // A kernel without DEFER_TASKRUN (6.0 and older) takes a restricted
+    // ring, which drops it; the stand-in refuses the flag as such a kernel
+    // does, and the pool keeps the probe's floor and makes none (NURING-33).
+    // A NET_LISTEN_RING listener there serves descriptors, sandboxed in
+    // either mode: the fallback a program gets wherever no ring is premade.
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const old = build(`ring-old-kernel-${mode}`, "ring", [flag], {
         defines: [...hooks.defines, "-DUR_SYS_SETUP(e,p)=((p)->flags & (1u << 13) ? (errno = EINVAL, -1L) : syscall(__NR_io_uring_setup, e, p))"],
       })
-      const oldCount = run(old, ["ring-count"])
-      const oldProbe = run(old, ["ring-probe"])
+      if (ringsWork) {
+        const oldCount = run(old, ["ring-count"])
+        const oldProbe = run(old, ["ring-probe"])
+        check(
+          `sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33, ${mode})`,
+          oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
+          `${said(oldCount)}\n${said(oldProbe)}`
+        )
+      }
+      const fallback = run(old, ["fallback"])
       check(
-        "sandbox: on a kernel that refuses DEFER_TASKRUN no ring is premade and the probe answers EINVAL (NURING-33)",
-        oldCount !== null && oldCount.stdout === "ring-count: 0\n" && oldProbe !== null && oldProbe.stdout === "ring-probe: start\nring-probe: -22\n",
-        `${said(oldCount)}\n${said(oldProbe)}`
+        `sandbox: where no ring is premade a NET_LISTEN_RING listener accepts a descriptor and netRingState() is negative (${mode})`,
+        fallback !== null && fallback.status === 0 && /^fallback: a descriptor, netRingState\(\) -\d+\n$/.test(fallback.stdout),
+        said(fallback)
       )
     }
 

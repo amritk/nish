@@ -1175,6 +1175,8 @@ const pathMtu = (why, filesByProgram) =>
 /** The changelog words of the stage that adds atomic arrays to nish/threads. */
 const ATOMIC_ARRAYS = "AtomicI32Array and AtomicI64Array, n atomics in one buffer"
 /** The changelog words of the stage that gives HmacSha256 and Sha256 digestInto (#1542). */
+/** The release-note words for the push loop that copies an array range in one `memcpy`. */
+const APPEND_RANGE = "Copy a push loop over an array range in one memcpy"
 const HMAC_DIGEST_INTO = "HmacSha256.digest allocates only the tag, and digestInto allocates nothing"
 /** The changelog words of the stage that proves vector accesses in range and tags them as element data. */
 const VECTOR_ACCESS_TBAA = "vector loads and stores in range"
@@ -1319,6 +1321,60 @@ const DECLARED = [
       "tests/link/net_outbound_f64/main.ts": ["checks.ll", "fetch.ll", "main.h"],
     }
   ),
+  // A `for` loop whose body is one `dst.push(src[P + j])` copies the range in
+  // one `memcpy` behind its guards, and keeps the loop as the fallback, so each
+  // module with such a loop gains the guard blocks and the memcpy declaration.
+  {
+    file: "rsa.ll",
+    changelog: APPEND_RANGE,
+    why: "std/crypto/rsa.ts appends a byte range with a push loop twice, so the module every importer of nish/crypto/rsa writes gains the guarded memcpy before each loop and renumbered values; no importer's own module moves",
+  },
+  ...[
+    "tests/link/crypto_bcrypt_batch/main.ts",
+    "tests/link/crypto_bcrypt_width/main.ts",
+    "tests/cases/arr_append_range.ts",
+    "tests/cases/arr_append_range_panic.ts",
+  ].map((program) => ({
+    program,
+    file: `${program.endsWith("main.ts") ? "main" : path.basename(program, ".ts")}.ll`,
+    changelog: APPEND_RANGE,
+    why: "the program has a push loop over an array range, so the candidate copies it in one guarded memcpy before the loop and the 0.41.0 seed does not",
+  })),
+  ...[
+    "tests/link/sha256_hw_vectors/main.ts",
+    "tests/link/std_compress/main.ts",
+    "tests/link/std_compress_node/main.ts",
+    "tests/link/std_term_events/main.ts",
+    "tests/link/std_term_probe/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: APPEND_RANGE,
+    why: "the program's main module copies a byte range with a push loop, so the candidate copies it in one guarded memcpy before the loop and the 0.41.0 seed does not",
+  })),
+  // tests/link/net_http3/peer.ts slices a byte range with a push loop, and
+  // every program importing it writes that module as `peer.ll` or, where the
+  // name is qualified by its directory, `net_http3_peer.ll`.
+  ...[
+    ["net_http3_bad_reset_budget", "peer.ll"],
+    ["net_http3_server_bad_head_timeout", "peer.ll"],
+    ["net_http3_server_bad_idle_timeout", "peer.ll"],
+    ["net_http_server_h3_head", "peer.ll"],
+    ["net_http_server_h3_slots", "peer.ll"],
+    ["net_http_server_h3_twice", "peer.ll"],
+    ["net_http_server_h3_webtransport", "peer.ll"],
+    ["net_http_server_caps", "net_http3_peer.ll"],
+    ["net_http_server_carriers", "net_http3_peer.ll"],
+    ["net_http_server_h2_refused", "net_http3_peer.ll"],
+    ["net_http_server_lifecycle", "net_http3_peer.ll"],
+    ["net_http_server_matrix", "net_http3_peer.ll"],
+    ["net_http_server_timeouts", "net_http3_peer.ll"],
+  ].map(([name, file]) => ({
+    program: `tests/link/${name}/main.ts`,
+    file,
+    changelog: APPEND_RANGE,
+    why: "tests/link/net_http3/peer.ts copies a byte range with a push loop, so the peer module this program imports gains the guarded memcpy before the loop and renumbered values",
+  })),
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {

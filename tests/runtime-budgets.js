@@ -75,9 +75,21 @@
  * and `nish_arena_keep` leaves a carved head alone. Measured 1,819 against 1,723 on
  * 2026-11-09 with clang 18.1.3 on linux-x64. It is not a unit of its own because those
  * walkers are the core's.
+ *
+ * Raised by 279, to 2,098, for growing an array where it is (`nish_array_grow_here`):
+ * bumping the arena past the block when it is the last one, or `realloc`ing the exact
+ * chunk a block over 64 KB fills, and `NISH_REUSE_CAP`, which keeps a chunk past 64 KB
+ * reused from its start a word short so that a scope's mark at that start is never
+ * under a reallocated chunk. Measured 1,805 before and 2,098 after on 2026-11-17 with clang
+ * 18.1.3 on linux-x64 (the 1,805 is what the 1,819 had left in hand). A walk 12 bytes
+ * smaller relinked the head through a pointer to `nish_arena.chunks`, which took the
+ * arena's address and cost Queens 0.35% instructions under LTO (the function's comment).
+ * It is the core's because both cases read the arena and its chunk list, and it took the
+ * large Goose benchmarks' peak resident size from 392 to 179 MB (records), 358 to 162
+ * (strlist) and 804 to 411 (words) (bench/goose/README.md).
  */
 // TEXT here is the .text section of the core runtime.c, not runtime-text.c (next).
-const RUNTIME_TEXT_BUDGET = 1819
+const RUNTIME_TEXT_BUDGET = 2098
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-text.c`:
  * strings (`nish_str_*`) and the number formatting (`nish_f64_format`, the Zmij tables'
@@ -234,8 +246,11 @@ const RUNTIME_OS_TEXT_BUDGET = 5888
  *
  * Raised by 87, to 2,025, by ASYNC-15's carved chunk (as above), measured 2,025 against
  * 1,938 on 2026-11-09 with clang 18.1.3 on linux-x64.
+ *
+ * Raised by 290, to 2,300, for growing an array where it is and the reuse cap (as above),
+ * measured 2,300 against 2,010 on 2026-11-17 with clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 2025
+const RUNTIME_THREADS_TEXT_BUDGET = 2300
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -743,8 +758,13 @@ const RUNTIME_BYTES_TEXT_BUDGET = 2048
  * their descriptors (WP63 S3, NURING-35; 4,608 to 4,864): the premake call with
  * its descriptor array, and the filter's rows comparing `io_uring_enter`'s first
  * argument with each premade ring. The budget is the 256-byte boundary above it.
+ * **5,169 bytes** on 2026-11-17 with clang 18.1.3 on linux-x64 once the filter
+ * keeps a confined program from closing or replacing a premade ring's descriptor
+ * (NURING-36; 4,864 to 5,376): the `close`, `dup2` and `dup3` rows comparing the
+ * descriptor argument with each ring and the keeper, `dup3`'s exception for the
+ * keeper as its source, `close_range` answered ENOSYS, and the row builder they share.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 4864
+const RUNTIME_SANDBOX_TEXT_BUDGET = 5376
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`
@@ -787,11 +807,16 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  * before its filter (WP63 S3; 7,424 to 8,192): `nish_uring_premake` with its
  * R_DISABLED setup, the opcode and flag restrictions and ENABLE_RINGS, the pool a
  * ring listener takes its rings from (NURING-33, NURING-34), and `nish_uring_pooled`.
- * The budget is the 256-byte boundary above it. A unit of its own beside runtime-net.c,
+ * The budget is the 256-byte boundary above it. **8,244 bytes** on 2026-11-17 with
+ * clang 18.1.3 on linux-x64 once the premake also makes a keeper ring, enabled and
+ * restricted to NOP, and a freed pooled ring's descriptor is overwritten with it by
+ * `dup3` instead of closed, so that no ring number is ever free (NURING-36; 8,192 to
+ * 8,448). **8,274 bytes** on 2026-11-17 once that `dup3` is tried again on `EINTR`
+ * and `EBUSY`. A unit of its own beside runtime-net.c,
  * so that a build whose probe fails
  * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 8192
+const RUNTIME_URING_TEXT_BUDGET = 8448
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle
@@ -1005,8 +1030,12 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * choice and its eight CUBIC fields (the window before the last reduction, K,
  * the epoch start, the Reno-friendly estimate and its carry, the step carry,
  * the prior window and the idle start).
+ *
+ * Moved to **111,080 bytes** (-8) by growing an array where it is
+ * (`nish_array_grow_here`, runtime.c): an array the build pushes to extends its
+ * block instead of leaving the smaller one behind it in the arena.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111088
+export const HTTP3_SERVER_SLOT_BYTES = 111080
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

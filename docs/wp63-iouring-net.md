@@ -515,10 +515,11 @@ else, and only on slots that hold sockets from the process's own listeners.
 dies of SIGSYS: the kernel's own answer, `-EOPNOTSUPP` for a file that is
 no ring (`io_uring/io_uring.c:3484`), would not stop a ring made outside
 the sandbox and inherited across `exec` (NURING-35), and the program cannot
-make another ring. The filter matches numbers, not files, so code that
-`dup2`s such a ring onto a premade ring's number, or closes that number and
-takes it with `dup` or `fcntl(F_DUPFD)`, still enters it; that is
-recorded open (NURING-36). A program that gets hold of a ring's descriptor through
+make another ring. The filter matches numbers, not files, so it also keeps
+each premade ring's number from being closed or replaced: `close`, `dup2`
+and `dup3` onto one kill, and a closed listener's ring is dropped by
+`dup3` of a keeper ring, which takes only NOP, onto its number, so no ring
+number is ever free for `dup` or `fcntl(F_DUPFD)` (NURING-36). A program that gets hold of a ring's descriptor through
 `nish:ffi` can submit only what the restrictions allow, which is what
 `nish:net` does anyway. A `SEND` with a destination address is a `sendto`
 with one. On a TCP socket the address is ignored, and on a UDP socket it is
@@ -673,7 +674,20 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    21 descriptors. Both halves of §4's rule hold: go. Its PSS was 518 MB
    against 129 MB at 96,000.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
-   not depend on S1 to S4 and can land first.
+   not depend on S1 to S4 and can land first. *Measured in S5*
+   ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5)):
+   `bash bench/handler-ring/wins.sh --rounds 7`, on S4's stand-in as five
+   epoll processes at 18,000 connections, each win on its own against the
+   unchanged five. `PRAGMA mmap_size=268435456` spent 27.87 µs a request
+   against 33.07 (15.7% less, band 0.6%; at least 11.3% less in every round),
+   all of it system time, and did not lower memory: RSS rose from 49 to
+   1,301 MB and PSS from 37 to 279 MB as the mapped file was counted against
+   the workers, with the box's used memory unchanged. A like-count cache in
+   one `nish/sync/shm` region spent 28.13 µs (14.9% less), answering 30.0% of
+   requests without SQLite; the same cache held in each worker answered 7.3%
+   and its 2.0% was not separable from noise, so the gain is the cache's, and
+   sharing bought its fill rate from cold. Both are gains on the stand-in;
+   rerun `wins.sh` on the entry before it adopts either.
 
 ## 11. Open questions
 
