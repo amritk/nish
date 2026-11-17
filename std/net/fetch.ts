@@ -492,6 +492,8 @@ export class FetchSyncClient {
   private rbuf: u8[]
   /** Where TLS application data is read before the parser takes it; empty until the first https connection. */
   private plain: u8[]
+  /** Where a redirect's body is read and thrown away; empty until the first redirect that has one. */
+  private sink: u8[]
   /** The fetch's end in monotonic nanoseconds; `HTTP_CLIENT_NEVER` for none. */
   private deadline: i64 = 0
   /** The last failure's `HTTP_E_*` code; `HTTP_E_NONE` after a fetch that answered. */
@@ -530,6 +532,7 @@ export class FetchSyncClient {
     this.ready = new Array<i32>(8)
     this.rbuf = new Array<u8>(HTTP_CLIENT_READ_BYTES)
     this.plain = []
+    this.sink = []
     const proxies: string[] = httpClientEnvProxies(options)
     this.httpProxy = proxies[0]
     this.httpsProxy = proxies[1]
@@ -1192,9 +1195,14 @@ export class FetchSyncClient {
   /**
    * Reads past a redirect's body so the connection can carry the next
    * request; a body too long to be worth reading, or any failure, closes it.
+   * The sink is the client's, kept for the next hop: one built per call would
+   * stay in the caller's memory for every redirect the fetch follows.
    */
   private drain(): void {
-    const sink: u8[] = new Array<u8>(HTTP_CLIENT_DRAIN_CHUNK)
+    if (toI32(this.sink.length) === 0) {
+      this.sink = new Array<u8>(HTTP_CLIENT_DRAIN_CHUNK)
+    }
+    const sink: u8[] = this.sink
     let left: i32 = HTTP_CLIENT_DRAIN_BYTES
     while (this.bodyOpen && left > 0) {
       const n: i32 = this.readBody(this.generation, sink, HTTP_CLIENT_ZERO, HTTP_CLIENT_DRAIN_CHUNK)

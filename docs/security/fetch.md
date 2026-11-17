@@ -136,7 +136,9 @@ refused, redacted or followed holds for both by construction. What differs:
   past it fails there with `HTTP_E_BODY_TOO_LARGE` rather than wrapping. A
   redirect's own body is read to `HTTP_CLIENT_DRAIN_BYTES` only, and, as
   `drain` does, a failure to read it closes the connection without failing
-  the fetch.
+  the fetch. The synchronous client's `drain` reads into one sink the client
+  keeps, made at the first redirect that has a body, so a chain of redirects
+  costs that buffer once rather than once per hop.
 - **The pool keeps a connection only when it is clean.** `release` hands one
   back only when the response was read to its end, the parser holds no byte
   past it and it was kept alive; `FetchPool.take` reads one byte without
