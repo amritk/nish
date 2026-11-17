@@ -9,7 +9,11 @@
  * writes the 101 that accepts it, with `Sec-WebSocket-Accept` from
  * `websocketAcceptKey` (§4.2.2): the base64 of the SHA-1 of the key and a
  * fixed GUID. `websocketOriginAllowed(parser, allowed)` is the opt-in check
- * of `Origin` a server makes first, against a page on another site. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
+ * of `Origin` a server makes first, against a page on another site. A server
+ * that accepts handshake after handshake keeps a `WsAcceptKey` and writes the
+ * 101 into its output with `websocketRequestKeyField` and
+ * `websocketWriteUpgradeResponse`, allocating nothing per handshake, as
+ * `Http1Connection.acceptWebSocket` does. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
  * input for the decoder.
  *
  * **The client's handshake** (§4.1). `websocketClientKey(nonce)` spells 16
@@ -70,14 +74,14 @@
  *
  * Written from RFC 6455, not ported from another implementation.
  */
-import { base64StdPadEncode, base64urlDecode } from "nish/crypto/base64url"
-import { sha1 } from "nish/crypto/sha1"
+import { base64StdPadDecodedLength, base64StdPadEncode, base64StdPadEncodeInto } from "nish/crypto/base64url"
+import { SHA1_SIZE, Sha1 } from "nish/crypto/sha1"
 import {
-  HTTP1_NO_BODY,
+  HTTP1_NO_ROOM,
+  HTTP1_REFUSED,
   Http1Parser,
   http1IsOws,
   http1IsToken,
-  http1ResponseHead,
   http1SameWord,
   http1Text,
 } from "nish/net/http1-codec"
@@ -864,23 +868,79 @@ const websocketBytesOf = (text: string): u8[] => {
   return out
 }
 
+/** The length of a valid `Sec-WebSocket-Key`: 16 bytes in padded base64. */
+/** Zero as an `i32`, for offsets under `--number-mode f64`. */
+const WS_ZERO: i32 = 0
+
+const WS_KEY_LENGTH: i32 = 24
+/** The length of `Sec-WebSocket-Accept`: 20 bytes of SHA-1 in padded base64. */
+const WS_ACCEPT_LENGTH: i32 = 28
+
 /**
- * `text` with one byte replaced by another throughout: how a base64url
- * spelling becomes standard base64 (`-` and `_` for `+` and `/`) and back.
+ * Whether `text[start .. end)` is a valid `Sec-WebSocket-Key` (§4.2.1 item 5):
+ * 24 characters of padded standard base64 that decode to 16 bytes in their
+ * one canonical spelling, read where they lie and allocating nothing.
  */
-const websocketSwapBytes = (text: string, from1: i32, to1: i32, from2: i32, to2: i32): string => {
-  const parts: string[] = []
-  const n: i32 = toI32(text.length)
-  for (let k: i32 = 0; k < n; k += 1) {
-    let c: i32 = toI32(text.charCodeAt(k))
-    if (c === from1) {
-      c = to1
-    } else if (c === from2) {
-      c = to2
+const websocketKeySpanIsValid = (text: u8[], start: i32, end: i32): boolean =>
+  start >= 0 &&
+  end <= toI32(text.length) &&
+  end - start === WS_KEY_LENGTH &&
+  base64StdPadDecodedLength(text, start, WS_KEY_LENGTH) === 16
+
+/**
+ * The accept key of one handshake after another, in storage the caller keeps:
+ * a server builds one per connection and computes every handshake's
+ * `Sec-WebSocket-Accept` into it, allocating nothing after it is built (the
+ * fix for H1-3 in `docs/security/http1-codec.md`).
+ *
+ *     const accept = new WsAcceptKey();
+ *     if (accept.compute(p.head, start, end)) {
+ *       // accept.value[0 .. 28) is the field's value
+ *     }
+ */
+export class WsAcceptKey {
+  /** The hasher, its state kept from one handshake to the next. */
+  hasher: Sha1
+  /** The key followed by `WS_GUID`: what is hashed (§4.2.2 item 5.4). */
+  input: u8[]
+  /** The SHA-1 of `input`. */
+  digest: u8[]
+  /** The accept value's 28 characters, one a byte, once `compute` answers true. */
+  value: u8[]
+
+  /** Storage for one accept value, its hasher and buffers allocated. */
+  constructor() {
+    this.hasher = new Sha1()
+    const guid: i32 = toI32(WS_GUID.length)
+    this.input = new Array<u8>(WS_KEY_LENGTH + guid)
+    for (let k: i32 = 0; k < guid; k += 1) {
+      this.input[WS_KEY_LENGTH + k] = toU8(WS_GUID.charCodeAt(k))
     }
-    parts.push(String.fromCharCode(c))
+    this.digest = new Array<u8>(SHA1_SIZE)
+    this.value = new Array<u8>(WS_ACCEPT_LENGTH)
   }
-  return parts.join("")
+
+  /**
+   * Computes into `value` the accept value of the key in `text[start .. end)`
+   * (§4.2.2 item 5.4), when that is a valid key.
+   *
+   * @param text The buffer holding the client's key, one character a byte, such as an `Http1Parser`'s `head`.
+   * @param start Where in `text` the key starts.
+   * @param end Where in `text` it ends.
+   * @returns True with `value` written, or false, `value` unchanged, when the key is not valid.
+   */
+  compute(text: u8[], start: i32, end: i32): boolean {
+    if (!websocketKeySpanIsValid(text, start, end)) {
+      return false
+    }
+    const input: u8[] = this.input
+    for (let k: i32 = 0; k < WS_KEY_LENGTH && k < toI32(input.length); k += 1) {
+      input[k] = text[start + k]
+    }
+    this.hasher.digestInto(input, WS_ZERO, toI32(input.length), this.digest, WS_ZERO)
+    base64StdPadEncodeInto(this.digest, WS_ZERO, SHA1_SIZE, this.value, WS_ZERO)
+    return true
+  }
 }
 
 /**
@@ -890,8 +950,14 @@ const websocketSwapBytes = (text: string, from1: i32, to1: i32, from2: i32, to2:
  * @param key The key as the client sent it; it is not checked here, so check it with `websocketKeyIsValid` first.
  * @returns The 28-character accept value.
  */
-export const websocketAcceptKey = (key: string): string =>
-  base64StdPadEncode(sha1(websocketBytesOf(`${key}${WS_GUID}`)))
+export const websocketAcceptKey = (key: string): string => {
+  const input: u8[] = websocketBytesOf(`${key}${WS_GUID}`)
+  const digest: u8[] = new Array<u8>(SHA1_SIZE)
+  new Sha1().digestInto(input, WS_ZERO, toI32(input.length), digest, WS_ZERO)
+  const text: u8[] = new Array<u8>(WS_ACCEPT_LENGTH)
+  base64StdPadEncodeInto(digest, WS_ZERO, SHA1_SIZE, text, WS_ZERO)
+  return http1Text(text, 0, WS_ACCEPT_LENGTH, false)
+}
 
 /**
  * Whether `key` is a valid `Sec-WebSocket-Key` (§4.2.1 item 5): padded
@@ -902,65 +968,138 @@ export const websocketAcceptKey = (key: string): string =>
  * @returns True for a 24-character key ending in `==` whose other characters decode to 16 bytes.
  */
 export const websocketKeyIsValid = (key: string): boolean => {
-  if (toI32(key.length) !== 24 || !key.endsWith("==")) {
+  if (toI32(key.length) !== WS_KEY_LENGTH) {
     return false
   }
-  const body: string = key.substring(0, 22)
-  // A `-` or `_` is not standard base64, so it may not survive the swap as
-  // if it were; `=` inside the body is refused by the decoder.
-  if (toI32(body.indexOf("-")) >= 0 || toI32(body.indexOf("_")) >= 0) {
-    return false
+  const bytes: u8[] = websocketBytesOf(key)
+  return websocketKeySpanIsValid(bytes, 0, WS_KEY_LENGTH)
+}
+
+/**
+ * Which field of the head `p` has just read holds the client's key, when that
+ * head is a valid opening handshake (§4.2.1): a GET in HTTP/1.1, asking to
+ * upgrade to `websocket` (alone, in any case), at version 13, with a valid
+ * first `Sec-WebSocket-Key`. Otherwise -1. Nothing is allocated: the key is
+ * `p.head[p.spans[4 * i + 2] .. p.spans[4 * i + 3])`, for `WsAcceptKey`.
+ *
+ * @param p The server's parser, at the `HTTP1_HEAD` of the request.
+ * @returns The key's field index, or -1 when the request is not a valid handshake.
+ */
+export const websocketRequestKeyField = (p: Http1Parser): i32 => {
+  if (!p.methodIs("GET") || p.minor !== 1 || !p.upgradeIs("websocket")) {
+    return -1
   }
-  const bytes: u8[] | null = base64urlDecode(websocketSwapBytes(body, 43, 45, 47, 95))
-  return bytes !== null && toI32(bytes.length) === 16
+  if (!p.headerIs("sec-websocket-version", "13")) {
+    return -1
+  }
+  const i: i32 = p.headerIndex("sec-websocket-key")
+  const spans: i32[] = p.spans
+  if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+    return -1
+  }
+  if (!websocketKeySpanIsValid(p.head, spans[4 * i + 2], spans[4 * i + 3])) {
+    return -1
+  }
+  return i
 }
 
 /**
  * The client's key when the head `p` has just read is a valid opening
- * handshake (§4.2.1): a GET in HTTP/1.1, asking to upgrade to `websocket`
- * (alone, in any case), at version 13, with a valid key. Otherwise `null`, and
- * the server answers 400 (or 426 with `Sec-WebSocket-Version: 13` when only the
- * version is wrong, §4.4).
+ * handshake (§4.2.1), as `websocketRequestKeyField` judges it. Otherwise
+ * `null`, and the server answers 400 (or 426 with `Sec-WebSocket-Version: 13`
+ * when only the version is wrong, §4.4).
  *
  * @param p The server's parser, at the `HTTP1_HEAD` of the request.
  * @returns The `Sec-WebSocket-Key` to pass to `websocketUpgradeResponse`, or null when the request is not a valid handshake.
  */
 export const websocketRequestKey = (p: Http1Parser): string | null => {
-  if (!p.methodIs("GET") || p.minor !== 1 || !p.upgradeIs("websocket")) {
+  const i: i32 = websocketRequestKeyField(p)
+  const spans: i32[] = p.spans
+  if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
     return null
   }
-  if (!p.headerIs("sec-websocket-version", "13")) {
-    return null
+  return http1Text(p.head, spans[4 * i + 2], spans[4 * i + 3], false)
+}
+
+/** Writes `text` into `out` from `at`; the caller has checked it fits. */
+const websocketPutText = (out: u8[], at: i32, text: string): i32 => {
+  const n: i32 = toI32(text.length)
+  for (let k: i32 = 0; k < n; k += 1) {
+    out[at + k] = toU8(text.charCodeAt(k))
   }
-  const key: string | null = p.header("sec-websocket-key")
-  if (key === null || !websocketKeyIsValid(key)) {
-    return null
+  return at + n
+}
+
+/** The 101's status line and its first two fields, which never change. */
+const WS_SWITCHING: string =
+  "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "
+
+/**
+ * Writes the server's 101 response to an opening handshake (§4.2.2) into
+ * `out` from `at`, allocating nothing: `Upgrade`, `Connection`,
+ * `Sec-WebSocket-Accept` with the 28 bytes `accept` holds, and
+ * `Sec-WebSocket-Protocol` when `protocol` is not empty. The bytes are those
+ * of `websocketUpgradeResponse`.
+ *
+ * @param out The buffer the head is written into.
+ * @param at Where in `out` it starts.
+ * @param accept The accept value, its 28 characters one a byte: a `WsAcceptKey`'s `value`.
+ * @param protocol The subprotocol the server chose from `websocketOfferedProtocols`, or "" for none.
+ * @returns The index just past the head, `HTTP1_REFUSED` when `protocol` is not a token or `accept` is not 28 bytes, or `HTTP1_NO_ROOM` when the head does not fit, `out` unchanged either way.
+ */
+export const websocketWriteUpgradeResponse = (out: u8[], at: i32, accept: u8[], protocol: string): i32 => {
+  const p: i32 = toI32(protocol.length)
+  if (toI32(accept.length) !== WS_ACCEPT_LENGTH || (p > 0 && !http1IsToken(protocol)) || p > 65536) {
+    return HTTP1_REFUSED
   }
-  return key
+  const fixed: i32 = toI32(WS_SWITCHING.length)
+  const named: i32 = p > 0 ? 26 + p : 0
+  const length: i32 = fixed + WS_ACCEPT_LENGTH + 2 + named + 2
+  if (at < 0 || at > toI32(out.length) - length) {
+    return HTTP1_NO_ROOM
+  }
+  let j: i32 = websocketPutText(out, at, WS_SWITCHING)
+  for (let k: i32 = 0; k < WS_ACCEPT_LENGTH; k += 1) {
+    out[j + k] = accept[k]
+  }
+  j = websocketPutText(out, j + WS_ACCEPT_LENGTH, "\r\n")
+  if (p > 0) {
+    j = websocketPutText(out, j, "Sec-WebSocket-Protocol: ")
+    j = websocketPutText(out, j, protocol)
+    j = websocketPutText(out, j, "\r\n")
+  }
+  return websocketPutText(out, j, "\r\n")
 }
 
 /**
  * The server's 101 response to an opening handshake (§4.2.2): `Upgrade`,
  * `Connection`, `Sec-WebSocket-Accept`, and `Sec-WebSocket-Protocol` when
  * `protocol` is not empty (the caller picks it from the client's list).
- * Answers `null` for an invalid key or a protocol that is not a token.
+ * Answers `null` for an invalid key or a protocol that is not a token. A
+ * server answering handshake after handshake writes the same bytes with
+ * `WsAcceptKey` and `websocketWriteUpgradeResponse` instead, allocating
+ * nothing.
  *
  * @param key The client's `Sec-WebSocket-Key`, as `websocketRequestKey` gave it.
  * @param protocol The subprotocol the server chose from `websocketOfferedProtocols`, or "" for none.
  * @returns The whole response head, ending in the empty line, or null when refused.
  */
 export const websocketUpgradeResponse = (key: string, protocol: string): u8[] | null => {
-  if (!websocketKeyIsValid(key)) {
+  const bytes: u8[] = websocketBytesOf(key)
+  const accept = new WsAcceptKey()
+  if (!accept.compute(bytes, WS_ZERO, toI32(bytes.length))) {
     return null
   }
-  const names: string[] = ["Upgrade", "Connection", "Sec-WebSocket-Accept"]
-  const values: string[] = ["websocket", "Upgrade", websocketAcceptKey(key)]
-  if (toI32(protocol.length) > 0) {
-    names.push("Sec-WebSocket-Protocol")
-    values.push(protocol)
+  const out: u8[] = new Array<u8>(toI32(WS_SWITCHING.length) + WS_ACCEPT_LENGTH + 30 + toI32(protocol.length))
+  const end: i32 = websocketWriteUpgradeResponse(out, WS_ZERO, accept.value, protocol)
+  if (end < 0) {
+    return null
   }
-  const switching: i32 = 101
-  return http1ResponseHead(switching, "Switching Protocols", names, values, HTTP1_NO_BODY)
+  const head: u8[] = new Array<u8>(end)
+  for (let k: i32 = 0; k < end; k++) {
+    head[k] = out[k]
+  }
+  return head
 }
 
 /**

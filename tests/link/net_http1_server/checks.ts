@@ -204,6 +204,46 @@ class Driven {
   }
 }
 
+/**
+ * H1-3: after a slot's first WebSocket accept, accepting again (a thousand
+ * handshakes on the one connection, restarted between them) leaves
+ * `Arena.mark()` where it was, the accept key and the 101 written into storage
+ * the connection owns.
+ */
+const acceptsFlat = (t: Suite, config: Http1Config, handshake: string): void => {
+  const conn = new Http1Connection(config);
+  conn.date.pin(PINNED_MS);
+  const bytes: u8[] = ascii(handshake);
+  let moved: i32 = 0;
+  let accepted: i32 = 0;
+  let same: boolean = true;
+  let first: string = "";
+  for (let k: i32 = 0; k <= 1000; k++) {
+    conn.restart();
+    conn.feed(bytes, ZERO, toI32(bytes.length));
+    conn.next();
+    const before: i64 = Arena.mark();
+    const answer: i32 = conn.acceptWebSocket("chat");
+    if (k > 0 && Arena.mark() !== before) {
+      moved += 1;
+    }
+    if (answer === 0) {
+      accepted += 1;
+    }
+    const head: string = sent(conn);
+    if (k === 0) {
+      first = head;
+    } else {
+      same = same && head === first;
+    }
+  }
+  t.ok(
+    "H1-3: a thousand WebSocket accepts after a slot's first each answer the same 101 with RFC 6455's accept key",
+    accepted === 1001 && same && toI32(first.indexOf("\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n")) > 0
+  );
+  t.eqI32("H1-3: and none of them moves the arena", moved, ZERO);
+};
+
 /** The suite every TLS client here offers. */
 const SUITE: i32 = TLS_CHACHA20_POLY1305_SHA256;
 
@@ -1445,6 +1485,7 @@ export const serverChecks = (): i32 => {
   t.eqI32("refused: closeWebSocket with 1005", ws.conn.closeWebSocket(WS_CLOSE_NO_STATUS), H1_INVALID);
   t.eqI32("closeWebSocket sends the close", ws.conn.closeWebSocket(toI32(1001)), ZERO);
   t.ok("and the connection is done once it is sent", sentHex(ws.conn) === "880203e9" && ws.conn.isDone() && ws.conn.next() === H1_NEED_MORE);
+  acceptsFlat(t, config, handshake);
 
   const wsEnd = new Driven(config, handshake);
   wsEnd.conn.acceptWebSocket("");

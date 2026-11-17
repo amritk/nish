@@ -49,7 +49,10 @@ export const main = (): i32 => 0;
 ```
 
 A request `acceptWebSocket` refuses (`H1_INVALID`) is yours to answer, with a
-400, or a 426 for a version other than 13.
+400, or a 426 for a version other than 13. It answers `H1_INVALID` too for a
+`protocol` that is not an RFC 9110 token, such as one with a space; pass `""`
+for none. The slot keeps what it computes the accept key in, so accepting on
+a slot that has accepted before allocates nothing.
 
 ### Checking `Origin`
 

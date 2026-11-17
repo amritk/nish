@@ -13,7 +13,10 @@
  *
  * The module also holds RFC 4648 §4 standard base64 — `+` and `/`, padded with
  * `=` — as `base64StdPadEncode` and `base64StdPadDecode`, for PEM
- * (`nish/crypto/x509`) and SCRAM (`nish/net/postgres`). It is as strict and as
+ * (`nish/crypto/x509`) and SCRAM (`nish/net/postgres`), and as
+ * `base64StdPadEncodeInto` and `base64StdPadDecodedLength`, which read and
+ * write a caller's buffer and allocate nothing, for the WebSocket handshake
+ * (`nish/net/websocket`). It is as strict and as
  * constant-time as the URL alphabet, by the same masks, and it refuses a `=`
  * anywhere but the last one or two characters of a text whose length is a
  * multiple of four. They are not `nish/base64`'s `base64Encode`, which encodes
@@ -281,6 +284,100 @@ export const base64StdPadEncode = (data: u8[]): string => {
     parts.push(tail === 1 ? "==" : "=")
   }
   return parts.join("")
+}
+
+/**
+ * `base64StdPadEncode` of `data[start .. start + length)`, written into `out`
+ * from `at` as the bytes of its characters, allocating nothing: the WebSocket
+ * accept key that a server writes for every handshake (RFC 6455 §4.2.2). A
+ * range outside `data`, or text that does not fit in `out` from `at`, panics.
+ *
+ * @param data The buffer holding the bytes to encode; it is read, not changed.
+ * @param start Where in `data` the bytes start.
+ * @param length How many bytes to encode.
+ * @param out The buffer the text is written into.
+ * @param at Where in `out` the text starts.
+ * @returns The index in `out` just past the text, `at + 4 × ceil(length / 3)`.
+ */
+export const base64StdPadEncodeInto = (data: u8[], start: i32, length: i32, out: u8[], at: i32): i32 => {
+  if (data.length > 2147483647 || out.length > 2147483647) {
+    panic("base64StdPadEncodeInto: a buffer longer than 2^31 - 1 bytes")
+  }
+  if (start < 0 || length < 0 || start > toI32(data.length) - length || length > 1610612733) {
+    panic("base64StdPadEncodeInto: bytes outside their buffer")
+  }
+  const end: i32 = at + ((length + 2) / 3) * 4
+  if (at < 0 || at > toI32(out.length) || end > toI32(out.length)) {
+    panic("base64StdPadEncodeInto: text that does not fit its buffer")
+  }
+  let j: i32 = at
+  let acc: i32 = 0
+  let bits: u32 = 0
+  for (let k: i32 = start; k < start + length; k++) {
+    acc = ((acc << 8) | toI32(data[k])) & 0xfff
+    bits += 8
+    while (bits >= 6) {
+      bits -= 6
+      out[j] = toU8(base64StdPadCharOf((acc >> toI32(bits)) & 63))
+      j++
+    }
+  }
+  if (bits > 0) {
+    out[j] = toU8(base64StdPadCharOf((acc << toI32(6 - bits)) & 63))
+    j++
+  }
+  while (j < end) {
+    out[j] = 61
+    j++
+  }
+  return end
+}
+
+/**
+ * How many bytes the padded standard base64 in `text[start .. start + length)`
+ * decodes to, or -1 unless it is their one canonical spelling, by
+ * `base64StdPadDecode`'s rules and its masks; nothing is decoded or allocated.
+ * A WebSocket server checks a handshake's `Sec-WebSocket-Key` this way, where
+ * it lies in the request (RFC 6455 §4.2.1, item 5). A range outside `text`
+ * panics.
+ *
+ * @param text The buffer holding the text, one character a byte.
+ * @param start Where in `text` the base64 starts.
+ * @param length How many characters it is.
+ * @returns The decoded length, or -1 when the text is not canonical.
+ */
+export const base64StdPadDecodedLength = (text: u8[], start: i32, length: i32): i32 => {
+  if (text.length > 2147483647) {
+    panic("base64StdPadDecodedLength: a buffer longer than 2^31 - 1 bytes")
+  }
+  if (start < 0 || length < 0 || start > toI32(text.length) - length) {
+    panic("base64StdPadDecodedLength: text outside its buffer")
+  }
+  if ((length & 3) !== 0) {
+    return -1
+  }
+  let pad: i32 = 0
+  if (length > 0 && toI32(text[start + length - 1]) === 61) {
+    pad = toI32(text[start + length - 2]) === 61 ? 2 : 1
+  }
+  const chars: i32 = length - pad
+  let bad: i32 = 0
+  let acc: i32 = 0
+  let bits: i32 = 0
+  for (let k: i32 = 0; k < chars; k++) {
+    const v: i32 = base64StdPadSextetOf(toI32(text[start + k]))
+    bad = bad | (v >> 31)
+    acc = ((acc << 6) | (v & 63)) & 0xfff
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+    }
+  }
+  bad = bad | (acc & ((1 << bits) - 1))
+  if (bad !== 0) {
+    return -1
+  }
+  return (length >> 2) * 3 - pad
 }
 
 /**

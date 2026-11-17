@@ -110,8 +110,9 @@
  *  come; `Http1TlsServer` does the same for a slot's connection and, through
  *  `TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or
  *  grown to its cap on first use and kept, so a warmed slot serves request after
- *  request with `Arena.used()` flat. Accepting a WebSocket allocates (the accept
- *  key), once a connection.
+ *  request with `Arena.used()` flat. Accepting a WebSocket computes the accept
+ *  key and writes the 101 into storage the slot keeps, built on its first
+ *  accept, so later handshakes leave the arena flat too.
  *
  * **Output is borrowed.** The pools' slots share an `Http1OutputPool`: a
  * connection takes an `outputSize` buffer when it first needs room to write
@@ -168,9 +169,10 @@ import {
   WsDecoder,
   websocketClosePayload,
   websocketFrameSize,
-  websocketRequestKey,
-  websocketUpgradeResponse,
+  WsAcceptKey,
+  websocketRequestKeyField,
   websocketWriteFrame,
+  websocketWriteUpgradeResponse,
 } from "nish/net/websocket"
 import { TlsServerConfig } from "nish/net/tls"
 import { HTTP_DATE_LAST_SECOND, HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields"
@@ -865,6 +867,11 @@ export class Http1Connection {
    * the slot's later peers.
    */
   ws: WsDecoder | null
+  /**
+   * The accept key's storage: made on the slot's first WebSocket accept, like
+   * `ws`, then kept, so a later handshake allocates nothing.
+   */
+  private acceptKey: WsAcceptKey | null
   /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
   data: u8[]
   /** A ping's payload, kept until its pong fits: empty until the first ping. */
@@ -960,6 +967,7 @@ export class Http1Connection {
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
     this.ws = null
+    this.acceptKey = null
     this.noOutput = []
     this.output = this.noOutput
     this.pool = null
@@ -2101,24 +2109,43 @@ export class Http1Connection {
     if (!this.answerable()) {
       return H1_CLOSED
     }
-    const key: string | null = websocketRequestKey(this.parser)
-    if (key === null) {
+    const p: Http1Parser = this.parser
+    const field: i32 = websocketRequestKeyField(p)
+    const spans: i32[] = p.spans
+    if (field < 0 || 4 * field + 3 >= toI32(spans.length)) {
       return H1_INVALID
     }
-    const head: u8[] | null = websocketUpgradeResponse(key, protocol)
-    if (head === null) {
+    const accept: WsAcceptKey = this.acceptStorage()
+    if (!accept.compute(p.head, spans[4 * field + 2], spans[4 * field + 3])) {
       return H1_INVALID
     }
-    const n: i32 = toI32(head.length)
-    if (n > this.bodyRoom()) {
+    // Written past `outputEnd`, where nothing live is, and kept only when it
+    // fits beside the control reserve.
+    const room: i32 = this.bodyRoom()
+    const end: i32 = websocketWriteUpgradeResponse(this.output, this.outputEnd, accept.value, protocol)
+    if (end === HTTP1_REFUSED) {
+      return H1_INVALID
+    }
+    if (end < 0 || end - this.outputEnd > room) {
       this.writeHeld = true
       return H1_AGAIN
     }
-    this.outputEnd = http1ServerCopy(this.output, this.outputEnd, head, H1_ZERO, n)
+    this.outputEnd = end
     this.response = H1_R_DONE
     this.upgraded = true
     this.closeAfter = false
     return 0
+  }
+
+  /** The slot's `WsAcceptKey`, made on its first WebSocket accept and kept. */
+  private acceptStorage(): WsAcceptKey {
+    const made: WsAcceptKey | null = this.acceptKey
+    if (made !== null) {
+      return made
+    }
+    const fresh: WsAcceptKey = new WsAcceptKey()
+    this.acceptKey = fresh
+    return fresh
   }
 
   /**
