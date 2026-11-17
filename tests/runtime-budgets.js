@@ -1089,7 +1089,12 @@ export const RUNTIME_BUDGETS = [
     "RUNTIME_CROSS_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
   ],
-  ["runtime/runtime-cross.c", RUNTIME_CROSS_TEXT_BUDGET, "RUNTIME_CROSS_TEXT_BUDGET", ["-DNISH_ARENA_RANGE=1"]],
+  [
+    "runtime/runtime-cross.c",
+    RUNTIME_CROSS_TEXT_BUDGET,
+    "RUNTIME_CROSS_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1"],
+  ],
   [
     "runtime/runtime-cross.c",
     RUNTIME_CROSS_THREADS_TEXT_BUDGET,

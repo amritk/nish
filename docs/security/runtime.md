@@ -400,7 +400,7 @@ only the suite makes.
 ## The compact-class range
 
 *Built: `scripts/build.sh --arena-range`, which the compiler passes when a
-program has a compact class (WP48, [`docs/wp48-ref32-classes.md`](../wp48-ref32-classes.md)
+program has a compact class (WP48, [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
 §3.3). No program has one until WP48 stage 2, so no build selects it today. The
 code is runtime.c's "The compact-class range" block, with the realigns in
 `nish_alloc_struct`, `runtime-text.c`'s `nish_text_alloc` and

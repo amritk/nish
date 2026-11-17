@@ -2026,7 +2026,18 @@ const runProgram = (
   json: boolean,
   argsFrom: i32
 ): number => {
-  const cached = cachedBinary(emitted, pkg, name, profile, cpu, debugInfo, threads, debugArena, arenaRange, json)
+  const cached = cachedBinary(
+    emitted,
+    pkg,
+    name,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    debugArena,
+    arenaRange,
+    json
+  )
   if (cached.status !== 0) {
     return cached.status
   }
@@ -2701,7 +2712,18 @@ const cachedRuntime = (
   if (answered !== 0 || version === null || runtimeDir === null) {
     return none
   }
-  const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, debugArena, arenaRange, cc, version)
+  const key = runtimeCacheKey(
+    root,
+    runtimeDir,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    debugArena,
+    arenaRange,
+    cc,
+    version
+  )
   const recipe: string[] = [`${root}/runtime/runtime.c`, "--runtime-objects"]
   const runtime = cachedEntry(
     root,
