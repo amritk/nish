@@ -1059,7 +1059,7 @@ export const websocketWriteUpgradeResponse = (out: u8[], at: i32, accept: u8[], 
     return HTTP1_NO_ROOM
   }
   let j: i32 = websocketPutText(out, at, WS_SWITCHING)
-  for (let k: i32 = 0; k < WS_ACCEPT_LENGTH; k += 1) {
+  for (let k: i32 = 0; k < toI32(accept.length); k += 1) {
     out[j + k] = accept[k]
   }
   j = websocketPutText(out, j + WS_ACCEPT_LENGTH, "\r\n")
@@ -1096,7 +1096,7 @@ export const websocketUpgradeResponse = (key: string, protocol: string): u8[] | 
     return null
   }
   const head: u8[] = new Array<u8>(end)
-  for (let k: i32 = 0; k < end; k++) {
+  for (let k: i32 = 0; k < toI32(head.length) && k < toI32(out.length); k++) {
     head[k] = out[k]
   }
   return head

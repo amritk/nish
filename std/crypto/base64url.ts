@@ -314,11 +314,15 @@ export const base64StdPadEncodeInto = (data: u8[], start: i32, length: i32, out:
   let acc: i32 = 0
   let bits: u32 = 0
   for (let k: i32 = start; k < start + length; k++) {
-    acc = ((acc << 8) | toI32(data[k])) & 0xfff
+    if (k >= 0 && k < toI32(data.length)) {
+      acc = ((acc << 8) | toI32(data[k])) & 0xfff
+    }
     bits += 8
     while (bits >= 6) {
       bits -= 6
-      out[j] = toU8(base64StdPadCharOf((acc >> toI32(bits)) & 63))
+      if (j >= 0 && j < toI32(out.length)) {
+        out[j] = toU8(base64StdPadCharOf((acc >> toI32(bits)) & 63))
+      }
       j++
     }
   }

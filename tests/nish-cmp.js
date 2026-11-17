@@ -503,6 +503,12 @@ const dnsFallback = (why, filesByProgram) =>
 // The fail-fast UTF-8 check lands under this PR's subject, which names the
 // Autobahn run that grades it.
 const WS_FAIL_FAST = "Autobahn"
+// The H1-3 fix lands under this PR's subject.
+const WS_ACCEPT_FLAT = "accept a WebSocket without leaving bytes in the arena"
+const wsAcceptFlat = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: WS_ACCEPT_FLAT, why }))
+  )
 const wsFailFast = (why, filesByProgram) =>
   Object.entries(filesByProgram).flatMap(([program, files]) =>
     files.map((file) => ({ program, file, changelog: WS_FAIL_FAST, why }))
@@ -2301,6 +2307,36 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
   },
+  // H1-3: the WebSocket accept key is written into storage the connection
+  // owns, so nish/crypto/sha1 gains Sha1 and digestInto and
+  // nish/crypto/base64url gains the into-a-buffer encoder: the module every
+  // importer of either writes has new functions and renumbered values.
+  {
+    file: "sha1.ll",
+    changelog: WS_ACCEPT_FLAT,
+    why: "std/crypto/sha1.ts gains the Sha1 class and digestInto, which sha1() now calls, so the module every importer of nish/crypto/sha1 writes has new functions and renumbered values; no importer's own module moves",
+  },
+  {
+    file: "base64url.ll",
+    changelog: WS_ACCEPT_FLAT,
+    why: "std/crypto/base64url.ts gains base64StdPadEncodeInto and base64StdPadDecodedLength, so the module every importer of nish/crypto/base64url writes has new functions and renumbered values; no importer's own module moves",
+  },
+  ...wsAcceptFlat(
+    "nish/crypto/sha1 exports the Sha1 class, so a program's C header gains its struct and renumbers what follows it",
+    {
+      "tests/link/crypto_sha1/main.ts": ["main.h"],
+      "tests/link/crypto_sha1_f64/main.ts": ["main.h"],
+      "tests/link/crypto_sha1_long_f64/main.ts": ["main.h"],
+    }
+  ),
+  ...wsAcceptFlat(
+    "Http1Connection keeps a WsAcceptKey, so a program's C header that lays out the connection gains WsAcceptKey's struct and renumbers what follows it",
+    {
+      "tests/link/net_http3_bad_reset_budget/main.ts": ["main.h"],
+      "tests/link/net_http3_server_bad_head_timeout/main.ts": ["main.h"],
+      "tests/link/net_http3_server_bad_idle_timeout/main.ts": ["main.h"],
+    }
+  ),
   // WsDecoder gains `frameChecked`, how far the text frame still arriving has
   // been unmasked and UTF-8 checked, so every program that links
   // nish/net/websocket lays the decoder out 8 bytes wider: websocket.ll moves
