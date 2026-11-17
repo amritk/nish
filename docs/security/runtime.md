@@ -455,7 +455,7 @@ the build links.
 
 **Memory.** The 4 KiB class floor rounds a small region's first chunk up.
 `tests/link/region_sessions_soak` (1000 live regions) holds about 4.5 MB
-of anonymous memory with the range, against about 757 KB without it, and
+of anonymous memory with the range, against about 762 KB without it, and
 prints the same output. The figures are the "anonymous resident" the program
 prints for its regions phase after warm-up (4,591,616 and 761,856 bytes on
 this record's run), built as `tests/run.js` builds it: `nish main.ts
@@ -465,40 +465,50 @@ with the range the whole arena is capped at 15 GiB, and without it the arena
 has no cap of its own.
 
 **The tests**, all in `tests/run.js` (`node tests/run.js arena-range`; the
-sanitizer rows under `runtime_sanitize`):
+sanitizer rows under `runtime_sanitize`). Each is named by its `check(...)`
+string; `<range>` is `the compact-class range` and, for the threaded build,
+`the compact-class range, -DNISH_THREADS`. The verdicts are exit statuses,
+signals and stdout, never a panic's words.
 
 - `tests/runtime/range-test.c`, linked with the whole runtime, plain and with
-  `-DNISH_THREADS`. It checks that every chunk of 2 MiB or less lies in the
-  range past its first 64 bytes with a class `cap`, that the fixed range is at
-  1 GiB, and that a released chunk is the next one its class hands out. It
-  also checks that a chunk over 2 MiB and an adopted copy block lie outside
-  the range, and that regions, `keep`, the cross-thread copies and a worker
-  thread's chunks all work. It must exit 0 and print `range ok`.
-- The same file in `exhaust` mode, built with a 1 MiB range, must exit 1
-  without printing `reached`.
-- In `busy` mode, a constructor that runs first maps `0x40000000`. The run
-  must exit 1 before `main` prints anything.
-- Under ASan and UBSan, built with the based shape because their shadow
-  memory lies where the fixed range would be. The ASan build in `unreserved`
-  mode must find the ABI symbol, a null base and a working arena.
-- The arena, region and `keep` round trips from `tests/cases/`, linked
-  through `scripts/build.sh --arena-range`, must print their `.out`.
-- A module that loads `nish_arena_range_abi` links with `--arena-range` and
-  fails to link without it. The wasm, wasm-host, wasi and napi profiles
-  refuse the flag with exit 2.
-- `--debug-arena` with the range: a pointer kept across a release must die of
-  `SIGSEGV` at the read, plain and with `-DNISH_THREADS`. The same build in
-  `exhaust` mode, with a 1 MiB range, must exit 1 without printing `reached`.
-- `range-test.c` in `misaligned` mode, plain and with `-DNISH_THREADS`: after
-  a 4-byte bump leaves the arena 4 past an 8-byte boundary, a struct, a
-  string, a cross-thread copy, a `keep` and a region's adopt each answer an
-  8-aligned block. It must print `misaligned ok`.
+  `-DNISH_THREADS`: "`<range>`: chunks of 2 MiB or less are power-of-two
+  classes in the range past its first 64 bytes, a freed chunk is reused,
+  larger ones are malloc's, and regions, keep and the cross copies work". It
+  must exit 0 and print `range ok`.
+- The same file in `misaligned` mode: "`<range>`: from an offset 4 past an
+  8-byte boundary, the struct and text bumps, nish_cross_in, keep and region
+  adopt each hand out an 8-aligned block". It must print `misaligned ok`.
+- In `busy` mode, on Linux: "`<range>`: a busy fixed address exits 1 before
+  main runs" (a constructor that runs first maps `0x40000000`), and "`<range>`:
+  without the address taken first, the same mode reaches main".
+- Built with a 1 MiB range in `exhaust` mode: "the compact-class range: a
+  used-up range exits 1 rather than handing out a chunk past its end", and
+  with `-DNISH_ARENA_DEBUG`, "the debug arena with the compact-class range: a
+  used-up range exits 1 rather than handing out a chunk past its end".
+- "runtime_sanitize: the range unit test (`<range>`) runs clean under ASan
+  and UBSan", built with the based shape because the sanitizers' shadow
+  memory lies where the fixed range would be, and "runtime_sanitize: the range
+  unit test (the compact-class range with -DNISH_ASAN, which reserves nothing)
+  runs clean under ASan and UBSan", in `unreserved` mode: the ABI symbol is
+  found, the base is null and the arena works.
+- "scripts/build.sh `<flags>`: a module naming @nish_arena_range_abi links and
+  reads 1", for `--arena-range`, `--arena-range --debug-arena` and
+  `--arena-range --threads`; "scripts/build.sh without --arena-range: the same
+  module does not link against the default runtime, and links once
+  @nish_arena_range_abi alone is supplied"; and "scripts/build.sh --arena-range
+  --profile wasm: refused with exit 2". The wasm-host, wasi and napi profiles
+  refuse the flag in `scripts/build.sh` too, but no check runs them.
+- "scripts/build.sh --threads --arena-range: tests/link/`<program>` prints what
+  the default build prints", for `region_sessions_soak` and `par_map_reclaim`.
+- "debug arena with the compact-class range: a pointer kept across a release
+  dies of SIGSEGV at the read", and the same with `, -DNISH_THREADS` after
+  `range`.
 
 | ID | Severity | Location | Finding | Status |
 | --- | --- | --- | --- | --- |
-| RT-55 | Medium | `runtime/runtime.c` (`nish_arena_keep`); `runtime/runtime-region.c` (`nish_region_adopt`) | A compact class bumps the arena by a multiple of 4, so its offset may sit 4 past an 8-byte boundary. `keep` copied its block to the mark unrounded, and adopt carved its chunk header at the caller's offset unrounded, so either could hand out a block 4 bytes off the alignment every other allocation keeps | **Fixed.** Under `NISH_ARENA_RANGE` both round the offset up to 8 first, as `nish_alloc_struct`, `nish_text_alloc` and `nish_cross_in` already did; the other 9 runtime sites that set or bump an offset set it to 0, a chunk's size or its `cap`, or add 8-byte multiples only. Before: a kept block at `0x4000005c` and a misaligned adopted chunk; after: `check("arena-range: misaligned (…)")` passes (`range-test.c` `misaligned`) |
+| RT-55 | Medium | `runtime/runtime.c` (`nish_arena_keep`); `runtime/runtime-region.c` (`nish_region_adopt`) | A compact class bumps the arena by a multiple of 4, so its offset may sit 4 past an 8-byte boundary. `keep` copied its block to the mark unrounded, and adopt carved its chunk header at the caller's offset unrounded, so either could hand out a block 4 bytes off the alignment every other allocation keeps | **Fixed.** Under `NISH_ARENA_RANGE` both round the offset up to 8 first, as `nish_alloc_struct`, `nish_text_alloc` and `nish_cross_in` already did; the other 9 runtime sites that set or bump an offset set it to 0, a chunk's size or its `cap`, or a mark captured earlier (`nish_arena_release`), or add 8-byte multiples only. Before: the `misaligned` mode built against the runtime before the fix stops at a kept block at `0x4000005c` and at a misaligned adopted chunk; after: "the compact-class range: from an offset 4 past an 8-byte boundary, the struct and text bumps, nish_cross_in, keep and region adopt each hand out an 8-aligned block" passes, plain and with `-DNISH_THREADS` |
 | RT-56 | Low | `runtime/runtime.c` (`nish_range_map`) | A fixed reservation that failed for any reason panicked "the address is in use", which misleads an operator who hit an address-space limit | **Fixed.** A failure whose `errno` is not `EEXIST` names the system's refusal. Not provoked by a test: the limit that provokes it would also stop the test's own start-up |
-| RT-57 | Low | `runtime/runtime.c` (`nish_debug_on_fault`) | With the range, the debug reservation starts at the range's base, so a null-ish dereference within its first page was reported as a stale arena read | **Fixed.** The handler's window starts one debug page in. `check("arena-range: --debug-arena kept read faults (…)")` still passes |
+| RT-57 | Low | `runtime/runtime.c` (`nish_debug_on_fault`) | With the range, the debug reservation starts at the range's base, so a null-ish dereference within its first page was reported as a stale arena read | **Fixed.** The handler's window starts one debug page in. Not provoked by a test: a fault in the first page and a stale read both die of `SIGSEGV`, so only the handler's message would tell them apart, and the checks read exit statuses and signals only. "debug arena with the compact-class range: a pointer kept across a release dies of SIGSEGV at the read" still passes, so a stale read past the first page is still named |
 
 ## Doc corrections for the security-policy stage
 

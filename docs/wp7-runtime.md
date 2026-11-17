@@ -181,8 +181,8 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 
 | File | Subject | Budget (constant) | Measured 2026-10-05 |
 | --- | --- | ---: | ---: |
-| `runtime/runtime.c` | the core: arena, arrays, `argv`, `Math.random`, panics, `nish_wipe` | 1,723 (`RUNTIME_TEXT_BUDGET`) | 1,723 (2026-11-08) |
-| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 1,938 (`RUNTIME_THREADS_TEXT_BUDGET`) | 1,938 (2026-11-08) |
+| `runtime/runtime.c` | the core: arena, arrays, `argv`, `Math.random`, panics, `nish_wipe` | 1,819 (`RUNTIME_TEXT_BUDGET`) | 1,805 (2026-11-17) |
+| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 2,025 (`RUNTIME_THREADS_TEXT_BUDGET`) | 2,010 (2026-11-17) |
 | `runtime.c -DNISH_ARENA_RANGE=1` | the compact-class runtime ([wp48](wp48-ref32-classes.md) stage 1): chunks of 2 MiB or less carved from a 15 GiB range reserved before main, in power-of-two classes with a free list each, the exhaustion panic and the 8-byte realigns; `scripts/build.sh --arena-range` links it only for a program with a compact class | 2,353 (`RUNTIME_RANGE_TEXT_BUDGET`) | 2,353 (2026-11-17) |
 | `runtime.c -DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` | the same, with a thread-local arena | 2,571 (`RUNTIME_RANGE_THREADS_TEXT_BUDGET`) | 2,571 (2026-11-17) |
 | `runtime/runtime-text.c` | strings and number formatting (`nish_str_*`, `nish_f64_format`, Zmij), freestanding for wasm32 ([wp50](wp50-wasm-host.md) stage 4) | 1,787 (`RUNTIME_TEXT_UNIT_BUDGET`) | 1,787 (2026-11-08) |
