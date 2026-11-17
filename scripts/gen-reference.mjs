@@ -43,7 +43,8 @@
 // The routes go to scalar.config.json under /reference: /reference/language
 // for docs/LANGUAGE.md, the /reference/library group holding every library
 // page, the /reference/compiler group holding the two compiler pages, and the
-// /reference/config group holding one page per schema. Only the /reference group's text is rewritten, in the
+// /reference/config group holding one page per schema. Only the /reference group's text, and each page
+// route's generated head (scripts/route-head.mjs), is rewritten, in the
 // one-line-when-it-fits layout the rest of the file keeps.
 //
 // Output is byte-deterministic: TypeDoc sorts each module's members, modules
@@ -54,6 +55,7 @@ import { generateMarkdownFiles } from "@amritk/generate-markdown"
 import { Application, ReflectionKind } from "typedoc"
 import ts from "typescript"
 import { parseCodesRegistry } from "./codes-registry.js"
+import { printJson, withHeads } from "./route-head.mjs"
 
 const root = path.resolve(import.meta.dirname, "..")
 const outDir = "docs/reference"
@@ -66,7 +68,6 @@ const languageSource = "docs/LANGUAGE.md"
 const languagePage = `${outDir}/language.md`
 /** One page per `##` section of the spec, beside its index. */
 const languageDir = `${outDir}/language`
-const width = 110
 const baselineFile = "scripts/undocumented.txt"
 
 const Kind = {
@@ -1436,41 +1437,6 @@ const libraryRoutes = (pages) => {
   return { type: "group", title: "Library reference", children }
 }
 
-const oneLine = (v) => {
-  if (Array.isArray(v)) {
-    return `[${v.map(oneLine).join(", ")}]`
-  }
-  if (v === null || typeof v !== "object") {
-    return JSON.stringify(v)
-  }
-  const kv = Object.entries(v).map(([k, x]) => `${JSON.stringify(k)}: ${oneLine(x)}`)
-  return kv.length > 0 ? `{ ${kv.join(", ")} }` : "{}"
-}
-
-/** JSON in the file's layout: an object or array on one line when it fits in `width`. */
-const printJson = (value, indent, prefix, suffix) => {
-  const one = oneLine(value)
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    indent + prefix.length + one.length + suffix.length <= width
-  ) {
-    return `${" ".repeat(indent)}${prefix}${one}${suffix}`
-  }
-  const pad = " ".repeat(indent)
-  const entries = Array.isArray(value) ? value.map((v) => ["", v]) : Object.entries(value)
-  const [open, close] = Array.isArray(value) ? ["[", "]"] : ["{", "}"]
-  const lines = entries.map(([k, v], i) =>
-    printJson(
-      v,
-      indent + 2,
-      Array.isArray(value) ? "" : `${JSON.stringify(k)}: `,
-      i < entries.length - 1 ? "," : ""
-    )
-  )
-  return `${pad}${prefix}${open}\n${lines.join("\n")}\n${pad}${close}${suffix}`
-}
-
 /** The line range `[open, close]` of the object `"key": {` that opens at or after `from`. */
 const objectLines = (lines, key, from) => {
   const open = lines.findIndex((l, i) => i >= from && l.trimStart().startsWith(`${JSON.stringify(key)}: {`))
@@ -2424,7 +2390,8 @@ const main = async () => {
   }
   const pages = collectPages(project)
   const configBefore = fs.readFileSync(path.join(root, configFile), "utf8")
-  const configAfter = configText(configBefore, pages)
+  // Every page route also carries its generated head (scripts/route-head.mjs).
+  const configAfter = withHeads(configText(configBefore, pages))
   const link = makeLinker(routedFiles(JSON.parse(configAfter), []))
   const want = new Map()
   for (const p of pages) {
@@ -2472,7 +2439,9 @@ const main = async () => {
     if (headerOf(before) !== headerOf(after)) {
       drift.push('the header\'s "Language reference" link')
     }
-    problems.push(`stale: ${configFile} (${drift.join(" and ") || "the layout of the /reference routes"})`)
+    problems.push(
+      `stale: ${configFile} (${drift.join(" and ") || "a page route's head, or the layout of the /reference routes"})`
+    )
   }
   const gapProblems = updateBaseline ? [] : baselineProblems(gaps)
   if (check) {
