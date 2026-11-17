@@ -86,7 +86,7 @@ import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
-import { arenaJson, unboundedPassFindings } from "./arena-report"
+import { CalleeDrops, arenaJson, unboundedPassFindings } from "./arena-report"
 import {
   allCapabilities,
   argumentCapabilities,
@@ -3247,6 +3247,10 @@ export class Compilation {
    */
   reportUnboundedPasses(): void {
     const facts = this.analyze()
+    const drops = new CalleeDrops(this.analysisUnits, facts)
+    for (const unit of this.analysisUnits) {
+      drops.theirs.push(!this.inRootPackage(unit.program.source))
+    }
     for (const unit of this.analysisUnits) {
       const source = unit.program.source
       if (!this.inRootPackage(source)) {
@@ -3258,7 +3262,7 @@ export class Compilation {
           named.push(warning.start)
         }
       }
-      for (const finding of unboundedPassFindings(unit, this.table, facts, named)) {
+      for (const finding of unboundedPassFindings(unit, this.table, facts, named, drops)) {
         this.sink.reportPerformance(source, finding.node.start, finding.node.end, finding.message)
       }
     }

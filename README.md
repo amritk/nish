@@ -13,6 +13,8 @@
 ![WebAssembly](https://img.shields.io/badge/wasm-wasm32%20%C2%B7%20wasi-654ff0?style=flat-square&logo=webassembly&logoColor=white)
 ![vibe coded](https://img.shields.io/badge/vibe-coded-a855f7?style=flat-square)
 
+**[nishlang.com](https://nishlang.com/)** · [Get started](https://nishlang.com/getting-started/installation) · [Language reference](https://nishlang.com/reference/language) · [Changelog](https://nishlang.com/reference/changelog)
+
 </div>
 
 ---
@@ -251,6 +253,10 @@ and emits IR in a Web Worker with no server. [web/README.md](web/README.md)
 has the playground.
 
 ## Documentation
+
+The documentation site, **[nishlang.com](https://nishlang.com/)**, publishes
+the user guide, the language and library reference and the changelog; the
+files below are its sources.
 
 | Read | For |
 |:---|:---|

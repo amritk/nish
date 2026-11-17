@@ -208,7 +208,7 @@ const spdx = () => {
     versionInfo: version,
     downloadLocation: releaseUrl(packed),
     ...fileFacts(packed),
-    homepage: `https://github.com/${REPO}`,
+    homepage: main.homepage,
     supplier: "Organization: the nish authors",
     licenseConcluded: "NOASSERTION",
     licenseDeclared: main.license,
