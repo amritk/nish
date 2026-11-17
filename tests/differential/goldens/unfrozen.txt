@@ -664,7 +664,10 @@ cases/simd_access_oob_strict added after R6: no rewriter to freeze it with
 cases/simd_access_oob_unfloored added after R6: no rewriter to freeze it with
 cases/simd_access_order added after R6: no rewriter to freeze it with
 cases/simd_access_proven added after R6: no rewriter to freeze it with
+cases/simd_adler32 added after R6: no rewriter to freeze it with
+cases/simd_byte_runs added after R6: no rewriter to freeze it with
 cases/simd_chacha_quarter added after R6: no rewriter to freeze it with
+cases/simd_hex added after R6: no rewriter to freeze it with
 cases/simd_lanes added after R6: no rewriter to freeze it with
 cases/simd_load_field_loop added after R6: no rewriter to freeze it with
 cases/simd_ops_float added after R6: no rewriter to freeze it with
