@@ -40491,10 +40491,13 @@ if (!only || "hooks".includes(only) || "format".includes(only)) {
 // ---- The spec tests: test/spec/<n>.ts, emitted by vector from contracts/<n>.json --------
 // Each test names the contract it was emitted from by hash on its one
 // `// vector-contract-sha256:` line. A test whose contract is missing or has moved
-// since is a FAIL: regenerate it (contracts/README.md). A test of a module std/ does
+// since is a FAIL, and a current one is a PASS of its own before the run's line:
+// regenerate a stale one (contracts/README.md). A test of a module std/ does
 // not have yet is a SKIP naming the module; otherwise the test is built and run, and
-// passes on exit 0, no FAIL line, and the `vector-done <nonce>` line its main prints
-// last, so a test that stopped early cannot pass. vector itself is not needed here.
+// passes on exit 0, no FAIL line, at least one PASS line, and the `vector-done <nonce>`
+// line its main prints last, so a test that stopped early, or whose every clause was
+// skipped, cannot pass: as in vector's own run, nothing ran. Each `SKIP` line the test
+// prints is a SKIP of its own. vector itself is not needed here.
 if (!only || "spec".includes(only)) {
   const specDir = path.join(root, "test", "spec")
   const tests = fs.existsSync(specDir)
@@ -40518,14 +40521,13 @@ if (!only || "spec".includes(only)) {
       .split("\n")
       .filter((l) => l.startsWith("// vector-contract-sha256:"))
       .map((l) => l.slice("// vector-contract-sha256:".length).trim())
-    if (pins.length !== 1 || pins[0] !== want) {
-      check(
-        `spec: ${rel} was emitted from ${contractRel} as it is now`,
-        false,
-        `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
-      )
-      continue
-    }
+    const fresh = pins.length === 1 && pins[0] === want
+    check(
+      `spec: ${rel} was emitted from ${contractRel} as it is now`,
+      fresh,
+      `the test pins ${pins.length === 0 ? "no hash" : pins.join(", ")}; ${contractRel} hashes to ${want}`
+    )
+    if (!fresh) continue
     let mod
     try {
       mod = JSON.parse(fs.readFileSync(contractPath, "utf8"))?.target?.module
@@ -40569,13 +40571,18 @@ if (!only || "spec".includes(only)) {
       maxBuffer: 64 * 1024 * 1024,
     })
     const lines = (r.stdout ?? "").split("\n")
+    const ran = lines.some((l) => l.startsWith("PASS  "))
     check(
       `spec: ${rel} passes against ${stdRel}`,
       r.status === 0 &&
         !lines.some((l) => l.startsWith("FAIL")) &&
-        lines.some((l) => l.startsWith(`vector-done ${nonce} `)),
-      shown(r)
+        lines.some((l) => l.startsWith(`vector-done ${nonce} `)) &&
+        ran,
+      ran ? shown(r) : `no clause passed, so nothing was checked\n${shown(r)}`
     )
+    // A clause the test skipped, such as a slow iterated vector emitted without
+    // `--slow`, does not fail the run; each is a SKIP here so the summary counts it.
+    for (const l of lines) if (l.startsWith("SKIP  ")) skip(`spec: ${rel}: ${l.slice("SKIP  ".length)}`)
   }
 }
 
