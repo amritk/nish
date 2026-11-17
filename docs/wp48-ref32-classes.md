@@ -1,7 +1,8 @@
 # WP48: 32-bit references for linked classes — designed and measured
 
-**Status: proposed on 2026-11-17, for the owner to accept or decline.** Nothing
-in the compiler, the runtime or `std/` changes with this note. It reopens
+**Status: accepted on 2026-11-17 (§7).** Stage 1, the arena on a reserved
+range, is in the runtime (§3.3, measured in §5.4); no program selects it until
+stage 2's emitter. It reopens
 WP48, whose first note
 ([`docs/wp48-compressed-references.md`](https://github.com/amritk/nish/blob/d38a94b00543bd87481a6fa811ecc5802ba36d92/docs/wp48-compressed-references.md),
 accepted 2026-11-11, removed in `b252107a`) declined a whole-program 32-bit
@@ -171,7 +172,7 @@ The decode has two shapes, measured in §5:
 
 The zero-based shape is faster (§5) and needs a fixed address. If that address
 is taken, the program stops with a diagnostic. The based shape runs anywhere.
-§7 proposes zero-based where the platform allows it (Linux, Windows), and
+§7 takes zero-based where the platform allows it (Linux, Windows), and
 based where it does not (macOS, whose `__PAGEZERO` takes the low 4 GiB).
 
 ### 3.3 The arena on a reserved range
@@ -202,9 +203,49 @@ growth, runtime-cross.c:221 and :240, and runtime-wasm.c. A compact instance
 gets its own inline bump (`@nish_alloc_ref`) that rounds to 4.
 
 The range is 15 GiB of arena: all threads, all regions, everything but big
-exact chunks. Running out is a panic that names the limit and the compact
-classes. The limit is why the rule asks for a class made over and over and not
-every class, and the panic names `--compact off`.
+exact chunks. Running out is a panic that names the limit. The limit is why
+the rule asks for a class made over and over and not every class.
+
+**As built in stage 1** (`-DNISH_ARENA_RANGE`, runtime.c's "The compact-class
+range"; the record is `docs/security/runtime.md`, "The compact-class range"):
+
+- `scripts/build.sh --arena-range` adds the define. It has no user CLI flag:
+  the compiler passes it when `hasCompactClass` (src/compile.ts) is true,
+  which no program is until stage 2, and the run cache keys the variant. The
+  wasm, wasi and napi profiles refuse it. The runtime defines
+  `nish_arena_range_abi`, so IR that needs the range fails to link against a
+  runtime without it.
+- On Linux the range is `mmap(0x40000000, 15 GiB, MAP_FIXED_NOREPLACE |
+  MAP_NORESERVE)`, once, from a constructor. Any other result, including a
+  kernel that maps elsewhere because it treats the address as a hint, is
+  unmapped and is the panic "cannot reserve its 15 GiB range at 0x40000000
+  (1 GiB to 16 GiB): the address is in use", before `main`. `MAP_FIXED` is
+  never used. Elsewhere (macOS) the system places it, and `nish_ref_base`
+  holds the base on every platform. The first 64 bytes are never handed out.
+- A chunk's class is its `cap` rounded up to a power of two from 4 KiB to
+  2 MiB, with the 16-byte header in front of it. A take pops the class's free
+  list, or bumps the high-water mark. A drop (`nish_free_until`, and
+  runtime-region.c's adopt) pushes a range chunk onto its list and frees any
+  other chunk with `free`, told apart by address. One spin lock covers the
+  lists and the mark. The panic on exhaustion is "nish: the compact-class
+  arena's 15 GiB range is used up".
+- The realign is in runtime.c's `nish_alloc_struct`, runtime-text.c's
+  `nish_text_alloc` and runtime-cross.c's `nish_cross_in`.
+  `nish_cross_keep` bumps only its own transfer blocks, in 8-byte multiples,
+  and needs none. The in-place array growth is unchanged until PR #1697's
+  rewrite of it lands. runtime-wasm.c is unchanged and never gets the
+  define. The inline bump in `src/runtime.ts` is unchanged: stage 2 adds
+  `@nish_alloc_ref` and the realign together.
+- `--debug-arena` with the range makes the debug reservation the range
+  itself (`PROT_NONE`, opened page by page), so its never-reuse rule holds
+  and a stale reference still faults. Its exhaustion message names the
+  15 GiB limit. `NISH_ASAN` wins over both: it reserves nothing,
+  `nish_ref_base` stays null, and the ABI symbol is still defined.
+- The 4 KiB class floor costs memory where many regions each hold one small
+  first chunk. `region_sessions_soak` (1000 live regions) peaks at about
+  4.5 MB of anonymous memory with the range, against about 757 KB without it,
+  and prints the same output. A program with a compact class makes that class
+  over and over, so its chunks are not that small.
 
 ## 4. The invariants, one by one
 
@@ -349,6 +390,46 @@ allocation and release, and the decode is lost in the band.
   not make a small graph faster, which is why the rule asks for repeated
 allocation and `Wide` can refuse it.
 
+### 5.4 Stage 1's runtime, measured
+
+The runtime of §3.3 as built, not the prototype's patch:
+[`bench/wp48-refs/range.mjs`](../bench/wp48-refs/range.mjs) compiles
+`sibling.ts` once with the 0.41.0 seed and links that one module three ways at
+`--profile speed`: `ptr` on the default runtime, `ptr-copy` a copy of it, and
+`ptr-range` with `scripts/build.sh --arena-range`. All three print the same
+checksum. The variants run shuffled in every round, each in a fresh process
+under `bench/rss.c`, on one virtual 4-core machine, 2026-11-17.
+`bench/goose/tree.ts` is not measured: it needs the in-place array growth of
+PR #1697, which has not merged.
+
+At 400,000 nodes, 25 walks of each kind, 9 rounds:
+
+| variant | peak RSS | build ms | visit ms | climb ms | wall vs ptr |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ptr | 13.7 MB | 8.1 | 54.6 | 93.6 | 1.00x |
+| ptr-copy | 13.7 MB | 7.9 | 56.9 | 104.3 | 1.15x |
+| ptr-range | 13.7 MB | 8.1 | 58.5 | 110.0 | 1.15x |
+
+Noise band (`ptr` against `ptr-copy`, the median per-round gap): build 20.4%,
+visit 7.0%, climb 6.4%, wall 3.7%. `ptr-copy` itself sits 1.15x from `ptr`
+on the medians, so at this size the medians move more than the per-round band.
+
+At 4,000,000 nodes, 4 walks of each kind, 21 rounds:
+
+| variant | peak RSS | build ms | visit ms | climb ms | wall vs ptr |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ptr | 123.6 MB | 81.2 | 130.0 | 212.5 | 1.00x |
+| ptr-copy | 123.6 MB | 80.1 | 133.3 | 214.6 | 1.02x |
+| ptr-range | 123.6 MB | 81.2 | 128.1 | 213.8 | 1.01x |
+
+Noise band: build 6.0%, visit 3.8%, climb 4.9%, wall 5.8%. A first run of
+9 rounds at this size gave `ptr-range` 1.04x against a 2.8% wall band, with
+each phase inside its own band (build 0.2%, visit 3.4%, climb 3.0%). The
+21-round rerun above is the figure of record.
+
+The range costs nothing a run can tell from noise: `ptr-range` is level with
+`ptr-copy` at both sizes, at the same peak RSS. That is stage 1's gate.
+
 ## 6. Where the emitter changes
 
 From a survey of `src/` at `8036aff1`.
@@ -383,29 +464,30 @@ The decoded pointer's type stays `%struct.R*` everywhere past the load, so the
 expression emitter, the checker's flow typing and every caller of a method
 see the same types as today.
 
-## 7. Open decisions
+## 7. Decisions
 
-1. **Accept or decline.** Accepting buys 0.5x memory on a 3-field node (12
+The owner decided all six on 2026-11-17:
+
+1. **Accept or decline: accepted.** It buys 0.5x memory on a 3-field node (12
    against 24 bytes) and 0.63x on sibling, for a decode that costs up to a
    quarter more time on a pointer-chasing loop while the graph is in cache.
-2. **Who decides.** The rule of §3.1 by default, with `implements Compact`
-   and `implements Wide` from `nish:compact` to force or refuse it and
-   `--compact off` per build (proposed), against markers only (every program
-   that wants the saving edits its source). The spellings are open: legal
-   TypeScript, erased by Node, visible at the class.
-3. **The decode shape.** Zero-based on Linux and Windows, based on macOS
-   (proposed), or based everywhere (one shape and no fixed address, slower).
-4. **What is narrowed.** Fields only (proposed for stage 2). `R[]` elements
+2. **Who decides: the compiler.** It picks compact classes by the rule of
+   §3.1. `implements Compact` and `implements Wide` from `nish:compact` force
+   or refuse it at the class. `--compact off` per build stays proposed, for
+   stage 3. The spellings are legal TypeScript, erased by Node, visible at
+   the class.
+3. **The decode shape: zero-based on Linux and Windows, based on macOS.**
+   Nish has no Windows target today; Windows takes the zero-based shape when
+   it has one.
+4. **What is narrowed: fields only.** No locals and no arrays. `R[]` elements
    would halve a children array too, but an array of compact references is a
-   new element type for every array builtin. Proposed as a later stage behind
-   its own measurement.
-5. **The range's size.** 15 GiB in 4-byte units, zero-based from 0. With
-   8-byte units the range could be 32 GiB, but a 12-byte node would round to
-   16 bytes and the `tree.ts` win would be gone. Proposed: 4-byte units.
-6. **A busy fixed address.** When the range cannot be reserved (another
-   mapping holds it), the program panics before `main` naming
-   `--compact off` (proposed), or falls back to the based shape at a
-   cost measured in §5.2 (0.71x against 0.61x on `tree.ts`).
+   new element type for every array builtin.
+5. **The range's size: 4-byte units, a 15 GiB range at [1 GiB, 16 GiB).**
+   With 8-byte units the range could be 32 GiB, but a 12-byte node would
+   round to 16 bytes and the `tree.ts` win would be gone.
+6. **A busy fixed address: a panic before `main`**, naming the address and
+   the limit. There is no fallback to the based shape (0.71x against 0.61x on
+   `tree.ts`, §5.2), because compiled code treats the base as a constant.
 
 ## 8. Stages
 

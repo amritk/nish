@@ -204,6 +204,16 @@ NISH_TLS uint64_t nish_region_chunk;
    single allocation larger than this still gets a chunk of its own size. */
 #define NISH_REGION_CHUNK_MAX ((uint64_t)1 << 20)
 
+#ifdef NISH_ARENA_RANGE
+/* A module compiled for this variant references it, so linking one against
+   the default runtime fails at the link rather than at the first reference.
+   The ASan build defines it too, so the same module links there. */
+const int nish_arena_range_abi = 1;
+/* The range's first byte: what a 32-bit reference counts from. Null under
+   NISH_ASAN, which reserves nothing. */
+char *nish_ref_base;
+#endif
+
 /* NISH_ASAN wins over NISH_ARENA_RANGE: an instrumented build reserves
    nothing and every block stays a malloc of its own, as without the range.
    ASan's shadow memory on x86-64 lies across [1 GiB, 16 GiB), where the
@@ -248,12 +258,6 @@ NISH_TLS uint64_t nish_region_chunk;
 #define NISH_RANGE_CLASS_MIN ((uint64_t)1 << 12)
 #define NISH_RANGE_CLASS_MAX ((uint64_t)1 << 21)
 #define NISH_RANGE_CLASSES 10
-/* A module compiled for this variant references it, so linking one against
-   the default runtime fails at the link rather than at the first reference. */
-const int nish_arena_range_abi = 1;
-/* The range's first byte: what a 32-bit reference counts from. */
-char *nish_ref_base;
-
 /* The range's mapping, `prot` its protection (the debug arena's is
    PROT_NONE): the fixed address or none, with a panic on anything else. */
 static char *nish_range_map(int prot) {

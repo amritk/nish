@@ -9957,27 +9957,48 @@ const sanitizerProbe = (flags) => {
 if (dealtHere("sanitizers") && (!only || "runtime_sanitize".includes(only))) {
   const flags = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
   const probe = sanitizerProbe(flags)
-  for (const [label, defines] of [
-    ["single-threaded", []],
-    ["-DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"]],
+  // The range unit test (tests/runtime/range-test.c) builds the range runtime
+  // without -DNISH_ASAN, so its chunks are carved; ASan's shadow lies where the
+  // fixed range would be, so it takes the based shape, as on macOS.
+  const range = ["-DNISH_ARENA_RANGE=1", "-DNISH_RANGE_TEST_BASED=1"]
+  // The last row adds -DNISH_ASAN, the differential ASan build's runtime:
+  // with the range on it reserves nothing (`unreserved`).
+  for (const [label, defines, test, exeName, args] of [
+    ["single-threaded", [], "tests/runtime-test.c", "runtime_test_sanitize", []],
+    ["-DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"], "tests/runtime-test.c", "runtime_test_sanitize_threads", []],
+    ["the compact-class range", range, "tests/runtime/range-test.c", "range_test_sanitize", []],
+    [
+      "the compact-class range, -DNISH_THREADS",
+      [...range, "-DNISH_THREADS=1", "-pthread"],
+      "tests/runtime/range-test.c",
+      "range_test_sanitize_threads",
+      [],
+    ],
+    [
+      "the compact-class range with -DNISH_ASAN, which reserves nothing",
+      ["-DNISH_ARENA_RANGE=1", "-DNISH_ASAN"],
+      "tests/runtime/range-test.c",
+      "range_test_sanitize_asan",
+      ["unreserved"],
+    ],
   ]) {
-    const name = `runtime_sanitize: the runtime unit test (${label}) runs clean under ASan and UBSan`
+    const name = `runtime_sanitize: the ${test === "tests/runtime-test.c" ? "runtime" : "range"} unit test (${label}) runs clean under ASan and UBSan`
     if (probe?.skip !== undefined) {
       skip(`${name} (${probe.skip})`)
       continue
     }
-    const exe = path.join(buildDir, `runtime_test_sanitize${defines.length > 0 ? "_threads" : ""}`)
+    const exe = path.join(buildDir, exeName)
     const cc =
       probe === null
         ? spawnSync(
             "clang",
-            ["-std=c11", "-g", "-O1", ...flags, ...defines, ...RUNTIME_C, "tests/runtime-test.c", "-o", exe],
+            ["-std=c11", "-g", "-O1", ...flags, ...defines, ...RUNTIME_C, test, "-o", exe],
             { cwd: root, encoding: "utf8" }
           )
         : { status: 1, stderr: probe.error }
     const run =
       cc.status === 0
-        ? spawnSync(exe, [], {
+        ? spawnSync(exe, args, {
             encoding: "utf8",
             env: { ...envWithThreads(null), ASAN_OPTIONS: "detect_leaks=1:abort_on_error=0", UBSAN_OPTIONS: "print_stacktrace=1" },
             timeout: 120_000,
@@ -16921,6 +16942,178 @@ if (dealtHere("runtimeChecks")) {
       "scripts/build.sh --profile wasm refuses IR that names @nish_region_ with exit 2, naming --profile wasi",
       wasm.status === 2 && wasm.stderr.includes("uses regions") && wasm.stderr.includes("--profile wasi"),
       `exit ${wasm.status}\n${wasm.stderr}`
+    )
+  }
+
+  // ---- The compact-class range (WP48 stage 1): runtime.c -DNISH_ARENA_RANGE -------------
+  // tests/runtime/range-test.c, linked with the whole runtime and the range in
+  // the default build and with -DNISH_THREADS: with no argument it checks the
+  // classes, reuse, the 64-byte hole, chunks past 2 MiB outside the range,
+  // regions, keep, the cross copies and a worker's chunks, and prints "range
+  // ok". `exhaust`, built with a 1 MiB range, must exit 1 before it prints
+  // "reached"; `busy` maps the fixed address first and must exit 1 before main
+  // prints anything. The verdicts are exit statuses and stdout, never the
+  // panic's words. Then programs from tests/link built through
+  // `scripts/build.sh --arena-range` print what the default build prints, the
+  // debug arena with the range still faults on a stale reference, and a module
+  // that names @nish_arena_range_abi links against the range runtime and not
+  // the default one. The sanitizer and NISH_ASAN builds are runtime_sanitize's.
+  if (!only || "arena-range".includes(only)) {
+    const rangeBuild = (name, flags) => {
+      const exe = path.join(buildDir, name)
+      const cc = spawnSync(
+        "clang",
+        [
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-O2",
+          "-DNISH_ARENA_RANGE=1",
+          ...flags,
+          ...RUNTIME_C,
+          "tests/runtime/range-test.c",
+          "-lm",
+          "-o",
+          exe,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      return { exe, ok: cc.status === 0, stderr: cc.stderr }
+    }
+    const shown = (built, run) => built.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "")
+    for (const [name, flags] of [
+      ["range_test", []],
+      ["range_test_threads", ["-DNISH_THREADS=1", "-pthread"]],
+    ]) {
+      const built = rangeBuild(name, flags)
+      const label = flags.length > 0 ? "the compact-class range, -DNISH_THREADS" : "the compact-class range"
+      const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
+      check(
+        `${label}: chunks of 2 MiB or less are power-of-two classes in the range past its first 64 bytes, a freed chunk is reused, larger ones are malloc's, and regions, keep and the cross copies work`,
+        run !== null && run.status === 0 && run.stdout === "range ok\n",
+        shown(built, run)
+      )
+      if (process.platform === "linux") {
+        const busy = built.ok
+          ? spawnSync(built.exe, ["busy"], { encoding: "utf8", env: { ...process.env, NISH_RANGE_TEST_BUSY: "1" } })
+          : null
+        check(
+          `${label}: a busy fixed address exits 1 before main runs`,
+          busy !== null && busy.status === 1 && busy.stdout === "",
+          shown(built, busy)
+        )
+        const free = built.ok ? spawnSync(built.exe, ["busy"], { encoding: "utf8" }) : null
+        check(
+          `${label}: without the address taken first, the same mode reaches main`,
+          free !== null && free.status === 0 && free.stdout === "reached\n",
+          shown(built, free)
+        )
+      }
+    }
+    const small = rangeBuild("range_test_exhaust", ["-DNISH_RANGE_TEST_SIZE=1048576"])
+    const exhausted = small.ok ? spawnSync(small.exe, ["exhaust"], { encoding: "utf8" }) : null
+    check(
+      "the compact-class range: a used-up range exits 1 rather than handing out a chunk past its end",
+      exhausted !== null && exhausted.status === 1 && !exhausted.stdout.includes("reached"),
+      shown(small, exhausted)
+    )
+
+    const rangeDir = path.join(buildDir, "arena-range")
+    fs.mkdirSync(rangeDir, { recursive: true })
+    const abiLl = path.join(rangeDir, "abi.ll")
+    fs.writeFileSync(
+      abiLl,
+      "@nish_arena_range_abi = external constant i32\n" +
+        "define i32 @main() {\n" +
+        "  %v = load i32, ptr @nish_arena_range_abi\n" +
+        "  %r = sub i32 %v, 1\n" +
+        "  ret i32 %r\n" +
+        "}\n"
+    )
+    const buildSh = (args) => spawnSync("bash", ["scripts/build.sh", ...args], { cwd: root, encoding: "utf8" })
+    for (const [label, extra] of [
+      ["--arena-range", ["--arena-range"]],
+      ["--arena-range --debug-arena", ["--arena-range", "--debug-arena"]],
+      ["--arena-range --threads", ["--arena-range", "--threads"]],
+    ]) {
+      const exe = path.join(rangeDir, `abi${extra.join("")}`)
+      const linked = buildSh([abiLl, "runtime/runtime.c", "-o", exe, "--profile", "debug", ...extra])
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        `scripts/build.sh ${label}: a module naming @nish_arena_range_abi links and reads 1`,
+        run !== null && run.status === 0,
+        `exit ${linked.status}\n${linked.stderr}` + (run ? `run: exit ${run.status} ${run.signal ?? ""}` : "")
+      )
+    }
+    const unlinked = buildSh([abiLl, "runtime/runtime.c", "-o", path.join(rangeDir, "abi_default"), "--profile", "debug"])
+    check(
+      "scripts/build.sh without --arena-range: the same module does not link against the default runtime",
+      unlinked.status !== 0 && unlinked.status !== null,
+      `exit ${unlinked.status}\n${unlinked.stderr}`
+    )
+    const refused = buildSh([abiLl, "-o", path.join(rangeDir, "abi.wasm"), "--profile", "wasm", "--arena-range"])
+    check(
+      "scripts/build.sh --arena-range --profile wasm: refused with exit 2",
+      refused.status === 2,
+      `exit ${refused.status}\n${refused.stderr}`
+    )
+
+    // A threaded program whose sessions each live in a region, and a parallel
+    // map that reclaims its workers' arenas: the range build prints the same.
+    for (const program of ["region_sessions_soak", "par_map_reclaim"]) {
+      const dir = path.join(rangeDir, program)
+      fs.mkdirSync(dir, { recursive: true })
+      const compiled = spawnSync(NISH, [path.join("tests", "link", program, "main.ts"), "--threads", "-o", `${dir}${path.sep}`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lls = compiled.status === 0 ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).map((f) => path.join(dir, f)) : []
+      const outs = []
+      for (const extra of [[], ["--arena-range"]]) {
+        const exe = path.join(dir, extra.length > 0 ? "range" : "plain")
+        const b = compiled.status === 0 ? buildSh([...lls, "runtime/runtime.c", "-pthread", "-o", exe, "--threads", ...extra]) : null
+        const run = b?.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 120_000 }) : null
+        outs.push({ b, run })
+      }
+      const expected = fs.readFileSync(path.join("tests", "link", program, "expected.out"), "utf8")
+      const [plain, range] = outs
+      check(
+        `scripts/build.sh --threads --arena-range: tests/link/${program} prints what the default build prints`,
+        plain.run?.status === 0 && range.run?.status === 0 && range.run.stdout === plain.run.stdout && plain.run.stdout === expected,
+        compiled.stderr +
+          outs
+            .map(({ b, run }) => (b ? b.stderr : "") + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}` : ""))
+            .join("\n---\n")
+      )
+    }
+
+    // The debug arena's reservation is the range when both are on: a pointer
+    // kept across a release still faults at the read.
+    const debugExe = path.join(rangeDir, "debug_arena_range")
+    const debugCc = spawnSync(
+      "clang",
+      [
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "-DNISH_ARENA_DEBUG=1",
+        "-DNISH_ARENA_RANGE=1",
+        ...RUNTIME_C,
+        "tests/runtime/debug-arena-test.c",
+        "-lm",
+        "-o",
+        debugExe,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const debugRun = debugCc.status === 0 ? spawnSync(debugExe, [], { encoding: "utf8" }) : null
+    check(
+      "debug arena with the compact-class range: a pointer kept across a release dies of SIGSEGV at the read",
+      debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
+      debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
     )
   }
 
@@ -40780,7 +40973,9 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       const { src, budget, constant, flags } = entry
       const name = path.basename(src)
       const label = budgetLabel(entry)
-      const stem = `${name.replace(/\.c$/, "")}${flags.length > 0 ? "_threads" : ""}`
+      // One object per configuration: `-DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` is `_arena_range_threads`.
+      const suffix = flags.map((flag) => `_${flag.replace(/^-DNISH_|=1$/g, "").toLowerCase()}`).join("")
+      const stem = `${name.replace(/\.c$/, "")}${suffix}`
       const obj = path.join(buildDir, `${stem}_budget.o`)
       const cc = spawnSync("clang", ["-Oz", ...flags, "-c", src, "-o", obj], { cwd: root })
       const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null
