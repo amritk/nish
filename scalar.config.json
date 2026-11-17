@@ -233,6 +233,11 @@
                 "title": "Authentication tokens (JWT)",
                 "filepath": "docs/guide/using-nish/auth.md"
               },
+              "/oidc": {
+                "type": "page",
+                "title": "OpenID Connect",
+                "filepath": "docs/guide/using-nish/oidc.md"
+              },
               "/http-router": {
                 "type": "page",
                 "title": "HTTP routing",
@@ -755,6 +760,7 @@
                         "title": "http3-server",
                         "filepath": "docs/reference/net/http3-server.md"
                       },
+                      "/oidc": { "type": "page", "title": "oidc", "filepath": "docs/reference/net/oidc.md" },
                       "/outbound": {
                         "type": "page",
                         "title": "outbound",
@@ -1312,6 +1318,11 @@
                     "type": "page",
                     "title": "HTTP/1.1 client (fetchSync)",
                     "filepath": "docs/security/fetch.md"
+                  },
+                  "/oidc": {
+                    "type": "page",
+                    "title": "OpenID Connect discovery and the JWK Set",
+                    "filepath": "docs/security/oidc.md"
                   },
                   "/upstream": {
                     "type": "page",
