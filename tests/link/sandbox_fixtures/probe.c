@@ -223,22 +223,23 @@ int sb_probe(const char *op, const char *path) {
     say(op, syscall(426, at, 0, 0, 0, NULL, 0));
   } else if (strcmp(op, "keeper-enter") == 0) {
     /* The keeper, the ring a freed ring's number is pointed at, is on no
-     * list io_uring_enter may name. */
+     * list io_uring_enter may name. Its index is the ring count, 1 in the
+     * builds tests/run.js runs this in. */
     if (nish_uring_test_fd == NULL) return printf("%s: no hook\n", op), 1;
     int keeper = nish_uring_test_fd(1);
     start(op);
     say(op, syscall(426, keeper, 0, 0, 0, NULL, 0));
   } else if (strcmp(op, "close-range") == 0) {
     /* close_range over premade ring 0's number, which the filter answers
-     * ENOSYS so that a C library falls back to close. */
+     * ENOSYS, as a kernel before 5.9 does. */
     if (nish_uring_test_fd == NULL) return printf("%s: no hook\n", op), 1;
     int at = nish_uring_test_fd(0);
     start(op);
     say(op, syscall(436, at, at, 0));
   } else if (strcmp(op, "uring-close") == 0) {
     /* IORING_OP_CLOSE, which the restriction lets through, submitted to ring
-     * 0 on `path`: `ring` (ring 0's own number), `keeper`, or `pipe` (the
-     * control, a pipe's read end). */
+     * 0 on `path`: `ring` (ring 0's own number), `keeper` (index 1, as in
+     * `keeper-enter`), or `pipe` (the control, a pipe's read end). */
     if (nish_uring_test_fd == NULL || nish_uring_test_submit_fd == NULL) return printf("%s: no hook\n", op), 1;
     int fd = -1, p[2];
     if (strcmp(path, "ring") == 0) fd = nish_uring_test_fd(0);

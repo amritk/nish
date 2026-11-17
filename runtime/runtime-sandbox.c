@@ -518,7 +518,7 @@ static void nish_sb_seccomp(int32_t caps, const int32_t *rings, int nrings) {
      * keeper's number, and `dup3` onto one kills unless it is from the
      * keeper, which is how the runtime drops a ring and leaves a ring that
      * takes only NOP in its place. `close_range` answers ENOSYS, as before
-     * 5.9, so a C library's `closefrom` falls back to `close`. `dup`,
+     * 5.9, so no range close passes a ring's number by the `close` row. `dup`,
      * `F_DUPFD`, `recvmsg` and `pidfd_getfd` take a free number only, and
      * exec is killed without `process.spawn`. */
     int nfds = nrings + 1;
