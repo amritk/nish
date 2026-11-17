@@ -450,13 +450,17 @@ static void nish_grown_put(char *data, const void *owner, uint64_t native) {
 #endif
 void nish_free_arena(void);
 /* The bytes of a chunk the arena reuses from its start, after a reset or a
-   release to a mark there: all but the last word. A scope may have marked that
-   start, and a block that began there and filled the chunk exactly would be
-   one `nish_array_grow_here` reallocates -- which would either keep the grown
+   release to a mark there. A scope may have marked that start, and a block
+   that began there and filled the chunk exactly would be one
+   `nish_array_grow_here` reallocates -- which would either keep the grown
    chunk for good (the release keeps the chunk its mark is in) or move it from
-   under the mark, which then names no chunk and frees nothing. Eight bytes
-   short, no block from the start fills it, so the grow copies instead. */
-#define NISH_REUSE_CAP(cap) ((cap) > 8 ? (cap) - 8 : 0)
+   under the mark, which then names no chunk and frees nothing. So a chunk
+   that growth could reallocate, one past 64 KB, is reused a word short, and no
+   block from its start fills it. A chunk of 64 KB or less is never
+   reallocated and keeps all of it: a recycled task region
+   (runtime-async.c) or a loop's reset chunk that a word short no longer fits
+   the same allocation again would take a fresh chunk every time. */
+#define NISH_REUSE_CAP(cap) ((cap) > 65536 ? (cap) - 8 : (cap))
 static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
 #ifdef NISH_ASAN
   /* A freed block's address comes back from malloc: forget the grown ones. */

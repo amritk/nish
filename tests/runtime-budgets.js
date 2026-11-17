@@ -78,9 +78,9 @@
  *
  * Raised by 279, to 2,098, for growing an array where it is (`nish_array_grow_here`):
  * bumping the arena past the block when it is the last one, or `realloc`ing the exact
- * chunk a block over 64 KB fills, and `NISH_REUSE_CAP`, which keeps a chunk reused from
- * its start a word short so that a scope's mark at that start is never under a
- * reallocated chunk. Measured 1,805 before and 2,098 after on 2026-11-17 with clang
+ * chunk a block over 64 KB fills, and `NISH_REUSE_CAP`, which keeps a chunk past 64 KB
+ * reused from its start a word short so that a scope's mark at that start is never
+ * under a reallocated chunk. Measured 1,805 before and 2,098 after on 2026-11-17 with clang
  * 18.1.3 on linux-x64 (the 1,805 is what the 1,819 had left in hand). A walk 12 bytes
  * smaller relinked the head through a pointer to `nish_arena.chunks`, which took the
  * arena's address and cost Queens 0.35% instructions under LTO (the function's comment).
@@ -247,10 +247,10 @@ const RUNTIME_OS_TEXT_BUDGET = 5888
  * Raised by 87, to 2,025, by ASYNC-15's carved chunk (as above), measured 2,025 against
  * 1,938 on 2026-11-09 with clang 18.1.3 on linux-x64.
  *
- * Raised by 269, to 2,294, for growing an array where it is and the reuse cap (as above),
- * measured 2,294 against 2,010 on 2026-11-17 with clang 18.1.3 on linux-x64.
+ * Raised by 290, to 2,300, for growing an array where it is and the reuse cap (as above),
+ * measured 2,300 against 2,010 on 2026-11-17 with clang 18.1.3 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 2294
+const RUNTIME_THREADS_TEXT_BUDGET = 2300
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
