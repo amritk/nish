@@ -229,8 +229,7 @@ body.scalar-app aside.t-doc__sidebar.sidebar-mobile-menu {
 .t-header__item--selected::after {
   transform: scaleX(1);
 }
-/* The current page's link keeps the gradient bar in place of Scalar's
-   currentColor border, so a link never shows two underlines. */
+/* The current link's underline is the bar, not Scalar's border. */
 .t-header .t-header__item.t-header__item--selected {
   border-bottom-color: transparent;
 }
