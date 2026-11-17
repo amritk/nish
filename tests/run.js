@@ -17004,6 +17004,24 @@ if (dealtHere("runtimeChecks")) {
         ),
       trapped.shown
     )
+    // tests/runtime/debug-arena-grow-test.c: a block that fills its own chunk
+    // grows by a `realloc` of that chunk in a normal build, which aborted on
+    // the debug arena's reserved, never-malloc'd chunks.
+    const grown = (() => {
+      const exe = path.join(buildDir, "debug_arena_grow")
+      const cc = spawnSync(
+        "clang",
+        ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-DNISH_ARENA_DEBUG=1", ...RUNTIME_C, "tests/runtime/debug-arena-grow-test.c", "-lm", "-o", exe],
+        { cwd: root, encoding: "utf8" }
+      )
+      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      return { run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
+    })()
+    check(
+      "debug arena: an array grown past 64 KB takes the copy and keeps every element",
+      grown.run !== null && grown.run.status === 0 && grown.run.stdout === "len 1048576, sum 66584576\n",
+      grown.shown
+    )
 
     // Every case that exercises the arena or a region, linked as section A
     // links it but against the debug objects. A case that measures the

@@ -760,6 +760,13 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * or region's arena handed out, one in the middle of a chunk -- simply takes
  * the copy. */
 static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
+#ifdef NISH_ARENA_DEBUG
+  /* The debug arena's chunks are cut from its reservation, never malloc'd, so
+     none can be `realloc`ed; and a grown array always moves, which is what
+     lets a reference to the old block fault. */
+  (void)a, (void)old, (void)want;
+  return 0;
+#endif
   char *data = a->data, *buf = nish_arena.buf;
   uint64_t more = want - old;
   if (buf && data >= buf && data + old == buf + nish_arena.off && more <= nish_arena.cap - nish_arena.off) {

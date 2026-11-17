@@ -12,12 +12,10 @@ reserved range first, then measure the decode cost on
 steps and proposes a design narrower than Design A.
 [LANGUAGE.md](LANGUAGE.md) stays normative.
 
-**What `main` does not have yet.** The measurements were taken on the
-`claude/lucid-ptolemy-1j95qf` branch at `8036aff1`, which is not merged. That
-branch adds `bench/goose/` (`0804e14e`) and makes arrays grow in place
-(`4ce39a88`, whose runtime unit test still fails at
-`tests/runtime-test.c:2314`). `bench/goose/` paths below name files on that
-branch, and §2's `pool` and `records` figures need the in-place growth.
+**Where the measurements were taken.** The figures were taken on the
+branch that added `bench/goose/` and made arrays grow in place, both now on
+`main`. §2's `pool` and `records` figures need
+the in-place growth.
 
 ## 1. Why reopen it
 
