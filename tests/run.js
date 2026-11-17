@@ -9677,6 +9677,13 @@ if (dealtHere("cryptoBench")) {
         JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
           .portableProof !== undefined
     )
+    // The families whose Nish portable column (the runtime's kernels pinned to
+    // `soft`) has a proof of its own.
+    const nishProved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .nishPortableProof !== undefined
+    )
     const v = spawnSync(
       "node",
       [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
@@ -9700,7 +9707,8 @@ if (dealtHere("cryptoBench")) {
     // GitHub's x86-64 Linux runner has every twin's toolchain and the
     // extensions their portable builds give up, so there a column this machine
     // did not run, or an `unproved` line, means a gate failed open: every twin
-    // must run and the OpenSSL and Go proofs must be measured ones.
+    // must run and the OpenSSL, Go and Nish portable proofs must be measured
+    // ones (the Nish one unless the CPU lacks every extension it pins off).
     const strict =
       process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
     const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
@@ -9721,13 +9729,22 @@ if (dealtHere("cryptoBench")) {
             new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
           )
         ) &&
+        nishProved.length > 0 &&
+        nishProved.every((f) => new RegExp(`^portable ${f} nish-portable: `, "m").test(v.stdout)) &&
         (!strict ||
           (validated.length === families.length &&
             !/ did not run /.test(v.stdout) &&
             proved.every((f) =>
               ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ) &&
+            // Not every runner CPU has SHA-NI, so a CPU without the family's
+            // flags is the one reason the Nish proof may go unmeasured there.
+            nishProved.every(
+              (f) =>
+                provedLine(f, "nish-portable").test(v.stdout) ||
+                new RegExp(`^portable ${f} nish-portable: unproved \\(this CPU has none of `, "m").test(v.stdout)
             ))),
-      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL, Go and Nish portable proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
     )
     for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
       if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
@@ -10742,10 +10759,10 @@ if (dealtHere("bench") && (!only || "yaml-compare".includes(only) || "bench".inc
 
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
-// noise is bigger than that. An instruction count is exact, so the twenty-one
-// benchmark programs (bench/*.ts, the four WP32 map layout prototypes, the three
-// `Map` measurements and the seven AWFY ports) are built as the timing
-// mode builds them and run once each under cachegrind, and a count above
+// noise is bigger than that. An instruction count is exact, so every program
+// bench/instructions.json lists (bench/*.ts, the four WP32 map layout prototypes,
+// the three `Map` measurements, the seven AWFY ports and the crypto kernels of
+// bench/crypto/) is built as the timing mode builds it and run once under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
 // bench/README.md ("Instruction counts") has the determinism measurements and
@@ -10771,7 +10788,8 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
     )
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 22 within /m.test(counted.stdout),
+      counted.status === 0 &&
+        new RegExp(`^instructions: all ${Object.keys(counts.programs).length} within `, "m").test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     )
   }

@@ -1,5 +1,5 @@
 {
-  "about": "Instructions each benchmark executes, whole process, under `valgrind --tool=cachegrind --cache-sim=no`, built with `--profile speed` and checks on. Sizes (`n` for bench/<name>.ts, `inner` for an AWFY port) are edited by hand; counts are written only by `node bench/run.mjs --instructions --update`, and a pull request that raises one says why (bench/README.md).",
+  "about": "Instructions each benchmark executes, whole process, under `valgrind --tool=cachegrind --cache-sim=no`, built with `--profile speed` and checks on. Sizes (`n` for bench/<name>.ts, `inner` for an AWFY port, `size` and `iterations` for a crypto kernel) are edited by hand; counts are written only by `node bench/run.mjs --instructions --update`, and a pull request that raises one says why (bench/README.md).",
   "tolerance": 0.001,
   "platform": "linux-x64",
   "valgrind": "valgrind-3.22.0",
@@ -26,6 +26,15 @@
     "List": { "inner": 1500, "instructions": 298357707 },
     "Bounce": { "inner": 1500, "instructions": 229230390 },
     "Mandelbrot": { "inner": 500, "instructions": 153306183 },
-    "Storage": { "inner": 1000, "instructions": 443655773 }
+    "Storage": { "inner": 1000, "instructions": 443655773 },
+    "crypto-aes128gcm-seal": { "size": 16384, "iterations": 40, "instructions": 105958511, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-chacha20poly1305-seal": { "size": 16384, "iterations": 120, "instructions": 103071568, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-sha256": { "size": 1048576, "iterations": 2, "instructions": 125982428, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-sha512": { "size": 1048576, "iterations": 2, "instructions": 110210352, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-x25519": { "size": 32, "iterations": 70, "instructions": 99092117, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-p256-verify": { "size": 64, "iterations": 12, "instructions": 97553221, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-ed25519-sign": { "size": 64, "iterations": 25, "instructions": 97331967, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-tls13": { "size": 32, "iterations": 6, "instructions": 90653994, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" },
+    "crypto-x509-parse": { "size": 338, "iterations": 15, "instructions": 98767536, "commit": "05c92f49", "valgrind": "valgrind-3.22.0" }
   }
 }
