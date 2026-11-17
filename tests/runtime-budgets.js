@@ -444,7 +444,8 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2896
  * element's body grew a 64 KB chunk past a mark at the end of a full one, the chunk is
  * kept, emptied, rather than freed, so a map at one thread stops doing a `malloc` and a
  * `free` per element. 1M short strings at `NISH_NUM_THREADS=1` went from 72.8 ms to
- * 54.9 ms, inside the loop's 56.4–57.6 ms band. *
+ * 54.9 ms, inside the loop's 56.4–57.6 ms band.
+ *
  * The compact-class runtime (`-DNISH_ARENA_RANGE=1`, WP48 stage 1) measured **1,571
  * bytes** on 2026-11-17 with clang 18.1.3 on linux-x64, 13 more than the default build's
  * 1,558, for the 8-byte realign of `off` before a copy is bumped into the arena. It

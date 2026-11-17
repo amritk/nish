@@ -403,6 +403,13 @@ void nish_region_adopt(uint64_t r) {
     nish_chunk_link *last = head;
     while (last->next) last = last->next;
     struct nish_arena caller = nish_arena;
+#ifdef NISH_ARENA_RANGE
+    /* A compact class's 4-byte bump may leave `off` 4 past an 8-byte
+       boundary (runtime.c's `nish_alloc_struct`): the carved chunk's header,
+       and every block bumped from it, start at the next one. */
+    caller.off = (caller.off + 7) & ~(uint64_t)7;
+    if (caller.off > caller.cap) caller.off = caller.cap;
+#endif
     uint64_t left = caller.buf ? caller.cap - caller.off : 0;
     last->next = caller.chunks;
     nish_arena = s->arena;

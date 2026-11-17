@@ -404,7 +404,8 @@ program has a compact class (WP48, [`docs/wp48-ref32-classes.md`](https://github
 §3.3). No program has one until WP48 stage 2, so no build selects it today. The
 code is runtime.c's "The compact-class range" block, with the realigns in
 `nish_alloc_struct`, `runtime-text.c`'s `nish_text_alloc` and
-`runtime-cross.c`'s `nish_cross_in`, and the drop in `runtime-region.c`'s
+`runtime-cross.c`'s `nish_cross_in`, runtime.c's `nish_arena_keep` and the
+carve in `runtime-region.c`'s `nish_region_adopt` (RT-55), and the drop in
 `nish_region_adopt`. The default runtime's objects are unchanged: their
 disassembly matches `main`'s, with and without `-DNISH_THREADS`.*
 
@@ -419,7 +420,9 @@ compact-class arena cannot reserve its 15 GiB range at 0x40000000 (1 GiB to
 16 GiB): the address is in use", and never a fallback, because compiled code
 will treat the base as a constant. Elsewhere the system places the range and
 `nish_ref_base` holds its base. A failed reservation there is the same panic
-without an address. The first 64 bytes of the range are never handed out, so
+without an address. A fixed reservation the system refuses for any other
+reason (an address-space or mapping limit, `ENOMEM`) panics with "the system
+refused the mapping" instead of "the address is in use" (RT-56). The first 64 bytes of the range are never handed out, so
 no block is at offset 0.
 
 **The free lists.** A chunk of 2 MiB or less is cut from the range at a
@@ -436,21 +439,30 @@ same as a chunk `malloc` hands back. The arena never promised zeroed memory.
 
 **Exhaustion.** A take that would move the mark past the range's end
 releases the lock and panics, "nish: the compact-class arena's 15 GiB range is
-used up". The check is `top > size - span` on unsigned values, with
-`span <= 2 MiB + 16`, so it cannot wrap.
+used up". The check is `span > size || top > size - span` on unsigned values, so it
+cannot wrap at any size, including the 1 MiB a test build reserves; at the
+production 15 GiB the first test folds away.
 
 **With the other modes.** Under `--debug-arena` the debug reservation is the
 range itself, `PROT_NONE` and opened page by page, so its never-reuse rule and
 its fault on a stale read hold. Its exhaustion panic names the 15 GiB limit.
+Its fault handler names a fault as a stale arena read only past the range's
+first page, which is never opened, so a fault there is not blamed on the arena
+(RT-57).
 `NISH_ASAN` wins over both: nothing is reserved, `nish_ref_base` stays null,
 every allocation is ASan's, and `nish_arena_range_abi` is still defined, so
 the build links.
 
 **Memory.** The 4 KiB class floor rounds a small region's first chunk up.
-`tests/cases/region_sessions_soak` (1000 live regions) peaks at about 4.5 MB
+`tests/link/region_sessions_soak` (1000 live regions) holds about 4.5 MB
 of anonymous memory with the range, against about 757 KB without it, and
-prints the same output. That is a cost, not a bound broken: the range caps
-the whole arena at 15 GiB either way.
+prints the same output. The figures are the "anonymous resident" the program
+prints for its regions phase after warm-up (4,591,616 and 761,856 bytes on
+this record's run), built as `tests/run.js` builds it: `nish main.ts
+--threads`, then `scripts/build.sh *.ll runtime/runtime.c -pthread --threads`,
+with and without `--arena-range`. That is a cost, not a bound broken:
+with the range the whole arena is capped at 15 GiB, and without it the arena
+has no cap of its own.
 
 **The tests**, all in `tests/run.js` (`node tests/run.js arena-range`; the
 sanitizer rows under `runtime_sanitize`):
@@ -475,7 +487,18 @@ sanitizer rows under `runtime_sanitize`):
   fails to link without it. The wasm, wasm-host, wasi and napi profiles
   refuse the flag with exit 2.
 - `--debug-arena` with the range: a pointer kept across a release must die of
-  `SIGSEGV` at the read.
+  `SIGSEGV` at the read, plain and with `-DNISH_THREADS`. The same build in
+  `exhaust` mode, with a 1 MiB range, must exit 1 without printing `reached`.
+- `range-test.c` in `misaligned` mode, plain and with `-DNISH_THREADS`: after
+  a 4-byte bump leaves the arena 4 past an 8-byte boundary, a struct, a
+  string, a cross-thread copy, a `keep` and a region's adopt each answer an
+  8-aligned block. It must print `misaligned ok`.
+
+| ID | Severity | Location | Finding | Status |
+| --- | --- | --- | --- | --- |
+| RT-55 | Medium | `runtime/runtime.c` (`nish_arena_keep`); `runtime/runtime-region.c` (`nish_region_adopt`) | A compact class bumps the arena by a multiple of 4, so its offset may sit 4 past an 8-byte boundary. `keep` copied its block to the mark unrounded, and adopt carved its chunk header at the caller's offset unrounded, so either could hand out a block 4 bytes off the alignment every other allocation keeps | **Fixed.** Under `NISH_ARENA_RANGE` both round the offset up to 8 first, as `nish_alloc_struct`, `nish_text_alloc` and `nish_cross_in` already did; the other 9 runtime sites that set or bump an offset set it to 0, a chunk's size or its `cap`, or add 8-byte multiples only. Before: a kept block at `0x4000005c` and a misaligned adopted chunk; after: `check("arena-range: misaligned (…)")` passes (`range-test.c` `misaligned`) |
+| RT-56 | Low | `runtime/runtime.c` (`nish_range_map`) | A fixed reservation that failed for any reason panicked "the address is in use", which misleads an operator who hit an address-space limit | **Fixed.** A failure whose `errno` is not `EEXIST` names the system's refusal. Not provoked by a test: the limit that provokes it would also stop the test's own start-up |
+| RT-57 | Low | `runtime/runtime.c` (`nish_debug_on_fault`) | With the range, the debug reservation starts at the range's base, so a null-ish dereference within its first page was reported as a stale arena read | **Fixed.** The handler's window starts one debug page in. `check("arena-range: --debug-arena kept read faults (…)")` still passes |
 
 ## Doc corrections for the security-policy stage
 

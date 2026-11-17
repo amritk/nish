@@ -6,14 +6,18 @@
 // copy of it (the noise band), and `ptr-range` on the compact-class runtime
 // (`scripts/build.sh --arena-range`).
 //
-//   node bench/wp48-refs/range.mjs [--rounds 9] [--sizes 400000,4000000]
+//   NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --rounds 21 --sizes 400000,4000000
 //
 // The compiler is `build/nish`, or `$NISH` when it is set. Each variant first
 // runs once per size, and all three must print the same checksum. Then each
 // round runs every variant once in a shuffled order (a seeded shuffle, so a
 // rerun repeats it), each in a fresh process under bench/rss.c for the peak
-// resident set, with the timings on stderr. A figure is the median over the
-// rounds; the band is the median gap between `ptr` and `ptr-copy`.
+// resident set, with the timings on stderr. "wall" is build + visit + climb,
+// the program's own timers, not the process's lifetime. A figure is the
+// median over the rounds. The band is the widest per-round gap between `ptr`
+// and `ptr-copy` (the same binary), over every round, so it covers the spread
+// of a round rather than its middle. The verdict: `ptr-range`'s median wall
+// is within the band of `ptr`'s.
 //
 // Linux only (ru_maxrss in KB), run from the repository root.
 import { execFileSync } from "node:child_process"
@@ -24,7 +28,7 @@ const option = (name, fallback) => {
   const at = args.indexOf(name)
   return at >= 0 ? args[at + 1] : fallback
 }
-const rounds = Number(option("--rounds", "9"))
+const rounds = Number(option("--rounds", "21"))
 const sizes = option("--sizes", "400000,4000000").split(",").map(Number)
 const nish = process.env.NISH ?? "build/nish"
 const out = "build/wp48-range"
@@ -52,7 +56,9 @@ const median = (xs) => {
 }
 
 execFileSync(process.env.CC ?? "clang", ["-O2", "bench/rss.c", "-o", `${out}/rss`])
-execFileSync(nish, ["bench/wp48-refs/sibling.ts", "-o", `${out}/ir/`], { stdio: "ignore" })
+execFileSync(nish, ["bench/wp48-refs/sibling.ts", "-o", `${out}/ir/`], {
+  stdio: "ignore",
+})
 const link = (exe, extra) =>
   execFileSync(
     "bash",
@@ -87,14 +93,22 @@ const run = (v, argv) => {
     return Number(m[1])
   }
   const kb = Number(text.trim().split("\n").at(-1))
-  return { build: field("build") / 1e6, visit: field("visit") / 1e6, climb: field("climb") / 1e6, kb }
+  return {
+    build: field("build") / 1e6,
+    visit: field("visit") / 1e6,
+    climb: field("climb") / 1e6,
+    kb,
+  }
 }
 
 for (const n of sizes) {
   const argv = [String(n), String(roundsFor(n))]
   const sums = new Set(
     variants.map((v) =>
-      execFileSync(`${out}/${v}`, argv, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+      execFileSync(`${out}/${v}`, argv, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim()
     )
   )
   if (sums.size !== 1) {
@@ -113,7 +127,7 @@ for (const n of sizes) {
   for (const v of variants) {
     data[v].total = data[v].build.map((b, r) => b + data[v].visit[r] + data[v].climb[r])
   }
-  const band = (k) => median(data.ptr[k].map((t, r) => Math.abs(t - data["ptr-copy"][k][r]) / t))
+  const band = (k) => Math.max(...data.ptr[k].map((t, r) => Math.abs(t - data["ptr-copy"][k][r]) / t))
   const med = (v, k) => median(data[v][k])
   console.log(`## ${n.toLocaleString("en-US")} nodes, ${argv[1]} walks of each kind, ${rounds} rounds\n`)
   console.log(`${[...sums][0]}\n`)
@@ -133,6 +147,11 @@ for (const n of sizes) {
   }
   const pct = (k) => `${(band(k) * 100).toFixed(1)}%`
   console.log(
-    `\nnoise band (ptr against ptr-copy): build ${pct("build")}, visit ${pct("visit")}, climb ${pct("climb")}, wall ${pct("total")}\n`
+    `\nnoise band (ptr against ptr-copy, the widest per-round gap): build ${pct("build")}, visit ${pct("visit")}, climb ${pct("climb")}, wall ${pct("total")}\n`
+  )
+  const cost = med("ptr-range", "total") / base - 1
+  const within = Math.abs(cost) <= band("total")
+  console.log(
+    `verdict: ptr-range wall ${cost >= 0 ? "+" : ""}${(cost * 100).toFixed(1)}% against ptr, ${within ? "within" : "outside"} the ${pct("total")} wall band\n`
   )
 }

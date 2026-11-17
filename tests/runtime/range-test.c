@@ -21,7 +21,11 @@
  * before main prints anything. `unreserved` (built with -DNISH_ASAN as well,
  * by `node tests/run.js runtime_sanitize`) checks that build reserves nothing:
  * the ABI symbol is there, the base is null, and the arena and a region still
- * work. */
+ * work. `misaligned` leaves the arena's offset 4 past an 8-byte boundary, as
+ * compiled code's bump of a compact class does, before each runtime site that
+ * bumps or moves a block in the current chunk (the struct and text bumps,
+ * `nish_cross_in`, `nish_arena_keep`, `nish_region_adopt`'s carve), and checks
+ * each block it hands out is 8-aligned: "misaligned ok", exit 0. */
 
 #define _GNU_SOURCE
 #include <stdint.h>
@@ -65,6 +69,11 @@ static int failures;
 __attribute__((constructor(101))) static void busy_first(void) {
   const char *e = getenv("NISH_RANGE_TEST_BUSY");
   if (!e || strcmp(e, "1") != 0) return;
+#ifndef MAP_FIXED_NOREPLACE
+  /* Linux's value, as runtime.c defines it for an older libc; the mode runs
+     only on Linux. */
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
   void *p = mmap((void *)((uintptr_t)1 << 30), 4096, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
   if (p != (void *)((uintptr_t)1 << 30)) {
     fputs("busy: could not map 0x40000000 first\n", stderr);
@@ -236,6 +245,68 @@ static int positive(void) {
   return 0;
 }
 
+/* Leaves the arena's `off` 4 past an 8-byte boundary, as compiled code's bump
+   of a compact class's 4-byte multiple does, with a fresh 4 KiB or larger
+   chunk's room after it. */
+static void skew(void) {
+  nish_free_arena();
+  nish_alloc_struct(8);
+  CHECK(nish_arena.off + 4 + 1024 <= nish_arena.cap, "skew: no room in the first chunk");
+  nish_arena.off += 4;
+  CHECK(nish_arena.off % 8 == 4, "skew: off %llu", (unsigned long long)nish_arena.off);
+}
+
+static int aligned(const void *p) { return ((uintptr_t)p & 7) == 0; }
+
+/* Every runtime site that bumps or relocates within the current chunk, run
+   from an `off` 4 past an 8-byte boundary: each block it hands out is
+   8-aligned. */
+static int misaligned(void) {
+  skew();
+  void *s = nish_alloc_struct(24);
+  CHECK(aligned(s), "nish_alloc_struct: %p", s);
+
+  skew();
+  nish_str *t = nish_str_new("abcdef", 6);
+  CHECK(aligned(t) && nish_str_len(t) == 6, "nish_str_new (the text bump): %p", (void *)t);
+
+  skew();
+  nish_str *b = nish_str_new("xyz", 3);
+  void *out = nish_cross_out(b, 0, 0);
+  skew();
+  nish_str *back = nish_cross_in(out, 0);
+  CHECK(aligned(back) && nish_str_len(back) == 3, "nish_cross_in: %p", (void *)back);
+
+  skew();
+  uint64_t mark = nish_arena_mark();
+  CHECK(mark % 8 == 4, "keep: the mark %llx is not skewed", (unsigned long long)mark);
+  nish_alloc_struct(40);
+  nish_str *k = nish_str_new("kept!", 5);
+  nish_str *kept = nish_arena_keep(mark, k);
+  CHECK(aligned(kept) && nish_str_len(kept) == 5 && memcmp(kept->data, "kept!", 5) == 0,
+        "nish_arena_keep: %p", (void *)kept);
+  void *after = nish_alloc_struct(16);
+  CHECK(aligned(after), "after keep: %p", after);
+
+  skew();
+  uint64_t r = nish_region_new();
+  nish_region_enter(r);
+  void *in_region = nish_alloc_struct(5000);
+  memset(in_region, 3, 5000);
+  nish_region_leave(r, in_region);
+  nish_region_adopt(r);
+  CHECK(aligned(nish_arena.chunks) && aligned(nish_arena.buf), "nish_region_adopt: carved chunk %p, buf %p",
+        nish_arena.chunks, (void *)nish_arena.buf);
+  void *carved = nish_alloc_struct(24);
+  CHECK(aligned(carved), "after nish_region_adopt: %p", carved);
+  memset(carved, 4, 24);
+
+  nish_free_arena();
+  if (failures) return 1;
+  puts("misaligned ok");
+  return 0;
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) return positive();
   if (strcmp(argv[1], "exhaust") == 0) {
@@ -262,6 +333,7 @@ int main(int argc, char **argv) {
     puts("unreserved ok");
     return 0;
   }
+  if (strcmp(argv[1], "misaligned") == 0) return misaligned();
   if (strcmp(argv[1], "busy") == 0) {
     puts("reached");
     return 0;

@@ -220,8 +220,9 @@ range"; the record is `docs/security/runtime.md`, "The compact-class range"):
   kernel that maps elsewhere because it treats the address as a hint, is
   unmapped and is the panic "cannot reserve its 15 GiB range at 0x40000000
   (1 GiB to 16 GiB): the address is in use", before `main`. `MAP_FIXED` is
-  never used. Elsewhere (macOS) the system places it, and `nish_ref_base`
-  holds the base on every platform. The first 64 bytes are never handed out.
+  never used. Elsewhere (macOS) the system places it. `nish_ref_base` holds
+  the base wherever the range is reserved; under `NISH_ASAN` nothing is
+  reserved and it stays null. The first 64 bytes are never handed out.
 - A chunk's class is its `cap` rounded up to a power of two from 4 KiB to
   2 MiB, with the 16-byte header in front of it. A take pops the class's free
   list, or bumps the high-water mark. A drop (`nish_free_until`, and

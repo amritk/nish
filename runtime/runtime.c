@@ -267,6 +267,11 @@ static char *nish_range_map(int prot) {
   /* A kernel older than MAP_FIXED_NOREPLACE takes the address as a hint and
      maps elsewhere when it is busy: that is busy too. */
   if (p != MAP_FAILED && p != (void *)NISH_RANGE_FIXED) munmap(p, (size_t)NISH_RANGE_SIZE);
+  /* EEXIST is the address taken; anything else (ENOMEM: a limit on address
+     space or mappings) is the system refusing the size. */
+  if (p == MAP_FAILED && errno != EEXIST)
+    nish_die("nish: the compact-class arena cannot reserve its 15 GiB range at 0x40000000 "
+             "(1 GiB to 16 GiB): the system refused the mapping (an address-space or mapping limit)\n");
   if (p != (void *)NISH_RANGE_FIXED)
     nish_die("nish: the compact-class arena cannot reserve its 15 GiB range at 0x40000000 "
              "(1 GiB to 16 GiB): the address is in use\n");
@@ -320,7 +325,9 @@ static nish_chunk *nish_range_take(uint64_t cap) {
     nish_range_free[k] = c->next;
   } else {
     uint64_t span = sizeof(nish_chunk) + cap;
-    if (nish_range_top > NISH_RANGE_SIZE - span) {
+    /* `span > NISH_RANGE_SIZE` folds to false at 15 GiB; it keeps a smaller
+       test size (NISH_RANGE_TEST_SIZE) from wrapping the subtraction. */
+    if (span > NISH_RANGE_SIZE || nish_range_top > NISH_RANGE_SIZE - span) {
       nish_range_leave();
       nish_die("nish: the compact-class arena's 15 GiB range is used up\n");
     }
@@ -383,7 +390,14 @@ static void nish_debug_on_fault(int sig, siginfo_t *info, void *ctx) {
   (void)ctx;
   uintptr_t a = (uintptr_t)info->si_addr, base = (uintptr_t)nish_debug_base;
   struct sigaction *old = sig == SIGSEGV ? &nish_debug_old_segv : &nish_debug_old_bus;
-  if (a >= base && a - base < __atomic_load_n(&nish_debug_next, __ATOMIC_RELAXED)) {
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN
+  /* The range's first page is never handed out: a fault there (a reference
+     of 0, counted from the base) is not a stale block. */
+  uint64_t lo = nish_debug_page;
+#else
+  uint64_t lo = 0;
+#endif
+  if (a >= base + lo && a - base < __atomic_load_n(&nish_debug_next, __ATOMIC_RELAXED)) {
     char msg[] = "nish: --debug-arena: stale arena reference at 0x0000000000000000: "
                  "the memory was released by the scope that allocated it\n";
     char *hex = msg + sizeof "nish: --debug-arena: stale arena reference at 0x" - 1;
@@ -743,6 +757,12 @@ void *nish_arena_keep(uint64_t mark, void *p) {
     if (mark >= cb && mark <= cb + NISH_CHUNK_CAP(c)) break;
   }
   if (!c || (c == pc && mark > q)) return p;
+#ifdef NISH_ARENA_RANGE
+  /* A compact class's 4-byte bump may have left the mark 4 past an 8-byte
+     boundary (`nish_alloc_struct`): the kept block moves to the next one.
+     `q` is 8-aligned, so a mark at or below it rounds to at most `q`. */
+  mark = (mark + 7) & ~(uint64_t)7;
+#endif
   /* mark <= q inside one chunk implies mark + size <= q + size <= its end, so
      the second arm is only ever reached with `c` older than `pc`. */
   if (mark + size <= (uintptr_t)(c + 1) + NISH_CHUNK_CAP(c)) {

@@ -16994,6 +16994,12 @@ if (dealtHere("runtimeChecks")) {
         run !== null && run.status === 0 && run.stdout === "range ok\n",
         shown(built, run)
       )
+      const skewed = built.ok ? spawnSync(built.exe, ["misaligned"], { encoding: "utf8" }) : null
+      check(
+        `${label}: from an offset 4 past an 8-byte boundary, the struct and text bumps, nish_cross_in, keep and region adopt each hand out an 8-aligned block`,
+        skewed !== null && skewed.status === 0 && skewed.stdout === "misaligned ok\n",
+        shown(built, skewed)
+      )
       if (process.platform === "linux") {
         const busy = built.ok
           ? spawnSync(built.exe, ["busy"], { encoding: "utf8", env: { ...process.env, NISH_RANGE_TEST_BUSY: "1" } })
@@ -17017,6 +17023,13 @@ if (dealtHere("runtimeChecks")) {
       "the compact-class range: a used-up range exits 1 rather than handing out a chunk past its end",
       exhausted !== null && exhausted.status === 1 && !exhausted.stdout.includes("reached"),
       shown(small, exhausted)
+    )
+    const smallDebug = rangeBuild("range_test_exhaust_debug", ["-DNISH_RANGE_TEST_SIZE=1048576", "-DNISH_ARENA_DEBUG=1"])
+    const exhaustedDebug = smallDebug.ok ? spawnSync(smallDebug.exe, ["exhaust"], { encoding: "utf8" }) : null
+    check(
+      "the debug arena with the compact-class range: a used-up range exits 1 rather than handing out a chunk past its end",
+      exhaustedDebug !== null && exhaustedDebug.status === 1 && !exhaustedDebug.stdout.includes("reached"),
+      shown(smallDebug, exhaustedDebug)
     )
 
     const rangeDir = path.join(buildDir, "arena-range")
@@ -17047,10 +17060,16 @@ if (dealtHere("runtimeChecks")) {
       )
     }
     const unlinked = buildSh([abiLl, "runtime/runtime.c", "-o", path.join(rangeDir, "abi_default"), "--profile", "debug"])
+    // The same link with only @nish_arena_range_abi supplied succeeds, so that
+    // symbol is the one the default runtime lacks.
+    const stubLl = path.join(rangeDir, "abi_stub.ll")
+    fs.writeFileSync(stubLl, "@nish_arena_range_abi = constant i32 1\n")
+    const stubbed = buildSh([abiLl, stubLl, "runtime/runtime.c", "-o", path.join(rangeDir, "abi_stubbed"), "--profile", "debug"])
+    const stubRun = stubbed.status === 0 ? spawnSync(path.join(rangeDir, "abi_stubbed"), [], { encoding: "utf8" }) : null
     check(
-      "scripts/build.sh without --arena-range: the same module does not link against the default runtime",
-      unlinked.status !== 0 && unlinked.status !== null,
-      `exit ${unlinked.status}\n${unlinked.stderr}`
+      "scripts/build.sh without --arena-range: the same module does not link against the default runtime, and links once @nish_arena_range_abi alone is supplied",
+      unlinked.status !== 0 && unlinked.status !== null && stubRun !== null && stubRun.status === 0,
+      `exit ${unlinked.status}\n${unlinked.stderr}\nstubbed: exit ${stubbed.status}\n${stubbed.stderr}`
     )
     const refused = buildSh([abiLl, "-o", path.join(rangeDir, "abi.wasm"), "--profile", "wasm", "--arena-range"])
     check(
@@ -17090,31 +17109,37 @@ if (dealtHere("runtimeChecks")) {
 
     // The debug arena's reservation is the range when both are on: a pointer
     // kept across a release still faults at the read.
-    const debugExe = path.join(rangeDir, "debug_arena_range")
-    const debugCc = spawnSync(
-      "clang",
-      [
-        "-std=c11",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-O2",
-        "-DNISH_ARENA_DEBUG=1",
-        "-DNISH_ARENA_RANGE=1",
-        ...RUNTIME_C,
-        "tests/runtime/debug-arena-test.c",
-        "-lm",
-        "-o",
-        debugExe,
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
-    const debugRun = debugCc.status === 0 ? spawnSync(debugExe, [], { encoding: "utf8" }) : null
-    check(
-      "debug arena with the compact-class range: a pointer kept across a release dies of SIGSEGV at the read",
-      debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
-      debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
-    )
+    for (const [suffix, flags] of [
+      ["", []],
+      [", -DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"]],
+    ]) {
+      const debugExe = path.join(rangeDir, `debug_arena_range${flags.length > 0 ? "_threads" : ""}`)
+      const debugCc = spawnSync(
+        "clang",
+        [
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-O2",
+          "-DNISH_ARENA_DEBUG=1",
+          "-DNISH_ARENA_RANGE=1",
+          ...flags,
+          ...RUNTIME_C,
+          "tests/runtime/debug-arena-test.c",
+          "-lm",
+          "-o",
+          debugExe,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const debugRun = debugCc.status === 0 ? spawnSync(debugExe, [], { encoding: "utf8" }) : null
+      check(
+        `debug arena with the compact-class range${suffix}: a pointer kept across a release dies of SIGSEGV at the read`,
+        debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
+        debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
+      )
+    }
   }
 
   // ---- The io_uring ring layer (WP63 S1): runtime-uring.c from C -------------------------
