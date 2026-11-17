@@ -32277,7 +32277,7 @@ export const main = (): number => {
 @llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
 
 declare void @nish_free_arena() #1
-declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #1
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*, i32) #1
 declare void @nish_sandbox_check() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
@@ -32300,7 +32300,7 @@ entry:
 
 define internal void @.sandbox.apply() "probe-stack"="inline-asm" {
 entry:
-  call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null)
+  call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null, i8* null, i32 0)
   ret void
 }
 
@@ -33436,7 +33436,7 @@ const identity = (s: string): string => s
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_reset_arena() #2
 declare void @nish_free_arena() #2
-declare void @nish_sandbox(i32, i32, i8*, i8*, i8*) #2
+declare void @nish_sandbox(i32, i32, i8*, i8*, i8*, i32) #2
 declare void @nish_sandbox_check() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
@@ -33559,6 +33559,7 @@ declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocaptur
 declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #3
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare noundef i32 @nish_poll_create() #2
+declare noundef i32 @nish_net_ring_state() #2
 declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #2

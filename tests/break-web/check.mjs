@@ -189,8 +189,10 @@ check(
 // The hero's script ships on every docs page, so all the terminal does lives in
 // the lazy shell: site.js may grow by under 500 B gzipped for it (the input,
 // and the prompt the hero's run ends on). The baseline is site.js on main
-// before the terminal took keys (71c41439).
-const SITE_GZIP_BEFORE = 3480
+// before the terminal took keys (71c41439), plus 300 B for keeping the hero
+// across the client app's swap of the page on a first load, which is no part
+// of the terminal.
+const SITE_GZIP_BEFORE = 3480 + 300
 const SITE_GZIP_GROWTH = 500
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(
@@ -202,8 +204,10 @@ check(
 // The terminal's look before it is used ships in theme.css on every docs page
 // too; the rest comes with the shell. The baseline is theme.css on main
 // (c6c797f9b) before the terminal took keys, plus 404 B for the inline-code
-// style added after it, which is no part of the terminal.
-const THEME_GZIP_BEFORE = 8956 + 404
+// style added after it, 180 B for the tables' column layout and the hero
+// name's unfold and 50 B for the current header link's single underline, none
+// of which is part of the terminal.
+const THEME_GZIP_BEFORE = 8956 + 404 + 180 + 50
 const THEME_GZIP_GROWTH = 250
 const themeGzipped = zlib.gzipSync(fs.readFileSync(path.join(root, "docs", "site", "theme.css")), { level: 9 }).length
 check(

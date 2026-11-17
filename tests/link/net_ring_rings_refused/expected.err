@@ -1,0 +1,1 @@
+package.json:5:17: error: `nish.netRings` is `65`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to 64

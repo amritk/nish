@@ -1,0 +1,1218 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc7748-x25519",
+  "source": {
+    "rfc": 7748,
+    "title": "Elliptic Curves for Security: X25519",
+    "sha256": "279ca0ecc5e92e2962e27b846986aeb74729d9dd34bd4a04a362f80dcb596ad3"
+  },
+  "sources": [
+    {
+      "id": "rfc7748",
+      "rfc": 7748,
+      "file": "rfcs/rfc7748.txt",
+      "sha256": "279ca0ecc5e92e2962e27b846986aeb74729d9dd34bd4a04a362f80dcb596ad3"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/x25519"
+  },
+  "requirements": [
+    {
+      "id": "R-FUNC",
+      "section": "5",
+      "level": "DEFINITION",
+      "quote": "The functions take a scalar and a u-coordinate as inputs and produce a u-coordinate as output."
+    },
+    {
+      "id": "R-SIZE",
+      "section": "5",
+      "level": "DEFINITION",
+      "quote": "Although the functions work internally with integers, the inputs and outputs are 32-byte strings (for X25519) or 56-byte strings (for X448) and this specification defines their encoding."
+    },
+    {
+      "id": "R-MASK",
+      "section": "5",
+      "level": "MUST",
+      "quote": "When receiving such an array, implementations of X25519 (but not X448) MUST mask the most significant bit in the final byte."
+    },
+    {
+      "id": "R-NONCANON",
+      "section": "5",
+      "level": "MUST",
+      "quote": "Implementations MUST accept non-canonical values and process them as if they had been reduced modulo the field prime."
+    },
+    {
+      "id": "R-CLAMP",
+      "section": "5",
+      "level": "DEFINITION",
+      "quote": "For X25519, in order to decode 32 random bytes as an integer scalar, set the three least significant bits of the first byte and the most significant bit of the last to zero, set the second most significant bit of the last byte to 1 and, finally, decode as little-endian."
+    },
+    {
+      "id": "R-ENCODE",
+      "section": "5",
+      "level": "DEFINITION",
+      "quote": "Finally, encode the resulting value as 32 or 56 bytes in little- endian order."
+    },
+    {
+      "id": "R-OUT-MSB",
+      "section": "5",
+      "level": "MUST",
+      "quote": "For X25519, the unused, most significant bit MUST be zero."
+    },
+    {
+      "id": "R-ITER",
+      "section": "5.2",
+      "level": "DEFINITION",
+      "quote": "For each iteration, set k to be the result of calling the function and u to be the old value of k."
+    },
+    {
+      "id": "R-BASE",
+      "section": "6.1",
+      "level": "DEFINITION",
+      "quote": "Alice generates 32 random bytes in a[0] to a[31] and transmits K_A = X25519(a, 9) to Bob, where 9 is the u-coordinate of the base point and is encoded as a byte with value 9, followed by 31 zero bytes."
+    },
+    {
+      "id": "R-DH",
+      "section": "6.1",
+      "level": "DEFINITION",
+      "quote": "Both now share K = X25519(a, X25519(b, 9)) = X25519(b, X25519(a, 9)) as a shared secret."
+    }
+  ],
+  "exclusions": [
+    {
+      "section": "5",
+      "quote": "The cswap function SHOULD be implemented in constant time (i.e., independent of the swap argument).",
+      "reason": "timing is not observable by a functional test; nish checks it on the emitted machine code (tests/cases/ct_asm_x25519.ts, tests/ct-timing.js, docs/security/ct-verification.md, docs/security/crypto-ecc.md)"
+    },
+    {
+      "section": "A",
+      "quote": "The trace of Frobenius MUST NOT be in {0, 1} in order to rule out the attacks described in [smart], [satoh], and [semaev], as in [brainpool] and [safecurves].",
+      "reason": "an obligation on choosing a curve, which Curve25519 already meets; nothing an implementation of X25519 does can satisfy or violate it"
+    },
+    {
+      "section": "A",
+      "quote": "MOV Degree [reducing]: the embedding degree MUST be greater than (order - 1) / 100, as in [brainpool] and [safecurves].",
+      "reason": "an obligation on choosing a curve, which Curve25519 already meets; nothing an implementation of X25519 does can satisfy or violate it"
+    },
+    {
+      "section": "A",
+      "quote": "CM Discriminant: discriminant D MUST be greater than 2^100, as in [safecurves].",
+      "reason": "an obligation on choosing a curve, which Curve25519 already meets; nothing an implementation of X25519 does can satisfy or violate it"
+    }
+  ],
+  "functions": [
+    {
+      "name": "x25519",
+      "params": [
+        {
+          "name": "scalar",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "u",
+          "type": "bytes"
+        }
+      ],
+      "returns": "secret-bytes?"
+    },
+    {
+      "name": "x25519Base",
+      "params": [
+        {
+          "name": "scalar",
+          "type": "secret-bytes"
+        }
+      ],
+      "returns": "bytes?"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "5.2-VECTOR-1",
+      "title": "RFC 7748 5.2: the first single-step X25519 vector",
+      "covers": ["R-FUNC", "R-CLAMP", "R-ENCODE"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4",
+          "label": "Input scalar"
+        },
+        {
+          "hex": "e6db6867583030db3594c1a424b15f7c726624ec26b3353b10a903a6d0ab1c4c",
+          "label": "Input u-coordinate"
+        }
+      ],
+      "expect": {
+        "hex": "c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552",
+        "label": "Output u-coordinate"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "5.2-VECTOR-2",
+      "title": "RFC 7748 5.2: the second single-step vector, whose u has the top bit set",
+      "covers": ["R-FUNC", "R-MASK", "R-CLAMP", "R-ENCODE"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "4b66e9d4d1b4673c5ad22691957d6af5c11b6421e0ea01d42ca4169e7918ba0d",
+          "label": "Input scalar"
+        },
+        {
+          "hex": "e5210f12786811d3f4b7959d0538ae2c31dbe7106fc03c3efc4cd549c715a493",
+          "label": "Input u-coordinate"
+        }
+      ],
+      "expect": {
+        "hex": "95cbde9476e8907d7aade45cb4b873f88b595a68799fa152e6f8f7647aac7957",
+        "label": "Output u-coordinate"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "5.2-ITER-1",
+      "title": "RFC 7748 5.2: one iteration from k = u = 9",
+      "covers": ["R-ITER"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        },
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        }
+      ],
+      "expect": {
+        "hex": "422c8e7a6227d7bca1350b3e2bb7279f7897b87bb6854b783c60e80311ae3079",
+        "label": "After one iteration"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "5.2-ITER-1000",
+      "title": "RFC 7748 5.2: 1,000 iterations from k = u = 9",
+      "covers": ["R-ITER"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        },
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        }
+      ],
+      "expect": {
+        "hex": "684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51",
+        "label": "After 1,000 iterations"
+      },
+      "iterate": {
+        "count": 1000,
+        "names": ["k", "u"],
+        "next": [
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "var": "u"
+              }
+            ]
+          },
+          {
+            "var": "k"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "5.2-ITER-1M",
+      "title": "RFC 7748 5.2: 1,000,000 iterations from k = u = 9",
+      "covers": ["R-ITER"],
+      "source": {
+        "cite": {
+          "section": "5.2"
+        }
+      },
+      "call": "x25519",
+      "args": [
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        },
+        {
+          "hex": "0900000000000000000000000000000000000000000000000000000000000000",
+          "label": "For X25519"
+        }
+      ],
+      "expect": {
+        "hex": "7c3911e0ab2586fd864497297e575e6f3bc601c0883c30df5f4dd2d24f665424",
+        "label": "After 1,000,000 iterations"
+      },
+      "iterate": {
+        "count": 1000000,
+        "names": ["k", "u"],
+        "next": [
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "var": "u"
+              }
+            ]
+          },
+          {
+            "var": "k"
+          }
+        ],
+        "slow": true
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-SIZES",
+      "title": "X25519 answers exactly when the scalar and the u-coordinate are both 32 bytes",
+      "covers": ["R-FUNC", "R-SIZE"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "u",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "k"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 32
+                  }
+                ]
+              },
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "op": "len",
+                    "args": [
+                      {
+                        "var": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "int": 32
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "notNull",
+            "args": [
+              {
+                "call": "x25519",
+                "args": [
+                  {
+                    "var": "k"
+                  },
+                  {
+                    "var": "u"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-OUT-32",
+      "title": "the output u-coordinate is 32 bytes",
+      "covers": ["R-SIZE", "R-ENCODE"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "u",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "x25519",
+                    "args": [
+                      {
+                        "var": "k"
+                      },
+                      {
+                        "var": "u"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 32
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-MASK",
+      "title": "the most significant bit of the final byte of u does not change the result",
+      "covers": ["R-MASK"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "u",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "var": "u"
+              }
+            ]
+          },
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "op": "flipBit",
+                "args": [
+                  {
+                    "var": "u"
+                  },
+                  {
+                    "int": 255
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-NONCANON",
+      "title": "u = p + d for the 19 non-canonical values gives the result for u = d",
+      "covers": ["R-NONCANON"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "d",
+          "type": "i32",
+          "min": 0,
+          "max": 18
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "p",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "op": "fill",
+                      "args": [
+                        {
+                          "op": "+",
+                          "args": [
+                            {
+                              "int": 237
+                            },
+                            {
+                              "var": "d"
+                            }
+                          ]
+                        },
+                        {
+                          "int": 1
+                        }
+                      ]
+                    },
+                    {
+                      "op": "fill",
+                      "args": [
+                        {
+                          "int": 255
+                        },
+                        {
+                          "int": 30
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "hex": "7f"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "==",
+          "args": [
+            {
+              "call": "x25519",
+              "args": [
+                {
+                  "var": "k"
+                },
+                {
+                  "var": "p"
+                }
+              ]
+            },
+            {
+              "call": "x25519",
+              "args": [
+                {
+                  "var": "k"
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "op": "fill",
+                      "args": [
+                        {
+                          "var": "d"
+                        },
+                        {
+                          "int": 1
+                        }
+                      ]
+                    },
+                    {
+                      "op": "zeros",
+                      "args": [
+                        {
+                          "int": 31
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-NONCANON-MASKED",
+      "title": "a non-canonical u with the top bit set is masked, then reduced",
+      "covers": ["R-NONCANON", "R-MASK"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "d",
+          "type": "i32",
+          "min": 0,
+          "max": 18
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "p",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "fill",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "int": 237
+                        },
+                        {
+                          "var": "d"
+                        }
+                      ]
+                    },
+                    {
+                      "int": 1
+                    }
+                  ]
+                },
+                {
+                  "op": "fill",
+                  "args": [
+                    {
+                      "int": 255
+                    },
+                    {
+                      "int": 31
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "==",
+          "args": [
+            {
+              "call": "x25519",
+              "args": [
+                {
+                  "var": "k"
+                },
+                {
+                  "var": "p"
+                }
+              ]
+            },
+            {
+              "call": "x25519",
+              "args": [
+                {
+                  "var": "k"
+                },
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "op": "fill",
+                      "args": [
+                        {
+                          "var": "d"
+                        },
+                        {
+                          "int": 1
+                        }
+                      ]
+                    },
+                    {
+                      "op": "zeros",
+                      "args": [
+                        {
+                          "int": 31
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-CLAMP",
+      "title": "the three low bits of the first byte and the top two bits of the last do not change the result",
+      "covers": ["R-CLAMP"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "u",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "keep",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "hex": "f8"
+                    },
+                    {
+                      "op": "fill",
+                      "args": [
+                        {
+                          "int": 255
+                        },
+                        {
+                          "int": 30
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "hex": "3f"
+                }
+              ]
+            }
+          },
+          {
+            "name": "set",
+            "value": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "zeros",
+                  "args": [
+                    {
+                      "int": 31
+                    }
+                  ]
+                },
+                {
+                  "hex": "40"
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "==",
+          "args": [
+            {
+              "call": "x25519",
+              "args": [
+                {
+                  "var": "k"
+                },
+                {
+                  "var": "u"
+                }
+              ]
+            },
+            {
+              "call": "x25519",
+              "args": [
+                {
+                  "op": "bitOr",
+                  "args": [
+                    {
+                      "op": "bitAnd",
+                      "args": [
+                        {
+                          "var": "k"
+                        },
+                        {
+                          "var": "keep"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "set"
+                    }
+                  ]
+                },
+                {
+                  "var": "u"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-OUT-MSB",
+      "title": "the most significant bit of the output is zero",
+      "covers": ["R-OUT-MSB"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "u",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "bitAnd",
+            "args": [
+              {
+                "op": "slice",
+                "args": [
+                  {
+                    "op": "unwrap",
+                    "args": [
+                      {
+                        "call": "x25519",
+                        "args": [
+                          {
+                            "var": "k"
+                          },
+                          {
+                            "var": "u"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "int": 31
+                  },
+                  {
+                    "int": 32
+                  }
+                ]
+              },
+              {
+                "hex": "80"
+              }
+            ]
+          },
+          {
+            "hex": "00"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-BASE",
+      "title": "x25519Base(a) is X25519(a, 9), with 9 a byte of value 9 followed by 31 zero bytes",
+      "covers": ["R-BASE"],
+      "forall": [
+        {
+          "name": "k",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "x25519Base",
+            "args": [
+              {
+                "var": "k"
+              }
+            ]
+          },
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "k"
+              },
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "hex": "09"
+                  },
+                  {
+                    "op": "zeros",
+                    "args": [
+                      {
+                        "int": 31
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-DH",
+      "title": "X25519(a, X25519(b, 9)) equals X25519(b, X25519(a, 9))",
+      "covers": ["R-DH"],
+      "forall": [
+        {
+          "name": "a",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "a"
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "x25519Base",
+                    "args": [
+                      {
+                        "var": "b"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "call": "x25519",
+            "args": [
+              {
+                "var": "b"
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "x25519Base",
+                    "args": [
+                      {
+                        "var": "a"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-DH-VECTOR",
+      "title": "the Section 6.1 test vector: Alice's and Bob's public keys and their shared secret K",
+      "covers": ["R-BASE", "R-DH"],
+      "forall": [
+        {
+          "name": "zero",
+          "type": "i32",
+          "min": 0,
+          "max": 0
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "a",
+            "value": {
+              "hex": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"
+            }
+          },
+          {
+            "name": "ka",
+            "value": {
+              "hex": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "hex": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb"
+            }
+          },
+          {
+            "name": "kb",
+            "value": {
+              "hex": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
+            }
+          },
+          {
+            "name": "k",
+            "value": {
+              "hex": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "var": "zero"
+                },
+                {
+                  "int": 0
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "x25519Base",
+                  "args": [
+                    {
+                      "var": "a"
+                    }
+                  ]
+                },
+                {
+                  "var": "ka"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "x25519Base",
+                  "args": [
+                    {
+                      "var": "b"
+                    }
+                  ]
+                },
+                {
+                  "var": "kb"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "x25519",
+                  "args": [
+                    {
+                      "var": "a"
+                    },
+                    {
+                      "var": "kb"
+                    }
+                  ]
+                },
+                {
+                  "var": "k"
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "x25519",
+                  "args": [
+                    {
+                      "var": "b"
+                    },
+                    {
+                      "var": "ka"
+                    }
+                  ]
+                },
+                {
+                  "var": "k"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outOfScope": [
+    {
+      "name": "f25519Add64",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Sub64",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Mul64",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Zero",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Small",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Copy",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Carry",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Add",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Sub",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Mul",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Square",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519SquareTimes",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Pow250",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Invert",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Swap",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Decode",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "f25519Encode",
+      "reason": "a field helper internal to the ladder; RFC 7748 specifies the function, not its field arithmetic"
+    },
+    {
+      "name": "X25519_SIZE",
+      "reason": "a constant, not a function; the properties test the 32-byte sizes it names through x25519"
+    }
+  ]
+}

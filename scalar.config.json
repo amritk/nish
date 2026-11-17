@@ -3,14 +3,13 @@
   "scalar": "2.0.0",
   "info": {
     "title": "Nish",
-    "description": "A compiler from a strictly static subset of TypeScript to native code through LLVM: the user guide."
+    "description": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector."
   },
   "navigation": {
     "header": [
+      { "type": "link", "title": "Get started", "icon": "phosphor/regular/rocket-launch", "to": "/getting-started/installation" },
       { "type": "link", "title": "GitHub", "icon": "phosphor/regular/github-logo", "to": "https://github.com/amritk/nish", "newTab": true },
-      { "type": "link", "title": "Roadmap", "icon": "phosphor/regular/map-trifold", "to": "/roadmap" },
-      { "type": "link", "title": "Language reference", "icon": "phosphor/regular/book-open", "to": "/reference/language" },
-      { "type": "link", "title": "Changelog", "icon": "phosphor/regular/clock-counter-clockwise", "to": "/reference/changelog" }
+      { "type": "link", "title": "Language reference", "icon": "phosphor/regular/book-open", "to": "/reference/language" }
     ],
     "routes": {
       "/": {
@@ -22,6 +21,7 @@
             "title": "Nish",
             "filepath": "docs/guide/index.md",
             "showInSidebar": false,
+            "head": { "title": "Nish: TypeScript in, native code out" },
             "layout": {
               "toc": false,
               "pageTitle": false,
@@ -1408,7 +1408,8 @@
                   "/wp61-json-typed-checks": { "type": "page", "title": "WP61: Typed JSON, constraints and coercion in one pass", "filepath": "docs/roadmap/wp61-json-typed-checks.md" },
                   "/wp62-json-schema-classes": { "type": "page", "title": "WP62: Nish classes from a JSON Schema", "filepath": "docs/roadmap/wp62-json-schema-classes.md" },
                   "/wp63-iouring-net": { "type": "page", "title": "WP63: io_uring direct descriptors for nish:net", "filepath": "docs/roadmap/wp63-iouring-net.md" },
-                  "/wp64-temporal": { "type": "page", "title": "WP64: Temporal — dates, times and time zones", "filepath": "docs/roadmap/wp64-temporal.md" }
+                  "/wp64-temporal": { "type": "page", "title": "WP64: Temporal — dates, times and time zones", "filepath": "docs/roadmap/wp64-temporal.md" },
+                  "/wp65-lexer-surface": { "type": "page", "title": "WP65: The surface a lexer port asked for", "filepath": "docs/roadmap/wp65-lexer-surface.md" }
                 }
               },
               "/done/..": {
@@ -1470,7 +1471,7 @@
   "assetsDir": "docs/site",
   "agentSkills": [{ "filepath": "skills/writing-nish/SKILL.md" }],
   "siteConfig": {
-    "isPrivate": true,
+    "isPrivate": false,
     "agent": { "enabled": false },
     "theme": "docs/site/theme.css",
     "logo": { "lightMode": "docs/site/logo-light.png", "darkMode": "docs/site/logo-dark.png" },
@@ -1480,7 +1481,27 @@
       "description": "Every Nish release: what changed in the compiler, the runtime and the standard library."
     },
     "head": {
-      "scripts": [{ "path": "docs/site/site.js", "defer": true }],
+      "meta": [
+        { "name": "description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "name": "application-name", "content": "Nish" },
+        { "property": "og:site_name", "content": "Nish" },
+        { "property": "og:type", "content": "website" },
+        { "property": "og:locale", "content": "en_US" },
+        { "property": "og:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "property": "og:image", "content": "https://nishlang.com/og.png" },
+        { "property": "og:image:type", "content": "image/png" },
+        { "property": "og:image:width", "content": "1200" },
+        { "property": "og:image:height", "content": "630" },
+        { "property": "og:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." },
+        { "name": "twitter:card", "content": "summary_large_image" },
+        { "name": "twitter:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "name": "twitter:image", "content": "https://nishlang.com/og.png" },
+        { "name": "twitter:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." }
+      ],
+      "scripts": [
+        { "path": "docs/site/site.js", "defer": true },
+        { "path": "docs/site/page.js", "defer": true }
+      ],
       "links": [
         { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
         { "rel": "icon", "type": "image/svg+xml", "href": "/mark.svg" },
@@ -1488,6 +1509,9 @@
         { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" },
         { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]
-    }
+    },
+    "llms": { "stripComments": true },
+    "contentSignals": { "search": "yes", "aiInput": "yes", "aiTrain": "yes" },
+    "customDomain": "nishlang.com"
   }
 }

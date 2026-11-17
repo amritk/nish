@@ -513,8 +513,20 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * the rule is a new file with its own measured ceiling, never a raised one. The
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
+ * **10,869 bytes** on 2026-11-16 once WP63 S2's ring slot layer was added (5,120 to
+ * 11,008): the slot tables that give a ring connection a descriptor-shaped handle, the
+ * dispatch of every socket call on a slot to runtime-uring.c, the readiness loop's
+ * drain of ring completions, the send backpressure and close of a slot, the fallback
+ * to epoll whenever the probe or a set's open fails (NURING-20, NURING-22), and the room
+ * left for epoll's events when ring slots fill the batch (NURING-18). It stays in this
+ * unit, and the ceiling is raised rather than split off as the rule above asks,
+ * because a unit of its own would save nothing: `nish_net_poll` and every socket call
+ * branch on the handle kind, so any program that uses `nish:net` links the slot layer
+ * from whichever file holds it, and the speed build's full LTO optimises across the
+ * units either way. The split would add a sixth budget and a cross-unit interface for
+ * no smaller program and no faster one.
  */
-const NET_TEXT_BUDGET = 5120
+const NET_TEXT_BUDGET = 11008
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -726,9 +738,13 @@ const RUNTIME_BYTES_TEXT_BUDGET = 2048
  * carry which kind each is, and a spawn of a program granted `exec:` is started by
  * the supervisor itself, without the filter, through the `posix_spawn` call the
  * spawner now shares. Measured 4,507 against 4,409 on 2026-11-13 with clang 18.1.3
- * on linux-x64. The ceiling stands, leaving 101.
+ * on linux-x64. The ceiling stands, leaving 101. **4,789 bytes** on 2026-11-16
+ * once `--sandbox` premakes restricted rings and lets `io_uring_enter` take only
+ * their descriptors (WP63 S3, NURING-35; 4,608 to 4,864): the premake call with
+ * its descriptor array, and the filter's rows comparing `io_uring_enter`'s first
+ * argument with each premade ring. The budget is the 256-byte boundary above it.
  */
-const RUNTIME_SANDBOX_TEXT_BUDGET = 4608
+const RUNTIME_SANDBOX_TEXT_BUDGET = 4864
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-shm.c`
  * -- the shared-memory regions of `nish/sync/shm` and `nish/sync/ring`
@@ -759,11 +775,23 @@ const RUNTIME_SHM_TEXT_BUDGET = 3072
  *
  * Measured **6,299 bytes** on 2026-11-16 with clang 18.1.3 on linux-x64, after
  * `nish_uring_sleep_ms`, the bound on every sleep on a set (NURING-8, a wake 7.0
- * loses); 6,045 before NURING-8. The budget is the 256-byte boundary
- * above it. A unit of its own beside runtime-net.c, so that the epoll path links none
- * of it: nothing in `nish:net` calls it until S2.
+ * loses); 6,045 before NURING-8. **6,852 bytes** on 2026-11-16 once S2 called it
+ * from `nish:net` (6,400 to 6,912): `nish_uring_hold`, which cancels a slot's receive
+ * and arms it again so a peer the program does not read cannot grow its queue
+ * (NURING-9), `nish_uring_queued`, the unsent bytes that bound a send area (NURING-2),
+ * and `nish_uring_full`, the full-set check behind tcpAccept's -23 (NURING-6).
+ * **7,277 bytes** on 2026-11-16 once an accept that found memory short paused and
+ * resumed rather than stopping the set (NURING-28; 6,912 to 7,424): the back-off's
+ * clock and doubling, its event, and the sleep bound that wakes the caller when it
+ * ends. **8,023 bytes** on 2026-11-16 once `--sandbox` premakes restricted rings
+ * before its filter (WP63 S3; 7,424 to 8,192): `nish_uring_premake` with its
+ * R_DISABLED setup, the opcode and flag restrictions and ENABLE_RINGS, the pool a
+ * ring listener takes its rings from (NURING-33, NURING-34), and `nish_uring_pooled`.
+ * The budget is the 256-byte boundary above it. A unit of its own beside runtime-net.c,
+ * so that a build whose probe fails
+ * runs the epoll path alone.
  */
-const RUNTIME_URING_TEXT_BUDGET = 6400
+const RUNTIME_URING_TEXT_BUDGET = 8192
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-region.c`
  * -- the regions of docs/wp46-long-running-memory.md (stage 1, the runtime): the handle

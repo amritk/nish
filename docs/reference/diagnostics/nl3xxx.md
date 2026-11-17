@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 56 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 57 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -425,7 +425,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host` and `compat`, each written once
+` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once
 ```
 
 ## NL3037
@@ -709,4 +709,12 @@ The message of an error contains:
 
 ```text
 …, which the root package's `compat` does not allow: a program is compiled in its root package's dialect
+```
+
+## NL3058
+
+The message of an error contains:
+
+```text
+`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to …
 ```

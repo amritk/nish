@@ -232,7 +232,7 @@ export class RuntimeTable {
     this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE))
     this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE))
     // WP37: the sandbox the `--sandbox` wrapper installs (runtime/runtime-sandbox.c).
-    this.add(plain("nish_sandbox", "declare void @nish_sandbox(i32, i32, i8*, i8*, i8*)", EFFECT_WRITE))
+    this.add(plain("nish_sandbox", "declare void @nish_sandbox(i32, i32, i8*, i8*, i8*, i32)", EFFECT_WRITE))
     this.add(plain("nish_sandbox_check", "declare void @nish_sandbox_check()", EFFECT_WRITE))
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
     // `EFFECT_WRITE` so nothing is reordered across it, but it only reads the bump position.
@@ -1082,6 +1082,10 @@ export class RuntimeTable {
     // negative one, so it is `nounwind` alone; it writes `ready`, which
     // therefore loses `readonly`.
     this.add(plain("nish_poll_create", "declare noundef i32 @nish_poll_create()", EFFECT_WRITE))
+    // `netRingState` reads what the first ring listen decided, which a later
+    // `tcpListenFlags` changes, so it is a write as `netLocalPort` is: never
+    // hoisted or merged across a listen.
+    this.add(plain("nish_net_ring_state", "declare noundef i32 @nish_net_ring_state()", EFFECT_WRITE))
     this.add(
       plain(
         "nish_poll_add",

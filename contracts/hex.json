@@ -1,19 +1,22 @@
 {
-  "$schema": "https://raw.githubusercontent.com/amritk/vector/main/schemas/rfc-contract.json",
+  "$schema": "../build/vector/schemas/rfc-contract.json",
   "contract": "hex",
   "source": {
     "title": "Spec 0001: nish/hex — hexadecimal encoding and decoding",
     "main": "hex",
-    "sha256": "48465b1d9c4aadb40f13b875fd1e289ca8a31190f308a89f925e73266a25996f"
+    "sha256": "03aafc66e97c076335b4dcc853f18c71a4af5fcecc81d5178eef2eebe4332920"
   },
   "sources": [
     {
       "id": "hex",
-      "path": "../specs/hex.md"
+      "path": "../specs/hex.xml"
     },
     {
       "id": "rfc4648",
-      "rfc": 4648
+      "rfc": 4648,
+      "path": "../rfcs/rfc4648.txt",
+      "file": "rfcs/rfc4648.txt",
+      "sha256": "84e14418f795d503be5f34bf23ce4ebaa119e9ec7c9f667d8caeb111385b178f"
     }
   ],
   "target": {
@@ -97,9 +100,7 @@
       "kind": "vector",
       "id": "V1",
       "title": "RFC 4648 §10: BASE16(\"\") is \"\", which decodes to the empty array",
-      "covers": [
-        "R-DEC-EMPTY"
-      ],
+      "covers": ["R-DEC-EMPTY"],
       "source": {
         "cite": {
           "source": "rfc4648",
@@ -120,9 +121,7 @@
       "kind": "vector",
       "id": "V2",
       "title": "RFC 4648 §10: \"66\" decodes to \"f\"",
-      "covers": [
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-DEC-ACCEPT"],
       "source": {
         "cite": {
           "source": "rfc4648",
@@ -143,9 +142,7 @@
       "kind": "vector",
       "id": "V3",
       "title": "RFC 4648 §10: uppercase \"666F6F\" decodes to \"foo\"",
-      "covers": [
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-DEC-ACCEPT"],
       "source": {
         "cite": {
           "source": "rfc4648",
@@ -166,9 +163,7 @@
       "kind": "vector",
       "id": "V4",
       "title": "RFC 4648 §10: uppercase \"666F6F626172\" decodes to \"foobar\"",
-      "covers": [
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-DEC-ACCEPT"],
       "source": {
         "cite": {
           "source": "rfc4648",
@@ -189,11 +184,7 @@
       "kind": "vector",
       "id": "V5",
       "title": "each nibble boundary, high nibble first, lowercase",
-      "covers": [
-        "R-ENC-LEN",
-        "R-ENC-DIGITS",
-        "R-ENC-ONLY"
-      ],
+      "covers": ["R-ENC-LEN", "R-ENC-DIGITS", "R-ENC-ONLY"],
       "source": {
         "command": "python3 -c 'print(bytes([0,15,240,255]).hex())'"
       },
@@ -212,9 +203,7 @@
       "kind": "vector",
       "id": "V6",
       "title": "a mix of case decodes",
-      "covers": [
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-DEC-ACCEPT"],
       "source": {
         "command": "python3 -c 'print(bytes.fromhex(\"aBcD\").hex())'"
       },
@@ -233,9 +222,7 @@
       "kind": "vector",
       "id": "V7",
       "title": "an odd length is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "source": {
         "spec": "4.2"
       },
@@ -254,9 +241,7 @@
       "kind": "vector",
       "id": "V8",
       "title": "a \"0x\" prefix is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "source": {
         "spec": "4.2"
       },
@@ -275,9 +260,7 @@
       "kind": "vector",
       "id": "V9",
       "title": "whitespace between the digits is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "source": {
         "spec": "4.2"
       },
@@ -296,11 +279,7 @@
       "kind": "vector",
       "id": "V10",
       "title": "every byte value encodes to its two lowercase digits",
-      "covers": [
-        "R-ENC-LEN",
-        "R-ENC-DIGITS",
-        "R-ENC-ONLY"
-      ],
+      "covers": ["R-ENC-LEN", "R-ENC-DIGITS", "R-ENC-ONLY"],
       "source": {
         "command": "python3 -c 'print(bytes(range(256)).hex())'"
       },
@@ -308,8 +287,7 @@
       "call": "hexEncode",
       "args": [
         {
-          "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
-          "unchecked": "§6 prints this argument as \"bytes 00 to ff\", not byte by byte."
+          "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
         }
       ],
       "expect": {
@@ -320,9 +298,7 @@
       "kind": "vector",
       "id": "V11",
       "title": "every byte value, in uppercase, decodes back",
-      "covers": [
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-DEC-ACCEPT"],
       "source": {
         "command": "python3 -c 'print(bytes.fromhex(bytes(range(256)).hex().upper()).hex())'"
       },
@@ -330,8 +306,7 @@
       "call": "hexDecode",
       "args": [
         {
-          "str": "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F202122232425262728292A2B2C2D2E2F303132333435363738393A3B3C3D3E3F404142434445464748494A4B4C4D4E4F505152535455565758595A5B5C5D5E5F606162636465666768696A6B6C6D6E6F707172737475767778797A7B7C7D7E7F808182838485868788898A8B8C8D8E8F909192939495969798999A9B9C9D9E9FA0A1A2A3A4A5A6A7A8A9AAABACADAEAFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBFC0C1C2C3C4C5C6C7C8C9CACBCCCDCECFD0D1D2D3D4D5D6D7D8D9DADBDCDDDEDFE0E1E2E3E4E5E6E7E8E9EAEBECEDEEEFF0F1F2F3F4F5F6F7F8F9FAFBFCFDFEFF",
-          "unchecked": "§6 prints this argument as \"00 to FF\", not digit by digit."
+          "str": "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F202122232425262728292A2B2C2D2E2F303132333435363738393A3B3C3D3E3F404142434445464748494A4B4C4D4E4F505152535455565758595A5B5C5D5E5F606162636465666768696A6B6C6D6E6F707172737475767778797A7B7C7D7E7F808182838485868788898A8B8C8D8E8F909192939495969798999A9B9C9D9E9FA0A1A2A3A4A5A6A7A8A9AAABACADAEAFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBFC0C1C2C3C4C5C6C7C8C9CACBCCCDCECFD0D1D2D3D4D5D6D7D8D9DADBDCDDDEDFE0E1E2E3E4E5E6E7E8E9EAEBECEDEEEFF0F1F2F3F4F5F6F7F8F9FAFBFCFDFEFF"
         }
       ],
       "expect": {
@@ -342,9 +317,7 @@
       "kind": "property",
       "id": "P-ENC-LEN",
       "title": "two characters per byte",
-      "covers": [
-        "R-ENC-LEN"
-      ],
+      "covers": ["R-ENC-LEN"],
       "forall": [
         {
           "name": "b",
@@ -393,9 +366,7 @@
       "kind": "property",
       "id": "P-ENC-LOWER",
       "title": "the encoding has no uppercase digit",
-      "covers": [
-        "R-ENC-ONLY"
-      ],
+      "covers": ["R-ENC-ONLY"],
       "forall": [
         {
           "name": "b",
@@ -441,10 +412,7 @@
       "kind": "property",
       "id": "P-ROUND-TRIP",
       "title": "hexDecode(hexEncode(b)) is b",
-      "covers": [
-        "R-ROUND-TRIP",
-        "R-ENC-ONLY"
-      ],
+      "covers": ["R-ROUND-TRIP", "R-ENC-ONLY"],
       "forall": [
         {
           "name": "b",
@@ -508,19 +476,14 @@
       "kind": "property",
       "id": "P-CANONICAL",
       "title": "lowercase hex of even length re-encodes to itself",
-      "covers": [
-        "R-ENC-DIGITS",
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-ENC-DIGITS", "R-DEC-ACCEPT"],
       "forall": [
         {
           "name": "t",
           "type": "string",
           "minLen": 0,
           "maxLen": 32,
-          "alphabet": [
-            "hexdigit"
-          ]
+          "alphabet": ["hexdigit"]
         }
       ],
       "where": {
@@ -602,19 +565,14 @@
       "kind": "property",
       "id": "P-ANY-CASE",
       "title": "any mix of case decodes as its lowercase does",
-      "covers": [
-        "R-DEC-ACCEPT"
-      ],
+      "covers": ["R-DEC-ACCEPT"],
       "forall": [
         {
           "name": "t",
           "type": "string",
           "minLen": 0,
           "maxLen": 32,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         }
       ],
       "where": {
@@ -701,19 +659,14 @@
       "kind": "property",
       "id": "P-ODD",
       "title": "an odd length is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "forall": [
         {
           "name": "t",
           "type": "string",
           "minLen": 1,
           "maxLen": 33,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         }
       ],
       "where": {
@@ -759,19 +712,14 @@
       "kind": "property",
       "id": "P-OTHER",
       "title": "any other printable character or whitespace, anywhere, is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "forall": [
         {
           "name": "a",
           "type": "string",
           "minLen": 0,
           "maxLen": 16,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         },
         {
           "name": "x",
@@ -862,10 +810,7 @@
           "type": "string",
           "minLen": 0,
           "maxLen": 16,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         }
       ],
       "where": {
@@ -943,43 +888,28 @@
       "kind": "property",
       "id": "P-OTHER-EDGE",
       "title": "the characters next to each digit range are null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "forall": [
         {
           "name": "a",
           "type": "string",
           "minLen": 0,
           "maxLen": 16,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         },
         {
           "name": "x",
           "type": "string",
           "minLen": 1,
           "maxLen": 1,
-          "alphabet": [
-            "/",
-            ":",
-            "@",
-            "G",
-            "`",
-            "g"
-          ]
+          "alphabet": ["/", ":", "@", "G", "`", "g"]
         },
         {
           "name": "z",
           "type": "string",
           "minLen": 0,
           "maxLen": 16,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         }
       ],
       "where": {
@@ -1057,19 +987,14 @@
       "kind": "property",
       "id": "P-CONTROL",
       "title": "a control byte or DEL, anywhere in an even-length text, is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "forall": [
         {
           "name": "a",
           "type": "string",
           "minLen": 0,
           "maxLen": 16,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         },
         {
           "name": "i",
@@ -1082,10 +1007,7 @@
           "type": "string",
           "minLen": 0,
           "maxLen": 16,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         }
       ],
       "where": {
@@ -1218,19 +1140,14 @@
       "kind": "property",
       "id": "P-PREFIX",
       "title": "a \"0x\" prefix is null",
-      "covers": [
-        "R-DEC-REJECT"
-      ],
+      "covers": ["R-DEC-REJECT"],
       "forall": [
         {
           "name": "t",
           "type": "string",
           "minLen": 0,
           "maxLen": 32,
-          "alphabet": [
-            "hexdigit",
-            "HEXDIGIT"
-          ]
+          "alphabet": ["hexdigit", "HEXDIGIT"]
         }
       ],
       "where": {

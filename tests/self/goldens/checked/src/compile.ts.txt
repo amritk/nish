@@ -3449,7 +3449,7 @@ function report(compilation: Compilation, json: boolean): void -> @report
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: Diagnostic.json DiagnosticSink.sorted DiagnosticSink.styledFormat diagnosticStyle nish_print nish_str_concat nish_write
-  pointer compilation: size=208 writesThrough=false captured=false
+  pointer compilation: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:19 DiagnosticSink.styledFormat -> @DiagnosticSink.styledFormat
   callee +0:53 diagnosticStyle -> @diagnosticStyle
@@ -3481,7 +3481,7 @@ function reportPerformance(compilation: Compilation, enabled: boolean, json: boo
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=208 writesThrough=false captured=false
+  pointer compilation: size=216 writesThrough=false captured=false
   pointer style: size=8 writesThrough=true captured=false passedTo=reportWarnings#3
   stackSites=0 stackLocals=0
   callee +0:5 reportWarnings -> @reportWarnings
@@ -3490,7 +3490,7 @@ function reportPortability(compilation: Compilation, json: boolean, style: Warni
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=208 writesThrough=false captured=false
+  pointer compilation: size=216 writesThrough=false captured=false
   pointer style: size=8 writesThrough=true captured=false passedTo=reportWarnings#3
   stackSites=0 stackLocals=0
   callee +0:3 reportWarnings -> @reportWarnings
@@ -3499,7 +3499,7 @@ function reportDeprecations(compilation: Compilation, json: boolean, style: Warn
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=208 writesThrough=false captured=false
+  pointer compilation: size=216 writesThrough=false captured=false
   pointer style: size=8 writesThrough=true captured=false passedTo=reportWarnings#3
   stackSites=0 stackLocals=0
   callee +0:3 reportWarnings -> @reportWarnings
@@ -3528,7 +3528,7 @@ function reportLoadFailure(compilation: Compilation, json: boolean): void -> @re
   sharedWrite: via reportRootFailure
   escaping: json
   calls: DiagnosticSink.hasErrors nish_str_concat report reportRootFailure
-  pointer compilation: size=208 writesThrough=false captured=false passedTo=report#0
+  pointer compilation: size=216 writesThrough=false captured=false passedTo=report#0
   stackSites=0 stackLocals=0
   callee +0:5 reportRootFailure -> @reportRootFailure
   callee +1:14 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
@@ -3683,150 +3683,151 @@ function commandMain(): i32 -> @commandMain
   local +48:7 link: string (let)
   local +49:7 profile: string (let)
   local +52:7 cpu: string (let)
-  local +53:7 json: boolean (let)
-  local +54:7 emitChecked: boolean (let)
-  local +55:7 emitAst: boolean (let)
-  local +58:7 capabilitiesFile: string (let)
-  local +59:7 capabilitiesLine: boolean (let)
-  local +62:7 policyFlag: string (let)
-  local +63:7 allowed: i32 (let)
-  local +65:9 scopes: string[] (const)
-  local +68:7 warnPerformance: boolean (let)
-  local +71:7 watch: boolean (let)
-  local +72:7 watchStateFile: string (let)
-  local +73:7 arg: i32 (let)
-  local +75:11 value: string (const)
-  local +82:13 mode: string (const)
-  callee +115:12 isProfile -> @isProfile
-  local +140:13 spec: string (const)
-  local +141:13 resolved: Target | null (const)
-  callee +141:24 resolveTarget -> @resolveTarget
-  callee +144:72 supportedTargets -> @supportedTargets
-  local +240:13 mask: i32 (const)
-  callee +240:20 capabilityListMask -> @capabilityListMask
-  callee +266:29 compatFeatureNames -> @compatFeatureNames
-  local +271:13 asked: string[] (const)
-  callee +271:21 splitByte -> @splitByte
-  local +272:18 name: string (const)
-  callee +273:14 compatHasFeature -> @compatHasFeature
-  callee +275:107 compatKnownText -> @compatKnownText
-  callee +293:181 helpHint -> @helpHint
-  callee +302:192 helpHint -> @helpHint
-  callee +344:19 usageText -> @usageText
-  local +355:11 mode: i32 (let)
-  callee +377:123 helpHint -> @helpHint
-  callee +387:60 helpHint -> @helpHint
-  callee +404:19 usageText -> @usageText
-  local +416:9 triple: string (let)
-  local +418:13 host: Target | null (const)
-  callee +418:20 resolveTarget -> @resolveTarget
-  local +422:13 what: string (const)
-  local +435:9 clash: string (let)
-  local +461:13 refused: string (const)
-  local +479:9 refused: string (let)
-  local +492:9 refused: string (let)
-  local +507:13 napi: string (const)
-  local +518:11 triple: string (let)
-  local +520:15 host: Target | null (const)
-  callee +520:22 resolveTarget -> @resolveTarget
-  callee +524:9 reportRootFailure -> @reportRootFailure
-  local +548:11 scoped: i32 (const)
-  callee +548:20 capabilityScopes -> @capabilityScopes
-  local +557:9 both: i32 (const)
-  callee +560:21 capabilityNames -> @capabilityNames
-  local +568:9 refused: string (let)
-  local +590:9 flag: string (let)
-  local +636:11 problem: string (const)
-  callee +636:21 missingToolchain -> @missingToolchain
-  callee +638:7 reportToolchainFailure -> @reportToolchainFailure
-  local +655:9 pkg: PackageSearch (const)
-  callee +655:15 findPackage -> @findPackage
-  callee +656:7 PackageSearch.wasRefused -> @PackageSearch.wasRefused
-  callee +657:5 reportToolchainFailure -> @reportToolchainFailure
-  callee +658:79 PackageSearch.where -> @PackageSearch.where
-  callee +665:12 runWatch -> @runWatch
-  callee +672:7 simulatedInternalError -> @simulatedInternalError
-  callee +673:12 internalErrorFor -> @internalErrorFor
-  local +680:11 outcome: FixOutcome (const)
-  callee +680:21 fixProgram -> @fixProgram
-  callee +682:7 reportLoadFailure -> @reportLoadFailure
-  callee +686:7 report -> @report
-  local +689:11 warningStyle: WarningStyle (const)
-  callee +689:26 new WarningStyle -> @WarningStyle.constructor
-  callee +690:5 reportDeprecations -> @reportDeprecations
-  callee +691:5 reportPerformance -> @reportPerformance
-  callee +692:5 reportPortability -> @reportPortability
-  local +696:9 compilation: Compilation (const)
-  callee +696:23 new Compilation -> @Compilation.constructor
-  local +700:9 loaded: boolean (const)
-  callee +700:18 loadRoots -> @loadRoots
-  callee +704:35 watchState -> @watchState
-  callee +704:63 isCheckout -> @isCheckout
-  callee +707:5 reportLoadFailure -> @reportLoadFailure
-  local +723:16 unit: ModuleUnit (const)
-  callee +724:13 astText -> @astText
-  callee +728:8 Compilation.check -> @Compilation.check
-  callee +729:5 report -> @report
-  callee +734:21 Compilation.explainMemoryText -> @Compilation.explainMemoryText
-  local +738:9 warningStyle: WarningStyle (const)
-  callee +738:24 new WarningStyle -> @WarningStyle.constructor
-  callee +739:3 reportDeprecations -> @reportDeprecations
-  callee +740:3 reportPerformance -> @reportPerformance
-  local +743:9 ts: EmittedProgram (const)
-  callee +743:39 emitTypeScript -> @emitTypeScript
-  callee +743:69 new EmittedProgram -> @EmittedProgram.constructor
-  callee +744:3 reportPortability -> @reportPortability
-  callee +754:5 Compilation.entry -> @Compilation.entry
-  local +756:9 asker: string (let)
-  callee +763:37 Compilation.entry -> @Compilation.entry
-  callee +770:29 Compilation.entry -> @Compilation.entry
-  callee +772:92 Compilation.entry -> @Compilation.entry
-  callee +786:19 Compilation.explainMemoryText -> @Compilation.explainMemoryText
-  callee +792:19 capabilitySummary -> @capabilitySummary
-  callee +795:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +798:5 writeCapabilityReport -> @writeCapabilityReport
-  callee +807:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +810:36 Compilation.panicsText -> @Compilation.panicsText
+  local +55:7 debugArena: boolean (let)
+  local +56:7 json: boolean (let)
+  local +57:7 emitChecked: boolean (let)
+  local +58:7 emitAst: boolean (let)
+  local +61:7 capabilitiesFile: string (let)
+  local +62:7 capabilitiesLine: boolean (let)
+  local +65:7 policyFlag: string (let)
+  local +66:7 allowed: i32 (let)
+  local +68:9 scopes: string[] (const)
+  local +71:7 warnPerformance: boolean (let)
+  local +74:7 watch: boolean (let)
+  local +75:7 watchStateFile: string (let)
+  local +76:7 arg: i32 (let)
+  local +78:11 value: string (const)
+  local +85:13 mode: string (const)
+  callee +118:12 isProfile -> @isProfile
+  local +143:13 spec: string (const)
+  local +144:13 resolved: Target | null (const)
+  callee +144:24 resolveTarget -> @resolveTarget
+  callee +147:72 supportedTargets -> @supportedTargets
+  local +243:13 mask: i32 (const)
+  callee +243:20 capabilityListMask -> @capabilityListMask
+  callee +269:29 compatFeatureNames -> @compatFeatureNames
+  local +274:13 asked: string[] (const)
+  callee +274:21 splitByte -> @splitByte
+  local +275:18 name: string (const)
+  callee +276:14 compatHasFeature -> @compatHasFeature
+  callee +278:107 compatKnownText -> @compatKnownText
+  callee +296:181 helpHint -> @helpHint
+  callee +305:192 helpHint -> @helpHint
+  callee +349:19 usageText -> @usageText
+  local +360:11 mode: i32 (let)
+  callee +382:123 helpHint -> @helpHint
+  callee +392:60 helpHint -> @helpHint
+  callee +409:19 usageText -> @usageText
+  local +437:9 triple: string (let)
+  local +439:13 host: Target | null (const)
+  callee +439:20 resolveTarget -> @resolveTarget
+  local +443:13 what: string (const)
+  local +456:9 clash: string (let)
+  local +482:13 refused: string (const)
+  local +500:9 refused: string (let)
+  local +513:9 refused: string (let)
+  local +528:13 napi: string (const)
+  local +539:11 triple: string (let)
+  local +541:15 host: Target | null (const)
+  callee +541:22 resolveTarget -> @resolveTarget
+  callee +545:9 reportRootFailure -> @reportRootFailure
+  local +569:11 scoped: i32 (const)
+  callee +569:20 capabilityScopes -> @capabilityScopes
+  local +578:9 both: i32 (const)
+  callee +581:21 capabilityNames -> @capabilityNames
+  local +589:9 refused: string (let)
+  local +611:9 flag: string (let)
+  local +657:11 problem: string (const)
+  callee +657:21 missingToolchain -> @missingToolchain
+  callee +659:7 reportToolchainFailure -> @reportToolchainFailure
+  local +676:9 pkg: PackageSearch (const)
+  callee +676:15 findPackage -> @findPackage
+  callee +677:7 PackageSearch.wasRefused -> @PackageSearch.wasRefused
+  callee +678:5 reportToolchainFailure -> @reportToolchainFailure
+  callee +679:79 PackageSearch.where -> @PackageSearch.where
+  callee +686:12 runWatch -> @runWatch
+  callee +693:7 simulatedInternalError -> @simulatedInternalError
+  callee +694:12 internalErrorFor -> @internalErrorFor
+  local +701:11 outcome: FixOutcome (const)
+  callee +701:21 fixProgram -> @fixProgram
+  callee +703:7 reportLoadFailure -> @reportLoadFailure
+  callee +707:7 report -> @report
+  local +710:11 warningStyle: WarningStyle (const)
+  callee +710:26 new WarningStyle -> @WarningStyle.constructor
+  callee +711:5 reportDeprecations -> @reportDeprecations
+  callee +712:5 reportPerformance -> @reportPerformance
+  callee +713:5 reportPortability -> @reportPortability
+  local +717:9 compilation: Compilation (const)
+  callee +717:23 new Compilation -> @Compilation.constructor
+  local +721:9 loaded: boolean (const)
+  callee +721:18 loadRoots -> @loadRoots
+  callee +725:35 watchState -> @watchState
+  callee +725:63 isCheckout -> @isCheckout
+  callee +728:5 reportLoadFailure -> @reportLoadFailure
+  local +744:16 unit: ModuleUnit (const)
+  callee +745:13 astText -> @astText
+  callee +749:8 Compilation.check -> @Compilation.check
+  callee +750:5 report -> @report
+  callee +755:21 Compilation.explainMemoryText -> @Compilation.explainMemoryText
+  local +759:9 warningStyle: WarningStyle (const)
+  callee +759:24 new WarningStyle -> @WarningStyle.constructor
+  callee +760:3 reportDeprecations -> @reportDeprecations
+  callee +761:3 reportPerformance -> @reportPerformance
+  local +764:9 ts: EmittedProgram (const)
+  callee +764:39 emitTypeScript -> @emitTypeScript
+  callee +764:69 new EmittedProgram -> @EmittedProgram.constructor
+  callee +765:3 reportPortability -> @reportPortability
+  callee +775:5 Compilation.entry -> @Compilation.entry
+  local +777:9 asker: string (let)
+  callee +784:37 Compilation.entry -> @Compilation.entry
+  callee +791:29 Compilation.entry -> @Compilation.entry
+  callee +793:92 Compilation.entry -> @Compilation.entry
+  callee +807:19 Compilation.explainMemoryText -> @Compilation.explainMemoryText
+  callee +813:19 capabilitySummary -> @capabilitySummary
   callee +816:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +819:35 Compilation.arenaText -> @Compilation.arenaText
-  callee +825:11 checkedText -> @checkedText
-  callee +834:14 internalErrorFor -> @internalErrorFor
-  callee +841:7 report -> @report
-  local +855:16 file: EmittedFile (const)
-  local +856:13 target: string | null (const)
-  callee +856:35 joinPath -> @joinPath
-  local +860:18 unit: ModuleUnit (const)
-  local +861:15 source: string | null (const)
-  local +870:16 file: EmittedFile (const)
-  local +871:13 path: string (const)
-  callee +871:20 joinPath -> @joinPath
-  callee +872:12 makeDirectoryFor -> @makeDirectoryFor
-  local +883:9 anySidecar: boolean (const)
-  local +888:9 fns: ExternalFunction[] (const)
-  callee +888:48 externalFunctions -> @externalFunctions
-  callee +889:22 acceptsSidecars -> @acceptsSidecars
-  callee +889:56 cDeclared -> @cDeclared
-  callee +890:5 report -> @report
-  local +893:9 emitted: EmittedModule[] (const)
-  callee +893:19 Compilation.emit -> @Compilation.emit
-  local +895:11 cached: CachedBinary (const)
-  callee +895:20 cachedBinary -> @cachedBinary
-  callee +898:7 basenameWithout -> @basenameWithout
-  callee +906:37 watchState -> @watchState
-  callee +906:76 isCheckout -> @isCheckout
-  callee +911:12 runProgram -> @runProgram
-  callee +914:7 basenameWithout -> @basenameWithout
-  local +923:9 stems: string[] (const)
-  local +924:9 paths: string[] (const)
-  local +927:14 module: EmittedModule (const)
-  local +931:9 outputs: string[] (const)
-  callee +931:19 planOutputs -> @planOutputs
-  local +936:7 i: i32 (let)
-  local +938:11 file: string (const)
-  callee +939:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +948:22 writeSidecars -> @writeSidecars
-  callee +954:10 linkProgram -> @linkProgram
-  callee +963:5 anyCallsSqlite -> @anyCallsSqlite
+  callee +819:5 writeCapabilityReport -> @writeCapabilityReport
+  callee +828:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +831:36 Compilation.panicsText -> @Compilation.panicsText
+  callee +837:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +840:35 Compilation.arenaText -> @Compilation.arenaText
+  callee +846:11 checkedText -> @checkedText
+  callee +855:14 internalErrorFor -> @internalErrorFor
+  callee +862:7 report -> @report
+  local +876:16 file: EmittedFile (const)
+  local +877:13 target: string | null (const)
+  callee +877:35 joinPath -> @joinPath
+  local +881:18 unit: ModuleUnit (const)
+  local +882:15 source: string | null (const)
+  local +891:16 file: EmittedFile (const)
+  local +892:13 path: string (const)
+  callee +892:20 joinPath -> @joinPath
+  callee +893:12 makeDirectoryFor -> @makeDirectoryFor
+  local +904:9 anySidecar: boolean (const)
+  local +909:9 fns: ExternalFunction[] (const)
+  callee +909:48 externalFunctions -> @externalFunctions
+  callee +910:22 acceptsSidecars -> @acceptsSidecars
+  callee +910:56 cDeclared -> @cDeclared
+  callee +911:5 report -> @report
+  local +914:9 emitted: EmittedModule[] (const)
+  callee +914:19 Compilation.emit -> @Compilation.emit
+  local +916:11 cached: CachedBinary (const)
+  callee +916:20 cachedBinary -> @cachedBinary
+  callee +919:7 basenameWithout -> @basenameWithout
+  callee +928:37 watchState -> @watchState
+  callee +928:76 isCheckout -> @isCheckout
+  callee +933:12 runProgram -> @runProgram
+  callee +936:7 basenameWithout -> @basenameWithout
+  local +946:9 stems: string[] (const)
+  local +947:9 paths: string[] (const)
+  local +950:14 module: EmittedModule (const)
+  local +954:9 outputs: string[] (const)
+  callee +954:19 planOutputs -> @planOutputs
+  local +959:7 i: i32 (let)
+  local +961:11 file: string (const)
+  callee +962:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +971:22 writeSidecars -> @writeSidecars
+  callee +977:10 linkProgram -> @linkProgram
+  callee +987:5 anyCallsSqlite -> @anyCallsSqlite
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -3902,10 +3903,10 @@ function findPackage(): PackageSearch -> @findPackage
   callee +14:22 distrustOf -> @distrustOf
   local +17:13 rest: string[] (const)
   local +18:11 j: i32 (let)
-function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean, argsFrom: i32): i32 -> @runProgram
+function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, json: boolean, argsFrom: i32): i32 -> @runProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via cachedBinary
-  escaping: argsFrom cpu debugInfo json name profile threads
+  escaping: argsFrom cpu debugArena debugInfo json name profile threads
   calls: cachedBinary nish_array_grow nish_panic_index nish_spawn nish_str_concat reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false passedTo=cachedBinary#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=cachedBinary#1
@@ -3916,10 +3917,10 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   local +6:7 i: i32 (let)
   local +11:9 status: i32 (const)
   callee +13:5 reportToolchainFailure -> @reportToolchainFailure
-function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean): CachedBinary -> @cachedBinary
+function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, json: boolean): CachedBinary -> @cachedBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via runCacheRoot
-  escaping: cpu debugInfo json name profile threads
+  escaping: cpu debugArena debugInfo json name profile threads
   calls: anyCallsSqlite buildIntoCache cCompiler nish_alloc_struct nish_read_file_or_null nish_str_concat nish_str_eq nish_write_file refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex sqliteCflags sqliteFingerprint
   pointer emitted: size=0 writesThrough=false captured=false passedTo=anyCallsSqlite#0 runCacheKey#0 buildIntoCache#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=buildIntoCache#1
@@ -3938,11 +3939,11 @@ function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string
   callee +17:60 sqliteCflags -> @sqliteCflags
   local +18:9 key: string (const)
   callee +18:15 runCacheKey -> @runCacheKey
-  callee +18:86 cCompiler -> @cCompiler
-  callee +19:34 sha256Hex -> @sha256Hex
-  local +21:9 keyFile: string (const)
-  local +22:9 stored: string | null (const)
-  callee +24:21 buildIntoCache -> @buildIntoCache
+  callee +27:5 cCompiler -> @cCompiler
+  callee +30:34 sha256Hex -> @sha256Hex
+  local +32:9 keyFile: string (const)
+  local +33:9 stored: string | null (const)
+  callee +35:21 buildIntoCache -> @buildIntoCache
 function isCheckout(pkg: PackageSearch): boolean -> @isCheckout
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_realpath
@@ -3987,7 +3988,7 @@ function cachedTool(pkg: PackageSearch, name: string, source: string, what: stri
   callee +34:19 internalErrorFor -> @internalErrorFor
   local +37:9 built: CachedBinary (const)
   callee +37:17 cachedBinary -> @cachedBinary
-  callee +37:30 Compilation.emit -> @Compilation.emit
+  callee +38:5 Compilation.emit -> @Compilation.emit
 function runWatch(pkg: PackageSearch, entry: string, argsFrom: i32, json: boolean): i32 -> @runWatch
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via selfPath
@@ -4035,10 +4036,10 @@ function makePrivateRoot(cacheRoot: string, json: boolean): boolean -> @makePriv
   local +4:9 privateRoot: string[] (const)
   callee +6:5 reportToolchainFailure -> @reportToolchainFailure
   callee +11:11 refuseCacheRoot -> @refuseCacheRoot
-function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean): i32 -> @buildIntoCache
+function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, sqlite: boolean, sqliteLines: string, json: boolean): i32 -> @buildIntoCache
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via missingToolchain
-  escaping: cacheEntry cacheRoot cpu debugInfo json profile sqlite sqliteLines threads
+  escaping: cacheEntry cacheRoot cpu debugArena debugInfo json profile sqlite sqliteLines threads
   calls: linkProgram makePrivateRoot makeScratchDirectory missingToolchain nish_array_grow nish_spawn nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   pointer pkg: size=32 writesThrough=false captured=false passedTo=linkProgram#2
@@ -4056,13 +4057,13 @@ function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot:
   local +21:9 built: string (const)
   local +22:7 status: i32 (let)
   callee +22:16 linkProgram -> @linkProgram
-  local +38:11 move: string[] (const)
-  callee +40:7 reportToolchainFailure -> @reportToolchainFailure
-  local +44:9 clean: string[] (const)
-function linkProgram(outputs: string[], irs: string[], pkg: PackageSearch, link: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean, quiet: boolean): i32 -> @linkProgram
+  local +39:11 move: string[] (const)
+  callee +41:7 reportToolchainFailure -> @reportToolchainFailure
+  local +45:9 clean: string[] (const)
+function linkProgram(outputs: string[], irs: string[], pkg: PackageSearch, link: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, sqlite: boolean, sqliteLines: string, json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportToolchainFailure
-  escaping: cpu debugInfo json link profile sqlite sqliteLines threads
+  escaping: cpu debugArena debugInfo json link profile sqlite sqliteLines threads
   calls: PackageSearch.where cachedRuntime keepModules makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_str_from_i32 nish_write pushRecipeFlags reportToolchainFailure stageModules
   pointer outputs: size=0 writesThrough=true captured=false passedTo=cachedRuntime#1 stageModules#0
   pointer irs: size=0 writesThrough=true captured=false passedTo=stageModules#1
@@ -4075,18 +4076,18 @@ function linkProgram(outputs: string[], irs: string[], pkg: PackageSearch, link:
   local +11:9 script: string (const)
   local +12:9 cached: CachedObjects | null (const)
   callee +12:18 cachedRuntime -> @cachedRuntime
-  local +26:9 runtime: string (const)
-  local +30:9 argv: string[] (const)
-  local +37:14 file: string (const)
-  local +48:7 staged: StagedModules | null (let)
-  callee +50:14 stageModules -> @stageModules
-  callee +62:3 pushRecipeFlags -> @pushRecipeFlags
-  local +63:9 status: i32 (const)
-  local +65:11 why: string (const)
-  callee +66:5 reportToolchainFailure -> @reportToolchainFailure
-  callee +70:5 keepModules -> @keepModules
-  local +75:9 binary: string | null (const)
-function pushRecipeFlags(argv: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean): void -> @pushRecipeFlags
+  local +27:9 runtime: string (const)
+  local +31:9 argv: string[] (const)
+  local +38:14 file: string (const)
+  local +49:7 staged: StagedModules | null (let)
+  callee +51:14 stageModules -> @stageModules
+  callee +63:3 pushRecipeFlags -> @pushRecipeFlags
+  local +64:9 status: i32 (const)
+  local +66:11 why: string (const)
+  callee +67:5 reportToolchainFailure -> @reportToolchainFailure
+  callee +71:5 keepModules -> @keepModules
+  local +76:9 binary: string | null (const)
+function pushRecipeFlags(argv: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean): void -> @pushRecipeFlags
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: cpu profile
@@ -4104,10 +4105,10 @@ function sqliteCflags(): string -> @sqliteCflags
   calls: nish_getenv
   stackSites=0 stackLocals=0
   local +0:9 flags: string | null (const)
-function cachedRuntime(root: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean): CachedObjects | null -> @cachedRuntime
+function cachedRuntime(root: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, sqlite: boolean, sqliteLines: string, json: boolean): CachedObjects | null -> @cachedRuntime
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via runtimeCacheRoot
-  escaping: cpu debugInfo json profile root sqliteLines threads
+  escaping: cpu debugArena debugInfo json profile root sqliteLines threads
   calls: CachedObjects.constructor cCompiler cachedEntry distrustOf makeDirectory makeScratchFile nish_alloc_struct nish_read_file_or_null nish_realpath nish_spawn nish_spawn_to nish_str_concat nish_str_eq runtimeCacheKey runtimeCacheRoot runtimeUnits sqliteCacheKey sqliteCflags sqliteFingerprint sqliteUnits
   pointer outputs: size=0 writesThrough=false captured=false passedTo=cachedEntry#6 cachedEntry#6
   stackSites=2 stackLocals=2
@@ -4133,18 +4134,18 @@ function cachedRuntime(root: string, outputs: string[], profile: string, cpu: st
   local +34:9 runtime: string | null (const)
   callee +34:19 cachedEntry -> @cachedEntry
   callee +39:5 runtimeUnits -> @runtimeUnits
-  callee +52:12 new CachedObjects -> @CachedObjects.constructor
-  local +54:9 sqliteDir: string | null (const)
-  callee +56:12 new CachedObjects -> @CachedObjects.constructor
-  local +58:9 sqliteKey: string (const)
-  callee +58:21 sqliteCacheKey -> @sqliteCacheKey
-  callee +67:44 sqliteFingerprint -> @sqliteFingerprint
-  callee +67:68 sqliteCflags -> @sqliteCflags
-  local +69:9 sqliteRecipe: string[] (const)
-  local +70:9 objects: string | null (const)
-  callee +70:19 cachedEntry -> @cachedEntry
-  callee +75:5 sqliteUnits -> @sqliteUnits
-  callee +84:36 new CachedObjects -> @CachedObjects.constructor
+  callee +53:12 new CachedObjects -> @CachedObjects.constructor
+  local +55:9 sqliteDir: string | null (const)
+  callee +57:12 new CachedObjects -> @CachedObjects.constructor
+  local +59:9 sqliteKey: string (const)
+  callee +59:21 sqliteCacheKey -> @sqliteCacheKey
+  callee +68:44 sqliteFingerprint -> @sqliteFingerprint
+  callee +68:68 sqliteCflags -> @sqliteCflags
+  local +70:9 sqliteRecipe: string[] (const)
+  local +71:9 objects: string | null (const)
+  callee +71:19 cachedEntry -> @cachedEntry
+  callee +76:5 sqliteUnits -> @sqliteUnits
+  callee +87:36 new CachedObjects -> @CachedObjects.constructor
 function StagedModules.constructor(this: StagedModules, dir: string): void -> @StagedModules.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: dir
@@ -4196,10 +4197,10 @@ function keepModules(staged: StagedModules): void -> @keepModules
   local +6:7 i: i32 (let)
   local +8:11 entry: string (const)
   callee +9:10 makeDirectory -> @makeDirectory
-function cachedEntry(root: string, cacheRoot: string, key: string, recipe: string[], units: string[], what: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean): string | null -> @cachedEntry
+function cachedEntry(root: string, cacheRoot: string, key: string, recipe: string[], units: string[], what: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, json: boolean): string | null -> @cachedEntry
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_or_null
-  escaping: cpu debugInfo json key profile threads
+  escaping: cpu debugArena debugInfo json key profile threads
   calls: makeScratchDirectory nish_alloc_struct nish_array_grow nish_panic_slice nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_new nish_write_file pushRecipeFlags reportToolchainFailure sha256Hex
   pointer recipe: size=0 writesThrough=false captured=false
   pointer units: size=0 writesThrough=false captured=false
@@ -4228,7 +4229,7 @@ function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalF
   sharedWrite: via napiBridges
   escaping: fns
   calls: napiBridges nish_array_grow
-  pointer compilation: size=208 writesThrough=false captured=false
+  pointer compilation: size=216 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 opts: Options (const)
@@ -4239,7 +4240,7 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
   calls: generateDts generateHeader generateNapiShim generateWasmLoader makeDirectoryFor nish_str_concat nish_write nish_write_file wasmLoaderPath
-  pointer compilation: size=208 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
+  pointer compilation: size=216 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
   local +0:9 opts: Options (const)

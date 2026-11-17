@@ -1,0 +1,1 @@
+{"file":"tests/link/net_ring_rings_refused/package.json","line":5,"column":17,"endLine":5,"endColumn":19,"severity":"error","code":"NL3058","message":"`nish.netRings` is `65`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to 64"}

@@ -36,10 +36,11 @@ goldens cite.
   `lexer-oracle.js`. Every part between dots counts, so `no-attribution.test.mjs`
   and `nish.d.ts` pass. Biome's `useFilenamingConvention` checks the files Biome
   reads, and `scripts/check-filenames.mjs` checks everything else: C, shell,
-  Markdown, and directories. Only three kinds of name are exempt. An ALL-CAPS
+  Markdown, and directories. Only four kinds of name are exempt. An ALL-CAPS
   document (`README.md`, `LICENSE`, `CHANGELOG.md`, `docs/LANGUAGE.md`) keeps
-  its capitals, the fixture trees above keep their names, and a directory keeps the name a
-  tool looks for: `node_modules` for package resolution, `.github/ISSUE_TEMPLATE`
+  its capitals, the fixture trees above keep their names, kramdown-rfc's
+  reference cache keeps the names it looks up (`.refcache/reference.RFC.4648.xml`),
+  and a directory keeps the name a tool looks for: `node_modules` for package resolution, `.github/ISSUE_TEMPLATE`
   for GitHub's issue forms.
 - **Values are camelCase and types are PascalCase.** Biome's `useNamingConvention`
   enforces it with these allowances. Each one is there because a strict rule

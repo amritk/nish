@@ -348,20 +348,21 @@ A listener opts in with one new `tcpListenFlags` bit:
 ```typescript
 import { tcpListenFlags, tcpAccept, NET_LISTEN_RING } from "nish:net"
 
-// Bit 4: accept connections into io_uring slots where the kernel allows it.
+// Bit 8: accept connections into io_uring slots where the kernel allows it.
 const listener: i32 = tcpListenFlags("0.0.0.0", 8080, 4096, 1 | NET_LISTEN_RING)
 const conn: i32 = tcpAccept(listener, peer) // a slot handle, or a descriptor on fallback
 ```
 
 The bit is opt-in because a slot handle is not a descriptor (`sendFd`, FFI),
 and because a program that never needs more than `RLIMIT_NOFILE`
-connections gains nothing measurable from it (#1543). Today
-`(uint32_t)flags > 3` answers -22 (`runtime/runtime-net.c:347`). Bit 4 is the
-next free bit, so a program built for the new runtime and run on an old one
-fails closed with -22.
+connections gains nothing measurable from it (#1543). Bits 1, 2 and 4 were
+taken (`SO_REUSEPORT`, `TCP_NODELAY`, steering), so the ring bit is 8, and
+`(uint32_t)flags > 15` answers -22 (`nish_tcp_listen_flags` in
+`runtime/runtime-net.c`). A runtime from before S2 refuses 8, so a program
+built for the new runtime and run on an old one fails closed with -22.
 
-`netRead`, `netWrite`, `netClose`, `netSetOption` and `netLocalPort` take
-either kind. A slot handle keeps the readiness contract every `nish:net`
+`netRead`, `netWrite`, `netClose` and `netLocalPort` take either kind
+(`netSetOption` was planned to as well; S2 has it answer -95, below). A slot handle keeps the readiness contract every `nish:net`
 caller is written against:
 
 - **`netRead(conn, buf, off, n)`** copies out of the bytes the ring's
@@ -375,6 +376,12 @@ caller is written against:
   backpressure, as a full socket buffer is today.
 - **`netClose(conn)`** queues `IORING_OP_CLOSE` on the slot
   (`file_index = slot + 1`) and frees the handle.
+
+*As built in S2:* `netWrite2` takes either kind too, and `netSetOption`
+answers -95 for a slot handle: the socket is the ring's fixed file, and no
+`setsockopt` reaches it from the caller. The send area is 256 KiB a slot
+(`NR_AREA`), and a slot's received bytes queue to the same bound before its
+recv is cancelled until `netRead` drains half of them (NURING-9).
 
 ### 5.2 `pollCreate`
 
@@ -492,7 +499,9 @@ runtime restricted before the filter loaded.
    `recvfrom`, `sendto` or `close` on a socket the process holds. The ring
    adds where a connection lives, not what the program may do with it.
 4. **The filter then kills `io_uring_setup` and `io_uring_register`.** It
-   allows `io_uring_enter`. Without `net`, all three stay killed, as now. With
+   allows `io_uring_enter` only when its first argument, the low word of
+   `args[0]`, is the descriptor of a ring step 1 made, and kills it on any
+   other descriptor, or always when no ring was made. Without `net`, all three stay killed, as now. With
    `net` and `process.spawn`, nothing changes. A program cannot make a ring of
    its own, cannot lift a ring's restrictions (they are set once, before the
    ring is enabled: `io_register_restrictions` requires
@@ -503,8 +512,13 @@ runtime restricted before the filter loaded.
 write and close sockets. A restricted ring can do those things and nothing
 else, and only on slots that hold sockets from the process's own listeners.
 `io_uring_enter` on a descriptor that is not one of the runtime's rings
-answers `-EOPNOTSUPP` (`io_uring/io_uring.c:3484`), and the program cannot
-make another ring. A program that gets hold of a ring's descriptor through
+dies of SIGSYS: the kernel's own answer, `-EOPNOTSUPP` for a file that is
+no ring (`io_uring/io_uring.c:3484`), would not stop a ring made outside
+the sandbox and inherited across `exec` (NURING-35), and the program cannot
+make another ring. The filter matches numbers, not files, so code that
+`dup2`s such a ring onto a premade ring's number, or closes that number and
+takes it with `dup` or `fcntl(F_DUPFD)`, still enters it; that is
+recorded open (NURING-36). A program that gets hold of a ring's descriptor through
 `nish:ffi` can submit only what the restrictions allow, which is what
 `nish:net` does anyway. A `SEND` with a destination address is a `sendto`
 with one. On a TCP socket the address is ignored, and on a UDP socket it is
@@ -650,7 +664,14 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    past the limit, and `bench/http1-server.ts` gains `BENCH_RING=1`. This
    stage re-measures the entry: one process with rings against five epoll
    processes, with SQLite, at 18k and at the box's C. It is gated on the same
-   rule as §4.
+   rule as §4. *Measured in S4* ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#io_uring-under-the-handler-wp63-s4)): `bash
+   bench/handler-ring/run.sh`, 5 interleaved rounds, a stand-in that answers
+   `GET /plaintext` with one SQLite lookup, under a hard limit of 20,000. One
+   ring process spent 25.63 µs a request against 34.60 for five epoll
+   processes at 18,000 (25.9% less, band 0.5%) and 26.20 against 37.17 at
+   96,000, the box's C (29.5% less, band 0.7%), holding 96,000 connections with
+   21 descriptors. Both halves of §4's rule hold: go. Its PSS was 518 MB
+   against 129 MB at 96,000.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
    not depend on S1 to S4 and can land first.
 
@@ -659,7 +680,10 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
 - **D1: opt-in or default.** This note makes the ring bit opt-in (§5.1). If
   S4 shows the ring path no dearer at low C, the bit could become the default
   for listeners on Linux, with descriptors as the fallback. The cost is the
-  `sendFd` and FFI difference.
+  `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers. Kept in S4: the ring path is
+  not dearer at 18,000 or 96,000, so the numbers allow a default, but it costs
+  about four times the memory a connection at 96,000 and no low C was measured
+  beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The
   rings must exist before the filter loads, so their number is fixed at
   start-up, and the runtime must know before `main` that the program uses
@@ -667,9 +691,11 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   binary, as it records other capability use. Two candidates: a
   build-time count from a `nish.json` setting, with 1 as the default, or
   `ceil(hard limit × k / limit)` for a declared connection ceiling. Without
-  `--sandbox`, rings are made on demand.
+  `--sandbox`, rings are made on demand. *Decided in S3: `netRings` in the root
+  `package.json`'s `"nish"` field, 1 to 64, default 1 (NL3058 otherwise);
+  the compiler passes 0 when `main` cannot reach the bit or `net`.*
 - **D3: one thread or more.** This design is one thread with N rings, which
   keeps the single-threaded `nish:net` model WP42 §1 fixed. The top entry
   runs a ring per thread. Rings per thread would need `nish:net` inside
   `scope()` tasks, which WP42 refuses on purpose. That decision belongs to
-  another note.
+  another note. *Decided in S2: one thread with N rings.*

@@ -116,9 +116,9 @@ npm install -g nish
 
 Install it without `-g` (`npm install --save-dev nish`) to pin the
 version per project in `package.json`, and run it as `npx nish`.
-A project install also links the `writing-nish` skill into
-`.claude/skills/` for coding agents; [Agent skills](../using-nish/agent-skills.md)
-says what it touches and how to turn it off.
+A project install links no agent skill. Run `npx nish-skills` to review the
+`writing-nish` skill and link it into `.claude/skills/` for coding agents;
+[Agent skills](../using-nish/agent-skills.md) says what it asks and what it touches.
 
 If you have the old `@amritk/nish` package installed, uninstall it
 (`npm uninstall -g @amritk/nish`) and install `nish` instead.
