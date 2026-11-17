@@ -1,8 +1,8 @@
 /*
   What every docs page gets besides the hero (which is site.js): the pages'
   structured data (JSON-LD) for search and answer engines, the browser's
-  theme-color, and a path in a table that may break at its slashes. It draws nothing; with this file
-  missing the pages read the same.
+  theme-color, and a path in a table that may break at its slashes. It draws
+  nothing; with this file missing the pages read the same.
 */
 ;(() => {
   if (window.__nishPage) {
@@ -156,6 +156,8 @@
     observer.observe(document.head, { childList: true, subtree: true, characterData: true })
     // The colour-scheme toggle changes only <body>'s class.
     modes.observe(document.body, { attributes: true, attributeFilter: ["class"] })
+    // With no mode class the system's scheme decides, and it can change too.
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeColor)
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start)

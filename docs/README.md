@@ -206,8 +206,8 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   the hero hidden, so the hero's late arrival pushes nothing a reader is
   looking at; the hold ends by itself after 1.2s if `site.js` never runs.
 - [`page.js`](site/page.js) writes each page's structured data and its
-  `theme-color` (below), and lets a path in a table break after its slashes, where `theme.css` keeps a
-  table's names whole. It draws nothing, and stays out of `site.js` so the
+  `theme-color` (below), and lets a path in a table break after its
+  slashes, where `theme.css` keeps a table's names whole. It draws nothing, and stays out of `site.js` so the
   hero's script keeps its size budget (`tests/break-web/check.mjs`).
 - The landing page is the site's home, not a page of the guide: its route,
   first under `/` in `scalar.config.json` and out of the sidebar, sets a

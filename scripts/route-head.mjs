@@ -17,6 +17,7 @@
 // lines are rewritten; every other line is kept byte for byte.
 import fs from "node:fs"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 
 export const site = "https://nishlang.com"
 const siteName = "Nish"
@@ -229,7 +230,7 @@ export const withHeads = (text) => {
   return out
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const file = path.join(path.resolve(import.meta.dirname, ".."), configFile)
   const before = fs.readFileSync(file, "utf8")
   const after = withHeads(before)
