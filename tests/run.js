@@ -17341,7 +17341,9 @@ if (dealtHere("runtimeChecks")) {
   // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
   // A link is a 32-bit offset in the struct, so `-g` describes the member as
   // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
-  // debugger would read past the field; the IR verifies.
+  // debugger would read past the field. Its type is named `ref32 <Class>`
+  // (stage 2b), which is what `tools/gdb` and `tools/lldb` key their printers
+  // on; the IR verifies.
   if (!only || "compact debug".includes(only)) {
     const dir = path.join(buildDir, "compact-debug")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -17353,12 +17355,12 @@ if (dealtHere("runtimeChecks")) {
     const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
     const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
     check(
-      "compact: -g describes Cell.next, a link, as a 32-bit unsigned member at offset 32",
+      "compact: -g describes Cell.next, a link, as a 32-bit unsigned `ref32 Cell` member at offset 32",
       member !== null &&
         member[3] === "32" &&
         member[4] === "32" &&
         base !== null &&
-        base[1] === '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+        base[1] === '!DIBasicType(name: "ref32 Cell", size: 32, encoding: DW_ATE_unsigned)',
       c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
     )
     if (has("opt") && c.status === 0) {

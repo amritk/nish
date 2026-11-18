@@ -465,9 +465,7 @@ export class DebugInfo {
         continue
       }
       if (f.link) {
-        // WP48: a compact class's link is a 32-bit offset, not a pointer;
-        // until stage 2b's pretty-printers, a debugger shows the raw offset.
-        members.push(this.member(f.name, ref, this.typeRef(T_U32), 32, f.offset * 8, file, line))
+        members.push(this.member(f.name, ref, this.linkType(f.type), 32, f.offset * 8, file, line))
         continue
       }
       const base = this.typeRef(f.type)
@@ -479,6 +477,26 @@ export class DebugInfo {
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(this.table.typeName(info.type))}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     )
+    return ref
+  }
+
+  /**
+   * A compact class's link (WP48) as DWARF sees it: the 32-bit offset it is,
+   * an unsigned base type named `ref32 <Class>`, one per class the link
+   * names, so a debugger without the printers shows the raw offset and
+   * `tools/gdb/nish_ref32.py` and `tools/lldb/nish_ref32.py` find the class
+   * to decode it to by name. Keyed under a prefix no mangled type has.
+   */
+  linkType(type: i32): string {
+    const target = this.table.stripNull(type)
+    const key = `^${this.table.mangle(target)}`
+    const known = this.typeKeys.get(key, -1)
+    if (known >= 0) {
+      return this.typeRefs[known]
+    }
+    const name = quote(`ref32 ${this.table.typeName(target)}`)
+    const ref = this.module.addMetadata(`!DIBasicType(name: ${name}, size: 32, encoding: DW_ATE_unsigned)`)
+    this.setTypeRef(key, ref)
     return ref
   }
 

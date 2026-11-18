@@ -51,7 +51,7 @@ entry:
   %7 = trunc i64 %6 to i32
   %8 = icmp eq %struct.Cell* %next, null
   %9 = select i1 %8, i32 0, i32 %7
-  store i32 %9, i32* %1, align 4
+  store i32 %9, i32* %1, align 4, !tbaa !7
   ret void
 }
 
@@ -68,7 +68,7 @@ entry:
   store %struct.Cell* %1, %struct.Cell** %cell.addr, align 8
   %4 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
   %5 = getelementptr inbounds %struct.Cell, %struct.Cell* %4, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4
+  %6 = load i32, i32* %5, align 4, !tbaa !7
   %7 = zext i32 %6 to i64
   %8 = shl nuw nsw i64 %7, 2
   %9 = load i8*, i8** @nish_ref_base, align 8, !invariant.load !6
@@ -125,16 +125,17 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!7, !8, !9, !10, !11}
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
-!3 = !{!"ptr", !1, i64 0}
+!3 = !{!"ref32", !1, i64 0}
 !4 = !{!"Cell", !2, i64 0, !3, i64 4}
 !5 = !{!4, !2, i64 0}
 !6 = !{}
-!7 = !{i32 8, !"cf-protection-branch", i32 1}
-!8 = !{i32 8, !"cf-protection-return", i32 1}
-!9 = !{i32 8, !"branch-target-enforcement", i32 1}
-!10 = !{i32 8, !"sign-return-address", i32 1}
-!11 = !{i32 4, !"probe-stack", !"inline-asm"}
+!7 = !{!4, !3, i64 4}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
