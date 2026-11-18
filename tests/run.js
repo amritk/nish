@@ -3485,14 +3485,14 @@ if (!only || only.startsWith("file_") || "file_wasm_stubs".includes(only)) {
     fs.writeFileSync(
       stubsTs,
       [
-        'export function openProbe(): i32 { return fileOpen("missing"); }',
-        "export function readProbe(): i32 {",
+        'export const openProbe = (): i32 => { return fileOpen("missing"); };',
+        "export const readProbe = (): i32 => {",
         "  const buf: u8[] = new Array<u8>(4);",
         "  const pos: i64 = 0;",
         "  return fileReadAt(3, buf, 0, 4, pos);",
-        "}",
-        "export function sizeProbe(): i64 { return fileSize(3); }",
-        "export function closeProbe(): i32 { return fileClose(3); }",
+        "};",
+        "export const sizeProbe = (): i64 => { return fileSize(3); };",
+        "export const closeProbe = (): i32 => { return fileClose(3); };",
         "",
       ].join("\n")
     )
@@ -5084,7 +5084,7 @@ if (dealtHere("diagnostics")) {
   const manySrc = path.join(buildDir, "diag_many.ts")
   fs.writeFileSync(
     manySrc,
-    Array.from({ length: 25 }, (_, i) => `function f${i}(a: number): number { return a + true; }`).join(
+    Array.from({ length: 25 }, (_, i) => `const f${i} = (a: number): number => { return a + true; };`).join(
       "\n"
     ) + "\n"
   )
@@ -5449,7 +5449,7 @@ if (dealtHere("diagnostics")) {
   const dbgSrc = path.join(buildDir, "dbg_main.ts")
   fs.writeFileSync(
     dbgSrc,
-    "function fib(n: number): number {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n\nexport function main(): number {\n  const x = fib(10);\n  return x - 55;\n}\n"
+    "const fib = (n: number): number => {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n};\n\nexport const main = (): number => {\n  const x = fib(10);\n  return x - 55;\n};\n"
   )
   const exe = path.join(buildDir, "dbg_main")
   const link = spawnSync(NISH, [dbgSrc, "-g", "--link", exe, "--profile", "debug"], {
@@ -6415,7 +6415,7 @@ if (dealtHere("performance")) {
   const mixedSrc = path.join(buildDir, "perf_mixed.ts")
   fs.writeFileSync(
     mixedSrc,
-    'export function test(): number {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n}\n'
+    'export const test = (): number => {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n};\n'
   )
   const mixed = spawnSync(NISH, [mixedSrc, "-o", path.join(buildDir, "perf_mixed.ll")], {
     cwd: root,
@@ -6434,7 +6434,7 @@ if (dealtHere("performance")) {
     Array.from(
       { length: 25 },
       (_, i) =>
-        `export function f${i}(): number {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n}`
+        `export const f${i} = (): number => {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n};`
     ).join("\n") + "\n"
   )
   const many = spawnSync(NISH, [manySrc, "-o", path.join(buildDir, "perf_many.ll")], {
@@ -15935,10 +15935,10 @@ if (dealtHere("arrayChecks")) {
           "  console.log(label);",
           "  return readStruct(localeconv());",
           "};",
-          "export function main(): i32 {",
+          "export const main = (): i32 => {",
           '  const lc = probe("x");',
           "  return lc.decimalPoint === lc.thousandsSep ? 1 : 0;",
-          "}",
+          "};",
           "",
         ].join("\n")
         const probeTs = path.join(buildDir, "alloc_probe_readStruct.ts")
@@ -21080,18 +21080,18 @@ if (dealtHere("cliChecks")) {
         "    wipe(this.k);",
         "  }",
         "}",
-        "export function make(n: i32): Keyed {",
+        "export const make = (n: i32): Keyed => {",
         "  return new Keyed(n);",
-        "}",
-        "export function size(h: Keyed): i32 {",
+        "};",
+        "export const size = (h: Keyed): i32 => {",
         "  return expose(h.k, width);",
-        "}",
-        "export function measure(s: Secret<u8[]>): i32 {",
+        "};",
+        "export const measure = (s: Secret<u8[]>): i32 => {",
         "  return expose(s, width);",
-        "}",
-        "export function fresh(n: i32): Secret<u8[]> {",
+        "};",
+        "export const fresh = (n: i32): Secret<u8[]> => {",
         "  return secret(new Array<u8>(n));",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -22276,18 +22276,18 @@ if (dealtHere("cliChecks")) {
         fs.writeFileSync(
           src,
           [
-            "export function half(n: i32): Result<i32, i32> {",
+            "export const half = (n: i32): Result<i32, i32> => {",
             "  if (n % 2 !== 0) { return Err(n); }",
             "  return Ok(n / 2);",
-            "}",
-            "export function checkPort(port: i32): Result<void, i32> {",
+            "};",
+            "export const checkPort = (port: i32): Result<void, i32> => {",
             "  if (port <= 0) { return Err(port); }",
             "  return Ok();",
-            "}",
-            "export function describe(r: Result<i32, i32>): i32 {",
+            "};",
+            "export const describe = (r: Result<i32, i32>): i32 => {",
             "  if (r.isErr()) { return -r.error; }",
             "  return r.value;",
-            "}",
+            "};",
             "",
           ].join("\n")
         )
@@ -22374,14 +22374,14 @@ if (dealtHere("cliChecks")) {
         "  x: number = 0;",
         "}",
         "",
-        "export function move(p: Point, dx: number): Point {",
+        "export const move = (p: Point, dx: number): Point => {",
         "  p.x = p.x + dx;",
         "  return p;",
-        "}",
+        "};",
         "",
-        "export function origin(): Point {",
+        "export const origin = (): Point => {",
         "  return new Point();",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -22521,14 +22521,14 @@ if (dealtHere("cliChecks")) {
     fs.writeFileSync(
       skipSrc,
       [
-        "export function spell(n: i32): string {",
+        "export const spell = (n: i32): string => {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return `${n}`;",
-        "}",
-        "export function names(n: i32): string[] {",
+        "};",
+        "export const names = (n: i32): string[] => {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return [`${n}`];",
-        "}",
+        "};",
         // WP30's negative half. Adding the unsigned widths to the typed-view
         // table moved the line between an element type that crosses and one that
         // does not, and these two are what must stay on the far side of it: a
@@ -22536,7 +22536,7 @@ if (dealtHere("cliChecks")) {
         // view, and a `string` element is a pointer into the arena. Without this,
         // a future row added to `typedView` by pattern-matching on the others
         // could let either through and nothing would notice.
-        "export function countTrue(flags: boolean[]): i32 {",
+        "export const countTrue = (flags: boolean[]): i32 => {",
         "  let n = 0;",
         "  for (let i = 0; i < flags.length; i++) {",
         "    if (flags[i]) {",
@@ -22544,10 +22544,10 @@ if (dealtHere("cliChecks")) {
         "    }",
         "  }",
         "  return n;",
-        "}",
-        "export function widest(names: string[]): i32 {",
+        "};",
+        "export const widest = (names: string[]): i32 => {",
         "  return names.length;",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -27194,7 +27194,7 @@ if (dealtHere("releaseChecks")) {
         fs.mkdirSync(work, { recursive: true })
         fs.writeFileSync(
           path.join(work, "hello.ts"),
-          'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n'
+          'export const main = (): number => {\n  console.log("hello from a global install");\n  return 0;\n};\n'
         )
 
         // ---- no platform package: the refusal ----------------------------------------
@@ -27462,9 +27462,9 @@ if (dealtHere("releaseChecks")) {
             fs.writeFileSync(
               path.join(work, "std.ts"),
               'import { trim } from "nish/text";\n' +
-                "export function main(): number {\n" +
+                "export const main = (): number => {\n" +
                 '  console.log(trim("  ok  "));\n' +
-                "  return 0;\n}\n"
+                "  return 0;\n};\n"
             )
             const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" })
             const stdRan =
@@ -29118,7 +29118,7 @@ if (dealtHere("releaseChecks")) {
       fs.writeFileSync(
         path.join(rp, "probe.ts"),
         [
-          "export function main(): number {",
+          "export const main = (): number => {",
           '  const target = realpathSync("target.txt");',
           "  if (target === null) {",
           '    console.log("target: <null>");',
@@ -29133,7 +29133,7 @@ if (dealtHere("releaseChecks")) {
           // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
           '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
           "  return 0;",
-          "}",
+          "};",
           "",
         ].join("\n")
       )
@@ -38873,7 +38873,7 @@ if (!only || "vite".includes(only)) {
     )
     fs.writeFileSync(
       path.join(app, "src", "quad.ts"),
-      'import { twice } from "./page"\nexport function quad(x: f64): f64 {\n  return twice(twice(x)) + 1\n}\n'
+      'import { twice } from "./page"\nexport const quad = (x: f64): f64 => {\n  return twice(twice(x)) + 1\n};\n'
     )
     const hosted = nish({ compiler: NISH, entries: ["src/quad.ts"], host: ["src/page.ts"] })
     hosted.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
@@ -38934,11 +38934,11 @@ if (!only || "wasm-math".includes(only)) {
         "export const logOf = (x: f64): f64 => Math.log(x)",
         "export const powOf = (x: f64, y: f64): f64 => Math.pow(x, y)",
         "export const remOf = (x: f64, y: f64): f64 => x % y",
-        "export function remF32(x: f32, y: f32): f32 {",
+        "export const remF32 = (x: f32, y: f32): f32 => {",
         "  let r = x",
         "  r %= y",
         "  return r",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -43230,6 +43230,247 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
         diagnosticWords(said(4, "NL1002", "`function*` is not supported")),
     "positions must normalise away and codes must not"
   )
+}
+
+// ---- WP22 stage C: the test corpus spells functions as arrows ----------------
+//
+// Biome reads `src/`, `std/` and `examples/`, not `tests/`, so its WP22 rule
+// cannot keep the test corpus arrow-spelled. This check does. A tests/**/*.ts
+// file that holds a top-level definition `scripts/arrowify.mjs` would rewrite
+// fails unless `tests/function-spelling-allowlist.txt` lists it with a reason,
+// and a listed file that no longer holds one fails too, so the list only
+// shrinks. A file the codemod cannot parse counts as holding one: the check
+// fails closed. The forms the codemod refuses by design (`declare function`,
+// `async`, `function*`, `export default`, a bodiless signature) are not
+// definitions here, the same as `node scripts/arrowify.mjs --check`; but a
+// "bodiless" signature whose line does not end in `;` counts, because that is
+// the codemod misreading a body (`function made(): keyof {`).
+if (selects("arrow-corpus")) {
+  const allowlistName = "tests/function-spelling-allowlist.txt"
+  // Every problem with `files` (paths relative to `base`) against the allowlist
+  // text, one line each; empty means the corpus passes.
+  const arrowCorpusProblems = (base, files, allowlistText) => {
+    const problems = []
+    const listed = new Set()
+    allowlistText.split("\n").forEach((raw, i) => {
+      const line = raw.trim()
+      if (line === "" || line.startsWith("#")) return
+      const hash = line.indexOf("#")
+      const file = (hash < 0 ? line : line.slice(0, hash)).trim()
+      if (hash < 0 || line.slice(hash + 1).trim() === "") {
+        problems.push(`${allowlistName}:${i + 1}: ${file} has no \`#\` reason`)
+      }
+      if (listed.has(file)) problems.push(`${allowlistName}:${i + 1}: ${file} is listed twice`)
+      listed.add(file)
+    })
+    const holds = (file) => {
+      const text = fs.readFileSync(path.join(base, file), "utf8")
+      if (!/\bfunction\b/.test(text)) return false
+      try {
+        const { changed, skipped } = arrowify(text, file)
+        const lines = text.split("\n")
+        return (
+          changed > 0 ||
+          skipped.some((s) => s.reason.startsWith("no body") && !/;\s*$/.test(lines[s.line - 1] ?? ""))
+        )
+      } catch {
+        return true
+      }
+    }
+    const holders = new Set(files.filter(holds))
+    for (const file of [...holders].sort()) {
+      if (!listed.has(file)) {
+        problems.push(
+          `${file} holds a top-level \`function\` definition: rewrite it with ` +
+            `\`node scripts/arrowify.mjs ${file}\`, or list it in ${allowlistName} with a reason`
+        )
+      }
+    }
+    for (const file of [...listed].sort()) {
+      if (!fs.existsSync(path.join(base, file))) {
+        problems.push(`${allowlistName} lists ${file}, which does not exist`)
+      } else if (!holders.has(file)) {
+        problems.push(`${allowlistName} lists ${file}, which no longer holds a \`function\` definition: drop its line`)
+      }
+    }
+    return problems
+  }
+
+  const corpus = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", "tests/*.ts"],
+    { cwd: root, encoding: "utf8" }
+  )
+    .split("\n")
+    .filter((f) => f !== "" && fs.existsSync(path.join(root, f)))
+  const corpusProblems = arrowCorpusProblems(
+    root,
+    corpus,
+    fs.readFileSync(path.join(root, allowlistName), "utf8")
+  )
+  check(
+    `WP22 arrow-corpus: no unlisted top-level \`function\` definition in ${corpus.length} test files`,
+    corpus.length > 1000 && corpusProblems.length === 0,
+    corpusProblems.join("\n") || `only ${corpus.length} files found`
+  )
+
+  // The negative proof, on a scratch tree: the check passes, fails on an
+  // unlisted definition and names it, passes again once it is gone, fails on
+  // a stale listing, and counts a file the codemod cannot parse, or reads as a
+  // bodiless signature though the line opens a body, as a holder.
+  const scratch = fs.mkdtempSync(path.join(buildDir, "arrow-corpus-"))
+  try {
+    const put = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(scratch, file)), { recursive: true })
+      fs.writeFileSync(path.join(scratch, file), text)
+    }
+    put("tests/cases/kept.ts", "function kept(): number {\n  return 1\n}\n")
+    put("tests/cases/arrow.ts", "const arrow = (): number => {\n  return 1\n};\n")
+    put(
+      "tests/cases/declared.ts",
+      "declare function puts(s: string): number\nasync function later(): Promise<void> {}\nfunction sig(): number;\n"
+    )
+    const list = "tests/cases/kept.ts  # the subject\n"
+    const base = ["tests/cases/kept.ts", "tests/cases/arrow.ts", "tests/cases/declared.ts"]
+    const clean = arrowCorpusProblems(scratch, base, list)
+    put("tests/cases/probe.ts", "function probe(): number {\n  return 2\n}\n")
+    const added = arrowCorpusProblems(scratch, [...base, "tests/cases/probe.ts"], list)
+    fs.rmSync(path.join(scratch, "tests/cases/probe.ts"))
+    const removed = arrowCorpusProblems(scratch, base, list)
+    put("tests/cases/kept.ts", "const kept = (): number => {\n  return 1\n};\n")
+    const stale = arrowCorpusProblems(scratch, base, list)
+    put("tests/cases/unparsed.ts", "function catch(x: number): number {\n  return x\n}\n")
+    const unparsed = arrowCorpusProblems(scratch, [...base, "tests/cases/unparsed.ts"], list)
+    put("tests/cases/misread.ts", "function made(): keyof {\n  return new keyof()\n}\n")
+    const misread = arrowCorpusProblems(scratch, [...base, "tests/cases/misread.ts"], list)
+    const noReason = arrowCorpusProblems(scratch, base, "tests/cases/kept.ts\n")
+    check(
+      "WP22 arrow-corpus: an unlisted definition fails and names its file and the codemod; removing it passes",
+      clean.length === 0 &&
+        added.length === 1 &&
+        added[0].includes("tests/cases/probe.ts") &&
+        added[0].includes("node scripts/arrowify.mjs tests/cases/probe.ts") &&
+        removed.length === 0,
+      JSON.stringify({ clean, added, removed }, null, 2)
+    )
+    check(
+      "WP22 arrow-corpus: a stale listing, a reasonless listing, an unparsable file and a misread body each fail",
+      stale.length === 1 &&
+        stale[0].includes("no longer holds") &&
+        unparsed.some((p) => p.startsWith("tests/cases/unparsed.ts ")) &&
+        misread.some((p) => p.startsWith("tests/cases/misread.ts ")) &&
+        noReason.some((p) => p.includes("no `#` reason")),
+      JSON.stringify({ stale, unparsed, misread, noReason }, null, 2)
+    )
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true })
+  }
+
+  // The re-key's refusal path and its positive control, on a scratch copy of
+  // the differential store:
+  // `--rekey-arrowified` re-keys a frozen program only when its source is the
+  // codemod's rewrite of the source at `--rev`. A hand edit is refused, the
+  // program stays stale and the store keeps its bytes; no `--rev` is a usage
+  // error. The committed store is never touched.
+  const copy = fs.mkdtempSync(path.join(buildDir, "arrow-rekey-"))
+  try {
+    fs.cpSync(path.join(root, "tests/differential"), path.join(copy, "tests/differential"), { recursive: true })
+    fs.mkdirSync(path.join(copy, "tests/self"), { recursive: true })
+    fs.copyFileSync(path.join(root, "tests/self/seed.js"), path.join(copy, "tests/self/seed.js"))
+    fs.mkdirSync(path.join(copy, "scripts"), { recursive: true })
+    fs.copyFileSync(path.join(root, "scripts/arrowify.mjs"), path.join(copy, "scripts/arrowify.mjs"))
+    fs.mkdirSync(path.join(copy, "tests/cases"), { recursive: true })
+    fs.symlinkSync(path.join(root, "node_modules"), path.join(copy, "node_modules"))
+    // Every git call names the copy's own repository, so a failed `init` can
+    // never fall through to the checkout this suite runs in.
+    const init = spawnSync("git", ["init", "-q", copy], { encoding: "utf8" })
+    const git = (...args) =>
+      spawnSync(
+        "git",
+        [
+          `--git-dir=${path.join(copy, ".git")}`,
+          `--work-tree=${copy}`,
+          "-c",
+          "user.name=nish-tests",
+          "-c",
+          "user.email=tests@nish.invalid",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { cwd: copy, encoding: "utf8" }
+      )
+    const committed =
+      init.status === 0 && git("add", "-A").status === 0 ? git("commit", "-q", "-m", "copy") : init
+    const goldens = (...args) =>
+      spawnSync(process.execPath, ["tests/differential/goldens.js", ...args], { cwd: copy, encoding: "utf8" })
+    const store = path.join(copy, "tests/differential/goldens/rewrites.txt")
+    const before = fs.readFileSync(store)
+    const freshBefore = goldens("corpus/arr_2d")
+    fs.appendFileSync(path.join(copy, "tests/differential/corpus/arr_2d.ts"), "// a hand edit\n")
+    const refused = goldens("--rekey-arrowified", "--rev", "HEAD", "corpus/arr_2d")
+    const freshAfter = goldens("corpus/arr_2d")
+    const noRev = goldens("--rekey-arrowified")
+    check(
+      "WP22 arrow-corpus: the re-key refuses a hand-edited frozen source, keeps it stale and the store unchanged",
+      committed.status === 0 &&
+        freshBefore.status === 0 &&
+        refused.status === 1 &&
+        freshAfter.status === 1 &&
+        fs.readFileSync(store).equals(before),
+      [committed, freshBefore, refused, freshAfter]
+        .map((r) => `exit ${r.status}\n${r.stdout}${r.stderr}`)
+        .join("\n---\n")
+    )
+    check(
+      "WP22 arrow-corpus: `--rekey-arrowified` without `--rev` is a usage error (exit 2)",
+      noRev.status === 2,
+      `exit ${noRev.status}\n${noRev.stdout}${noRev.stderr}`
+    )
+
+    // The positive control, so a mode that refused everything would fail: commit
+    // arr_2d in its `function` spelling, keyed in the store, then put back the
+    // codemod's rewrite of it. The re-key accepts that, moves the key and leaves
+    // the program fresh.
+    const programFile = path.join(copy, "tests/differential/corpus/arr_2d.ts")
+    const arrows = fs.readFileSync(path.join(root, "tests/differential/corpus/arr_2d.ts"), "utf8")
+    const functions = arrows
+      .replace(/^(export )?const (\w+) = \((.*)\): (.+) => \{$/gm, "$1function $2($3): $4 {")
+      .replace(/^\};$/gm, "}")
+    const key = (text) => crypto.createHash("sha256").update(text).digest("hex").slice(0, 16)
+    const roundTrips = functions !== arrows && arrowify(functions, "arr_2d.ts", { concise: false }).text === arrows
+    fs.writeFileSync(programFile, functions)
+    fs.writeFileSync(
+      store,
+      fs
+        .readFileSync(store, "utf8")
+        .replace(
+          `module ${key(arrows)} tests/differential/corpus/arr_2d.ts `,
+          `module ${key(functions)} tests/differential/corpus/arr_2d.ts `
+        )
+    )
+    const recommitted = git("commit", "-q", "-a", "-m", "function spelling")
+    const freshFunctions = goldens("corpus/arr_2d")
+    fs.writeFileSync(programFile, arrows)
+    const keyedBefore = fs.readFileSync(store)
+    const accepted = goldens("--rekey-arrowified", "--rev", "HEAD", "corpus/arr_2d")
+    const freshArrows = goldens("corpus/arr_2d")
+    check(
+      "WP22 arrow-corpus: the re-key accepts the codemod's rewrite of a frozen source, moves its key and leaves it fresh",
+      roundTrips &&
+        recommitted.status === 0 &&
+        freshFunctions.status === 0 &&
+        accepted.status === 0 &&
+        freshArrows.status === 0 &&
+        !fs.readFileSync(store).equals(keyedBefore) &&
+        fs.readFileSync(store, "utf8").includes(`module ${key(arrows)} tests/differential/corpus/arr_2d.ts `),
+      [`round trip ${roundTrips}`, ...[recommitted, freshFunctions, accepted, freshArrows].map(
+        (r) => `exit ${r.status}\n${r.stdout}${r.stderr}`
+      )].join("\n---\n")
+    )
+  } finally {
+    fs.rmSync(copy, { recursive: true, force: true })
+  }
 }
 
 // ---- The gate on the prebuilt runtime objects ------------------------------------
