@@ -124,7 +124,7 @@ Stage D (refusing `function`) is still an open question and **not** part of this
 
 ## Stage 4 — fixtures
 
-**Owns:** `tests/differential/corpus/**`, `tests/differential/goldens/**`, `tests/self/goldens/checked/tests/differential/**`, `tests/self/goldens/checked/tests/parser/**`, `tests/fix/**`, `tests/parser/**`, `tests/layout/**`, `tests/emit-ts/**`, `tests/host-import/**`, `tests/module-storage/**`, `tests/host-window/**`, `tests/page/**`, `tests/panic/**`, `tests/postgres/**`
+**Owns:** `tests/differential/goldens.js` (added by the lead, see Amendments), `tests/differential/corpus/**`, `tests/differential/goldens/**`, `tests/self/goldens/checked/tests/differential/**`, `tests/self/goldens/checked/tests/parser/**`, `tests/fix/**`, `tests/parser/**`, `tests/layout/**`, `tests/emit-ts/**`, `tests/host-import/**`, `tests/module-storage/**`, `tests/host-window/**`, `tests/page/**`, `tests/panic/**`, `tests/postgres/**`
 
 - `tests/differential/corpus`: codemod. The frozen JavaScript in `tests/differential/goldens/` should not move, because the two spellings rewrite to the same JavaScript (§8b, the arrow-parity guard). Run `node tests/differential/goldens.js --fresh` and treat any change as a finding.
 - `tests/differential/arrow-parity/` is **not** owned. `declared.ts` is the subject.
@@ -143,6 +143,10 @@ Starts after stages 1–4 have merged. It is the sweep, so it is not concurrent 
 - **Inline Nish:** rewrite the Nish source held in strings in `tests/run.js` (41), `tests/ffi-string.js`, `tests/ffi-buffer.js`, `tests/ffi-struct.js`, and the program generator in `tests/differential/fuzz.js`, so that generated programs use arrows. JavaScript functions in those files are not Nish and are not touched. nish-cmp's fuzz rows use a fixed seed. If the generator change moves their IR, that is a finding.
 - **Check:** a `tests/run.js` check whose name contains `arrow-corpus`. It runs the codemod's `--check` logic, or the same parse, over every tracked `tests/**/*.ts`. It fails on a top-level `function` definition in any file not listed in `tests/function-spelling-allowlist.txt` (one path per line, each with a `#` reason), and it fails on a listed file that no longer holds one, so the list only shrinks. The failure message names the file and `node scripts/arrowify.mjs <file>`. Prove the check with a negative: write a temporary case that holds a `function`, show that the check fails, and show that it passes once the case is removed (a test of the check function, not a committed bad case). Add its cost to `tests/shard-costs.json` if the sharding requires it.
 - **Docs:** design note §7 table (fresh counts), §8 table (C: done), §10 count. Roadmap page: tick "C: rewrite the test corpus", Done 4 of 5, **Next** stays the stage D decision. Update the `docs/roadmap/index.md` row. Do not touch `.claude/`, `AGENTS.md` or `CLAUDE.md` (CODEOWNERS).
+
+## Amendments
+
+- **2026-11-18, round 1 of `cases-positive`:** `tests/differential/goldens/rewrites.txt` keys each frozen rewrite on a hash of its sources, and nothing can re-freeze one since stage0 left. A rewritten `cases/` or `corpus/` program therefore drops out of the differential oracle on `--update` (77 programs in `cases-positive`'s first push). `fixtures` now also owns `tests/differential/goldens.js`. It adds a re-key mode: the source at the base revision must hash to the frozen key, and `arrowify` of that source must reproduce the working-tree file byte for byte. Only then is the key moved and the stored rewrite kept. **Merge-order edge: `cases-positive` merges after `fixtures`** and re-keys its cases with that mode. `cases-reject` and `link-wordings` hold no frozen programs.
 
 ## Out of scope
 
