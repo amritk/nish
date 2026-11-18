@@ -8791,7 +8791,7 @@ const DECLARED = [
   // wasm32 programs' allocation sizes, field offsets, TBAA offsets,
   // `dereferenceable` widths and pointer-slot alignments move; no scalar
   // access and no native program does.
-  ...byFinding("lay out a class pointer field in 4 bytes on wasm32")(
+  ...byFinding("a class pointer field in 4 bytes on wasm32")(
     "a wasm32 class lays a pointer field out in 4 bytes, as LLVM's p:32:32 does, so its size, offsets and pointer-slot alignment move",
     {
       "tests/link/break_core_wasm/main.ts": [
