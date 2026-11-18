@@ -421,7 +421,11 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
       lines.add(`${info.name}${module.std ? " (std)" : ""}: ${verdict}, ${info.size} → ${shown} bytes`)
       if (verdict === "compact") {
         picked = picked + 1
-        lines.add(saver === info.name ? "" : `; ${saver} saves ${saving}`)
+      }
+      // Past test 3, the line names the class whose saving passed it: `R`
+      // itself, or a class holding the link.
+      if (linked && saver.length > 0) {
+        lines.add(`; ${saver} saves ${saving}`)
       }
       lines.add("\n")
     }

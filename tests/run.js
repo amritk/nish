@@ -23399,6 +23399,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
+      "--explain-layout",
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
