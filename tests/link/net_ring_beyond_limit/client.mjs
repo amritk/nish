@@ -13,11 +13,13 @@
 // once and reads nothing for a second; when the server's end arrives it prints `halfclose: received N
 // bytes` and opens a second connection as its signal. In `reset` mode one
 // connection sends five bytes and, a moment later, resets the connection.
+// In `idle` mode each connection sends five bytes as in `echo`, but stays
+// open, sending nothing more, until the server exits.
 // The client exits with the
 // server's status, after printing the server's output, so the verdict is the
 // server's exit status. A failure of the client's own exits 1.
 //
-//     node client.mjs <exe> <limit> <count> echo|hold|flood|sink|halfclose|reset
+//     node client.mjs <exe> <limit> <count> echo|hold|flood|sink|halfclose|reset|idle
 import { spawn } from "node:child_process"
 import net from "node:net"
 
@@ -141,11 +143,11 @@ const open = (port) => {
     const s = net.connect({ host: "127.0.0.1", port })
     sockets.push(s)
     s.on("error", (e) => {
-      if (mode === "echo") {
+      if (mode === "echo" || (mode === "idle" && echoed < count)) {
         done(1, `connection ${k}: ${e.message}`)
       }
     })
-    if (mode !== "echo") {
+    if (mode !== "echo" && mode !== "idle") {
       continue
     }
     let got = 0
@@ -154,7 +156,7 @@ const open = (port) => {
       got += d.length
       if (got === 5) {
         echoed += 1
-        if (echoed === count) {
+        if (echoed === count && mode === "echo") {
           for (const t of sockets) {
             t.end()
           }

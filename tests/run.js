@@ -3939,8 +3939,11 @@ if (dealtHere("fnref")) {
   // set. `fnref_place_set` and the half of `fnref_escape_join` that calls
   // through the set that keeps nothing must peak alike; the half that calls
   // `slot.use`, whose set keeps `p`, grows the arena as a direct call of
-  // `keepIt` does, so it is pinned to that direct call instead. The tolerance
-  // is under one arena chunk (128 KB), the smallest step a leak can take.
+  // `keepIt` does, so it is pinned to that direct call instead. Each check
+  // bounds growth only: the second peak may not exceed the first by one arena
+  // chunk (128 KB), the smallest step a leak can take. A leak only raises the
+  // second peak, so a second peak lower than the first is measurement noise
+  // and passes.
   const rssExe = path.join(fnrefDir, "rss")
   const rssBuilt = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
   const peakOf = (label, source) => {
@@ -3958,7 +3961,7 @@ if (dealtHere("fnref")) {
   const flat = (label, few, many) =>
     check(
       label,
-      rssBuilt.status === 0 && few.kb > 0 && many.kb > 0 && Math.abs(many.kb - few.kb) < 128,
+      rssBuilt.status === 0 && few.kb > 0 && many.kb > 0 && many.kb - few.kb < 128,
       `peak ${few.kb} KB and ${many.kb} KB\n${rssBuilt.stderr}${few.detail}\n${many.detail}`
     )
   flat(
@@ -32671,6 +32674,24 @@ if (!only || "net_ring".includes(only)) {
       3000,
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
+    )
+    // NURING-38: a slot that read its request to -11 holds no receive queue.
+    // Under a limit of 4,096 the 3,000 slots share one ring, whose 2 MiB of
+    // provided buffers and the slots' table entries come to about 800 bytes
+    // a connection of the program's anonymous resident set. Before the fix
+    // each idle slot also kept its 4,096-byte queue, 4,894 bytes in all; a
+    // kept 1,024-byte queue would be about 1,850.
+    ring(
+      "net_ring: an idle keep-alive slot holds no receive queue: under 1,536 bytes a connection at 3,000 (NURING-38)",
+      "net_ring_idle",
+      "idle.ts",
+      4096,
+      3000,
+      "idle",
+      (out) => {
+        const m = /^idle: (-?\d+) bytes per connection$/m.exec(out)
+        return m !== null && Number(m[1]) < 1536
+      }
     )
     const fullRan = ring(
       "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
