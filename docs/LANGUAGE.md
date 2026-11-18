@@ -15174,6 +15174,31 @@ by the caller.
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
 
+### Profile-guided builds
+
+- **`--pgo-generate`** links an instrumented binary: the module, every
+  runtime unit and, when the program calls it, SQLite are compiled, and
+  linked, with `-fprofile-generate`, so each run writes a raw profile
+  (`LLVM_PROFILE_FILE` names it). **`--pgo-use <file.profdata>`** compiles
+  and links the same units with `-fprofile-use=<file>`, the file's real
+  path, so a relative path means the same file whichever unit compiles from
+  which directory. `scripts/build.sh --pgo-generate` and `--pgo-use` are the
+  same build.
+- **Each needs `--link` and the `speed` or `size` profile, and the host.**
+  Both flags at once, either without `--link`, with `--profile debug` or
+  `wasi`, with a `--target` that is not the host's, or in `nish run` is a
+  usage error (exit 2, one line, nothing written). The `--pgo-use` file must
+  exist and begin with the indexed profile's magic bytes, which
+  `llvm-profdata merge` writes: a directory, a raw `.profraw` (named, with
+  the `merge` that fixes it) or any other file is refused the same way, and
+  so is one `llvm-profdata show` cannot read. `llvm-profdata` missing from
+  `PATH` is a toolchain failure (exit 3).
+- **It changes the link and nothing else.** The IR is byte for byte the IR
+  without it. A profile-guided link compiles every runtime and SQLite unit
+  itself: it reads no entry of the runtime cache and writes none, so a plain
+  link after an instrumented one is byte for byte the plain link before it
+  (`tests/run.js`, the `pgo` section).
+
 ### The debug arena
 
 - **`--debug-arena`** links the program against a runtime compiled with

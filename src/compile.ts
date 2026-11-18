@@ -1455,7 +1455,7 @@ const commandMain = (): number => {
   // The `.profraw` files an instrumented binary writes are of no use without
   // `llvm-profdata merge`, and a profile is read by the LLVM that wrote it, so
   // the tool is asked for before anything compiles (docs/security/cli.md,
-  // CLI-12). `show` reads the whole profile and refuses one another LLVM
+  // CLI-13). `show` reads the whole profile and refuses one another LLVM
   // wrote, with the tool's own reason on stderr.
   if (pgoGenerate || pgoUse.length > 0) {
     if (programOnPath("llvm-profdata").length === 0) {
@@ -2647,7 +2647,7 @@ const linkProgram = (
   }
   const script = `${root}/scripts/build.sh`
   // A profile-guided link takes nothing from the cache and adds nothing to
-  // it (docs/security/cli.md, CLI-11): the runtime and SQLite entries are
+  // it (docs/security/cli.md, CLI-13): the runtime and SQLite entries are
   // keyed without the profile, so an instrumented object would be handed to
   // a plain link, and build.sh refuses `--pgo-*` beside cached objects. Every
   // unit is compiled for this link alone, profile and all. The module cache
