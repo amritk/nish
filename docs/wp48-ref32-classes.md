@@ -109,17 +109,21 @@ A class `R` is compact when all of these hold:
 Two controls override the rule, both erased under Node and `tsc`:
 
 ```ts
-import type { Compact, Wide } from "nish:compact"
+import { Compact, Wide } from "nish:compact"
 
 class TNode implements Compact { /* compact even if the rule says no */ }
 class Big implements Wide { /* never compact */ }
 ```
 
-and `--compact off` turns the whole mechanism off for one build, which is
-what to try first when a program hits the range's limit (§3.3) or runs
-slower. `implements Compact` on a class that rule 1 or 5 refuses is a
-compile error naming the reason. Each class the rule picks is listed by
-`nish --explain-layout`, so the decision can be seen and checked.
+and `--compact off` turns the whole mechanism off for one build, classes
+marked `implements Compact` included, which is what to try first when a
+program hits the range's limit (§3.3) or runs slower. `implements Compact` on
+a class that rule 1 or 5 refuses is a compile error naming the reason, and a
+class may not write both markers (NL2799). `nish --explain-layout` prints one
+line per class: `compact` with its size before and after, `off` under
+`--compact off`, or the first test that refused it, numbered as above
+(`5 forbidden: implements Wide` for the marker), so the decision can be seen
+and checked. Stage 3 ships both controls and the flag (§5.5).
 
 Against the measured programs: `tree.ts`'s and `bintrees.ts`'s `TNode` are
 made in a recursive build and shrink from 24 to 12 and 16 to 8 bytes, and
@@ -127,9 +131,8 @@ made in a recursive build and shrink from 24 to 12 and 16 to 8 bytes, and
 rule picks all three with no source change.
 
 The rule lands after the mechanism (§8): stage 2 builds compact classes with
-`implements Compact` as the only way in, and stage 3 turns the rule on once
-the corpus shows no program slower beyond its noise band. Until then a
-program that does not write the marker is unchanged.
+`implements Compact` as the only way in, and stage 3 turns the rule on, gated
+on the corpus showing no program slower beyond its noise band (§5.5).
 
 **Why not every class.** The compiler could narrow every class's links, and
 that is the first note's Design A, measured and declined. Three costs stay

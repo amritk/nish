@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 790 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 791 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15471,4 +15471,12 @@ export const main = (): i32 => {
 
 ```text
 `Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+## NL2799
+
+The message of an error contains:
+
+```text
+` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
 ```
