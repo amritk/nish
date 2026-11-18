@@ -23,7 +23,8 @@ called whenever a frame may go out, and draws into the frame's `screen` (text
 cells) and `framebuffer` (pixels, when the options ask for one). This program
 bounces a square across the screen until you press `q`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
 import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term-io";
 
@@ -325,7 +326,8 @@ This program prints the number of each key you press. It stops on `q`, on
 Ctrl-D, or when stdin ends or fails. Run it in a terminal and press an arrow key to see
 its three bytes.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { isTerminal, readStdin, setRawMode, waitStdin } from "nish:term";
 
 export const main = (): i32 => {
@@ -368,7 +370,8 @@ runtime, which writes them once, on the same paths that put raw mode back:
 returning from `main`, `process.exit`, a panic or a crash, Ctrl-C or `kill`.
 It writes them first, then restores the terminal settings.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { write } from "nish:io";
 import { setRawMode, setTerminalRestore } from "nish:term";
 
@@ -393,7 +396,8 @@ undone them all itself. It answers `0`, `-25` when stdout is not a terminal
 `terminalSize()` answers a new pair each time you call it. Call it again on
 each frame to notice when the window is resized.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { isTerminal, terminalSize } from "nish:term";
 
 export const main = (): i32 => {

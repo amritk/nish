@@ -9,7 +9,8 @@ It assumes `nish` and LLVM are installed as described in
 
 Make an empty directory and save this as `hello.ts` inside it:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   console.log("hello from Nish");
   return 0;
@@ -29,7 +30,8 @@ then exits with 0. The rules for `main` are in the reference's
 A short program can leave `main` out and write its statements at the top
 level, the way a script does:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const square = (n: i32): i32 => n * n
 
 const sides = [3, 4, 5]
@@ -51,7 +53,8 @@ stand:
 
 This one breaks the second rule, and the compiler says which variable and why:
 
-```ts nish:err NL2656
+<!-- nish:err NL2656 -->
+```ts
 let count = 0
 const bump = (): void => {
   count += 1
@@ -106,7 +109,8 @@ needs no `clang`.
 Save this as `greet.ts`. It has a mistake on line 8: `"3"` is a string where
 `greet` takes a number.
 
-```ts nish:err NL2117
+<!-- nish:err NL2117 -->
+```ts
 const greet = (name: string, times: i32): void => {
   for (let i = 0; i < times; i++) {
     console.log(`hello, ${name}`);
@@ -164,7 +168,8 @@ Change `"3"` to `3`, and `nish run greet.ts` prints `hello, Nish` three times.
 Some errors have only one sensible repair, and the compiler can apply it
 itself. Save this as `check.ts`:
 
-```ts nish:err NL2188
+<!-- nish:err NL2188 -->
+```ts
 export const main = (): i32 => {
   const xs = [1, 2, 3];
   if (xs.length) {
@@ -211,7 +216,8 @@ an array, or arithmetic that overflows. Integer arithmetic is checked, so this
 program, saved as `overflow.ts`, stops rather than wrap round to a negative
 number:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   let n: i32 = 2147483600;
   for (let i = 0; i < 100; i++) {

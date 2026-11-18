@@ -210,7 +210,7 @@ positive number, which can lower the count and never raise it. It needs no
 `--threads`, and a task may call it.
 
 ```ts
-function availableParallelism(): i32
+const availableParallelism: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -225,7 +225,7 @@ The global `process.exit`: a terminator, which `never` is how `tsc`
 spells it.
 
 ```ts
-function exit(code: i32): never
+const exit: (code: i32) => never
 ```
 
 <scalar-field name="code" type="i32" required>
@@ -250,7 +250,7 @@ folded into one, because linked C may change the environment between
 them. There is no `setenv`.
 
 ```ts
-function getenv(name: string): string | null
+const getenv: (name: string) => string | null
 ```
 
 <scalar-field name="name" type="string" required>
@@ -275,7 +275,7 @@ the same signal on every host. A positive pid may be any process of this
 user, not only a child.
 
 ```ts
-function kill(pid: i32, sig: i32): i32
+const kill: (pid: i32, sig: i32) => i32
 ```
 
 <scalar-field name="pid" type="i32" required>
@@ -307,7 +307,7 @@ two processes or two machines, and it is not a date. Two reads with work
 between them never fold into one.
 
 ```ts
-function monotonicNanos(): i64
+const monotonicNanos: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -321,7 +321,7 @@ The clock's reading.
 Block until SIGTERM or SIGINT arrives. It can wait forever.
 
 ```ts
-function readSignal(fd: i32): i32
+const readSignal: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -346,7 +346,7 @@ Narrow-only: it never moves a process onto a CPU it was kept off.
 afterwards inherit the mask.
 
 ```ts
-function setCpuAffinity(cpu: i32): i32
+const setCpuAffinity: (cpu: i32) => i32
 ```
 
 <scalar-field name="cpu" type="i32" required>
@@ -372,7 +372,7 @@ normal-priority fallback (`setNice(19)`, or a deadline) for work that must
 finish. Per thread, as `setNice` is.
 
 ```ts
-function setIdlePriority(): i32
+const setIdlePriority: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -390,7 +390,7 @@ every thread's started after it, so it belongs at the top of `main`;
 children started afterwards inherit it.
 
 ```ts
-function setNice(n: i32): i32
+const setNice: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>
@@ -415,7 +415,7 @@ on. Installing the handler overrides a disposition the process started
 with, so a signal its parent ignored is heard. Made once.
 
 ```ts
-function signalFd(): i32
+const signalFd: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -433,7 +433,7 @@ zombie until the program exits, as in C. Test `pid > 0` before handing the
 answer on: a failure such as `-1` passed to `waitPid` reads as "any child".
 
 ```ts
-function spawn(argv: string[]): i32
+const spawn: (argv: string[]) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -469,12 +469,12 @@ reading is absorbed. One `poll` loop writes and drains, so a child that
 fills one pipe cannot deadlock the parent.
 
 ```ts
-function spawnPiped(
+const spawnPiped: (
   argv: string[],
   stdin: readonly u8[],
   stdout: u8[],
   stderr: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -523,13 +523,13 @@ and a grandchild that keeps an output pipe open makes the run wait for it
 until the deadline.
 
 ```ts
-function spawnPipedWithin(
+const spawnPipedWithin: (
   argv: string[],
   stdin: readonly u8[],
   stdout: u8[],
   stderr: u8[],
   timeoutMs: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -579,7 +579,7 @@ working directory. The runtime keeps each element's bytes pointer for the
 child, so the array escapes; an embedded NUL truncates an argument.
 
 ```ts
-function spawnSync(argv: string[]): number
+const spawnSync: (argv: string[]) => number
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -606,11 +606,11 @@ file: each is opened separately, with its own offset, so the streams
 would overwrite rather than interleave.
 
 ```ts
-function spawnSyncTo(
+const spawnSyncTo: (
   argv: string[],
   stdoutPath: string,
   stderrPath: string,
-): number
+) => number
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -650,10 +650,10 @@ descriptor's open file, its offset and its status flags, `O_NONBLOCK`
 among them, and this process keeps its own. Reap the pid with `waitPid`.
 
 ```ts
-function spawnWithFds(
+const spawnWithFds: (
   argv: string[],
   fds: readonly i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="argv" type="string[]" required>
@@ -686,7 +686,7 @@ Linux, `hw.memsize` on Darwin. The machine's, not a cgroup's limit. A task
 may call it.
 
 ```ts
-function totalMemory(): i64
+const totalMemory: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -701,7 +701,7 @@ Reap a child. The status is `spawnSync`'s: the exit code, or `128 + n`
 when signal `n` ended it. An array because the language has no tuple.
 
 ```ts
-function waitPid(pid: i32, flags: i32): i32[]
+const waitPid: (pid: i32, flags: i32) => i32[]
 ```
 
 <scalar-field name="pid" type="i32" required>
@@ -733,7 +733,7 @@ at a nanosecond's grain. It steps, and can go backwards, when the system
 time is set, so a duration is `monotonicNanos`'s job. Not refused on wasm.
 
 ```ts
-function wallClockNanos(): i64
+const wallClockNanos: () => i64
 ```
 
 <scalar-field name="returns" type="i64">

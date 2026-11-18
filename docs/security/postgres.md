@@ -511,22 +511,33 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   ends.
 - **A task waiting for its answer yields before it parks.** `pgAsyncTurn`
   yields to the loop (`sleep(0)`) up to `PG_ASYNC_TURN_YIELDS` (4) times
-  while the answer ahead of its own is unread, then parks on the
-  connection's wake. The yields are bounded, so a stalled server costs four
-  loop turns and then the same park, `claimWaitMs` and cancel as before.
+  while the answer ahead of its own is unread, then parks on its seat's turn
+  lane. A done, skip or abandon that leaves a turn come rings the lanes of
+  the seats waiting on that connection in the order their answers come.
+  Under Linux epoll, which hands back distinct descriptors in the order they
+  became ready, seats freed together are each woken in the one loop turn;
+  the runtime promises only the kernel's order, and kqueue specifies none,
+  so there a seat woken early parks again and costs a turn. The yields are
+  bounded, so a stalled server costs four loop turns and then the same park,
+  `claimWaitMs` and cancel as before.
 - **`pgAsyncRead` grows its buffer only as an answer needs it.** The buffer
   starts the size of the input already read for the answer, then doubles
   (from `PG_ASYNC_INPUT_SIZE` at the least) whenever it is full, clamped to
   `maxMessage` + 1 once doubling would pass it, so a message over
   `maxMessage` still fails `PG_ERR_TOO_BIG` before its body is read.
-- **A pool holds up to `size` + 129 socket pairs for its wakes.** Each
-  connection has a wake, the pool has one, and so does each of 128 queue
-  lanes. A pair is opened the first time a task waits on its wake and kept
-  until `close()`. A pool nobody waits on holds none, and one whose waits
-  stay within a few lanes holds a few. Under a long queue it holds them all:
-  `2 × (size + 129)` descriptors, 274 for a pool of 8 and 386 for 64. When
-  no pair can be opened (out of descriptors), a waiter sleeps 1 ms and looks
-  again instead of failing.
+- **A pool holds up to 257 socket pairs for its wakes.** The pool has a
+  wake, and so does each of 128 queue lanes and 128 turn lanes. A seat
+  waiting for its turn waits on the turn lane its seat index picks, so a
+  pool of `size` connections uses at most 16 × `size` of them, and slots
+  eight apart share theirs. A pair is opened the first time a task waits on
+  its wake and kept until `close()`. A pool nobody waits on holds none, and
+  one whose waits stay within a few lanes holds a few. Under a long queue,
+  with every seat waiting its turn, it holds every pair its seats can pick:
+  514 descriptors for a pool of 8 or more at `depth` 16, 290 for a pool of 1.
+  The ceiling rose with the turn lanes, from 2 × (`size` + 129): a pool of
+  64 went from 386 to 514, one of 8 from 274 to 514, one of 1 from 260 to 290.
+  When no pair can be opened (out of descriptors), a waiter sleeps 1 ms and
+  looks again instead of failing.
 - **A pipelined connection is only as fast as its slowest statement
   (PG-39).** Statements seated on one connection are answered in the order
   they were sent, so a slow one delays up to `depth` - 1 behind it, and a

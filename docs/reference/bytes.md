@@ -330,13 +330,13 @@ panics `copyBytes` before any byte is written. Natively the copy is one
 `llvm.memmove`.
 
 ```ts
-function copyBytes(
+const copyBytes: (
   dst: u8[],
   at: i32,
   src: readonly u8[],
   from: i32,
   count: i32,
-): void
+) => void
 ```
 
 <scalar-field name="dst" type="u8[]" required>
@@ -374,7 +374,7 @@ How many bytes to copy; zero copies nothing.
 The `f64` whose IEEE 754 bits are `getU64BE`'s.
 
 ```ts
-function getF64BE(b: u8[], off: i32): f64
+const getF64BE: (b: u8[], off: i32) => f64
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -401,7 +401,7 @@ The double whose bits the eight bytes are.
 The `f64` whose IEEE 754 bits are `getU64LE`'s.
 
 ```ts
-function getF64LE(b: u8[], off: i32): f64
+const getF64LE: (b: u8[], off: i32) => f64
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -428,7 +428,7 @@ The double whose bits the eight bytes are.
 `getU32BE`'s bits as a two's-complement `i32`.
 
 ```ts
-function getI32BE(b: u8[], off: i32): i32
+const getI32BE: (b: u8[], off: i32) => i32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -455,7 +455,7 @@ The number read, from -2^31 to 2^31 - 1.
 `getU32LE`'s bits as a two's-complement `i32`.
 
 ```ts
-function getI32LE(b: u8[], off: i32): i32
+const getI32LE: (b: u8[], off: i32) => i32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -482,7 +482,7 @@ The number read, from -2^31 to 2^31 - 1.
 `getU64BE`'s bits as a two's-complement `i64`.
 
 ```ts
-function getI64BE(b: u8[], off: i32): i64
+const getI64BE: (b: u8[], off: i32) => i64
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -509,7 +509,7 @@ The number read, from -2^63 to 2^63 - 1.
 `getU64LE`'s bits as a two's-complement `i64`.
 
 ```ts
-function getI64LE(b: u8[], off: i32): i64
+const getI64LE: (b: u8[], off: i32) => i64
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -536,7 +536,7 @@ The number read, from -2^63 to 2^63 - 1.
 The `u16` whose high byte is `b[off]` and low byte `b[off + 1]`.
 
 ```ts
-function getU16BE(b: u8[], off: i32): u16
+const getU16BE: (b: u8[], off: i32) => u16
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -563,7 +563,7 @@ The number read.
 The `u16` whose low byte is `b[off]` and high byte `b[off + 1]`.
 
 ```ts
-function getU16LE(b: u8[], off: i32): u16
+const getU16LE: (b: u8[], off: i32) => u16
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -590,7 +590,7 @@ The number read.
 The `u32` whose bytes, most significant first, are `b[off]` to `b[off + 3]`.
 
 ```ts
-function getU32BE(b: u8[], off: i32): u32
+const getU32BE: (b: u8[], off: i32) => u32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -617,7 +617,7 @@ The number read.
 The `u32` whose bytes, least significant first, are `b[off]` to `b[off + 3]`.
 
 ```ts
-function getU32LE(b: u8[], off: i32): u32
+const getU32LE: (b: u8[], off: i32) => u32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -647,7 +647,7 @@ a `bswap`; a flat chain of eight `or`s stayed byte by byte. The byte loop is
 its own function so its last load is not merged with the fast path's.
 
 ```ts
-function getU64BE(b: u8[], off: i32): u64
+const getU64BE: (b: u8[], off: i32) => u64
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -674,7 +674,7 @@ The number read.
 The `u64` whose bytes, least significant first, are `b[off]` to `b[off + 7]`.
 
 ```ts
-function getU64LE(b: u8[], off: i32): u64
+const getU64LE: (b: u8[], off: i32) => u64
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -701,7 +701,7 @@ The number read.
 Writes `v`'s IEEE 754 bits as `setU64BE` does.
 
 ```ts
-function setF64BE(b: u8[], off: i32, v: f64): void
+const setF64BE: (b: u8[], off: i32, v: f64) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -728,7 +728,7 @@ The double to store, as its IEEE 754 bits.
 Writes `v`'s IEEE 754 bits as `setU64LE` does.
 
 ```ts
-function setF64LE(b: u8[], off: i32, v: f64): void
+const setF64LE: (b: u8[], off: i32, v: f64) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -755,7 +755,7 @@ The double to store, as its IEEE 754 bits.
 Writes `v`'s two's-complement bits as `setU32BE` does.
 
 ```ts
-function setI32BE(b: u8[], off: i32, v: i32): void
+const setI32BE: (b: u8[], off: i32, v: i32) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -783,7 +783,7 @@ The number to store; a negative one is stored as its two's
 Writes `v`'s two's-complement bits as `setU32LE` does.
 
 ```ts
-function setI32LE(b: u8[], off: i32, v: i32): void
+const setI32LE: (b: u8[], off: i32, v: i32) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -811,7 +811,7 @@ The number to store; a negative one is stored as its two's
 Writes `v`'s two's-complement bits as `setU64BE` does.
 
 ```ts
-function setI64BE(b: u8[], off: i32, v: i64): void
+const setI64BE: (b: u8[], off: i32, v: i64) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -839,7 +839,7 @@ The number to store; a negative one is stored as its two's
 Writes `v`'s two's-complement bits as `setU64LE` does.
 
 ```ts
-function setI64LE(b: u8[], off: i32, v: i64): void
+const setI64LE: (b: u8[], off: i32, v: i64) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -867,7 +867,7 @@ The number to store; a negative one is stored as its two's
 Writes `v` into `b[off]` and `b[off + 1]`, high byte first.
 
 ```ts
-function setU16BE(b: u8[], off: i32, v: u16): void
+const setU16BE: (b: u8[], off: i32, v: u16) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -894,7 +894,7 @@ The number to store.
 Writes `v` into `b[off]` and `b[off + 1]`, low byte first.
 
 ```ts
-function setU16LE(b: u8[], off: i32, v: u16): void
+const setU16LE: (b: u8[], off: i32, v: u16) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -921,7 +921,7 @@ The number to store.
 Writes `v` into `b[off]` to `b[off + 3]`, most significant byte first.
 
 ```ts
-function setU32BE(b: u8[], off: i32, v: u32): void
+const setU32BE: (b: u8[], off: i32, v: u32) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -948,7 +948,7 @@ The number to store.
 Writes `v` into `b[off]` to `b[off + 3]`, least significant byte first.
 
 ```ts
-function setU32LE(b: u8[], off: i32, v: u32): void
+const setU32LE: (b: u8[], off: i32, v: u32) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -975,7 +975,7 @@ The number to store.
 Writes `v` into `b[off]` to `b[off + 7]`, most significant byte first.
 
 ```ts
-function setU64BE(b: u8[], off: i32, v: u64): void
+const setU64BE: (b: u8[], off: i32, v: u64) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -1002,7 +1002,7 @@ The number to store.
 Writes `v` into `b[off]` to `b[off + 7]`, least significant byte first.
 
 ```ts
-function setU64LE(b: u8[], off: i32, v: u64): void
+const setU64LE: (b: u8[], off: i32, v: u64) => void
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -1037,11 +1037,7 @@ or 32 bytes at a time (docs/LANGUAGE.md, "Byte runs"). It is
 never for secret data.
 
 ```ts
-function skipBlank(
-  b: u8[],
-  from: i32,
-  to: i32,
-): i32
+const skipBlank: (b: u8[], from: i32, to: i32) => i32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -1076,11 +1072,7 @@ The index of the first byte in the clamped range that is not a
 kernel family, `nish_bytes_skip_digits`.
 
 ```ts
-function skipDigits(
-  b: u8[],
-  from: i32,
-  to: i32,
-): i32
+const skipDigits: (b: u8[], from: i32, to: i32) => i32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -1121,11 +1113,7 @@ the bytes of a string through as they are. Natively the scan is
 `skipBlank` is.
 
 ```ts
-function skipJsonPlain(
-  b: u8[],
-  from: i32,
-  to: i32,
-): i32
+const skipJsonPlain: (b: u8[], from: i32, to: i32) => i32
 ```
 
 <scalar-field name="b" type="u8[]" required>
@@ -1169,11 +1157,7 @@ the byte a decoder has to look at. Natively the scan is
 multi-byte sequence a byte at a time. Variable-time, as `skipBlank` is.
 
 ```ts
-function skipJsonText(
-  b: u8[],
-  from: i32,
-  to: i32,
-): i32
+const skipJsonText: (b: u8[], from: i32, to: i32) => i32
 ```
 
 <scalar-field name="b" type="u8[]" required>

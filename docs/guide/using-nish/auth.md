@@ -31,7 +31,8 @@ for each request. It answers `JWT_OK` or one `JWT_ERR_*` code, and after
 `JWT_OK` the payload's JSON is `v.claims[0 .. v.claimsLen)` and its times are
 `v.exp`, `v.nbf` and `v.iat`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import {
   JWT_ALG_HS256,
   JWT_ERR_EXPIRED,
@@ -163,7 +164,8 @@ object. Claims outside ASCII are refused too: escape such text in the JSON
 `jwtSignKid(key, kid, bytes)` adds a `kid`. The claims are signed as given,
 so put the `exp` in yourself.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JWT_OK, JWT_MAX_TOKEN, JwtKey, JwtVerifier, jwtEd25519SigningKey, jwtSignKid } from "nish/crypto/jwt";
 import { Secret, secret, wipe } from "nish:secret";
 

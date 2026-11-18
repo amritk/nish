@@ -8824,6 +8824,20 @@ const DECLARED = [
       "tests/cases/wasm_union_generic.ts": ["wasm_union_generic.ll"],
     }
   ),
+  // #1750: a seat waiting for its turn waits on its own turn lane, and a
+  // done rings the waiting seats' lanes in answer order, so the pool gains
+  // `pgAsyncWakeTurns` and `pgAsyncTurnLane` and its wakes are laid out again.
+  ...byFinding("the pipelined pool's seats-freed-together check deterministic")(
+    "a seat waiting for its turn waits on its own turn lane, which a done rings in answer order, so `std/net/postgres-async.ts` gains `pgAsyncWakeTurns` and `pgAsyncTurnLane` and renumbers its wakes; no importer's own module moves",
+    {
+      "tests/link/std_postgres_async/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
+    }
+  ),
 ]
 
 /**

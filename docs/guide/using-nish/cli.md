@@ -24,7 +24,8 @@ usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
 file, links it into a cache, and starts it with the rest of the command line
 as its arguments:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const args = process.argv;
   for (let i: i32 = 1; i < args.length; i++) {
@@ -234,7 +235,8 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function sqlite3_libversion(): string;
 
 export const main = (): i32 => {
@@ -445,7 +447,8 @@ out.
 
 An error prints with its position and an excerpt, and the compile exits 1:
 
-```ts nish:err NL1047
+<!-- nish:err NL1047 -->
+```ts
 export const main = (): i32 => {
   const x: i32 = 1;
   if (x == 1) {

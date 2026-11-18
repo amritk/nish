@@ -16,7 +16,8 @@ of its own, in a task that may await, uses [an async server](async-server.md).
 
 ## A first server
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
 import { Router, RouterLimits } from "nish/net/router";
 import { tcpListen } from "nish:net";

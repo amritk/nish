@@ -192,7 +192,7 @@ The integer cube root of `x`, the largest r with r³ <= x, for 0 <= x <=
 steps, the same answer on every machine, no floating point.
 
 ```ts
-function quicRecoveryCbrt(x: i64): i64
+const quicRecoveryCbrt: (x: i64) => i64
 ```
 
 <scalar-field name="x" type="i64" required>

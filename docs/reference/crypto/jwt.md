@@ -248,7 +248,7 @@ functions share the importing program's flat symbol namespace
 The `alg` header value for `alg`, `""` for no algorithm this module knows.
 
 ```ts
-function jwtAlgName(alg: i32): string
+const jwtAlgName: (alg: i32) => string
 ```
 
 <scalar-field name="alg" type="i32" required>
@@ -270,10 +270,7 @@ An ES256 or ES384 verifying key from its uncompressed point, `04 ‖ x ‖ y`
 off the curve makes every verification fail.
 
 ```ts
-function jwtEcKey(
-  alg: i32,
-  point: u8[],
-): JwtKey | null
+const jwtEcKey: (alg: i32, point: u8[]) => JwtKey | null
 ```
 
 <scalar-field name="alg" type="i32" required>
@@ -300,7 +297,7 @@ An EdDSA (Ed25519) verifying key from its 32 bytes (RFC 8037 §2's `x`);
 another length answers `null`.
 
 ```ts
-function jwtEd25519Key(pub: u8[]): JwtKey | null
+const jwtEd25519Key: (pub: u8[]) => JwtKey | null
 ```
 
 <scalar-field name="pub" type="u8[]" required>
@@ -322,9 +319,9 @@ An EdDSA key that signs and verifies, from its 32-byte seed (RFC 8037 §2's
 stays the caller's to wipe.
 
 ```ts
-function jwtEd25519SigningKey(
+const jwtEd25519SigningKey: (
   seed: Secret<u8[]>,
-): JwtKey | null
+) => JwtKey | null
 ```
 
 <scalar-field name="seed" type="Secret&lt;u8[]&gt;" required>
@@ -346,9 +343,9 @@ scalar `p256PublicKey` refuses answers `null`. The key keeps a copy;
 `priv` stays the caller's to wipe.
 
 ```ts
-function jwtEs256SigningKey(
+const jwtEs256SigningKey: (
   priv: Secret<u8[]>,
-): JwtKey | null
+) => JwtKey | null
 ```
 
 <scalar-field name="priv" type="Secret&lt;u8[]&gt;" required>
@@ -371,10 +368,10 @@ an `alg` that is not HS. The pads are keyed once, here; `key` stays the
 caller's to wipe.
 
 ```ts
-function jwtHmacKey(
+const jwtHmacKey: (
   alg: i32,
   key: Secret<u8[]>,
-): JwtKey | null
+) => JwtKey | null
 ```
 
 <scalar-field name="alg" type="i32" required>
@@ -402,10 +399,7 @@ An RS256, RS384 or RS512 key from the DER of a PKCS#1 `RSAPublicKey`
 2048 bits (RFC 7518 §3.3) or an `alg` that is not RS answers `null`.
 
 ```ts
-function jwtRsaKey(
-  alg: i32,
-  der: u8[],
-): JwtKey | null
+const jwtRsaKey: (alg: i32, der: u8[]) => JwtKey | null
 ```
 
 <scalar-field name="alg" type="i32" required>
@@ -433,11 +427,11 @@ spell them once base64url-decoded (RFC 7518 §6.3.1). The same checks as
 `jwtRsaKey`; parts too long for any key this module takes answer `null`.
 
 ```ts
-function jwtRsaKeyParts(
+const jwtRsaKeyParts: (
   alg: i32,
   n: u8[],
   e: u8[],
-): JwtKey | null
+) => JwtKey | null
 ```
 
 <scalar-field name="alg" type="i32" required>
@@ -469,10 +463,7 @@ A new key that verifies only, or `null`.
 `jwtSignKid` with no `kid`.
 
 ```ts
-function jwtSign(
-  key: JwtKey,
-  claims: u8[],
-): string | null
+const jwtSign: (key: JwtKey, claims: u8[]) => string | null
 ```
 
 <scalar-field name="key" type="JwtKey" required>
@@ -503,11 +494,11 @@ would need a JSON escape. The claims are signed as given: this function
 neither adds nor checks any claim.
 
 ```ts
-function jwtSignKid(
+const jwtSignKid: (
   key: JwtKey,
   kid: string | null,
   claims: u8[],
-): string | null
+) => string | null
 ```
 
 <scalar-field name="key" type="JwtKey" required>
@@ -541,10 +532,10 @@ outside ASCII, as `verifyString` refuses them: escape such text (`\u00e9`)
 or pass its UTF-8 bytes to `jwtSign`.
 
 ```ts
-function jwtSignString(
+const jwtSignString: (
   key: JwtKey,
   claims: string,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="key" type="JwtKey" required>

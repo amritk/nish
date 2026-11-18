@@ -164,12 +164,12 @@ spoofed reply must guess it, and passes the same query to `dnsParseReply`.
 Nothing is allocated, and nothing is written past `out.length`.
 
 ```ts
-function dnsBuildQuery(
+const dnsBuildQuery: (
   out: u8[],
   id: i32,
   name: string,
   qtype: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -223,14 +223,14 @@ bytes left and never read. `reply` is reset first and written in place, so
 nothing is allocated; it holds this reply's answer until the next call.
 
 ```ts
-function dnsParseReply(
+const dnsParseReply: (
   msg: u8[],
   len: i32,
   query: u8[],
   queryLen: i32,
   port: i32,
   reply: DnsReply,
-): i32
+) => i32
 ```
 
 <scalar-field name="msg" type="u8[]" required>

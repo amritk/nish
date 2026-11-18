@@ -315,10 +315,10 @@ Written from RFC 8446, not ported from another implementation.
 The binder key of a resumption PSK: `Derive-Secret(early, "res binder", "")` (RFC 8446 §7.1).
 
 ```ts
-function tlsBinderKey(
+const tlsBinderKey: (
   hashLength: i32,
   earlySecret: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -345,12 +345,12 @@ A fresh `Secret` holding the binder key, which the caller owns and wipes.
 wiped before it returns.
 
 ```ts
-function tlsBinderKeyInto(
+const tlsBinderKeyInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   earlySecret: u8[],
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -391,7 +391,7 @@ returns, as `tlsFinishedVerifyDataInto` wipes the finished key and the
 scratch.
 
 ```ts
-function tlsBinderVerify(
+const tlsBinderVerify: (
   kdf: HkdfScratch,
   hashLength: i32,
   binderKey: u8[],
@@ -400,7 +400,7 @@ function tlsBinderVerify(
   binder: u8[],
   binderOff: i32,
   binderLength: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -463,12 +463,12 @@ Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcr
 held as a `Secret`.
 
 ```ts
-function tlsDeriveSecret(
+const tlsDeriveSecret: (
   hashLength: i32,
   prk: Secret<u8[]>,
   label: string,
   transcriptHash: u8[],
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -510,14 +510,14 @@ may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
 HashLen bytes.
 
 ```ts
-function tlsDeriveSecretHeld(
+const tlsDeriveSecretHeld: (
   hashLength: i32,
   prk: Secret<u8[]>,
   label: string,
   transcriptHash: u8[],
   hashOff: i32,
   dst: Secret<u8[]>,
-): void
+) => void
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -565,7 +565,7 @@ before it returns. It panics as `hkdfExpandLabelInto` does, a window outside
 its array included.
 
 ```ts
-function tlsDeriveSecretInto(
+const tlsDeriveSecretInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   prk: u8[],
@@ -573,7 +573,7 @@ function tlsDeriveSecretInto(
   transcriptHash: u8[],
   hashOff: i32,
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -624,9 +624,7 @@ The early secret with no PSK: HKDF-Extract of HashLen zeros under a zero salt (R
 salt and the zero input are wiped before it returns.
 
 ```ts
-function tlsEarlySecret(
-  hashLength: i32,
-): Secret<u8[]>
+const tlsEarlySecret: (hashLength: i32) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -646,7 +644,7 @@ A fresh `Secret` holding the early secret, which the caller owns and wipes.
 The hash of the empty string, the transcript `Derive-Secret(., "derived", "")` hashes.
 
 ```ts
-function tlsEmptyHash(hashLength: i32): u8[]
+const tlsEmptyHash: (hashLength: i32) => u8[]
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -669,13 +667,13 @@ prefix, which is added) and `context`, held as a `Secret`. It panics as
 `hkdfExpandLabelSha256Secret` (or its SHA-384 twin) does.
 
 ```ts
-function tlsExpandLabel(
+const tlsExpandLabel: (
   hashLength: i32,
   prk: Secret<u8[]>,
   label: string,
   context: u8[],
   length: i32,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -722,11 +720,11 @@ after the first with a derived secret; an empty salt keys HMAC as HashLen
 zeros do.
 
 ```ts
-function tlsExtract(
+const tlsExtract: (
   hashLength: i32,
   salt: Secret<u8[]>,
   ikm: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -762,11 +760,11 @@ HashLen)`, where `baseKey` is the sender's handshake traffic secret. The
 so it is plain.
 
 ```ts
-function tlsFinishedVerifyData(
+const tlsFinishedVerifyData: (
   hashLength: i32,
   baseKey: Secret<u8[]>,
   transcriptHash: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -803,12 +801,12 @@ the HMAC of `transcriptHash[hashOff .. hashOff + hashLength)` under
 is 32 or 48 and `baseKey` holds HashLen bytes.
 
 ```ts
-function tlsFinishedVerifyDataHeld(
+const tlsFinishedVerifyDataHeld: (
   hashLength: i32,
   baseKey: Secret<u8[]>,
   transcriptHash: u8[],
   hashOff: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -849,7 +847,7 @@ hashOff + hashLength)` under `finished_key = Expand-Label(baseKey,
 finished key is wiped before it returns, and so is the scratch.
 
 ```ts
-function tlsFinishedVerifyDataInto(
+const tlsFinishedVerifyDataInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   baseKey: u8[],
@@ -857,7 +855,7 @@ function tlsFinishedVerifyDataInto(
   hashOff: i32,
   out: u8[],
   at: i32,
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -909,10 +907,10 @@ The salt the handshake secret is extracted under, `Derive-Secret(early,
 wipes itself, answered for a caller that extracts in place.
 
 ```ts
-function tlsHandshakeSalt(
+const tlsHandshakeSalt: (
   hashLength: i32,
   earlySecret: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -941,12 +939,12 @@ salt a resumed handshake extracts its handshake secret under, written at
 before it returns.
 
 ```ts
-function tlsHandshakeSaltInto(
+const tlsHandshakeSaltInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   earlySecret: u8[],
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -979,11 +977,11 @@ The handshake secret: HKDF-Extract of the ECDHE secret under
 `Derive-Secret(early, "derived", "")`, which is wiped before it returns.
 
 ```ts
-function tlsHandshakeSecret(
+const tlsHandshakeSecret: (
   hashLength: i32,
   earlySecret: Secret<u8[]>,
   ecdhe: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -1019,12 +1017,12 @@ unless `hashLength` is 32 or 48 and `earlySecret` and `dst` hold HashLen
 bytes.
 
 ```ts
-function tlsHandshakeSecretHeld(
+const tlsHandshakeSecretHeld: (
   hashLength: i32,
   earlySecret: Secret<u8[]>,
   ecdhe: Secret<u8[]>,
   dst: Secret<u8[]>,
-): void
+) => void
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -1058,10 +1056,10 @@ The master secret: HKDF-Extract of HashLen zeros under
 as the zeros are.
 
 ```ts
-function tlsMasterSecret(
+const tlsMasterSecret: (
   hashLength: i32,
   handshakeSecret: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -1091,11 +1089,11 @@ bytes. The salt and the zeros are wiped before it returns; `dst` may be
 HashLen bytes.
 
 ```ts
-function tlsMasterSecretHeld(
+const tlsMasterSecretHeld: (
   hashLength: i32,
   handshakeSecret: Secret<u8[]>,
   dst: Secret<u8[]>,
-): void
+) => void
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -1123,12 +1121,12 @@ The held secret whose bytes the master secret overwrites. The caller still owns 
 wiped before it returns, and so is the scratch.
 
 ```ts
-function tlsMasterSecretInto(
+const tlsMasterSecretInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   handshakeSecret: u8[],
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -1162,10 +1160,10 @@ zero salt (RFC 8446 §7.1). The zero salt is wiped before it returns; the
 PSK is the caller's.
 
 ```ts
-function tlsPskEarlySecret(
+const tlsPskEarlySecret: (
   hashLength: i32,
   psk: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -1193,12 +1191,12 @@ A fresh `Secret` holding the early secret, which the caller owns and wipes.
 holds nothing to wipe.
 
 ```ts
-function tlsPskEarlySecretInto(
+const tlsPskEarlySecretInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   psk: u8[],
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -1231,11 +1229,11 @@ The PSK a ticket stands for: `HKDF-Expand-Label(resumption_master_secret,
 "resumption", ticket_nonce, HashLen)` (RFC 8446 §4.6.1).
 
 ```ts
-function tlsResumptionPsk(
+const tlsResumptionPsk: (
   hashLength: i32,
   resumptionMasterSecret: Secret<u8[]>,
   ticketNonce: u8[],
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -1271,7 +1269,7 @@ returns. A nonce window outside `ticketNonce`, or longer than 255 bytes,
 panics, as `hkdfExpandLabelInto` does.
 
 ```ts
-function tlsResumptionPskInto(
+const tlsResumptionPskInto: (
   kdf: HkdfScratch,
   hashLength: i32,
   resumptionMasterSecret: u8[],
@@ -1279,7 +1277,7 @@ function tlsResumptionPskInto(
   nonceOff: i32,
   nonceLength: i32,
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -1331,7 +1329,7 @@ The hash length of `suite`: 32 for the two SHA-256 suites, 48 for
 negotiate, which is how a caller tells the two apart.
 
 ```ts
-function tlsSuiteHashLength(suite: i32): i32
+const tlsSuiteHashLength: (suite: i32) => i32
 ```
 
 <scalar-field name="suite" type="i32" required>
@@ -1351,7 +1349,7 @@ The suite's hash length in bytes (32 or 48), or 0 for a suite this module does n
 The AEAD key length of `suite`: 16 for AES-128-GCM, 32 for the other two, 0 for an unknown suite.
 
 ```ts
-function tlsSuiteKeyLength(suite: i32): i32
+const tlsSuiteKeyLength: (suite: i32) => i32
 ```
 
 <scalar-field name="suite" type="i32" required>
@@ -1372,10 +1370,10 @@ The 12-byte IV a traffic secret gives `suite`'s record protection (RFC 8446
 §7.3), held as a `Secret`; empty for a suite this module does not negotiate.
 
 ```ts
-function tlsTrafficIv(
+const tlsTrafficIv: (
   suite: i32,
   trafficSecret: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="suite" type="i32" required>
@@ -1403,10 +1401,10 @@ The AEAD key a traffic secret gives `suite`'s record protection (RFC 8446
 §7.3), held as a `Secret`; empty for a suite this module does not negotiate.
 
 ```ts
-function tlsTrafficKey(
+const tlsTrafficKey: (
   suite: i32,
   trafficSecret: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="suite" type="i32" required>
@@ -1438,12 +1436,12 @@ negotiate, a secret that is not its hash's length, or a key or IV array of
 the wrong length.
 
 ```ts
-function tlsTrafficKeysFromHeld(
+const tlsTrafficKeysFromHeld: (
   suite: i32,
   trafficSecret: Secret<u8[]>,
   key: u8[],
   iv: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="suite" type="i32" required>
@@ -1486,13 +1484,13 @@ length, or a key or IV array of the wrong length. When it derives, the
 scratch is wiped before it returns.
 
 ```ts
-function tlsTrafficKeysInto(
+const tlsTrafficKeysInto: (
   kdf: HkdfScratch,
   suite: i32,
   trafficSecret: u8[],
   key: u8[],
   iv: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
