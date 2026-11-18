@@ -689,9 +689,10 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    process on one core tails whatever it waits with. The tail is a queue,
    not a stall: in a traced run at 45,000 (`bench/handler-ring/trace.sh`,
    which applies `trace.patch` for one build) no pass of the loop took more
-   than 14.59 ms, but a burst left 5,163 slots ready with the oldest 63 ms
-   old. No fix is made; a second core should shorten it, which is not
-   measured. The final code at 96,000
+   than 8.60 ms inside the load window, but a burst left at least 1,910
+   slots ready with the oldest 26 ms old. The p99 is noisy: one design
+   moved up to 6.6x between rounds. No fix is made; a second core should
+   shorten it, which is not measured. The final code at 96,000
    (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
    request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.
    At 300,000 (`--conns 300000 --think 10 --rounds 3 --designs ring`), one

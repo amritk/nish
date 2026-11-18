@@ -4,19 +4,28 @@ and nr_poll_wait, printed to stderr once a second when NR_TRACE is set. It is
 not in the runtime: bench/handler-ring/trace.sh applies it for one build and
 reverts it. git apply skips this text.
 
-`trace` line, per second: cycles (returns of nr_poll_wait), pumps, ev
-(completions pumped), waits, sleeps; max_cycle, the longest pass between two
-returns less its sleep, ms; max_out, the time of that pass spent outside
-nr_poll_wait, in the handler, ms; n_at_max, the events that pass returned;
-max_in, max_pump, max_wait, max_sleep, ms; max_pump_ev, max_rounds;
-max_cycle_pumps and max_cycle_ev, the pumps and completions of the longest
-pass; h(>1,2,5,10,20,50,100), passes longer than each bound, ms.
+Both lines start with t, the CLOCK_MONOTONIC second the line was printed at,
+the clock loadgen's win_lo and win_hi are on: a line whose t lies in
+(win_lo + 1, win_hi] covers one second of the measured window.
+
+`trace` line, per second. Counts: cycles (returns of nr_poll_wait), pumps,
+ev (completions pumped), waits, sleeps, sleep_full. The longest pass, a pass
+running from one return of nr_poll_wait to the next, less its sleep in
+epoll_wait: max_cycle, its length, ms; max_out, its time outside
+nr_poll_wait, in the handler, ms; n_at_max, the ready slots the previous
+return handed the handler, the ones that time served; max_cycle_pumps and
+max_cycle_ev, its pumps and the completions they took. The longest pump:
+max_pump, ms, and max_pump_ev, its completions. Maxima over every pass of
+the second, not of the longest one: max_in (one call of nr_poll_wait), max_wait
+(one nish_uring_wait), max_sleep (one epoll_wait), ms; max_rounds (waits in one
+pump), max_npend (sends queued at a pump's end). h(>1,2,5,10,20,50,100):
+passes longer than each bound, ms.
 
 `tr2` line, per second: ages, the ready-list entries the handler took;
 max_age, the longest any waited from listing to collection, ms; ah(...),
-entries older than each bound, ms; max_list, the longest the list was; and the
-ring set's taskrun, overflow, nobufs, requeues and live counters
-(nish_uring_stats).
+entries older than each bound, ms; max_list, the longest the list was, read
+every 64th collection; and the ring set's taskrun, overflow, nobufs and
+requeues over the second and its live count (nish_uring_stats).
 
 diff --git a/runtime/runtime-net.c b/runtime/runtime-net.c
 index 4160af77..5d1e17e3 100644
@@ -67,7 +76,7 @@ index 4160af77..5d1e17e3 100644
 +static double tr_t0, tr_ret, tr_in0;
 +static long tr_cycles, tr_pumps, tr_ev, tr_waits, tr_sleeps, tr_sleep_full, tr_h[8];
 +static double tr_max_cycle, tr_max_out, tr_max_in, tr_max_pump, tr_max_sleep, tr_max_wait;
-+static long tr_max_pump_ev, tr_max_rounds, tr_n_at_max, tr_max_npend, tr_max_cycle_pumps, tr_cycle_pumps, tr_max_cycle_ev, tr_cycle_ev;
++static long tr_max_pump_ev, tr_max_rounds, tr_n_at_max, tr_max_npend, tr_max_cycle_pumps, tr_cycle_pumps, tr_max_cycle_ev, tr_cycle_ev, tr_prev_n;
 +static double tr_cycle_sleep;
 +static long tr_ah[8], tr_ages; static double tr_max_age; static long tr_max_list;
 +static struct nish_uring_set *tr_u; static struct tr_ust tr_prev;
@@ -87,14 +96,14 @@ index 4160af77..5d1e17e3 100644
 +  if (t - tr_t0 < 1000) return;
 +  if (tr_u) {
 +    struct tr_ust u; nish_uring_stats(tr_u, &u);
-+    fprintf(stderr, "tr2 ages=%ld max_age=%.2f ah(>1,2,5,10,20,50,100)=%ld,%ld,%ld,%ld,%ld,%ld,%ld max_list=%ld taskrun=%ld overflow=%ld nobufs=%ld requeues=%ld live=%ld\n",
-+      tr_ages, tr_max_age, tr_ah[0], tr_ah[1], tr_ah[2], tr_ah[3], tr_ah[4], tr_ah[5], tr_ah[6], tr_max_list,
++    fprintf(stderr, "tr2 t=%.3f ages=%ld max_age=%.2f ah(>1,2,5,10,20,50,100)=%ld,%ld,%ld,%ld,%ld,%ld,%ld max_list=%ld taskrun=%ld overflow=%ld nobufs=%ld requeues=%ld live=%ld\n",
++      t / 1e3, tr_ages, tr_max_age, tr_ah[0], tr_ah[1], tr_ah[2], tr_ah[3], tr_ah[4], tr_ah[5], tr_ah[6], tr_max_list,
 +      (long)(u.taskrun - tr_prev.taskrun), (long)(u.overflow - tr_prev.overflow), (long)(u.nobufs - tr_prev.nobufs), (long)(u.requeues - tr_prev.requeues), (long)u.live);
 +    tr_prev = u;
 +  }
 +  tr_ages = 0; tr_max_age = 0; tr_max_list = 0; for (int i = 0; i < 8; i++) tr_ah[i] = 0;
-+  fprintf(stderr, "trace cycles=%ld pumps=%ld ev=%ld waits=%ld sleeps=%ld sleep_full=%ld max_cycle=%.2f max_out=%.2f n_at_max=%ld max_in=%.2f max_pump=%.2f max_pump_ev=%ld max_rounds=%ld max_wait=%.3f max_sleep=%.2f max_npend=%ld max_cycle_pumps=%ld max_cycle_ev=%ld h(>1,2,5,10,20,50,100)=%ld,%ld,%ld,%ld,%ld,%ld,%ld\n",
-+          tr_cycles, tr_pumps, tr_ev, tr_waits, tr_sleeps, tr_sleep_full, tr_max_cycle, tr_max_out, tr_n_at_max, tr_max_in, tr_max_pump, tr_max_pump_ev, tr_max_rounds, tr_max_wait, tr_max_sleep, tr_max_npend, tr_max_cycle_pumps, tr_max_cycle_ev, tr_h[0], tr_h[1], tr_h[2], tr_h[3], tr_h[4], tr_h[5], tr_h[6]);
++  fprintf(stderr, "trace t=%.3f cycles=%ld pumps=%ld ev=%ld waits=%ld sleeps=%ld sleep_full=%ld max_cycle=%.2f max_out=%.2f n_at_max=%ld max_in=%.2f max_pump=%.2f max_pump_ev=%ld max_rounds=%ld max_wait=%.3f max_sleep=%.2f max_npend=%ld max_cycle_pumps=%ld max_cycle_ev=%ld h(>1,2,5,10,20,50,100)=%ld,%ld,%ld,%ld,%ld,%ld,%ld\n",
++          t / 1e3, tr_cycles, tr_pumps, tr_ev, tr_waits, tr_sleeps, tr_sleep_full, tr_max_cycle, tr_max_out, tr_n_at_max, tr_max_in, tr_max_pump, tr_max_pump_ev, tr_max_rounds, tr_max_wait, tr_max_sleep, tr_max_npend, tr_max_cycle_pumps, tr_max_cycle_ev, tr_h[0], tr_h[1], tr_h[2], tr_h[3], tr_h[4], tr_h[5], tr_h[6]);
 +  tr_t0 = t;
 +  tr_cycles = tr_pumps = tr_ev = tr_waits = tr_sleeps = tr_sleep_full = 0;
 +  tr_max_cycle = tr_max_out = tr_max_in = tr_max_pump = tr_max_sleep = tr_max_wait = 0;
@@ -192,10 +201,10 @@ index 4160af77..5d1e17e3 100644
 +    if (in > tr_max_in) tr_max_in = in;
 +    double busy = cyc - tr_cycle_sleep;
 +    tr_cycle_sleep = 0;
-+    if (busy > tr_max_cycle) { tr_max_cycle = busy; tr_max_out = out_; tr_max_cycle_pumps = tr_cycle_pumps; tr_max_cycle_ev = tr_cycle_ev; }
++    if (busy > tr_max_cycle) { tr_max_cycle = busy; tr_max_out = out_; tr_max_cycle_pumps = tr_cycle_pumps; tr_max_cycle_ev = tr_cycle_ev; tr_n_at_max = tr_prev_n; }
 +    static const double edges[7] = {1, 2, 5, 10, 20, 50, 100};
 +    for (int i = 0; i < 7; i++) if (busy > edges[i]) tr_h[i]++;
-+    if (out_ > 0 && 1) tr_n_at_max = tr_n_at_max < n ? n : tr_n_at_max;
++    tr_prev_n = n;
 +    tr_cycle_pumps = 0; tr_cycle_ev = 0;
 +    tr_ret = t;
 +    tr_flush(t);

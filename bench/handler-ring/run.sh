@@ -13,7 +13,7 @@
 #   bash bench/handler-ring/run.sh --quick          # 18k, 1 round, short windows
 #   bash bench/handler-ring/run.sh --conns "18000 60000" --rounds 3
 #   bash bench/handler-ring/run.sh --compiler build/nish
-#   bash bench/handler-ring/run.sh --conns 90000 --think 4 --designs "ring epoll"
+#   bash bench/handler-ring/run.sh --conns 90000 --think 4 --warmup 4 --designs "ring epoll"
 #
 # --think S runs the load closed-loop: each connection sends its next request
 # S seconds after its last answer, as a keep-alive client with think time
@@ -37,8 +37,10 @@
 # The load is bench/fd-limit/loadgen.c, at a fixed total rate or, with
 # --think, closed-loop: C keep-alive connections, `GET /plaintext`, responses
 # counted at 129 bytes. A run whose load lost connections (loadgen's
-# `send_failed` or `closed` above 0) offered less than it says, and is flagged. The database
-# is bench/sqlite's, made by `node bench/sqlite/run.mjs --validate` and copied
+# `send_failed` or `closed` above 0) offered less than it says, and is
+# flagged; so is one with window requests left unanswered (`lat_lost`), whose
+# percentiles leave them out and are lower bounds, and the summary's `lost`
+# column sums them. The database is bench/sqlite's, made by `node bench/sqlite/run.mjs --validate` and copied
 # here once per run. Needs gcc, node, Linux 6.1 or later and memory for both
 # ends of C connections.
 set -euo pipefail
@@ -209,10 +211,14 @@ run() {
   local line
   line=$(${load_pin[@]+"${load_pin[@]}"} "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
   echo "round=$r procs=$n $line" | tee -a "$results"
-  case "$line" in
-  *" send_failed=0 closed=0") ;;
-  *) echo "warning: $design at C=$c round $r lost connections during the load; it offered less than C / think" >&2 ;;
-  esac
+  if ! [[ $line == *" send_failed=0 closed=0 "* ]]; then
+    echo "warning: $design at C=$c round $r lost connections during the load; it offered less than C / think" >&2
+  fi
+  # A request the window sent and the 2 s drain left unanswered is in no
+  # percentile, so each one makes the round's percentiles a lower bound.
+  if ! [[ $line == *" lat_lost=0 "* ]]; then
+    echo "warning: $design at C=$c round $r left window requests unanswered (lat_lost); its percentiles are lower bounds" >&2
+  fi
   stop_server
   sleep 1
 }
@@ -264,6 +270,7 @@ awk -v limit="$limit" '
     k = v["conns"] SUBSEP v["label"]
     n[k]++; us[k, n[k]] = v["srv_us"]; box[k, n[k]] = v["box_us"]; rps[k, n[k]] = v["rps"]
     p50[k, n[k]] = v["p50_ms"]; p99[k, n[k]] = v["p99_ms"]; p999[k, n[k]] = v["p999_ms"]
+    lost[k] += v["lat_lost"]; if (v["lat_n"] == 0) nolat[k] = 1
     p99lo[k] = (n[k] == 1 || v["p99_ms"] < p99lo[k]) ? v["p99_ms"] : p99lo[k]
     p99hi[k] = (n[k] == 1 || v["p99_ms"] > p99hi[k]) ? v["p99_ms"] : p99hi[k]
     lo[k] = (n[k] == 1 || v["srv_us"] < lo[k]) ? v["srv_us"] : lo[k]
@@ -273,7 +280,7 @@ awk -v limit="$limit" '
     if (!(v["conns"] in seen)) { seen[v["conns"]] = 1; order[++nc] = v["conns"] }
   }
   END {
-    printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s %7s %20s %8s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms"
+    printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
       split("ring epoll epoll-copy epoll1", ds, " ")
@@ -283,7 +290,10 @@ awk -v limit="$limit" '
         delete a; delete b; delete q; delete l50; delete l99; delete l999
         for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i]; l50[i] = p50[k, i]; l99[i] = p99[k, i]; l999[i] = p999[k, i] }
         m[k] = med(a, n[k]); mb = med(b, n[k]); mq = med(q, n[k])
-        printf "%-8s %-10s %5s %8s %6s %7.2f (%.2f-%.2f) %8.2f %8.0f %8s %8s %7.2f %7.2f (%.2f-%.2f) %8.2f\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], mb, mq, pss[k], mem[k], med(l50, n[k]), med(l99, n[k]), p99lo[k], p99hi[k], med(l999, n[k])
+        # A round with no answer in its window has no percentile: n/a.
+        if (k in nolat) { s50 = "n/a"; s99 = "n/a"; s999 = "n/a" }
+        else { s50 = sprintf("%.2f", med(l50, n[k])); s99 = sprintf("%.2f (%.2f-%.2f)", med(l99, n[k]), p99lo[k], p99hi[k]); s999 = sprintf("%.2f", med(l999, n[k])) }
+        printf "%-8s %-10s %5s %8s %6s %7.2f (%.2f-%.2f) %8.2f %8.0f %8s %8s %7s %20s %8s %6d\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], mb, mq, pss[k], mem[k], s50, s99, s999, lost[k]
       }
       e = c SUBSEP "epoll"; ec = c SUBSEP "epoll-copy"; u = c SUBSEP "ring"
       if ((e in m) && (ec in m) && (u in m)) {

@@ -21,12 +21,16 @@
  * last byte of its response, into a log-linear histogram (32 buckets an
  * octave, so a percentile reads within about 3%), and the run waits up to
  * 2 s past the window for the window's last answers. `lat_lost` counts the
- * window's requests still unanswered then. `send_failed` counts sends that
+ * window's requests still unanswered then; they are not in the histogram, so
+ * a nonzero count makes every percentile a lower bound, and with no answer
+ * at all they print n/a. win_lo and win_hi bound the window, CLOCK_MONOTONIC
+ * seconds. `send_failed` counts sends that
  * failed or went short and `closed` the connections that closed or failed
  * after the load began: either connection sends nothing more, so a nonzero
  * count means the run offered less than C / think. With -t, -w must be at
- * least the think time, so the window opens after the spread first requests. The connect burst is outside the
- * window: it starts after every connection is up and the warm-up has run.
+ * least the think time, so the window opens after the spread first requests.
+ * The connect burst is outside the window: it starts after every connection
+ * is up and the warm-up has run.
  *
  * Usage: loadgen -c <conns> -r <req/s> -p <port> -w <warmup s> -d <seconds>
  *                -n <server pid,pid,...> [-t <think s>] [-P <client processes>]
@@ -525,6 +529,12 @@ int main(int argc, char **argv) {
     }
   }
 
+  /* With no answer in the window there is no quantile: n/a, not 0. */
+  char ps[4][24];
+  for (int j = 0; j < 4; j++) {
+    if (lat_n > 0) snprintf(ps[j], sizeof ps[j], "%.3f", pv[j]);
+    else snprintf(ps[j], sizeof ps[j], "n/a");
+  }
   double hz = (double)sysconf(_SC_CLK_TCK);
   double dt = b.t - a.t;
   double req = (double)(b.responses - a.responses);
@@ -534,10 +544,10 @@ int main(int argc, char **argv) {
   double si_us = (double)(b.box_softirq - a.box_softirq) / hz * 1e6 / req;
   printf("label=%s conns=%ld up=%ld failed=%ld clients=%d connect_s=%.1f rps=%.0f srv_us=%.2f srv_user_us=%.2f "
          "srv_sys_us=%.2f box_us=%.2f softirq_us=%.2f srv_rss_mb=%.1f srv_pss_mb=%.1f srv_fds=%ld mem_used_mb=%ld "
-         "tcp_mem_mb=%ld starved=%ld sent=%ld think_s=%.2f p50_ms=%.3f p99_ms=%.3f p999_ms=%.3f max_ms=%.3f "
-         "lat_n=%ld lat_lost=%ld send_failed=%ld closed=%ld\n",
+         "tcp_mem_mb=%ld starved=%ld sent=%ld think_s=%.2f p50_ms=%s p99_ms=%s p999_ms=%s max_ms=%s "
+         "lat_n=%ld lat_lost=%ld send_failed=%ld closed=%ld win_lo=%.3f win_hi=%.3f\n",
          label, conns, up, failed, nchild, connect_s, req / dt, us_user + us_sys, us_user, us_sys, box_us, si_us,
-         (double)rss / 1024, (double)pss / 1024, fds, used_mb, tcp_mb, starved, sent, think, pv[0], pv[1], pv[2], pv[3],
-         lat_n, lat_lost, send_failed, closed);
+         (double)rss / 1024, (double)pss / 1024, fds, used_mb, tcp_mb, starved, sent, think, ps[0], ps[1], ps[2], ps[3],
+         lat_n, lat_lost, send_failed, closed, sh->win_lo, sh->win_hi);
   return 0;
 }
