@@ -21,7 +21,11 @@
  * last byte of its response, into a log-linear histogram (32 buckets an
  * octave, so a percentile reads within about 3%), and the run waits up to
  * 2 s past the window for the window's last answers. `lat_lost` counts the
- * window's requests still unanswered then. The connect burst is outside the
+ * window's requests still unanswered then. `send_failed` counts sends that
+ * failed or went short and `closed` the connections that closed or failed
+ * after the load began: either connection sends nothing more, so a nonzero
+ * count means the run offered less than C / think. With -t, -w must be at
+ * least the think time, so the window opens after the spread first requests. The connect burst is outside the
  * window: it starts after every connection is up and the warm-up has run.
  *
  * Usage: loadgen -c <conns> -r <req/s> -p <port> -w <warmup s> -d <seconds>
@@ -60,6 +64,9 @@ struct shared {
   volatile long established[MAX_CHILD], failed[MAX_CHILD], ready[MAX_CHILD];
   volatile long responses[MAX_CHILD], sent[MAX_CHILD], starved[MAX_CHILD];
   volatile long win_sent[MAX_CHILD], win_answered[MAX_CHILD];
+  /* Sends that failed or went short, and connections the server closed or
+   * that failed, after go: either leaves a connection that sends no more. */
+  volatile long send_failed[MAX_CHILD], closed[MAX_CHILD];
   volatile long lat[MAX_CHILD][LAT_BUCKETS];
 };
 
@@ -100,7 +107,10 @@ static double lat_value(int b) {
 static int in_window(double t) { return sh->win_lo > 0 && t >= sh->win_lo && (sh->win_hi == 0 || t < sh->win_hi); }
 
 static int send_request(struct conn *c, int k, double t) {
-  if (send(c->fd, REQUEST, REQUEST_LEN, MSG_NOSIGNAL) != (ssize_t)REQUEST_LEN) return 0;
+  if (send(c->fd, REQUEST, REQUEST_LEN, MSG_NOSIGNAL) != (ssize_t)REQUEST_LEN) {
+    sh->send_failed[k]++;
+    return 0;
+  }
   c->state = C_BUSY;
   c->sent_at = t;
   if (in_window(t)) sh->win_sent[k]++;
@@ -247,6 +257,7 @@ static void child(int k, long n, double rate, double think, int port) {
         if (r == 0 || (errno != EAGAIN && errno != EINTR)) {
           close(c->fd);
           c->state = C_NONE;
+          sh->closed[k]++;
         }
         continue;
       }
@@ -405,6 +416,12 @@ int main(int argc, char **argv) {
       return 2;
     }
   }
+  if (think > 0 && warmup < think) {
+    /* The first requests spread over the first think seconds: a window that
+     * opens sooner would time a ramp, not the steady load. */
+    fprintf(stderr, "loadgen: -w %.2f is shorter than -t %.2f\n", warmup, think);
+    return 2;
+  }
   long need = (conns + PER_CHILD_MAX - 1) / PER_CHILD_MAX;
   if (nchild < need) nchild = (int)need;
   if (nchild < 1) nchild = 1;
@@ -471,10 +488,12 @@ int main(int argc, char **argv) {
     usleep(10000);
   }
   sh->stop = 1;
-  long sent = 0, starved = 0;
+  long sent = 0, starved = 0, send_failed = 0, closed = 0;
   for (int k = 0; k < nchild; k++) {
     sent += sh->sent[k];
     starved += sh->starved[k];
+    send_failed += sh->send_failed[k];
+    closed += sh->closed[k];
   }
   for (int k = 0; k < nchild; k++) waitpid(kids[k], NULL, 0);
   long lat_n = 0, lat_lost = 0;
@@ -516,9 +535,9 @@ int main(int argc, char **argv) {
   printf("label=%s conns=%ld up=%ld failed=%ld clients=%d connect_s=%.1f rps=%.0f srv_us=%.2f srv_user_us=%.2f "
          "srv_sys_us=%.2f box_us=%.2f softirq_us=%.2f srv_rss_mb=%.1f srv_pss_mb=%.1f srv_fds=%ld mem_used_mb=%ld "
          "tcp_mem_mb=%ld starved=%ld sent=%ld think_s=%.2f p50_ms=%.3f p99_ms=%.3f p999_ms=%.3f max_ms=%.3f "
-         "lat_n=%ld lat_lost=%ld\n",
+         "lat_n=%ld lat_lost=%ld send_failed=%ld closed=%ld\n",
          label, conns, up, failed, nchild, connect_s, req / dt, us_user + us_sys, us_user, us_sys, box_us, si_us,
          (double)rss / 1024, (double)pss / 1024, fds, used_mb, tcp_mb, starved, sent, think, pv[0], pv[1], pv[2], pv[3],
-         lat_n, lat_lost);
+         lat_n, lat_lost, send_failed, closed);
   return 0;
 }

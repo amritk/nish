@@ -3202,7 +3202,7 @@ What this bench shares with the entry: one SQLite lookup a request, and one ring
 | 2 s | 45,000 | 44,904 / 44,813 | 17.86 / 18.43 | 11.65 / 76.80 | 40,342 / 39,188 | 24.52 / 25.23 | 331.78 / 446.46 |
 | 1.6 s | 56,250 | 52,868 / 53,094 | 18.38 / 17.96 | 182.27 / 231.42 | 39,693 / 39,180 | 24.96 / 25.30 | 778.24 / 794.62 |
 
-At every load the ring process's p99 was below the five's on the same core. Both tails grow as the load nears what one core can serve: about 53,000 requests a second for the ring process (about 18 µs a request) and about 40,000 for the five (about 25 µs). Two longer runs at a light load, 3 rounds each, read the same way:
+At every load the ring process's p99 was below the five's on the same core. Both tails grow as the load nears what one core can serve: on this 2.10GHz box, about 53,000 requests a second for the ring process (about 18 µs a request) and about 40,000 for the five (about 25 µs). At the 2-second and 1.6-second thinks the five were saturated: they served about 40,000 of the 45,000 and 56,250 offered, so their p99 there is a backlog that grows for the whole window, not a tail at the same load as the ring's. At 1.6 seconds the ring process was saturated too, at about 53,000 of 56,250. Two longer runs at a light load, 3 rounds each, read the same way:
 
 - `--conns 90000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"`, at 22,500 req/s: the ring process read a p99 of 0.70 to 0.76 ms against 1.23 to 1.39 ms for the five.
 - `--conns 18000 --think 0.8 --rounds 3 --warmup 5 --seconds 15 --designs "ring epoll epoll-copy epoll1"`, same rate: the ring process read 1.65 to 1.78 ms, the five 2.08 to 3.17 ms, and one epoll process 1.49 to 1.84 ms.
@@ -3231,7 +3231,7 @@ No fix is made in this stage. The loop spends about 0.08 µs a request pumping c
 | 96,000 | epoll | 5 | 96,000 | 96,040 | 31.17 (30.37–31.45) | 41.65 | 23,995 | 129.2 | 1,322 | 0.24 | 8.83 (2.27–26.88) | 29.44 |
 | 96,000 | epoll copy | 5 | 96,000 | 96,040 | 31.42 (31.20–31.78) | 41.53 | 23,996 | 129.2 | 1,327 | 0.24 | 3.87 (2.21–17.66) | 19.71 |
 
-Medians of 3 (min to max), and `box MB` from the last round of each design, as above. The ring process is 33.1% cheaper than the five at the medians, against a 0.8% band, and its p99 is lower in every round. Its PSS, 141.8 MB, is the 141.4 to 141.7 MB NURING-38 measured. The verdict still holds.
+Medians of 3 (min to max), and `box MB` from the last round of each design, as above. These rounds predate `02230cc8`'s ten-minute `idleTimeout` (below), which does not touch them: opening 96,000 connections took 5.8 to 6.1 s, far inside the 60-second default. The ring process is 33.1% cheaper than the five at the medians, against a 0.8% band, and its p99 is lower in every round. Its PSS, 141.8 MB, is the 141.4 to 141.7 MB NURING-38 measured. The verdict still holds.
 
 **300,000 connections, one ring process.** `bash bench/handler-ring/run.sh --conns 300000 --think 10 --rounds 3 --warmup 15 --seconds 15 --designs ring` at commit `02230cc8`, on the same 2.30GHz box, at 30,000 req/s. There is no epoll row. Under this limit five epoll processes hold 96,000 connections between them, so 300,000 would need sixteen.
 

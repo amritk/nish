@@ -24,7 +24,9 @@
 # load on the remaining cores; --server-cpus "" runs both unpinned.
 # --designs picks from ring, epoll (five SO_REUSEPORT processes), epoll-copy
 # (its byte-identical copy, the noise band) and epoll1 (one process on
-# descriptors, held to the limit's C).
+# descriptors, which holds at most L - 64 connections and is skipped above
+# that; raising the hard limit needs CAP_SYS_RESOURCE, which a container's
+# root may lack).
 #
 # The box's C is the most connections five descriptor processes hold under
 # the limit L (65535, or this shell's hard limit if lower), each keeping 800
@@ -32,8 +34,10 @@
 # 5 x (L - 800), rounded down to a thousand. On a hard limit of 20,000 that is
 # 96,000; on the benchmark box's 65,535 it would be 323,000.
 #
-# The load is bench/fd-limit/loadgen.c, at a fixed total rate: C keep-alive
-# connections, `GET /plaintext`, responses counted at 129 bytes. The database
+# The load is bench/fd-limit/loadgen.c, at a fixed total rate or, with
+# --think, closed-loop: C keep-alive connections, `GET /plaintext`, responses
+# counted at 129 bytes. A run whose load lost connections (loadgen's
+# `send_failed` or `closed` above 0) offered less than it says, and is flagged. The database
 # is bench/sqlite's, made by `node bench/sqlite/run.mjs --validate` and copied
 # here once per run. Needs gcc, node, Linux 6.1 or later and memory for both
 # ends of C connections.
@@ -76,6 +80,13 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# The closed loop spreads its first requests over the first think time, so
+# the window opens only after it (loadgen refuses a shorter warm-up too).
+if awk -v t="$think" -v w="$warmup" 'BEGIN { exit !(t > w) }'; then
+  echo "run.sh: --warmup $warmup is shorter than --think $think" >&2
+  exit 2
+fi
 
 hard=$(ulimit -Hn)
 limit=65535
@@ -156,7 +167,7 @@ run() {
   ring)
     n=1
     slots=$((c + 1024))
-    env -u BENCH_CORES BENCH_RING=1 "${srv_pin[@]}" prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     # `rings` follows `listening`: wait for the line the check reads.
     wait_for '^rings '
@@ -171,7 +182,7 @@ run() {
     # Every descriptor the limit leaves: SO_REUSEPORT does not split C evenly.
     slots=$((limit - 64))
     if [ "$design" = epoll-copy ]; then bin=$out/server-copy; fi
-    env -u BENCH_RING BENCH_CORES=5 "${srv_pin[@]}" prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    env -u BENCH_RING BENCH_CORES=5 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     wait_for listening
     # Worker 0 prints `listening`; the others bind beside it.
@@ -181,7 +192,11 @@ run() {
   epoll1)
     n=1
     slots=$((limit - 64))
-    env -u BENCH_RING -u BENCH_CORES "${srv_pin[@]}" prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    if [ "$c" -gt "$slots" ]; then
+      echo "epoll1 skipped at C=$c: one process holds at most $slots connections under $limit" >&2
+      return 0
+    fi
+    env -u BENCH_RING -u BENCH_CORES ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     wait_for listening
     pids=$server
@@ -192,8 +207,12 @@ run() {
     ;;
   esac
   local line
-  line=$("${load_pin[@]}" "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
+  line=$(${load_pin[@]+"${load_pin[@]}"} "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
   echo "round=$r procs=$n $line" | tee -a "$results"
+  case "$line" in
+  *" send_failed=0 closed=0") ;;
+  *) echo "warning: $design at C=$c round $r lost connections during the load; it offered less than C / think" >&2 ;;
+  esac
   stop_server
   sleep 1
 }
