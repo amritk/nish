@@ -25165,7 +25165,9 @@ if (dealtHere("cliChecks")) {
         noLink: true,
         want: [
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
-          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 8 bytes`,
+          // On wasm32, L's pointer field is 4 bytes, so its current layout is
+          // already the compact 8; natively the 8-byte pointer pads it to 16.
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? 8 : 16} → 8 bytes`,
           "explain-layout: 0 of 2 classes compact",
         ],
       })
