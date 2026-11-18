@@ -43709,7 +43709,10 @@ if (!only || "pgo".includes(only)) {
         .flatMap((l) => l.match(/\/runtime\/runtime(-[a-z0-9]+)?\.c(?= |$)/g) ?? [])
         .sort()
         .join(",")
-    const sqliteC = (l) => / -c /.test(l) && /(^| )sqlite3\.c( |$)/.test(l)
+    // SQLite is compiled as one unit with the adapter: nish-sqlite.c includes
+    // sqlite3.c, so no line compiles sqlite3.c on its own.
+    const sqliteC = (l) => / -c /.test(l) && /(^| )(\S*\/)?nish-sqlite\.c( |$)/.test(l)
+    const amalgamationAlone = (l) => /(^| )(\S*\/)?sqlite3\.c( |$)/.test(l)
 
     const unread = path.join(pgoDir, "unread")
     const truncated = nish([hello, "-o", path.join(pgoDir, "unread.ll"), "--link", unread, "--pgo-use", indexedMagic], env)
@@ -43735,6 +43738,7 @@ if (!only || "pgo".includes(only)) {
       trained.status === 0 &&
         runtimeUnits(trainedLines).includes("/runtime/runtime.c") &&
         trainedLines.some(sqliteC) &&
+        !trainedLines.some(amalgamationAlone) &&
         trainedLines.some((l) => !/ -c /.test(l)) &&
         trainedLines.every((l) => l.includes("-fprofile-generate")),
       trained.stderr + trainedLines.join("\n")
@@ -43789,6 +43793,7 @@ if (!only || "pgo".includes(only)) {
       used.status === 0 &&
         runtimeUnits(usedLines) === runtimeUnits(trainedLines) &&
         usedLines.some(sqliteC) &&
+        !usedLines.some(amalgamationAlone) &&
         usedLines.every((l) => l.includes(`-fprofile-use=${fs.realpathSync(profile)}`)) &&
         ranPgo.status === 0 &&
         ranPgo.stdout === ranPlain.stdout &&
