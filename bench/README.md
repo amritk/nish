@@ -514,7 +514,10 @@ its own elapsed time and the number of digits varies. Turning ASLR off
 **The tolerance is 0.1%,** stored in the file as `tolerance`. The largest effect
 measured above, after pinning, is strbuild's 0.006%, so 0.1% leaves a
 sixteenfold margin for anything else that differs between runners, such as a
-glibc patch release or a kernel's vDSO. A looser bound would have cost real
+glibc patch release or a kernel's vDSO. It does not cover a different glibc
+minor and valgrind: `map-proto-ordered` reads 0.553% apart between this
+container and CI's runner ("Which environment a count is from", below). A
+looser bound would have cost real
 regressions: switching off the bounds prover in `src/bounds.ts` costs Queens
 0.858% and changes no other benchmark by more than two instructions. A count below
 its baseline by more than the tolerance does not fail. `--check` prints a note,
@@ -543,7 +546,38 @@ changes its count as well, so a resize is its own update and says so.
 under test. The counts are only meaningful on x86-64 Linux, and valgrind does not
 run on macOS. So on any other host, or where valgrind is not on `PATH`, the check
 is a counted skip that names the reason. CI's Linux job installs valgrind beside
-LLVM, so the check runs there on every push.
+LLVM, so the check runs there on every push. On a pass, `tests/run.js` prints
+the whole table, so each runner's own counts are in its log.
+
+**Which environment a count is from.** The file-level `valgrind` and every
+entry stamped `valgrind-3.22.0` were counted in a cloud container with glibc
+2.39. `map-proto-ordered`, stamped `valgrind-3.26.0`, was counted on CI's
+runner, which has glibc 2.43 and valgrind 3.26. A count depends on the
+environment's glibc and valgrind, so a rise smaller than the gap between two
+environments' counts fails on one and passes on the other. Two did (#1727).
+Both programs' IR is byte for byte the same across each pair of releases
+below, and putting the newer commit's `runtime/` into the older install moves
+the count by the full amount:
+
+- **strbuild, +0.312%** (53,767,351 to 53,935,041), at 2f4f8e30, which gave
+  each `awaitAll` lane its own region (HF-13). `nish_arena_release`,
+  `nish_arena_keep` and `nish_free_until` now test a chunk's carved bit, about
+  1.3 instructions for each of the 131,072 pieces.
+- **map-proto-ordered-fp32, +0.192%** (238,334,288 to 238,792,901), at
+  6074bbec, which added regions to the runtime. Its message records the cost:
+  LTO no longer inlines `nish_str_from_i32` into the map loop, about 458
+  thousand instructions a run. That commit raised `map-proto-ordered` and
+  `map-proto-unordered` for it, but not this program, which runs the same
+  loop. 377be32b, which moved the string code into `runtime/runtime-text.c`,
+  took back 130,942 of it.
+
+CI passed both rises on every push from those commits to 50df343f, and this
+container failed both. CI's counts were not printed then, so how far below the
+container's they sit is not known. Both baselines are raised to this
+container's counts at 50df343f, stamped `valgrind-3.22.0`. In the same run,
+`map-proto-ordered` read 0.553% below its CI-counted baseline. Raise a
+baseline in the environment its entry's stamp names. An entry with no stamp is
+the file-level one.
 
 ## Crypto against other languages
 
