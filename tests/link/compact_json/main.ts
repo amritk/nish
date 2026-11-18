@@ -39,7 +39,7 @@ const copyOf = (team: Team): Team => {
   return out
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const body = bytesOf(
     `{"players":[{"name":"Ann","score":3,"next":{"name":"Bo","score":4,"next":null}}],"captain":{"name":"Cy","score":5,"next":null}}`
   )
@@ -62,4 +62,4 @@ export function main(): i32 {
   jsonEncode(w2, copy)
   console.log(w2.text())
   return 0
-}
+};

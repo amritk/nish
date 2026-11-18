@@ -1325,10 +1325,6 @@ const reportUninstantiated = (
 }
 
 /**
- * The name a clash diagnostic points at, or the declaration for a constructor,
- * which has none: `nameNode` in `src/compilation.ts`, for the same reason.
- */
-/**
  * WP48: refuses a compact class in a build C or Node reads. Its links are
  * 32-bit offsets no header, shim or host spells, so an exported function that
  * takes or returns one is refused at its signature (`CompactInSignature`), and
@@ -1343,7 +1339,6 @@ export const refuseCompactSidecars = (
   fns: ExternalFunction[],
   flag: string
 ): boolean => {
-  const table = compilation.table
   const reported = new StringSet()
   for (const fn of fns) {
     const sig = fn.sig
@@ -1359,7 +1354,7 @@ export const refuseCompactSidecars = (
         fn.unit.source,
         at.start,
         at.end,
-        `\`${sig.sourceName}\` is exported to C or Node and its signature holds \`${table.typeName(held.type)}\`, which implements \`Compact\`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object`
+        `\`${sig.sourceName}\` is exported to C or Node and its signature holds \`${held.name}\`, which implements \`Compact\`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object`
       )
       reported.add(held.name)
     }
@@ -1396,6 +1391,10 @@ const compactHeld = (unit: ModuleUnit, type: i32): StructInfo | null => {
   return info !== null && info.compact ? info : null
 }
 
+/**
+ * The name a clash diagnostic points at, or the declaration for a constructor,
+ * which has none: `nameNode` in `src/compilation.ts`, for the same reason.
+ */
 const sigNameNode = (sig: FunctionSig): Node =>
   sig.decl.kind === NodeKind.Constructor ? sig.decl : sig.decl.children[0]
 

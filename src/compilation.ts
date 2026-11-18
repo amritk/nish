@@ -490,6 +490,8 @@ export class Compilation {
    * the fixpoint is the most expensive thing either of them asks for.
    */
   facts: FactsTable | null
+  /** WP48: every module's compact class names, shared (`CheckContext.compactNames`). */
+  compactNames: StringSet
   /** How many diagnostics Phase 0 reported, over every module loaded so far. */
   validationErrors: i32
   /**
@@ -501,8 +503,6 @@ export class Compilation {
   dumpOnly: boolean
   /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
   hostRefused: boolean
-  /** WP48: every module's compact class names, shared (`CheckContext.compactNames`). */
-  compactNames: StringSet
   /**
    * The check got as far as the whole-program facts, so `explainMemoryText`
    * can read them even when a later refusal (`--deny-retention`) fails it.

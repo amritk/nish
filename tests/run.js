@@ -15827,10 +15827,18 @@ if (dealtHere("arrayChecks")) {
         : []
     )
     // `nish_alloc_struct` is not declared but defined, `internal`, in each module
-    // that calls it (`src/runtime.ts`), so `--runtime-decls` has no line for it;
-    // its `define` line is its table entry, read the same way.
-    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_alloc_struct)\()/g)) {
-      runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+    // that calls it (`src/runtime.ts` writes it from a template), so
+    // `--runtime-decls` has no line for it; its `define` line in a module that
+    // allocates a class is its table entry, read the same way.
+    const allocLl = path.join(buildDir, "alloc_runtime_define.ll")
+    const allocIr = spawnSync(NISH, [path.join(casesDir, "acc_method.ts"), "-o", allocLl], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (allocIr.status === 0) {
+      for (const m of fs.readFileSync(allocLl, "utf8").matchAll(/^define internal (.*?@(nish_alloc_struct)\()/gm)) {
+        runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+      }
     }
     check(
       `--runtime-decls prints the runtime table (${runtimeByName.size} declarations)`,

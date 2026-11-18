@@ -52,7 +52,7 @@ const consume = (p: Pipe): i32 => {
   return sum
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const cells: Cell[] = []
   let prev: Cell | null = null
   for (let i: i32 = 1; i <= 6; i++) {
@@ -74,4 +74,4 @@ export function main(): i32 {
   }
   console.log(`${sent[0]} ${got[0]}`)
   return 0
-}
+};

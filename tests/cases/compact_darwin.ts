@@ -11,8 +11,8 @@ class Cell implements Compact {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const cell = new Cell(2, new Cell(1, null))
   const next = cell.next
   return next === null ? cell.value : cell.value + next.value
-}
+};
