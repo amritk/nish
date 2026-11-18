@@ -605,6 +605,12 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     link.push("-DNISH_THREADS=1");
     link.push("-pthread");
   }
+  // WP48: a module with a compact class references `@nish_arena_range_abi`,
+  // which only the range runtime defines, as `tests/run.js` links it.
+  const ir = readFileSyncOrNull(irPath);
+  if (ir !== null && ir.indexOf("@nish_arena_range_abi") >= 0) {
+    link.push("-DNISH_ARENA_RANGE=1");
+  }
   link.push(irPath);
   if (!hasEntry(name, source)) {
     // `<name>.c` is the case's own driver when it has one, and `tests/driver.c`
