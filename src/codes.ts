@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 968
+export const RULE_COUNT: i32 = 969
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -513,6 +513,8 @@ const diagnosticRules = (): string[] => [
   "NL2716",
   "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
   "NL2499",
+  "` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker",
+  "NL2799",
   ", and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target",
   "NL2551",
   "` an argument, which only `fs.read` and `fs.write` (a directory), `process.spawn` (a program) and `net` (a host) take: grant `",

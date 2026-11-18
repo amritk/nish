@@ -23587,6 +23587,7 @@ if (dealtHere("cliChecks")) {
       "--emit-arena",
       "--explain-memory",
       "--explain-layout",
+      "--compact",
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
@@ -25466,6 +25467,104 @@ if (dealtHere("cliChecks")) {
       noIr: true,
       noLink: true,
       want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // Test 3 counts a saving of at least a quarter, on `R` or on a holder the
+    // program makes in a loop or recursion (§3.1): `H` loses 8 of its 40 bytes,
+    // and in the second case its saving is a half, but `H` is made once.
+    layoutCases.push({
+      name: "test 3, a holder's saving under a quarter",
+      file: "underQuarter.ts",
+      source: [
+        "class R {",
+        "  v: i32 = 0",
+        "}",
+        "class H {",
+        "  a: i64 = 0",
+        "  b: i64 = 0",
+        "  c: i64 = 0",
+        "  x: i32 = 0",
+        "  r: R | null = null",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    const h = new H()",
+        "    h.r = new R()",
+        "    n = n + h.x",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: [
+        "underQuarter.ts:1:7: layout: R: 3 no saving that pays: H saves 40 → 32, under a quarter, 4 → 4 bytes",
+        "underQuarter.ts:4:7: layout: H: 2 no link, 40 → 40 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
+    layoutCases.push({
+      name: "test 3, a holder not made in a loop",
+      file: "holderOnce.ts",
+      source: [
+        "class R {",
+        "  v: i32 = 0",
+        "}",
+        "class H {",
+        "  x: i32 = 0",
+        "  r: R | null = null",
+        "}",
+        "export const main = (): i32 => {",
+        "  const h = new H()",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    h.r = new R()",
+        "    n = n + h.x",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: [
+        "holderOnce.ts:1:7: layout: R: 3 no saving that pays: H saves 16 → 8, but is not made in a loop or recursion, 4 → 4 bytes",
+        "holderOnce.ts:4:7: layout: H: 2 no link, 16 → 16 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
+    // Test 5: `implements Wide` refuses a class every other test picks.
+    layoutCases.push({
+      name: "test 5, implements Wide",
+      file: "wide.ts",
+      source: [
+        "import { Wide } from \"nish:compact\"",
+        "class L implements Wide {",
+        "  next: L | null = null",
+        "  v: i32 = 0",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    n = n + new L().v",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: ["wide.ts:2:7: layout: L: 5 forbidden: implements Wide, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // `--compact off` refuses every class before test 1 asks.
+    layoutCases.push({
+      name: "--compact off",
+      file: "compactOff.ts",
+      source: loopNode,
+      args: ["--compact", "off"],
+      want: [
+        "compactOff.ts:1:7: layout: W: off: --compact off, 24 → 24 bytes",
+        "compactOff.ts:11:7: layout: L: off: --compact off, 16 → 8 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
     })
     // Every file under `out` (one file, or a directory's tree), named and in
     // order, so two outputs compare as one string.

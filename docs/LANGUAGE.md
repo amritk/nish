@@ -10516,8 +10516,25 @@ class Cell implements Compact {
   class, whose instantiations keep full-pointer links (NL2798,
   `compact_reject_generic`).
 
-`Wide` is accepted and changes nothing yet; it is reserved for a class to
-refuse a compact layout the compiler would pick on its own.
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+narrowing the links takes at least a quarter off, after rounding, `R` itself
+or a class holding the link that is made in a loop or recursion; some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2799, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
 
 Reference: [`nish:compact`](reference/nish-compact.md).
 

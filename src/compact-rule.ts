@@ -1,11 +1,14 @@
 // The compact-class rule: which classes docs/wp48-ref32-classes.md §3.1 would
-// make compact, and why each other class is left alone. `--explain-layout`
-// prints it (`Compilation.explainLayoutText`); nothing else reads it yet, so
-// it changes no byte of the IR. The stage that narrows the classes it picks
-// reads the same answer.
+// make compact, and why each other class is left alone. One answer serves
+// both readers: `Compilation.settleCompactClasses` marks each class it picks
+// compact before any body is emitted, and `--explain-layout` prints the same
+// report (`Compilation.explainLayoutText`). `--compact off` refuses every
+// class, `implements Compact` included.
 //
 // A class `R` is compact when five tests hold, asked in order, and the first
-// that fails is the reason it is not:
+// that fails is the reason it is not. A class written `implements Compact`
+// skips tests 2 to 4, and test 1 still refuses it; one written `implements
+// Wide` is refused at test 5:
 //
 //   1. the output is a native executable: a closed-world build
 //      (`buildModeOf` in `src/visibility.ts`), which `--link` and `nish run`
@@ -13,11 +16,15 @@
 //      `--emit-napi-async`, `--emit-dts`) or a `declare function` opens it;
 //      `--emit-ts` writes TypeScript and no IR, so it is refused as well;
 //   2. some class, `R` included, has a field typed exactly `R` or `R | null`;
-//   3. narrowing those fields to four bytes (`narrowedSize`) shrinks `R` or a
-//      class holding the link, after rounding;
+//   3. narrowing those fields to four bytes (`narrowedSize`) takes at least a
+//      quarter off, after rounding, `R` itself or a class holding the link
+//      that test 4 passes for (`pays`): a smaller saving on one holder pays
+//      the decode on every link read and the 4-byte heap rounding for a few
+//      percent of one class (docs/wp48-ref32-classes.md §3.1);
 //   4. some `new R(...)` is lexically inside a loop, or inside a function that
 //      reaches itself through direct calls by name;
-//   5. nothing forbids it: `R` is not a `declare class` and holds no `Secret`.
+//   5. nothing forbids it: `R` is not a `declare class`, holds no `Secret`, is
+//      no generic instantiation and does not write `implements Wide`.
 //
 // Test 1 refuses a bare `-o x.ll` build: a host may link that IR, and its
 // exports are then the host's to call with any object. A `declare function` is
@@ -46,21 +53,13 @@
 // inheritance (docs/LANGUAGE.md), so `T.m()` and an inherited `this.m()` have
 // no case to cover.
 //
-// A generic class is asked about once per instantiation (`Box<i32>`), which
-// is a candidate `R` like any class: its fields, monomorphised, are links for
-// test 2 and holders for test 3 when typed exactly that instantiation or it
-// `| null`. A template no code instantiates has no layout, and no line. An
-// instantiation is reported once, at its template's declaration, under the
-// module that declares the template, though every module that names it holds
-// it. A `new Box<T>(...)` or `new Box(...)` is a made-site and a constructor
-// edge: the body is read before any type argument is settled, so the site
-// names the template and counts for each of its instantiations. Test 4 then
-// over-counts an instantiation made once beside one made in a loop; test 4
-// picks where narrowing pays, and a wrong yes costs a decode, not
-// correctness. Test 5
-// reads a field's own type (`holdsSecret`): a `Secret<T>`, or an array,
-// nullable or `Result` of one; a field holding a class that holds a `Secret`
-// is not looked into.
+// A generic class is reported once per instantiation (`Box<i32>`), at its
+// template's declaration, under the module that declares the template, and
+// test 5 refuses it: `implements Compact` is refused on one at compile time
+// (`checkCompactClass`), and the rule keeps to the same set. A template no
+// code instantiates has no layout, and no line. Test 5 reads a field's own
+// type (`holdsSecret`): a `Secret<T>`, or an array, nullable or `Result` of
+// one; a field holding a class that holds a `Secret` is not looked into.
 
 import { isLoopKind } from "./escape"
 import { StringMap } from "./map"
