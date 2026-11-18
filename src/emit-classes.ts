@@ -547,6 +547,11 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
     storeField(emitter, info, receiver, field, value)
     return value
   }
+  // A compact link takes no arithmetic or bitwise operator, so no compound
+  // assignment reaches one; the raw load and store below skip its encoding.
+  if (field.link) {
+    process.exit(internalErrorFor("emitter: a compound assignment to a compact link", emitter.opts.json))
+  }
   // One GEP for both halves of the read-modify-write, so `p.f op= e` addresses
   // the field once however the receiver was spelled.
   const ptr = structFieldPointer(emitter, info, receiver, field)

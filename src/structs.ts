@@ -1165,6 +1165,21 @@ export const checkCompactClass = (ctx: CheckContext, info: StructInfo): void => 
   }
 }
 
+/**
+ * WP48: a generic class cannot implement `Compact` yet. Its instantiations
+ * are laid out per type argument and keep full pointers (`computeLayout`
+ * links only a non-generic class's fields), so the marker would compress
+ * nothing; refusing it says so once, at the declaration.
+ */
+export const refuseCompactTemplate = (ctx: CheckContext, decl: Node): void => {
+  if (declaresCompact(ctx, decl)) {
+    ctx.error(decl.children[0], compactTemplateMessage(decl.children[0].text))
+  }
+}
+
+const compactTemplateMessage = (name: string): string =>
+  `\`${name}\` is generic, and a generic class cannot implement \`Compact\` in this version: its links would stay full pointers; drop the type parameters or the marker`
+
 const compactLayoutMessage = (name: string): string =>
   `\`${name}\` is a \`declare class\`, which C lays out with a pointer-wide slot per link, so it cannot implement \`Compact\`; drop the marker`
 

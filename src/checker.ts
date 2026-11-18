@@ -107,6 +107,7 @@ import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsuppor
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   checkCompactClass,
+  refuseCompactTemplate,
   checkImplements,
   collectStructMembers,
   declaresCompact,
@@ -285,6 +286,7 @@ export class Checker {
           if (template !== null && template.decl === stmt) {
             resolveStructTemplateConstraints(template)
             markTemplateImplements(this.program, stmt)
+            refuseCompactTemplate(this.ctx, stmt)
           }
           declareMethodTypeParameters(this.ctx, stmt)
         }
