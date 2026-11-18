@@ -24,7 +24,7 @@ ovf.fail:
 
 define noundef i8 @darker(i8 noundef %level) #0 {
 entry:
-  %0 = call i8 @shade(i8 %level)
+  %0 = call zeroext i8 @shade(i8 zeroext %level)
   %1 = sub i8 %0, 1
   ret i8 %1
 }

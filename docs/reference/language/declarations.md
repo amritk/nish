@@ -5129,6 +5129,21 @@ C hands back that the program keeps is a copy it made**, so there is nothing for
 a foreign function to capture or free, which is what lets the escape analysis
 stay correct without knowing anything about the callee.
 
+**A `u8`, `u16` or `boolean` crosses as C's `unsigned char`, `unsigned short` or
+`_Bool`, and the caller widens it** (#1755). The x86-64 SysV and Apple arm64
+ABIs give the caller that job and a callee clang built reads the whole
+register, so the `declare` and every `call` carry `zeroext` on each such
+parameter and result; `toU8(511)` reaches C as 255
+(`tests/cases/ffi_narrow_zeroext`):
+
+```llvm
+declare i32 @widen_u8(i8 zeroext)
+declare zeroext i1 @is_odd(i32)
+  %3 = call i32 @widen_u8(i8 zeroext %2)
+```
+
+Nish has no signed integer narrower than `i32`, so no argument takes `signext`.
+
 ### A `string` parameter: borrowed for the length of the call
 
 **A `string` parameter is C's NUL-terminated `const char *`, and C borrows it:

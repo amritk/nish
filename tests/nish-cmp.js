@@ -1314,7 +1314,15 @@ const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena 
 const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
+const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
+
 const DECLARED = [
+  {
+    program: "tests/cases/host_import_call.ts",
+    file: "host_import_call.ll",
+    changelog: FFI_ZEROEXT,
+    why: "a call to a narrow host import now carries the `zeroext` its declaration already did, on the `i8` argument and result (#1755)",
+  },
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
   ...ecnEcho(

@@ -76,6 +76,7 @@ import { urlFuzzVerdict } from "./link/std_url/verdict.js"
 import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
+import { runFfiAbiChecks } from "./ffi-abi.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
@@ -37342,6 +37343,8 @@ runFfiStructChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir }
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 runFfiHandleChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir, wasiSysroot: WASI_SYSROOT })
+
+runFfiAbiChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`
