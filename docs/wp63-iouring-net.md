@@ -677,6 +677,17 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    bytes: `bash bench/handler-ring/run.sh --conns 96000 --compiler
    build/nish-test`, 5 rounds on the same box shape, read 141.4 MB against
    128.9 MB, and 21.76 against 29.27 µs a request (25.7% less, band 0.8%).
+   *Tail latency* ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-rings-tail-latency-and-300000-connections)):
+   `run.sh` now reports p50, p99 and p99.9 and takes `--think` for a
+   closed-loop load. The entry's 65 ms p99 for one ring process, against
+   20 ms for five epoll processes, does not reproduce on one shared core. At
+   every load from 30,000 to 56,000 requests a second at 90,000 connections,
+   the ring process's p99 was below the five's. Its tail is a queue on one
+   core, not a stall: no pass of the loop took more than 4.87 ms, but a burst
+   left 2,927 slots ready with the oldest 36 ms old. No fix is made; a second
+   core is what would shorten it. The final code at 96,000
+   (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
+   request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
    not depend on S1 to S4 and can land first. *Measured in S5*
    ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5)):
@@ -705,7 +716,12 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   The memory has since narrowed: with an idle slot's receive queue freed
   (NURING-38) the ring process held 141.4 MB against 128.9 MB at 96,000,
   about 1.5 KB a connection against 1.3 KB. The default is still not changed:
-  18,000 and a low C are not re-measured.*
+  18,000 and a low C are not re-measured. The tail does not stand against a
+  default either: at a matched load on one core the ring process's p99 was
+  the lower one, at 18,000 (re-measured for its tail only: 1.65 to 1.78 ms
+  against 2.08 to 3.17) and at 96,000. What does stand is that one ring
+  process has one core while five epoll processes can use five, so a default
+  would want a ring process per core, which is not measured.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The
   rings must exist before the filter loads, so their number is fixed at
   start-up, and the runtime must know before `main` that the program uses

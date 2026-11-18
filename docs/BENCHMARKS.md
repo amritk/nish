@@ -3184,6 +3184,54 @@ Most of the ring process's 518 MB was the slots' receive queues: each slot kept 
 | 96,000 | epoll copy | 5 | 96,000 | 96,040 | 29.03 (28.53–32.50) | 40.40 | 30,000 | 128.8 | 1,346 |
 
 The ring process's PSS fell from 517.8 MB to 141.4 MB, about 1.5 KB a connection against the five epoll processes' 1.3 KB (128.9 MB, unchanged from 128.8), and every round read between 141.4 and 141.7 MB. The box's used memory in the last round was 1,375 MB against 1,792 MB before. At the medians the ring process is 25.7% cheaper than the five against a 0.8% band (29.5% against 0.7% before), so the verdict above still holds; this run's single-round bands are wider than S4's, up to 11.0%, and its smallest saving in a round was 22.6%. Both sides read lower in absolute terms than S4's run (29.27 against 37.17 µs for the five), which is the box between runs, not the change: compare within a run, not across them. What the free costs, an allocation and a free per drained read, is not separable here from that drift.
+
+<a id="the-rings-tail-latency-and-300000-connections"></a>
+
+### The ring's tail latency, and 300,000 connections
+
+The owner's external entry read a p99 of 65 ms for one ring process against 20 ms for five epoll processes. The runs above measured CPU a request and no latency, so `bench/fd-limit/loadgen.c` now times every request sent inside the window, from its send to the last byte of its response, into a log-linear histogram (32 buckets an octave, so a percentile reads within about 3%), and `run.sh` reports p50, p99 and p99.9. With `--think S` the load is closed-loop: each connection sends its next request S seconds after its last answer, so the offered rate is about C / S and a slow server is offered less.
+
+What this bench shares with the entry: one SQLite lookup a request, and one ring process against five SO_REUSEPORT epoll processes. What it does not: the think time is this bench's choice, as is the pinning. The server, all five epoll processes included, runs on CPU 0 (`--server-cpus`, default `0`) and the load on CPUs 1 to 3. The entry's load generator and rate are not known here, and its five epoll processes may have run on several cores while its ring process had one.
+
+**The tail does not reproduce at a matched load.** `bash bench/handler-ring/run.sh --conns 90000 --think T --rounds 2 --warmup 8 --seconds 15 --designs "ring epoll"` at commit `d603893d`, on an Intel Xeon @ 2.10GHz, 4 vCPUs, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000. The figures are per round (round 1 / round 2):
+
+| think | offered req/s | ring req/s | ring µs/req | ring p99 ms | epoll req/s | epoll µs/req | epoll p99 ms |
+| ---: | ---: | ---: | --- | --- | ---: | --- | --- |
+| 3 s | 30,000 | 29,992 / 29,991 | 18.34 / 18.09 | 1.02 / 1.04 | 29,992 / 29,991 | 25.49 / 27.19 | 2.53 / 18.18 |
+| 2.5 s | 36,000 | 35,979 / 35,986 | 18.70 / 18.54 | 14.46 / 2.91 | 35,853 / 35,794 | 26.40 / 26.15 | 84.99 / 70.66 |
+| 2 s | 45,000 | 44,904 / 44,813 | 17.86 / 18.43 | 11.65 / 76.80 | 40,342 / 39,188 | 24.52 / 25.23 | 331.78 / 446.46 |
+| 1.6 s | 56,250 | 52,868 / 53,094 | 18.38 / 17.96 | 182.27 / 231.42 | 39,693 / 39,180 | 24.96 / 25.30 | 778.24 / 794.62 |
+
+At every load the ring process's p99 was below the five's on the same core. Both tails grow as the load nears what one core can serve: about 53,000 requests a second for the ring process (about 18 µs a request) and about 40,000 for the five (about 25 µs). Two longer runs at a light load, 3 rounds each, read the same way:
+
+- `--conns 90000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"`, at 22,500 req/s: the ring process read a p99 of 0.70 to 0.76 ms against 1.23 to 1.39 ms for the five.
+- `--conns 18000 --think 0.8 --rounds 3 --warmup 5 --seconds 15 --designs "ring epoll epoll-copy epoll1"`, same rate: the ring process read 1.65 to 1.78 ms, the five 2.08 to 3.17 ms, and one epoll process 1.49 to 1.84 ms.
+
+**What the tail is: a queue on one core, not a stall.** One traced run at the 2-second think, 45,000 req/s, read a p99 of 19.7 ms. It used a counting patch to `runtime/runtime-net.c` that is not in the tree: one line a second on stderr with the loop's longest pass, the ready list's length and the age of its oldest entry. Within the window:
+
+- No pass of `nr_poll_wait` took more than 4.87 ms.
+- No completion overflowed the ring, no receive ran short of buffers, and nothing was requeued.
+- In the worst second the ready list held 2,927 slots, and the oldest of them had waited 36.1 ms. At about 18 µs a request that list is about 53 ms of work. The handler takes it in arrival order, 64 slots a wait, so the last slot in a burst waits for the whole burst.
+
+The bursts come from the load itself. A closed loop with one fixed think time sends a connection's next request at a fixed interval after its last answer, so the requests a slow moment delays arrive together again one think time later. A server on more cores drains the same burst sooner, which is consistent with the entry's five epoll processes on several cores against one ring process on one. That is an inference: the entry's cores were not measured here. The ring process's own CPU a request, 18 µs against 25 µs, is what decides how near its core it runs at a given rate.
+
+No fix is made in this stage. The loop spends about 0.08 µs a request pumping completions, so bounding it buys nothing. The 64-slot batch is in `std/net/handler.ts`, and making it smaller would only reorder the same queue. What would shorten the tail is a second core, with one ring process for each core, or smaller bursts from the load. Neither is measured here.
+
+**The final code at the box's C.** `bash bench/handler-ring/run.sh --conns 96000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"` at commit `d603893d`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000, at 24,000 req/s:
+
+| C | round | ring | epoll | epoll copy | saving | band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 96,000 | 1 | 21.62 | 31.45 | 31.78 | 31.3% | 1.0% |
+| 96,000 | 2 | 20.86 | 31.17 | 31.20 | 33.1% | 0.1% |
+| 96,000 | 3 | 20.62 | 30.37 | 31.42 | 32.1% | 3.5% |
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 96,000 | ring | 1 | 96,000 | 21 | 20.86 (20.62–21.62) | 30.53 | 23,994 | 141.8 | 1,400 | 0.17 | 1.74 (1.55–1.78) | 10.11 |
+| 96,000 | epoll | 5 | 96,000 | 96,040 | 31.17 (30.37–31.45) | 41.65 | 23,995 | 129.2 | 1,322 | 0.24 | 8.83 (2.27–26.88) | 29.44 |
+| 96,000 | epoll copy | 5 | 96,000 | 96,040 | 31.42 (31.20–31.78) | 41.53 | 23,996 | 129.2 | 1,327 | 0.24 | 3.87 (2.21–17.66) | 19.71 |
+
+Medians of 3 (min to max), and `box MB` from the last round of each design, as above. The ring process is 33.1% cheaper than the five at the medians, against a 0.8% band, and its p99 is lower in every round. Its PSS, 141.8 MB, is the 141.4 to 141.7 MB NURING-38 measured. The verdict still holds.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->
