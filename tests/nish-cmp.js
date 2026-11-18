@@ -1314,7 +1314,7 @@ const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena 
 const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
-const FFI_ZEROEXT = "widen narrow C arguments and results with zeroext"
+const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
 const DECLARED = [
   {
