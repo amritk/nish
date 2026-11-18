@@ -38,7 +38,7 @@ function sqliteUnits(root: string): string[] -> @sqliteUnits [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via sqliteFiles
   escaping: root
-  calls: nish_array_grow nish_str_at sqliteFiles
+  calls: nish_array_grow nish_str_at nish_str_eq sqliteFiles
   stackSites=0 stackLocals=0
   local +0:9 units: string[] (const)
   local +1:14 name: string (const)
