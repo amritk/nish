@@ -6,11 +6,12 @@
 @.str.2 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c", lanes \00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"4000 bytes of 0xff: scalar \00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"Wikipedia\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"Wikipedia: scalar \00" }, align 8
-@.str.6 = private unnamed_addr constant { i64, [22 x i8] } { i64 21, [22 x i8] c" (published 11e60398)\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [37 x i8] } { i64 36, [37 x i8] c"WikipediaWikipediaWikipediaWikipedia\00" }, align 8
-@.str.8 = private unnamed_addr constant { i64, [22 x i8] } { i64 21, [22 x i8] c"Wikipedia x4: scalar \00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"mismatches: \00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"11e60398\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"Wikipedia: scalar \00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [22 x i8] } { i64 21, [22 x i8] c" (published 11e60398)\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [37 x i8] } { i64 36, [37 x i8] c"WikipediaWikipediaWikipediaWikipedia\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [22 x i8] } { i64 21, [22 x i8] c"Wikipedia x4: scalar \00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"mismatches: \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
@@ -21,17 +22,18 @@ declare void @nish_arena_release(i64 noundef) #1
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
-declare i32 @llvm.vector.reduce.add.v16i32(<16 x i32>) #4
-declare i32 @llvm.vector.reduce.add.v8i32(<8 x i32>) #4
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
+declare i32 @llvm.vector.reduce.add.v16i32(<16 x i32>) #5
+declare i32 @llvm.vector.reduce.add.v8i32(<8 x i32>) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -630,6 +632,8 @@ entry:
   %scalarOnes.addr = alloca i32, align 4
   %lanesOnes.addr = alloca i32, align 4
   %wiki.addr = alloca %struct.nish_array*, align 8
+  %scalarWiki.addr = alloca i32, align 4
+  %lanesWiki.addr = alloca i32, align 4
   %wiki4.addr = alloca %struct.nish_array*, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
@@ -798,61 +802,95 @@ if.end.1:
   store %struct.nish_array* %91, %struct.nish_array** %wiki.addr, align 8
   %92 = load %struct.nish_array*, %struct.nish_array** %wiki.addr, align 8
   %93 = call i32 @adlerScalar(%struct.nish_array* %92)
-  %94 = call i64 @nish_arena_mark()
-  %95 = call i8* @hex8(i32 %93)
-  %96 = call i8* @nish_arena_keep(i64 %94, i8* %95)
-  %97 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.5 to i8*), i8* %96)
-  %98 = call i8* @nish_str_concat(i8* %97, i8* bitcast ({ i64, [9 x i8] }* @.str.2 to i8*))
-  %99 = load %struct.nish_array*, %struct.nish_array** %wiki.addr, align 8
-  %100 = call i32 @adlerLanes(%struct.nish_array* %99)
-  %101 = call i64 @nish_arena_mark()
-  %102 = call i8* @hex8(i32 %100)
-  %103 = call i8* @nish_arena_keep(i64 %101, i8* %102)
-  %104 = call i8* @nish_str_concat(i8* %98, i8* %103)
-  %105 = call i8* @nish_str_concat(i8* %104, i8* bitcast ({ i64, [22 x i8] }* @.str.6 to i8*))
-  call void @nish_print(i8* %105)
-  %106 = call %struct.nish_array* @ascii(i8* bitcast ({ i64, [37 x i8] }* @.str.7 to i8*))
-  store %struct.nish_array* %106, %struct.nish_array** %wiki4.addr, align 8
-  %107 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
-  %108 = call i32 @adlerScalar(%struct.nish_array* %107)
-  %109 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
-  %110 = call i32 @adlerLanes(%struct.nish_array* %109)
-  %111 = icmp ne i32 %108, %110
-  br i1 %111, label %if.then.2, label %if.end.2
+  store i32 %93, i32* %scalarWiki.addr, align 4
+  %94 = load %struct.nish_array*, %struct.nish_array** %wiki.addr, align 8
+  %95 = call i32 @adlerLanes(%struct.nish_array* %94)
+  store i32 %95, i32* %lanesWiki.addr, align 4
+  %96 = load i32, i32* %scalarWiki.addr, align 4
+  %97 = load i32, i32* %lanesWiki.addr, align 4
+  %98 = icmp ne i32 %96, %97
+  br i1 %98, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %99 = load i32, i32* %scalarWiki.addr, align 4
+  %100 = call i64 @nish_arena_mark()
+  %101 = call i8* @hex8(i32 %99)
+  %102 = call i8* @nish_arena_keep(i64 %100, i8* %101)
+  %103 = call zeroext i1 @nish_str_eq(i8* %102, i8* bitcast ({ i64, [9 x i8] }* @.str.5 to i8*))
+  %104 = xor i1 %103, true
+  br label %lor.end
+
+lor.end:
+  %105 = phi i1 [ true, %if.end.1 ], [ %104, %lor.rhs ]
+  br i1 %105, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %112 = load i32, i32* %mismatches.addr, align 4
-  %113 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %112, i32 1)
-  %114 = extractvalue { i32, i1 } %113, 0
-  %115 = extractvalue { i32, i1 } %113, 1
-  br i1 %115, label %ovf.fail, label %ovf.ok.3
+  %106 = load i32, i32* %mismatches.addr, align 4
+  %107 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %106, i32 1)
+  %108 = extractvalue { i32, i1 } %107, 0
+  %109 = extractvalue { i32, i1 } %107, 1
+  br i1 %109, label %ovf.fail, label %ovf.ok.3
 
 ovf.ok.3:
-  store i32 %114, i32* %mismatches.addr, align 4
+  store i32 %108, i32* %mismatches.addr, align 4
   br label %if.end.2
 
 if.end.2:
-  %116 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
-  %117 = call i32 @adlerScalar(%struct.nish_array* %116)
-  %118 = call i64 @nish_arena_mark()
-  %119 = call i8* @hex8(i32 %117)
-  %120 = call i8* @nish_arena_keep(i64 %118, i8* %119)
-  %121 = call i8* @nish_str_concat(i8* bitcast ({ i64, [22 x i8] }* @.str.8 to i8*), i8* %120)
-  %122 = call i8* @nish_str_concat(i8* %121, i8* bitcast ({ i64, [9 x i8] }* @.str.2 to i8*))
+  %110 = load i32, i32* %scalarWiki.addr, align 4
+  %111 = call i64 @nish_arena_mark()
+  %112 = call i8* @hex8(i32 %110)
+  %113 = call i8* @nish_arena_keep(i64 %111, i8* %112)
+  %114 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.6 to i8*), i8* %113)
+  %115 = call i8* @nish_str_concat(i8* %114, i8* bitcast ({ i64, [9 x i8] }* @.str.2 to i8*))
+  %116 = load i32, i32* %lanesWiki.addr, align 4
+  %117 = call i64 @nish_arena_mark()
+  %118 = call i8* @hex8(i32 %116)
+  %119 = call i8* @nish_arena_keep(i64 %117, i8* %118)
+  %120 = call i8* @nish_str_concat(i8* %115, i8* %119)
+  %121 = call i8* @nish_str_concat(i8* %120, i8* bitcast ({ i64, [22 x i8] }* @.str.7 to i8*))
+  call void @nish_print(i8* %121)
+  %122 = call %struct.nish_array* @ascii(i8* bitcast ({ i64, [37 x i8] }* @.str.8 to i8*))
+  store %struct.nish_array* %122, %struct.nish_array** %wiki4.addr, align 8
   %123 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
-  %124 = call i32 @adlerLanes(%struct.nish_array* %123)
-  %125 = call i64 @nish_arena_mark()
-  %126 = call i8* @hex8(i32 %124)
-  %127 = call i8* @nish_arena_keep(i64 %125, i8* %126)
-  %128 = call i8* @nish_str_concat(i8* %122, i8* %127)
-  call void @nish_print(i8* %128)
-  %129 = load i32, i32* %mismatches.addr, align 4
-  %130 = call i8* @nish_str_from_i32(i32 %129)
-  %131 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.9 to i8*), i8* %130)
-  call void @nish_print(i8* %131)
-  %132 = load i32, i32* %mismatches.addr, align 4
-  %133 = icmp eq i32 %132, 0
-  br i1 %133, label %cond.true, label %cond.false
+  %124 = call i32 @adlerScalar(%struct.nish_array* %123)
+  %125 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
+  %126 = call i32 @adlerLanes(%struct.nish_array* %125)
+  %127 = icmp ne i32 %124, %126
+  br i1 %127, label %if.then.3, label %if.end.3
+
+if.then.3:
+  %128 = load i32, i32* %mismatches.addr, align 4
+  %129 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %128, i32 1)
+  %130 = extractvalue { i32, i1 } %129, 0
+  %131 = extractvalue { i32, i1 } %129, 1
+  br i1 %131, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  store i32 %130, i32* %mismatches.addr, align 4
+  br label %if.end.3
+
+if.end.3:
+  %132 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
+  %133 = call i32 @adlerScalar(%struct.nish_array* %132)
+  %134 = call i64 @nish_arena_mark()
+  %135 = call i8* @hex8(i32 %133)
+  %136 = call i8* @nish_arena_keep(i64 %134, i8* %135)
+  %137 = call i8* @nish_str_concat(i8* bitcast ({ i64, [22 x i8] }* @.str.9 to i8*), i8* %136)
+  %138 = call i8* @nish_str_concat(i8* %137, i8* bitcast ({ i64, [9 x i8] }* @.str.2 to i8*))
+  %139 = load %struct.nish_array*, %struct.nish_array** %wiki4.addr, align 8
+  %140 = call i32 @adlerLanes(%struct.nish_array* %139)
+  %141 = call i64 @nish_arena_mark()
+  %142 = call i8* @hex8(i32 %140)
+  %143 = call i8* @nish_arena_keep(i64 %141, i8* %142)
+  %144 = call i8* @nish_str_concat(i8* %138, i8* %143)
+  call void @nish_print(i8* %144)
+  %145 = load i32, i32* %mismatches.addr, align 4
+  %146 = call i8* @nish_str_from_i32(i32 %145)
+  %147 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.10 to i8*), i8* %146)
+  call void @nish_print(i8* %147)
+  %148 = load i32, i32* %mismatches.addr, align 4
+  %149 = icmp eq i32 %148, 0
+  br i1 %149, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -861,9 +899,9 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %134 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  %150 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %134
+  ret i32 %150
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -880,9 +918,10 @@ entry:
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
-attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!17, !18, !19, !20, !21}
 !0 = !{!"nish array"}

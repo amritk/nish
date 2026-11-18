@@ -69,5 +69,8 @@ function main(): i32 -> @nish_main [exported entry]
   local +16:9 allScalar: string (const)
   callee +16:21 hexScalar -> @hexScalar
   callee +17:21 hexLanes -> @hexLanes
-  callee +21:28 hexLanes -> @hexLanes
-  callee +21:37 noise -> @noise
+  local +22:9 seventeen: u8[] (const)
+  callee +22:21 noise -> @noise
+  local +23:9 seventeenLanes: string (const)
+  callee +23:26 hexLanes -> @hexLanes
+  callee +24:26 hexScalar -> @hexScalar

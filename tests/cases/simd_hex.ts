@@ -80,7 +80,13 @@ export const main = (): number => {
     mismatches += 1;
   }
   console.log(`every byte: ${allScalar.substring(0, 40)}...${allScalar.substring(472, 512)}`);
-  console.log(`17 bytes: ${hexLanes(noise(17, 22))}`);
+  // One block and a one-byte tail, printed so the expected output pins the text.
+  const seventeen = noise(17, 22);
+  const seventeenLanes = hexLanes(seventeen);
+  if (seventeenLanes !== hexScalar(seventeen)) {
+    mismatches += 1;
+  }
+  console.log(`17 bytes: ${seventeenLanes}`);
   console.log(`mismatches: ${mismatches}`);
   return mismatches === 0 ? 0 : 1;
 };

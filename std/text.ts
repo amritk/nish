@@ -44,6 +44,8 @@
  * immutable, so its length cannot change underneath the local.
  */
 
+import { bitmask, eq, loadU8x16, splatU8x16 } from "nish:simd"
+
 const NEWLINE: i32 = 10
 const CARRIAGE_RETURN: i32 = 13
 const SPACE: i32 = 32
@@ -77,8 +79,34 @@ const isTextBlankByte = (code: i32): boolean =>
 export const splitLines = (text: string): string[] => {
   const length: i32 = toI32(text.length)
   const lines: string[] = []
+  // One byte per position of `text`, 1 where it holds a newline: a string has
+  // no lane-wise load, so the scan reads this copy sixteen positions at a
+  // time. The copy stores a flag rather than the character so that a UTF-16
+  // unit under Node whose low byte is 10 is not taken for a newline.
+  const flags: u8[] = new Array<u8>(length)
+  for (let k: i32 = 0; k < length && k < toI32(flags.length); k += 1) {
+    flags[k] = toU8(toI32(text.charCodeAt(k)) === NEWLINE ? 1 : 0)
+  }
+  const one = splatU8x16(1)
   let start: i32 = 0
   let i: i32 = 0
+  while (i >= 0 && i <= toI32(flags.length) - 16) {
+    // Each set bit is one newline in this block, lowest position first.
+    let bits: i32 = bitmask(eq(loadU8x16(flags, i), one))
+    while (bits !== 0) {
+      const at: i32 = i + (31 - toI32(Math.clz32(bits & (0 - bits))))
+      // `start` is never negative and never passes `at`, which is below
+      // `length`, so this test always holds. It is written because it is what
+      // proves `start` and `at` within `text`, as in the scalar tail below.
+      if (start >= 0 && start < length && at >= 0 && at < length) {
+        lines.push(text.substring(start, at))
+      }
+      start = at + 1
+      bits = bits & (bits - 1)
+    }
+    i += 16
+  }
+  // The last fewer-than-sixteen positions, one at a time.
   while (i < length) {
     if (toI32(text.charCodeAt(i)) === NEWLINE) {
       // `start` is never negative and never passes `i`, which is below

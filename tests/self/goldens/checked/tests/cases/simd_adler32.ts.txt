@@ -63,7 +63,7 @@ function hex8(x: u32): string -> @hex8
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: adlerLanes adlerScalar ascii hex8 nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 noise ones
+  calls: adlerLanes adlerScalar ascii hex8 nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 noise ones
   stackSites=1 stackLocals=1
   local +0:9 lengths: readonly i32[] (const)
   local +1:7 mismatches: i32 (let)
@@ -86,15 +86,18 @@ function main(): i32 -> @nish_main [exported entry]
   callee +17:72 hex8 -> @hex8
   local +18:9 wiki: u8[] (const)
   callee +18:16 ascii -> @ascii
-  callee +19:36 hex8 -> @hex8
-  callee +19:41 adlerScalar -> @adlerScalar
-  callee +19:70 hex8 -> @hex8
-  callee +19:75 adlerLanes -> @adlerLanes
-  local +21:9 wiki4: u8[] (const)
-  callee +21:17 ascii -> @ascii
-  callee +22:7 adlerScalar -> @adlerScalar
-  callee +22:30 adlerLanes -> @adlerLanes
-  callee +25:39 hex8 -> @hex8
-  callee +25:44 adlerScalar -> @adlerScalar
-  callee +25:74 hex8 -> @hex8
-  callee +25:79 adlerLanes -> @adlerLanes
+  local +19:9 scalarWiki: u32 (const)
+  callee +19:22 adlerScalar -> @adlerScalar
+  local +20:9 lanesWiki: u32 (const)
+  callee +20:21 adlerLanes -> @adlerLanes
+  callee +22:35 hex8 -> @hex8
+  callee +25:36 hex8 -> @hex8
+  callee +25:63 hex8 -> @hex8
+  local +27:9 wiki4: u8[] (const)
+  callee +27:17 ascii -> @ascii
+  callee +28:7 adlerScalar -> @adlerScalar
+  callee +28:30 adlerLanes -> @adlerLanes
+  callee +31:39 hex8 -> @hex8
+  callee +31:44 adlerScalar -> @adlerScalar
+  callee +31:74 hex8 -> @hex8
+  callee +31:79 adlerLanes -> @adlerLanes

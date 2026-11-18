@@ -107,7 +107,13 @@ export const main = (): number => {
   }
   console.log(`4000 bytes of 0xff: scalar ${hex8(scalarOnes)}, lanes ${hex8(lanesOnes)}`);
   const wiki = ascii("Wikipedia");
-  console.log(`Wikipedia: scalar ${hex8(adlerScalar(wiki))}, lanes ${hex8(adlerLanes(wiki))} (published 11e60398)`);
+  const scalarWiki = adlerScalar(wiki);
+  const lanesWiki = adlerLanes(wiki);
+  // Both must also give the checksum Wikipedia's Adler-32 article publishes.
+  if (scalarWiki !== lanesWiki || hex8(scalarWiki) !== "11e60398") {
+    mismatches += 1;
+  }
+  console.log(`Wikipedia: scalar ${hex8(scalarWiki)}, lanes ${hex8(lanesWiki)} (published 11e60398)`);
   // "Wikipedia" is nine bytes, so it never reaches a block: repeated to 36 it does.
   const wiki4 = ascii("WikipediaWikipediaWikipediaWikipedia");
   if (adlerScalar(wiki4) !== adlerLanes(wiki4)) {

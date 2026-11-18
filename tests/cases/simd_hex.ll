@@ -633,6 +633,8 @@ entry:
   %arr.data.1 = alloca [256 x i8], align 8
   %i.addr = alloca i32, align 4
   %allScalar.addr = alloca i8*, align 8
+  %seventeen.addr = alloca %struct.nish_array*, align 8
+  %seventeenLanes.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
   store i32 0, i32* %mismatches.addr, align 4
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
@@ -850,18 +852,43 @@ if.end.1:
   %125 = call i8* @nish_str_concat(i8* %111, i8* %124)
   call void @nish_print(i8* %125)
   %126 = call %struct.nish_array* @noise(i32 17, i32 22)
-  %127 = call i64 @nish_arena_mark()
-  %128 = call i8* @hexLanes(%struct.nish_array* %126)
-  %129 = call i8* @nish_arena_keep(i64 %127, i8* %128)
-  %130 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.6 to i8*), i8* %129)
-  call void @nish_print(i8* %130)
-  %131 = load i32, i32* %mismatches.addr, align 4
-  %132 = call i8* @nish_str_from_i32(i32 %131)
-  %133 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.7 to i8*), i8* %132)
-  call void @nish_print(i8* %133)
-  %134 = load i32, i32* %mismatches.addr, align 4
-  %135 = icmp eq i32 %134, 0
-  br i1 %135, label %cond.true, label %cond.false
+  store %struct.nish_array* %126, %struct.nish_array** %seventeen.addr, align 8
+  %127 = load %struct.nish_array*, %struct.nish_array** %seventeen.addr, align 8
+  %128 = call i64 @nish_arena_mark()
+  %129 = call i8* @hexLanes(%struct.nish_array* %127)
+  %130 = call i8* @nish_arena_keep(i64 %128, i8* %129)
+  store i8* %130, i8** %seventeenLanes.addr, align 8
+  %131 = load i8*, i8** %seventeenLanes.addr, align 8
+  %132 = load %struct.nish_array*, %struct.nish_array** %seventeen.addr, align 8
+  %133 = call i64 @nish_arena_mark()
+  %134 = call i8* @hexScalar(%struct.nish_array* %132)
+  %135 = call i8* @nish_arena_keep(i64 %133, i8* %134)
+  %136 = call zeroext i1 @nish_str_eq(i8* %131, i8* %135)
+  %137 = xor i1 %136, true
+  br i1 %137, label %if.then.2, label %if.end.2
+
+if.then.2:
+  %138 = load i32, i32* %mismatches.addr, align 4
+  %139 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %138, i32 1)
+  %140 = extractvalue { i32, i1 } %139, 0
+  %141 = extractvalue { i32, i1 } %139, 1
+  br i1 %141, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  store i32 %140, i32* %mismatches.addr, align 4
+  br label %if.end.2
+
+if.end.2:
+  %142 = load i8*, i8** %seventeenLanes.addr, align 8
+  %143 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.6 to i8*), i8* %142)
+  call void @nish_print(i8* %143)
+  %144 = load i32, i32* %mismatches.addr, align 4
+  %145 = call i8* @nish_str_from_i32(i32 %144)
+  %146 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.7 to i8*), i8* %145)
+  call void @nish_print(i8* %146)
+  %147 = load i32, i32* %mismatches.addr, align 4
+  %148 = icmp eq i32 %147, 0
+  br i1 %148, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -870,9 +897,9 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %136 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  %149 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %136
+  ret i32 %149
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
