@@ -1,7 +1,7 @@
 // Http1Server's lingering close on a ring listener (WP63, NURING-39).
 // tests/run.js's `net_ring` section runs this program under this directory's
 // `client.mjs`, which sends a request line Http1Server refuses and keeps
-// sending for a while after it. The server answers 400, shuts its write side
+// sending until it reads the end of the stream. The server answers 400, shuts its write side
 // with netShutdown and drains what the client still sends, so the client
 // reads the whole response and then the end of the stream, not a reset. Once
 // the client ends its own side the slot closes and the program exits.

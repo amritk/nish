@@ -32760,15 +32760,19 @@ if (!only || "net_ring".includes(only)) {
         return sent !== null && got !== null && sent[1] === got[1]
       }
     )
-    {
-      // NURING-39: netShutdown queues a SHUTDOWN behind the slot's sends, so
-      // Http1Server's refusal lingers rather than closing with the client's
-      // bytes unread. Its client decides: exit 0 when it read the whole 400
-      // and then the end of the stream with no reset, 2 when rings are
-      // refused. Before the slot path the client got ECONNRESET.
-      const name =
-        "net_ring: Http1Server's lingering close on a ring listener sends the whole refusal and then the end of the stream, not a reset (NURING-39)"
-      const b = build("net_ring_linger", "linger.ts")
+    // NURING-39: netShutdown queues a SHUTDOWN behind the slot's sends, so
+    // Http1Server's refusal lingers rather than closing with the client's
+    // bytes unread. Its client decides: exit 0 when it read the whole 400
+    // and then the end of the stream while it was still sending, with no
+    // reset; 2 when rings are refused. Before the slot path the client got
+    // ECONNRESET; under --sandbox, with SHUTDOWN left out of the premade
+    // rings' restriction, no end of the stream came within its 100 sends.
+    for (const [mode, flags, suffix] of [
+      ["", [], ""],
+      [" under --sandbox", ["--sandbox"], "-sandbox"],
+    ]) {
+      const name = `net_ring: Http1Server's lingering close on a ring listener${mode} sends the whole refusal and then the end of the stream while the client still sends, not a reset (NURING-39)`
+      const b = build("net_ring_linger", "linger.ts", flags, suffix)
       const r =
         b.exe === null
           ? null
