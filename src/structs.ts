@@ -83,12 +83,24 @@ import {
 } from "./handles"
 
 /**
+ * Bytes in one pointer on the target being checked for: four on wasm32, whose
+ * LLVM data layout is `p:32:32`, eight on every native target. A class field
+ * that holds a pointer takes this width and alignment, as the LLVM struct
+ * type the emitter writes for it does (WP48 stage 6).
+ */
+const pointerBytes = (ctx: CheckContext): i32 => (ctx.wasm ? 4 : 8)
+
+/** The alignment of a value stored in a struct field, on the target being checked for. */
+const alignOfField = (ctx: CheckContext, type: i32): i32 =>
+  ctx.table.alignWithPointer(type, pointerBytes(ctx))
+
+/**
  * Size in bytes of a value stored in a struct field. `bool` is one byte
  * (`i1` has store size 1 in LLVM's data layout, matching C's `_Bool`);
  * every other type is its own alignment, which is right for every scalar
  * and every pointer.
  */
-const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type)
+const sizeOfField = (ctx: CheckContext, type: i32): i32 => alignOfField(ctx, type)
 
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
 export const roundUpTo = (value: i32, align: i32): i32 => {
@@ -112,16 +124,13 @@ const fieldAlign = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (nested !== null) {
     return nested.align
   }
-  if (table.stripNull(field.type) === T_CPTR) {
-    return pointer
-  }
   if (field.boxed) {
     return 8
   }
   if (!field.inline()) {
-    return table.alignOf(field.type)
+    return table.alignWithPointer(field.type, pointer)
   }
-  const slot = table.alignOf(table.refOf(field.type))
+  const slot = table.alignWithPointer(table.refOf(field.type), pointer)
   return slot > 8 ? slot : 8
 }
 
@@ -138,17 +147,17 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (nested !== null) {
     return nested.size
   }
-  if (table.stripNull(field.type) === T_CPTR) {
-    return pointer
-  }
   if (field.boxed) {
     return SLICE_BYTES
   }
   if (!field.inline()) {
-    return table.alignOf(field.type)
+    return table.alignWithPointer(field.type, pointer)
   }
+  // Only a native build gets here: `layoutInlineArrays` inlines nothing in a
+  // build that shares layouts, wasm among them, so `pointer` is 8 and the
+  // stride is `elementStride`'s, which sizes the slots' memset and memcpy.
   const align = fieldAlign(table, field, pointer)
-  const stride = table.alignOf(table.refOf(field.type))
+  const stride = table.alignWithPointer(table.refOf(field.type), pointer)
   const slots = roundUpTo(INLINE_HEADER_BYTES, align)
   return roundUpTo(slots + field.inlineCapacity * stride, align)
 }
@@ -165,10 +174,7 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
  * reordering, and almost every struct is one of those.
  */
 export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
-  // A `declare class`'s `CPtr` field is the target's `void *`, four bytes on
-  // wasm32 as its LLVM `i8*` is (WP27 S4.1); every other class keeps the
-  // eight-byte slot its arena object has always had.
-  const pointer = info.layout && ctx.wasm ? 4 : 8
+  const pointer = pointerBytes(ctx)
   let offset = 0
   let align = 1
   let used = 0
@@ -223,7 +229,7 @@ export const isLinkTo = (table: TypeTable, field: FieldInfo, target: i32): boole
 const layoutSize = (ctx: CheckContext, fields: FieldInfo[], align: i32): i32 => {
   let offset = 0
   for (const field of fields) {
-    offset = roundUpTo(offset, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
+    offset = roundUpTo(offset, alignOfField(ctx, field.type)) + sizeOfField(ctx, field.type)
   }
   return roundUpTo(offset, align)
 }
@@ -248,7 +254,7 @@ const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldI
   let width = align
   while (width >= 1) {
     for (const field of fields) {
-      if (ctx.table.alignOf(field.type) === width) {
+      if (alignOfField(ctx, field.type) === width) {
         sorted.push(field)
       }
     }
@@ -297,7 +303,7 @@ const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): 
     let chosenAlign = 0
     let index = 0
     for (const field of remaining) {
-      const alignment = ctx.table.alignOf(field.type)
+      const alignment = alignOfField(ctx, field.type)
       const pad = roundUpTo(offset, alignment) - offset
       if (chosen === null || pad < chosenPad || (pad === chosenPad && alignment > chosenAlign)) {
         chosen = field
@@ -424,7 +430,7 @@ const reportWastefulPadding = (
   for (const field of info.fields) {
     if (fields.length < fixed) {
       fields.push(field)
-      prefixEnd = roundUpTo(prefixEnd, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
+      prefixEnd = roundUpTo(prefixEnd, alignOfField(ctx, field.type)) + sizeOfField(ctx, field.type)
     } else {
       rest.push(field)
     }

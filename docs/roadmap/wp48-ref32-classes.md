@@ -1,6 +1,6 @@
 # WP48: 32-bit references for linked classes
 
-**State:** In progress · **Done:** 2 of 7 · **Design note:** [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
+**State:** In progress · **Done:** 3 of 7 · **Design note:** [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
 
 ## Stages
 
@@ -10,7 +10,7 @@
 - [ ] Stage 3: the compiler picks compact classes by itself (a native executable, a link field, a byte saving, made in a loop or recursion), with `implements Wide` and `--compact off` to refuse; gated on the corpus showing no program slower. Prepared: `nish --explain-layout` reports which classes the rule picks, and changes no IR
 - [ ] Stage 4: the `bench/goose` tree programs, `bench/wp48-refs/sibling.ts` and the guide's memory page
 - [ ] Stage 5: inside Nish: which of the compiler's and `std/`'s own classes the rule picks, measured on a self-build and the `std/` benches, with `implements Compact` or `Wide` where the measurement disagrees with the rule (in `src/` only after the release that ships the markers)
-- [ ] Stage 6: a class pointer field on wasm32 laid out in 4 bytes, not 8 (found by the survey, independent of stages 1 to 5)
+- [x] Stage 6: a class pointer field on wasm32 laid out in 4 bytes, not 8 (found by the survey, independent of stages 1 to 5); a class's size, alignment and field offsets on wasm32 are LLVM's, and native IR does not move
 
 ## Next
 

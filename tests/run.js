@@ -7613,6 +7613,19 @@ const runLinkProgram = async (name) => {
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
+  // A program that runs but whose `args` name a wasm32 target is linked and run
+  // as a native build of the same flags: a wasm32 module lays a class's pointer
+  // field out in 4 bytes (WP48 stage 6), and build.sh's clang replaces the
+  // module's datalayout with the host's, so a native link of wasm32 IR would
+  // write 8-byte pointers into objects allocated for 4-byte ones. The wasm32
+  // compile itself is still made, below, and must succeed. Only the two-token
+  // `--target wasm32` is recognised: it is the one form every wasm32 `args` in
+  // tests/link uses, and an `args` spelling `--target=wasm32` or `--profile wasi`
+  // would be linked natively as wasm32 IR, the mismatch above.
+  const targetAt = args.indexOf("--target")
+  const wasmRun =
+    targetAt >= 0 && String(args[targetAt + 1]).startsWith("wasm32") && !fs.existsSync(side("expected.err"))
+  const linkArgs = wasmRun ? args.filter((_, i) => i !== targetAt && i !== targetAt + 1) : args
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
   // This program's own directory: no other program in flight names it.
@@ -7630,7 +7643,7 @@ const runLinkProgram = async (name) => {
   // safely (CLI-5; see above).
   const r = await spawnAsync(
     NISH,
-    [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
+    [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs],
     { cwd: root }
   )
   const stderr = String(r.stderr)
@@ -7661,6 +7674,31 @@ const runLinkProgram = async (name) => {
     expect(`link/${name}: compiles and links`, false, stderr)
     return record
   }
+  if (wasmRun) {
+    const wasmDir = path.join(buildDir, "link", `${name}.wasm32`) + path.sep
+    // Named after the program, like `outDir`.
+    fs.rmSync(wasmDir, { recursive: true, force: true })
+    const w = await spawnAsync(NISH, [side("main.ts"), "-o", wasmDir, ...args], { cwd: root, encoding: "utf8" })
+    const wasmModules = w.status === 0 ? fs.readdirSync(wasmDir).filter((f) => f.endsWith(".ll")) : []
+    const rejected = []
+    for (const f of HAS_LLVM_AS ? wasmModules : []) {
+      const as = await spawnAsync("llvm-as", [path.join(wasmDir, f), "-o", "/dev/null"], { encoding: "utf8" })
+      if (as.status !== 0) {
+        rejected.push(`${f}: ${as.stderr}`)
+      }
+      // The verifier reads what llvm-as does not: a load's alignment against
+      // the wasm32 datalayout the module declares.
+      const v = HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(wasmDir, f)], { encoding: "utf8" }) : null
+      if (v !== null && v.status !== 0) {
+        rejected.push(`${f}: ${v.stderr}`)
+      }
+    }
+    expect(
+      `link/${name}: its wasm32 compile succeeds and llvm-as and opt -passes=verify accept its ${wasmModules.length} module(s)`,
+      w.status === 0 && wasmModules.length > 0 && rejected.length === 0,
+      w.status === 0 ? rejected.join("\n") : w.stderr
+    )
+  }
   if (DELEGATE_IR_CHECKS) {
     record.irDelegated = true
   } else {
@@ -7675,7 +7713,7 @@ const runLinkProgram = async (name) => {
     // compile (a function reference crosses an exported signature, which an
     // open build hands a host: WP51 §5.2), so its listing links too.
     const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...args, "--emit-panics", panicsFile], {
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile], {
       cwd: root,
       encoding: "utf8",
     })
@@ -7722,7 +7760,7 @@ const runLinkProgram = async (name) => {
       fs.rmSync(warnedDir, { recursive: true, force: true })
       const warned = await spawnAsync(
         NISH,
-        [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+        [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"],
         {
           cwd: root,
           encoding: "utf8",
@@ -25150,7 +25188,9 @@ if (dealtHere("cliChecks")) {
         noLink: true,
         want: [
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
-          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 8 bytes`,
+          // On wasm32, L's pointer field is 4 bytes, so its current layout is
+          // already the compact 8; natively the 8-byte pointer pads it to 16.
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? 8 : 16} → 8 bytes`,
           "explain-layout: 0 of 2 classes compact",
         ],
       })
@@ -39796,7 +39836,7 @@ if (!only || "host-import".includes(only)) {
       [
         "examples/arrays.ts",
         "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "91ce0443911068f9c1bd57103d51a102f733d808c555db8b586336a4bb77aa0c",
+        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -40881,9 +40921,10 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // 100,000 steps; the driver checks the answers and that linear memory and the
 // kept heap stay flat after warm-up; the director also runs its first 40,000
 // steps beside an instance whose keep does nothing and must match it frame for
-// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
-// call to 200,000 nodes, which every compaction traces end to end: a trace
-// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// frame. A third, tests/module-storage/persist/chain.ts, grows one list a node
+// a call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. Each call also drops a scratch node,
+// so every compaction has half the region to pack away. A fourth, tests/module-storage/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
 // and empty arrays and strings through a compaction at least every third call
 // (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
@@ -40985,7 +41026,7 @@ if (!only || "persist".includes(only)) {
     for (const [stem, source, steps, says] of [
       ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
-      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["chain", "tests/module-storage/persist/chain.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
@@ -41326,6 +41367,226 @@ if (!only || "game-page".includes(only)) {
     exported !== undefined && exported.types === "./runtime/page-game.d.ts" && exported.default === "./runtime/page-game.mjs",
     JSON.stringify(exported)
   )
+}
+
+// ---- WP48 stage 6: a class's layout on wasm32 is LLVM's -----------------------------
+// computeLayout lays a pointer field (a class, nullable or not, a string, an
+// array) in the target's pointer width: four bytes under wasm32's `p:32:32`,
+// eight natively. The program below compiles with `--target wasm32`, and
+// `--emit-checked` prints the size, alignment and every field offset the
+// compiler recorded. For each class the test then asks LLVM: it appends to the
+// emitted module's types a function per number, `ptrtoint` of a `getelementptr` from
+// null (one past the struct for its size, into `{ i1, %T }` for its alignment,
+// to each field's index for its offset), and `opt -passes=instcombine` folds
+// each under the module's own data layout. The two must agree, the size must
+// be what `nish_alloc_struct` is asked for, and the linked node is pinned at 8
+// bytes on wasm32 and 16 natively, so a pointer slot back at 8 bytes fails.
+if (!only || "wasm32-layout".includes(only)) {
+  if (!has("opt")) {
+    skip("wasm32-layout: opt not installed: the data layout cannot fold the probes")
+  } else {
+    const dir = path.join(buildDir, "wasm32-layout")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const entry = path.join(dir, "classes.ts")
+    fs.writeFileSync(
+      entry,
+      `class Node {
+  next: Node | null
+  value: i32
+  constructor(next: Node | null, value: i32) {
+    this.next = next
+    this.value = value
+  }
+}
+
+class Mixed {
+  a: f64
+  link: Node | null
+  n: i32
+  b: i64
+  name: string
+  constructor(a: f64, link: Node | null, n: i32, b: i64, name: string) {
+    this.a = a
+    this.link = link
+    this.n = n
+    this.b = b
+    this.name = name
+  }
+}
+
+class Links {
+  head: Node
+  tail: Node | null
+  mixed: Mixed | null
+  count: i32
+  items: i32[]
+  done: boolean
+  constructor(head: Node, tail: Node | null, mixed: Mixed | null, count: i32, items: i32[], done: boolean) {
+    this.head = head
+    this.tail = tail
+    this.mixed = mixed
+    this.count = count
+    this.items = items
+    this.done = done
+  }
+}
+
+enum Kind {
+  Round,
+  Flat,
+}
+
+class Round {
+  readonly kind: Kind.Round = Kind.Round
+  r: f64
+  constructor(r: f64) {
+    this.r = r
+  }
+}
+
+class Flat {
+  readonly kind: Kind.Flat = Kind.Flat
+  w: i32
+  constructor(w: i32) {
+    this.w = w
+  }
+}
+
+const parse = (n: i32): Result<i32, string> => (n > 0 ? Ok(n) : Err("neg"))
+
+class Wide {
+  flag: boolean
+  shape: Round | Flat
+  tags: string[]
+  nodes: Node[]
+  outcome: Result<i32, string>
+  last: u16
+  constructor(flag: boolean, shape: Round | Flat, tags: string[], nodes: Node[], outcome: Result<i32, string>, last: u16) {
+    this.flag = flag
+    this.shape = shape
+    this.tags = tags
+    this.nodes = nodes
+    this.outcome = outcome
+    this.last = last
+  }
+}
+
+export const main = (): i32 => {
+  const a = new Node(null, 1)
+  const b = new Node(a, 2)
+  const m = new Mixed(1.5, b, 3, 4, "m")
+  const l = new Links(a, b, m, 2, [1, 2, 3], true)
+  const w = new Wide(true, new Flat(2), ["x", "y"], [a, b], parse(3), 4)
+  return l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
+}
+`
+    )
+    const names = ["Node", "Mixed", "Links", "Wide"]
+    // `struct T (class) size=S align=A`, then `  field f: T index=I offset=O`.
+    const layouts = (args) => {
+      const r = spawnSync(NISH, [entry, "--emit-checked", ...args], { cwd: root, encoding: "utf8" })
+      const found = new Map()
+      let current = null
+      for (const line of r.status === 0 ? r.stdout.split("\n") : []) {
+        const struct = /^struct (\w+) \(class\) size=(\d+) align=(\d+)/.exec(line)
+        if (struct !== null) {
+          current = { size: Number(struct[2]), align: Number(struct[3]), fields: [] }
+          found.set(struct[1], current)
+          continue
+        }
+        const field = /^ {2}field (\w+): .* index=(\d+) offset=(\d+)/.exec(line)
+        if (field !== null && current !== null) {
+          current.fields.push({ name: field[1], index: Number(field[2]), offset: Number(field[3]) })
+        }
+      }
+      return { r, found }
+    }
+    const wasm = layouts(["--target", "wasm32"])
+    const native = layouts([])
+    const ll = path.join(dir, "classes.ll")
+    const emitted = spawnSync(NISH, [entry, "--target", "wasm32", "-o", ll], { cwd: root, encoding: "utf8" })
+    if (
+      check(
+        "wasm32-layout: the program compiles for wasm32 and both targets print every class's layout",
+        wasm.r.status === 0 && native.r.status === 0 && emitted.status === 0 && names.every((n) => wasm.found.has(n)),
+        `${shown(wasm.r)}\n${shown(emitted)}`
+      )
+    ) {
+      // One probe per number, each `add`ed to 0 so instcombine folds it.
+      const probe = (label, type, gep) =>
+        `define i64 @probe.${label}() {\n  %v = add i64 ptrtoint (${type}* getelementptr ${gep} to i64), 0\n  ret i64 %v\n}\n`
+      const probes = []
+      for (const name of names) {
+        const t = `%struct.${name}`
+        const info = wasm.found.get(name)
+        probes.push(probe(`${name}.size`, t, `(${t}, ${t}* null, i32 1)`))
+        probes.push(probe(`${name}.align`, t, `({ i1, ${t} }, { i1, ${t} }* null, i32 0, i32 1)`))
+        for (const f of info.fields) {
+          probes.push(probe(`${name}.${f.name}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${f.index})`))
+        }
+      }
+      // The probes run in a module of their own: the emitted one's data layout
+      // and type definitions, and nothing for instcombine to rewrite but them.
+      const kept = fs
+        .readFileSync(ll, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("target datalayout") || /^%[\w.]+ = type /.test(line))
+      const probed = path.join(dir, "probed.ll")
+      fs.writeFileSync(probed, `${kept.join("\n")}\n\n${probes.join("\n")}`)
+      const folded = spawnSync("opt", ["-S", "-passes=instcombine", probed], { encoding: "utf8", maxBuffer: 1 << 28 })
+      const llvm = new Map()
+      for (const m of folded.stdout.matchAll(/define i64 @"?probe\.([\w.]+)"?\(\)[^{]*\{\n\s*ret i64 (\d+)/g)) {
+        llvm.set(m[1], Number(m[2]))
+      }
+      const text = fs.readFileSync(ll, "utf8")
+      for (const name of names) {
+        const info = wasm.found.get(name)
+        const mine = [`size=${info.size}`, `align=${info.align}`, ...info.fields.map((f) => `${f.name}=${f.offset}`)]
+        const theirs = [
+          `size=${llvm.get(`${name}.size`)}`,
+          `align=${llvm.get(`${name}.align`)}`,
+          ...info.fields.map((f) => `${f.name}=${llvm.get(`${name}.${f.name}`)}`),
+        ]
+        check(
+          `wasm32-layout: ${name}'s size, alignment and field offsets are what LLVM's wasm32 DataLayout gives %struct.${name}`,
+          folded.status === 0 && mine.join(" ") === theirs.join(" "),
+          `compiler: ${mine.join(" ")}\nLLVM:     ${theirs.join(" ")}\n${folded.stderr}`
+        )
+        // A class's own heap allocation is the call whose result is cast to
+        // its struct on the next line, so two classes of one size cannot stand
+        // in for each other. One that does not escape is an `alloca` of its
+        // struct instead, sized by the type the probe above already pinned.
+        const sites = [
+          ...text.matchAll(
+            new RegExp(`call i8\\* @nish_alloc_struct\\(i64 (\\d+)\\)\\n\\s*%\\d+ = bitcast i8\\* %\\d+ to %struct\\.${name}\\*\\n`, "g")
+          ),
+        ].map((m) => Number(m[1]))
+        const onStack = text.includes(`= alloca %struct.${name}, `)
+        check(
+          `wasm32-layout: every heap ${name} asks nish_alloc_struct for its ${info.size} bytes, and every ${name} is allocated`,
+          (sites.length > 0 || onStack) && sites.every((size) => size === info.size),
+          `allocation sizes cast to %struct.${name}*: ${sites.join(", ") || "none"}; alloca: ${onStack}`
+        )
+      }
+      const node = wasm.found.get("Node")
+      const nativeNode = native.found.get("Node")
+      check(
+        "wasm32-layout: `next: Node | null; value: i32` is 8 bytes, 4-aligned, on wasm32 and 16, 8-aligned, natively",
+        node.size === 8 && node.align === 4 && nativeNode !== undefined && nativeNode.size === 16 && nativeNode.align === 8,
+        `wasm32 ${JSON.stringify(node)}\nnative ${JSON.stringify(nativeNode)}`
+      )
+      // A wasm build inlines no array field (`BuildMode.layoutsShared`), so an
+      // array of pointers stays one pointer to its header: the inline slots'
+      // stride is only ever a native one.
+      const wide = text.split("\n").find((line) => line.startsWith("%struct.Wide = type ")) ?? ""
+      check(
+        "wasm32-layout: `tags: string[]` and `nodes: Node[]` stay pointers to an array on wasm32, with no inline slots",
+        wide === "%struct.Wide = type { i1, %union.tagged*, %struct.nish_array*, %struct.nish_array*, %struct.nish_result.i32.str*, i16 }",
+        wide
+      )
+    }
+  }
 }
 
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
