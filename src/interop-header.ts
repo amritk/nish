@@ -304,16 +304,18 @@ export const generateHeader = (
   lines.push(" * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }.")
   lines.push(" * An array of records (an interface below) holds them inline, so its data is")
   lines.push(" * a C array of that struct; every other element type is one pointer per")
-  lines.push(" * slot. The comment above each prototype says which.")
   // WP48: a compact program's links count from a range the runtime reserves.
+  // Every other header keeps its banner byte for byte.
   if (compilation.opts.compactLinks) {
+    lines.push(" * slot. The comment above each prototype says which.")
     lines.push(" *")
     lines.push(" * This program has compact classes (WP48): compile runtime/runtime.c with")
     lines.push(" * -DNISH_ARENA_RANGE=1 (scripts/build.sh --arena-range), the runtime that")
     lines.push(" * reserves the range their 32-bit links count from. A class that holds a")
-    lines.push(" * link is opaque: C holds it and passes it back to an exported function.")
+    lines.push(" * link is opaque: C holds it and passes it back to an exported function. */")
+  } else {
+    lines.push(" * slot. The comment above each prototype says which. */")
   }
-  lines.push(" */")
   lines.push(`#ifndef ${guard}`)
   lines.push(`#define ${guard}`)
   lines.push("")
