@@ -8,6 +8,7 @@ SHA-1 as FIPS 180-4 §6.1 defines it, in pure Nish.
 import {
   SHA1_BLOCK,
   SHA1_SIZE,
+  Sha1,
   sha1,
 } from "nish/crypto/sha1";
 ```
@@ -21,6 +22,22 @@ const digest: u8[] = sha1(message); // 20 bytes
 ```
 
 </scalar-code-group>
+
+<scalar-grid cols="2">
+
+<scalar-card title="sha1" icon="phosphor/regular/function" href="#sha1">
+
+The SHA-1 digest of all of `data`, as a fresh 20-byte array: `Sha1`'s `digestInto` over the whole of it, with a hasher of its own.
+
+</scalar-card>
+
+<scalar-card title="Sha1" icon="phosphor/regular/cube" href="#sha1-1">
+
+A SHA-1 hasher that keeps its working state, so that a caller hashing again and again (a server answering WebSocket handshakes) allocates once, when it builds one, and never after: `digestInto` writes into the caller's buffer.
+
+</scalar-card>
+
+</scalar-grid>
 
 <scalar-detail title="This is not for security">
 
@@ -36,7 +53,9 @@ sake takes `nish/crypto/sha256`.
 </scalar-detail>
 
 One shot only, because a handshake key is a few dozen bytes: there is no
-streaming hasher to keep in step with `Sha256`'s.
+streaming hasher to keep in step with `Sha256`'s. A caller that hashes again
+and again keeps a `Sha1` and calls `digestInto`, which writes into its
+buffer and allocates nothing.
 
 Every word is a `u32`, whose arithmetic wraps, so the additions modulo 2^32
 are plain `+`. The only branches are on lengths, loop counters and the round
@@ -48,7 +67,8 @@ Written from the specification, not ported from another implementation.
 
 ### sha1
 
-The SHA-1 digest of all of `data`, as a fresh 20-byte array.
+The SHA-1 digest of all of `data`, as a fresh 20-byte array: `Sha1`'s
+`digestInto` over the whole of it, with a hasher of its own.
 
 An array longer than 2^31 - 1 bytes panics, for the reason `sha256` gives:
 under `--number-mode f64`, `toI32` of a longer length saturates, and the
@@ -69,6 +89,36 @@ The whole message; it is read, not changed.
 A fresh 20-byte digest.
 
 </scalar-field>
+
+## Classes
+
+### Sha1
+
+A SHA-1 hasher that keeps its working state, so that a caller hashing again
+and again (a server answering WebSocket handshakes) allocates once, when it
+builds one, and never after: `digestInto` writes into the caller's buffer.
+It holds no secret, so nothing in it is wiped.
+
+<scalar-code-group>
+
+```ts example.ts
+const hasher = new Sha1();
+hasher.digestInto(message, 0, message.length, digest, 0); // digest[0 .. 20)
+```
+
+</scalar-code-group>
+
+```ts
+class Sha1
+```
+
+| Member | |
+| --- | --- |
+| `new Sha1()` | A hasher with its buffers allocated, ready for `digestInto`. |
+| `h: u32[]` | The chaining value H of FIPS 180-4 §6.1.2, five words. |
+| `last: u8[]` | The last one or two blocks: the message's tail and its padding (§5.1.1). |
+| `w: u32[]` | The 80-word message schedule, reused for every block. |
+| `digestInto(data: u8[], start: i32, length: i32, out: u8[], at: i32): void` | Writes the SHA-1 digest of `data[start .. start + length)` into `out[at .. at + 20)`, allocating nothing. A range outside `data` or `out` panics, as does a message longer than 2^31 - 1 bytes. |
 
 ## Constants
 
