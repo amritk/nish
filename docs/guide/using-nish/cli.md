@@ -770,6 +770,10 @@ leaves the IR unchanged.
   compact-class rule would pick it, or the first of the rule's five tests
   that refuses it, with its size in bytes now and with its links narrowed
   to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
+  A generic class gets one line for each of its instantiations, named as
+  written in a type (`TNode<i32>`), at the generic class's declaration. An
+  instantiation from the standard library is marked `(std)`. A generic class
+  that nothing instantiates gets no line.
   Nothing uses the verdict yet, and the flag changes no byte of the build.
   Only a native executable can pick a class: a build with `--link`, or
   `nish run`. Every other build refuses every class at the first test: IR
