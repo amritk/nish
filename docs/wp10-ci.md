@@ -12,9 +12,16 @@ workflow's comments point at.
 `.github/workflows/ci.yml` runs on every pull request, on pushes to `main`
 (scoped to `main` so a branch with an open pull request is not tested twice),
 and through `workflow_call` from `release.yml`. A pull request's superseded
-runs are cancelled; a push to `main` never is, because each one is a merge and
-its run is the only record of whether `main` was green after it (the runs of #396
-and #397 ended cancelled before that rule).
+runs are cancelled, and so is a push to `main`'s run once the next merge lands:
+the merge queue (below) already tested that tree and records which merge broke
+`main`, and the next run, which runs every lane, tests a superset of it. Two
+kinds of `main` run are pinned to a group of their own and never cancelled: the
+Release PR's merge (its `chore(release):` subject, or a push adding
+`changelog/`) and a re-run. Release CI is otherwise untouched: `release.yml`'s
+call runs at the tag's ref, and the Release PR's runs are ordinary pull request
+runs. `interop.yml` follows the same rule. (Before the queue, `main`'s runs
+queued instead, after the runs of #396 and #397 ended cancelled with nothing to
+say which merge broke `main`.)
 
 It also runs on `merge_group`, the merge queue's event, as does
 `pr-title.yml`. A pull request's own run tests its head merged with `main` as
