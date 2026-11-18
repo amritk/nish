@@ -31,7 +31,10 @@
 # (its byte-identical copy, the noise band) and epoll1 (one process on
 # descriptors, which holds at most L - 64 connections and is skipped above
 # that; raising the hard limit needs CAP_SYS_RESOURCE, which a container's
-# root may lack).
+# root may lack), and h1 and h1-copy: bench/http1-server.ts, the HTTP/1.1
+# load-test server, as one process on descriptors, and a byte-identical copy
+# of its build, the band between them. It serves the same 129-byte
+# /plaintext with no database, and with the same L - 64 bound as epoll1.
 #
 # The box's C is the most connections five descriptor processes hold under
 # the limit L (65535, or this shell's hard limit if lower), each keeping 800
@@ -126,6 +129,13 @@ gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
 "$compiler" "$root/bench/handler-ring/server.ts" --link "$out/server" >/dev/null
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"
+case " $designs_arg " in
+*" h1 "* | *" h1-copy "*)
+  "$compiler" "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
+  cp "$out/h1" "$out/h1-copy"
+  cmp "$out/h1" "$out/h1-copy"
+  ;;
+esac
 node "$root/bench/sqlite/run.mjs" --validate --compiler "$compiler" >/dev/null
 cp "$root/build/bench/sqlite/feed.db" "$out/feed.db"
 rm -f "$out/feed.db-wal" "$out/feed.db-shm"
@@ -210,6 +220,18 @@ run() {
     wait_for listening
     pids=$server
     ;;
+  h1 | h1-copy)
+    n=1
+    slots=$((limit - 64))
+    if [ "$c" -gt "$slots" ]; then
+      echo "$design skipped at C=$c: one process holds at most $slots connections under $limit" >&2
+      return 0
+    fi
+    env -u BENCH_RING -u BENCH_CORES ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$out/$design" "$port" "$slots" >"$out/server.out" 2>"$out/server.err" &
+    server=$!
+    wait_for listening
+    pids=$server
+    ;;
   *)
     echo "unknown design $design" >&2
     exit 2
@@ -290,8 +312,8 @@ awk -v limit="$limit" '
     printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      split("ring epoll epoll-copy epoll1", ds, " ")
-      for (di = 1; di <= 4; di++) {
+      split("ring epoll epoll-copy epoll1 h1 h1-copy", ds, " ")
+      for (di = 1; di <= 6; di++) {
         k = c SUBSEP ds[di]
         if (!(k in n)) continue
         delete a; delete b; delete q; delete l50; delete l99; delete l999

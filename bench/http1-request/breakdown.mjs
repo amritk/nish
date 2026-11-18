@@ -17,8 +17,10 @@
 // libc, with no TypeScript source, goes to the function callgrind names
 // (`memcpy`, `nish_net_write`). A call's inclusive cost is skipped, since
 // the callee's own lines count it. Prints a table per case: instructions a
-// request by function, largest first, every function over 1 a request, and
-// the total of every row. That total is of this `-g` build under
+// request by function, largest first, every function at 1 or more a request
+// (a row under 1 is left out of the table but counted in its total), and
+// the total of every row. Grouping the rows into components (parse,
+// respond, the arena) is done by hand from this table, not by this script. That total is of this `-g` build under
 // callgrind and can differ by about 1% from run.mjs --instructions' figure,
 // which counts a build without debug info under cachegrind. Writes the profiles under
 // build/bench/http1-request/breakdown/.
@@ -109,8 +111,11 @@ const methodsOf = (file) => {
       : []
     for (const line of text) {
       const m = definition.exec(line)
+      // A top-level `}` ends a class or a function: the lines after it, up to
+      // the next definition, are module scope and belong to none.
       if (/^}/.test(line)) {
         cls = ""
+        current = ""
       }
       if (m && m[4]) {
         cls = m[4]
@@ -195,7 +200,8 @@ const callgrind = (name, iterations) => {
   return profile(file)
 }
 
-const commit = run("git", ["rev-parse", "--short=12", "HEAD"], { cwd: root }).trim()
+const dirty = run("git", ["status", "--porcelain"], { cwd: root }).trim() !== ""
+const commit = `${run("git", ["rev-parse", "--short=12", "HEAD"], { cwd: root }).trim()}${dirty ? "-dirty" : ""}`
 console.log(
   `breakdown: callgrind, NISH_SIMD=${PINNED_SIMD}, glibc pinned, --profile speed -g, ` +
     `${2 * N} iterations less ${N}, over ${N}; bench code at ${commit}`
