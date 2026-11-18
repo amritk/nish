@@ -145,7 +145,7 @@ jobs:
   # Which side jobs this run needs (docs/wp10-ci.md, "Scoped lanes"). One
   # `<lane>=true|false` output per lane; each lane job keeps its matrix rows and
   # its name, runs on ubuntu-latest when its lane is `false`, and skips every
-  # step but the one that says why. Every lane job compares with `!= 'false'`,
+  # work step; only the one that says why runs. Work steps compare with `!= 'false'`,
   # so a missing output runs the lane; if this job fails, GitHub skips the jobs
   # that need it, and `ci-gate` fails on both. A pull
   # request is the only event that can turn a lane off; any other event (a

@@ -337,6 +337,8 @@ export const fetchFiles = async (repo, pr, token, get = fetch) => {
 
 /**
  * Reads a pull request's labels as they are now, not as the event saw them.
+ * It reads one page of 100; a full page may hide a `ci:full` on the next,
+ * so it then adds `ci:full` itself and every lane runs (fails closed).
  *
  * @param {string} repo `owner/name`
  * @param {string} pr the pull request number
@@ -355,7 +357,8 @@ const fetchLabels = async (repo, pr, token) => {
   if (!Array.isArray(list)) {
     throw new Error("the labels response is not a list")
   }
-  return list.map((l) => l?.name)
+  const names = list.map((l) => l?.name)
+  return list.length >= 100 ? [...names, "ci:full"] : names
 }
 
 /**

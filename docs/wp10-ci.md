@@ -97,7 +97,7 @@ about 42 of a run's ~119 runner-minutes go to seven jobs that read only the
 compiler and some test trees. Those jobs are now **lanes**. The `scope` job runs
 `scripts/ci-scope.mjs`, which reads the pull request's changed files and labels
 from the API and writes `<lane>=true|false`. A lane job `needs: scope` and gates
-every step on `needs.scope.outputs.<lane> != 'false'`, so an empty or missing
+every work step on `needs.scope.outputs.<lane> != 'false'`, so an empty or missing
 output runs it. If `scope` itself fails, GitHub skips the jobs that need it, and
 `ci-gate` fails on that. When the lane is off, the job's first step writes why to the job
 summary, and the job still reports success under its usual name, so no required
@@ -118,8 +118,10 @@ lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
 `.claude/`, the top-level prose files and the other lanes' test trees), and
 the read set wins over the allowlist. A path on neither list turns every lane
 on. Each list was read from the code of every command the lane runs, composite
-actions included (`node tests/run.js ci-scope` pins a file per command, 19
-commands across the seven lanes). Some were also traced with `strace -f` on
+actions included (`node tests/run.js ci-scope` pins a file per command, 21
+commands across the seven lanes, the compiler-cache action counted once for
+each of the five lanes that run it). That check proves only that a change to a
+listed file turns its lane on: it cannot find a read nobody listed. Some were also traced with `strace -f` on
 x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
 `soundness.js`, the `simd`, `float-corpus`, `sha256_hw` and five kernel
 sections of `tests/run.js`, and the four `bench/` checks; `fuzz.js --stage1`

@@ -33092,6 +33092,11 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // Every command each lane's job runs, with files it opens: its entry
   // script, what that imports, and the fixtures it compiles (the composite
   // compiler-cache action counts as a command of every lane that uses it).
+  // An entry here proves only that a change to a listed file turns its lane on;
+  // it cannot find a read nobody listed. package.json is left out because it is
+  // in FULL and turns every lane on whatever the lane lists; the tests/ entries
+  // of simd, sha256_macos and fuzz record what those commands read, though the
+  // tests/run.js check below already turns those lanes on for all of tests/.
   // Re-derived from each step's `run:` after #1746's review found the
   // bootstrap lane missing the fixtures tests/nish/cli.ts compiles and the
   // postgres lane missing tests/self/. A lane whose read set drops one of
@@ -33104,7 +33109,6 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     "src/compile.ts",
     "std/term.ts",
     "runtime/nish.d.ts",
-    "package.json",
   ]
   const laneCommands = {
     bootstrap: {
@@ -33207,7 +33211,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   ])
   const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
   check(
-    "ci-scope: a change to a file any lane command opens turns that lane on, for every command of all seven lanes",
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
     commandGaps.length === 0 && uncoveredLanes.length === 0,
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
