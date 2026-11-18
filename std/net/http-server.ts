@@ -1271,11 +1271,10 @@ export class HttpServer {
     if (h1 !== null) {
       for (let s: i32 = 0; s < toI32(this.h1Open.length); s++) {
         if (this.h1Open[s] && h1.holds(s)) {
-          const conn: Http1Connection = h1.connection(s)
-          if (this.h1Current[s] === -1 && !conn.wantsWrite()) {
+          if (this.h1Current[s] === -1 && (h1.resting(s) || !h1.connection(s).wantsWrite())) {
             this.h1Close(h1, s)
           } else {
-            conn.closeAfter = true
+            h1.connection(s).closeAfter = true
           }
         }
       }

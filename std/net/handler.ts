@@ -770,7 +770,7 @@ export class HttpHandler {
         this.open[s] &&
         this.server.holds(s) &&
         this.current[s] === -1 &&
-        !this.server.connection(s).wantsWrite()
+        (this.server.resting(s) || !this.server.connection(s).wantsWrite())
       ) {
         this.closeSlot(s)
       } else if (this.open[s] && this.server.holds(s)) {

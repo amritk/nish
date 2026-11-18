@@ -542,6 +542,21 @@ export const main = (): i32 => {
   t.eqI32("two hundred answers, each byte for byte", same, 200);
   t.ok("two heads written, 198 copied", busy.headCopies === 198);
 
+  // H1-7: a connection `Http1Server` lends to another peer's slot drops the
+  // head it kept, so its first response there is written, not copied.
+  const lent = fed(times(GET, 7));
+  lent.lendTo(toI64(1));
+  check(t, lent, "H1-7: peer 1's first head", 200, names, values, body, "OK", false);
+  check(t, lent, "H1-7: peer 1's second head, kept", 200, names, values, body, "OK", false);
+  check(t, lent, "H1-7: peer 1's third head", 200, names, values, body, "OK", true);
+  lent.lendTo(toI64(2));
+  check(t, lent, "H1-7: lent to peer 2, the same head is not taken from peer 1's", 200, names, values, body, "OK", false);
+  lent.lendTo(toI64(2));
+  check(t, lent, "H1-7: lent to peer 2 again, its own kept head", 200, names, values, body, "OK", false);
+  check(t, lent, "H1-7: and peer 2's next", 200, names, values, body, "OK", true);
+  lent.lendTo(toI64(1));
+  check(t, lent, "H1-7: lent back to peer 1, peer 2's head is not taken", 200, names, values, body, "OK", false);
+
   return t.done();
 };
 

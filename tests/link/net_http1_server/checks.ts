@@ -336,8 +336,8 @@ const tlsTimedSlot = (lb: H1Loop): i32 => {
 
 /** The first held slot of `lb`'s plain server whose connection waits on a head deadline, or -1. */
 const plainTimedSlot = (lb: H1Loop): i32 => {
-  for (let k: i32 = 0; k < toI32(lb.plain.connections.length); k++) {
-    if (lb.plain.holds(k) && lb.plain.connections[k].headTimed) {
+  for (let k: i32 = 0; k < toI32(lb.plain.fds.length); k++) {
+    if (lb.plain.holds(k) && !lb.plain.resting(k) && lb.plain.connection(k).headTimed) {
       return k;
     }
   }
@@ -392,12 +392,12 @@ const acceptOrder = (t: Suite): void => {
     }
   }
   t.ok(
-    "a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept",
-    slots[0] === 0 && slots[1] === 1 && slots[2] === 2 && toI32(server.connections.length) === 3
+    "a pool built as it accepts takes slots 0, 1, 2 in order, building no connection for a slot that has read nothing",
+    slots[0] === 0 && slots[1] === 1 && slots[2] === 2 && toI32(server.connections.length) === 0
   );
   t.ok(
     "with size slots busy the next is shed with H1_POOL_FULL and nothing more is built",
-    slots[3] === H1_POOL_FULL && server.busy() === 3 && toI32(server.connections.length) === 3 && toI32(server.fds.length) === 3
+    slots[3] === H1_POOL_FULL && server.busy() === 3 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 3
   );
   const first: Http1Connection = server.connection(toI32(1));
   server.close(toI32(1));
@@ -406,8 +406,8 @@ const acceptOrder = (t: Suite): void => {
   const again: i32 = acceptWaiting(server, loop, ready);
   const againGrowth: i64 = Arena.used() - before;
   t.ok(
-    "a closed slot is taken again, its connection kept rather than built anew",
-    again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
+    "a closed slot is taken again, the connection it was lent kept spare and lent again rather than built anew",
+    again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 1
   );
   t.ok("the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing", firstGrowth > toI64(0) && againGrowth === toI64(0));
   server.close(toI32(2));
@@ -573,9 +573,13 @@ export const serverChecks = (): i32 => {
   // --- 1. Plain TCP ----------------------------------------------------------------------------
   t.ok("a pool of four builds no slot before its first accept", lb.plain.size() === 4 && toI32(lb.plain.connections.length) === 0 && lb.plain.busy() === 0);
   const a: i32 = lb.connect(false);
-  t.ok("the first accept builds slot 0 alone", lb.plain.holds(ZERO) && toI32(lb.plain.connections.length) === 1);
+  t.ok("the first accept holds slot 0 and builds no connection before it reads", lb.plain.holds(ZERO) && lb.plain.resting(ZERO) && toI32(lb.plain.connections.length) === 0);
   lb.send(a, ascii(get));
   const hello = lb.response(a, false);
+  t.ok(
+    "once answered, the keep-alive slot rests and gives back the one connection it was lent",
+    lb.plain.holds(ZERO) && lb.plain.resting(ZERO) && toI32(lb.plain.connections.length) === 1 && lb.plain.spares() === 1
+  );
   t.eqStr(
     "a GET is answered with its length, byte for byte",
     `${hello.head}\r\n${hello.text()}`,
@@ -785,9 +789,9 @@ export const serverChecks = (): i32 => {
   lb.hangUp(warm);
   const shared: i64 = lb.plain.date.formats();
   lb.plain.connections[0].date.pin(PINNED_MS + toI64(2000));
-  const seen: string = latin1(lb.plain.connections[1].date.current());
+  const seen: string = latin1(lb.plain.date.current());
   t.ok(
-    "the server's slots share one date: a second set through one is formatted once and read through another",
+    "the server's connections share its one date: a second set through one is formatted once and read through the server",
     lb.plain.date.formats() - shared === toI64(1) && seen === "Fri, 16 Oct 2026 08:11:56 GMT"
   );
   lb.plain.date.pin(PINNED_MS);
@@ -912,8 +916,8 @@ export const serverChecks = (): i32 => {
     pushyAnswer.status === 413 && lb.awaitEnd(pushy) && lb.peers[pushy].failure === 0
   );
   let pushySlot: i32 = toI32(-1);
-  for (let k: i32 = 0; k < toI32(lb.plain.connections.length); k++) {
-    if (lb.plain.holds(k) && lb.plain.connection(k).lingering()) {
+  for (let k: i32 = 0; k < toI32(lb.plain.fds.length); k++) {
+    if (lb.plain.holds(k) && !lb.plain.resting(k) && lb.plain.connection(k).lingering()) {
       pushySlot = k;
     }
   }
@@ -1047,13 +1051,14 @@ export const serverChecks = (): i32 => {
   );
   t.ok("and its client sees the end", lb.awaitEnd(piped) && lb.plain.busy() === 0);
 
+  const builtBefore: i32 = toI32(lb.plain.connections.length);
   const pool: i32[] = [];
   for (let k: i32 = 0; k < 4; k++) {
     pool.push(lb.connect(false));
   }
   lb.settle();
   t.eqI32("four clients fill the pool", lb.plain.busy(), toI32(4));
-  t.eqI32("which has then built its four slots", toI32(lb.plain.connections.length), toI32(4));
+  t.eqI32("which builds no connection for them while they read nothing", toI32(lb.plain.connections.length), builtBefore);
   lb.hangUp(pool[1]);
   t.ok("one of them hangs up", lb.awaitClosed(lb.closed + 1) && lb.plain.busy() === 3);
   let freed: i32 = -1;
@@ -1072,7 +1077,7 @@ export const serverChecks = (): i32 => {
   const refusedBefore: i32 = lb.refused;
   const shed: i32 = lb.connect(false);
   t.ok("a fifth is accepted and shed", lb.awaitEnd(shed) && lb.refused === refusedBefore + 1);
-  t.ok("and none past the four is built", toI32(lb.plain.connections.length) === 4 && toI32(lb.plain.fds.length) === 4);
+  t.ok("and no slot or connection past the four is built", toI32(lb.plain.connections.length) === builtBefore && toI32(lb.plain.fds.length) === 4);
   for (const k of pool) {
     lb.send(k, ascii("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n"));
     lb.response(k, false);

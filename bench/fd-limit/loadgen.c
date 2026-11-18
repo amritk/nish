@@ -38,9 +38,18 @@
  * The connect burst is outside the window: it starts after every connection
  * is up and the warm-up has run.
  *
+ * With -i <idle s> the run then holds every connection open and sends nothing
+ * more for <idle s>, and reads the servers' RSS and PSS and the box's Slab and
+ * TCP buffer pages again, as idle_rss_kb, idle_pss_kb, idle_slab_kb and
+ * idle_tcp_pages, beside the same reads taken before the first connect
+ * (base_rss_kb, base_pss_kb, base_slab_kb, base_tcp_pages): their difference
+ * over C is what an idle keep-alive connection holds once its last answer is
+ * out. Slab and TCP pages are the box's, so they count both ends of every
+ * loopback connection.
+ *
  * Usage: loadgen -c <conns> -r <req/s> -p <port> -w <warmup s> -d <seconds>
  *                -n <server pid,pid,...> [-t <think s>] [-P <client processes>]
- *                [-l <label>] */
+ *                [-l <label>] [-i <idle s>] */
 #define _GNU_SOURCE
 #include "common.h"
 
@@ -67,7 +76,7 @@
 #define LAT_BUCKETS (64 + (40 - 6) * LAT_SUB)
 
 struct shared {
-  volatile int go, stop;
+  volatile int go, stop, pause;
   /* The measured window, CLOCK_MONOTONIC seconds: a request sent in
    * [win_lo, win_hi) is timed. win_hi is 0 while the window is open. */
   volatile double win_lo, win_hi;
@@ -231,7 +240,9 @@ static void child(int k, long n, double rate, double think, int port) {
   }
   while (!sh->stop) {
     double t = now();
-    if (think > 0) {
+    if (sh->pause) {
+      /* -i: the connections stay open and send nothing more. */
+    } else if (think > 0) {
       while (qn > 0 && q[qh].at <= t) {
         struct conn *c = &cs[q[qh].idx];
         qh = (qh + 1) % n;
@@ -404,11 +415,11 @@ static void take(struct sample *s, double t, const int *pids, int npids, int nch
 
 int main(int argc, char **argv) {
   long conns = 1000;
-  double rate = 20000, warmup = 3, seconds = 10, think = 0;
+  double rate = 20000, warmup = 3, seconds = 10, think = 0, idle = 0;
   int port = 8080, nchild = 0, npids = 0, opt;
   int pids[MAX_PIDS];
   const char *label = "run";
-  while ((opt = getopt(argc, argv, "c:r:p:w:d:n:P:l:t:")) != -1) {
+  while ((opt = getopt(argc, argv, "c:r:p:w:d:n:P:l:t:i:")) != -1) {
     switch (opt) {
     case 'c': conns = atol(optarg); break;
     case 'r': rate = atof(optarg); break;
@@ -418,11 +429,12 @@ int main(int argc, char **argv) {
     case 'P': nchild = atoi(optarg); break;
     case 'l': label = optarg; break;
     case 't': think = atof(optarg); break;
+    case 'i': idle = atof(optarg); break;
     case 'n':
       for (char *t = strtok(optarg, ","); t && npids < MAX_PIDS; t = strtok(NULL, ",")) pids[npids++] = atoi(t);
       break;
     default:
-      fprintf(stderr, "usage: loadgen -c conns -r rate -p port -w warmup -d seconds -n pids [-t think] [-P procs] [-l label]\n");
+      fprintf(stderr, "usage: loadgen -c conns -r rate -p port -w warmup -d seconds -n pids [-t think] [-P procs] [-l label] [-i idle]\n");
       return 2;
     }
   }
@@ -442,6 +454,13 @@ int main(int argc, char **argv) {
   signal(SIGPIPE, SIG_IGN);
   sh = mmap(NULL, sizeof *sh, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
   memset((void *)sh, 0, sizeof *sh);
+  /* Before the first connect: what -i's idle reads are taken against. */
+  long base_rss = 0, base_pss = 0;
+  for (int i = 0; i < npids; i++) {
+    base_rss += status_kb(pids[i], "status", "VmRSS:");
+    base_pss += status_kb(pids[i], "smaps_rollup", "Pss:");
+  }
+  long base_slab = meminfo_kb("Slab:"), base_tcp = tcp_mem_pages();
   pid_t kids[MAX_CHILD];
   for (int k = 0; k < nchild; k++) {
     long n = conns / nchild + (k < conns % nchild ? 1 : 0);
@@ -499,6 +518,17 @@ int main(int argc, char **argv) {
     }
     if (wa >= ws) break;
     usleep(10000);
+  }
+  long idle_rss = 0, idle_pss = 0, idle_slab = 0, idle_tcp = 0;
+  if (idle > 0) {
+    sh->pause = 1;
+    usleep((useconds_t)(idle * 1e6));
+    for (int i = 0; i < npids; i++) {
+      idle_rss += status_kb(pids[i], "status", "VmRSS:");
+      idle_pss += status_kb(pids[i], "smaps_rollup", "Pss:");
+    }
+    idle_slab = meminfo_kb("Slab:");
+    idle_tcp = tcp_mem_pages();
   }
   sh->stop = 1;
   long sent = 0, starved = 0, send_failed = 0, closed = 0;
@@ -558,5 +588,10 @@ int main(int argc, char **argv) {
          label, conns, up, failed, nchild, connect_s, req / dt, us_user + us_sys, us_user, us_sys, box_us, si_us,
          (double)rss / 1024, (double)pss / 1024, fds, used_mb, tcp_mb, starved, sent, think, ps[0], ps[1], ps[2], ps[3],
          lat_n, lat_lost, send_failed, closed, sh->win_lo, sh->win_hi);
+  if (idle > 0) {
+    printf("label=%s conns=%ld up=%ld idle_s=%.1f base_rss_kb=%ld base_pss_kb=%ld base_slab_kb=%ld base_tcp_pages=%ld "
+           "idle_rss_kb=%ld idle_pss_kb=%ld idle_slab_kb=%ld idle_tcp_pages=%ld\n",
+           label, conns, up, idle, base_rss, base_pss, base_slab, base_tcp, idle_rss, idle_pss, idle_slab, idle_tcp);
+  }
   return 0;
 }
