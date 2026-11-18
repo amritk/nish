@@ -36,6 +36,15 @@ A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
 narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
 release-note words) in the same PR; run nish-cmp before pushing.
 
+**`std/` line moves and panic proofs are pinned.** An edit that adds or
+removes lines in a `std/*.ts` file moves every `std/<file>.ts:LINE:COL` in
+`tests/link/*/expected.caps.json`, `tests/wordings/*.err` and
+`docs/reference/diagnostics/`: grep `std/<file>.ts:[0-9]` and regenerate them
+from the compiler's output in the same PR. A `nish:simd` load is always
+recorded as an unproven index site (`src/attributes.ts`), so `std/` code a
+`--deny-panics` caller can reach does not use one; lane-wise helpers for test
+tooling live under `tests/`.
+
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every
 registry code is provoked". A changed diagnostic message is grepped across
