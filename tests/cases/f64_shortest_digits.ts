@@ -4,7 +4,7 @@
 // neighbouring 16-digit string does, so the old snprintf/strtod search gave up
 // and printed all seventeen. Zmij finds the shortest one, which is what Node
 // prints and what this pins.
-export function main(): i32 {
+export const main = (): i32 => {
   const a: f64 = 7.120236347223045e-307;
   const b: f64 = 7.291122019556398e-304;
   const c: f64 = 8.209073602596753e-289;
@@ -21,4 +21,4 @@ export function main(): i32 {
   console.log(`${f}`);
   console.log(`${g}`);
   return 0;
-}
+};

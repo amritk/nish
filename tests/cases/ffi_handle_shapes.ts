@@ -70,33 +70,33 @@ class Lying {
 
 const pathFor = (fail: i32): Result<i32, i32> => (fail === 0 ? Ok(10) : Err(fail))
 
-export function sureEarly(k: i32): i32 {
+export const sureEarly = (k: i32): i32 => {
   using s = new Sure()
   if (k > 0) {
     return k
   }
   return s.num()
-}
+};
 
-export function quietEarly(k: i32): i32 {
+export const quietEarly = (k: i32): i32 => {
   using q = new Quiet()
   if (k > 0) {
     return k
   }
   return q.num()
-}
+};
 
-export function maybeEither(fail: i32): i32 {
+export const maybeEither = (fail: i32): i32 => {
   using m = new Maybe(fail)
   return fail
-}
+};
 
-export function lyingEither(fail: i32): i32 {
+export const lyingEither = (fail: i32): i32 => {
   using l = new Lying(fail)
   return fail
-}
+};
 
-export function beforeLoop(n: i32): i32 {
+export const beforeLoop = (n: i32): i32 => {
   using s = new Sure()
   let total = 0
   for (let i = 0; i < n; i++) {
@@ -109,7 +109,7 @@ export function beforeLoop(n: i32): i32 {
     total = total + s.num()
   }
   return total
-}
+};
 
 const body = (fail: i32): Result<i32, i32> => {
   using s = new Sure()
@@ -117,6 +117,6 @@ const body = (fail: i32): Result<i32, i32> => {
   return Ok(s.num() + extra)
 }
 
-export function bodyOrReturn(fail: i32): i32 {
+export const bodyOrReturn = (fail: i32): i32 => {
   return body(fail).unwrapOr(-1)
-}
+};

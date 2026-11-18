@@ -79,18 +79,18 @@ class Dir {
 
 const first = (f: File): i32 => f.read()
 
-function descriptor(d: Dir): i32 {
+const descriptor = (d: Dir): i32 => {
   return d.fd()
-}
+};
 
-function counted(d: Dir): i32 {
+const counted = (d: Dir): i32 => {
   const c = new Counter()
   return c.count(d)
-}
+};
 
-function firstTwo(f: File, g: File): i32 {
+const firstTwo = (f: File, g: File): i32 => {
   return first(f) + first(g)
-}
+};
 
 const skipThenRead = (f: File, n: i32): i32 => {
   f.skip(n)

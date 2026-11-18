@@ -5,10 +5,10 @@
 // calls something that may resize the array.
 declare function pwrite(fd: i32, buf: readonly u8[], n: u64, off: i64): i64;
 
-function shrink(b: u8[]): i64 {
+const shrink = (b: u8[]): i64 => {
   b.pop();
   return 0;
-}
+};
 
 class Popper {
   off: i64;
@@ -18,12 +18,12 @@ class Popper {
   }
 }
 
-export function viaCall(): i32 {
+export const viaCall = (): i32 => {
   const buf: u8[] = [1, 2, 3, 4];
   return toI32(pwrite(-1, buf, toU64(buf.length), shrink(buf)));
-}
+};
 
-export function viaNew(): i32 {
+export const viaNew = (): i32 => {
   const buf: u8[] = [1, 2, 3, 4];
   return toI32(pwrite(-1, buf, toU64(buf.length), new Popper(buf).off));
-}
+};

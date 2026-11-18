@@ -3,9 +3,9 @@
 // its check fails before C copies a byte past its end.
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
 
-export function shortSource(): i32 {
+export const shortSource = (): i32 => {
   const dst = new Array<u8>(8);
   const src: u8[] = [1, 2, 3];
   memcpy(dst, src, toU64(dst.length));
   return 0;
-}
+};

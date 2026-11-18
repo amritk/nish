@@ -1,18 +1,18 @@
-function passthrough(s: string): string {
+const passthrough = (s: string): string => {
   return s;
-}
+};
 
-function wrapped(s: string): string {
+const wrapped = (s: string): string => {
   return `${s}`;
-}
+};
 
-function printed(s: string): string {
+const printed = (s: string): string => {
   console.log(s);
   return "done";
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   console.log(wrapped(passthrough("pass")));
   console.log(printed("printed"));
   return 0;
-}
+};

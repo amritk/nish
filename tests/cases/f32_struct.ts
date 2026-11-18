@@ -8,11 +8,11 @@ class Vec3 {
   hits: u32 = 0;
 }
 
-function dot(a: Vec3, b: Vec3): f32 {
+const dot = (a: Vec3, b: Vec3): f32 => {
   return a.x * b.x + a.y * b.y + a.z * b.z;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   const v = new Vec3();
   v.x = 0.1;
   v.y = 0.25;
@@ -28,4 +28,4 @@ export function test(): number {
   xs[1] = xs[0] * 3.0;
   console.log(`${xs[0]} ${xs[1]} ${xs.length}`);
   return 0;
-}
+};

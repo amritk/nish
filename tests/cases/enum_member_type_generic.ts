@@ -11,21 +11,21 @@ enum Kind {
   Array,
 }
 
-function fold<T>(xs: T[], init: T): T {
+const fold = <T>(xs: T[], init: T): T => {
   let acc: T = init;
   for (const x of xs) {
     acc = x;
   }
   return acc;
-}
+};
 
-function first<T>(init: T, xs: T[]): T {
+const first = <T>(init: T, xs: T[]): T => {
   return xs.length > 0 ? xs[0] : init;
-}
+};
 
-function tag<T>(x: T, k: Kind.Array): Kind.Array {
+const tag = <T>(x: T, k: Kind.Array): Kind.Array => {
   return k;
-}
+};
 
 export const test = (): number => {
   const xs: Kind.Array[] = [Kind.Array];

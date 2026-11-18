@@ -2,7 +2,7 @@
 // cannot go on the stack, but it never escapes `histogram`, so the function
 // marks the arena on entry and releases it before returning. Called 100000
 // times, `Arena.used()` does not grow (tests/run.js compares the two lines).
-function histogram(n: number, seed: number): number {
+const histogram = (n: number, seed: number): number => {
   const counts = new Array<number>(n);
   let x = seed;
   for (let i = 0; i < 1000; i++) {
@@ -16,9 +16,9 @@ function histogram(n: number, seed: number): number {
     }
   }
   return best;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(histogram(16, 1));
   const before = Arena.used();
   let acc = 0;
@@ -30,4 +30,4 @@ export function main(): number {
   console.log(acc);
   console.log(after);
   return 0;
-}
+};
