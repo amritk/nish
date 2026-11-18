@@ -4,4 +4,4 @@ import { twice } from "./src/host"
 
 export const quad = (x: f64): f64 => {
   return twice(twice(x)) + 1
-};
+}

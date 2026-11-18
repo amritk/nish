@@ -10,4 +10,4 @@ export const main = (): i32 => {
   }
   console.log("joined")
   return 0
-};
+}

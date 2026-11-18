@@ -4,4 +4,4 @@ import { bump } from "./host"
 export const twice = (by: i32): i32 => {
   bump(by)
   return bump(by)
-};
+}

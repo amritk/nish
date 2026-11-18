@@ -15,48 +15,48 @@ export enum Mode {
 
 export const hI32 = (x: i32): i32 => {
   return x * 2
-};
+}
 export const hU8 = (x: u8): u8 => {
   return x + 300
-};
+}
 export const hU16 = (x: u16): u16 => {
   return x + 70000
-};
+}
 export const hU32 = (x: u32): u32 => {
   return x + 1
-};
+}
 export const hF32 = (x: f32): f32 => {
   return x * 2
-};
+}
 export const hF64 = (x: f64): f64 => {
   return x / 4
-};
+}
 export const hBool = (x: boolean): boolean => {
   if (typeof x !== "boolean") {
     throw new TypeError("hBool: not a boolean")
   }
   return !x
-};
+}
 export const hI64 = (x: i64): i64 => {
   return x - 1n
-};
+}
 export const hU64 = (x: u64): u64 => {
   if (x < 0n) {
     throw new RangeError("hU64: negative")
   }
   return x + 1n
-};
+}
 export const hPercent = (x: i32): integer<0, 100> => {
   return x
-};
+}
 export const hNext = (m: Mode): Mode => {
   return m === Mode.Clip ? Mode.Fill : m + 1
-};
+}
 const canvases: string[] = ["none"]
 export const hCanvas = (name: i32): Canvas => {
   canvases.push(`canvas${name}`)
   return (canvases.length - 1) as Canvas
-};
+}
 export const hSame = (c: Canvas): Canvas => {
   return c
-};
+}

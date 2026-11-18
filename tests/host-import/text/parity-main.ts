@@ -3,4 +3,4 @@ import { corpus } from "./parity"
 
 export const main = (): void => {
   console.log(corpus())
-};
+}

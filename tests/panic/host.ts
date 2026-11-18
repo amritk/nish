@@ -4,6 +4,6 @@ import type { u32 } from "nish"
 
 export const reenter = (): u32 => {
   return 0
-};
+}
 
-export const boom = (): void => {};
+export const boom = (): void => {}

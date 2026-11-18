@@ -8,4 +8,4 @@ export const main = (): i32 => {
   const ys = parallelMap(xs, (x: i32): i32 => x + kNow)
   console.log(ys[0] + ys[1] + ys[2])
   return 0
-};
+}

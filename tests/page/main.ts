@@ -13,7 +13,7 @@ export const tick = (): i32 => {
     moved++
   }
   return moved
-};
+}
 
 /** Pushes `from`, `from + 1`, ... onto the output until it is full; answers how many went. */
 export const fill = (from: i32): i32 => {
@@ -22,12 +22,12 @@ export const fill = (from: i32): i32 => {
     n++
   }
   return n
-};
+}
 
 /** The input ring's size as the module reads it. */
 export const waiting = (): i32 => {
   return ringSize(INPUT)
-};
+}
 
 /** Nothing: the page drives the module. `--emit-ts` writes its reading from an entry with a `main`. */
-export const main = (): void => {};
+export const main = (): void => {}

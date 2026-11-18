@@ -11,4 +11,4 @@ export const main = (): i32 => {
   }
   console.log(out[0] + out[1])
   return 0
-};
+}

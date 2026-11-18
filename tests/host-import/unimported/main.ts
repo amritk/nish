@@ -4,4 +4,4 @@ import { first } from "./counter"
 
 export const next = (x: i32): i32 => {
   return first(x)
-};
+}

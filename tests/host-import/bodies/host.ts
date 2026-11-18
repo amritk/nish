@@ -26,4 +26,4 @@ export const bump = (by: i32): i32 => {
   }
   void settle(0).then((n) => n)
   return step(by)
-};
+}

@@ -2,7 +2,7 @@
 // declaration it names, whatever kind of declaration that is.
 const f = (): i32 => {
   return 1
-};
+}
 const g = (): i32 => 2
 interface P {
   x: i32

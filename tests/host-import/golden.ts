@@ -7,7 +7,7 @@ export type Canvas = HostHandle<"canvas">
 
 export const width = (c: Canvas): i32 => {
   return 0
-};
+}
 export const shade = (level: u8): u8 => {
   return level
-};
+}

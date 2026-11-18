@@ -9,8 +9,8 @@ export const setupCounter = (element: HTMLElement): void => {
   }
   element.addEventListener("click", () => setCounter(counter + 1))
   setCounter(0)
-};
+}
 
 export const first = (x: i32): i32 => {
   return x + 1
-};
+}

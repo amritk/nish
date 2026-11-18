@@ -7,4 +7,4 @@ export const main = (): i32 => {
   const r = apply((x: i32): i32 => x + kNow, 1)
   console.log(r)
   return 0
-};
+}

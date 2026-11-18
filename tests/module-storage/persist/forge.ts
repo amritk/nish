@@ -31,7 +31,7 @@ export const init = (): void => {
   }
   c.next = new Cell(1592615544)
   cells[0] = c
-};
+}
 
 /**
  * Garbage past the keep's 64 KiB of slack, so the keep after this call
@@ -46,7 +46,7 @@ export const churn = (): i32 => {
   trash[0] = junk
   trash[0] = null
   return junk.names.length
-};
+}
 
 /** How many names the cell holds, and the first's length: 4 and 2 untouched. */
 export const names = (): i32 => {
@@ -55,4 +55,4 @@ export const names = (): i32 => {
     return -1
   }
   return c.names.length * 10 + c.names[0].length
-};
+}

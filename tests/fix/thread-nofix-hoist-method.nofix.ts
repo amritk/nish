@@ -27,4 +27,4 @@ class Runner {
 export const main = (): i32 => {
   console.log(new Runner().run())
   return 0
-};
+}

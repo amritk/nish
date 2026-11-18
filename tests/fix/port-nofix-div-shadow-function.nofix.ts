@@ -2,7 +2,7 @@
 // `u32` `/=`.
 const toU32 = (x: u32): u32 => {
   return x + 1000
-};
+}
 
 const g = (a: u32, b: u32): u32 => {
   let q = a

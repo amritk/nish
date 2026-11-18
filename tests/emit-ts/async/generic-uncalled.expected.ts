@@ -9,4 +9,4 @@ async function echo<T>(x: T): Promise<T> {
 export const main = (): i32 => {
   console.log("plain")
   return 0
-};
+}

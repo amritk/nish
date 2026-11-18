@@ -18,4 +18,4 @@ export const main = (): i32 => {
     console.log(g.value.n)
   }
   return 0
-};
+}

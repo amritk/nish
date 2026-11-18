@@ -5,9 +5,9 @@ import type { i32 } from "nish"
 
 export const say = (s: string): void => {
   console.log(`say ${JSON.stringify(s)}`)
-};
+}
 
 export const measure = (s: string, tag: i32): i32 => {
   console.log(`measure ${tag} ${JSON.stringify(s)}`)
   return s.length
-};
+}

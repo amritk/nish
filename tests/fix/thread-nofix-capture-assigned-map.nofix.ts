@@ -10,4 +10,4 @@ export const main = (): i32 => {
   })
   console.log(ys[0] + ys[1] + ys[2])
   return 0
-};
+}

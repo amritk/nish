@@ -4,4 +4,4 @@ import { setupCounter } from "./counter"
 
 export const start = (): void => {
   setupCounter()
-};
+}
