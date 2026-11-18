@@ -32239,12 +32239,26 @@ if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
   // test under the sanitizers.
   const testJob = ciJob(ciYmlText, "test")
   const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  // A step that runs them counts only while it must run and must pass: no
+  // `continue-on-error`, and no `if:` but `!cancelled()`. A job-level `if:`
+  // or `continue-on-error` would leave them running nowhere, or failing
+  // unseen, while the `test` job still prints DELEGATED.
+  const fuzzSmokeSteps = fuzzSmoke.split(/\n {6}- /).slice(1)
+  const binding = (pattern) => {
+    const step = fuzzSmokeSteps.find((s) => pattern.test(s))
+    return (
+      step !== undefined &&
+      !/^ {8}continue-on-error:/m.test(step) &&
+      [...step.matchAll(/^ {8}if: (.*)$/gm)].every((m) => m[1] === "${{ !cancelled() }}")
+    )
+  }
   check(
     "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
     testJob !== "" &&
       (!testJob.includes("--delegate-sanitizers") ||
-        (/^\s+run: bash scripts\/fuzz\.sh --smoke$/m.test(fuzzSmoke) &&
-          /^\s+node tests\/run\.js runtime_sanitize /m.test(fuzzSmoke))),
+        (!/^ {4}(if|continue-on-error):/m.test(fuzzSmoke) &&
+          binding(/^ {8}run: bash scripts\/fuzz\.sh --smoke$/m) &&
+          binding(/^\s+node tests\/run\.js runtime_sanitize /m))),
     `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
   )
   // The `runner` job, the whole corpus through the golden runner written in
@@ -32256,8 +32270,7 @@ if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
   const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
   check(
     "ci.yml: the `runner` job runs on the release tag and the Release PR, and release.yml still calls ci.yml",
-    runnerIf.includes("github.ref_type == 'tag'") &&
-      runnerIf.includes("github.head_ref == 'release/next'") &&
+    runnerIf === "github.ref_type == 'tag' || github.head_ref == 'release/next'" &&
       /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
     `runner job's if: ${runnerIf || "(none)"}`
   )
