@@ -2337,6 +2337,12 @@ const DECLARED = [
       "tests/link/net_http3_server_bad_idle_timeout/main.ts": ["main.h"],
     }
   ),
+  ...wsAcceptFlat(
+    "Http1Connection gains the WsAcceptKey field, so the probe that links the handler lays out WsAcceptKey and Sha1 in its modules and header and renumbers what follows them; the 0.41.0 seed refused this probe, the 0.42.0 seed builds it",
+    {
+      "tests/link/net_handler_rest_close/main.ts": ["handler.ll", "main.h", "main.ll"],
+    }
+  ),
   // WsDecoder gains `frameChecked`, how far the text frame still arriving has
   // been unmasked and UTF-8 checked, so every program that links
   // nish/net/websocket lays the decoder out 8 bytes wider: websocket.ll moves
