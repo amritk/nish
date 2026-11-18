@@ -78,13 +78,16 @@ A cursor reads one snapshot, so it lives inside a read transaction:
 - `db.openCursor` outside a transaction (`sqlite3_get_autocommit(db) != 0`)
   answers `MISUSE`.
 - `db.endRead()` closes every cursor on the connection, then runs `COMMIT`.
+- `beginRead` does not make the transaction read-only. A write run inside it
+  invalidates the cursors like any other write, and `endRead`'s `COMMIT`
+  commits it.
 
 A raw B-tree cursor is not counted by SQLite's statement bookkeeping
 (`nVdbeRead`, `nVdbeActive`), so a `COMMIT` or `ROLLBACK` run while one is open
 would end the transaction under it, and a write would move pages under it. The
 adapter therefore **invalidates** every cursor on a connection, closing its
-`BtCursor` and bumping the connection's cursor epoch, *before* anything other
-than a plain read runs:
+`BtCursor` and freeing it (its handle then answers `MISUSE`), *before*
+anything other than a plain read runs:
 
 - **The adapter owns the connection's authorizer.** `nishsqlite_open` installs
   one with `sqlite3_set_authorizer`; `nish/sqlite` exposes no authorizer of its
@@ -94,7 +97,8 @@ than a plain read runs:
   `SQLITE_FUNCTION`, `SQLITE_RECURSIVE`). Anything else — `SQLITE_TRANSACTION`,
   `SQLITE_SAVEPOINT`, every write, DDL, `PRAGMA`, `ATTACH`, `ANALYZE`, or a
   statement that authorized nothing, such as `VACUUM` — makes it a statement
-  that invalidates.
+  that invalidates. A `SELECT` from a `pragma_*` table-valued function
+  authorizes `SQLITE_PRAGMA`, so it invalidates too.
 - **`nishsqlite_step` invalidates** before it steps a statement that is not a
   plain read.
 - **`nishsqlite_exec` invalidates** before it runs anything: it answers no rows,
@@ -112,29 +116,39 @@ The adapter's own statements (the schema check, `beginRead`'s `BEGIN` and
 read) run with the callback told they are internal, so they do not invalidate
 the cursors they serve.
 
-A build with `-DSQLITE_DEBUG` (SQLite's assertions on) runs the same sequences
-— a cursor open across `db.exec("COMMIT")`, `db.commit()`, `db.rollback()`, an
-`INSERT` and `endRead` — without an assertion failure; a test pins it.
+A build with `-DSQLITE_DEBUG` (SQLite's assertions on) runs
+`tests/link/std_sqlite_cursor_stale` without an assertion failure; a test pins
+it.
+
+Every cursor entry point holds the connection's `db->mutex`
+(`sqlite3_db_mutex`, entered and left around the call) as SQLite's own API
+functions do, since the internal functions it calls expect it held. The mutex
+is recursive, and NULL (a no-op) in the default `THREADSAFE=0` build and under
+`--threads` (`THREADSAFE=2`). A `SQLITE_DEBUG`, `THREADSAFE=1` build of the
+adapter with a C helper that walks, reads and seeks asserts it; a test pins it.
 
 ## The schema check
 
 At `openCursor`, inside the read transaction, through the public API on the
 same connection:
 
-1. `PRAGMA encoding` must answer `UTF-8`: text is read as bytes and keys are
-   compared as bytes.
-2. `SELECT type, rootpage, tbl_name, sql FROM sqlite_schema WHERE name = ?1`
-   finds the object. The root page comes from this row, never from the caller.
-3. For a table, `PRAGMA table_xinfo(name)` lists its columns; for an index,
-   `PRAGMA index_xinfo(name)` lists its key columns and then the rowid, with
-   each one's `desc` and collation. `PRAGMA index_list(table)` says whether a
+1. `PRAGMA main.encoding` must answer `UTF-8`: text is read as bytes and keys
+   are compared as bytes.
+2. `SELECT type, rootpage, tbl_name FROM main.sqlite_schema WHERE name = ?1`
+   finds the object, which must be a `table` or an `index` with a root page
+   above 0. The root page comes from this row, never from the caller.
+3. `SELECT type, wr FROM pragma_table_list WHERE schema = 'main' AND name = ?1`,
+   on the table (or the index's table), must answer `type = 'table'` and
+   `wr = 0`: not a view, a virtual table or a `WITHOUT ROWID` table.
+4. For a table, `pragma_table_xinfo` lists its columns; for an index,
+   `pragma_index_xinfo` lists its key columns and then the rowid, with each
+   one's `desc` and collation. `pragma_index_list(table)` says whether a
    table's primary key is an index (`origin = 'pk'`).
 
 The open is refused with `SqliteError` and `SQLITE_SCHEMA` when:
 
-- the name is missing, or names a view, a trigger, a virtual table
-  (`CREATE VIRTUAL TABLE` in its `sql`, root page 0) or a `WITHOUT ROWID` table
-  (or an index on one, which `index_xinfo` lists without a rowid);
+- the name is missing, or names a view, a trigger, a virtual table or a
+  `WITHOUT ROWID` table (or an index on one);
 - the declared names differ from the schema's in any name, in their order or in
   their count; for an index, `DESC` is written exactly where `index_xinfo` says
   `desc`, and the last name is `rowid`;
@@ -157,15 +171,19 @@ row): that is how SQLite itself decides, `INTEGER PRIMARY KEY DESC` included.
 | overflow payload | `sqlite3BtreePayloadFetch` gives only the part on the B-tree page: when it is shorter than `sqlite3BtreePayloadSize`, `sqlite3BtreePayload` copies the whole record into the cursor's buffer |
 | REAL affinity holding an integer | the record stores an integer: `columnType` answers `SQLITE_INTEGER` and `columnI64` its value |
 | text read | `sqlite3_value_blob` + `sqlite3_value_bytes`, never `sqlite3_value_text`, which can convert and allocate |
+| seek key affinity | a key part is compared as given, with no column affinity: `keyText("5")` on an INTEGER column sorts after every number, as SQLite's text sorts after its integers |
 
 ## Memory
 
-Per cursor, allocated once at open with `sqlite3_malloc64`/`sqlite3DbMallocRaw`
-and freed at close: the `BtCursor` (`sqlite3BtreeCursorSize` bytes, zeroed with
-`sqlite3BtreeCursorZero`), the `KeyInfo` (`sqlite3KeyInfoAlloc`), one
-`UnpackedRecord` for reading the current row and one for building seek keys
-(`sqlite3VdbeAllocUnpackedRecord`). A payload buffer is allocated only when a
-record is not wholly on its page, and grows geometrically. The current row is
+Per cursor, allocated at open and freed at close: one `sqlite3_malloc64`
+block holding the cursor, its `BtCursor` (`sqlite3BtreeCursorSize` bytes,
+zeroed with `sqlite3BtreeCursorZero`) and the `Mem`s of its seek key
+(`sqlite3VdbeMemInit`); the `KeyInfo` (`sqlite3KeyInfoAlloc`); and one
+`UnpackedRecord` for the current row (`sqlite3VdbeAllocUnpackedRecord`). A
+seek builds its `UnpackedRecord` on the stack over the key's `Mem`s. A payload
+buffer (`sqlite3_realloc64`) is allocated only when a record is not wholly on
+its page, grows geometrically, and keeps 18 zeroed bytes past the record, the
+slack SQLite's record decoder may read past a corrupt record's end. The current row is
 unpacked lazily, on the first column read after a move, and cached until the
 cursor moves. A steady-state row loop therefore allocates nothing; a test
 reads 10,000 rows under `SQLITE_DEFAULT_MEMSTATUS=1` and checks that SQLite's
@@ -181,6 +199,7 @@ translation unit. The calls, all of them:
 
 - B-tree: `sqlite3DbNameToBtree`, `sqlite3BtreeCursorSize`,
   `sqlite3BtreeCursorZero`, `sqlite3BtreeCursor`, `sqlite3BtreeCloseCursor`,
+  `sqlite3BtreeCursorHasMoved`, `sqlite3BtreeTxnState`,
   `sqlite3BtreeFirst`, `sqlite3BtreeLast`, `sqlite3BtreeNext`,
   `sqlite3BtreePrevious`, `sqlite3BtreeEof`, `sqlite3BtreeTableMoveto`,
   `sqlite3BtreeIndexMoveto`, `sqlite3BtreeIntegerKey`,
@@ -188,18 +207,20 @@ translation unit. The calls, all of them:
 - Records and keys: `sqlite3KeyInfoAlloc`, `sqlite3KeyInfoUnref`,
   `sqlite3VdbeAllocUnpackedRecord`, `sqlite3VdbeRecordUnpack`,
   `sqlite3VdbeMemInit`, `sqlite3VdbeMemSetInt64`, `sqlite3VdbeMemSetStr`,
-  `sqlite3DbFree`.
+  `sqlite3VdbeMemSetNull`, `sqlite3VdbeMemRelease`, `sqlite3DbFree`.
 - Public API: `sqlite3_set_authorizer`, `sqlite3_get_autocommit`,
   `sqlite3_txn_state`, `sqlite3_db_mutex`, `sqlite3_mutex_enter`,
-  `sqlite3_mutex_leave`, the `sqlite3_value_*` accessors, and the statement API
-  for the schema check.
+  `sqlite3_mutex_leave`, `sqlite3_malloc64`, `sqlite3_realloc64`,
+  `sqlite3_free`, the `sqlite3_value_*` accessors, and the statement and
+  `sqlite3_str` API for the schema check.
 
 What it writes, all of it: its own allocations; in the `KeyInfo` it allocated,
 `aSortFlags` (the per-column `DESC` flags `sqlite3KeyInfoAlloc` leaves zero,
 the way SQLite's own code generator fills them; `aColl` stays zero, which is
-`BINARY`); and in the `UnpackedRecord`s it allocated, `nField` and
-`default_rc`, which SQLite's caller sets before an unpack or a seek, as the
-VDBE's `OP_SeekGE` does. It writes no member of `BtCursor`, `Btree`, `BtShared`,
+`BINARY`); in the row's `UnpackedRecord`, `nField`, which SQLite's caller
+sets before an unpack; and the seek's stack `UnpackedRecord`, zeroed and then
+given `pKeyInfo`, `aMem`, `nField` and `default_rc`, as the VDBE's `OP_SeekGE`
+fills its own. It writes no member of `BtCursor`, `Btree`, `BtShared`,
 `Mem` (only through `sqlite3VdbeMem*`) or `sqlite3`.
 
 The seek follows `OP_SeekGE`/`OP_SeekGT`/`OP_SeekLE`/`OP_SeekLT`:

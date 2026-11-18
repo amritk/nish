@@ -150,19 +150,27 @@ Tests:
   closed cursor, a column out of range, an `at` past the buffer, a
   `keyTextBytes` window outside it, one key part too many, and a buffer too
   small.
-- `tests/link/std_sqlite_cursor_stale`: a cursor open across each route
-  above answers `SQLITE_MISUSE`. It runs again with `-DSQLITE_DEBUG`, so
-  SQLite's assertions check the same sequences.
+- `tests/link/std_sqlite_cursor_stale`: a cursor open across `COMMIT`,
+  `ROLLBACK`, `commit()`, `rollback()`, a write through `exec` and through a
+  prepared statement, a prepared `ROLLBACK`, `endRead`, a `SELECT` on a
+  `pragma_*` function and `close` answers `SQLITE_MISUSE`. It runs again with
+  `-DSQLITE_DEBUG`, so SQLite's assertions check the same sequences.
+- `tests/run.js` (`sqlite-link`): the adapter built with `-DSQLITE_DEBUG` and
+  `THREADSAFE=1` under a C helper that walks, reads and seeks, so SQLite's
+  assertions check that every cursor call holds the connection's mutex.
 - `tests/link/std_sqlite_cursor_schema`: each refused object. It runs again
   with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
 - `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
   equal byte for byte to SQL's.
 
-The route that frees a cursor because a row moved under it
-(`sqlite3BtreeCursorHasMoved`, `SQLITE_ABORT`) has no test, and neither has
-`SQLITE_CORRUPT` for an oversized record or the `SQLITE_NOMEM` paths. Each
-needs a corrupt file or a failing allocator, which the suite has no harness
-for.
+Untested: a read that answers `SQLITE_ABORT` because the row moved under the
+cursor (`sqlite3BtreeCursorHasMoved`; the cursor stays open), `SQLITE_CORRUPT`
+for an oversized record, and the `SQLITE_NOMEM` paths, each of which needs a
+corrupt file or a failing allocator the suite has no harness for; the
+invalidation by a re-prepare whose statement now authorizes an action off the
+allowlist, which needs another connection to change the schema between a
+prepare and its step; and the invalidation `cursor_of` makes when SQLite has
+rolled the transaction back by itself, which needs an I/O error mid-read.
 
 ## Findings
 
@@ -201,7 +209,7 @@ Every unit in `runtime/sqlite/` is compiled with:
 | `SQLITE_MAX_EXPR_DEPTH=0` | No limit on expression depth: the parser does not count it |
 | `SQLITE_OMIT_DEPRECATED` | No deprecated interface |
 | `SQLITE_OMIT_PROGRESS_CALLBACK` | No progress callback |
-| `SQLITE_OMIT_SHARED_CACHE` | No shared cache |
+| `SQLITE_OMIT_SHARED_CACHE` | No shared cache. The cursors rely on it: with a shared cache another connection could free pages under one, so `nish-sqlite.c` refuses to build without it (`#error`) |
 | `SQLITE_USE_ALLOCA` | Scratch space on the stack where SQLite allows it |
 | `SQLITE_OMIT_LOAD_EXTENSION` | No `load_extension`: nothing can load code |
 | `SQLITE_THREADSAFE=0`, or `=2` with `--threads` | Single-thread mode, or multi-thread mode: no mutex guards a connection, so a program must not share one across threads (serialized mode is `1`); always `0` on wasi |

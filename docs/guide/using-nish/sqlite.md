@@ -225,6 +225,8 @@ export const main = (): i32 => {
   `keyI64`, `keyText` or `keyTextBytes`, one per key column, in order.
   `seek(SEEK_GE)`, `SEEK_GT`, `SEEK_LE` or `SEEK_LT` then lands on the first
   entry at or past it, or the last at or before it.
+  A key gets no column affinity: `keyText("5")` on an `INTEGER` column sorts
+  after every number, so seek a number with `keyI64`.
 - **Reads take the stored value.** `columnI64` reads an integer.
   `columnInto` copies text or blob bytes into a buffer, the way
   `Statement.columnInto` does; for a number it answers
@@ -235,7 +237,9 @@ export const main = (): i32 => {
   `exec`, `commit`, `rollback`, stepping a statement that writes, and
   `endRead`. A closed cursor answers `Err(SQLITE_MISUSE)`, and `rowid` and
   `columnI64` answer 0. Plain `SELECT` statements can run beside open
-  cursors.
+  cursors, except one that reads a `pragma_*` function, which closes them.
+- **A read transaction does not forbid writes.** A write inside
+  `beginRead()` closes the open cursors, and `endRead()` commits it.
 - **Some objects cannot be read this way.** Views, virtual tables,
   `WITHOUT ROWID` tables, generated columns, expression indexes, indexes with
   a collation other than `BINARY`, and databases whose encoding is not UTF-8
