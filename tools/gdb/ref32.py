@@ -65,14 +65,22 @@ def target_type(link):
     return None
 
 
+def offset_of(value):
+    return int(value) & 0xFFFFFFFF
+
+
 def decode(value):
-    """The address a link names, or 0 for null."""
-    offset = int(value) & 0xFFFFFFFF
+    """The address a link names, 0 for null, or None when `nish_ref_base` cannot be read."""
+    offset = offset_of(value)
     if offset == 0:
         return 0
     if zero_based():
         return offset << 2
-    base = int(gdb.parse_and_eval("(unsigned long) nish_ref_base"))
+    try:
+        base = int(gdb.parse_and_eval("(unsigned long) nish_ref_base"))
+    except (gdb.error, gdb.MemoryError):
+        # No symbol (a stripped binary) or no process yet: no address to give.
+        return None
     return base + (offset << 2)
 
 
@@ -82,6 +90,8 @@ class LinkPrinter:
 
     def to_string(self):
         address = decode(self.value)
+        if address is None:
+            return "offset 0x%x (nish_ref_base unreadable)" % offset_of(self.value)
         if address == 0:
             return "null"
         # A string, not the cast `gdb.Value`: gdb prints a pointer value an
@@ -109,7 +119,10 @@ class Ref32Function(gdb.Function):
         pointer = target_type(link)
         if pointer is None:
             raise gdb.GdbError("no struct named by %s" % link.name)
-        return gdb.Value(decode(value)).cast(pointer)
+        address = decode(value)
+        if address is None:
+            raise gdb.GdbError("nish_ref_base cannot be read; the link is offset 0x%x" % offset_of(value))
+        return gdb.Value(address).cast(pointer)
 
 
 Ref32Function()

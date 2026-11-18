@@ -17370,41 +17370,79 @@ if (dealtHere("runtimeChecks")) {
   }
 
   // ---- A compact link's TBAA node (WP48 stage 2b) ---------------------------------------
-  // A link's load and store hang off `ref32`, a sibling of `i32` under the
-  // root, so `opt -O2` may forward `a.value = 1` across `b.next = c` to the
-  // `return a.value` in tests/cases/compact_tbaa: the optimised `relink`
-  // keeps no `i32` load. Under `--plain` neither access is
-  // tagged, the two may alias, and the reload stays -- which is what shows
-  // the first half is the tag's doing.
-  if (has("opt") && (!only || "compact tbaa".includes(only))) {
-    const dir = path.join(buildDir, "compact-tbaa")
-    fs.rmSync(dir, { recursive: true, force: true })
-    /** `relink`'s optimised body under `flags`, or the failure that stopped it. */
-    const relinkBody = (flags, sub) => {
-      const out = path.join(dir, sub) + path.sep
-      const c = spawnSync(NISH, [path.join(casesDir, "compact_tbaa.ts"), ...flags, "-o", out], { cwd: root, encoding: "utf8" })
-      if (c.status !== 0) {
-        return { ok: false, text: shown(c) }
+  // Two tags that both name a class decide alias by the class path, whatever
+  // their scalars, so the `ref32` node shows only on a merged tag. In
+  // tests/cases/compact_tbaa, `simplifycfg<sink-common-insts>` sinks
+  // `p.next = c` (a `Cell`) and `q.next = c` (a `Node`) into one store tagged
+  // with the bare scalar, and `gvn` then forwards `h.count = 1` (`i32`) and
+  // `h.held = t` (`ptr`) past it. The pipeline is spelled out because `-O2`
+  // forwards before it sinks. Renaming the node to `i32` or to `ptr` makes it
+  // the same node as that scalar (LLVM uniques equal nodes), and each rename
+  // must keep its reload: that is what shows the scalar decides, not the path.
+  // Under `--plain` nothing is tagged and both reloads stay.
+  if (!only || "compact tbaa".includes(only)) {
+    if (has("opt")) {
+      const dir = path.join(buildDir, "compact-tbaa")
+      fs.rmSync(dir, { recursive: true, force: true })
+      const pipeline = "function(sroa,instcombine,simplifycfg<sink-common-insts>,gvn)"
+      /** The IR of compact_tbaa under `flags`, or the failure that stopped it. */
+      const compiled = (flags, sub) => {
+        const out = path.join(dir, sub) + path.sep
+        const c = spawnSync(NISH, [path.join(casesDir, "compact_tbaa.ts"), ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+        return c.status === 0 ? { ok: true, text: fs.readFileSync(path.join(out, "compact_tbaa.ll"), "utf8") } : { ok: false, text: shown(c) }
       }
-      const o = spawnSync("opt", ["-O2", "-S", path.join(out, "compact_tbaa.ll")], { encoding: "utf8", maxBuffer: 1 << 26 })
-      if (o.status !== 0) {
-        return { ok: false, text: shown(o) }
+      /** `name`'s body after `pipeline`, or the failure that stopped it. */
+      const optimised = (ir, name) => {
+        if (!ir.ok) {
+          return ir
+        }
+        const o = spawnSync("opt", [`-passes=${pipeline}`, "-S"], { input: ir.text, encoding: "utf8", maxBuffer: 1 << 26 })
+        if (o.status !== 0) {
+          return { ok: false, text: shown(o) }
+        }
+        const body = new RegExp(`^define [^\\n]*@${name}\\([^\\n]*\\{\\n(?:[^\\n]*\\n)*?\\}$`, "m").exec(o.stdout)
+        return { ok: body !== null, text: body === null ? `no ${name} define` : body[0] }
       }
-      const body = /^define [^\n]*@[^\n(]*relink[^\n(]*\([^\n]*\{\n(?:[^\n]*\n)*?\}$/m.exec(o.stdout)
-      return { ok: body !== null, text: body === null ? "no relink define" : body[0] }
-    }
-    const tagged = relinkBody([], "tagged")
-    check(
-      "compact: opt -O2 forwards an i32 field store across a link store through another object",
-      tagged.ok && !/= load i32,/.test(tagged.text) && /\bret i32 1\b/.test(tagged.text),
-      tagged.text
-    )
-    const untagged = relinkBody(["--plain"], "untagged")
-    check(
-      "compact: without TBAA the i32 field is reloaded after the link store",
-      untagged.ok && /= load i32,/.test(untagged.text),
-      untagged.text
-    )
+      const tagged = compiled([], "tagged")
+      const renamed = (scalar) => ({ ok: tagged.ok, text: tagged.text.split('!"ref32"').join(`!"${scalar}"`) })
+      check(
+        "compact: the link stores of compact_tbaa hang off a ref32 node",
+        tagged.ok && tagged.text.includes('!"ref32"'),
+        tagged.text
+      )
+      const count = optimised(tagged, "relinkCount")
+      check(
+        "compact: a merged ref32 link store does not clobber an i32 field",
+        count.ok && !/= load i32,/.test(count.text) && /\bret i32 1\b/.test(count.text),
+        count.text
+      )
+      const held = optimised(tagged, "relinkHeld")
+      check(
+        "compact: a merged ref32 link store does not clobber a pointer field",
+        held.ok && !/= load ptr,/.test(held.text) && /\bret ptr %t\b/.test(held.text),
+        held.text
+      )
+      const asI32 = optimised(renamed("i32"), "relinkCount")
+      check(
+        "compact: with the link scalar renamed i32 the i32 field is reloaded",
+        asI32.ok && /= load i32,/.test(asI32.text),
+        asI32.text
+      )
+      const asPtr = optimised(renamed("ptr"), "relinkHeld")
+      check(
+        "compact: with the link scalar renamed ptr the pointer field is reloaded",
+        asPtr.ok && /= load ptr,/.test(asPtr.text),
+        asPtr.text
+      )
+      const plain = compiled(["--plain"], "untagged")
+      const plainCount = optimised(plain, "relinkCount")
+      const plainHeld = optimised(plain, "relinkHeld")
+      check(
+        "compact: without TBAA both fields are reloaded after the link store",
+        plainCount.ok && /= load i32,/.test(plainCount.text) && plainHeld.ok && /= load ptr,/.test(plainHeld.text),
+        `${plainCount.text}\n${plainHeld.text}`
+      )
+    } else skip("compact tbaa: opt is not installed")
   }
 
   // ---- A compact link in gdb and lldb (WP48 stage 2b) ----------------------------------
@@ -17452,12 +17490,21 @@ if (dealtHere("runtimeChecks")) {
           "",
         ].join("\n")
       )
-      const g = spawnSync(
-        "gdb",
-        ["-batch", "-nx", "-x", path.join(root, "tools", "gdb", "ref32.py"), "-x", script, exe],
-        { encoding: "utf8", timeout: 60000 }
-      )
+      // `check` ends in `quit 0` or `quit 1`; the `quit 3` after it is reached
+      // only when it stopped short of its verdict, so that fails the check too.
+      /** gdb on `exe` with the printers loaded, then `check`. */
+      const gdb = (check) =>
+        spawnSync("gdb", ["-batch", "-nx", "-x", path.join(root, "tools", "gdb", "ref32.py"), "-x", check, "-ex", "quit 3", exe], {
+          encoding: "utf8",
+          timeout: 60000,
+        })
+      const g = gdb(script)
       check("compact: gdb with tools/gdb/ref32.py follows a link chain to null", g.status === 0, shown(g))
+      // A script that raises before its verdict must not read as a pass.
+      const broken = path.join(dir, "check-gdb-broken.py")
+      fs.writeFileSync(broken, 'raise RuntimeError("no verdict")\n')
+      const gb = gdb(broken)
+      check("compact: a gdb check script that raises exits non-zero", gb.status !== 0 && gb.error === undefined, shown(gb))
     } else if (linked.status === 0) skip("compact debugger: gdb is not installed")
     if (linked.status === 0 && has("lldb")) {
       const script = path.join(dir, "check_lldb.py")
@@ -17466,10 +17513,22 @@ if (dealtHere("runtimeChecks")) {
         [
           "import os",
           "import sys",
-          "import lldb",
-          "import ref32",
+          "import traceback",
           "",
           "def __lldb_init_module(debugger, _internal):",
+          "    # lldb --batch exits 0 when this raises, so every path ends in os._exit.",
+          "    try:",
+          "        ok = verdict(debugger)",
+          "    except BaseException:",
+          "        traceback.print_exc()",
+          "        ok = False",
+          "    sys.stdout.flush()",
+          "    sys.stderr.flush()",
+          "    os._exit(0 if ok else 1)",
+          "",
+          "def verdict(debugger):",
+          "    import lldb",
+          "    import ref32",
           "    target = debugger.GetSelectedTarget()",
           '    target.BreakpointCreateByLocation("compact_list.ts", 56)',
           "    process = target.LaunchSimple(None, None, os.getcwd())",
@@ -17490,17 +17549,36 @@ if (dealtHere("runtimeChecks")) {
           '            ok = ok and shown.startswith("(Cell *) 0x")',
           "            cell = ref32.pointer(link.GetNonSyntheticValue())",
           "    process.Kill()",
-          "    sys.stdout.flush()",
-          "    os._exit(0 if ok else 1)",
+          "    return ok",
           "",
         ].join("\n")
       )
-      const l = spawnSync(
-        "lldb",
-        ["--batch", "--no-lldbinit", "-o", `command script import ${path.join(root, "tools", "lldb", "ref32.py")}`, "-o", `command script import ${script}`, exe],
-        { cwd: dir, encoding: "utf8", timeout: 60000 }
-      )
+      // The last command exits 3, so a script that never reaches its verdict
+      // (an import that fails, a module that raises) fails the check too.
+      /** lldb on `exe` with the printers loaded, then `check`. */
+      const lldb = (check) =>
+        spawnSync(
+          "lldb",
+          [
+            "--batch",
+            "--no-lldbinit",
+            "-o",
+            `command script import ${path.join(root, "tools", "lldb", "ref32.py")}`,
+            "-o",
+            `command script import ${check}`,
+            "-o",
+            "script import os; os._exit(3)",
+            exe,
+          ],
+          { cwd: dir, encoding: "utf8", timeout: 60000 }
+        )
+      const l = lldb(script)
       check("compact: lldb with tools/lldb/ref32.py follows a link chain to null", l.status === 0, shown(l))
+      const broken = path.join(dir, "check_lldb_broken.py")
+      // lldb-18 --batch exits 0 when `__lldb_init_module` raises: this one did pass before the `os._exit(3)`.
+      fs.writeFileSync(broken, ["def __lldb_init_module(debugger, _internal):", '    raise RuntimeError("no verdict")', ""].join("\n"))
+      const lb = lldb(broken)
+      check("compact: an lldb check script that raises exits non-zero", lb.status !== 0 && lb.error === undefined, shown(lb))
     } else if (linked.status === 0) skip("compact debugger: lldb is not installed")
   }
 
