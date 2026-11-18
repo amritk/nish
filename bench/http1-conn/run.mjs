@@ -144,6 +144,143 @@ for (const [label, nish] of Object.entries(compilers)) {
   run(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
   binaries.push({ label, exe })
 }
+// `--variants` builds the working tree's std/ again with one part of the
+// GET path taken out, each in a package directory of its own as `old` is,
+// so that a part's cost is the difference of two stage rows timed in the
+// same interleaved rounds. Every replacement must match exactly once, or the
+// run fails: a std/ that has moved past a patch is not timed as if it held.
+//   nospans: the header section is scanned for its line ends and control
+//     bytes as before, but no field line is copied into the head, lowered,
+//     classed as a framing field or stored as spans; the one Host is found by
+//     its name in the read bytes and checked there, so the answer is the same.
+//   nodate: `respond` writes no `Date`; its heads are 37 bytes shorter, so its
+//     checksum is held to its own rounds, not to old's.
+//   live: main.ts does not pin the date, so `readable` reads the wall clock
+//     once a call and every connection writes its head afresh when the second
+//     turns, as a server does.
+const codec = path.join("std", "net", "http1-codec.ts")
+const server = path.join("std", "net", "http1-server.ts")
+const variantPatches = {
+  nospans: {
+    std: [
+      [codec, "  const copy: boolean = !trailer\n", "  const copy: boolean = false\n"],
+      [
+        codec,
+        "        p.headLength = p.start + delta\n        return http1EndOfHead(p)\n",
+        "        return http1EndOfHead(p)\n",
+      ],
+      [
+        codec,
+        "  // A trailer is checked and counted, but not kept: nothing here reads one.\n  if (keep) {\n",
+        `  if (
+    !keep &&
+    nameEnd - a === 4 &&
+    a >= 0 &&
+    a + 3 < toI32(buf.length) &&
+    (toI32(buf[a]) | 32) === 104 &&
+    (toI32(buf[a + 1]) | 32) === 111 &&
+    (toI32(buf[a + 2]) | 32) === 115 &&
+    (toI32(buf[a + 3]) | 32) === 116
+  ) {
+    let hostStart: i32 = nameEnd + 1
+    let hostEnd: i32 = b
+    while (
+      hostStart >= 0 &&
+      hostStart < hostEnd &&
+      hostStart < toI32(buf.length) &&
+      (buf[hostStart] === 32 || buf[hostStart] === 9)
+    ) {
+      hostStart += 1
+    }
+    while (hostEnd > hostStart && (buf[hostEnd - 1] === 32 || buf[hostEnd - 1] === 9)) {
+      hostEnd -= 1
+    }
+    p.hostFields += 1
+    p.hostField = 0
+    http1SpanSet(p, 3, hostEnd)
+    const hostSpans: i32[] = p.spans
+    if (toI32(hostSpans.length) > 3) {
+      hostSpans[2] = hostStart
+      hostSpans[3] = hostEnd
+    }
+  }
+  // A trailer is checked and counted, but not kept: nothing here reads one.
+  if (keep) {
+`,
+      ],
+      [
+        codec,
+        "    !urlIsHostPort(head, spans[4 * hostField + 2], spans[4 * hostField + 3])\n",
+        "    !urlIsHostPort(p.buf, spans[4 * hostField + 2], spans[4 * hostField + 3])\n",
+      ],
+    ],
+  },
+  nodate: {
+    ownChecksum: true,
+    std: [
+      [
+        server,
+        "    const date: u8[] = this.date.current()\n    // Off for the rest",
+        "    const date: u8[] = this.noDate\n    // Off for the rest",
+      ],
+      [server, "  private headOff: i64 = -1\n", "  private headOff: i64 = -1\n  private noDate: u8[]\n"],
+      [
+        server,
+        "  constructor(config: Http1Config, date: HttpDate | null = null) {\n",
+        "  constructor(config: Http1Config, date: HttpDate | null = null) {\n    this.noDate = new Array<u8>(0)\n",
+      ],
+    ],
+  },
+  live: {
+    main: [["    this.date.pin(toI64(1700000000) * toI64(1000))\n", ""]],
+  },
+}
+/** `text` with `from` replaced by `to`, failing the run unless `from` is there exactly once. */
+const patch = (what, text, from, to) => {
+  const at = text.indexOf(from)
+  if (at < 0 || text.indexOf(from, at + 1) >= 0) {
+    process.stderr.write(`bench/http1-conn: ${what}: the text to patch is not there exactly once:\n${from}\n`)
+    process.exit(1)
+  }
+  return text.slice(0, at) + to + text.slice(at + from.length)
+}
+const variants = flag("--variants", "")
+  .split(",")
+  .filter((v) => v !== "")
+const ownChecksum = new Set()
+for (const v of variants) {
+  const spec = variantPatches[v]
+  if (spec === undefined) {
+    process.stderr.write(`bench/http1-conn: no variant called ${v}\n`)
+    process.exit(1)
+  }
+  const pkg = path.join(out, `${v}-package`)
+  fs.rmSync(pkg, { recursive: true, force: true })
+  fs.mkdirSync(path.join(pkg, "bin"), { recursive: true })
+  for (const d of ["std", "scripts", "runtime"]) {
+    fs.cpSync(path.join(root, d), path.join(pkg, d), { recursive: true })
+  }
+  for (const [file, from, to] of spec.std ?? []) {
+    const f = path.join(pkg, file)
+    fs.writeFileSync(f, patch(`${v} ${file}`, fs.readFileSync(f, "utf8"), from, to))
+  }
+  const nish = path.join(pkg, "bin", "nish")
+  fs.copyFileSync(compiler, nish)
+  fs.chmodSync(nish, 0o755)
+  let text = sourceFor(pkg)
+  for (const [from, to] of spec.main ?? []) {
+    text = patch(`${v} main.ts`, text, from, to)
+  }
+  const dir = path.join(out, v)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, "main.ts"), text)
+  const exe = path.join(dir, "conn")
+  run(nish, [path.join(dir, "main.ts"), "-o", `${dir}/`, "--profile", "speed", "--link", exe])
+  binaries.push({ label: v, exe })
+  if (spec.ownChecksum) {
+    ownChecksum.add(v)
+  }
+}
 const copy = path.join(out, "old-copy")
 fs.copyFileSync(binaries[0].exe, copy)
 fs.chmodSync(copy, 0o755)
@@ -221,13 +358,14 @@ for (let r = 0; r < rounds; r++) {
         )
         process.exit(1)
       }
-      if (sums.has(shape) && sums.get(shape) !== sum) {
+      const key = ownChecksum.has(label) ? `${label} ${shape}` : shape
+      if (sums.has(key) && sums.get(key) !== sum) {
         process.stderr.write(
-          `bench/http1-conn: ${label} ${shape} checksum ${sum}, expected ${sums.get(shape)}\n`
+          `bench/http1-conn: ${label} ${shape} checksum ${sum}, expected ${sums.get(key)}\n`
         )
         process.exit(1)
       }
-      sums.set(shape, sum)
+      sums.set(key, sum)
       times
         .get(label)
         .get(shape)

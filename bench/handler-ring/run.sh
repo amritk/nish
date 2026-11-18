@@ -35,6 +35,14 @@
 # load-test server, as one process on descriptors, and a byte-identical copy
 # of its build, the band between them. It serves the same 129-byte
 # /plaintext with no database, and with the same L - 64 bound as epoll1.
+# h1-ring is the h1 build run with BENCH_RING=1 (NET_LISTEN_RING): one
+# process whose connections are ring slots, so like ring it may pass L.
+#
+# --idle S holds every connection open S seconds after the window closes,
+# with no request in flight, and then reads the server's RSS, PSS,
+# descriptors and the kernel's TCP memory (loadgen -i): the summary's idle
+# table gives the idle growth over the server's RSS before the load and the
+# bytes a held connection costs, (idle RSS - base RSS) / held.
 #
 # The box's C is the most connections five descriptor processes hold under
 # the limit L (65535, or this shell's hard limit if lower), each keeping 800
@@ -65,6 +73,7 @@ port=9312
 think=0
 designs_arg="ring epoll epoll-copy"
 server_cpus=0
+idle=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -84,8 +93,9 @@ while [ $# -gt 0 ]; do
   --designs) designs_arg="$2"; shift ;;
   --server-cpus) server_cpus="$2"; shift ;;
   --nodb) export BENCH_NODB=1 ;;
+  --idle) idle="$2"; shift ;;
   *)
-    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish]" >&2
+    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--idle S] [--compiler nish]" >&2
     exit 2
     ;;
   esac
@@ -130,7 +140,7 @@ gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
 cp "$out/server" "$out/server-copy"
 cmp "$out/server" "$out/server-copy"
 case " $designs_arg " in
-*" h1 "* | *" h1-copy "*)
+*" h1 "* | *" h1-copy "* | *" h1-ring "*)
   "$compiler" "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
   cp "$out/h1" "$out/h1-copy"
   cmp "$out/h1" "$out/h1-copy"
@@ -232,13 +242,25 @@ run() {
     wait_for listening
     pids=$server
     ;;
+  h1-ring)
+    n=1
+    slots=$((c + 1024))
+    env -u BENCH_CORES BENCH_RING=1 ${srv_pin[@]+"${srv_pin[@]}"} prlimit --nofile="$limit:$limit" "$out/h1" "$port" "$slots" >"$out/server.out" 2>"$out/server.err" &
+    server=$!
+    wait_for '^rings '
+    if ! grep -q '^rings 1$' "$out/server.out"; then
+      echo "the kernel refused rings: $(cat "$out/server.out")" >&2
+      exit 1
+    fi
+    pids=$server
+    ;;
   *)
     echo "unknown design $design" >&2
     exit 2
     ;;
   esac
   local line
-  line=$(${load_pin[@]+"${load_pin[@]}"} "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
+  line=$(${load_pin[@]+"${load_pin[@]}"} "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -i "$idle" -l "$design")
   echo "round=$r procs=$n $line" | tee -a "$results"
   if ! [[ $line == *" send_failed=0 closed=0 "* ]]; then
     echo "warning: $design at C=$c round $r lost connections during the load; it offered less than C / think" >&2
@@ -312,8 +334,8 @@ awk -v limit="$limit" '
     printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s %7s %20s %8s %6s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms", "lost"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      split("ring epoll epoll-copy epoll1 h1 h1-copy", ds, " ")
-      for (di = 1; di <= 6; di++) {
+      split("ring epoll epoll-copy epoll1 h1 h1-copy h1-ring", ds, " ")
+      for (di = 1; di <= 7; di++) {
         k = c SUBSEP ds[di]
         if (!(k in n)) continue
         delete a; delete b; delete q; delete l50; delete l99; delete l999
@@ -340,3 +362,42 @@ awk -v limit="$limit" '
     }
   }
 ' "$results"
+
+if [ "$idle" != 0 ]; then
+  echo "== idle: every connection held ${idle}s after the window, no request in flight; median of $rounds (min-max)"
+  awk '
+    function med(a, n,   i, j, t) {
+      for (i = 2; i <= n; i++) for (j = i; j > 1 && a[j - 1] > a[j]; j--) { t = a[j]; a[j] = a[j - 1]; a[j - 1] = t }
+      return n % 2 ? a[(n + 1) / 2] : (a[n / 2] + a[n / 2 + 1]) / 2
+    }
+    {
+      for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }
+      k = v["conns"] SUBSEP v["label"]
+      n[k]++
+      base[k, n[k]] = v["base_rss_mb"]; rss[k, n[k]] = v["idle_rss_mb"]; pss[k, n[k]] = v["idle_pss_mb"]
+      tcp[k, n[k]] = v["idle_tcp_mem_mb"]; fds[k] = v["idle_fds"]
+      per[k, n[k]] = v["up"] > 0 ? (v["idle_rss_mb"] - v["base_rss_mb"]) * 1048576 / v["up"] : 0
+      if (n[k] == 1 || v["up"] < up[k]) up[k] = v["up"]
+      if (!(v["conns"] in seen)) { seen[v["conns"]] = 1; order[++nc] = v["conns"] }
+    }
+    END {
+      printf "%-8s %-10s %8s %6s %9s %9s %9s %9s %22s\n", "C", "design", "held", "fds", "base MB", "idle MB", "PSS MB", "TCP MB", "B/conn (min-max)"
+      for (ci = 1; ci <= nc; ci++) {
+        c = order[ci]
+        split("ring epoll epoll-copy epoll1 h1 h1-copy h1-ring", ds, " ")
+        for (di = 1; di <= 7; di++) {
+          k = c SUBSEP ds[di]
+          if (!(k in n)) continue
+          delete a; delete b; delete q; delete t; delete pc
+          lo = ""; hi = ""
+          for (i = 1; i <= n[k]; i++) {
+            a[i] = base[k, i]; b[i] = rss[k, i]; q[i] = pss[k, i]; t[i] = tcp[k, i]; pc[i] = per[k, i]
+            if (lo == "" || per[k, i] < lo) lo = per[k, i]
+            if (hi == "" || per[k, i] > hi) hi = per[k, i]
+          }
+          printf "%-8s %-10s %8s %6s %9.1f %9.1f %9.1f %9.1f %8.0f (%.0f-%.0f)\n", c, ds[di], up[k], fds[k], med(a, n[k]), med(b, n[k]), med(q, n[k]), med(t, n[k]), med(pc, n[k]), lo, hi
+        }
+      }
+    }
+  ' "$results"
+fi

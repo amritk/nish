@@ -12,6 +12,14 @@
 // `<name> <bytes>` lines; `chunk` in place of a count says the arena moved to
 // a new chunk during it, which `Arena.used()` cannot see across.
 //
+// Then the per-slot arrays around a connection, counted over SLOTS slots and
+// built as their owners build them: `HttpHandler`'s five fixed arrays, sized
+// by its `slots` (`std/net/handler.ts`'s constructor: `slotGen`, `current`
+// and `owed` of i32, `open` and `owing` of boolean), and `Http1Server`'s
+// three arrays that `accept` and `build` push one entry a connection onto
+// (`connections`, `fds` and `armed`). Each is printed as `<name> <bytes>`
+// over SLOTS slots, as the connection counts are.
+//
 //   build/nish bench/http1-conn/bytes.ts --link build/bench/http1-conn/bytes && build/bench/http1-conn/bytes
 import { Http1Parser } from "nish/net/http1-codec"
 import {
@@ -33,6 +41,11 @@ const ascii = (text: string): u8[] => {
 
 /** How many counts `main` takes. */
 const COUNTS: i32 = 9
+/** How many slots the per-slot arrays are counted over. */
+const SLOTS: i32 = 256
+/** How many per-slot counts `main` takes. */
+const SLOT_COUNTS: i32 = 2
+
 /** The buffer lengths kept: four while the first request is served, four once idle. */
 const LENGTHS: i32 = 8
 
@@ -149,6 +162,31 @@ export const main = (): i32 => {
   }
   keep(conn, lengths, 4)
 
+  // The per-slot arrays, each kept in a slot made before its count starts.
+  const slotCounts: i64[] = new Array<i64>(SLOT_COUNTS)
+  const ints: i32[][] = [[], [], [], [], []]
+  const flags: boolean[][] = [[], []]
+  const pushed: Http1Connection[][] = [[]]
+  mark = Arena.mark()
+  before = Arena.used()
+  ints[0] = new Array<i32>(SLOTS)
+  ints[1] = new Array<i32>(SLOTS)
+  flags[0] = new Array<boolean>(SLOTS)
+  flags[1] = new Array<boolean>(SLOTS)
+  ints[2] = new Array<i32>(SLOTS)
+  slotCounts[0] = since(mark, before)
+  mark = Arena.mark()
+  before = Arena.used()
+  pushed[0] = []
+  ints[3] = []
+  ints[4] = []
+  for (let i: i32 = 0; i < SLOTS; i += 1) {
+    pushed[0].push(conn)
+    ints[3].push(toI32(-1))
+    ints[4].push(toI32(1))
+  }
+  slotCounts[1] = since(mark, before)
+
   const what: string[] = [
     "empty-array",
     "HttpDate",
@@ -162,6 +200,10 @@ export const main = (): i32 => {
   ]
   for (let i: i32 = 0; i < COUNTS; i += 1) {
     console.log(`${what[i]} ${counts[i] < 0 ? "chunk" : `${counts[i]}`}`)
+  }
+  const slotWhat: string[] = ["handler-slot-arrays", "server-pushed-arrays"]
+  for (let i: i32 = 0; i < SLOT_COUNTS; i += 1) {
+    console.log(`${slotWhat[i]}.${SLOTS} ${slotCounts[i] < 0 ? "chunk" : `${slotCounts[i]}`}`)
   }
   const held: string[] = ["input", "head", "output", "spans"]
   for (let i: i32 = 0; i < LENGTHS; i += 1) {
