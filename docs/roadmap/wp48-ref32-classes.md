@@ -6,7 +6,7 @@
 
 - [x] Designed and measured: a compact class keeps its instances in one reserved range, 4-byte aligned, and a field of that class's type is an `i32` offset; prototyped on the generated IR, `bench/goose/tree.ts` at n = 24 takes 0.50x the memory and 0.61x the time, and a pointer-chasing loop in cache pays up to a quarter more for the decode
 - [x] Stage 1: the arena on a reserved range, switched on only by a compact class, with no IR moved for any program
-- [x] Stage 2a: `implements Compact` from `nish:compact`, the `i32` layout of a compact class's links in any class, the encode and decode in field loads, stores and compound assignments, the 4-rounding allocation through `@nish_alloc_ref`, and the refusals (C and N-API surfaces, `declare class`, a `Secret` field), each with its code; wasm32, host page modules and ASAN builds stay uncompressed
+- [x] Stage 2a: `implements Compact` from `nish:compact`, the `i32` layout of a compact class's links in any class, the encode and decode in field loads and stores (no operator takes a link, so no compound assignment reaches one), the 4-rounding allocation through `@nish_alloc_ref`, and the refusals (C and N-API surfaces, `declare class`, a `Secret` field, a generic class), each with its code; wasm32, host page modules and ASAN builds stay uncompressed
 - [ ] Stage 2b: TBAA for an offset field, its debug info, and debugger pretty-printers that show a link as the object it names
 - [ ] Stage 2c: the opaque C header, so a compact class can cross `--emit-header`
 - [ ] Stage 3: the compiler picks compact classes by itself (a native executable, a link field, a byte saving, made in a loop or recursion), with `implements Wide` and `--compact off` to refuse; gated on the corpus showing no program slower

@@ -168,16 +168,17 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
  * compresses. A generic class's fields stay full pointers, since a field
  * written `T` cannot be told from one written as the class.
  */
-const isLinkType = (ctx: CheckContext, type: i32): boolean => {
-  if (!ctx.compressLinks) {
-    return false
-  }
+const isLinkType = (ctx: CheckContext, type: i32): boolean =>
+  ctx.compressLinks && compactClassOf(ctx, type) !== null
+
+/** The compact class `type` is, alone or `| null`; null for any other type. */
+const compactClassOf = (ctx: CheckContext, type: i32): StructInfo | null => {
   const inner = ctx.table.stripNull(type)
   if (!ctx.table.isStruct(inner)) {
-    return false
+    return null
   }
   const target = ctx.program.struct(ctx.table.nameOf(inner))
-  return target !== null && target.compact
+  return target !== null && target.compact ? target : null
 }
 
 /**
@@ -1047,11 +1048,8 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     }
     collectStructMembers(ctx, nested)
   } else if (!isLayoutScalar(type) && ctx.table.stripNull(type) !== T_CPTR) {
-    const inner = ctx.table.stripNull(type)
-    const target: StructInfo | null = ctx.table.isStruct(inner)
-      ? ctx.program.struct(ctx.table.nameOf(inner))
-      : null
-    if (target !== null && target.compact) {
+    const target = compactClassOf(ctx, type)
+    if (target !== null) {
       ctx.error(decl.children[1], compactLayoutFieldMessage(owner.name, name, target.name))
       return
     }
