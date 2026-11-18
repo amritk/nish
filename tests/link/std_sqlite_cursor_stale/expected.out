@@ -54,9 +54,15 @@ PASS  endRead: runs
 PASS  endRead: leaves the table cursor dead
 PASS  endRead: and the index cursor
 PASS  endRead: then t holds
+PASS  pragma SELECT: beginRead
+PASS  pragma SELECT: the table cursor is on row 5
+PASS  pragma SELECT: answers t's 2 columns
+PASS  pragma SELECT: finalize
+PASS  pragma SELECT: leaves the cursor dead
+PASS  pragma SELECT: inside a read that endRead still ends
 PASS  close: beginRead
 PASS  close: on a row
 PASS  close: closes the connection
 PASS  close: leaves the table cursor dead
 PASS  close: and the index cursor
-std_sqlite_cursor_stale: 61 passed, 0 failed, 0 skipped
+std_sqlite_cursor_stale: 67 passed, 0 failed, 0 skipped
