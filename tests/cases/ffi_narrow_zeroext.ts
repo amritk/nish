@@ -15,7 +15,7 @@ declare function is_odd(x: u32): boolean;
 export const run = (): i32 => {
   const n = ident(511);
   console.log(`widen_u8(toU8(511)): ${widen_u8(toU8(n))}`);
-  const m = ident(65537 * 3);
+  const m = ident(196611);
   console.log(`widen_u16(toU16(196611)): ${widen_u16(toU16(m))}`);
   console.log(`pick(true): ${pick(n > 0)}`);
   console.log(`pick(false): ${pick(n < 0)}`);

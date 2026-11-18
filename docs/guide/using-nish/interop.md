@@ -920,7 +920,9 @@ $ $NISH/scripts/build.sh app.ll $NISH/runtime/runtime.c mylib.c -o app
 ```
 
 Scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64` and
-the rest), `boolean` and `void`. So does a `string` *parameter*, which C reads
+the rest), `boolean` and `void`. A `u8`, `u16` and `boolean` are C's
+`unsigned char`, `unsigned short` and `_Bool`, and Nish widens them at the call
+as the C ABI expects, so `toU8(511)` reaches C as 255. So does a `string` *parameter*, which C reads
 as a NUL-terminated `const char *`:
 
 ```ts nish:ok

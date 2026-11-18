@@ -1983,8 +1983,10 @@ export class Emitter {
       }
       // #1755: a narrow C argument is widened here, at the call, as at the
       // `declare` (`foreignExtended`).
+      // The attribute is a literal, so the pass allocates only the operand.
       const operandAbi = this.llvmAbi(want, calleePrivate)
-      operands.push(`${sig.foreign() ? foreignExtended(operandAbi, false) : operandAbi} ${value}`)
+      const widened = sig.foreign() && isNarrowAbi(operandAbi) ? " zeroext" : ""
+      operands.push(`${operandAbi}${widened} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
       passed.push(value)
