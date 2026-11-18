@@ -16,8 +16,9 @@
 //      `--emit-napi-async`, `--emit-dts`) or a `declare function` opens it;
 //      `--emit-ts` writes TypeScript and no IR, so it is refused as well;
 //   2. some class, `R` included, has a field typed exactly `R` or `R | null`;
-//   3. narrowing those fields to four bytes (`narrowedSize`) takes at least a
-//      quarter off `R` itself, after rounding (`pays`): a smaller saving pays
+//   3. `R` is at least 24 bytes and narrowing those fields to four bytes
+//      (`narrowedSize`) takes at least a quarter off it, after rounding
+//      (`pays`): a 16-byte cell measured slower narrowed, a smaller saving pays
 //      the decode on every link read for a few percent of one class, and a
 //      saving only in a class holding the link (an 8-byte link in a 40-byte
 //      holder) measured inside the noise band of the self-build
@@ -541,15 +542,25 @@ export class LayoutReport {
  * pointer though it is native (a page module, `NISH_ASAN`), or `""`.
  */
 /**
- * Whether narrowing `size` bytes to `narrowed` pays (test 3): at least a
- * quarter of the class gone, so the 4-byte heap rounding and the decode on
- * every link read cost less than the cache lines saved.
+ * The smallest class test 3 narrows, in bytes. A 16-byte cell already packs
+ * four to a cache line, and narrowed it measured slower, not faster: the
+ * `bench/awfy` List cells by about a fifth and the `bench/goose/bintrees`
+ * nodes by an eighth at depth 19, while every 24- and 32-byte node held even
+ * or gained (docs/wp48-ref32-classes.md §5.5).
+ */
+const PAYING_SIZE: i32 = 24
+
+/**
+ * Whether narrowing `size` bytes to `narrowed` pays (test 3): a class of at
+ * least `PAYING_SIZE` bytes with at least a quarter of it gone, so the 4-byte
+ * heap rounding and the decode on every link read cost less than the cache
+ * lines saved.
  *
  * @param size the class's size with no class narrowed
  * @param narrowed its size with the candidate's links narrowed
- * @returns true when the saving is at least a quarter of `size`
+ * @returns true when `size` is at least `PAYING_SIZE` and the saving at least a quarter of it
  */
-const pays = (size: i32, narrowed: i32): boolean => narrowed * 4 <= size * 3
+const pays = (size: i32, narrowed: i32): boolean => size >= PAYING_SIZE && narrowed * 4 <= size * 3
 
 /**
  * Whether the class under `key` is made at a site inside a loop or in a
@@ -633,7 +644,10 @@ export const explainLayout = (
         if (pays(before, after)) {
           saves = true
         } else {
-          unpaid = `${shownName} saves ${before} → ${after}, under a quarter`
+          unpaid =
+            before < PAYING_SIZE
+              ? `${shownName} saves ${before} → ${after}, under ${PAYING_SIZE} bytes`
+              : `${shownName} saves ${before} → ${after}, under a quarter`
         }
       }
       let h = 0
