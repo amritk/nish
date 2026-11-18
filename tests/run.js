@@ -67,6 +67,7 @@ import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
+import * as ciScope from "../scripts/ci-scope.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
@@ -8842,21 +8843,9 @@ if (dealtHere("selfHosting")) {
     )
   }
 
-  // The delegation above is a claim about ci.yml, so ci.yml is read for it on
-  // every run, local ones included: a `test` job that still asks for it while
-  // the `bootstrap` job no longer runs `--verify` would be a green run with
-  // the fixed point proved nowhere. Comment lines are left out, because a
-  // comment that mentions a flag is not a step that passes it.
-  const testJobText = ciJob(ciYmlText, "test")
-  const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
-  check(
-    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
-    testJobText !== "" &&
-      (!testJobText.includes("--delegate-fixed-point") ||
-        (/^\s+needs: seeds$/m.test(bootstrapJobText) &&
-          bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
-    `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
-  )
+  // The delegation above is a claim about ci.yml, read for it on every run
+  // with the sanitizers' twin, under "ci.yml: the `test` job delegates the
+  // fixed point" below: cheaply, and outside this section, which builds.
 
   // A sharded job runs `--shard "$SHARD/<n>"` over a `shard:` list,
   // and the two numbers are written apart. A list shorter than `n` is a green
@@ -8881,6 +8870,7 @@ if (dealtHere("selfHosting")) {
   // (build/test/simd/) or its kernels' lines run in the shard the group is
   // pinned to, or they read a file no step there wrote.
   const simdShard = DEALT_SECTIONS.simd.pinned
+  const testJobText = ciJob(ciYmlText, "test")
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
@@ -32875,33 +32865,484 @@ if (SHARD > 1) {
 // and each move is a claim about ci.yml, read here on every run, local ones
 // included, so an edit that leaves a check running nowhere turns this red
 // rather than every row green.
-if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
-  // `--delegate-sanitizers` (DELEGATE_SANITIZERS) is honest only while
-  // `fuzz-smoke` builds and replays every target and runs the runtime unit
-  // test under the sanitizers.
+// scripts/ci-scope.mjs: the `scope` job's decision and the `ci-gate` verdict.
+// A wrong decision skips a check on a pull request it would have failed, so
+// every case that must run everything is pinned, and so is the replay of
+// recorded merged pull requests.
+if (selects("ci-scope", "ci.yml")) {
+  const on = (files, extra = {}) =>
+    ciScope.decide({
+      event: "pull_request",
+      files: files.map((f) => (typeof f === "string" ? { path: f, status: "modified" } : f)),
+      ...extra,
+    })
+  const lanes = ciScope.LANES.map((l) => l.name)
+  const everything = (r) => r.full !== null && lanes.every((l) => r.lanes[l] === true)
+  const docs = [{ path: "docs/x.md", status: "modified" }]
+  const fullCases = [
+    ["a push to main", ciScope.decide({ event: "push", files: docs })],
+    ["a merge_group", ciScope.decide({ event: "merge_group", files: docs })],
+    ["a workflow_call", ciScope.decide({ event: "workflow_call", files: docs })],
+    ["a workflow_dispatch", ciScope.decide({ event: "workflow_dispatch", files: docs })],
+    ["no event", ciScope.decide({ files: docs })],
+    ["the ci:full label", on(["docs/x.md"], { labels: ["ci:full"] })],
+    ["NISH_CI_SCOPE=full", on(["docs/x.md"], { mode: "full" })],
+    ["NISH_CI_SCOPE=FULL", on(["docs/x.md"], { mode: " FULL " })],
+    ["a CI:Full label", on(["docs/x.md"], { labels: ["CI:Full"] })],
+    ["an empty file list", on([])],
+    ["an unknown file list", ciScope.decide({ event: "pull_request" })],
+    ["a truncated file list", on(["docs/x.md"], { truncated: true })],
+    ["a file with no path", on([{ status: "modified" }])],
+    ["a deleted docs file", on([{ path: "docs/x.md", status: "removed" }])],
+    ["an unknown status", on([{ path: "docs/x.md", status: "unchanged" }])],
+    ["a rename with no old path", on([{ path: "docs/x.md", status: "renamed" }])],
+    ["a rename out of src/", on([{ path: "docs/x.ts", status: "renamed", previous: "src/x.ts" }])],
+    ["a rename into std/", on([{ path: "std/x.ts", status: "renamed", previous: "docs/x.ts" }])],
+    // tests/postgres/ is read by the postgres lane alone: a rename out of it
+    // into docs/ is on every other lane's allowlist at both ends.
+    ["a rename out of one lane's read set", on([{ path: "docs/x.ts", status: "renamed", previous: "tests/postgres/x.ts" }])],
+    ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
+    ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
+    ["a change to package.json", on(["package.json"])],
+    ["a change to package-lock.json", on(["package-lock.json"])],
+    ["a nested package.json", on(["docs/cookbook/node_modules/p/package.json"])],
+    ["a change to scripts/ci-scope.mjs", on(["scripts/ci-scope.mjs"])],
+  ]
+  const notFull = fullCases.filter(([, r]) => !everything(r)).map(([n]) => n)
+  check(
+    "ci-scope: every case that must run every lane does",
+    notFull.length === 0,
+    `ran less than everything: ${notFull.join(", ")}`
+  )
+
+  const docsOnly = on(["docs/guide/index.md", "README.md"])
+  const srcChange = on(["src/compile.ts"])
+  const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
+  check(
+    "ci-scope: a docs-only change skips every lane, a src/ change runs every lane, an inert rename skips",
+    docsOnly.full === null &&
+      lanes.every((l) => docsOnly.lanes[l] === false) &&
+      lanes.every((l) => srcChange.lanes[l] === true) &&
+      lanes.every((l) => inertRename.lanes[l] === false),
+    JSON.stringify({ docsOnly, srcChange, inertRename })
+  )
+  const unknownPath = on(["somewhere/new.txt"])
+  check(
+    "ci-scope: a path on no lane's allowlist of unread paths runs every lane",
+    lanes.every((l) => unknownPath.lanes[l] === true),
+    JSON.stringify(unknownPath)
+  )
+
+  const ok = { result: "success" }
+  const skipped = { result: "skipped" }
+  check(
+    "ci-scope: the gate passes only when every job succeeded or was skipped by its own if:",
+    ciScope.gate({ a: ok, b: skipped }, ["b"]).length === 0 &&
+      ciScope.gate({ a: ok, b: skipped }, []).length === 1 &&
+      ciScope.gate({ a: { result: "failure" } }, []).length === 1 &&
+      ciScope.gate({ a: { result: "cancelled" } }, ["a"]).length === 1 &&
+      ciScope.gate({ a: {} }, []).length === 1 &&
+      ciScope.gate({}, []).length === 1 &&
+      ciScope.gate(null, []).length === 1,
+    "a gate verdict differs"
+  )
+
+  // ci.yml and the module name the same lanes, and the gate waits for every
+  // other job: a job left out of its `needs` could fail under a green gate.
+  const scopeJob = ciJob(ciYmlText, "scope")
+  const gateJob = ciJob(ciYmlText, "ci-gate")
+  const outputs = [...scopeJob.matchAll(/^ {6}([a-z0-9_]+): \$\{\{ steps\.scope\.outputs\.\1 \}\}$/gm)].map((m) => m[1])
+  const read = [...new Set([...ciYmlText.matchAll(/needs\.scope\.outputs\.([a-z0-9_]+)/g)].map((m) => m[1]))]
+  const jobIds = [...ciYmlText.slice(ciYmlText.search(/^jobs:$/m)).matchAll(/^ {2}([a-z0-9-]+):$/gm)]
+    .map((m) => m[1])
+    .filter((j) => j !== "ci-gate")
+  const gateNeeds = [...(/^ {4}needs:\n((?: {6}- [a-z0-9-]+\n)+)/m.exec(gateJob)?.[1] ?? "").matchAll(/- ([a-z0-9-]+)/g)]
+    .map((m) => m[1])
+  const ungated = jobIds.filter((j) => !gateNeeds.includes(j))
+  check(
+    "ci-scope: the scope job outputs every lane, ci.yml reads no other, and ci-gate needs every job",
+    [...lanes, "why"].every((l) => outputs.includes(l)) &&
+      outputs.length === lanes.length + 1 &&
+      read.every((u) => outputs.includes(u)) &&
+      jobIds.length > 0 &&
+      ungated.length === 0 &&
+      /^ {4}if: always\(\)$/m.test(gateJob),
+    `outputs: ${outputs.join(" ")}\nread: ${read.join(" ")}\njobs not in ci-gate's needs: ${ungated.join(" ")}`
+  )
+
+  // The backtest charges a failed job to the lane whose ci.yml `name:` it
+  // matches exactly, so each lane's `names` must be its jobs' templates.
+  const yamlName = (id) => {
+    const job = ciJob(ciYmlText, id)
+    return /^ {4}name: (.*)$/m.exec(job)?.[1] ?? (job === "" ? null : id)
+  }
+  const nameDrift = ciScope.LANES.filter(
+    (l) => l.names.length !== l.jobs.length || l.jobs.some((id, i) => yamlName(id) !== l.names[i])
+  ).map((l) => `${l.name}: ${l.names.join(", ")} vs ${l.jobs.map(yamlName).join(", ")}`)
+  const asRun = (name) => name.replace(/\$\{\{.*?\}\}/g, "x86_64-linux")
+  const misMapped = [
+    ...ciScope.LANES.flatMap((l) => l.names.map((n) => [asRun(n), l.name])),
+    ["nish-cmp elision (aarch64-linux)", "elision"],
+    ["nish-cmp (aarch64-linux)", "nish_cmp"],
+    ["the NEON path agrees (aarch64-linux)", "simd"],
+    ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
+    ["test (ubuntu-latest, shard 1/8)", null],
+    ["lint", null],
+    ["the golden cases, in Nish (shard 1/3)", null],
+    ["nish-cmp", null],
+  ].filter(([display, lane]) => (ciScope.laneOf(display)?.name ?? null) !== lane)
+  check(
+    "ci-scope: every lane's names are its jobs' ci.yml name: templates, and a job's display name maps to its lane alone",
+    nameDrift.length === 0 && misMapped.length === 0,
+    `names that differ from ci.yml: ${nameDrift.join("; ") || "none"}\nmis-mapped: ${JSON.stringify(misMapped)}`
+  )
+
+  // The file list: a short page ends it; a 30th full page means the API cut
+  // it off, which runs everything.
+  const pages = (sizes) => {
+    const asked = []
+    const get = async (url) => {
+      const page = Number(new URL(url).searchParams.get("page"))
+      asked.push(page)
+      const n = sizes[page - 1] ?? 0
+      return { ok: true, json: async () => Array.from({ length: n }, (_, i) => ({ filename: `docs/${page}-${i}.md`, status: "modified" })) }
+    }
+    return ciScope.fetchFiles("o/r", "1", "t", get).then((r) => ({ ...r, asked }))
+  }
+  const [thirty, short, failed] = await Promise.all([
+    pages(Array(30).fill(100)),
+    pages([100, 100, 7]),
+    ciScope.fetchFiles("o/r", "1", "t", async () => ({ ok: false, status: 502 })).then(() => "resolved", (e) => e.message),
+  ])
+  check(
+    "ci-scope: 30 full pages of changed files is a truncated list, a short page ends it, and an HTTP error throws",
+    thirty.truncated === true &&
+      thirty.asked.length === 30 &&
+      everything(on(thirty.files.map((f) => f.path), { truncated: thirty.truncated })) &&
+      short.truncated === false &&
+      short.files.length === 207 &&
+      short.asked.join() === "1,2,3" &&
+      /502/.test(failed),
+    JSON.stringify({ thirty: [thirty.truncated, thirty.asked.length], short: [short.truncated, short.files.length], failed })
+  )
+
+  // The command line: labels it cannot parse count as `ci:full`, and the
+  // reason written to GITHUB_OUTPUT stays on one line whatever a path holds.
+  const scopeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ci-scope-"))
+  const runScope = (files, env) => {
+    const list = path.join(scopeDir, "files.txt")
+    const output = path.join(scopeDir, "output.txt")
+    fs.writeFileSync(list, files.join("\n"))
+    fs.writeFileSync(output, "")
+    const ran = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--files", list], {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", NISH_CI_SCOPE: "", GITHUB_STEP_SUMMARY: "", ...env, GITHUB_OUTPUT: output },
+    })
+    return { ran, lines: fs.readFileSync(output, "utf8").split("\n").filter(Boolean) }
+  }
+  const badLabels = runScope(["docs/x.md"], { PR_LABELS: "[not json" })
+  const goodLabels = runScope(["docs/x.md"], { PR_LABELS: "[]" })
+  const carriage = runScope([".github/a\rb.yml"], { PR_LABELS: "[]" })
+  const laneLines = (lines) => lines.filter((l) => !l.startsWith("why="))
+  check(
+    "ci-scope: unparseable PR_LABELS runs every lane, and the why= output is one line even for a path with a carriage return",
+    badLabels.ran.status === 0 &&
+      laneLines(badLabels.lines).length === lanes.length &&
+      laneLines(badLabels.lines).every((l) => l.endsWith("=true")) &&
+      goodLabels.ran.status === 0 &&
+      laneLines(goodLabels.lines).every((l) => l.endsWith("=false")) &&
+      carriage.ran.status === 0 &&
+      carriage.lines.length === lanes.length + 1 &&
+      carriage.lines.every((l) => !l.includes("\r")) &&
+      carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
+    JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
+  )
+  fs.rmSync(scopeDir, { recursive: true, force: true })
+
+  // The replay passes with no miss and excuses exactly the flakes the data
+  // names: a new excuse is a change to this list, reviewed like a miss.
+  const replay = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--backtest"], {
+    encoding: "utf8",
+  })
+  const excusedFlakes = [...replay.stdout.matchAll(/^ {2}excused flake (#\d+ \S+)/gm)].map((m) => m[1])
+  check(
+    "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke",
+    replay.status === 0 && /^misses: 0$/m.test(replay.stdout) && excusedFlakes.join() === "#1666 fuzz-smoke",
+    `excused: ${excusedFlakes.join(", ") || "none"}\n${replay.stdout}${replay.stderr}`
+  )
+}
+
+if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // Each delegation is honest only while the job it names makes the check on
+  // every run that could change its answer. Those jobs are scoped lanes
+  // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so
+  // each claim is held to two things:
+  //
+  //   - the step that makes the check runs whenever its lane does, and must
+  //     pass: no `continue-on-error`, no job-level `if:` beyond the one named
+  //     here, and a step `if:` that is exactly the lane's gate (with
+  //     `!cancelled()` first on runtime_sanitize, which runs after a failed
+  //     smoke);
+  //   - the lane runs for a change to any file the check reads: `decide`
+  //     turns it on for every file under the trees named below and for
+  //     tests/run.js and everything it imports. A lane whose read set loses
+  //     one of them would skip the only run of the check on a pull request
+  //     that changes it.
   const testJob = ciJob(ciYmlText, "test")
-  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
-  // A step that runs them counts only while it must run and must pass: no
-  // `continue-on-error`, and no `if:` but `!cancelled()`. A job-level `if:`
-  // or `continue-on-error` would leave them running nowhere, or failing
-  // unseen, while the `test` job still prints DELEGATED.
-  const fuzzSmokeSteps = fuzzSmoke.split(/\n {6}- /).slice(1)
-  const binding = (pattern) => {
-    const step = fuzzSmokeSteps.find((s) => pattern.test(s))
+  const gateOf = (lane) => `needs.scope.outputs.${lane} != 'false'`
+  const stepsOf = (job) => job.split(/\n {6}- /).slice(1)
+  const binding = (job, pattern, ifs) => {
+    const step = stepsOf(job).find((s) => pattern.test(s))
+    const stepIfs = [...(step ?? "").matchAll(/^ {8}if: (.*)$/gm)].map((m) => m[1])
     return (
       step !== undefined &&
       !/^ {8}continue-on-error:/m.test(step) &&
-      [...step.matchAll(/^ {8}if: (.*)$/gm)].every((m) => m[1] === "${{ !cancelled() }}")
+      stepIfs.length === 1 &&
+      ifs.includes(stepIfs[0])
     )
   }
+  const filesUnder = (...dirs) =>
+    dirs.flatMap((dir) =>
+      fs
+        .readdirSync(path.join(root, dir), { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => path.relative(root, path.join(e.parentPath, e.name)).split(path.sep).join("/"))
+    )
+  const importsOf = (file, seen = new Set()) => {
+    if (seen.has(file) || !fs.existsSync(path.join(root, file))) {
+      return seen
+    }
+    seen.add(file)
+    const text = fs.readFileSync(path.join(root, file), "utf8")
+    for (const m of text.matchAll(/^import [^"]*"(\.\.?\/[^"]+)"/gm)) {
+      importsOf(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])), seen)
+    }
+    return seen
+  }
+  const unread = (lane, files) =>
+    files.filter(
+      (f) => !ciScope.decide({ event: "pull_request", files: [{ path: f, status: "modified" }] }).lanes[lane]
+    )
+  const laneJob = (job, jobIf) =>
+    job !== "" &&
+    /^ {4}needs: (scope|\[[^\]]*\bscope\b[^\]]*\])$/m.test(job) &&
+    !/^ {4}continue-on-error:/m.test(job) &&
+    [...job.matchAll(/^ {4}if: (.*)$/gm)].every((m) => m[1] === jobIf)
+
+  // Every command each lane's job runs, with files it opens: its entry
+  // script, what that imports, and the fixtures it compiles (the composite
+  // compiler-cache action counts as a command of every lane that uses it).
+  // An entry here proves only that a change to a listed file turns its lane on;
+  // it cannot find a read nobody listed. package.json is left out because it is
+  // in FULL and turns every lane on whatever the lane lists; the tests/ entries
+  // of simd, sha256_macos and fuzz record what those commands read, though the
+  // tests/run.js check below already turns those lanes on for all of tests/.
+  // Re-derived from each step's `run:` after #1746's review found the
+  // bootstrap lane missing the fixtures tests/nish/cli.ts compiles and the
+  // postgres lane missing tests/self/. A lane whose read set drops one of
+  // these skips the command's only run on a pull request that changes it.
+  const compilerCache = [
+    "tests/self/compiler-cache.js",
+    "tests/self/seed.js",
+    "scripts/fetch-seed.sh",
+    "scripts/build.sh",
+    "src/compile.ts",
+    "std/term.ts",
+    "runtime/nish.d.ts",
+  ]
+  const laneCommands = {
+    bootstrap: {
+      "bash scripts/bootstrap.sh --verify": [
+        "scripts/bootstrap.sh",
+        "scripts/build.sh",
+        "tests/self/bootstrap.js",
+        "src/capability-lock.ts",
+        "src/compile.ts",
+        "runtime/nish.d.ts",
+      ],
+      "node scripts/check-hardening.mjs": ["scripts/check-hardening.mjs"],
+      "build/nish tests/nish/cli.ts, then build/nish-cli build/nish": [
+        "tests/nish/cli.ts",
+        "tests/cases/caps_pure.ts",
+        "tests/cases/caps_generic.ts",
+        "tests/cases/caps_generic.caps.json",
+        "tests/cases/sandbox_hello.ts",
+        "tests/link/caps_lock_growth/main.ts",
+      ],
+    },
+    nish_cmp: {
+      "node tests/nish-cmp.js": [
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+        "tests/self/seed.js",
+        "tests/cases/caps_pure.ts",
+        "tests/driver.c",
+        "CHANGELOG.md",
+      ],
+      "node tests/differential/fuzz.js --stage1 / --emit-ts": [
+        "tests/differential/fuzz.js",
+        "tests/self/seed.js",
+        "tests/pool.js",
+      ],
+    },
+    elision: {
+      "compiler-cache": compilerCache,
+      "node tests/differential/soundness.js": [
+        "tests/differential/soundness.js",
+        "tests/cases/caps_pure.ts",
+        "tests/differential/corpus/argv_words.ts",
+        "tests/driver.c",
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+      ],
+    },
+    simd: {
+      "compiler-cache": compilerCache,
+      "node tests/run.js simd / float-corpus / the kernels": [
+        ...importsOf("tests/run.js"),
+        "docs/LANGUAGE.md",
+        "tests/simd/sha256.c",
+        "tests/link/sha256_hw_vectors/main.ts",
+        "tests/cases/caps_pure.ts",
+      ],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+      "node bench/crc32.mjs, adler32.mjs, chacha20.mjs": [
+        "bench/crc32.mjs",
+        "bench/adler32.mjs",
+        "bench/chacha20.mjs",
+      ],
+    },
+    sha256_macos: {
+      "compiler-cache": compilerCache,
+      "clang tests/simd/sha256.c, sha256-calls.c": [
+        "tests/simd/sha256.c",
+        "tests/simd/sha256-calls.c",
+        "runtime/runtime-sha256.c",
+      ],
+      "node tests/run.js sha256_hw": [...importsOf("tests/run.js"), "tests/link/sha256_hw_vectors/main.ts"],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+    },
+    fuzz: {
+      "compiler-cache": compilerCache,
+      "bash scripts/fuzz.sh --smoke": ["scripts/fuzz.sh", "tests/fuzz/harness.c"],
+      "node tests/run.js runtime_sanitize": [...importsOf("tests/run.js"), "tests/runtime/range-test.c"],
+    },
+    postgres: {
+      "compiler-cache": compilerCache,
+      "bash tests/postgres/live/tls-certs.sh": ["tests/postgres/live/tls-certs.sh"],
+      "node tests/postgres/live/run.mjs": [
+        "tests/postgres/live/run.mjs",
+        "tests/postgres/live/live.ts",
+        "tests/postgres/live/tls.ts",
+        "tests/postgres/carrier.ts",
+        "tests/postgres/serve-pool.ts",
+        "bench/techempower/db-main.ts",
+        "bench/techempower/async-db-main.ts",
+      ],
+    },
+  }
+  const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
+    ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
+    ...Object.entries(commands).flatMap(([command, files]) => [
+      ...(files.length === 0 ? [`${lane}: ${command}: no file`] : []),
+      ...files.filter((f) => !fs.existsSync(path.join(root, f))).map((f) => `${lane}: ${command}: ${f} does not exist`),
+      ...unread(lane, files).map((f) => `${lane}: ${command}: ${f} would not turn it on`),
+    ]),
+  ])
+  const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
+  check(
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    commandGaps.length === 0 && uncoveredLanes.length === 0,
+    `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
+  )
+
+  // A lane whose job runs tests/run.js reads all of tests/ but tests/ci-scope:
+  // a section can open any fixture there, and #1746's second review found a
+  // hand-picked list missing tests/runtime/range-test.c.
+  const testsFiles = filesUnder("tests").filter((f) => !f.startsWith("tests/ci-scope/"))
+  const runJsLanes = ciScope.LANES.filter((l) =>
+    l.jobs.some((j) => /^\s+(?:\$run )?node tests\/run\.js /m.test(ciJob(ciYmlText, j)))
+  )
+  const runJsMisses = runJsLanes.flatMap((l) =>
+    unread(l.name, testsFiles)
+      .slice(0, 5)
+      .map((f) => `${l.name}: ${f}`)
+  )
+  const ciScopeRead = ciScope.LANES.filter(
+    (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
+  )
+  check(
+    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
+    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.length === 0,
+    `lanes running tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
+      `misses: ${runJsMisses.join(", ") || "none"}\n` +
+      `lanes a tests/ci-scope change turns on: ${ciScopeRead.map((l) => l.name).join(", ") || "none"}`
+  )
+
+  // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
+  // with itself, and compares (scripts/bootstrap.sh --verify).
+  const bootstrapJob = ciJob(ciYmlText, "bootstrap")
+  const fixedPointMisses = unread("bootstrap", [
+    ...filesUnder("src", "std", "runtime"),
+    "scripts/bootstrap.sh",
+    "scripts/build.sh",
+    "tests/self/bootstrap.js",
+    "nish-capabilities.lock.json",
+  ])
+  check(
+    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
+    testJob !== "" &&
+      (!testJob.includes("--delegate-fixed-point") ||
+        (laneJob(bootstrapJob, "needs.seeds.outputs.rows != '[]'") &&
+          /^ {4}needs: \[seeds, scope\]$/m.test(bootstrapJob) &&
+          binding(bootstrapJob, /bash scripts\/bootstrap\.sh --verify$/m, [gateOf("bootstrap")]) &&
+          fixedPointMisses.length === 0)),
+    `files the bootstrap lane would skip on: ${fixedPointMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `bootstrap job:\n${bootstrapJob || "(not found)"}`
+  )
+
+  // `--delegate-sanitizers` (DELEGATE_SANITIZERS): `fuzz-smoke` builds and
+  // replays every target and runs the runtime unit test under the sanitizers.
+  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  // The fuzz lane reads tests/ wholesale (but tests/ci-scope): a list picked
+  // file by file missed tests/runtime/range-test.c, which runtime_sanitize
+  // compiles under ASan and UBSan.
+  const sanitizerMisses = unread("fuzz", [
+    ...filesUnder("src", "std", "runtime"),
+    ...testsFiles,
+    "scripts/fuzz.sh",
+  ])
   check(
     "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
     testJob !== "" &&
       (!testJob.includes("--delegate-sanitizers") ||
-        (!/^ {4}(if|continue-on-error):/m.test(fuzzSmoke) &&
-          binding(/^ {8}run: bash scripts\/fuzz\.sh --smoke$/m) &&
-          binding(/^\s+node tests\/run\.js runtime_sanitize /m))),
-    `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+        (laneJob(fuzzSmoke, "") &&
+          !/^ {4}if:/m.test(fuzzSmoke) &&
+          binding(fuzzSmoke, /^ {8}run: bash scripts\/fuzz\.sh --smoke$/m, [gateOf("fuzz")]) &&
+          binding(fuzzSmoke, /^\s+node tests\/run\.js runtime_sanitize /m, [
+            `\${{ (!cancelled()) && ${gateOf("fuzz")} }}`,
+          ]) &&
+          sanitizerMisses.length === 0)),
+    `files the fuzz lane would skip on: ${sanitizerMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+  )
+
+  // #1724: the runtime_sanitize step fails on a failed or skipped check. It
+  // pipes the run through `tee`, so without `set -o pipefail` the step's
+  // status is tee's; it requires a non-zero passed count with 0 failed, and
+  // a SKIP line fails it (a missing sanitizer runtime prints one and passes
+  // nothing). `|| true` anywhere in it would hide all three.
+  const sanitizeStep = stepsOf(fuzzSmoke).find((s) => /^\s+node tests\/run\.js runtime_sanitize /m.test(s)) ?? ""
+  check(
+    "ci.yml: fuzz-smoke's runtime_sanitize step fails on a failed check, on no passed checks and on a SKIP",
+    /^ {10}set -o pipefail$/m.test(sanitizeStep) &&
+      /^ {10}node tests\/run\.js runtime_sanitize .*\| tee "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}grep -E '\^\[1-9\]\[0-9\]\* passed, 0 failed' "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}if grep -E '\^SKIP {2}' "\$RUNNER_TEMP\/runtime-sanitize\.log"; then exit 1; fi$/m.test(sanitizeStep) &&
+      !/\|\|\s*(true|:)(\s|$)/m.test(sanitizeStep) &&
+      !/continue-on-error/.test(sanitizeStep) &&
+      sanitizeStep.indexOf("set -o pipefail") < sanitizeStep.indexOf("node tests/run.js runtime_sanitize"),
+    `runtime_sanitize step:\n${sanitizeStep || "(not found)"}`
   )
   // The `runner` job, the whole corpus through the golden runner written in
   // Nish, runs per release rather than per push: on the Release PR, and in
