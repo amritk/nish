@@ -67,6 +67,7 @@ import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
+import * as ciScope from "../scripts/ci-scope.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
@@ -8804,21 +8805,9 @@ if (dealtHere("selfHosting")) {
     )
   }
 
-  // The delegation above is a claim about ci.yml, so ci.yml is read for it on
-  // every run, local ones included: a `test` job that still asks for it while
-  // the `bootstrap` job no longer runs `--verify` would be a green run with
-  // the fixed point proved nowhere. Comment lines are left out, because a
-  // comment that mentions a flag is not a step that passes it.
-  const testJobText = ciJob(ciYmlText, "test")
-  const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
-  check(
-    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
-    testJobText !== "" &&
-      (!testJobText.includes("--delegate-fixed-point") ||
-        (/^\s+needs: seeds$/m.test(bootstrapJobText) &&
-          bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
-    `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
-  )
+  // The delegation above is a claim about ci.yml, read for it on every run
+  // with the sanitizers' twin, under "ci.yml: the `test` job delegates the
+  // fixed point" below: cheaply, and outside this section, which builds.
 
   // A sharded job runs `--shard "$SHARD/<n>"` over a `shard:` list,
   // and the two numbers are written apart. A list shorter than `n` is a green
@@ -32835,33 +32824,234 @@ if (SHARD > 1) {
 // and each move is a claim about ci.yml, read here on every run, local ones
 // included, so an edit that leaves a check running nowhere turns this red
 // rather than every row green.
-if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
-  // `--delegate-sanitizers` (DELEGATE_SANITIZERS) is honest only while
-  // `fuzz-smoke` builds and replays every target and runs the runtime unit
-  // test under the sanitizers.
+// scripts/ci-scope.mjs: the `scope` job's decision and the `ci-gate` verdict.
+// A wrong decision skips a check on a pull request it would have failed, so
+// every case that must run everything is pinned, and so is the replay of
+// recorded merged pull requests.
+if (selects("ci-scope", "ci.yml")) {
+  const on = (files, extra = {}) =>
+    ciScope.decide({
+      event: "pull_request",
+      files: files.map((f) => (typeof f === "string" ? { path: f, status: "modified" } : f)),
+      ...extra,
+    })
+  const lanes = ciScope.LANES.map((l) => l.name)
+  const everything = (r) => r.full !== null && lanes.every((l) => r.lanes[l] === true)
+  const docs = [{ path: "docs/x.md", status: "modified" }]
+  const fullCases = [
+    ["a push to main", ciScope.decide({ event: "push", files: docs })],
+    ["a merge_group", ciScope.decide({ event: "merge_group", files: docs })],
+    ["a workflow_call", ciScope.decide({ event: "workflow_call", files: docs })],
+    ["a workflow_dispatch", ciScope.decide({ event: "workflow_dispatch", files: docs })],
+    ["no event", ciScope.decide({ files: docs })],
+    ["the ci:full label", on(["docs/x.md"], { labels: ["ci:full"] })],
+    ["NISH_CI_SCOPE=full", on(["docs/x.md"], { mode: "full" })],
+    ["an empty file list", on([])],
+    ["an unknown file list", ciScope.decide({ event: "pull_request" })],
+    ["a truncated file list", on(["docs/x.md"], { truncated: true })],
+    ["a file with no path", on([{ status: "modified" }])],
+    ["a deleted docs file", on([{ path: "docs/x.md", status: "removed" }])],
+    ["an unknown status", on([{ path: "docs/x.md", status: "unchanged" }])],
+    ["a rename with no old path", on([{ path: "docs/x.md", status: "renamed" }])],
+    ["a rename out of src/", on([{ path: "docs/x.ts", status: "renamed", previous: "src/x.ts" }])],
+    ["a rename into std/", on([{ path: "std/x.ts", status: "renamed", previous: "docs/x.ts" }])],
+    ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
+    ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
+    ["a change to package.json", on(["package.json"])],
+    ["a change to package-lock.json", on(["package-lock.json"])],
+    ["a nested package.json", on(["docs/cookbook/node_modules/p/package.json"])],
+    ["a change to scripts/ci-scope.mjs", on(["scripts/ci-scope.mjs"])],
+  ]
+  const notFull = fullCases.filter(([, r]) => !everything(r)).map(([n]) => n)
+  check(
+    "ci-scope: every case that must run every lane does",
+    notFull.length === 0,
+    `ran less than everything: ${notFull.join(", ")}`
+  )
+
+  const docsOnly = on(["docs/guide/index.md", "README.md"])
+  const srcChange = on(["src/compile.ts"])
+  const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
+  check(
+    "ci-scope: a docs-only change skips every lane, a src/ change runs every lane, an inert rename skips",
+    docsOnly.full === null &&
+      lanes.every((l) => docsOnly.lanes[l] === false) &&
+      lanes.every((l) => srcChange.lanes[l] === true) &&
+      lanes.every((l) => inertRename.lanes[l] === false),
+    JSON.stringify({ docsOnly, srcChange, inertRename })
+  )
+  const unknownPath = on(["somewhere/new.txt"])
+  check(
+    "ci-scope: a path on no lane's allowlist of unread paths runs every lane",
+    lanes.every((l) => unknownPath.lanes[l] === true),
+    JSON.stringify(unknownPath)
+  )
+
+  const ok = { result: "success" }
+  const skipped = { result: "skipped" }
+  check(
+    "ci-scope: the gate passes only when every job succeeded or was skipped by its own if:",
+    ciScope.gate({ a: ok, b: skipped }, ["b"]).length === 0 &&
+      ciScope.gate({ a: ok, b: skipped }, []).length === 1 &&
+      ciScope.gate({ a: { result: "failure" } }, []).length === 1 &&
+      ciScope.gate({ a: { result: "cancelled" } }, ["a"]).length === 1 &&
+      ciScope.gate({ a: {} }, []).length === 1 &&
+      ciScope.gate({}, []).length === 1 &&
+      ciScope.gate(null, []).length === 1,
+    "a gate verdict differs"
+  )
+
+  // ci.yml and the module name the same lanes, and the gate waits for every
+  // other job: a job left out of its `needs` could fail under a green gate.
+  const scopeJob = ciJob(ciYmlText, "scope")
+  const gateJob = ciJob(ciYmlText, "ci-gate")
+  const outputs = [...scopeJob.matchAll(/^ {6}([a-z0-9_]+): \$\{\{ steps\.scope\.outputs\.\1 \}\}$/gm)].map((m) => m[1])
+  const read = [...new Set([...ciYmlText.matchAll(/needs\.scope\.outputs\.([a-z0-9_]+)/g)].map((m) => m[1]))]
+  const jobIds = [...ciYmlText.slice(ciYmlText.search(/^jobs:$/m)).matchAll(/^ {2}([a-z0-9-]+):$/gm)]
+    .map((m) => m[1])
+    .filter((j) => j !== "ci-gate")
+  const gateNeeds = [...(/^ {4}needs:\n((?: {6}- [a-z0-9-]+\n)+)/m.exec(gateJob)?.[1] ?? "").matchAll(/- ([a-z0-9-]+)/g)]
+    .map((m) => m[1])
+  const ungated = jobIds.filter((j) => !gateNeeds.includes(j))
+  check(
+    "ci-scope: the scope job outputs every lane, ci.yml reads no other, and ci-gate needs every job",
+    [...lanes, "why"].every((l) => outputs.includes(l)) &&
+      outputs.length === lanes.length + 1 &&
+      read.every((u) => outputs.includes(u)) &&
+      jobIds.length > 0 &&
+      ungated.length === 0 &&
+      /^ {4}if: always\(\)$/m.test(gateJob),
+    `outputs: ${outputs.join(" ")}\nread: ${read.join(" ")}\njobs not in ci-gate's needs: ${ungated.join(" ")}`
+  )
+
+  const replay = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--backtest"], {
+    encoding: "utf8",
+  })
+  check(
+    "ci-scope: the backtest replays at least 40 merged pull requests with no miss",
+    replay.status === 0 && /^misses: 0$/m.test(replay.stdout),
+    `${replay.stdout}${replay.stderr}`
+  )
+}
+
+if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // Each delegation is honest only while the job it names makes the check on
+  // every run that could change its answer. Those jobs are scoped lanes
+  // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so
+  // each claim is held to two things:
+  //
+  //   - the step that makes the check runs whenever its lane does, and must
+  //     pass: no `continue-on-error`, no job-level `if:` beyond the one named
+  //     here, and a step `if:` that is exactly the lane's gate (with
+  //     `!cancelled()` first on runtime_sanitize, which runs after a failed
+  //     smoke);
+  //   - the lane runs for a change to any file the check reads: `decide`
+  //     turns it on for every file under the trees named below and for
+  //     tests/run.js and everything it imports. A lane whose read set loses
+  //     one of them would skip the only run of the check on a pull request
+  //     that changes it.
   const testJob = ciJob(ciYmlText, "test")
-  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
-  // A step that runs them counts only while it must run and must pass: no
-  // `continue-on-error`, and no `if:` but `!cancelled()`. A job-level `if:`
-  // or `continue-on-error` would leave them running nowhere, or failing
-  // unseen, while the `test` job still prints DELEGATED.
-  const fuzzSmokeSteps = fuzzSmoke.split(/\n {6}- /).slice(1)
-  const binding = (pattern) => {
-    const step = fuzzSmokeSteps.find((s) => pattern.test(s))
+  const gateOf = (lane) => `needs.scope.outputs.${lane} != 'false'`
+  const stepsOf = (job) => job.split(/\n {6}- /).slice(1)
+  const binding = (job, pattern, ifs) => {
+    const step = stepsOf(job).find((s) => pattern.test(s))
+    const stepIfs = [...(step ?? "").matchAll(/^ {8}if: (.*)$/gm)].map((m) => m[1])
     return (
       step !== undefined &&
       !/^ {8}continue-on-error:/m.test(step) &&
-      [...step.matchAll(/^ {8}if: (.*)$/gm)].every((m) => m[1] === "${{ !cancelled() }}")
+      stepIfs.length === 1 &&
+      ifs.includes(stepIfs[0])
     )
   }
+  const filesUnder = (...dirs) =>
+    dirs.flatMap((dir) =>
+      fs
+        .readdirSync(path.join(root, dir), { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => path.relative(root, path.join(e.parentPath, e.name)).split(path.sep).join("/"))
+    )
+  const importsOf = (file, seen = new Set()) => {
+    if (seen.has(file) || !fs.existsSync(path.join(root, file))) {
+      return seen
+    }
+    seen.add(file)
+    const text = fs.readFileSync(path.join(root, file), "utf8")
+    for (const m of text.matchAll(/^import [^"]*"(\.\.?\/[^"]+)"/gm)) {
+      importsOf(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])), seen)
+    }
+    return seen
+  }
+  const unread = (lane, files) =>
+    files.filter(
+      (f) => !ciScope.decide({ event: "pull_request", files: [{ path: f, status: "modified" }] }).lanes[lane]
+    )
+  const laneJob = (job, jobIf) =>
+    job !== "" &&
+    /^ {4}needs: (scope|\[[^\]]*\bscope\b[^\]]*\])$/m.test(job) &&
+    !/^ {4}continue-on-error:/m.test(job) &&
+    [...job.matchAll(/^ {4}if: (.*)$/gm)].every((m) => m[1] === jobIf)
+
+  // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
+  // with itself, and compares (scripts/bootstrap.sh --verify).
+  const bootstrapJob = ciJob(ciYmlText, "bootstrap")
+  const fixedPointMisses = unread("bootstrap", [
+    ...filesUnder("src", "std", "runtime"),
+    "scripts/bootstrap.sh",
+    "scripts/build.sh",
+    "tests/self/bootstrap.js",
+    "nish-capabilities.lock.json",
+  ])
+  check(
+    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
+    testJob !== "" &&
+      (!testJob.includes("--delegate-fixed-point") ||
+        (laneJob(bootstrapJob, "needs.seeds.outputs.rows != '[]'") &&
+          /^ {4}needs: \[seeds, scope\]$/m.test(bootstrapJob) &&
+          binding(bootstrapJob, /bash scripts\/bootstrap\.sh --verify$/m, [gateOf("bootstrap")]) &&
+          fixedPointMisses.length === 0)),
+    `files the bootstrap lane would skip on: ${fixedPointMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `bootstrap job:\n${bootstrapJob || "(not found)"}`
+  )
+
+  // `--delegate-sanitizers` (DELEGATE_SANITIZERS): `fuzz-smoke` builds and
+  // replays every target and runs the runtime unit test under the sanitizers.
+  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  const sanitizerMisses = unread("fuzz", [
+    ...filesUnder("src", "std", "runtime", "tests/fuzz"),
+    "scripts/fuzz.sh",
+    ...importsOf("tests/run.js"),
+  ])
   check(
     "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
     testJob !== "" &&
       (!testJob.includes("--delegate-sanitizers") ||
-        (!/^ {4}(if|continue-on-error):/m.test(fuzzSmoke) &&
-          binding(/^ {8}run: bash scripts\/fuzz\.sh --smoke$/m) &&
-          binding(/^\s+node tests\/run\.js runtime_sanitize /m))),
-    `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+        (laneJob(fuzzSmoke, "") &&
+          !/^ {4}if:/m.test(fuzzSmoke) &&
+          binding(fuzzSmoke, /^ {8}run: bash scripts\/fuzz\.sh --smoke$/m, [gateOf("fuzz")]) &&
+          binding(fuzzSmoke, /^\s+node tests\/run\.js runtime_sanitize /m, [
+            `\${{ (!cancelled()) && ${gateOf("fuzz")} }}`,
+          ]) &&
+          sanitizerMisses.length === 0)),
+    `files the fuzz lane would skip on: ${sanitizerMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+  )
+
+  // #1724: the runtime_sanitize step fails on a failed or skipped check. It
+  // pipes the run through `tee`, so without `set -o pipefail` the step's
+  // status is tee's; it requires a non-zero passed count with 0 failed, and
+  // a SKIP line fails it (a missing sanitizer runtime prints one and passes
+  // nothing). `|| true` anywhere in it would hide all three.
+  const sanitizeStep = stepsOf(fuzzSmoke).find((s) => /^\s+node tests\/run\.js runtime_sanitize /m.test(s)) ?? ""
+  check(
+    "ci.yml: fuzz-smoke's runtime_sanitize step fails on a failed check, on no passed checks and on a SKIP",
+    /^ {10}set -o pipefail$/m.test(sanitizeStep) &&
+      /^ {10}node tests\/run\.js runtime_sanitize .*\| tee "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}grep -E '\^\[1-9\]\[0-9\]\* passed, 0 failed' "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}if grep -E '\^SKIP {2}' "\$RUNNER_TEMP\/runtime-sanitize\.log"; then exit 1; fi$/m.test(sanitizeStep) &&
+      !/\|\|\s*(true|:)(\s|$)/m.test(sanitizeStep) &&
+      !/continue-on-error/.test(sanitizeStep) &&
+      sanitizeStep.indexOf("set -o pipefail") < sanitizeStep.indexOf("node tests/run.js runtime_sanitize"),
+    `runtime_sanitize step:\n${sanitizeStep || "(not found)"}`
   )
   // The `runner` job, the whole corpus through the golden runner written in
   // Nish, runs per release rather than per push: on the Release PR, and in

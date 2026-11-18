@@ -14,9 +14,16 @@
 //   node scripts/ci-scope.mjs --files <file>      # a newline-separated path list
 //   node scripts/ci-scope.mjs --backtest [<file>] # replay merged PRs
 //
+//   node scripts/ci-scope.mjs --gate              # in the `ci-gate` job (env below)
+//
 // The `scope` job's environment: GITHUB_EVENT_NAME, GITHUB_REPOSITORY,
 // GITHUB_TOKEN, PR_NUMBER, PR_LABELS (a JSON array of names) and
-// NISH_CI_SCOPE (the repository variable; `full` turns every lane on).
+// NISH_CI_SCOPE (the repository variable; `full` turns every lane on). The
+// labels are read again from the API, so re-running a workflow after adding
+// `ci:full` runs everything. Lane names are output names, so they use `_`.
+//
+// The `ci-gate` job's environment: NEEDS (`toJSON(needs)`) and EXPECT_SKIP (a
+// JSON array of the job ids whose own `if:` is false on this run).
 
 import fs from "node:fs"
 import path from "node:path"
@@ -27,7 +34,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 /**
  * Paths no lane reads. Each entry was checked against the lanes' entry points
  * and the files they import or open (an `strace -f` of every lane command's
- * opens: tests/ci-scope/README.md). A lane's own `reads` carve paths back out.
+ * opens, docs/wp10-ci.md "Scoped lanes"). A lane's own `reads` carve paths back out.
  */
 const INERT = [
   "docs/**",
@@ -47,6 +54,11 @@ const INERT = [
   "biome-plugins/**",
   "knip.json",
   "tests/ci-scope/**",
+  // The `test` job's spec section and `npm run lint` read these; no lane does.
+  "contracts/**",
+  "test/spec/**",
+  ".vector-version",
+  ".refcache/**",
 ]
 
 /** The corpus `tests/self/corpus.js` walks, and what nish-cmp's checks open. */
@@ -66,6 +78,24 @@ const CORPUS = [
   "changelog/**",
 ]
 
+/**
+ * What `tests/run.js` opens for the simd, sha256_hw, float-corpus, kernel and
+ * runtime_sanitize sections (an `strace -f` of each), plus `scripts/fuzz.sh`'s
+ * tests/fuzz. Its top level reads every file directly in tests/.
+ */
+const RUN_JS = [
+  "tests/*",
+  "tests/cases/**",
+  "tests/differential/**",
+  "tests/fix/**",
+  "tests/fuzz/**",
+  "tests/link/**",
+  "tests/nish/**",
+  "tests/self/**",
+  "tests/simd/**",
+  "tests/wipes/**",
+]
+
 /** What every lane that builds a compiler from `src/` reads. */
 const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nish-capabilities.lock.json"]
 
@@ -76,7 +106,7 @@ const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nis
  */
 export const LANES = [
   {
-    name: "nish-cmp",
+    name: "nish_cmp",
     jobs: ["nish-cmp"],
     minutes: 14.2,
     // tests/nish-cmp.js, then fuzz.js --stage1 and --emit-ts over the corpus.
@@ -106,16 +136,16 @@ export const LANES = [
     jobs: ["simd-arm64"],
     minutes: 5.5,
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
-    reads: [...COMPILER, "tests/**", "bench/**", "examples/**"],
-    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
   },
   {
-    name: "sha256-macos",
+    name: "sha256_macos",
     jobs: ["sha256-macos"],
     minutes: 2.1,
     // tests/simd/sha256*.c, tests/run.js sha256_hw and bench/sha256/run.mjs.
-    reads: [...COMPILER, "tests/**", "bench/**", "examples/**"],
-    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "fuzz",
@@ -123,8 +153,8 @@ export const LANES = [
     minutes: 4.5,
     // scripts/fuzz.sh --smoke (tests/fuzz/**) and tests/run.js runtime_sanitize,
     // which the `test` job delegates here (tests/run.js pins it).
-    reads: [...COMPILER, "tests/**", "bench/**", "examples/**"],
-    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "postgres",
@@ -205,22 +235,40 @@ export const inertFor = (lane, file) => matches(file, lane.inert) && !matches(fi
  */
 export const decide = ({ event, labels = [], mode = "", files, truncated = false }) => {
   const all = (why) => ({ full: why, lanes: Object.fromEntries(LANES.map((l) => [l.name, true])) })
-  if (!SCOPED_EVENTS.has(event)) return all(`a ${event || "unknown"} event runs every lane`)
-  if (mode.trim() === "full") return all("the NISH_CI_SCOPE variable is `full`")
-  if (labels.includes("ci:full")) return all("the pull request has the `ci:full` label")
-  if (!Array.isArray(files) || files.length === 0) return all("the changed-file list is empty or unknown")
-  if (truncated) return all("the changed-file list was truncated")
+  if (!SCOPED_EVENTS.has(event)) {
+    return all(`a ${event || "unknown"} event runs every lane`)
+  }
+  if (mode.trim() === "full") {
+    return all("the NISH_CI_SCOPE variable is `full`")
+  }
+  if (labels.includes("ci:full")) {
+    return all("the pull request has the `ci:full` label")
+  }
+  if (!Array.isArray(files) || files.length === 0) {
+    return all("the changed-file list is empty or unknown")
+  }
+  if (truncated) {
+    return all("the changed-file list was truncated")
+  }
   for (const f of files) {
-    if (typeof f?.path !== "string" || f.path === "") return all("a changed file has no path")
-    if (f.status === "removed") return all(`a file is deleted (${f.path})`)
+    if (typeof f?.path !== "string" || f.path === "") {
+      return all("a changed file has no path")
+    }
+    if (f.status === "removed") {
+      return all(`a file is deleted (${f.path})`)
+    }
     if (f.status && !["added", "modified", "changed", "renamed", "copied"].includes(f.status)) {
       return all(`a file has status ${f.status} (${f.path})`)
     }
     for (const p of [f.path, f.previous].filter(Boolean)) {
-      if (matches(p, FULL)) return all(`${p} changes what CI runs`)
+      if (matches(p, FULL)) {
+        return all(`${p} changes what CI runs`)
+      }
     }
     if (f.status === "renamed" || f.previous) {
-      if (typeof f.previous !== "string") return all(`a rename of ${f.path} has no old path`)
+      if (typeof f.previous !== "string") {
+        return all(`a rename of ${f.path} has no old path`)
+      }
       for (const lane of LANES) {
         if (inertFor(lane, f.path) !== inertFor(lane, f.previous)) {
           return all(`${f.previous} → ${f.path} moves a file into or out of ${lane.name}'s read set`)
@@ -254,13 +302,71 @@ const fetchFiles = async (repo, pr, token) => {
         signal: AbortSignal.timeout(20000),
       }
     )
-    if (!res.ok) throw new Error(`GET pulls/${pr}/files page ${page}: ${res.status}`)
+    if (!res.ok) {
+      throw new Error(`GET pulls/${pr}/files page ${page}: ${res.status}`)
+    }
     const batch = await res.json()
-    if (!Array.isArray(batch)) throw new Error("the files response is not a list")
-    for (const f of batch) files.push({ path: f.filename, status: f.status, previous: f.previous_filename })
-    if (batch.length < 100) return { files, truncated: false }
+    if (!Array.isArray(batch)) {
+      throw new Error("the files response is not a list")
+    }
+    for (const f of batch) {
+      files.push({ path: f.filename, status: f.status, previous: f.previous_filename })
+    }
+    if (batch.length < 100) {
+      return { files, truncated: false }
+    }
   }
   return { files, truncated: true }
+}
+
+/**
+ * Reads a pull request's labels as they are now, not as the event saw them.
+ *
+ * @param {string} repo `owner/name`
+ * @param {string} pr the pull request number
+ * @param {string} token a token that can read the repository
+ * @returns {Promise<string[]>} the label names
+ */
+const fetchLabels = async (repo, pr, token) => {
+  const res = await fetch(`https://api.github.com/repos/${repo}/issues/${pr}/labels?per_page=100`, {
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json" },
+    signal: AbortSignal.timeout(20000),
+  })
+  if (!res.ok) {
+    throw new Error(`GET issues/${pr}/labels: ${res.status}`)
+  }
+  const list = await res.json()
+  if (!Array.isArray(list)) {
+    throw new Error("the labels response is not a list")
+  }
+  return list.map((l) => l?.name)
+}
+
+/**
+ * The `ci-gate` verdict: every job it needs succeeded, or was skipped by its
+ * own `if:` on this run. A lane that was not selected still *succeeds*, since
+ * only its steps are skipped, so a skipped lane job is a failure here.
+ *
+ * @param {Record<string, {result: string}>} needs `toJSON(needs)`
+ * @param {string[]} expectSkip the job ids whose own `if:` is false on this run
+ * @returns {string[]} one line per job that fails the gate; empty when it passes
+ */
+export const gate = (needs, expectSkip) => {
+  const bad = []
+  if (!needs || typeof needs !== "object" || Object.keys(needs).length === 0) {
+    return ["no job results"]
+  }
+  for (const [job, v] of Object.entries(needs)) {
+    const result = v?.result
+    if (result === "success") {
+      continue
+    }
+    if (result === "skipped" && expectSkip.includes(job)) {
+      continue
+    }
+    bad.push(`${job}: ${result ?? "no result"}`)
+  }
+  return bad
 }
 
 /**
@@ -274,6 +380,7 @@ const backtest = (file) => {
   const prs = data.prs
   const skipped = Object.fromEntries(LANES.map((l) => [l.name, 0]))
   const misses = []
+  const excused = []
   let saved = 0
   for (const pr of prs) {
     const { lanes } = decide({
@@ -283,13 +390,26 @@ const backtest = (file) => {
       truncated: pr.truncated === true,
     })
     for (const lane of LANES) {
-      if (lanes[lane.name]) continue
+      if (lanes[lane.name]) {
+        continue
+      }
       skipped[lane.name]++
       saved += lane.minutes
-      // A miss: a job of a lane this would have skipped failed on one of the PR's runs.
+      // A miss: a job of a lane this would have skipped failed on one of the
+      // PR's runs. A failure the data records as a flake (`flakes`, keyed by
+      // job, with the log line that shows the cause) is excused and printed.
       for (const run of pr.runs ?? []) {
         for (const job of run.failed ?? []) {
-          if (lane.jobs.includes(job.split(/[ (]/)[0])) misses.push(`#${pr.number} ${job} (run ${run.id})`)
+          if (!lane.jobs.includes(job.split(/[ (]/)[0])) {
+            continue
+          }
+          const line = `#${pr.number} ${job} (run ${run.id})`
+          const flake = run.flakes?.[job]
+          if (flake) {
+            excused.push(`${line}: ${flake}`)
+          } else {
+            misses.push(line)
+          }
         }
       }
     }
@@ -308,7 +428,12 @@ const backtest = (file) => {
       `(${((100 * per) / 119).toFixed(1)}% of a ~119-minute run)`
   )
   console.log(`misses: ${misses.length}`)
-  for (const m of misses) console.log(`  MISS ${m}`)
+  for (const m of misses) {
+    console.log(`  MISS ${m}`)
+  }
+  for (const e of excused) {
+    console.log(`  excused flake ${e}`)
+  }
   if (prs.length < 40) {
     console.log(`backtest: needs at least 40 pull requests, has ${prs.length}`)
     return 1
@@ -325,7 +450,9 @@ const backtest = (file) => {
 const emit = ({ full, lanes }) => {
   const why = full ?? "every changed path of a skipped lane is on its allowlist of paths it does not read"
   const lines = [...Object.entries(lanes).map(([k, v]) => `${k}=${v}`), `why=${why.replace(/\n/g, " ")}`]
-  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`)
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`)
+  }
   if (process.env.GITHUB_STEP_SUMMARY) {
     const rows = Object.entries(lanes).map(([k, v]) => `| ${k} | ${v ? "runs" : "skipped"} |`)
     fs.appendFileSync(
@@ -343,6 +470,22 @@ const main = async () => {
     return
   }
   const env = process.env
+  if (args[0] === "--gate") {
+    let bad
+    try {
+      bad = gate(JSON.parse(env.NEEDS ?? ""), JSON.parse(env.EXPECT_SKIP || "[]"))
+    } catch (err) {
+      bad = [`unreadable job results: ${err.message}`]
+    }
+    for (const line of bad) {
+      console.log(`ci-gate: ${line}`)
+    }
+    console.log(
+      bad.length === 0 ? "ci-gate: every job succeeded or was skipped by its own if:" : "ci-gate: FAILED"
+    )
+    process.exitCode = bad.length === 0 ? 0 : 1
+    return
+  }
   let labels = []
   try {
     labels = JSON.parse(env.PR_LABELS || "[]")
@@ -362,8 +505,13 @@ const main = async () => {
   let fetched = { files: null, truncated: false }
   if (SCOPED_EVENTS.has(base.event)) {
     try {
-      fetched = await fetchFiles(env.GITHUB_REPOSITORY ?? "", env.PR_NUMBER ?? "", env.GITHUB_TOKEN ?? "")
+      const repo = env.GITHUB_REPOSITORY ?? ""
+      const pr = env.PR_NUMBER ?? ""
+      const token = env.GITHUB_TOKEN ?? ""
+      base.labels = [...base.labels, ...(await fetchLabels(repo, pr, token))]
+      fetched = await fetchFiles(repo, pr, token)
     } catch (err) {
+      fetched = { files: null, truncated: false }
       console.error(`ci-scope: ${err.message}; every lane runs`)
     }
   }
