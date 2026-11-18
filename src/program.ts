@@ -1058,10 +1058,19 @@ export class FieldInfo {
    * address of that member inside the object (`emitPropertyAccess`).
    */
   nested: StructInfo | null
+  /**
+   * WP48: the field is a link, typed exactly `R` or `R | null` for a compact
+   * `R`, stored as a 32-bit offset into the reserved range: an LLVM `i32`
+   * slot 4 wide and 4 aligned, decoded by `loadField` and encoded by
+   * `storeField` (`src/emit-classes.ts`). Set by `computeLayout` where the
+   * build compresses (`CheckContext.compressLinks`); false everywhere else.
+   */
+  link: boolean
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
     this.nested = null
+    this.link = false
     this.type = type
     this.index = 0
     this.offset = 0
@@ -1122,6 +1131,12 @@ export class StructInfo {
    * before any body is checked, and read by `inlineElementStruct`.
    */
   implemented: boolean
+  /**
+   * WP48: a compact class `implements` this interface, so a pointer of this
+   * type may name a block `@nish_alloc_ref` rounded to 4 and promises only
+   * `align 4`. Set in `checkImplements` with `implemented`.
+   */
+  compactImplementer: boolean
   decl: Node
   /** The module that declares it, so an importer can tell it from a re-export. */
   origin: SourceFile
@@ -1187,11 +1202,19 @@ export class StructInfo {
   layout: boolean
   /** Pass 1b is collecting this layout's fields, so a nesting cycle is caught. */
   laying: boolean
+  /**
+   * WP48: the class writes `implements Compact` (`nish:compact`), so a field
+   * typed exactly this class or this class `| null`, in any class, is a 32-bit
+   * offset into the reserved range where the target compresses
+   * (`computeLayout`, docs/wp48-ref32-classes.md §3.2).
+   */
+  compact: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
     this.layout = false
     this.laying = false
+    this.compact = false
     this.kind = kind
     this.origin = origin
     this.type = type
@@ -1207,6 +1230,7 @@ export class StructInfo {
     this.ctor = null
     this.implementsNames = []
     this.implemented = false
+    this.compactImplementer = false
     this.decl = decl
     this.exported = false
     this.poisoned = false

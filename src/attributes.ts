@@ -1978,11 +1978,34 @@ const pointerAlign = (program: CheckedProgram, table: TypeTable, type: i32): i32
   if (type < 0) {
     return 8
   }
+  // WP48: a compact instance of alignment 4 comes from `@nish_alloc_ref`,
+  // which rounds to 4, so 4 is all it can promise.
+  const compact = compactStruct(program, table, table.stripNull(type))
+  if (compact !== null && compact.align < 8) {
+    return compact.align
+  }
+  // An interface a compact class implements may name that class's block.
+  const bare = table.stripNull(type)
+  if (table.isStruct(bare)) {
+    const view = program.struct(table.nameOf(bare))
+    if (view !== null && view.compactImplementer) {
+      return 4
+    }
+  }
   const record = inlineElementStruct(program, table, table.stripNull(type))
   if (record === null || record.align >= 8) {
     return 8
   }
   return record.align
+}
+
+/** The compact class (WP48) `type` names, or null. */
+const compactStruct = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
+  if (!table.isStruct(type)) {
+    return null
+  }
+  const info = program.struct(table.nameOf(type))
+  return info !== null && info.compact ? info : null
 }
 
 /** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */

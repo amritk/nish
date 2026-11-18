@@ -15,7 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
-import { admitsSecretField, checkHolderReleaser, secretFieldMessage } from "./secret"
+import { admitsSecretField, checkHolderReleaser, secretFieldMessage, secretFieldOf } from "./secret"
 import {
   DISPOSE_METHOD,
   disposeElsewhereMessage,
@@ -24,6 +24,7 @@ import {
   markAtomicClass,
 } from "./parallel"
 import { CheckContext } from "./context"
+import { COMPACT_SPECIFIER, isCompactExport } from "./nish-modules"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectStoredMask } from "./simd"
 import { deferExportedLayout, rejectForeignPointer, resolveType } from "./annotations"
@@ -83,12 +84,32 @@ import {
 } from "./handles"
 
 /**
+ * Bytes in one pointer on the target being checked for: four on wasm32, whose
+ * LLVM data layout is `p:32:32`, eight on every native target. A class field
+ * that holds a pointer takes this width and alignment, as the LLVM struct
+ * type the emitter writes for it does (WP48 stage 6).
+ */
+const pointerBytes = (ctx: CheckContext): i32 => (ctx.wasm ? 4 : 8)
+
+/** The alignment of a value stored in a struct field, on the target being checked for. */
+const alignOfField = (ctx: CheckContext, type: i32): i32 =>
+  ctx.table.alignWithPointer(type, pointerBytes(ctx))
+
+/**
  * Size in bytes of a value stored in a struct field. `bool` is one byte
  * (`i1` has store size 1 in LLVM's data layout, matching C's `_Bool`);
  * every other type is its own alignment, which is right for every scalar
  * and every pointer.
  */
-const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type)
+const sizeOfField = (ctx: CheckContext, type: i32): i32 => alignOfField(ctx, type)
+
+/**
+ * The width and alignment the padding warning gives a field: four bytes for a
+ * link (WP48), which `computeLayout` lays out as an `i32` offset, else its
+ * type's.
+ */
+const paddingWidth = (ctx: CheckContext, field: FieldInfo): i32 =>
+  field.link ? 4 : sizeOfField(ctx, field.type)
 
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
 export const roundUpTo = (value: i32, align: i32): i32 => {
@@ -112,16 +133,13 @@ const fieldAlign = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (nested !== null) {
     return nested.align
   }
-  if (table.stripNull(field.type) === T_CPTR) {
-    return pointer
-  }
   if (field.boxed) {
     return 8
   }
   if (!field.inline()) {
-    return table.alignOf(field.type)
+    return table.alignWithPointer(field.type, pointer)
   }
-  const slot = table.alignOf(table.refOf(field.type))
+  const slot = table.alignWithPointer(table.refOf(field.type), pointer)
   return slot > 8 ? slot : 8
 }
 
@@ -138,19 +156,44 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (nested !== null) {
     return nested.size
   }
-  if (table.stripNull(field.type) === T_CPTR) {
-    return pointer
-  }
   if (field.boxed) {
     return SLICE_BYTES
   }
   if (!field.inline()) {
-    return table.alignOf(field.type)
+    return table.alignWithPointer(field.type, pointer)
   }
+  // Only a native build gets here: `layoutInlineArrays` inlines nothing in a
+  // build that shares layouts, wasm among them, so `pointer` is 8 and the
+  // stride is `elementStride`'s, which sizes the slots' memset and memcpy.
   const align = fieldAlign(table, field, pointer)
-  const stride = table.alignOf(table.refOf(field.type))
+  const stride = table.alignWithPointer(table.refOf(field.type), pointer)
   const slots = roundUpTo(INLINE_HEADER_BYTES, align)
   return roundUpTo(slots + field.inlineCapacity * stride, align)
+}
+
+/**
+ * WP48: whether a field of `type` is a link, a 32-bit offset in this build:
+ * `type` is exactly a compact class or that class `| null`, and the build
+ * compresses. An instantiation's fields follow the same rule as any other
+ * class's: `Holder<Cell>`'s `value: T` is a link, as its implementer's
+ * `value: Cell` is, since an interface parameter reads the implementer's
+ * bytes through the interface's offsets.
+ */
+const isLinkType = (ctx: CheckContext, type: i32): boolean =>
+  ctx.compressLinks && compactClassOf(ctx, type) !== null
+
+/**
+ * The name of the compact class `type` is, alone or `| null`; null for any
+ * other type. Read from the compilation's shared names, since an imported
+ * class is not yet bound in this module when its fields are laid out.
+ */
+const compactClassOf = (ctx: CheckContext, type: i32): string | null => {
+  const inner = ctx.table.stripNull(type)
+  if (!ctx.table.isStruct(inner)) {
+    return null
+  }
+  const name = ctx.table.nameOf(inner)
+  return ctx.compactNames.has(name) ? name : null
 }
 
 /**
@@ -165,16 +208,14 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
  * reordering, and almost every struct is one of those.
  */
 export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
-  // A `declare class`'s `CPtr` field is the target's `void *`, four bytes on
-  // wasm32 as its LLVM `i8*` is (WP27 S4.1); every other class keeps the
-  // eight-byte slot its arena object has always had.
-  const pointer = info.layout && ctx.wasm ? 4 : 8
+  const pointer = pointerBytes(ctx)
   let offset = 0
   let align = 1
   let used = 0
   for (const field of info.fields) {
-    const need = fieldAlign(ctx.table, field, pointer)
-    const width = fieldWidth(ctx.table, field, pointer)
+    field.link = !info.layout && isLinkType(ctx, field.type)
+    const need = field.link ? 4 : fieldAlign(ctx.table, field, pointer)
+    const width = field.link ? 4 : fieldWidth(ctx.table, field, pointer)
     offset = roundUpTo(offset, need)
     field.offset = offset
     offset = offset + width
@@ -188,11 +229,42 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
   return roundUpTo(used, align)
 }
 
+/**
+ * The size `info` would lay out to if every field that links to the class
+ * whose pointer type is `target` (typed exactly that class or it `| null`)
+ * were a four-byte reference, four-aligned: `computeLayout`'s walk, in the
+ * same order, with those fields narrowed (docs/wp48-ref32-classes.md §3.1,
+ * test 3). It reads `info` and writes nothing, so the layout every build
+ * uses stays the one `computeLayout` settled; `src/compact-rule.ts` asks it.
+ */
+export const narrowedSize = (table: TypeTable, info: StructInfo, target: i32, wasm: boolean): i32 => {
+  const pointer = info.layout && wasm ? 4 : 8
+  let offset = 0
+  let align = 1
+  for (const field of info.fields) {
+    const link = isLinkTo(table, field, target)
+    const need = link ? 4 : fieldAlign(table, field, pointer)
+    offset = roundUpTo(offset, need) + (link ? 4 : fieldWidth(table, field, pointer))
+    if (need > align) {
+      align = need
+    }
+  }
+  return roundUpTo(offset, align)
+}
+
+/**
+ * Whether `field` holds a pointer to the class whose pointer type is
+ * `target`: typed exactly that class or it `| null`. A `declare class`
+ * embedded by value (`FieldInfo.nested`) is its bytes, not a link.
+ */
+export const isLinkTo = (table: TypeTable, field: FieldInfo, target: i32): boolean =>
+  field.nested === null && !field.boxed && !field.inline() && table.stripNull(field.type) === target
+
 /** The size `fields` lay out to in the order given, rounded up to `align`. */
 const layoutSize = (ctx: CheckContext, fields: FieldInfo[], align: i32): i32 => {
   let offset = 0
   for (const field of fields) {
-    offset = roundUpTo(offset, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
+    offset = roundUpTo(offset, paddingWidth(ctx, field)) + paddingWidth(ctx, field)
   }
   return roundUpTo(offset, align)
 }
@@ -217,7 +289,7 @@ const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldI
   let width = align
   while (width >= 1) {
     for (const field of fields) {
-      if (ctx.table.alignOf(field.type) === width) {
+      if (paddingWidth(ctx, field) === width) {
         sorted.push(field)
       }
     }
@@ -266,7 +338,7 @@ const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): 
     let chosenAlign = 0
     let index = 0
     for (const field of remaining) {
-      const alignment = ctx.table.alignOf(field.type)
+      const alignment = paddingWidth(ctx, field)
       const pad = roundUpTo(offset, alignment) - offset
       if (chosen === null || pad < chosenPad || (pad === chosenPad && alignment > chosenAlign)) {
         chosen = field
@@ -280,7 +352,7 @@ const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): 
       return order
     }
     order.push(chosen)
-    offset = offset + chosenPad + sizeOfField(ctx, chosen.type)
+    offset = offset + chosenPad + paddingWidth(ctx, chosen)
     const next: FieldInfo[] = []
     index = 0
     for (const field of remaining) {
@@ -393,7 +465,7 @@ const reportWastefulPadding = (
   for (const field of info.fields) {
     if (fields.length < fixed) {
       fields.push(field)
-      prefixEnd = roundUpTo(prefixEnd, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
+      prefixEnd = roundUpTo(prefixEnd, paddingWidth(ctx, field)) + paddingWidth(ctx, field)
     } else {
       rest.push(field)
     }
@@ -1019,6 +1091,11 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     }
     collectStructMembers(ctx, nested)
   } else if (!isLayoutScalar(type) && ctx.table.stripNull(type) !== T_CPTR) {
+    const target = compactClassOf(ctx, type)
+    if (target !== null) {
+      ctx.error(decl.children[1], compactLayoutFieldMessage(owner.name, name, target))
+      return
+    }
     ctx.error(
       decl.children[1],
       `${what} has type \`${ctx.table.typeName(type)}\`, which has no C layout: a field of a \`declare class\` is i32, i64, u8, u16, u32, u64, f32, f64, \`CPtr\`, \`CPtr | null\` or another \`declare class\``
@@ -1045,7 +1122,9 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
     const clause = decl.children[1].kind !== NodeKind.Empty ? decl.children[1] : decl.children[2].children[0]
     ctx.error(
       clause,
-      `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
+      namesCompact(ctx, clause)
+        ? compactLayoutMessage(info.name)
+        : `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
     )
     info.poisoned = true
   }
@@ -1071,6 +1150,85 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
   info.laying = false
   info.collected = true
 }
+
+/**
+ * Whether `iface`, one entry of a class's `implements` list, names a
+ * `nish:compact` marker through this module's import (an `as` rename too).
+ */
+const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
+  if (
+    iface.kind !== NodeKind.TypeRef ||
+    (iface.children.length > 0 && iface.children[0].children.length > 0)
+  ) {
+    return false
+  }
+  const imported = ctx.program.importNamed(iface.text)
+  return (
+    imported !== null && imported.specifier === COMPACT_SPECIFIER && isCompactExport(imported.importedName)
+  )
+}
+
+/** Whether the class `decl` writes `implements Compact` (WP48). `Wide` marks nothing yet. */
+export const declaresCompact = (ctx: CheckContext, decl: Node): boolean => {
+  if (decl.kind !== NodeKind.Class) {
+    return false
+  }
+  for (const iface of decl.children[2].children) {
+    if (namesCompact(ctx, iface)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether the heritage entry `iface` names `Compact` itself, not `Wide`. */
+const namesCompact = (ctx: CheckContext, iface: Node): boolean => {
+  if (!namesCompactMarker(ctx, iface)) {
+    return false
+  }
+  const imported = ctx.program.importNamed(iface.text)
+  return imported !== null && imported.importedName === "Compact"
+}
+
+/**
+ * WP48: a compact class holds no `Secret`, whose wipe reads the payload
+ * through the pointer the field holds (`src/emit-secret.ts`). The two
+ * `declare class` refusals sit in `collectLayoutMembers` and
+ * `collectLayoutField`, where the C-layout checks would otherwise answer first.
+ */
+export const checkCompactClass = (ctx: CheckContext, info: StructInfo): void => {
+  if (!info.compact) {
+    return
+  }
+  const secret = secretFieldOf(ctx.table, info)
+  if (secret !== null) {
+    ctx.error(secret.decl.children[1], compactSecretMessage(info.name, secret.name))
+  }
+}
+
+/**
+ * WP48: a generic class cannot implement `Compact` yet. Its instantiations
+ * are laid out per type argument and keep full pointers (`computeLayout`
+ * links only a non-generic class's fields), so the marker would compress
+ * nothing; refusing it says so once, at the declaration.
+ */
+export const refuseCompactTemplate = (ctx: CheckContext, decl: Node): void => {
+  if (declaresCompact(ctx, decl)) {
+    ctx.error(decl.children[0], compactTemplateMessage(decl.children[0].text))
+  }
+}
+
+const compactTemplateMessage = (name: string): string =>
+  `\`${name}\` is generic, and a generic class cannot implement \`Compact\` in this version: its links would stay full pointers; drop the type parameters or the marker`
+
+const compactLayoutMessage = (name: string): string =>
+  `\`${name}\` is a \`declare class\`, which C lays out with a pointer-wide slot per link, so it cannot implement \`Compact\`; drop the marker`
+
+const compactLayoutFieldMessage = (owner: string, field: string, target: string): string =>
+  `Field \`${field}\` of \`declare class\` \`${owner}\` holds the compact class \`${target}\`, whose links C would read as pointers; a \`declare class\` holds no object of a class that implements \`Compact\``
+
+const compactSecretMessage = (owner: string, field: string): string =>
+  `\`${owner}\` implements \`Compact\` and holds the \`Secret\` field \`${field}\`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement \`Compact\`; keep the secret in a class of its own that does not`
 
 /**
  * The fields, layout, methods and constructor of a declared struct.
@@ -1140,6 +1298,11 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         // an identifier and says this, so stage1 says it where its own grammar
         // puts the same mistake.
         ctx.error(iface, "`implements` must name a declared interface")
+        continue
+      }
+      // A `nish:compact` marker has no fields to check as a prefix: it picks
+      // the class's layout, marked before pass 1b (`declaresCompact`).
+      if (namesCompactMarker(ctx, iface)) {
         continue
       }
       const template = ctx.program.structTemplate(iface.text)
@@ -1245,6 +1408,7 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
     // shared across the modules of a compilation, so marking the one here is
     // what makes every module lay `I[]` out the same way.
     iface.implemented = true
+    iface.compactImplementer = iface.compactImplementer || cls.compact
     let i = 0
     while (i < iface.fields.length) {
       const want = iface.fields[i]

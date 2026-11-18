@@ -383,16 +383,22 @@ const build = async (compiler, prog, dir, reference) => {
     return `compile: exit ${cc.status}\n${cc.stderr}`
   }
   const threads = prog.args.includes("--threads")
-  const rt = runtimeObjects(threads ? ["-DNISH_THREADS=1"] : [])
+  const lls = fs
+    .readdirSync(ir)
+    .filter((f) => f.endsWith(".ll"))
+    .map((f) => path.join(ir, f))
+  // WP48: a module with a compact class references `@nish_arena_range_abi`,
+  // which only the range runtime defines, as `tests/run.js` links it.
+  const range = lls.some((f) => fs.readFileSync(f, "utf8").includes("@nish_arena_range_abi"))
+  const rt = runtimeObjects([
+    ...(range ? ["-DNISH_ARENA_RANGE=1"] : []),
+    ...(threads ? ["-DNISH_THREADS=1"] : []),
+  ])
   if (rt.error !== null) {
     return rt.error
   }
   const driverObject = rt.objects[rt.objects.length - 1]
   const runtime = rt.objects.slice(0, -1)
-  const lls = fs
-    .readdirSync(ir)
-    .filter((f) => f.endsWith(".ll"))
-    .map((f) => path.join(ir, f))
   const driver = prog.driver === null ? [] : [prog.driver === DRIVER_C ? driverObject : prog.driver]
   const link = await run(
     "clang",

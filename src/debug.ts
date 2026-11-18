@@ -210,11 +210,14 @@ export class DebugInfo {
   typeRefs: string[]
   /** The `DISubprogram` of the function being emitted: the scope of every location and variable. */
   subprogram: string
+  /** A pointer's width in bits: 32 under wasm32's `p:32:32`, 64 natively, as `computeLayout` lays it out. */
+  pointerBits: i32
   /** Whether that function is a reference's dispatcher, whose every location is line 0 (WP51 §5.3). */
   synthetic: boolean
 
-  constructor(module: IRModule, program: CheckedProgram, table: TypeTable) {
+  constructor(module: IRModule, program: CheckedProgram, table: TypeTable, pointerBits: i32) {
     this.module = module
+    this.pointerBits = pointerBits
     this.program = program
     this.table = table
     this.source = program.source
@@ -405,7 +408,9 @@ export class DebugInfo {
   }
 
   pointerTo(base: string): string {
-    return this.module.addMetadata(`!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: 64)`)
+    return this.module.addMetadata(
+      `!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: ${this.pointerBits})`
+    )
   }
 
   /** One `DW_TAG_member`; an empty `file` is a member with no declaration to point at. */
@@ -459,8 +464,15 @@ export class DebugInfo {
         )
         continue
       }
+      if (f.link) {
+        // WP48: a compact class's link is a 32-bit offset, not a pointer;
+        // until stage 2b's pretty-printers, a debugger shows the raw offset.
+        members.push(this.member(f.name, ref, this.typeRef(T_U32), 32, f.offset * 8, file, line))
+        continue
+      }
       const base = this.typeRef(f.type)
-      members.push(this.member(f.name, ref, base, bitsOfIn(this.table, f.type), f.offset * 8, file, line))
+      const bits = this.table.isPointerValue(f.type) ? this.pointerBits : bitsOfIn(this.table, f.type)
+      members.push(this.member(f.name, ref, base, bits, f.offset * 8, file, line))
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
@@ -522,7 +534,7 @@ export class DebugInfo {
     const ref = this.module.reserveMetadata()
     const members: string[] = []
     members.push(this.member("len", ref, this.typeRef(T_I64), 64, 0, "", 0))
-    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 64, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), this.pointerBits, 64, "", 0))
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
@@ -538,7 +550,7 @@ export class DebugInfo {
     const members: string[] = []
     members.push(this.member("len", ref, long, 64, 0, "", 0))
     members.push(this.member("cap", ref, long, 64, 64, "", 0))
-    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 128, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), this.pointerBits, 128, "", 0))
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,

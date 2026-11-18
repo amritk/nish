@@ -114,6 +114,9 @@ const buildStructNode = (emitter: Emitter, info: StructInfo): string => {
     // and `elementTbaa` tags, never through a field access of this class.
     if (!field.inline() && !field.boxed) {
       // Interned in stage0's order, so the two compilers number the nodes alike.
+      // A compact class's link (`field.link`, WP48) is an i32 offset yet still
+      // gets the pointer scalar node here; no access is tagged through these
+      // struct-path nodes, so give a link its own node before one is.
       members = `${members}, ${scalarNode(emitter, field.type)}, i64 ${field.offset}`
     }
     i = i + 1

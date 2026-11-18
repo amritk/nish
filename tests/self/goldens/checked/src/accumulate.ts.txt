@@ -27,7 +27,7 @@ function recordAccumulation(ctx: CheckContext, sig: FunctionSig, body: Node): vo
   sharedWrite: via tailKind
   escaping: body
   calls: FusionTable.record collectTailValues containsArrow nish_array_grow passesOnlyHeld signatureQualifies stepCall tailKind
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=signatureQualifies#0 tailKind#0 passesOnlyHeld#0 stepCall#0 stepCall#0
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=signatureQualifies#0 tailKind#0 passesOnlyHeld#0 stepCall#0 stepCall#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=signatureQualifies#1 tailKind#1 passesOnlyHeld#1 stepCall#1 stepCall#1
   pointer body: size=40 writesThrough=true captured=true passedTo=containsArrow#0 collectTailValues#0
   stackSites=3 stackLocals=3
@@ -54,7 +54,7 @@ function recordAccumulation(ctx: CheckContext, sig: FunctionSig, body: Node): vo
 function signatureQualifies(ctx: CheckContext, sig: FunctionSig): boolean -> @signatureQualifies
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.defaultOf FunctionSig.foreign FunctionSig.isAsync TypeTable.isRanged TypeTable.isResult hasCheckedSum isGenericFunction ownerQualifies
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer sig: size=200 writesThrough=false captured=false passedTo=ownerQualifies#0 FunctionSig.foreign#0 FunctionSig.isAsync#0 FunctionSig.defaultOf#0
   stackSites=0 stackLocals=0
   callee +0:6 ownerQualifies -> @ownerQualifies
@@ -103,7 +103,7 @@ function tailKind(ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
   sharedWrite: +0:7
   escaping: value
   calls: isPlainSum isStep nish_array_grow nish_panic_index tailKind
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=isPlainSum#0 isPlainSum#0 tailKind#0 tailKind#0 isStep#0
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=isPlainSum#0 isPlainSum#0 tailKind#0 tailKind#0 isStep#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=isPlainSum#1 isPlainSum#1 tailKind#1 tailKind#1 isStep#1
   pointer value: size=40 writesThrough=true captured=true
   pointer steps: size=0 writesThrough=true captured=false passedTo=tailKind#3 tailKind#3
@@ -121,7 +121,7 @@ function tailKind(ctx: CheckContext, sig: FunctionSig, value: Node, steps: Node[
 function isStep(ctx: CheckContext, sig: FunctionSig, node: Node): boolean -> @isStep
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isPlainSum isSelfCall isStable nish_panic_index nish_str_eq
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=isPlainSum#0 isPlainSum#0 isPlainSum#0 isSelfCall#0 isSelfCall#0 isStable#0
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=isPlainSum#0 isPlainSum#0 isPlainSum#0 isSelfCall#0 isSelfCall#0 isStable#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=isPlainSum#1 isPlainSum#1 isPlainSum#1 isSelfCall#1 isSelfCall#1
   pointer node: size=40 writesThrough=false captured=false passedTo=isPlainSum#2
   stackSites=0 stackLocals=0
@@ -136,7 +136,7 @@ function isStep(ctx: CheckContext, sig: FunctionSig, node: Node): boolean -> @is
 function stepCall(ctx: CheckContext, sig: FunctionSig, step: Node): Node -> @stepCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: isSelfCall nish_panic_index
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=isSelfCall#0
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=isSelfCall#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=isSelfCall#1
   pointer step: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -145,14 +145,14 @@ function stepCall(ctx: CheckContext, sig: FunctionSig, step: Node): Node -> @ste
 function isPlainSum(ctx: CheckContext, sig: FunctionSig, node: Node): boolean -> @isPlainSum
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer sig: size=200 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function isSelfCall(ctx: CheckContext, sig: FunctionSig, node: Node): boolean -> @isSelfCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.writtenArity hasSpread nish_panic_index nish_panic_overflow
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer sig: size=200 writesThrough=false captured=false passedTo=FunctionSig.writtenArity#0 FunctionSig.writtenArity#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -164,14 +164,14 @@ function isSelfCall(ctx: CheckContext, sig: FunctionSig, node: Node): boolean ->
 function isStable(ctx: CheckContext, node: Node): boolean -> @isStable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 local: Local | null (const)
 function passesOnlyHeld(ctx: CheckContext, sig: FunctionSig, call: Node): boolean -> @passesOnlyHeld
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isHeld nish_panic_index
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=isHeld#0 isHeld#0
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=isHeld#0 isHeld#0
   pointer sig: size=200 writesThrough=false captured=false passedTo=isHeld#1 isHeld#1
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -184,7 +184,7 @@ function isHeld(ctx: CheckContext, sig: FunctionSig, arg: Node, index: i32): boo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: isScalarArgument nish_panic_index
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer sig: size=200 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0

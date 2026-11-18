@@ -69,7 +69,7 @@ import { compatFeatureNames, compatHasFeature, compatKnownText } from "./compat"
 import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
-import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
+import { acceptsSidecars, ExternalFunction, externalFunctions, refuseCompactSidecars } from "./interop-abi"
 import { generateDts } from "./interop-dts"
 import { generateHeader } from "./interop-header"
 import { generateNapiShim, napiBridges } from "./interop-napi"
@@ -884,6 +884,8 @@ const commandMain = (): number => {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {
       opts.explainMemory = true
+    } else if (value === "--explain-layout") {
+      opts.explainLayout = true
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -1165,10 +1167,10 @@ const commandMain = (): number => {
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
-  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory)) {
+  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory || opts.explainLayout)) {
     let refused = productFlag.length > 0 ? productFlag : irFlag
     if (refused.length === 0) {
-      refused = "--explain-memory"
+      refused = opts.explainMemory ? "--explain-memory" : "--explain-layout"
     }
     console.error(
       `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
@@ -1276,8 +1278,14 @@ const commandMain = (): number => {
   // The retention warnings and the arena placements come from the body checks
   // and the whole-program facts, which `--emit-ast` never reaches, so there
   // would be nothing to deny or to write.
-  if (emitAst && (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory)) {
+  if (
+    emitAst &&
+    (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory || opts.explainLayout)
+  ) {
     let flag = opts.explainMemory ? "--explain-memory" : "--emit-arena"
+    if (opts.explainLayout && !opts.explainMemory) {
+      flag = "--explain-layout"
+    }
     if (opts.denyRetention) {
       flag = "--deny-retention"
     }
@@ -1285,11 +1293,10 @@ const commandMain = (): number => {
     return 2
   }
   // `--json` promises a stderr of diagnostic objects, one per line, and the
-  // memory report is prose.
-  if (json && opts.explainMemory) {
-    console.error(
-      "compile: `--explain-memory` prints a report for people, and --json keeps stderr to diagnostics"
-    )
+  // memory and layout reports are prose.
+  if (json && (opts.explainMemory || opts.explainLayout)) {
+    const flag = opts.explainMemory ? "--explain-memory" : "--explain-layout"
+    console.error(`compile: \`${flag}\` prints a report for people, and --json keeps stderr to diagnostics`)
     return 2
   }
   opts.capabilityReport = capabilitiesFile.length > 0
@@ -1475,6 +1482,9 @@ const commandMain = (): number => {
   if (opts.explainMemory) {
     console.error(compilation.explainMemoryText())
   }
+  if (opts.explainLayout) {
+    console.error(compilation.explainLayoutText())
+  }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last
   // thing on stderr before the program's own output.
@@ -1577,6 +1587,19 @@ const commandMain = (): number => {
     opts.emitNapiAsync.length > 0
   const fns: ExternalFunction[] = anySidecar ? externalFunctions(compilation) : []
   if (anySidecar && !acceptsSidecars(compilation, fns, cDeclared(compilation, fns))) {
+    report(compilation, json)
+    return 1
+  }
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link.
+  let hostFlag = ""
+  if (opts.emitHeader.length > 0) {
+    hostFlag = "--emit-header"
+  } else if (opts.emitNapi.length > 0) {
+    hostFlag = "--emit-napi"
+  } else if (opts.emitNapiAsync.length > 0) {
+    hostFlag = "--emit-napi-async"
+  }
+  if (hostFlag.length > 0 && !refuseCompactSidecars(compilation, fns, hostFlag)) {
     report(compilation, json)
     return 1
   }
@@ -2558,10 +2581,10 @@ const linkProgram = (
  * Whether a program has a compact class, a class whose references are 32-bit
  * offsets into the arena's reserved range (WP48, docs/wp48-ref32-classes.md
  * §3.1), so its binary must link the range runtime (`--arena-range`). Stage 1
- * ships that runtime and no compact class, so no program has one yet; stage 2
- * reads the rule here.
+ * ships that runtime; stage 2's `Compilation.emit` sets `compactLinks` when a module
+ * declares one on a target that compresses (not wasm32, not an ASAN build).
  */
-const hasCompactClass = (_compilation: Compilation): boolean => false
+const hasCompactClass = (compilation: Compilation): boolean => compilation.opts.compactLinks
 
 /**
  * The flags that pick `scripts/build.sh`'s recipe, the same for the link and

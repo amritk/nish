@@ -1400,6 +1400,64 @@ integers, and is an intrinsic emitted into the program, so it needs no runtime
 function and works wherever the program's IR does. Key material belongs in a
 `Secret`, and `secureZero` is for bytes that never were one.
 
+## Compact classes
+
+`class R implements Compact` (`import { Compact } from "nish:compact"`)
+stores every field typed exactly `R` or `R | null` — a *link*, in `R` itself
+or in any other class — as a 32-bit offset into the one address range the
+arena reserves, where a plain class stores a 64-bit pointer. A list or tree
+node of an `i32` and two links is 12 bytes instead of 24, so twice as many fit
+in a cache line.
+
+```ts
+import { Compact } from "nish:compact"
+
+class Cell implements Compact {
+  value: i32
+  next: Cell | null
+  constructor(value: i32, next: Cell | null) {
+    this.value = value
+    this.next = next
+  }
+}
+```
+
+- **Only a link moves.** A local, a parameter, a return, an array element, a
+  `Map` key or value, and a field whose type is a wider union all stay full
+  pointers. A load of a link widens it back to a pointer and a store narrows
+  it; what the program reads and prints is the same as without the marker
+  (`compact_list`).
+- **The class's own layout follows its fields.** A compact class whose fields
+  are all 4 bytes or narrower is 4-aligned and rounded to 4, so `Cell` is 8
+  bytes; one with a `string` or an `f64` keeps 8. Its objects are allocated
+  in the range and never on the stack.
+- **Where a pointer is already 4 bytes, nothing moves.** On wasm32
+  (`--profile wasi`, `--target wasm32`), in a page module built for the host
+  with `--emit-dts` (it runs on the wasm runtime, whose root trace reads each
+  link as a pointer: `compact_root_page`), and under `NISH_ASAN`, the marker
+  compiles to the IR the class has without it.
+- **The marker changes nothing under Node.** Type stripping removes the
+  `implements Compact` clause, and the `nish:compact` import resolves to the
+  frozen values `runtime/core.mjs` exports, so the program runs unmodified
+  there.
+- **A generic field instantiated as exactly a compact class is narrowed.**
+  `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
+  interface view of the field and its implementer agree on the layout.
+- **A compact class is refused where C, Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
+  `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
+  export whose signature holds one (NL4020, `compact_reject_export`); as a
+  `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
+  `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
+  through a full pointer (NL2797, `compact_reject_secret`); and as a generic
+  class, whose instantiations keep full-pointer links (NL2798,
+  `compact_reject_generic`).
+
+`Wide` is accepted and changes nothing yet; it is reserved for a class to
+refuse a compact layout the compiler would pick on its own.
+
+Reference: [`nish:compact`](../nish-compact.md).
+
 ## Regions: `nish:region`
 
 A region is memory a program frees when it says so: an arena of its own,

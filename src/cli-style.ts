@@ -82,6 +82,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--warn-portability", "", "warn where TypeScript would answer otherwise")
   menu.row("--no-warn-performance", "", "silence the performance warnings")
   menu.row("--explain-memory", "", "why loops and functions keep their memory")
+  menu.row("--explain-layout", "", "which classes the compact-class rule picks")
   menu.row("--capabilities", "", "print what the program can reach, on stderr")
 
   menu.section("Policy")

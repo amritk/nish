@@ -153,6 +153,15 @@ test is **data, not code**: a source file next to the output it must produce.
   Actions, so a local `npm test` still runs it, and a check reads `ci.yml` so
   each delegation cannot outlive the job it names. Do not delegate anything
   that is not already proved elsewhere in the same workflow run.
+- **A delegated-to job is a scoped lane, so its read set is part of the
+  claim.** `bootstrap` and `fuzz-smoke` skip their steps on a pull request
+  that changes nothing `scripts/ci-scope.mjs` says they read
+  ([docs/wp10-ci.md](../docs/wp10-ci.md#scoped-lanes)). A check that opens a
+  new file or tree, and is delegated, needs that path in its lane's `reads`;
+  `node tests/run.js ci.yml` fails when the `bootstrap` or `fuzz` lane would
+  skip a change to a file its check reads. A new top-level tree a lane reads
+  needs no edit: a path on no allowlist runs every lane. Run
+  `node tests/run.js ci-scope` after changing `scripts/ci-scope.mjs`.
 
 ## What every construct ships with
 

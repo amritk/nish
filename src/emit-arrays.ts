@@ -1767,7 +1767,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   fn.placeBlock(sumBodyBlock)
   const partPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, sumAt)
   const part = fn.emitValue(
-    `load i8*, i8** ${partPtr}${emitter.align8()}${valueSlotAccess(emitter, T_STRING)}`
+    `load i8*, i8** ${partPtr}${emitter.alignSuffix(T_STRING)}${valueSlotAccess(emitter, T_STRING)}`
   )
   const total = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`)
   const grown = fn.emitValue(`add i64 ${total}, ${stringLength(emitter, part)}`)
@@ -1811,7 +1811,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`)
   const itemPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, copyAt)
   const item = fn.emitValue(
-    `load i8*, i8** ${itemPtr}${emitter.align8()}${valueSlotAccess(emitter, T_STRING)}`
+    `load i8*, i8** ${itemPtr}${emitter.alignSuffix(T_STRING)}${valueSlotAccess(emitter, T_STRING)}`
   )
   const itemLen = stringLength(emitter, item)
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`)

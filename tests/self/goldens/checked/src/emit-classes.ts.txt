@@ -67,7 +67,7 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
   pointer emitter: size=424 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false passedTo=structTypeName#0
-  pointer field: size=80 writesThrough=false captured=false
+  pointer field: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 structTypeName -> @structTypeName
@@ -76,36 +76,94 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   escaping: receiver
-  calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue fieldTbaa nish_str_concat structFieldPointer
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
+  calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue decodeLink fieldTbaa nish_str_concat structFieldPointer
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 decodeLink#0 fieldTbaa#0 Emitter.alignSuffix#0
   pointer info: size=176 writesThrough=true captured=true passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=80 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer field: size=88 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
   local +1:9 ptr: string (const)
   callee +1:15 structFieldPointer -> @structFieldPointer
-  local +2:9 tbaa: string (const)
-  callee +2:16 fieldTbaa -> @fieldTbaa
-  callee +3:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +3:59 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +3:12 decodeLink -> @decodeLink
+  callee +3:36 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:9 tbaa: string (const)
+  callee +5:16 fieldTbaa -> @fieldTbaa
+  callee +6:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:59 Emitter.alignSuffix -> @Emitter.alignSuffix
 function storeField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo, value: string): void -> @storeField [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
-  escaping: receiver
-  calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit fieldTbaa nish_str_concat structFieldPointer
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
+  escaping: receiver value
+  calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit encodeLink fieldTbaa nish_str_concat structFieldPointer
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 encodeLink#0 fieldTbaa#0 Emitter.alignSuffix#0
   pointer info: size=176 writesThrough=true captured=true passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=80 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer field: size=88 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
   local +1:9 ptr: string (const)
   callee +1:15 structFieldPointer -> @structFieldPointer
-  local +2:9 tbaa: string (const)
-  callee +2:16 fieldTbaa -> @fieldTbaa
-  callee +3:3 IRFunction.emit -> @IRFunction.emit
-  callee +3:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +3:5 IRFunction.emit -> @IRFunction.emit
+  callee +3:34 encodeLink -> @encodeLink
+  local +6:9 tbaa: string (const)
+  callee +6:16 fieldTbaa -> @fieldTbaa
+  callee +7:3 IRFunction.emit -> @IRFunction.emit
+  callee +7:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+function decodeLink(emitter: Emitter, ty: string, slot: string): string -> @decodeLink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: IRFunction.emitValue loadRefBase nish_str_concat
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=loadRefBase#0
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 wide: string (const)
+  callee +1:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +2:9 bytes: string (const)
+  callee +2:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:9 base: string (const)
+  callee +6:16 loadRefBase -> @loadRefBase
+  local +7:9 at: string (const)
+  callee +7:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:9 object: string (const)
+  callee +8:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 isNull: string (const)
+  callee +9:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +10:10 IRFunction.emitValue -> @IRFunction.emitValue
+function encodeLink(emitter: Emitter, ty: string, value: string): string -> @encodeLink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: IRFunction.emitValue loadRefBase nish_str_concat
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=loadRefBase#0
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 address: string (const)
+  callee +1:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local +3:11 units: string (const)
+  callee +3:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:9 base: string (const)
+  callee +6:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:45 loadRefBase -> @loadRefBase
+  local +7:9 bytes: string (const)
+  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:9 units: string (const)
+  callee +8:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 offset: string (const)
+  callee +9:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +10:9 isNull: string (const)
+  callee +10:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:10 IRFunction.emitValue -> @IRFunction.emitValue
+function loadRefBase(emitter: Emitter): string -> @loadRefBase
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: Emitter.metadata IRFunction.emitValue nish_str_concat
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.metadata#0
+  stackSites=0 stackLocals=0
+  local +1:9 invariant: string (const)
+  callee +1:21 Emitter.metadata -> @Emitter.metadata
+  callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
 function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @allocate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitAlloca
@@ -118,24 +176,31 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @al
   callee +1:12 IRFunction.emitAlloca -> @IRFunction.emitAlloca
   callee +1:54 structTypeName -> @structTypeName
   callee +3:10 arenaObject -> @arenaObject
+function compactInstance(emitter: Emitter, info: StructInfo): boolean -> @compactInstance
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer emitter: size=424 writesThrough=false captured=false
+  pointer info: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function arenaObject(emitter: Emitter, info: StructInfo): string -> @arenaObject
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
-  calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
-  pointer info: size=176 writesThrough=false captured=false passedTo=structTypeName#0
+  calls: Emitter.useRuntime IRFunction.emitValue compactInstance nish_str_concat nish_str_from_i32 structTypeName
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=compactInstance#0 Emitter.useRuntime#0
+  pointer info: size=176 writesThrough=false captured=false passedTo=compactInstance#1 structTypeName#0
   stackSites=0 stackLocals=0
-  local +0:9 raw: string (const)
-  callee +0:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +0:48 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +1:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +1:56 structTypeName -> @structTypeName
+  local +0:9 bump: string (const)
+  callee +0:16 compactInstance -> @compactInstance
+  local +1:9 raw: string (const)
+  callee +1:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +1:48 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:56 structTypeName -> @structTypeName
 function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @initializerConstant [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.stringConstant TypeTable.isFnRef TypeTable.stripNull floatText internalErrorFor isFloat nish_exit nish_panic_index nish_panic_overflow nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0
-  pointer field: size=80 writesThrough=false captured=false
+  pointer field: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 init: Node | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
@@ -169,7 +234,7 @@ function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: str
   sharedWrite: via storeField
   escaping: receiver
   calls: initializerConstant storeField
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=storeField#0 initializerConstant#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=storeField#0 initializerConstant#0
   pointer info: size=176 writesThrough=true captured=true passedTo=storeField#1
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
@@ -192,7 +257,7 @@ function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void -> @e
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: emitFieldInitializers internalErrorFor nish_exit
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=emitFieldInitializers#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=emitFieldInitializers#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
@@ -410,26 +475,27 @@ function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitField
   callee +22:7 storeField -> @storeField
   callee +22:50 guardKeep -> @guardKeep
   callee +25:5 storeField -> @storeField
-  local +30:9 ptr: string (const)
-  callee +30:15 structFieldPointer -> @structFieldPointer
-  local +31:9 ty: string (const)
-  callee +31:14 Emitter.llvm -> @Emitter.llvm
-  local +32:9 old: string (const)
-  callee +32:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +32:64 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +33:7 value: string (let)
-  callee +34:7 isBitwiseAssignment -> @isBitwiseAssignment
-  callee +35:13 emitBitwiseCombine -> @emitBitwiseCombine
-  local +37:11 rhs: string (const)
-  callee +37:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +38:13 isFloat -> @isFloat
-  callee +39:9 emitFloatArithmetic -> @emitFloatArithmetic
-  callee +39:38 withoutEquals -> @withoutEquals
-  callee +40:9 emitIntBinary -> @emitIntBinary
-  callee +42:11 compoundIntegerOpcode -> @compoundIntegerOpcode
-  callee +49:3 emitRangedStore -> @emitRangedStore
-  callee +50:3 IRFunction.emit -> @IRFunction.emit
-  callee +50:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +31:18 internalErrorFor -> @internalErrorFor
+  local +35:9 ptr: string (const)
+  callee +35:15 structFieldPointer -> @structFieldPointer
+  local +36:9 ty: string (const)
+  callee +36:14 Emitter.llvm -> @Emitter.llvm
+  local +37:9 old: string (const)
+  callee +37:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +37:64 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +38:7 value: string (let)
+  callee +39:7 isBitwiseAssignment -> @isBitwiseAssignment
+  callee +40:13 emitBitwiseCombine -> @emitBitwiseCombine
+  local +42:11 rhs: string (const)
+  callee +42:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +43:13 isFloat -> @isFloat
+  callee +44:9 emitFloatArithmetic -> @emitFloatArithmetic
+  callee +44:38 withoutEquals -> @withoutEquals
+  callee +45:9 emitIntBinary -> @emitIntBinary
+  callee +47:11 compoundIntegerOpcode -> @compoundIntegerOpcode
+  callee +54:3 emitRangedStore -> @emitRangedStore
+  callee +55:3 IRFunction.emit -> @IRFunction.emit
+  callee +55:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function structTypeDeclarations(emitter: Emitter): string[] -> @structTypeDeclarations [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rootClosureStructs
@@ -472,15 +538,15 @@ function fieldLLVMType(emitter: Emitter, field: FieldInfo): string -> @fieldLLVM
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm FieldInfo.inline TypeTable.refOf nish_str_concat nish_str_from_i32 structTypeName
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0
-  pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
   callee +2:12 structTypeName -> @structTypeName
-  callee +4:8 FieldInfo.inline -> @FieldInfo.inline
-  callee +5:12 Emitter.llvm -> @Emitter.llvm
-  local +7:9 slot: string (const)
-  callee +7:16 Emitter.llvm -> @Emitter.llvm
-  callee +7:29 TypeTable.refOf -> @TypeTable.refOf
+  callee +7:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +8:12 Emitter.llvm -> @Emitter.llvm
+  local +10:9 slot: string (const)
+  callee +10:16 Emitter.llvm -> @Emitter.llvm
+  callee +10:29 TypeTable.refOf -> @TypeTable.refOf
 function noteStruct(emitter: Emitter, referenced: string[], results: string[], headers: string[], type: i32): void -> @noteStruct
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

@@ -4,12 +4,15 @@ entry: src/structs.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emi
 import admitsSecretField from "./secret" -> function @admitsSecretField
 import checkHolderReleaser from "./secret" -> function @checkHolderReleaser
 import secretFieldMessage from "./secret" -> function @secretFieldMessage
+import secretFieldOf from "./secret" -> function @secretFieldOf
 import DISPOSE_METHOD from "./parallel" -> const DISPOSE_METHOD
 import disposeElsewhereMessage from "./parallel" -> function @disposeElsewhereMessage
 import isIteratorMethod from "./parallel" -> function @isIteratorMethod
 import isThreadsSource from "./parallel" -> function @isThreadsSource
 import markAtomicClass from "./parallel" -> function @markAtomicClass
 import CheckContext from "./context" -> struct CheckContext
+import COMPACT_SPECIFIER from "./nish-modules" -> const COMPACT_SPECIFIER
+import isCompactExport from "./nish-modules" -> function @isCompactExport
 import JSON_OPTIONS from "./json-typed" -> const JSON_OPTIONS
 import checkJsonOptions from "./json-typed" -> function @checkJsonOptions
 import noteJsonOptions from "./json-typed" -> function @noteJsonOptions
@@ -64,13 +67,32 @@ import handleJsonMessage from "./handles" -> function @handleJsonMessage
 import isHandleFieldAnnotation from "./handles" -> function @isHandleFieldAnnotation
 const INLINE_HEADER_BYTES: i32 = 24
 const SLICE_BYTES: i32 = 16
-function sizeOfField(ctx: CheckContext, type: i32): i32 -> @sizeOfField
+function pointerBytes(ctx: CheckContext): i32 -> @pointerBytes
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer ctx: size=360 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function alignOfField(ctx: CheckContext, type: i32): i32 -> @alignOfField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.alignOf
-  pointer ctx: size=344 writesThrough=false captured=false
+  calls: TypeTable.alignWithPointer pointerBytes
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=pointerBytes#0
   stackSites=0 stackLocals=0
-  callee +0:60 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +0:3 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
+  callee +0:36 pointerBytes -> @pointerBytes
+function sizeOfField(ctx: CheckContext, type: i32): i32 -> @sizeOfField
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: alignOfField
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=alignOfField#0
+  stackSites=0 stackLocals=0
+  callee +0:60 alignOfField -> @alignOfField
+function paddingWidth(ctx: CheckContext, field: FieldInfo): i32 -> @paddingWidth
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: sizeOfField
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=sizeOfField#0
+  pointer field: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:20 sizeOfField -> @sizeOfField
 function roundUpTo(value: i32, align: i32): i32 -> @roundUpTo [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
@@ -80,84 +102,129 @@ function roundUpTo(value: i32, align: i32): i32 -> @roundUpTo [exported]
 function fieldAlign(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @fieldAlign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: pointer
-  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf TypeTable.stripNull
-  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
-  pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  calls: FieldInfo.inline TypeTable.alignWithPointer TypeTable.refOf
+  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
+  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
-  callee +4:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +10:8 FieldInfo.inline -> @FieldInfo.inline
-  callee +11:12 TypeTable.alignOf -> @TypeTable.alignOf
-  local +13:9 slot: i32 (const)
-  callee +13:16 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +13:30 TypeTable.refOf -> @TypeTable.refOf
+  callee +7:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +8:12 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
+  local +10:9 slot: i32 (const)
+  callee +10:16 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
+  callee +10:39 TypeTable.refOf -> @TypeTable.refOf
 function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @fieldWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: pointer
-  calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf TypeTable.stripNull fieldAlign nish_panic_overflow roundUpTo
-  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.alignOf#0 fieldAlign#0 TypeTable.alignOf#0 TypeTable.refOf#0
-  pointer field: size=80 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
+  calls: FieldInfo.inline TypeTable.alignWithPointer TypeTable.refOf fieldAlign nish_panic_overflow roundUpTo
+  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 fieldAlign#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
+  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
-  callee +4:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +10:8 FieldInfo.inline -> @FieldInfo.inline
-  callee +11:12 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +7:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +8:12 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
   local +13:9 align: i32 (const)
   callee +13:17 fieldAlign -> @fieldAlign
   local +14:9 stride: i32 (const)
-  callee +14:18 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +14:32 TypeTable.refOf -> @TypeTable.refOf
+  callee +14:18 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
+  callee +14:41 TypeTable.refOf -> @TypeTable.refOf
   local +15:9 slots: i32 (const)
   callee +15:17 roundUpTo -> @roundUpTo
   callee +16:10 roundUpTo -> @roundUpTo
+function isLinkType(ctx: CheckContext, type: i32): boolean -> @isLinkType
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: compactClassOf
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=compactClassOf#0
+  stackSites=0 stackLocals=0
+  callee +0:24 compactClassOf -> @compactClassOf
+function compactClassOf(ctx: CheckContext, type: i32): string | null -> @compactClassOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: StringSet.has TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
+  pointer ctx: size=360 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 inner: i32 (const)
+  callee +0:17 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +1:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local +4:9 name: string (const)
+  callee +4:16 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +5:10 StringSet.has -> @StringSet.has
 function computeLayout(ctx: CheckContext, info: StructInfo): i32 -> @computeLayout [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: fieldAlign fieldWidth nish_panic_overflow roundUpTo
-  pointer ctx: size=344 writesThrough=false captured=false
+  calls: fieldAlign fieldWidth isLinkType nish_panic_overflow pointerBytes roundUpTo
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=pointerBytes#0 isLinkType#0
   pointer info: size=176 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -8:9 pointer: i32 (const)
-  local -7:7 offset: i32 (let)
-  local -6:7 align: i32 (let)
-  local -5:7 used: i32 (let)
-  local -4:14 field: FieldInfo (const)
-  local -3:11 need: i32 (const)
-  callee -3:18 fieldAlign -> @fieldAlign
-  local -2:11 width: i32 (const)
-  callee -2:19 fieldWidth -> @fieldWidth
-  callee -1:14 roundUpTo -> @roundUpTo
-  callee +7:15 roundUpTo -> @roundUpTo
-  callee +9:10 roundUpTo -> @roundUpTo
+  local -5:9 pointer: i32 (const)
+  callee -5:19 pointerBytes -> @pointerBytes
+  local -4:7 offset: i32 (let)
+  local -3:7 align: i32 (let)
+  local -2:7 used: i32 (let)
+  local -1:14 field: FieldInfo (const)
+  callee +0:34 isLinkType -> @isLinkType
+  local +1:11 need: i32 (const)
+  callee +1:35 fieldAlign -> @fieldAlign
+  local +2:11 width: i32 (const)
+  callee +2:36 fieldWidth -> @fieldWidth
+  callee +3:14 roundUpTo -> @roundUpTo
+  callee +11:15 roundUpTo -> @roundUpTo
+  callee +13:10 roundUpTo -> @roundUpTo
+function narrowedSize(table: TypeTable, info: StructInfo, target: i32, wasm: boolean): i32 -> @narrowedSize [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: target
+  calls: fieldAlign fieldWidth isLinkTo nish_panic_overflow roundUpTo
+  pointer table: size=160 writesThrough=false captured=false passedTo=isLinkTo#0 fieldAlign#0 fieldWidth#0
+  pointer info: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 pointer: i32 (const)
+  local +1:7 offset: i32 (let)
+  local +2:7 align: i32 (let)
+  local +3:14 field: FieldInfo (const)
+  local +4:11 link: boolean (const)
+  callee +4:18 isLinkTo -> @isLinkTo
+  local +5:11 need: i32 (const)
+  callee +5:29 fieldAlign -> @fieldAlign
+  callee +6:14 roundUpTo -> @roundUpTo
+  callee +6:52 fieldWidth -> @fieldWidth
+  callee +11:10 roundUpTo -> @roundUpTo
+function isLinkTo(table: TypeTable, field: FieldInfo, target: i32): boolean -> @isLinkTo [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FieldInfo.inline TypeTable.stripNull
+  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
+  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  stackSites=0 stackLocals=0
+  callee +0:45 FieldInfo.inline -> @FieldInfo.inline
+  callee +0:63 TypeTable.stripNull -> @TypeTable.stripNull
 function layoutSize(ctx: CheckContext, fields: FieldInfo[], align: i32): i32 -> @layoutSize
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: align
-  calls: TypeTable.alignOf nish_panic_overflow roundUpTo sizeOfField
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=sizeOfField#0
+  calls: nish_panic_overflow paddingWidth roundUpTo
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=paddingWidth#0 paddingWidth#0
   pointer fields: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 offset: i32 (let)
   local +1:14 field: FieldInfo (const)
   callee +2:14 roundUpTo -> @roundUpTo
-  callee +2:32 TypeTable.alignOf -> @TypeTable.alignOf
-  callee +2:65 sizeOfField -> @sizeOfField
+  callee +2:32 paddingWidth -> @paddingWidth
+  callee +2:60 paddingWidth -> @paddingWidth
   callee +4:10 roundUpTo -> @roundUpTo
 function widestFirst(ctx: CheckContext, fields: FieldInfo[], align: i32): FieldInfo[] -> @widestFirst
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: align
-  calls: TypeTable.alignOf nish_array_grow
-  pointer ctx: size=344 writesThrough=false captured=false
+  calls: nish_array_grow paddingWidth
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=paddingWidth#0
   pointer fields: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 sorted: FieldInfo[] (const)
   local +1:7 width: i32 (let)
   local +3:16 field: FieldInfo (const)
-  callee +4:11 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +4:11 paddingWidth -> @paddingWidth
 function leastPaddingFirst(ctx: CheckContext, fields: FieldInfo[], start: i32): FieldInfo[] -> @leastPaddingFirst
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: fields start
-  calls: TypeTable.alignOf nish_array_grow nish_panic_overflow roundUpTo sizeOfField
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=sizeOfField#0
+  calls: nish_array_grow nish_panic_overflow paddingWidth roundUpTo
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=paddingWidth#0 paddingWidth#0
   pointer fields: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 order: FieldInfo[] (const)
@@ -170,16 +237,16 @@ function leastPaddingFirst(ctx: CheckContext, fields: FieldInfo[], start: i32): 
   local +10:9 index: i32 (let)
   local +11:16 field: FieldInfo (const)
   local +12:13 alignment: i32 (const)
-  callee +12:25 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +12:25 paddingWidth -> @paddingWidth
   local +13:13 pad: i32 (const)
   callee +13:19 roundUpTo -> @roundUpTo
-  callee +26:35 sizeOfField -> @sizeOfField
+  callee +26:35 paddingWidth -> @paddingWidth
   local +27:11 next: FieldInfo[] (const)
   local +29:16 field: FieldInfo (const)
 function spelled(ctx: CheckContext, info: StructInfo): string -> @spelled
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:66 TypeTable.typeName -> @TypeTable.typeName
@@ -193,8 +260,8 @@ function declaredFieldCount(iface: StructInfo): i32 -> @declaredFieldCount
 function reportWastefulPadding(ctx: CheckContext, info: StructInfo, floor: i32, prefix: StructInfo | null): void -> @reportWastefulPadding
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CheckContext.performance CheckedProgram.structArguments TypeTable.alignOf TypeTable.typeName declaredFieldCount layoutSize leastPaddingFirst nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 roundUpTo sizeOfField spelled widestFirst
-  pointer ctx: size=344 writesThrough=false captured=false passedTo=sizeOfField#0 widestFirst#0 leastPaddingFirst#0 layoutSize#0 spelled#0 CheckContext.performance#0 spelled#0
+  calls: CheckContext.performance CheckedProgram.structArguments TypeTable.typeName declaredFieldCount layoutSize leastPaddingFirst nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 paddingWidth roundUpTo spelled widestFirst
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=paddingWidth#0 paddingWidth#0 widestFirst#0 leastPaddingFirst#0 layoutSize#0 spelled#0 CheckContext.performance#0 spelled#0
   pointer info: size=176 writesThrough=false captured=false passedTo=spelled#1
   pointer prefix: size=176 writesThrough=false captured=false passedTo=declaredFieldCount#0 spelled#1
   stackSites=2 stackLocals=2
@@ -206,8 +273,8 @@ function reportWastefulPadding(ctx: CheckContext, info: StructInfo, floor: i32, 
   local -6:7 prefixEnd: i32 (let)
   local -5:14 field: FieldInfo (const)
   callee -2:19 roundUpTo -> @roundUpTo
-  callee -2:40 TypeTable.alignOf -> @TypeTable.alignOf
-  callee -2:73 sizeOfField -> @sizeOfField
+  callee -2:40 paddingWidth -> @paddingWidth
+  callee -2:68 paddingWidth -> @paddingWidth
   local +3:9 suffix: FieldInfo[] (const)
   callee +3:32 widestFirst -> @widestFirst
   callee +3:69 leastPaddingFirst -> @leastPaddingFirst
@@ -234,7 +301,7 @@ function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructInfo | n
   sharedWrite: via CheckContext.error
   escaping: kind
   calls: CheckContext.error CheckedProgram.addStruct StringMap.has StringSet.add StructInfo.constructor TypeTable.structOf declareHandle isExported nish_alloc_struct nish_panic_index nish_str_at nish_str_concat
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 declareHandle#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 declareHandle#0 CheckContext.error#0 CheckContext.error#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 StructInfo.constructor#4 isExported#0 declareHandle#2
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -262,7 +329,7 @@ function declareHandle(ctx: CheckContext, info: StructInfo, decl: Node): void ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: CheckContext.error handleHeaderMessage isHandleFieldAnnotation nish_panic_index
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer info: size=176 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -276,7 +343,7 @@ function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: want
   calls: TypeTable.isFnRef TypeTable.isNullable TypeTable.stripNull nish_panic_index nish_str_eq
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 number: i32 (const)
@@ -289,8 +356,8 @@ function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, w
   sharedWrite: +0:3
   escaping: notLiteral
   calls: CheckContext.error CheckContext.errorAtProperty CheckedProgram.enumNamed EnumInfo.hasMember EnumInfo.memberValue TypeTable.assignable TypeTable.isEnumMemberType TypeTable.memberValue TypeTable.refOf TypeTable.typeName memberSlotMessage nish_panic_index nish_str_concat
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtProperty#0 CheckContext.error#0 memberSlotMessage#0 CheckContext.error#0
-  pointer field: size=80 writesThrough=true captured=false
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtProperty#0 CheckContext.error#0 memberSlotMessage#0 CheckContext.error#0
+  pointer field: size=88 writesThrough=true captured=false
   pointer init: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.errorAtProperty#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   local -11:9 receiver: Node (const)
@@ -317,8 +384,8 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
   sharedWrite: via checkEnumInitializer
   escaping: notLiteral what
   calls: CheckContext.error TypeTable.assignable TypeTable.isHostHandle TypeTable.isRanged TypeTable.typeName checkEnumInitializer checkNumericLiteral isNumeric literalInitializerType nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkNumericLiteral#0
-  pointer field: size=80 writesThrough=true captured=false passedTo=checkEnumInitializer#1
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkNumericLiteral#0
+  pointer field: size=88 writesThrough=true captured=false passedTo=checkEnumInitializer#1
   pointer init: size=40 writesThrough=false captured=false passedTo=checkEnumInitializer#2 literalInitializerType#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkNumericLiteral#1 checkNumericLiteral#4
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -342,7 +409,7 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.holdsSecret TypeTable.stripNull admitsSecretField annotationSpelling checkLiteralInitializer deferExportedLayout handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer rejectStoredMask resolveType secretFieldMessage spelled
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectStoredMask#0 deferExportedLayout#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkLiteralInitializer#0
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectStoredMask#0 deferExportedLayout#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkLiteralInitializer#0
   pointer owner: size=176 writesThrough=true captured=false passedTo=kindWord#0 spelled#1 noteJsonOptions#1 StructInfo.hasMember#0 kindWord#0 spelled#1 admitsSecretField#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=noteJsonOptions#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
@@ -386,7 +453,7 @@ function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 isStatic: boolean (const)
@@ -398,7 +465,7 @@ function collectHandleDispose(ctx: CheckContext, owner: StructInfo, decl: Node):
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_panic_index nish_str_concat nish_str_eq rejectMemberModifiers spelled
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=spelled#0 CheckContext.error#0 rejectMemberModifiers#0
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=spelled#0 CheckContext.error#0 rejectMemberModifiers#0
   pointer owner: size=176 writesThrough=false captured=false passedTo=spelled#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=rejectMemberModifiers#1
   stackSites=0 stackLocals=0
@@ -411,7 +478,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.error StringMap.set StructInfo.hasMember collectHandleDispose collectMethodSignature declareMethodTemplate disposeElsewhereMessage isGenericFunction isIteratorMethod isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq rejectMemberModifiers spelled
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.error#0 spelled#0 collectHandleDispose#0 spelled#0 CheckContext.error#0 rejectMemberModifiers#0 CheckContext.error#0 declareMethodTemplate#0 collectMethodSignature#0
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=CheckContext.error#0 spelled#0 collectHandleDispose#0 spelled#0 CheckContext.error#0 rejectMemberModifiers#0 CheckContext.error#0 declareMethodTemplate#0 collectMethodSignature#0
   pointer owner: size=176 writesThrough=true captured=true passedTo=spelled#1 collectHandleDispose#1 spelled#1 StructInfo.hasMember#0 declareMethodTemplate#1 collectMethodSignature#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=collectHandleDispose#2 isIteratorMethod#0 rejectMemberModifiers#1 CheckContext.error#1 isGenericFunction#0 declareMethodTemplate#2 collectMethodSignature#2
   stackSites=0 stackLocals=0
@@ -439,7 +506,7 @@ function collectMethodSignature(ctx: CheckContext, owner: StructInfo, decl: Node
   sharedWrite: via collectParams
   escaping: owner shownName symbol
   calls: FunctionSig.constructor annotationSpelling collectParams deferExportedLayout nish_alloc_struct nish_panic_index rejectForeignPointer rejectStoredMask resolveType
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=collectParams#0 resolveType#1 annotationSpelling#0 rejectForeignPointer#0 rejectStoredMask#0 deferExportedLayout#0
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=collectParams#0 resolveType#1 annotationSpelling#0 rejectForeignPointer#0 rejectStoredMask#0 deferExportedLayout#0
   pointer owner: size=176 writesThrough=true captured=true
   pointer decl: size=40 writesThrough=true captured=true passedTo=FunctionSig.constructor#3
   stackSites=0 stackLocals=0
@@ -457,7 +524,7 @@ function declareMethodTemplate(ctx: CheckContext, owner: StructInfo, decl: Node)
   sharedWrite: +0:3
   escaping: owner
   calls: CheckedProgram.methodConstraintList StringMap.set TemplateInfo.constructor collectTypeParamNames nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat spelled
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=spelled#0 TemplateInfo.constructor#4
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=spelled#0 TemplateInfo.constructor#4
   pointer owner: size=176 writesThrough=true captured=true passedTo=spelled#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=TemplateInfo.constructor#2 collectTypeParamNames#0 CheckedProgram.methodConstraintList#1
   stackSites=0 stackLocals=0
@@ -473,7 +540,7 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
   sharedWrite: +0:3
   escaping: owner
   calls: CheckContext.error FunctionSig.constructor collectParams nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat rejectMemberModifiers spelled
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 rejectMemberModifiers#0 collectParams#0
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 rejectMemberModifiers#0 collectParams#0
   pointer owner: size=176 writesThrough=true captured=true passedTo=spelled#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 rejectMemberModifiers#1 FunctionSig.constructor#3
   stackSites=0 stackLocals=0
@@ -503,28 +570,32 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
 function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectLayoutField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat resolveType
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 collectStructMembers#0 CheckContext.error#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers compactClassOf compactLayoutFieldMessage isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat resolveType
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 collectStructMembers#0 compactClassOf#0 CheckContext.error#0 CheckContext.error#0
   pointer owner: size=176 writesThrough=false captured=false passedTo=StructInfo.hasMember#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -56:9 name: string (const)
-  local -55:9 what: string (const)
-  callee -54:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -53:5 CheckContext.error -> @CheckContext.error
-  callee -49:5 CheckContext.error -> @CheckContext.error
-  callee -42:5 CheckContext.error -> @CheckContext.error
-  local -36:9 annotation: Node (const)
-  local -35:9 before: i32 (const)
-  local -34:9 type: i32 (const)
-  callee -34:16 resolveType -> @resolveType
-  callee -29:5 CheckContext.error -> @CheckContext.error
-  local -21:9 nested: StructInfo | null (const)
-  callee -21:18 layoutClass -> @layoutClass
-  callee -18:7 CheckContext.error -> @CheckContext.error
-  callee -12:5 collectStructMembers -> @collectStructMembers
-  callee -11:15 isLayoutScalar -> @isLayoutScalar
-  callee -11:39 TypeTable.stripNull -> @TypeTable.stripNull
+  local -61:9 name: string (const)
+  local -60:9 what: string (const)
+  callee -59:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -58:5 CheckContext.error -> @CheckContext.error
+  callee -54:5 CheckContext.error -> @CheckContext.error
+  callee -47:5 CheckContext.error -> @CheckContext.error
+  local -41:9 annotation: Node (const)
+  local -40:9 before: i32 (const)
+  local -39:9 type: i32 (const)
+  callee -39:16 resolveType -> @resolveType
+  callee -34:5 CheckContext.error -> @CheckContext.error
+  local -26:9 nested: StructInfo | null (const)
+  callee -26:18 layoutClass -> @layoutClass
+  callee -23:7 CheckContext.error -> @CheckContext.error
+  callee -17:5 collectStructMembers -> @collectStructMembers
+  callee -16:15 isLayoutScalar -> @isLayoutScalar
+  callee -16:39 TypeTable.stripNull -> @TypeTable.stripNull
+  local -15:11 target: string | null (const)
+  callee -15:20 compactClassOf -> @compactClassOf
+  callee -13:7 CheckContext.error -> @CheckContext.error
+  callee -13:35 compactLayoutFieldMessage -> @compactLayoutFieldMessage
   callee -10:5 CheckContext.error -> @CheckContext.error
   callee -8:29 TypeTable.typeName -> @TypeTable.typeName
   local -4:9 field: FieldInfo (const)
@@ -533,23 +604,88 @@ function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): v
 function collectLayoutMembers(ctx: CheckContext, info: StructInfo): void -> @collectLayoutMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error collectLayoutField computeLayout nish_panic_index nish_str_concat
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.error#0 collectLayoutField#0 CheckContext.error#0 computeLayout#0
+  calls: CheckContext.error collectLayoutField compactLayoutMessage computeLayout namesCompact nish_panic_index nish_str_concat
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=CheckContext.error#0 namesCompact#0 collectLayoutField#0 CheckContext.error#0 computeLayout#0
   pointer info: size=176 writesThrough=true captured=false passedTo=collectLayoutField#1 computeLayout#1
   stackSites=0 stackLocals=0
   local -1:9 decl: Node (const)
   local +2:11 clause: Node (const)
   callee +3:5 CheckContext.error -> @CheckContext.error
-  local +9:14 member: Node (const)
-  callee +11:7 collectLayoutField -> @collectLayoutField
-  local +15:11 word: string (let)
-  callee +21:7 CheckContext.error -> @CheckContext.error
-  callee +27:3 computeLayout -> @computeLayout
+  callee +5:7 namesCompact -> @namesCompact
+  callee +6:11 compactLayoutMessage -> @compactLayoutMessage
+  local +11:14 member: Node (const)
+  callee +13:7 collectLayoutField -> @collectLayoutField
+  local +17:11 word: string (let)
+  callee +23:7 CheckContext.error -> @CheckContext.error
+  callee +29:3 computeLayout -> @computeLayout
+function namesCompactMarker(ctx: CheckContext, iface: Node): boolean -> @namesCompactMarker
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: CheckedProgram.importNamed isCompactExport nish_str_eq
+  pointer ctx: size=360 writesThrough=false captured=false
+  pointer iface: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 imported: ImportBinding | null (const)
+  callee +0:20 CheckedProgram.importNamed -> @CheckedProgram.importNamed
+  callee +2:70 isCompactExport -> @isCompactExport
+function declaresCompact(ctx: CheckContext, decl: Node): boolean -> @declaresCompact [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: namesCompact nish_panic_index
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=namesCompact#0
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 iface: Node (const)
+  callee +1:9 namesCompact -> @namesCompact
+function namesCompact(ctx: CheckContext, iface: Node): boolean -> @namesCompact
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: CheckedProgram.importNamed namesCompactMarker nish_str_eq
+  pointer ctx: size=360 writesThrough=false captured=false passedTo=namesCompactMarker#0
+  pointer iface: size=40 writesThrough=false captured=false passedTo=namesCompactMarker#1
+  stackSites=0 stackLocals=0
+  callee +0:8 namesCompactMarker -> @namesCompactMarker
+  local +3:9 imported: ImportBinding | null (const)
+  callee +3:20 CheckedProgram.importNamed -> @CheckedProgram.importNamed
+function checkCompactClass(ctx: CheckContext, info: StructInfo): void -> @checkCompactClass [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error compactSecretMessage nish_panic_index secretFieldOf
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer info: size=176 writesThrough=false captured=false passedTo=secretFieldOf#1
+  stackSites=0 stackLocals=0
+  local +0:9 secret: FieldInfo | null (const)
+  callee +0:18 secretFieldOf -> @secretFieldOf
+  callee +2:5 CheckContext.error -> @CheckContext.error
+  callee +2:40 compactSecretMessage -> @compactSecretMessage
+function refuseCompactTemplate(ctx: CheckContext, decl: Node): void -> @refuseCompactTemplate [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error compactTemplateMessage declaresCompact nish_panic_index
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=declaresCompact#0 CheckContext.error#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=declaresCompact#1
+  stackSites=0 stackLocals=0
+  callee +0:7 declaresCompact -> @declaresCompact
+  callee +1:5 CheckContext.error -> @CheckContext.error
+  callee +1:33 compactTemplateMessage -> @compactTemplateMessage
+function compactTemplateMessage(name: string): string -> @compactTemplateMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function compactLayoutMessage(name: string): string -> @compactLayoutMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function compactLayoutFieldMessage(owner: string, field: string, target: string): string -> @compactLayoutFieldMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function compactSecretMessage(owner: string, field: string): string -> @compactSecretMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @collectStructMembers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CheckContext.error CheckedProgram.struct CheckedProgram.structTemplate checkHolderReleaser checkJsonOptions collectConstructor collectField collectLayoutMembers collectMethod computeLayout declaredFieldCount instantiateWritten markAtomicClass nish_array_grow nish_panic_index nish_str_concat nish_str_index_of nish_str_index_of_from reportWastefulPadding spelled
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=collectLayoutMembers#0 CheckContext.error#0 spelled#0 CheckContext.error#0 instantiateWritten#0 CheckContext.error#0 CheckContext.error#0 collectField#0 collectMethod#0 collectConstructor#0 checkHolderReleaser#0 collectField#0 checkJsonOptions#0 computeLayout#0 reportWastefulPadding#0
+  calls: CheckContext.error CheckedProgram.struct CheckedProgram.structTemplate checkHolderReleaser checkJsonOptions collectConstructor collectField collectLayoutMembers collectMethod computeLayout declaredFieldCount instantiateWritten markAtomicClass namesCompactMarker nish_array_grow nish_panic_index nish_str_concat nish_str_index_of nish_str_index_of_from reportWastefulPadding spelled
+  pointer ctx: size=360 writesThrough=true captured=true passedTo=collectLayoutMembers#0 CheckContext.error#0 spelled#0 CheckContext.error#0 namesCompactMarker#0 instantiateWritten#0 CheckContext.error#0 CheckContext.error#0 collectField#0 collectMethod#0 collectConstructor#0 checkHolderReleaser#0 collectField#0 checkJsonOptions#0 computeLayout#0 reportWastefulPadding#0
   pointer info: size=176 writesThrough=true captured=true passedTo=collectLayoutMembers#1 spelled#1 collectField#1 collectMethod#1 collectConstructor#1 checkHolderReleaser#1 collectField#1 checkJsonOptions#1 markAtomicClass#1 computeLayout#1 reportWastefulPadding#1
   stackSites=0 stackLocals=0
   callee -20:5 collectLayoutMembers -> @collectLayoutMembers
@@ -560,27 +696,28 @@ function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @col
   callee -4:118 spelled -> @spelled
   local +3:16 iface: Node (const)
   callee +16:9 CheckContext.error -> @CheckContext.error
-  local +19:13 template: StructTemplateInfo | null (const)
-  callee +19:24 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
-  local +20:11 target: StructInfo | null (let)
-  callee +22:18 instantiateWritten -> @instantiateWritten
-  callee +27:9 CheckContext.error -> @CheckContext.error
-  callee +30:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +33:9 CheckContext.error -> @CheckContext.error
-  callee +37:30 declaredFieldCount -> @declaredFieldCount
-  callee +37:59 declaredFieldCount -> @declaredFieldCount
-  local +41:16 member: Node (const)
-  callee +43:9 collectField -> @collectField
-  callee +45:9 collectMethod -> @collectMethod
-  callee +47:9 collectConstructor -> @collectConstructor
-  callee +50:5 checkHolderReleaser -> @checkHolderReleaser
-  local +52:16 member: Node (const)
-  callee +54:9 collectField -> @collectField
-  callee +58:3 checkJsonOptions -> @checkJsonOptions
-  callee +59:3 markAtomicClass -> @markAtomicClass
-  local +60:9 floor: i32 (const)
-  callee +60:17 computeLayout -> @computeLayout
-  callee +62:3 reportWastefulPadding -> @reportWastefulPadding
+  callee +21:11 namesCompactMarker -> @namesCompactMarker
+  local +24:13 template: StructTemplateInfo | null (const)
+  callee +24:24 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  local +25:11 target: StructInfo | null (let)
+  callee +27:18 instantiateWritten -> @instantiateWritten
+  callee +32:9 CheckContext.error -> @CheckContext.error
+  callee +35:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +38:9 CheckContext.error -> @CheckContext.error
+  callee +42:30 declaredFieldCount -> @declaredFieldCount
+  callee +42:59 declaredFieldCount -> @declaredFieldCount
+  local +46:16 member: Node (const)
+  callee +48:9 collectField -> @collectField
+  callee +50:9 collectMethod -> @collectMethod
+  callee +52:9 collectConstructor -> @collectConstructor
+  callee +55:5 checkHolderReleaser -> @checkHolderReleaser
+  local +57:16 member: Node (const)
+  callee +59:9 collectField -> @collectField
+  callee +63:3 checkJsonOptions -> @checkJsonOptions
+  callee +64:3 markAtomicClass -> @markAtomicClass
+  local +65:9 floor: i32 (const)
+  callee +65:17 computeLayout -> @computeLayout
+  callee +67:3 reportWastefulPadding -> @reportWastefulPadding
 function markTemplateImplements(program: CheckedProgram, decl: Node): void -> @markTemplateImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -597,31 +734,31 @@ function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImpl
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error CheckedProgram.struct describeField nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 spelled
-  pointer ctx: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 spelled#0 spelled#0 describeField#0 spelled#0 describeField#0 spelled#0 CheckContext.error#0 spelled#0 spelled#0 describeField#0
+  pointer ctx: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0 spelled#0 spelled#0 describeField#0 spelled#0 describeField#0 spelled#0 CheckContext.error#0 spelled#0 spelled#0 describeField#0
   pointer cls: size=176 writesThrough=false captured=false passedTo=spelled#1 spelled#1 spelled#1
   stackSites=0 stackLocals=0
   local -15:14 name: string (const)
   local -10:11 iface: StructInfo | null (const)
   callee -10:19 CheckedProgram.struct -> @CheckedProgram.struct
-  local +1:9 i: i32 (let)
-  local +3:13 want: FieldInfo (const)
-  local +5:15 got: FieldInfo (const)
-  callee +10:9 CheckContext.error -> @CheckContext.error
-  callee +12:22 spelled -> @spelled
-  callee +12:66 spelled -> @spelled
-  callee +12:110 describeField -> @describeField
-  callee +12:143 spelled -> @spelled
-  callee +12:172 describeField -> @describeField
-  callee +12:204 spelled -> @spelled
-  callee +16:7 CheckContext.error -> @CheckContext.error
-  callee +18:20 spelled -> @spelled
-  callee +18:64 spelled -> @spelled
-  callee +18:105 describeField -> @describeField
+  local +2:9 i: i32 (let)
+  local +4:13 want: FieldInfo (const)
+  local +6:15 got: FieldInfo (const)
+  callee +11:9 CheckContext.error -> @CheckContext.error
+  callee +13:22 spelled -> @spelled
+  callee +13:66 spelled -> @spelled
+  callee +13:110 describeField -> @describeField
+  callee +13:143 spelled -> @spelled
+  callee +13:172 describeField -> @describeField
+  callee +13:204 spelled -> @spelled
+  callee +17:7 CheckContext.error -> @CheckContext.error
+  callee +19:20 spelled -> @spelled
+  callee +19:64 spelled -> @spelled
+  callee +19:105 describeField -> @describeField
 function describeField(ctx: CheckContext, field: FieldInfo): string -> @describeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
-  pointer ctx: size=344 writesThrough=false captured=false
-  pointer field: size=80 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
+  pointer field: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:23 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]
@@ -676,7 +813,7 @@ function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean -> @coerces
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from want
   calls: CheckedProgram.struct TypeTable.hasVariant TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.stripNull implementsDeclaration
-  pointer ctx: size=344 writesThrough=false captured=false
+  pointer ctx: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 target: i32 (const)
   callee +0:18 TypeTable.stripNull -> @TypeTable.stripNull

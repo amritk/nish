@@ -128,6 +128,22 @@ const hostTriple = (): string => {
 }
 
 /**
+ * Whether a compact class's links decode zero-based (WP48,
+ * docs/wp48-ref32-classes.md §4): `inttoptr(zext(o) << 2)`, which needs the
+ * range at stage 1's fixed Linux address. Every other target the range runs
+ * on (macOS) decodes against `@nish_ref_base`. `target` is `--target`'s
+ * argument, or the empty string for the machine the compiler runs on.
+ */
+export const zeroBasedLinks = (target: string): boolean => {
+  let triple = hostTriple()
+  if (target.length > 0) {
+    const resolved = resolveTarget(target)
+    triple = resolved === null ? "" : resolved.triple
+  }
+  return triple.endsWith("-linux-gnu")
+}
+
+/**
  * Resolve a `--target` argument: a supported triple, one of its aliases, or
  * `host`. Null for anything else, so the driver can list what it accepts.
  */

@@ -1325,6 +1325,73 @@ const reportUninstantiated = (
 }
 
 /**
+ * WP48: refuses a compact class in a build C or Node reads. Its links are
+ * 32-bit offsets no header, shim or host spells, so an exported function that
+ * takes or returns one is refused at its signature (`CompactInSignature`), and
+ * any other compact class of the program at its name, naming the flag: a host
+ * reaches it through an object it is handed all the same. One check, then, and
+ * two codes, because the signature is the line to change in the first case and
+ * the flag in the second. `flag` is the sidecar flag the build was given.
+ * True when the program has no compact class.
+ */
+export const refuseCompactSidecars = (
+  compilation: Compilation,
+  fns: ExternalFunction[],
+  flag: string
+): boolean => {
+  const reported = new StringSet()
+  for (const fn of fns) {
+    const sig = fn.sig
+    let held = compactHeld(fn.unit, sig.returnType)
+    let i = 0
+    while (held === null && i < sig.paramTypes.length) {
+      held = compactHeld(fn.unit, sig.paramTypes[i])
+      i = i + 1
+    }
+    if (held !== null) {
+      const at = sigNameNode(sig)
+      compilation.sink.report(
+        fn.unit.source,
+        at.start,
+        at.end,
+        `\`${sig.sourceName}\` is exported to C or Node and its signature holds \`${held.name}\`, which implements \`Compact\`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object`
+      )
+      reported.add(held.name)
+    }
+  }
+  for (const unit of compilation.modules) {
+    for (const info of unit.checker.program.structList) {
+      if (!info.compact || reported.has(info.name) || info.decl.kind !== NodeKind.Class) {
+        continue
+      }
+      reported.add(info.name)
+      const at = info.decl.children[0]
+      compilation.sink.report(
+        unit.source,
+        at.start,
+        at.end,
+        `\`${info.name}\` implements \`Compact\`, and \`${flag}\` describes the program to C or Node, which would read its 32-bit links as pointers; build without \`${flag}\`, or drop the marker`
+      )
+    }
+  }
+  return reported.size() === 0
+}
+
+/** The compact class `type` is, or is a nullable or array of, or null. */
+const compactHeld = (unit: ModuleUnit, type: i32): StructInfo | null => {
+  const table = unit.checker.ctx.table
+  let inner = type
+  while (inner >= 0 && (table.isNullable(inner) || table.isArray(inner))) {
+    inner = table.refOf(inner)
+  }
+  if (inner < 0 || !table.isStruct(inner)) {
+    return null
+  }
+  const info = unit.checker.program.struct(table.nameOf(inner))
+  return info !== null && info.compact ? info : null
+}
+
+/**
  * The name a clash diagnostic points at, or the declaration for a constructor,
  * which has none: `nameNode` in `src/compilation.ts`, for the same reason.
  */

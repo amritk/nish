@@ -150,8 +150,23 @@ if (asyncList === null) {
     `nish-modules.ts: \`nish:async\` exports \`${asyncList[1]}\`, not the operators and waits \`${ASYNC_EXPORTS}\` this check knows`
   )
 }
+// `nish:compact` (WP48) exports `Compact` and `Wide`, interfaces a class
+// implements to choose its link layout. They are types, not values: no call or
+// read reaches them, so they carry no row. The check is that the list is
+// exactly those two.
+const COMPACT_EXPORTS = "Compact, Wide"
+const compactList = /COMPACT_SPECIFIER\) \{\s*return "([^"]+)"/.exec(moduleExports)
+if (compactList === null) {
+  problems.push("nish-modules.ts: no `nish:compact` export list to read in `nishModuleExports`")
+} else if (compactList[1] !== COMPACT_EXPORTS) {
+  problems.push(
+    `nish-modules.ts: \`nish:compact\` exports \`${compactList[1]}\`, not the layout markers \`${COMPACT_EXPORTS}\` this check knows`
+  )
+}
+/** Whether `list` is the export list `found` matched. */
+const isList = (list, found) => found !== null && list.index === found.index + found[0].indexOf("return")
 const exportLists = [...moduleExports.matchAll(/return "([^"]+)"/g)].filter(
-  (list) => asyncList === null || list.index !== asyncList.index + asyncList[0].indexOf("return")
+  (list) => !isList(list, asyncList) && !isList(list, compactList)
 )
 if (exportLists.length === 0) {
   problems.push("nish-modules.ts: no export list to read in `nishModuleExports`")

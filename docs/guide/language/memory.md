@@ -248,6 +248,22 @@ This prints `10`. A child is added after the parent's last one, so the
 children stay in the order they were made, and the walk reads them in that
 order.
 
+A class that links to its own kind, as `Node` does, is what a later release
+will lay out in less memory by itself: its links in 4 bytes rather than 8,
+when the program is a native executable and makes the class in a loop or a
+recursive function. To see which of your classes that rule would pick, and
+the first test that refuses each of the others, build it with `--link` (or
+`nish run` it) and add `--explain-layout`. IR alone (`-o` with no `--link`)
+is refused at the first test, since a host may link it. For the program
+above it prints:
+
+```
+app.ts:1:7: layout: Node: 4 not made in a loop or recursion, 32 → 16 bytes
+explain-layout: 0 of 1 classes compact
+```
+
+Nothing uses the verdict yet: the flag changes no byte of what is built.
+
 Where some pass needs to reach a node's children by index, keep a count of
 them on the node, and fill its `Node[]` once, when the node is complete,
 rather than pushing to it as each child arrives.

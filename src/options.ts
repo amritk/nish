@@ -50,6 +50,15 @@ export class Options {
    */
   threads: boolean
   /**
+   * Whether this program stores its compact classes' links as 32-bit offsets
+   * into the arena's reserved range (WP48, docs/wp48-ref32-classes.md §4): a
+   * module declares one with `implements Compact` on a target that
+   * compresses. Set by `Compilation.emit` once every module is checked, since
+   * every module's inline bump then realigns to 8 and the binary links the
+   * range runtime. Off leaves the IR byte for byte what it was.
+   */
+  compactLinks: boolean
+  /**
    * The WP8 interop sidecars, each the path `--emit-header` / `--emit-dts` /
    * `--emit-napi` was given, or the empty string when it was not passed.
    * `--emit-dts` writes two files: the declarations, and the loader that
@@ -213,6 +222,13 @@ export class Options {
    */
   explainMemory: boolean
   /**
+   * `--explain-layout`: print, for every class, whether the compact-class rule
+   * of docs/wp48-ref32-classes.md §3.1 picks it, or the first of its tests that
+   * refuses it, with the size it has and would have
+   * (`Compilation.explainLayoutText`). It changes no byte of the IR.
+   */
+  explainLayout: boolean
+  /**
    * The root package's `"nish".noPanic` named at least one module, which puts
    * those modules in the scope `--deny-panics` puts all of them in. Set by
    * `Compilation` once it has read the manifest, before anything records.
@@ -323,6 +339,7 @@ export class Options {
     this.target = ""
     this.debugInfo = false
     this.threads = false
+    this.compactLinks = false
     this.emitHeader = ""
     this.emitDts = ""
     this.hosts = []
@@ -343,6 +360,7 @@ export class Options {
     this.denyRetention = false
     this.emitArena = ""
     this.explainMemory = false
+    this.explainLayout = false
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

@@ -49,6 +49,7 @@
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
 import { REGION_STD_SPECIFIER } from "./region"
+import { explainLayout, LayoutModule } from "./compact-rule"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
@@ -489,6 +490,8 @@ export class Compilation {
    * the fixpoint is the most expensive thing either of them asks for.
    */
   facts: FactsTable | null
+  /** WP48: every module's compact class names, shared (`CheckContext.compactNames`). */
+  compactNames: StringSet
   /** How many diagnostics Phase 0 reported, over every module loaded so far. */
   validationErrors: i32
   /**
@@ -573,6 +576,7 @@ export class Compilation {
     this.unreadableRoot = ""
     this.hostIdentities = new StringSet()
     this.hostRefused = false
+    this.compactNames = new StringSet()
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
@@ -717,6 +721,16 @@ export class Compilation {
           targets.push(index < 0 ? null : this.modules[index].checker.program)
         }
         unit.checker.bindTypeImports(targets)
+      }
+      i = i + 1
+    }
+    // WP48: every module's compact classes are marked before any module lays
+    // out a field: the entry module runs pass 1 first and may hold a link to
+    // a class one of its imports declares.
+    i = first
+    while (i < this.modules.length) {
+      if (!this.modules[i].refused) {
+        this.modules[i].checker.markCompact()
       }
       i = i + 1
     }
@@ -920,6 +934,13 @@ export class Compilation {
     checker.ctx.wasm = isWasmBuild(this.opts)
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
+    // WP48: a page module runs on the wasm runtime, whose root traces read
+    // each link as a pointer and which reserves no range, so its links stay
+    // full pointers, as on wasm32. `NISH_ASAN` is read from the environment,
+    // so setting it switches compression off for every compile in the process,
+    // matching the uncompressed runtime ASAN builds link.
+    checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
+    checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals
@@ -4208,6 +4229,22 @@ export class Compilation {
     return lines.toText()
   }
 
+  /**
+   * The `--explain-layout` report (`src/compact-rule.ts`): one line per class
+   * of every module, the standard library's marked, saying whether the
+   * compact-class rule picks it. It reads the checked programs and the laid-out
+   * structs and changes no byte of the IR.
+   */
+  explainLayoutText(): string {
+    const modules: LayoutModule[] = []
+    for (const unit of this.modules) {
+      modules.push(
+        new LayoutModule(unit.checker.program, isStdModule(this.libraryRoot(), unit.name, unit.path))
+      )
+    }
+    return explainLayout(this.opts, this.table, modules).text
+  }
+
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
   libraryRoot(): string {
     return this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
@@ -4378,6 +4415,21 @@ export class Compilation {
     }
   }
 
+  /** Whether a checked module lays out a compact class's links as offsets (`Options.compactLinks`). */
+  compressesLinks(): boolean {
+    for (const unit of this.modules) {
+      if (!unit.checker.ctx.compressLinks) {
+        continue
+      }
+      for (const info of unit.checker.program.structList) {
+        if (info.compact) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
     const facts = this.analyze()
@@ -4395,6 +4447,7 @@ export class Compilation {
       this.opts.sandboxNetRings = net && fact !== null && fact.ringListen ? this.netRings : 0
     }
     this.opts.panicSites = this.guardsPanics()
+    this.opts.compactLinks = this.compressesLinks()
     this.opts.rootSymbols = this.rootSymbols()
     const units = this.analysisUnits
     const stems = this.outputStems()

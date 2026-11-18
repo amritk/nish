@@ -67,6 +67,7 @@ import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
+import * as ciScope from "../scripts/ci-scope.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
@@ -189,6 +190,29 @@ const RUNTIME_C = [
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
 const DRIVER_C = path.join(root, "tests", "driver.c")
+
+/** Whether util-linux's `prlimit` is on the path, for `spawnFaulting`. */
+const HAS_PRLIMIT = spawnSync("prlimit", ["--version"], { stdio: "ignore" }).status === 0
+
+/**
+ * `spawnSync(exe, args, options)` for a program a check expects to die of a
+ * signal, run with `RLIMIT_CORE` at 1 byte so the kernel writes no core for
+ * it. A process that reserved the debug arena or the compact-class range
+ * dumps every page of the reservation: a 1 TiB core, and minutes of kernel
+ * time on a CI runner whose `core_pattern` pipes the core to a helper. A limit
+ * of 1 is the one the kernel reads as "no core" for a pipe too, where 0 would
+ * only stop a core file. Without `prlimit` the program runs as it is, and the
+ * first such run prints one `NOTE` line saying the cores are back.
+ */
+let warnedNoPrlimit = false
+const spawnFaulting = (exe, args, options) => {
+  if (HAS_PRLIMIT) return spawnSync("prlimit", ["--core=1:1", "--", exe, ...args], options)
+  if (!warnedNoPrlimit) {
+    warnedNoPrlimit = true
+    console.log("NOTE  no `prlimit` on the path: the checks that expect a fault run with this shell's core limit")
+  }
+  return spawnSync(exe, args, options)
+}
 
 /**
  * The C a case is linked against -- `runtime.c`, `runtime-os.c` and the shared
@@ -1247,10 +1271,15 @@ const runCase = async (name) => {
     // runtime is now a prebuilt object, the macro is also what picks *which*
     // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : []
+    // WP48: a module with a compact class references `@nish_arena_range_abi`,
+    // which only the range runtime defines (the CLI's `--arena-range`), so the
+    // link fails against the default objects rather than storing offsets from
+    // a range nothing reserved.
+    const range = fs.readFileSync(outLl, "utf8").includes("@nish_arena_range_abi") ? ["-DNISH_ARENA_RANGE=1"] : []
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const line = linkLine(outLl, {
       driver: hasEntry ? null : driver,
-      defines: threads,
+      defines: [...range, ...threads],
       libm: true,
     })
     if (line.error !== null) {
@@ -3485,14 +3514,14 @@ if (!only || only.startsWith("file_") || "file_wasm_stubs".includes(only)) {
     fs.writeFileSync(
       stubsTs,
       [
-        'export function openProbe(): i32 { return fileOpen("missing"); }',
-        "export function readProbe(): i32 {",
+        'export const openProbe = (): i32 => { return fileOpen("missing"); };',
+        "export const readProbe = (): i32 => {",
         "  const buf: u8[] = new Array<u8>(4);",
         "  const pos: i64 = 0;",
         "  return fileReadAt(3, buf, 0, 4, pos);",
-        "}",
-        "export function sizeProbe(): i64 { return fileSize(3); }",
-        "export function closeProbe(): i32 { return fileClose(3); }",
+        "};",
+        "export const sizeProbe = (): i64 => { return fileSize(3); };",
+        "export const closeProbe = (): i32 => { return fileClose(3); };",
         "",
       ].join("\n")
     )
@@ -5084,7 +5113,7 @@ if (dealtHere("diagnostics")) {
   const manySrc = path.join(buildDir, "diag_many.ts")
   fs.writeFileSync(
     manySrc,
-    Array.from({ length: 25 }, (_, i) => `function f${i}(a: number): number { return a + true; }`).join(
+    Array.from({ length: 25 }, (_, i) => `const f${i} = (a: number): number => { return a + true; };`).join(
       "\n"
     ) + "\n"
   )
@@ -5449,7 +5478,7 @@ if (dealtHere("diagnostics")) {
   const dbgSrc = path.join(buildDir, "dbg_main.ts")
   fs.writeFileSync(
     dbgSrc,
-    "function fib(n: number): number {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n\nexport function main(): number {\n  const x = fib(10);\n  return x - 55;\n}\n"
+    "const fib = (n: number): number => {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n};\n\nexport const main = (): number => {\n  const x = fib(10);\n  return x - 55;\n};\n"
   )
   const exe = path.join(buildDir, "dbg_main")
   const link = spawnSync(NISH, [dbgSrc, "-g", "--link", exe, "--profile", "debug"], {
@@ -5656,6 +5685,21 @@ if (dealtHere("performance")) {
         )
       ),
     gap.stderr
+  )
+
+  // WP48: a link of a compact class is a four-byte offset, so the warning
+  // measures it as one. `Spill` packs to 16 only with the link beside the
+  // `i32`; measured as a pointer no order would shrink it and the warning
+  // would say nothing. `Pair` has no gap in any order and stays quiet.
+  const compactPad = compile("perf_padding_compact", "perf_padding_compact_report.ll")
+  const compactPadLines = summaries(compactPad.stderr)
+  check(
+    "performance: the padding warning measures a compact class's link as four bytes, and names the order that packs it",
+    compactPad.status === 0 &&
+      compactPadLines.length === 1 &&
+      positions(compactPadLines) === "14:14" &&
+      compactPadLines[0].endsWith(padSentence("Spill", "weight: f64, next: Spill | null, count: i32")),
+    compactPad.stderr
   )
 
   const str = compile("perf_str_concat_loop", "perf_str.ll")
@@ -6415,7 +6459,7 @@ if (dealtHere("performance")) {
   const mixedSrc = path.join(buildDir, "perf_mixed.ts")
   fs.writeFileSync(
     mixedSrc,
-    'export function test(): number {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n}\n'
+    'export const test = (): number => {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n};\n'
   )
   const mixed = spawnSync(NISH, [mixedSrc, "-o", path.join(buildDir, "perf_mixed.ll")], {
     cwd: root,
@@ -6434,7 +6478,7 @@ if (dealtHere("performance")) {
     Array.from(
       { length: 25 },
       (_, i) =>
-        `export function f${i}(): number {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n}`
+        `export const f${i} = (): number => {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n};`
     ).join("\n") + "\n"
   )
   const many = spawnSync(NISH, [manySrc, "-o", path.join(buildDir, "perf_many.ll")], {
@@ -7590,6 +7634,19 @@ const runLinkProgram = async (name) => {
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
+  // A program that runs but whose `args` name a wasm32 target is linked and run
+  // as a native build of the same flags: a wasm32 module lays a class's pointer
+  // field out in 4 bytes (WP48 stage 6), and build.sh's clang replaces the
+  // module's datalayout with the host's, so a native link of wasm32 IR would
+  // write 8-byte pointers into objects allocated for 4-byte ones. The wasm32
+  // compile itself is still made, below, and must succeed. Only the two-token
+  // `--target wasm32` is recognised: it is the one form every wasm32 `args` in
+  // tests/link uses, and an `args` spelling `--target=wasm32` or `--profile wasi`
+  // would be linked natively as wasm32 IR, the mismatch above.
+  const targetAt = args.indexOf("--target")
+  const wasmRun =
+    targetAt >= 0 && String(args[targetAt + 1]).startsWith("wasm32") && !fs.existsSync(side("expected.err"))
+  const linkArgs = wasmRun ? args.filter((_, i) => i !== targetAt && i !== targetAt + 1) : args
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
   // This program's own directory: no other program in flight names it.
@@ -7607,7 +7664,7 @@ const runLinkProgram = async (name) => {
   // safely (CLI-5; see above).
   const r = await spawnAsync(
     NISH,
-    [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
+    [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs],
     { cwd: root }
   )
   const stderr = String(r.stderr)
@@ -7638,6 +7695,31 @@ const runLinkProgram = async (name) => {
     expect(`link/${name}: compiles and links`, false, stderr)
     return record
   }
+  if (wasmRun) {
+    const wasmDir = path.join(buildDir, "link", `${name}.wasm32`) + path.sep
+    // Named after the program, like `outDir`.
+    fs.rmSync(wasmDir, { recursive: true, force: true })
+    const w = await spawnAsync(NISH, [side("main.ts"), "-o", wasmDir, ...args], { cwd: root, encoding: "utf8" })
+    const wasmModules = w.status === 0 ? fs.readdirSync(wasmDir).filter((f) => f.endsWith(".ll")) : []
+    const rejected = []
+    for (const f of HAS_LLVM_AS ? wasmModules : []) {
+      const as = await spawnAsync("llvm-as", [path.join(wasmDir, f), "-o", "/dev/null"], { encoding: "utf8" })
+      if (as.status !== 0) {
+        rejected.push(`${f}: ${as.stderr}`)
+      }
+      // The verifier reads what llvm-as does not: a load's alignment against
+      // the wasm32 datalayout the module declares.
+      const v = HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(wasmDir, f)], { encoding: "utf8" }) : null
+      if (v !== null && v.status !== 0) {
+        rejected.push(`${f}: ${v.stderr}`)
+      }
+    }
+    expect(
+      `link/${name}: its wasm32 compile succeeds and llvm-as and opt -passes=verify accept its ${wasmModules.length} module(s)`,
+      w.status === 0 && wasmModules.length > 0 && rejected.length === 0,
+      w.status === 0 ? rejected.join("\n") : w.stderr
+    )
+  }
   if (DELEGATE_IR_CHECKS) {
     record.irDelegated = true
   } else {
@@ -7652,7 +7734,7 @@ const runLinkProgram = async (name) => {
     // compile (a function reference crosses an exported signature, which an
     // open build hands a host: WP51 §5.2), so its listing links too.
     const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...args, "--emit-panics", panicsFile], {
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile], {
       cwd: root,
       encoding: "utf8",
     })
@@ -7699,7 +7781,7 @@ const runLinkProgram = async (name) => {
       fs.rmSync(warnedDir, { recursive: true, force: true })
       const warned = await spawnAsync(
         NISH,
-        [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+        [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"],
         {
           cwd: root,
           encoding: "utf8",
@@ -8781,21 +8863,9 @@ if (dealtHere("selfHosting")) {
     )
   }
 
-  // The delegation above is a claim about ci.yml, so ci.yml is read for it on
-  // every run, local ones included: a `test` job that still asks for it while
-  // the `bootstrap` job no longer runs `--verify` would be a green run with
-  // the fixed point proved nowhere. Comment lines are left out, because a
-  // comment that mentions a flag is not a step that passes it.
-  const testJobText = ciJob(ciYmlText, "test")
-  const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
-  check(
-    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
-    testJobText !== "" &&
-      (!testJobText.includes("--delegate-fixed-point") ||
-        (/^\s+needs: seeds$/m.test(bootstrapJobText) &&
-          bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
-    `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
-  )
+  // The delegation above is a claim about ci.yml, read for it on every run
+  // with the sanitizers' twin, under "ci.yml: the `test` job delegates the
+  // fixed point" below: cheaply, and outside this section, which builds.
 
   // A sharded job runs `--shard "$SHARD/<n>"` over a `shard:` list,
   // and the two numbers are written apart. A list shorter than `n` is a green
@@ -8820,6 +8890,7 @@ if (dealtHere("selfHosting")) {
   // (build/test/simd/) or its kernels' lines run in the shard the group is
   // pinned to, or they read a file no step there wrote.
   const simdShard = DEALT_SECTIONS.simd.pinned
+  const testJobText = ciJob(ciYmlText, "test")
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
@@ -12956,12 +13027,17 @@ if (dealtHere("cryptoChecks")) {
   // tests/link/crypto_bcrypt_batch and the widths one to six of
   // tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
   // WASI: all three build for wasm32 and answer every case there as natively.
-  for (const [program, what] of [
-    ["crypto_bcrypt", "the bcrypt vectors"],
-    ["crypto_bcrypt_batch", "the bcrypt batch"],
-    ["crypto_bcrypt_width", "the bcrypt widths"],
+  // WP48: the compact-class programs build for wasm32 too, where a link stays
+  // a full 32-bit pointer (nothing to compress), and print what they print
+  // natively.
+  for (const [program, what, area] of [
+    ["crypto_bcrypt", "the bcrypt vectors", "bcrypt"],
+    ["crypto_bcrypt_batch", "the bcrypt batch", "bcrypt"],
+    ["crypto_bcrypt_width", "the bcrypt widths", "bcrypt"],
+    ["compact_modules", "the compact classes across modules", "compact"],
+    ["compact_json", "the compact JSON round trip", "compact"],
   ]) {
-    if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
+    if (only && ![program, area, "wasi"].some((name) => name.includes(only))) {
       continue
     }
     if (WASI_SYSROOT && has("wasm-ld")) {
@@ -15779,10 +15855,18 @@ if (dealtHere("arrayChecks")) {
         : []
     )
     // `nish_alloc_struct` is not declared but defined, `internal`, in each module
-    // that calls it (`src/runtime.ts`), so `--runtime-decls` has no line for it;
-    // its `define` line is its table entry, read the same way.
-    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_alloc_struct)\()/g)) {
-      runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+    // that calls it (`src/runtime.ts` writes it from a template), so
+    // `--runtime-decls` has no line for it; its `define` line in a module that
+    // allocates a class is its table entry, read the same way.
+    const allocLl = path.join(buildDir, "alloc_runtime_define.ll")
+    const allocIr = spawnSync(NISH, [path.join(casesDir, "acc_method.ts"), "-o", allocLl], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (allocIr.status === 0) {
+      for (const m of fs.readFileSync(allocLl, "utf8").matchAll(/^define internal (.*?@(nish_alloc_struct)\()/gm)) {
+        runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+      }
     }
     check(
       `--runtime-decls prints the runtime table (${runtimeByName.size} declarations)`,
@@ -15935,10 +16019,10 @@ if (dealtHere("arrayChecks")) {
           "  console.log(label);",
           "  return readStruct(localeconv());",
           "};",
-          "export function main(): i32 {",
+          "export const main = (): i32 => {",
           '  const lc = probe("x");',
           "  return lc.decimalPoint === lc.thousandsSep ? 1 : 0;",
-          "}",
+          "};",
           "",
         ].join("\n")
         const probeTs = path.join(buildDir, "alloc_probe_readStruct.ts")
@@ -17223,11 +17307,104 @@ if (dealtHere("runtimeChecks")) {
         ],
         { cwd: root, encoding: "utf8" }
       )
-      const debugRun = debugCc.status === 0 ? spawnSync(debugExe, [], { encoding: "utf8" }) : null
+      const debugRun = debugCc.status === 0 ? spawnFaulting(debugExe, [], { encoding: "utf8" }) : null
       check(
         `debug arena with the compact-class range${suffix}: a pointer kept across a release dies of SIGSEGV at the read`,
         debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
         debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
+      )
+    }
+  }
+
+  // ---- A compact class in a host page module (WP48 stage 2a) ----------------------------
+  // An `--emit-dts` compile for the host is a page module: it runs on the wasm
+  // runtime, whose root trace reads each link as a pointer and which reserves
+  // no range. tests/cases/compact_root_page built that way keeps its links as
+  // pointers and names no `@nish_arena_range_abi`.
+  if (!only || "compact page module".includes(only)) {
+    const dir = path.join(buildDir, "compact-page-host")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(
+      NISH,
+      [path.join(casesDir, "compact_root_page.ts"), "-o", `${dir}${path.sep}`, "--emit-dts", path.join(dir, "main.d.ts")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_root_page.ll"), "utf8") : ""
+    check(
+      "compact: a host `--emit-dts` page module keeps a compact class's links as pointers and reserves no range",
+      c.status === 0 && ll.includes("%struct.Node = type { i32, %struct.Node* }") && !ll.includes("nish_arena_range_abi"),
+      c.status !== 0 ? shown(c) : ll.split("\n").filter((line) => line.startsWith("%struct.Node")).join("\n")
+    )
+  }
+
+  // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
+  // A link is a 32-bit offset in the struct, so `-g` describes the member as
+  // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
+  // debugger would read past the field; the IR verifies.
+  if (!only || "compact debug".includes(only)) {
+    const dir = path.join(buildDir, "compact-debug")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(NISH, [path.join(casesDir, "compact_list.ts"), "-g", "-o", `${dir}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_list.ll"), "utf8") : ""
+    const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
+    const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
+    check(
+      "compact: -g describes Cell.next, a link, as a 32-bit unsigned member at offset 32",
+      member !== null &&
+        member[3] === "32" &&
+        member[4] === "32" &&
+        base !== null &&
+        base[1] === '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+      c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
+    )
+    if (has("opt") && c.status === 0) {
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(dir, "compact_list.ll")])
+      check("compact: opt -passes=verify accepts the -g IR of a compact class", v.status === 0, String(v.stderr))
+    }
+  }
+
+  // ---- A compact class under AddressSanitizer (WP48 stage 2a) ----------------------------
+  // The ASAN runtime (-DNISH_ASAN) mallocs every block and reserves no range,
+  // so an offset could not name one. tests/differential/asan.js runs the
+  // compiler with NISH_ASAN set: tests/cases/compact_list built that way keeps
+  // its links as pointers, and where the toolchain has the sanitizer runtimes
+  // the program runs clean under ASan and prints what it prints elsewhere.
+  if (!only || "compact asan".includes(only)) {
+    const dir = path.join(buildDir, "compact-asan")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const src = path.join(casesDir, "compact_list.ts")
+    const want = fs.readFileSync(path.join(casesDir, "compact_list.out"), "utf8")
+    const c = spawnSync(NISH, [src, "-o", `${dir}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_ASAN: "1" },
+    })
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_list.ll"), "utf8") : ""
+    const bodies = ll.split("\n").filter((line) => /^%struct\.(Cell|Tree) = /.test(line))
+    check(
+      "compact: with NISH_ASAN set, a compact class's links stay pointers and reserve no range",
+      c.status === 0 &&
+        bodies.includes("%struct.Cell = type { i32, %struct.Cell* }") &&
+        bodies.some((line) => line.startsWith("%struct.Tree = ") && !line.includes("i32, i32")) &&
+        !ll.includes("nish_arena_range_abi"),
+      c.status !== 0 ? shown(c) : bodies.join("\n")
+    )
+    const asan = await import("./differential/asan.js")
+    if (!asan.hasAsanRuntime()) {
+      skip("compact asan: clang has no AddressSanitizer runtime here")
+    } else {
+      const res = asan.runUnderAsan(src, { compiler: { label: NISH, cmd: NISH, prefix: [] }, exe: path.join(dir, "asan") })
+      const ll2 = fs.existsSync(path.join(dir, "asan.modules", "compact_list.ll"))
+        ? fs.readFileSync(path.join(dir, "asan.modules", "compact_list.ll"), "utf8")
+        : ""
+      check(
+        "compact: tests/differential/asan.js builds a compact class with pointer links, and it runs clean under ASan",
+        res.kind === "clean" && res.stdout === want && ll2.includes("%struct.Cell = type { i32, %struct.Cell* }"),
+        JSON.stringify({ kind: res.kind, detail: res.detail, error: res.error, stderr: res.stderr, stdout: res.stdout })
       )
     }
   }
@@ -17293,7 +17470,7 @@ if (dealtHere("runtimeChecks")) {
         ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", ...flags, ...RUNTIME_C, "tests/runtime/debug-arena-test.c", "-lm", "-o", exe],
         { cwd: root, encoding: "utf8" }
       )
-      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      const run = cc.status === 0 ? spawnFaulting(exe, [], { encoding: "utf8" }) : null
       return { cc, run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
     }
     const plain = staleBuild("debug_arena_plain", [])
@@ -21080,18 +21257,18 @@ if (dealtHere("cliChecks")) {
         "    wipe(this.k);",
         "  }",
         "}",
-        "export function make(n: i32): Keyed {",
+        "export const make = (n: i32): Keyed => {",
         "  return new Keyed(n);",
-        "}",
-        "export function size(h: Keyed): i32 {",
+        "};",
+        "export const size = (h: Keyed): i32 => {",
         "  return expose(h.k, width);",
-        "}",
-        "export function measure(s: Secret<u8[]>): i32 {",
+        "};",
+        "export const measure = (s: Secret<u8[]>): i32 => {",
         "  return expose(s, width);",
-        "}",
-        "export function fresh(n: i32): Secret<u8[]> {",
+        "};",
+        "export const fresh = (n: i32): Secret<u8[]> => {",
         "  return secret(new Array<u8>(n));",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -22276,18 +22453,18 @@ if (dealtHere("cliChecks")) {
         fs.writeFileSync(
           src,
           [
-            "export function half(n: i32): Result<i32, i32> {",
+            "export const half = (n: i32): Result<i32, i32> => {",
             "  if (n % 2 !== 0) { return Err(n); }",
             "  return Ok(n / 2);",
-            "}",
-            "export function checkPort(port: i32): Result<void, i32> {",
+            "};",
+            "export const checkPort = (port: i32): Result<void, i32> => {",
             "  if (port <= 0) { return Err(port); }",
             "  return Ok();",
-            "}",
-            "export function describe(r: Result<i32, i32>): i32 {",
+            "};",
+            "export const describe = (r: Result<i32, i32>): i32 => {",
             "  if (r.isErr()) { return -r.error; }",
             "  return r.value;",
-            "}",
+            "};",
             "",
           ].join("\n")
         )
@@ -22374,14 +22551,14 @@ if (dealtHere("cliChecks")) {
         "  x: number = 0;",
         "}",
         "",
-        "export function move(p: Point, dx: number): Point {",
+        "export const move = (p: Point, dx: number): Point => {",
         "  p.x = p.x + dx;",
         "  return p;",
-        "}",
+        "};",
         "",
-        "export function origin(): Point {",
+        "export const origin = (): Point => {",
         "  return new Point();",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -22521,14 +22698,14 @@ if (dealtHere("cliChecks")) {
     fs.writeFileSync(
       skipSrc,
       [
-        "export function spell(n: i32): string {",
+        "export const spell = (n: i32): string => {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return `${n}`;",
-        "}",
-        "export function names(n: i32): string[] {",
+        "};",
+        "export const names = (n: i32): string[] => {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return [`${n}`];",
-        "}",
+        "};",
         // WP30's negative half. Adding the unsigned widths to the typed-view
         // table moved the line between an element type that crosses and one that
         // does not, and these two are what must stay on the far side of it: a
@@ -22536,7 +22713,7 @@ if (dealtHere("cliChecks")) {
         // view, and a `string` element is a pointer into the arena. Without this,
         // a future row added to `typedView` by pattern-matching on the others
         // could let either through and nothing would notice.
-        "export function countTrue(flags: boolean[]): i32 {",
+        "export const countTrue = (flags: boolean[]): i32 => {",
         "  let n = 0;",
         "  for (let i = 0; i < flags.length; i++) {",
         "    if (flags[i]) {",
@@ -22544,10 +22721,10 @@ if (dealtHere("cliChecks")) {
         "    }",
         "  }",
         "  return n;",
-        "}",
-        "export function widest(names: string[]): i32 {",
+        "};",
+        "export const widest = (names: string[]): i32 => {",
         "  return names.length;",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -23408,6 +23585,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
+      "--explain-layout",
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
@@ -24731,6 +24909,547 @@ if (dealtHere("cliChecks")) {
         shown(ran)
       )
     }
+  }
+
+  // ---- `--explain-layout`: which classes the compact-class rule picks ---------------
+  // The report runs the five tests of docs/roadmap/wp48-ref32-classes.md §3.1 over
+  // every class and prints one line per class: `compact`, or the first test that
+  // refuses it. Nothing in the build reads the verdict yet, so the flag changes no
+  // byte of the IR. Each refusal has a program below that stops at that test and
+  // at no earlier one.
+  if (!only || "explain_layout".includes(only) || "cli".includes(only)) {
+    const layoutDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-layout-"))
+    const layoutOf = (stderr) =>
+      stderr
+        .split("\n")
+        .filter((line) => line.includes(": layout: ") || line.startsWith("explain-layout: "))
+        .join("\n")
+        .split(`${layoutDir}/`)
+        .join("")
+        .split(`${root}/`)
+        .join("")
+    // The three design figures (§3.1): each bench file's linked node class is
+    // picked, at the size the design states. Test 1 passes only for a build that
+    // writes the executable itself (`--link`, or `nish run`), so each is linked.
+    const benchWant = {
+      "bench/goose/tree.ts": [
+        "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
+        "explain-layout: 1 of 1 classes compact",
+      ],
+      "bench/goose/bintrees.ts": [
+        "bench/goose/bintrees.ts:11:7: layout: TNode: compact, 16 → 8 bytes",
+        "explain-layout: 1 of 1 classes compact",
+      ],
+      "bench/wp48-refs/sibling.ts": [
+        "bench/wp48-refs/sibling.ts:13:7: layout: Node: compact, 32 → 20 bytes",
+        "bench/wp48-refs/sibling.ts:26:7: layout: Builder: 2 no link, 16 → 16 bytes",
+        "explain-layout: 1 of 2 classes compact",
+      ],
+    }
+    for (const [file, want] of Object.entries(benchWant)) {
+      const base = path.basename(file, ".ts")
+      const plainLl = path.join(layoutDir, `${base}.ll`)
+      const explainedLl = path.join(layoutDir, `${base}.layout.ll`)
+      const exe = path.join(layoutDir, base)
+      const plain = spawnSync(NISH, [file, "-o", plainLl, "--link", exe], { cwd: root, encoding: "utf8" })
+      const explained = spawnSync(NISH, [file, "-o", explainedLl, "--link", exe, "--explain-layout"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `explain layout: ${file} matches the golden report`,
+        explained.status === 0 && layoutOf(explained.stderr) === want.join("\n"),
+        `--- expected\n${want.join("\n")}\n--- actual\n${layoutOf(explained.stderr)}\n${shown(explained)}`
+      )
+      check(
+        `explain layout: --explain-layout changes no byte of ${file}'s IR`,
+        plain.status === 0 &&
+          explained.status === 0 &&
+          fs.readFileSync(plainLl, "utf8") === fs.readFileSync(explainedLl, "utf8"),
+        `${shown(plain)}\n${shown(explained)}`
+      )
+    }
+    // A linked class the program makes in a loop, so only test 1 and the
+    // class's own shape can refuse it.
+    const loopNode = [
+      "class W {",
+      "  a: i64",
+      "  b: i64",
+      "  next: W | null",
+      "  constructor() {",
+      "    this.a = 0",
+      "    this.b = 0",
+      "    this.next = null",
+      "  }",
+      "}",
+      "class L {",
+      "  next: L | null = null",
+      "  v: i32 = 0",
+      "}",
+      "export const main = (): i32 => {",
+      "  let n = 0",
+      "  for (let i = 0; i < 3; i = i + 1) {",
+      "    const w = new W()",
+      "    const l = new L()",
+      "    n = n + (w.next === null ? 1 : 0) + l.v",
+      "  }",
+      "  return n",
+      "};",
+      "",
+    ].join("\n")
+    const layoutCases = [
+      // Test 3: two i64 fields keep W 8-aligned, so a 4-wide link pads back to 24.
+      {
+        name: "test 3, no saving",
+        file: "noSaving.ts",
+        source: loopNode,
+        args: [],
+        want: [
+          "noSaving.ts:1:7: layout: W: 3 no saving, 24 → 24 bytes",
+          "noSaving.ts:11:7: layout: L: compact, 16 → 8 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
+      },
+      // Test 4: made once, outside any loop, in a function that does not reach itself.
+      {
+        name: "test 4, made once",
+        file: "madeOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const l = new L()",
+          "console.log(`${l.v}`)",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // Test 4 passes through recursion alone: `Chain`'s constructor makes a
+      // `Chain`, so the `new L` in it runs once per level.
+      {
+        name: "test 4, recursion through a constructor",
+        file: "recursive.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Chain {",
+          "  head: L",
+          "  constructor(n: i32) {",
+          "    this.head = new L()",
+          "    if (n > 0) {",
+          "      const c = new Chain(n - 1)",
+          "      this.head.next = c.head",
+          "    }",
+          "  }",
+          "}",
+          "export const main = (): i32 => {",
+          "  return new Chain(3).head.v",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "recursive.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "recursive.ts:5:7: layout: Chain: 2 no link, 8 → 8 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
+      },
+      // Tests 2 and 5: `Holder` links to no class like itself; `P` is a declare
+      // class, whose layout is the foreign side's, and the saving that passed
+      // test 3 is `Holder`'s; `S` holds a Secret, whose wipe the narrowing
+      // must not move.
+      {
+        name: "test 2 and both reasons of test 5",
+        file: "forbidden.ts",
+        source: [
+          'import { Secret, secret, wipe } from "nish:secret"',
+          "declare class P {",
+          "  x: i32",
+          "}",
+          "class Holder {",
+          "  p: P | null = null",
+          "  n: i32 = 0",
+          "}",
+          "class S {",
+          "  next: S | null",
+          "  n: i32",
+          "  readonly k: Secret<u8[]>",
+          "  constructor() {",
+          "    const bytes: u8[] = [1, 2]",
+          "    this.k = secret(bytes)",
+          "    this.next = null",
+          "    this.n = 0",
+          "  }",
+          "  wipe(): void {",
+          "    wipe(this.k)",
+          "  }",
+          "}",
+          "export const main = (): i32 => {",
+          "  let n = 0",
+          "  for (let i = 0; i < 3; i = i + 1) {",
+          "    const h = new Holder()",
+          "    const s = new S()",
+          "    s.wipe()",
+          "    const p = new P()",
+          "    h.p = p",
+          "    n = n + p.x + h.n + s.n",
+          "  }",
+          "  return n",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "forbidden.ts:2:15: layout: P: 5 forbidden: a declare class, 4 → 4 bytes; Holder saves 16 → 8",
+          "forbidden.ts:5:7: layout: Holder: 2 no link, 16 → 16 bytes",
+          "forbidden.ts:9:7: layout: S: 5 forbidden: holds a Secret in k, 24 → 16 bytes",
+          "explain-layout: 0 of 3 classes compact",
+        ],
+      },
+      // Test 4 through a generic function: each instantiation is its own
+      // function (`build<i32>`), and the call in its body names it as written.
+      {
+        name: "test 4, recursion through a generic function",
+        file: "genericRecursion.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const build = <T>(n: i32, x: T): L => {",
+          "  const l = new L()",
+          "  if (n > 0) {",
+          "    l.next = build(n - 1, x)",
+          "  }",
+          "  return l",
+          "};",
+          "export const main = (): i32 => {",
+          "  return build(3, 1).v",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: ["genericRecursion.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+      },
+      // Its pair: the same generic function with no call to itself makes one `L`
+      // per call from a straight-line `main`, so test 4 still refuses it.
+      {
+        name: "test 4, a generic function that does not reach itself",
+        file: "genericOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const build = <T>(n: i32, x: T): L => {",
+          "  const l = new L()",
+          "  l.v = n",
+          "  return l",
+          "};",
+          "export const main = (): i32 => {",
+          "  return build(3, 1).v",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // The same through `this.m(...)` in a generic class's method: the method
+      // is `Box<i32>.make`, the call `this.make`.
+      {
+        name: "test 4, recursion through a generic class's method",
+        file: "genericMethod.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Box<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "  make(n: i32): L {",
+          "    const l = new L()",
+          "    if (n > 0) {",
+          "      l.next = this.make(n - 1)",
+          "    }",
+          "    return l",
+          "  }",
+          "}",
+          "export const main = (): i32 => {",
+          "  return new Box<i32>(1).make(3).v",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: ["genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+      },
+      // Its pair: a generic method that calls another method, not itself.
+      {
+        name: "test 4, a generic class's method that does not reach itself",
+        file: "genericMethodOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Box<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "  make(n: i32): L {",
+          "    const l = new L()",
+          "    l.v = this.size(n)",
+          "    return l",
+          "  }",
+          "  size(n: i32): i32 {",
+          "    return n",
+          "  }",
+          "}",
+          "export const main = (): i32 => {",
+          "  return new Box<i32>(1).make(3).v",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // A parameter named like its function shadows it: `walk(n)` calls the
+      // value passed in, which is no edge, so `walk` does not reach itself.
+      {
+        name: "test 4, a parameter shadows the function's name",
+        file: "shadowed.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const walk = (walk: (n: i32) => i32, n: i32): i32 => {",
+          "  const l = new L()",
+          "  return walk(n) + l.v",
+          "};",
+          "export const main = (): i32 => {",
+          "  return walk((n: i32): i32 => n, 3)",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // So does a local: `walk(n)` calls the `const walk` reference to `same`.
+      {
+        name: "test 4, a local shadows the function's name",
+        file: "shadowedLocal.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const same = (m: i32): i32 => {",
+          "  return m",
+          "};",
+          "const walk = (n: i32): i32 => {",
+          "  const l = new L()",
+          "  const walk = same",
+          "  return walk(n) + l.v",
+          "};",
+          "export const main = (): i32 => {",
+          "  return walk(3)",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+    ]
+    // Test 1: every build but a closed native link (`src/visibility.ts`) refuses
+    // every class. `--emit-dts` is refused on its own: a native compile still
+    // writes the `.d.ts`, though the loader beside it is for a wasm build. The
+    // wasm32 case writes IR only, as a wasm link needs a WASI sysroot; its
+    // reason is asked before the missing `--link`.
+    for (const [reason, args] of [
+      ["wasm32", ["--target", "wasm32-wasi"]],
+      ["no --link, so a host may link the IR", []],
+      ["--emit-header", ["--emit-header", path.join(layoutDir, "lib.h")]],
+      ["--emit-napi", ["--emit-napi", path.join(layoutDir, "napi.c")]],
+      ["--emit-napi-async", ["--threads", "--emit-napi-async", path.join(layoutDir, "napi-async.c")]],
+      ["--emit-dts", ["--emit-dts", path.join(layoutDir, "lib.d.ts")]],
+    ]) {
+      layoutCases.push({
+        name: `test 1, ${reason}`,
+        file: "notNative.ts",
+        source: loopNode,
+        args,
+        noLink: true,
+        want: [
+          `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
+          // On wasm32, L's pointer field is 4 bytes, so its current layout is
+          // already the compact 8; natively the 8-byte pointer pads it to 16.
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? 8 : 16} → 8 bytes`,
+          "explain-layout: 0 of 2 classes compact",
+        ],
+      })
+    }
+    // A `declare function` puts a C library in the link, which may be handed a
+    // class, so even a linked build is not closed. `labs` is libc's, so the
+    // link finds it.
+    layoutCases.push({
+      name: "test 1, a declare function under --link",
+      file: "declared.ts",
+      source: ["declare function labs(n: i64): i64", loopNode].join("\n"),
+      args: [],
+      want: [
+        "declared.ts:2:7: layout: W: 1 native: a declare function, so a C library is in the link, 24 → 24 bytes",
+        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 16 → 8 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
+    // `--emit-ts` writes TypeScript and no IR, so it is not native either. Its
+    // program holds no `i64`, which TypeScript would round.
+    layoutCases.push({
+      name: "test 1, --emit-ts",
+      file: "emitTs.ts",
+      source: [
+        "class L {",
+        "  next: L | null = null",
+        "  v: i32 = 0",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    n = n + new L().v",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: ["--emit-ts", path.join(layoutDir, "ts")],
+      noIr: true,
+      noLink: true,
+      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // Each case is built twice, with and without the flag, and its IR compared:
+    // the report changes no byte of it in any test-1 mode.
+    for (const c of layoutCases) {
+      const file = path.join(layoutDir, c.file)
+      fs.writeFileSync(file, c.source)
+      const base = path.basename(c.file, ".ts")
+      const build = (ll, extra) =>
+        spawnSync(
+          NISH,
+          [
+            file,
+            ...(c.noIr ? [] : ["-o", ll]),
+            ...(c.noLink ? [] : ["--link", path.join(layoutDir, base)]),
+            ...c.args,
+            ...extra,
+          ],
+          { cwd: root, encoding: "utf8" }
+        )
+      const r = build(path.join(layoutDir, `${base}.layout.ll`), ["--explain-layout"])
+      check(
+        `explain layout: ${c.name}`,
+        r.status === 0 && layoutOf(r.stderr) === c.want.join("\n"),
+        `--- expected\n${c.want.join("\n")}\n--- actual\n${layoutOf(r.stderr)}\n${shown(r)}`
+      )
+      if (!c.noIr) {
+        const plain = build(path.join(layoutDir, `${base}.ll`), [])
+        check(
+          `explain layout: --explain-layout changes no byte of the IR, ${c.name}`,
+          plain.status === 0 &&
+            r.status === 0 &&
+            fs.readFileSync(path.join(layoutDir, `${base}.ll`), "utf8") ===
+              fs.readFileSync(path.join(layoutDir, `${base}.layout.ll`), "utf8"),
+          `${shown(plain)}\n${shown(r)}`
+        )
+      }
+    }
+    // The usage errors are `--explain-memory`'s: no checked program under
+    // `--emit-ast`, no IR under `--fix`, and diagnostics only under `--json`.
+    const refusedSource = path.join(layoutDir, "refused.ts")
+    fs.writeFileSync(refusedSource, loopNode)
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--explain-layout` reports on a checked program, and --emit-ast stops before the check"],
+      ["--fix", "`--explain-layout` cannot be used with --fix"],
+      ["--json", "`--explain-layout` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      const refused = spawnSync(NISH, [refusedSource, flag, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: --explain-layout with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    // `nish run` refuses the same three, before it builds anything: it takes
+    // neither `--emit-ast` nor `--fix` at all.
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--emit-ast` cannot be used with `nish run`"],
+      ["--fix", "`--fix` cannot be used with `nish run`"],
+      ["--json", "`--explain-layout` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      const refused = spawnSync(NISH, ["run", flag, "--explain-layout", refusedSource], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `explain layout: \`nish run --explain-layout\` with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    check(
+      "explain layout: a refused `--fix` left the source as it was",
+      fs.readFileSync(refusedSource, "utf8") === loopNode,
+      "the source changed"
+    )
+    // `nish run` takes it: the report, then the program.
+    const layoutRun = spawnSync(NISH, ["run", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "explain layout: `nish run --explain-layout` prints the report and runs the program",
+      layoutRun.status === 0 &&
+        layoutRun.stdout === "2097151\n8377899684\n" &&
+        layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
+      shown(layoutRun)
+    )
+    // The capability line stays the last thing on stderr (WP35): the report is
+    // printed ahead of it.
+    const layoutCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const layoutCapsLines = layoutCaps.stderr.trimEnd().split("\n")
+    check(
+      "explain layout: under `nish run --capabilities` the capability line still comes last",
+      layoutCaps.status === 0 &&
+        layoutCaps.stderr.includes("explain-layout: 1 of 1 classes compact") &&
+        layoutCapsLines[layoutCapsLines.length - 1].startsWith("capabilities: "),
+      shown(layoutCaps)
+    )
+    fs.rmSync(layoutDir, { recursive: true, force: true })
   }
 
   // ---- `nish run`: a script built into a cache and started ----------------------------
@@ -26715,7 +27434,7 @@ if (dealtHere("releaseChecks")) {
         fs.mkdirSync(work, { recursive: true })
         fs.writeFileSync(
           path.join(work, "hello.ts"),
-          'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n'
+          'export const main = (): number => {\n  console.log("hello from a global install");\n  return 0;\n};\n'
         )
 
         // ---- no platform package: the refusal ----------------------------------------
@@ -26983,9 +27702,9 @@ if (dealtHere("releaseChecks")) {
             fs.writeFileSync(
               path.join(work, "std.ts"),
               'import { trim } from "nish/text";\n' +
-                "export function main(): number {\n" +
+                "export const main = (): number => {\n" +
                 '  console.log(trim("  ok  "));\n' +
-                "  return 0;\n}\n"
+                "  return 0;\n};\n"
             )
             const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" })
             const stdRan =
@@ -28639,7 +29358,7 @@ if (dealtHere("releaseChecks")) {
       fs.writeFileSync(
         path.join(rp, "probe.ts"),
         [
-          "export function main(): number {",
+          "export const main = (): number => {",
           '  const target = realpathSync("target.txt");',
           "  if (target === null) {",
           '    console.log("target: <null>");',
@@ -28654,7 +29373,7 @@ if (dealtHere("releaseChecks")) {
           // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
           '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
           "  return 0;",
-          "}",
+          "};",
           "",
         ].join("\n")
       )
@@ -32333,33 +33052,484 @@ if (SHARD > 1) {
 // and each move is a claim about ci.yml, read here on every run, local ones
 // included, so an edit that leaves a check running nowhere turns this red
 // rather than every row green.
-if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
-  // `--delegate-sanitizers` (DELEGATE_SANITIZERS) is honest only while
-  // `fuzz-smoke` builds and replays every target and runs the runtime unit
-  // test under the sanitizers.
+// scripts/ci-scope.mjs: the `scope` job's decision and the `ci-gate` verdict.
+// A wrong decision skips a check on a pull request it would have failed, so
+// every case that must run everything is pinned, and so is the replay of
+// recorded merged pull requests.
+if (selects("ci-scope", "ci.yml")) {
+  const on = (files, extra = {}) =>
+    ciScope.decide({
+      event: "pull_request",
+      files: files.map((f) => (typeof f === "string" ? { path: f, status: "modified" } : f)),
+      ...extra,
+    })
+  const lanes = ciScope.LANES.map((l) => l.name)
+  const everything = (r) => r.full !== null && lanes.every((l) => r.lanes[l] === true)
+  const docs = [{ path: "docs/x.md", status: "modified" }]
+  const fullCases = [
+    ["a push to main", ciScope.decide({ event: "push", files: docs })],
+    ["a merge_group", ciScope.decide({ event: "merge_group", files: docs })],
+    ["a workflow_call", ciScope.decide({ event: "workflow_call", files: docs })],
+    ["a workflow_dispatch", ciScope.decide({ event: "workflow_dispatch", files: docs })],
+    ["no event", ciScope.decide({ files: docs })],
+    ["the ci:full label", on(["docs/x.md"], { labels: ["ci:full"] })],
+    ["NISH_CI_SCOPE=full", on(["docs/x.md"], { mode: "full" })],
+    ["NISH_CI_SCOPE=FULL", on(["docs/x.md"], { mode: " FULL " })],
+    ["a CI:Full label", on(["docs/x.md"], { labels: ["CI:Full"] })],
+    ["an empty file list", on([])],
+    ["an unknown file list", ciScope.decide({ event: "pull_request" })],
+    ["a truncated file list", on(["docs/x.md"], { truncated: true })],
+    ["a file with no path", on([{ status: "modified" }])],
+    ["a deleted docs file", on([{ path: "docs/x.md", status: "removed" }])],
+    ["an unknown status", on([{ path: "docs/x.md", status: "unchanged" }])],
+    ["a rename with no old path", on([{ path: "docs/x.md", status: "renamed" }])],
+    ["a rename out of src/", on([{ path: "docs/x.ts", status: "renamed", previous: "src/x.ts" }])],
+    ["a rename into std/", on([{ path: "std/x.ts", status: "renamed", previous: "docs/x.ts" }])],
+    // tests/postgres/ is read by the postgres lane alone: a rename out of it
+    // into docs/ is on every other lane's allowlist at both ends.
+    ["a rename out of one lane's read set", on([{ path: "docs/x.ts", status: "renamed", previous: "tests/postgres/x.ts" }])],
+    ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
+    ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
+    ["a change to package.json", on(["package.json"])],
+    ["a change to package-lock.json", on(["package-lock.json"])],
+    ["a nested package.json", on(["docs/cookbook/node_modules/p/package.json"])],
+    ["a change to scripts/ci-scope.mjs", on(["scripts/ci-scope.mjs"])],
+  ]
+  const notFull = fullCases.filter(([, r]) => !everything(r)).map(([n]) => n)
+  check(
+    "ci-scope: every case that must run every lane does",
+    notFull.length === 0,
+    `ran less than everything: ${notFull.join(", ")}`
+  )
+
+  const docsOnly = on(["docs/guide/index.md", "README.md"])
+  const srcChange = on(["src/compile.ts"])
+  const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
+  check(
+    "ci-scope: a docs-only change skips every lane, a src/ change runs every lane, an inert rename skips",
+    docsOnly.full === null &&
+      lanes.every((l) => docsOnly.lanes[l] === false) &&
+      lanes.every((l) => srcChange.lanes[l] === true) &&
+      lanes.every((l) => inertRename.lanes[l] === false),
+    JSON.stringify({ docsOnly, srcChange, inertRename })
+  )
+  const unknownPath = on(["somewhere/new.txt"])
+  check(
+    "ci-scope: a path on no lane's allowlist of unread paths runs every lane",
+    lanes.every((l) => unknownPath.lanes[l] === true),
+    JSON.stringify(unknownPath)
+  )
+
+  const ok = { result: "success" }
+  const skipped = { result: "skipped" }
+  check(
+    "ci-scope: the gate passes only when every job succeeded or was skipped by its own if:",
+    ciScope.gate({ a: ok, b: skipped }, ["b"]).length === 0 &&
+      ciScope.gate({ a: ok, b: skipped }, []).length === 1 &&
+      ciScope.gate({ a: { result: "failure" } }, []).length === 1 &&
+      ciScope.gate({ a: { result: "cancelled" } }, ["a"]).length === 1 &&
+      ciScope.gate({ a: {} }, []).length === 1 &&
+      ciScope.gate({}, []).length === 1 &&
+      ciScope.gate(null, []).length === 1,
+    "a gate verdict differs"
+  )
+
+  // ci.yml and the module name the same lanes, and the gate waits for every
+  // other job: a job left out of its `needs` could fail under a green gate.
+  const scopeJob = ciJob(ciYmlText, "scope")
+  const gateJob = ciJob(ciYmlText, "ci-gate")
+  const outputs = [...scopeJob.matchAll(/^ {6}([a-z0-9_]+): \$\{\{ steps\.scope\.outputs\.\1 \}\}$/gm)].map((m) => m[1])
+  const read = [...new Set([...ciYmlText.matchAll(/needs\.scope\.outputs\.([a-z0-9_]+)/g)].map((m) => m[1]))]
+  const jobIds = [...ciYmlText.slice(ciYmlText.search(/^jobs:$/m)).matchAll(/^ {2}([a-z0-9-]+):$/gm)]
+    .map((m) => m[1])
+    .filter((j) => j !== "ci-gate")
+  const gateNeeds = [...(/^ {4}needs:\n((?: {6}- [a-z0-9-]+\n)+)/m.exec(gateJob)?.[1] ?? "").matchAll(/- ([a-z0-9-]+)/g)]
+    .map((m) => m[1])
+  const ungated = jobIds.filter((j) => !gateNeeds.includes(j))
+  check(
+    "ci-scope: the scope job outputs every lane, ci.yml reads no other, and ci-gate needs every job",
+    [...lanes, "why"].every((l) => outputs.includes(l)) &&
+      outputs.length === lanes.length + 1 &&
+      read.every((u) => outputs.includes(u)) &&
+      jobIds.length > 0 &&
+      ungated.length === 0 &&
+      /^ {4}if: always\(\)$/m.test(gateJob),
+    `outputs: ${outputs.join(" ")}\nread: ${read.join(" ")}\njobs not in ci-gate's needs: ${ungated.join(" ")}`
+  )
+
+  // The backtest charges a failed job to the lane whose ci.yml `name:` it
+  // matches exactly, so each lane's `names` must be its jobs' templates.
+  const yamlName = (id) => {
+    const job = ciJob(ciYmlText, id)
+    return /^ {4}name: (.*)$/m.exec(job)?.[1] ?? (job === "" ? null : id)
+  }
+  const nameDrift = ciScope.LANES.filter(
+    (l) => l.names.length !== l.jobs.length || l.jobs.some((id, i) => yamlName(id) !== l.names[i])
+  ).map((l) => `${l.name}: ${l.names.join(", ")} vs ${l.jobs.map(yamlName).join(", ")}`)
+  const asRun = (name) => name.replace(/\$\{\{.*?\}\}/g, "x86_64-linux")
+  const misMapped = [
+    ...ciScope.LANES.flatMap((l) => l.names.map((n) => [asRun(n), l.name])),
+    ["nish-cmp elision (aarch64-linux)", "elision"],
+    ["nish-cmp (aarch64-linux)", "nish_cmp"],
+    ["the NEON path agrees (aarch64-linux)", "simd"],
+    ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
+    ["test (ubuntu-latest, shard 1/8)", null],
+    ["lint", null],
+    ["the golden cases, in Nish (shard 1/3)", null],
+    ["nish-cmp", null],
+  ].filter(([display, lane]) => (ciScope.laneOf(display)?.name ?? null) !== lane)
+  check(
+    "ci-scope: every lane's names are its jobs' ci.yml name: templates, and a job's display name maps to its lane alone",
+    nameDrift.length === 0 && misMapped.length === 0,
+    `names that differ from ci.yml: ${nameDrift.join("; ") || "none"}\nmis-mapped: ${JSON.stringify(misMapped)}`
+  )
+
+  // The file list: a short page ends it; a 30th full page means the API cut
+  // it off, which runs everything.
+  const pages = (sizes) => {
+    const asked = []
+    const get = async (url) => {
+      const page = Number(new URL(url).searchParams.get("page"))
+      asked.push(page)
+      const n = sizes[page - 1] ?? 0
+      return { ok: true, json: async () => Array.from({ length: n }, (_, i) => ({ filename: `docs/${page}-${i}.md`, status: "modified" })) }
+    }
+    return ciScope.fetchFiles("o/r", "1", "t", get).then((r) => ({ ...r, asked }))
+  }
+  const [thirty, short, failed] = await Promise.all([
+    pages(Array(30).fill(100)),
+    pages([100, 100, 7]),
+    ciScope.fetchFiles("o/r", "1", "t", async () => ({ ok: false, status: 502 })).then(() => "resolved", (e) => e.message),
+  ])
+  check(
+    "ci-scope: 30 full pages of changed files is a truncated list, a short page ends it, and an HTTP error throws",
+    thirty.truncated === true &&
+      thirty.asked.length === 30 &&
+      everything(on(thirty.files.map((f) => f.path), { truncated: thirty.truncated })) &&
+      short.truncated === false &&
+      short.files.length === 207 &&
+      short.asked.join() === "1,2,3" &&
+      /502/.test(failed),
+    JSON.stringify({ thirty: [thirty.truncated, thirty.asked.length], short: [short.truncated, short.files.length], failed })
+  )
+
+  // The command line: labels it cannot parse count as `ci:full`, and the
+  // reason written to GITHUB_OUTPUT stays on one line whatever a path holds.
+  const scopeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ci-scope-"))
+  const runScope = (files, env) => {
+    const list = path.join(scopeDir, "files.txt")
+    const output = path.join(scopeDir, "output.txt")
+    fs.writeFileSync(list, files.join("\n"))
+    fs.writeFileSync(output, "")
+    const ran = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--files", list], {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", NISH_CI_SCOPE: "", GITHUB_STEP_SUMMARY: "", ...env, GITHUB_OUTPUT: output },
+    })
+    return { ran, lines: fs.readFileSync(output, "utf8").split("\n").filter(Boolean) }
+  }
+  const badLabels = runScope(["docs/x.md"], { PR_LABELS: "[not json" })
+  const goodLabels = runScope(["docs/x.md"], { PR_LABELS: "[]" })
+  const carriage = runScope([".github/a\rb.yml"], { PR_LABELS: "[]" })
+  const laneLines = (lines) => lines.filter((l) => !l.startsWith("why="))
+  check(
+    "ci-scope: unparseable PR_LABELS runs every lane, and the why= output is one line even for a path with a carriage return",
+    badLabels.ran.status === 0 &&
+      laneLines(badLabels.lines).length === lanes.length &&
+      laneLines(badLabels.lines).every((l) => l.endsWith("=true")) &&
+      goodLabels.ran.status === 0 &&
+      laneLines(goodLabels.lines).every((l) => l.endsWith("=false")) &&
+      carriage.ran.status === 0 &&
+      carriage.lines.length === lanes.length + 1 &&
+      carriage.lines.every((l) => !l.includes("\r")) &&
+      carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
+    JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
+  )
+  fs.rmSync(scopeDir, { recursive: true, force: true })
+
+  // The replay passes with no miss and excuses exactly the flakes the data
+  // names: a new excuse is a change to this list, reviewed like a miss.
+  const replay = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--backtest"], {
+    encoding: "utf8",
+  })
+  const excusedFlakes = [...replay.stdout.matchAll(/^ {2}excused flake (#\d+ \S+)/gm)].map((m) => m[1])
+  check(
+    "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke",
+    replay.status === 0 && /^misses: 0$/m.test(replay.stdout) && excusedFlakes.join() === "#1666 fuzz-smoke",
+    `excused: ${excusedFlakes.join(", ") || "none"}\n${replay.stdout}${replay.stderr}`
+  )
+}
+
+if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // Each delegation is honest only while the job it names makes the check on
+  // every run that could change its answer. Those jobs are scoped lanes
+  // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so
+  // each claim is held to two things:
+  //
+  //   - the step that makes the check runs whenever its lane does, and must
+  //     pass: no `continue-on-error`, no job-level `if:` beyond the one named
+  //     here, and a step `if:` that is exactly the lane's gate (with
+  //     `!cancelled()` first on runtime_sanitize, which runs after a failed
+  //     smoke);
+  //   - the lane runs for a change to any file the check reads: `decide`
+  //     turns it on for every file under the trees named below and for
+  //     tests/run.js and everything it imports. A lane whose read set loses
+  //     one of them would skip the only run of the check on a pull request
+  //     that changes it.
   const testJob = ciJob(ciYmlText, "test")
-  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
-  // A step that runs them counts only while it must run and must pass: no
-  // `continue-on-error`, and no `if:` but `!cancelled()`. A job-level `if:`
-  // or `continue-on-error` would leave them running nowhere, or failing
-  // unseen, while the `test` job still prints DELEGATED.
-  const fuzzSmokeSteps = fuzzSmoke.split(/\n {6}- /).slice(1)
-  const binding = (pattern) => {
-    const step = fuzzSmokeSteps.find((s) => pattern.test(s))
+  const gateOf = (lane) => `needs.scope.outputs.${lane} != 'false'`
+  const stepsOf = (job) => job.split(/\n {6}- /).slice(1)
+  const binding = (job, pattern, ifs) => {
+    const step = stepsOf(job).find((s) => pattern.test(s))
+    const stepIfs = [...(step ?? "").matchAll(/^ {8}if: (.*)$/gm)].map((m) => m[1])
     return (
       step !== undefined &&
       !/^ {8}continue-on-error:/m.test(step) &&
-      [...step.matchAll(/^ {8}if: (.*)$/gm)].every((m) => m[1] === "${{ !cancelled() }}")
+      stepIfs.length === 1 &&
+      ifs.includes(stepIfs[0])
     )
   }
+  const filesUnder = (...dirs) =>
+    dirs.flatMap((dir) =>
+      fs
+        .readdirSync(path.join(root, dir), { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => path.relative(root, path.join(e.parentPath, e.name)).split(path.sep).join("/"))
+    )
+  const importsOf = (file, seen = new Set()) => {
+    if (seen.has(file) || !fs.existsSync(path.join(root, file))) {
+      return seen
+    }
+    seen.add(file)
+    const text = fs.readFileSync(path.join(root, file), "utf8")
+    for (const m of text.matchAll(/^import [^"]*"(\.\.?\/[^"]+)"/gm)) {
+      importsOf(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])), seen)
+    }
+    return seen
+  }
+  const unread = (lane, files) =>
+    files.filter(
+      (f) => !ciScope.decide({ event: "pull_request", files: [{ path: f, status: "modified" }] }).lanes[lane]
+    )
+  const laneJob = (job, jobIf) =>
+    job !== "" &&
+    /^ {4}needs: (scope|\[[^\]]*\bscope\b[^\]]*\])$/m.test(job) &&
+    !/^ {4}continue-on-error:/m.test(job) &&
+    [...job.matchAll(/^ {4}if: (.*)$/gm)].every((m) => m[1] === jobIf)
+
+  // Every command each lane's job runs, with files it opens: its entry
+  // script, what that imports, and the fixtures it compiles (the composite
+  // compiler-cache action counts as a command of every lane that uses it).
+  // An entry here proves only that a change to a listed file turns its lane on;
+  // it cannot find a read nobody listed. package.json is left out because it is
+  // in FULL and turns every lane on whatever the lane lists; the tests/ entries
+  // of simd, sha256_macos and fuzz record what those commands read, though the
+  // tests/run.js check below already turns those lanes on for all of tests/.
+  // Re-derived from each step's `run:` after #1746's review found the
+  // bootstrap lane missing the fixtures tests/nish/cli.ts compiles and the
+  // postgres lane missing tests/self/. A lane whose read set drops one of
+  // these skips the command's only run on a pull request that changes it.
+  const compilerCache = [
+    "tests/self/compiler-cache.js",
+    "tests/self/seed.js",
+    "scripts/fetch-seed.sh",
+    "scripts/build.sh",
+    "src/compile.ts",
+    "std/term.ts",
+    "runtime/nish.d.ts",
+  ]
+  const laneCommands = {
+    bootstrap: {
+      "bash scripts/bootstrap.sh --verify": [
+        "scripts/bootstrap.sh",
+        "scripts/build.sh",
+        "tests/self/bootstrap.js",
+        "src/capability-lock.ts",
+        "src/compile.ts",
+        "runtime/nish.d.ts",
+      ],
+      "node scripts/check-hardening.mjs": ["scripts/check-hardening.mjs"],
+      "build/nish tests/nish/cli.ts, then build/nish-cli build/nish": [
+        "tests/nish/cli.ts",
+        "tests/cases/caps_pure.ts",
+        "tests/cases/caps_generic.ts",
+        "tests/cases/caps_generic.caps.json",
+        "tests/cases/sandbox_hello.ts",
+        "tests/link/caps_lock_growth/main.ts",
+      ],
+    },
+    nish_cmp: {
+      "node tests/nish-cmp.js": [
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+        "tests/self/seed.js",
+        "tests/cases/caps_pure.ts",
+        "tests/driver.c",
+        "CHANGELOG.md",
+      ],
+      "node tests/differential/fuzz.js --stage1 / --emit-ts": [
+        "tests/differential/fuzz.js",
+        "tests/self/seed.js",
+        "tests/pool.js",
+      ],
+    },
+    elision: {
+      "compiler-cache": compilerCache,
+      "node tests/differential/soundness.js": [
+        "tests/differential/soundness.js",
+        "tests/cases/caps_pure.ts",
+        "tests/differential/corpus/argv_words.ts",
+        "tests/driver.c",
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+      ],
+    },
+    simd: {
+      "compiler-cache": compilerCache,
+      "node tests/run.js simd / float-corpus / the kernels": [
+        ...importsOf("tests/run.js"),
+        "docs/LANGUAGE.md",
+        "tests/simd/sha256.c",
+        "tests/link/sha256_hw_vectors/main.ts",
+        "tests/cases/caps_pure.ts",
+      ],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+      "node bench/crc32.mjs, adler32.mjs, chacha20.mjs": [
+        "bench/crc32.mjs",
+        "bench/adler32.mjs",
+        "bench/chacha20.mjs",
+      ],
+    },
+    sha256_macos: {
+      "compiler-cache": compilerCache,
+      "clang tests/simd/sha256.c, sha256-calls.c": [
+        "tests/simd/sha256.c",
+        "tests/simd/sha256-calls.c",
+        "runtime/runtime-sha256.c",
+      ],
+      "node tests/run.js sha256_hw": [...importsOf("tests/run.js"), "tests/link/sha256_hw_vectors/main.ts"],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+    },
+    fuzz: {
+      "compiler-cache": compilerCache,
+      "bash scripts/fuzz.sh --smoke": ["scripts/fuzz.sh", "tests/fuzz/harness.c"],
+      "node tests/run.js runtime_sanitize": [...importsOf("tests/run.js"), "tests/runtime/range-test.c"],
+    },
+    postgres: {
+      "compiler-cache": compilerCache,
+      "bash tests/postgres/live/tls-certs.sh": ["tests/postgres/live/tls-certs.sh"],
+      "node tests/postgres/live/run.mjs": [
+        "tests/postgres/live/run.mjs",
+        "tests/postgres/live/live.ts",
+        "tests/postgres/live/tls.ts",
+        "tests/postgres/carrier.ts",
+        "tests/postgres/serve-pool.ts",
+        "bench/techempower/db-main.ts",
+        "bench/techempower/async-db-main.ts",
+      ],
+    },
+  }
+  const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
+    ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
+    ...Object.entries(commands).flatMap(([command, files]) => [
+      ...(files.length === 0 ? [`${lane}: ${command}: no file`] : []),
+      ...files.filter((f) => !fs.existsSync(path.join(root, f))).map((f) => `${lane}: ${command}: ${f} does not exist`),
+      ...unread(lane, files).map((f) => `${lane}: ${command}: ${f} would not turn it on`),
+    ]),
+  ])
+  const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
+  check(
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    commandGaps.length === 0 && uncoveredLanes.length === 0,
+    `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
+  )
+
+  // A lane whose job runs tests/run.js reads all of tests/ but tests/ci-scope:
+  // a section can open any fixture there, and #1746's second review found a
+  // hand-picked list missing tests/runtime/range-test.c.
+  const testsFiles = filesUnder("tests").filter((f) => !f.startsWith("tests/ci-scope/"))
+  const runJsLanes = ciScope.LANES.filter((l) =>
+    l.jobs.some((j) => /^\s+(?:\$run )?node tests\/run\.js /m.test(ciJob(ciYmlText, j)))
+  )
+  const runJsMisses = runJsLanes.flatMap((l) =>
+    unread(l.name, testsFiles)
+      .slice(0, 5)
+      .map((f) => `${l.name}: ${f}`)
+  )
+  const ciScopeRead = ciScope.LANES.filter(
+    (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
+  )
+  check(
+    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
+    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.length === 0,
+    `lanes running tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
+      `misses: ${runJsMisses.join(", ") || "none"}\n` +
+      `lanes a tests/ci-scope change turns on: ${ciScopeRead.map((l) => l.name).join(", ") || "none"}`
+  )
+
+  // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
+  // with itself, and compares (scripts/bootstrap.sh --verify).
+  const bootstrapJob = ciJob(ciYmlText, "bootstrap")
+  const fixedPointMisses = unread("bootstrap", [
+    ...filesUnder("src", "std", "runtime"),
+    "scripts/bootstrap.sh",
+    "scripts/build.sh",
+    "tests/self/bootstrap.js",
+    "nish-capabilities.lock.json",
+  ])
+  check(
+    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
+    testJob !== "" &&
+      (!testJob.includes("--delegate-fixed-point") ||
+        (laneJob(bootstrapJob, "needs.seeds.outputs.rows != '[]'") &&
+          /^ {4}needs: \[seeds, scope\]$/m.test(bootstrapJob) &&
+          binding(bootstrapJob, /bash scripts\/bootstrap\.sh --verify$/m, [gateOf("bootstrap")]) &&
+          fixedPointMisses.length === 0)),
+    `files the bootstrap lane would skip on: ${fixedPointMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `bootstrap job:\n${bootstrapJob || "(not found)"}`
+  )
+
+  // `--delegate-sanitizers` (DELEGATE_SANITIZERS): `fuzz-smoke` builds and
+  // replays every target and runs the runtime unit test under the sanitizers.
+  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  // The fuzz lane reads tests/ wholesale (but tests/ci-scope): a list picked
+  // file by file missed tests/runtime/range-test.c, which runtime_sanitize
+  // compiles under ASan and UBSan.
+  const sanitizerMisses = unread("fuzz", [
+    ...filesUnder("src", "std", "runtime"),
+    ...testsFiles,
+    "scripts/fuzz.sh",
+  ])
   check(
     "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
     testJob !== "" &&
       (!testJob.includes("--delegate-sanitizers") ||
-        (!/^ {4}(if|continue-on-error):/m.test(fuzzSmoke) &&
-          binding(/^ {8}run: bash scripts\/fuzz\.sh --smoke$/m) &&
-          binding(/^\s+node tests\/run\.js runtime_sanitize /m))),
-    `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+        (laneJob(fuzzSmoke, "") &&
+          !/^ {4}if:/m.test(fuzzSmoke) &&
+          binding(fuzzSmoke, /^ {8}run: bash scripts\/fuzz\.sh --smoke$/m, [gateOf("fuzz")]) &&
+          binding(fuzzSmoke, /^\s+node tests\/run\.js runtime_sanitize /m, [
+            `\${{ (!cancelled()) && ${gateOf("fuzz")} }}`,
+          ]) &&
+          sanitizerMisses.length === 0)),
+    `files the fuzz lane would skip on: ${sanitizerMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+  )
+
+  // #1724: the runtime_sanitize step fails on a failed or skipped check. It
+  // pipes the run through `tee`, so without `set -o pipefail` the step's
+  // status is tee's; it requires a non-zero passed count with 0 failed, and
+  // a SKIP line fails it (a missing sanitizer runtime prints one and passes
+  // nothing). `|| true` anywhere in it would hide all three.
+  const sanitizeStep = stepsOf(fuzzSmoke).find((s) => /^\s+node tests\/run\.js runtime_sanitize /m.test(s)) ?? ""
+  check(
+    "ci.yml: fuzz-smoke's runtime_sanitize step fails on a failed check, on no passed checks and on a SKIP",
+    /^ {10}set -o pipefail$/m.test(sanitizeStep) &&
+      /^ {10}node tests\/run\.js runtime_sanitize .*\| tee "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}grep -E '\^\[1-9\]\[0-9\]\* passed, 0 failed' "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}if grep -E '\^SKIP {2}' "\$RUNNER_TEMP\/runtime-sanitize\.log"; then exit 1; fi$/m.test(sanitizeStep) &&
+      !/\|\|\s*(true|:)(\s|$)/m.test(sanitizeStep) &&
+      !/continue-on-error/.test(sanitizeStep) &&
+      sanitizeStep.indexOf("set -o pipefail") < sanitizeStep.indexOf("node tests/run.js runtime_sanitize"),
+    `runtime_sanitize step:\n${sanitizeStep || "(not found)"}`
   )
   // The `runner` job, the whole corpus through the golden runner written in
   // Nish, runs per release rather than per push: on the Release PR, and in
@@ -38394,7 +39564,7 @@ if (!only || "vite".includes(only)) {
     )
     fs.writeFileSync(
       path.join(app, "src", "quad.ts"),
-      'import { twice } from "./page"\nexport function quad(x: f64): f64 {\n  return twice(twice(x)) + 1\n}\n'
+      'import { twice } from "./page"\nexport const quad = (x: f64): f64 => {\n  return twice(twice(x)) + 1\n};\n'
     )
     const hosted = nish({ compiler: NISH, entries: ["src/quad.ts"], host: ["src/page.ts"] })
     hosted.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
@@ -38455,11 +39625,11 @@ if (!only || "wasm-math".includes(only)) {
         "export const logOf = (x: f64): f64 => Math.log(x)",
         "export const powOf = (x: f64, y: f64): f64 => Math.pow(x, y)",
         "export const remOf = (x: f64, y: f64): f64 => x % y",
-        "export function remF32(x: f32, y: f32): f32 {",
+        "export const remF32 = (x: f32, y: f32): f32 => {",
         "  let r = x",
         "  r %= y",
         "  return r",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -39146,7 +40316,7 @@ if (!only || "host-import".includes(only)) {
       fs.writeFileSync(path.join(scratch, `${name}.host.ts`), hostText)
       fs.writeFileSync(
         path.join(scratch, `${name}.ts`),
-        `import { first } from "./${name}.host"\nexport function f(): i32 {\n  return first(1)\n}\n`
+        `import { first } from "./${name}.host"\nexport const f = (): i32 => {\n  return first(1)\n};\n`
       )
       return spawnSync(
         NISH,
@@ -39249,12 +40419,12 @@ if (!only || "host-import".includes(only)) {
       [
         'import type { i32, u16 } from "nish"',
         'import { hI32, hU16 } from "./host"',
-        "export function rI32(x: i32): i32 {",
+        "export const rI32 = (x: i32): i32 => {",
         "  return hI32(x)",
-        "}",
-        "export function rU16(x: u16): u16 {",
+        "};",
+        "export const rU16 = (x: u16): u16 => {",
         "  return hU16(x)",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -39294,7 +40464,7 @@ if (!only || "host-import".includes(only)) {
       [
         "examples/arrays.ts",
         "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "91ce0443911068f9c1bd57103d51a102f733d808c555db8b586336a4bb77aa0c",
+        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -40379,9 +41549,10 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // 100,000 steps; the driver checks the answers and that linear memory and the
 // kept heap stay flat after warm-up; the director also runs its first 40,000
 // steps beside an instance whose keep does nothing and must match it frame for
-// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
-// call to 200,000 nodes, which every compaction traces end to end: a trace
-// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// frame. A third, tests/module-storage/persist/chain.ts, grows one list a node
+// a call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. Each call also drops a scratch node,
+// so every compaction has half the region to pack away. A fourth, tests/module-storage/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
 // and empty arrays and strings through a compaction at least every third call
 // (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
@@ -40394,7 +41565,11 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // fake cell past the arena, or sets an array's len (and cap) to 2^40, then
 // forces a compaction, which must throw a NishPanic and leave the fake's bytes
 // as written. Before the fix the compactor rewrote the fake's field for the
-// first two and walked the len into a bare out-of-bounds trap.
+// first two and walked the len into a bare out-of-bounds trap. A seventh,
+// tests/module-storage/persist/compact-chain.ts, is the chain with a class
+// that implements `Compact` (WP48): wasm32 keeps its links as pointers, and the chain
+// driver's 8 bytes a node fails if the trace or the layout read one as an
+// offset.
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
 // without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
 // union is fine in a page build's `.d.ts` but refused once a C header is asked
@@ -40480,14 +41655,16 @@ if (!only || "persist".includes(only)) {
   } else {
     const dir = path.join(buildDir, "persist")
     fs.rmSync(dir, { recursive: true, force: true })
-    for (const [stem, source, steps, says] of [
+    for (const [stem, source, steps, says, drive] of [
       ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
-      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["chain", "tests/module-storage/persist/chain.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
+      ["compact", "tests/module-storage/persist/compact-chain.ts", "200000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
     ]) {
+      const mode = drive ?? stem
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })
       const compiled = spawnSync(
@@ -40522,13 +41699,13 @@ if (!only || "persist".includes(only)) {
       if (linked.status !== 0) {
         continue
       }
-      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, steps], {
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", mode, path.join(out, `${stem}.mjs`), wasm, steps], {
         cwd: root,
         encoding: "utf8",
       })
       check(
         `persist: ${stem} ${says}`,
-        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: ${steps} steps`),
+        ran.status === 0 && ran.stdout.startsWith(`persist ${mode}: ${steps} steps`),
         shown(ran)
       )
     }
@@ -40824,6 +42001,226 @@ if (!only || "game-page".includes(only)) {
     exported !== undefined && exported.types === "./runtime/page-game.d.ts" && exported.default === "./runtime/page-game.mjs",
     JSON.stringify(exported)
   )
+}
+
+// ---- WP48 stage 6: a class's layout on wasm32 is LLVM's -----------------------------
+// computeLayout lays a pointer field (a class, nullable or not, a string, an
+// array) in the target's pointer width: four bytes under wasm32's `p:32:32`,
+// eight natively. The program below compiles with `--target wasm32`, and
+// `--emit-checked` prints the size, alignment and every field offset the
+// compiler recorded. For each class the test then asks LLVM: it appends to the
+// emitted module's types a function per number, `ptrtoint` of a `getelementptr` from
+// null (one past the struct for its size, into `{ i1, %T }` for its alignment,
+// to each field's index for its offset), and `opt -passes=instcombine` folds
+// each under the module's own data layout. The two must agree, the size must
+// be what `nish_alloc_struct` is asked for, and the linked node is pinned at 8
+// bytes on wasm32 and 16 natively, so a pointer slot back at 8 bytes fails.
+if (!only || "wasm32-layout".includes(only)) {
+  if (!has("opt")) {
+    skip("wasm32-layout: opt not installed: the data layout cannot fold the probes")
+  } else {
+    const dir = path.join(buildDir, "wasm32-layout")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const entry = path.join(dir, "classes.ts")
+    fs.writeFileSync(
+      entry,
+      `class Node {
+  next: Node | null
+  value: i32
+  constructor(next: Node | null, value: i32) {
+    this.next = next
+    this.value = value
+  }
+}
+
+class Mixed {
+  a: f64
+  link: Node | null
+  n: i32
+  b: i64
+  name: string
+  constructor(a: f64, link: Node | null, n: i32, b: i64, name: string) {
+    this.a = a
+    this.link = link
+    this.n = n
+    this.b = b
+    this.name = name
+  }
+}
+
+class Links {
+  head: Node
+  tail: Node | null
+  mixed: Mixed | null
+  count: i32
+  items: i32[]
+  done: boolean
+  constructor(head: Node, tail: Node | null, mixed: Mixed | null, count: i32, items: i32[], done: boolean) {
+    this.head = head
+    this.tail = tail
+    this.mixed = mixed
+    this.count = count
+    this.items = items
+    this.done = done
+  }
+}
+
+enum Kind {
+  Round,
+  Flat,
+}
+
+class Round {
+  readonly kind: Kind.Round = Kind.Round
+  r: f64
+  constructor(r: f64) {
+    this.r = r
+  }
+}
+
+class Flat {
+  readonly kind: Kind.Flat = Kind.Flat
+  w: i32
+  constructor(w: i32) {
+    this.w = w
+  }
+}
+
+const parse = (n: i32): Result<i32, string> => (n > 0 ? Ok(n) : Err("neg"))
+
+class Wide {
+  flag: boolean
+  shape: Round | Flat
+  tags: string[]
+  nodes: Node[]
+  outcome: Result<i32, string>
+  last: u16
+  constructor(flag: boolean, shape: Round | Flat, tags: string[], nodes: Node[], outcome: Result<i32, string>, last: u16) {
+    this.flag = flag
+    this.shape = shape
+    this.tags = tags
+    this.nodes = nodes
+    this.outcome = outcome
+    this.last = last
+  }
+}
+
+export const main = (): i32 => {
+  const a = new Node(null, 1)
+  const b = new Node(a, 2)
+  const m = new Mixed(1.5, b, 3, 4, "m")
+  const l = new Links(a, b, m, 2, [1, 2, 3], true)
+  const w = new Wide(true, new Flat(2), ["x", "y"], [a, b], parse(3), 4)
+  return l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
+}
+`
+    )
+    const names = ["Node", "Mixed", "Links", "Wide"]
+    // `struct T (class) size=S align=A`, then `  field f: T index=I offset=O`.
+    const layouts = (args) => {
+      const r = spawnSync(NISH, [entry, "--emit-checked", ...args], { cwd: root, encoding: "utf8" })
+      const found = new Map()
+      let current = null
+      for (const line of r.status === 0 ? r.stdout.split("\n") : []) {
+        const struct = /^struct (\w+) \(class\) size=(\d+) align=(\d+)/.exec(line)
+        if (struct !== null) {
+          current = { size: Number(struct[2]), align: Number(struct[3]), fields: [] }
+          found.set(struct[1], current)
+          continue
+        }
+        const field = /^ {2}field (\w+): .* index=(\d+) offset=(\d+)/.exec(line)
+        if (field !== null && current !== null) {
+          current.fields.push({ name: field[1], index: Number(field[2]), offset: Number(field[3]) })
+        }
+      }
+      return { r, found }
+    }
+    const wasm = layouts(["--target", "wasm32"])
+    const native = layouts([])
+    const ll = path.join(dir, "classes.ll")
+    const emitted = spawnSync(NISH, [entry, "--target", "wasm32", "-o", ll], { cwd: root, encoding: "utf8" })
+    if (
+      check(
+        "wasm32-layout: the program compiles for wasm32 and both targets print every class's layout",
+        wasm.r.status === 0 && native.r.status === 0 && emitted.status === 0 && names.every((n) => wasm.found.has(n)),
+        `${shown(wasm.r)}\n${shown(emitted)}`
+      )
+    ) {
+      // One probe per number, each `add`ed to 0 so instcombine folds it.
+      const probe = (label, type, gep) =>
+        `define i64 @probe.${label}() {\n  %v = add i64 ptrtoint (${type}* getelementptr ${gep} to i64), 0\n  ret i64 %v\n}\n`
+      const probes = []
+      for (const name of names) {
+        const t = `%struct.${name}`
+        const info = wasm.found.get(name)
+        probes.push(probe(`${name}.size`, t, `(${t}, ${t}* null, i32 1)`))
+        probes.push(probe(`${name}.align`, t, `({ i1, ${t} }, { i1, ${t} }* null, i32 0, i32 1)`))
+        for (const f of info.fields) {
+          probes.push(probe(`${name}.${f.name}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${f.index})`))
+        }
+      }
+      // The probes run in a module of their own: the emitted one's data layout
+      // and type definitions, and nothing for instcombine to rewrite but them.
+      const kept = fs
+        .readFileSync(ll, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("target datalayout") || /^%[\w.]+ = type /.test(line))
+      const probed = path.join(dir, "probed.ll")
+      fs.writeFileSync(probed, `${kept.join("\n")}\n\n${probes.join("\n")}`)
+      const folded = spawnSync("opt", ["-S", "-passes=instcombine", probed], { encoding: "utf8", maxBuffer: 1 << 28 })
+      const llvm = new Map()
+      for (const m of folded.stdout.matchAll(/define i64 @"?probe\.([\w.]+)"?\(\)[^{]*\{\n\s*ret i64 (\d+)/g)) {
+        llvm.set(m[1], Number(m[2]))
+      }
+      const text = fs.readFileSync(ll, "utf8")
+      for (const name of names) {
+        const info = wasm.found.get(name)
+        const mine = [`size=${info.size}`, `align=${info.align}`, ...info.fields.map((f) => `${f.name}=${f.offset}`)]
+        const theirs = [
+          `size=${llvm.get(`${name}.size`)}`,
+          `align=${llvm.get(`${name}.align`)}`,
+          ...info.fields.map((f) => `${f.name}=${llvm.get(`${name}.${f.name}`)}`),
+        ]
+        check(
+          `wasm32-layout: ${name}'s size, alignment and field offsets are what LLVM's wasm32 DataLayout gives %struct.${name}`,
+          folded.status === 0 && mine.join(" ") === theirs.join(" "),
+          `compiler: ${mine.join(" ")}\nLLVM:     ${theirs.join(" ")}\n${folded.stderr}`
+        )
+        // A class's own heap allocation is the call whose result is cast to
+        // its struct on the next line, so two classes of one size cannot stand
+        // in for each other. One that does not escape is an `alloca` of its
+        // struct instead, sized by the type the probe above already pinned.
+        const sites = [
+          ...text.matchAll(
+            new RegExp(`call i8\\* @nish_alloc_struct\\(i64 (\\d+)\\)\\n\\s*%\\d+ = bitcast i8\\* %\\d+ to %struct\\.${name}\\*\\n`, "g")
+          ),
+        ].map((m) => Number(m[1]))
+        const onStack = text.includes(`= alloca %struct.${name}, `)
+        check(
+          `wasm32-layout: every heap ${name} asks nish_alloc_struct for its ${info.size} bytes, and every ${name} is allocated`,
+          (sites.length > 0 || onStack) && sites.every((size) => size === info.size),
+          `allocation sizes cast to %struct.${name}*: ${sites.join(", ") || "none"}; alloca: ${onStack}`
+        )
+      }
+      const node = wasm.found.get("Node")
+      const nativeNode = native.found.get("Node")
+      check(
+        "wasm32-layout: `next: Node | null; value: i32` is 8 bytes, 4-aligned, on wasm32 and 16, 8-aligned, natively",
+        node.size === 8 && node.align === 4 && nativeNode !== undefined && nativeNode.size === 16 && nativeNode.align === 8,
+        `wasm32 ${JSON.stringify(node)}\nnative ${JSON.stringify(nativeNode)}`
+      )
+      // A wasm build inlines no array field (`BuildMode.layoutsShared`), so an
+      // array of pointers stays one pointer to its header: the inline slots'
+      // stride is only ever a native one.
+      const wide = text.split("\n").find((line) => line.startsWith("%struct.Wide = type ")) ?? ""
+      check(
+        "wasm32-layout: `tags: string[]` and `nodes: Node[]` stay pointers to an array on wasm32, with no inline slots",
+        wide === "%struct.Wide = type { i1, %union.tagged*, %struct.nish_array*, %struct.nish_array*, %struct.nish_result.i32.str*, i16 }",
+        wide
+      )
+    }
+  }
 }
 
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
@@ -42751,6 +44148,247 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
         diagnosticWords(said(4, "NL1002", "`function*` is not supported")),
     "positions must normalise away and codes must not"
   )
+}
+
+// ---- WP22 stage C: the test corpus spells functions as arrows ----------------
+//
+// Biome reads `src/`, `std/` and `examples/`, not `tests/`, so its WP22 rule
+// cannot keep the test corpus arrow-spelled. This check does. A tests/**/*.ts
+// file that holds a top-level definition `scripts/arrowify.mjs` would rewrite
+// fails unless `tests/function-spelling-allowlist.txt` lists it with a reason,
+// and a listed file that no longer holds one fails too, so the list only
+// shrinks. A file the codemod cannot parse counts as holding one: the check
+// fails closed. The forms the codemod refuses by design (`declare function`,
+// `async`, `function*`, `export default`, a bodiless signature) are not
+// definitions here, the same as `node scripts/arrowify.mjs --check`; but a
+// "bodiless" signature whose line does not end in `;` counts, because that is
+// the codemod misreading a body (`function made(): keyof {`).
+if (selects("arrow-corpus")) {
+  const allowlistName = "tests/function-spelling-allowlist.txt"
+  // Every problem with `files` (paths relative to `base`) against the allowlist
+  // text, one line each; empty means the corpus passes.
+  const arrowCorpusProblems = (base, files, allowlistText) => {
+    const problems = []
+    const listed = new Set()
+    allowlistText.split("\n").forEach((raw, i) => {
+      const line = raw.trim()
+      if (line === "" || line.startsWith("#")) return
+      const hash = line.indexOf("#")
+      const file = (hash < 0 ? line : line.slice(0, hash)).trim()
+      if (hash < 0 || line.slice(hash + 1).trim() === "") {
+        problems.push(`${allowlistName}:${i + 1}: ${file} has no \`#\` reason`)
+      }
+      if (listed.has(file)) problems.push(`${allowlistName}:${i + 1}: ${file} is listed twice`)
+      listed.add(file)
+    })
+    const holds = (file) => {
+      const text = fs.readFileSync(path.join(base, file), "utf8")
+      if (!/\bfunction\b/.test(text)) return false
+      try {
+        const { changed, skipped } = arrowify(text, file)
+        const lines = text.split("\n")
+        return (
+          changed > 0 ||
+          skipped.some((s) => s.reason.startsWith("no body") && !/;\s*$/.test(lines[s.line - 1] ?? ""))
+        )
+      } catch {
+        return true
+      }
+    }
+    const holders = new Set(files.filter(holds))
+    for (const file of [...holders].sort()) {
+      if (!listed.has(file)) {
+        problems.push(
+          `${file} holds a top-level \`function\` definition: rewrite it with ` +
+            `\`node scripts/arrowify.mjs ${file}\`, or list it in ${allowlistName} with a reason`
+        )
+      }
+    }
+    for (const file of [...listed].sort()) {
+      if (!fs.existsSync(path.join(base, file))) {
+        problems.push(`${allowlistName} lists ${file}, which does not exist`)
+      } else if (!holders.has(file)) {
+        problems.push(`${allowlistName} lists ${file}, which no longer holds a \`function\` definition: drop its line`)
+      }
+    }
+    return problems
+  }
+
+  const corpus = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", "tests/*.ts"],
+    { cwd: root, encoding: "utf8" }
+  )
+    .split("\n")
+    .filter((f) => f !== "" && fs.existsSync(path.join(root, f)))
+  const corpusProblems = arrowCorpusProblems(
+    root,
+    corpus,
+    fs.readFileSync(path.join(root, allowlistName), "utf8")
+  )
+  check(
+    `WP22 arrow-corpus: no unlisted top-level \`function\` definition in ${corpus.length} test files`,
+    corpus.length > 1000 && corpusProblems.length === 0,
+    corpusProblems.join("\n") || `only ${corpus.length} files found`
+  )
+
+  // The negative proof, on a scratch tree: the check passes, fails on an
+  // unlisted definition and names it, passes again once it is gone, fails on
+  // a stale listing, and counts a file the codemod cannot parse, or reads as a
+  // bodiless signature though the line opens a body, as a holder.
+  const scratch = fs.mkdtempSync(path.join(buildDir, "arrow-corpus-"))
+  try {
+    const put = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(scratch, file)), { recursive: true })
+      fs.writeFileSync(path.join(scratch, file), text)
+    }
+    put("tests/cases/kept.ts", "function kept(): number {\n  return 1\n}\n")
+    put("tests/cases/arrow.ts", "const arrow = (): number => {\n  return 1\n};\n")
+    put(
+      "tests/cases/declared.ts",
+      "declare function puts(s: string): number\nasync function later(): Promise<void> {}\nfunction sig(): number;\n"
+    )
+    const list = "tests/cases/kept.ts  # the subject\n"
+    const base = ["tests/cases/kept.ts", "tests/cases/arrow.ts", "tests/cases/declared.ts"]
+    const clean = arrowCorpusProblems(scratch, base, list)
+    put("tests/cases/probe.ts", "function probe(): number {\n  return 2\n}\n")
+    const added = arrowCorpusProblems(scratch, [...base, "tests/cases/probe.ts"], list)
+    fs.rmSync(path.join(scratch, "tests/cases/probe.ts"))
+    const removed = arrowCorpusProblems(scratch, base, list)
+    put("tests/cases/kept.ts", "const kept = (): number => {\n  return 1\n};\n")
+    const stale = arrowCorpusProblems(scratch, base, list)
+    put("tests/cases/unparsed.ts", "function catch(x: number): number {\n  return x\n}\n")
+    const unparsed = arrowCorpusProblems(scratch, [...base, "tests/cases/unparsed.ts"], list)
+    put("tests/cases/misread.ts", "function made(): keyof {\n  return new keyof()\n}\n")
+    const misread = arrowCorpusProblems(scratch, [...base, "tests/cases/misread.ts"], list)
+    const noReason = arrowCorpusProblems(scratch, base, "tests/cases/kept.ts\n")
+    check(
+      "WP22 arrow-corpus: an unlisted definition fails and names its file and the codemod; removing it passes",
+      clean.length === 0 &&
+        added.length === 1 &&
+        added[0].includes("tests/cases/probe.ts") &&
+        added[0].includes("node scripts/arrowify.mjs tests/cases/probe.ts") &&
+        removed.length === 0,
+      JSON.stringify({ clean, added, removed }, null, 2)
+    )
+    check(
+      "WP22 arrow-corpus: a stale listing, a reasonless listing, an unparsable file and a misread body each fail",
+      stale.length === 1 &&
+        stale[0].includes("no longer holds") &&
+        unparsed.some((p) => p.startsWith("tests/cases/unparsed.ts ")) &&
+        misread.some((p) => p.startsWith("tests/cases/misread.ts ")) &&
+        noReason.some((p) => p.includes("no `#` reason")),
+      JSON.stringify({ stale, unparsed, misread, noReason }, null, 2)
+    )
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true })
+  }
+
+  // The re-key's refusal path and its positive control, on a scratch copy of
+  // the differential store:
+  // `--rekey-arrowified` re-keys a frozen program only when its source is the
+  // codemod's rewrite of the source at `--rev`. A hand edit is refused, the
+  // program stays stale and the store keeps its bytes; no `--rev` is a usage
+  // error. The committed store is never touched.
+  const copy = fs.mkdtempSync(path.join(buildDir, "arrow-rekey-"))
+  try {
+    fs.cpSync(path.join(root, "tests/differential"), path.join(copy, "tests/differential"), { recursive: true })
+    fs.mkdirSync(path.join(copy, "tests/self"), { recursive: true })
+    fs.copyFileSync(path.join(root, "tests/self/seed.js"), path.join(copy, "tests/self/seed.js"))
+    fs.mkdirSync(path.join(copy, "scripts"), { recursive: true })
+    fs.copyFileSync(path.join(root, "scripts/arrowify.mjs"), path.join(copy, "scripts/arrowify.mjs"))
+    fs.mkdirSync(path.join(copy, "tests/cases"), { recursive: true })
+    fs.symlinkSync(path.join(root, "node_modules"), path.join(copy, "node_modules"))
+    // Every git call names the copy's own repository, so a failed `init` can
+    // never fall through to the checkout this suite runs in.
+    const init = spawnSync("git", ["init", "-q", copy], { encoding: "utf8" })
+    const git = (...args) =>
+      spawnSync(
+        "git",
+        [
+          `--git-dir=${path.join(copy, ".git")}`,
+          `--work-tree=${copy}`,
+          "-c",
+          "user.name=nish-tests",
+          "-c",
+          "user.email=tests@nish.invalid",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { cwd: copy, encoding: "utf8" }
+      )
+    const committed =
+      init.status === 0 && git("add", "-A").status === 0 ? git("commit", "-q", "-m", "copy") : init
+    const goldens = (...args) =>
+      spawnSync(process.execPath, ["tests/differential/goldens.js", ...args], { cwd: copy, encoding: "utf8" })
+    const store = path.join(copy, "tests/differential/goldens/rewrites.txt")
+    const before = fs.readFileSync(store)
+    const freshBefore = goldens("corpus/arr_2d")
+    fs.appendFileSync(path.join(copy, "tests/differential/corpus/arr_2d.ts"), "// a hand edit\n")
+    const refused = goldens("--rekey-arrowified", "--rev", "HEAD", "corpus/arr_2d")
+    const freshAfter = goldens("corpus/arr_2d")
+    const noRev = goldens("--rekey-arrowified")
+    check(
+      "WP22 arrow-corpus: the re-key refuses a hand-edited frozen source, keeps it stale and the store unchanged",
+      committed.status === 0 &&
+        freshBefore.status === 0 &&
+        refused.status === 1 &&
+        freshAfter.status === 1 &&
+        fs.readFileSync(store).equals(before),
+      [committed, freshBefore, refused, freshAfter]
+        .map((r) => `exit ${r.status}\n${r.stdout}${r.stderr}`)
+        .join("\n---\n")
+    )
+    check(
+      "WP22 arrow-corpus: `--rekey-arrowified` without `--rev` is a usage error (exit 2)",
+      noRev.status === 2,
+      `exit ${noRev.status}\n${noRev.stdout}${noRev.stderr}`
+    )
+
+    // The positive control, so a mode that refused everything would fail: commit
+    // arr_2d in its `function` spelling, keyed in the store, then put back the
+    // codemod's rewrite of it. The re-key accepts that, moves the key and leaves
+    // the program fresh.
+    const programFile = path.join(copy, "tests/differential/corpus/arr_2d.ts")
+    const arrows = fs.readFileSync(path.join(root, "tests/differential/corpus/arr_2d.ts"), "utf8")
+    const functions = arrows
+      .replace(/^(export )?const (\w+) = \((.*)\): (.+) => \{$/gm, "$1function $2($3): $4 {")
+      .replace(/^\};$/gm, "}")
+    const key = (text) => crypto.createHash("sha256").update(text).digest("hex").slice(0, 16)
+    const roundTrips = functions !== arrows && arrowify(functions, "arr_2d.ts", { concise: false }).text === arrows
+    fs.writeFileSync(programFile, functions)
+    fs.writeFileSync(
+      store,
+      fs
+        .readFileSync(store, "utf8")
+        .replace(
+          `module ${key(arrows)} tests/differential/corpus/arr_2d.ts `,
+          `module ${key(functions)} tests/differential/corpus/arr_2d.ts `
+        )
+    )
+    const recommitted = git("commit", "-q", "-a", "-m", "function spelling")
+    const freshFunctions = goldens("corpus/arr_2d")
+    fs.writeFileSync(programFile, arrows)
+    const keyedBefore = fs.readFileSync(store)
+    const accepted = goldens("--rekey-arrowified", "--rev", "HEAD", "corpus/arr_2d")
+    const freshArrows = goldens("corpus/arr_2d")
+    check(
+      "WP22 arrow-corpus: the re-key accepts the codemod's rewrite of a frozen source, moves its key and leaves it fresh",
+      roundTrips &&
+        recommitted.status === 0 &&
+        freshFunctions.status === 0 &&
+        accepted.status === 0 &&
+        freshArrows.status === 0 &&
+        !fs.readFileSync(store).equals(keyedBefore) &&
+        fs.readFileSync(store, "utf8").includes(`module ${key(arrows)} tests/differential/corpus/arr_2d.ts `),
+      [`round trip ${roundTrips}`, ...[recommitted, freshFunctions, accepted, freshArrows].map(
+        (r) => `exit ${r.status}\n${r.stdout}${r.stderr}`
+      )].join("\n---\n")
+    )
+  } finally {
+    fs.rmSync(copy, { recursive: true, force: true })
+  }
 }
 
 // ---- The gate on the prebuilt runtime objects ------------------------------------
