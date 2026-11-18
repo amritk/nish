@@ -86,7 +86,7 @@ The owner's calls before S2, numbered D1…: the directory and naming, public vs
 
 Mirror WP66's PR (`git show --stat f0587701`): `docs/wp67-<name>.md`, `docs/roadmap/wp67-<name>.md` (State: Proposed, Done 0 of N, Stages, Next, Open questions, Not planned), a row in [`docs/roadmap/index.md`](../../docs/roadmap/index.md) "In progress and proposed" and its Open questions list, a row in [`docs/MASTER_PLAN.md`](../../docs/MASTER_PLAN.md) and [`docs/README.md`](../../docs/README.md), and the route in [`scalar.config.json`](../../scalar.config.json).
 
-Owns: `docs/wp67-*.md`, `docs/roadmap/wp67-*.md`, `docs/roadmap/index.md`, `docs/MASTER_PLAN.md`, `docs/README.md`, `scalar.config.json`
+Owns: `docs/wp67-*.md`, `bench/wp67-*` (the per-cluster micro-benchmarks the survey measures with, kept so every figure reruns), `docs/roadmap/wp67-*.md`, `docs/roadmap/index.md`, `docs/MASTER_PLAN.md`, `docs/README.md`, `scalar.config.json`
 
 ## Out of scope
 
