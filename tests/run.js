@@ -8650,7 +8650,10 @@ if (dealtHere("selfHosting")) {
         `${nishCmp.stdout}${nishCmp.stderr}`
       )
 
-      const stage1FuzzSeed = 20261001
+      // The window starts at the first generated program a declaration in
+      // fuzz.js reaches (20261176 holds a guarded counted loop), since an entry
+      // no program in the run uses fails as stale; any 16 programs are as random.
+      const stage1FuzzSeed = 20261176
       const stage1Fuzz = spawnSync(
         "node",
         [
