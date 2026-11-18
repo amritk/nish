@@ -22,7 +22,6 @@ cases/acc_width_i64 added after R6: no rewriter to freeze it with
 cases/acc_width_unsigned added after R6: no rewriter to freeze it with
 cases/arena_placement added after R6: no rewriter to freeze it with
 cases/arena_placement_loops added after R6: no rewriter to freeze it with
-cases/argv_echo stale since R6: tests/cases/argv_echo.ts changed since the rewrite was frozen (56997a70169032e1 -> 61a603fd6093e8a4)
 cases/arr_bounds_break_for added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_for_string added after R6: no rewriter to freeze it with
 cases/arr_bounds_break_while added after R6: no rewriter to freeze it with
@@ -44,7 +43,6 @@ cases/arr_bounds_offset added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_floor added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_other added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_reach added after R6: no rewriter to freeze it with
-cases/arr_bounds_panic stale since R6: tests/cases/arr_bounds_panic.ts changed since the rewrite was frozen (b42b82e1dc77c77f -> f596981293c1e7ee)
 cases/arr_bounds_range added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_call added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_kept added after R6: no rewriter to freeze it with
@@ -71,25 +69,17 @@ cases/arr_bounds_returned_through_store added after R6: no rewriter to freeze it
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard added after R6: no rewriter to freeze it with
 cases/arr_bounds_unsigned_guard_f64 added after R6: no rewriter to freeze it with
-cases/arr_element_bitwise_assign stale since R6: tests/cases/arr_element_bitwise_assign.ts changed since the rewrite was frozen (44a1ea6b2ff66098 -> 19fe4be4ae453f5b)
-cases/arr_f64 stale since R6: tests/cases/arr_f64.ts changed since the rewrite was frozen (feef47cf159eb51a -> b51050296bf074ca)
 cases/arr_filter added after R6: no rewriter to freeze it with
 cases/arr_find_index added after R6: no rewriter to freeze it with
-cases/arr_for_of stale since R6: tests/cases/arr_for_of.ts changed since the rewrite was frozen (a35ca6f821e64d62 -> d30062f78a3df1c5)
 cases/arr_foreach added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_store added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_view added after R6: no rewriter to freeze it with
-cases/arr_index_read_write stale since R6: tests/cases/arr_index_read_write.ts changed since the rewrite was frozen (1a00a3c9d42134bb -> e2dd7b201486ae68)
-cases/arr_length stale since R6: tests/cases/arr_length.ts changed since the rewrite was frozen (5906b614ed701634 -> 2a3955f363bac6ed)
-cases/arr_literal stale since R6: tests/cases/arr_literal.ts changed since the rewrite was frozen (c445a1498c624ae0 -> 03ef696ad6ef34c3)
 cases/arr_map added after R6: no rewriter to freeze it with
 cases/arr_map_f64 added after R6: no rewriter to freeze it with
 cases/arr_map_template added after R6: no rewriter to freeze it with
 cases/arr_named_predicates added after R6: no rewriter to freeze it with
-cases/arr_nested stale since R6: tests/cases/arr_nested.ts changed since the rewrite was frozen (fcb5a84fdf857dfc -> 6301a4ba40cf2d81)
-cases/arr_new_zeroed stale since R6: tests/cases/arr_new_zeroed.ts changed since the rewrite was frozen (f42ed49c1c8446bf -> aacad6dadffc064b)
 cases/arr_path_alias_shrink added after R6: no rewriter to freeze it with
 cases/arr_path_alias_store added after R6: no rewriter to freeze it with
 cases/arr_path_callee_pop added after R6: no rewriter to freeze it with
@@ -112,7 +102,6 @@ cases/arr_path_root added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs_compound added after R6: no rewriter to freeze it with
 cases/arr_path_store_rhs_field added after R6: no rewriter to freeze it with
-cases/arr_push stale since R6: tests/cases/arr_push.ts changed since the rewrite was frozen (d1e6d9ea8a6e47e1 -> 520937be9c5bceb0)
 cases/arr_range_call added after R6: no rewriter to freeze it with
 cases/arr_range_call_arg_rebind added after R6: no rewriter to freeze it with
 cases/arr_range_call_arrow added after R6: no rewriter to freeze it with
@@ -125,8 +114,6 @@ cases/arr_range_call_no_proof added after R6: no rewriter to freeze it with
 cases/arr_range_call_rebind added after R6: no rewriter to freeze it with
 cases/arr_range_call_rebind_callee added after R6: no rewriter to freeze it with
 cases/arr_range_call_two_sites added after R6: no rewriter to freeze it with
-cases/arr_readonly_field stale since R6: tests/cases/arr_readonly_field.ts changed since the rewrite was frozen (c508009d9b86395f -> 34c9653f97c95e01)
-cases/arr_readonly_param stale since R6: tests/cases/arr_readonly_param.ts changed since the rewrite was frozen (8c2735c0995a71e6 -> 760e2a6c7c90144d)
 cases/arr_ref_alias_clone added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_dead added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_replace added after R6: no rewriter to freeze it with
@@ -134,19 +121,14 @@ cases/arr_slice added after R6: no rewriter to freeze it with
 cases/arr_slice_bounds added after R6: no rewriter to freeze it with
 cases/arr_slice_saturate added after R6: no rewriter to freeze it with
 cases/arr_some_every added after R6: no rewriter to freeze it with
-cases/arr_sort stale since R6: tests/cases/arr_sort.ts changed since the rewrite was frozen (1be25fb3538cbdad -> 6f3701a8227b7bd2)
 cases/arr_sort_capture added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp_f64 added after R6: no rewriter to freeze it with
 cases/arr_sort_cmp_record added after R6: no rewriter to freeze it with
 cases/arr_sort_edge added after R6: no rewriter to freeze it with
 cases/arr_sort_overflow added after R6: no rewriter to freeze it with
-cases/arr_stack_f64 stale since R6: tests/cases/arr_stack_f64.ts changed since the rewrite was frozen (58ae4e8e011087ce -> 8f3976d3abcaaa14)
-cases/arr_strings stale since R6: tests/cases/arr_strings.ts changed since the rewrite was frozen (ce0815e9eaaf9dd9 -> 798844552d09c8e5)
 cases/arr_sum stale since R6: tests/cases/arr_sum.ts changed since the rewrite was frozen (db9b79bf0f0b86e7 -> dc44f5bae14ee81d)
 cases/arr_typed_push_pop added after R6: no rewriter to freeze it with
-cases/arr_typed_views stale since R6: tests/cases/arr_typed_views.ts changed since the rewrite was frozen (e18b566b5dec237c -> 71927bc280a8f53d)
-cases/arr_u8 stale since R6: tests/cases/arr_u8.ts changed since the rewrite was frozen (2e224cfc237d9cbd -> b2f44433f7b34868)
 cases/asi_continuation added after R6: no rewriter to freeze it with
 cases/asi_statements added after R6: no rewriter to freeze it with
 cases/async_attributes added after R6: no rewriter to freeze it with
@@ -167,7 +149,6 @@ cases/async_spawn_fn_arg added after R6: no rewriter to freeze it with
 cases/async_spawn_handler_reach added after R6: no rewriter to freeze it with
 cases/async_spawn_shared added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
-cases/bit_shift_narrow stale since R6: tests/cases/bit_shift_narrow.ts changed since the rewrite was frozen (699f596c8bcaffd7 -> 7dc0e7a2d812ec68)
 cases/bytes_fill added after R6: no rewriter to freeze it with
 cases/bytes_offset_float added after R6: no rewriter to freeze it with
 cases/bytes_offset_u64 added after R6: no rewriter to freeze it with
@@ -205,12 +186,6 @@ cases/cf_label_dispose added after R6: no rewriter to freeze it with
 cases/cf_label_walks added after R6: no rewriter to freeze it with
 cases/cls_boxed_array added after R6: no rewriter to freeze it with
 cases/cls_boxed_array_push added after R6: no rewriter to freeze it with
-cases/cls_compound_field stale since R6: tests/cases/cls_compound_field.ts changed since the rewrite was frozen (b9e86586299ca6a5 -> d00d19d19892202e)
-cases/cls_field_bitwise_assign stale since R6: tests/cases/cls_field_bitwise_assign.ts changed since the rewrite was frozen (976f46200aca4d0f -> f0587c35ab65994b)
-cases/cls_field_write stale since R6: tests/cases/cls_field_write.ts changed since the rewrite was frozen (a0470716eb70c98a -> 260ee58cca4d4eea)
-cases/cls_implements stale since R6: tests/cases/cls_implements.ts changed since the rewrite was frozen (eb71f89ccec6c920 -> 21038b291330faa6)
-cases/cls_implements_prefix stale since R6: tests/cases/cls_implements_prefix.ts changed since the rewrite was frozen (ccc0ac10a0a8cf8f -> 3f65ae7e85a8f336)
-cases/cls_initializers stale since R6: tests/cases/cls_initializers.ts changed since the rewrite was frozen (ba06aca5f8e28ad9 -> a21b3d1fd143acf5)
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with
@@ -218,19 +193,9 @@ cases/cls_inline_array_local added after R6: no rewriter to freeze it with
 cases/cls_inline_array_order added after R6: no rewriter to freeze it with
 cases/cls_inline_array_passed added after R6: no rewriter to freeze it with
 cases/cls_inline_array_push added after R6: no rewriter to freeze it with
-cases/cls_interface_literal stale since R6: tests/cases/cls_interface_literal.ts changed since the rewrite was frozen (69344bbdc0bf00bc -> 44f129c0059e895c)
 cases/cls_literal_methodless added after R6: no rewriter to freeze it with
-cases/cls_nested stale since R6: tests/cases/cls_nested.ts changed since the rewrite was frozen (7c40d528ee112dd0 -> 2a1fd986bcb71550)
-cases/cls_point stale since R6: tests/cases/cls_point.ts changed since the rewrite was frozen (435fd35a3955d03c -> 558dd8e0012f1c30)
-cases/cls_readonly_ok stale since R6: tests/cases/cls_readonly_ok.ts changed since the rewrite was frozen (a17880e5b5a9eb78 -> 723864c55e102e05)
-cases/cls_this_method_call stale since R6: tests/cases/cls_this_method_call.ts changed since the rewrite was frozen (fe78fbd1d72f2f6f -> cdc4e3f11dd7c112)
-cases/cls_vector stale since R6: tests/cases/cls_vector.ts changed since the rewrite was frozen (9fced3344599ceff -> b88a3735bf0851eb)
 cases/const_array_numeric added after R6: no rewriter to freeze it with
 cases/const_array_u8 added after R6: no rewriter to freeze it with
-cases/const_f64 stale since R6: tests/cases/const_f64.ts changed since the rewrite was frozen (3ecb93ffb4859d93 -> 36a8d86f0c14448c)
-cases/const_i64 stale since R6: tests/cases/const_i64.ts changed since the rewrite was frozen (907e63c796228d65 -> 4dd5c14827daa500)
-cases/conv_f64_bits stale since R6: tests/cases/conv_f64_bits.ts changed since the rewrite was frozen (ece6de317c53eb3d -> 205a0789cad3bc04)
-cases/conv_f64_context stale since R6: tests/cases/conv_f64_context.ts changed since the rewrite was frozen (89bcd75694730a11 -> dab24b3c58bfdb38)
 cases/ct_asm_p256 added after R6: no rewriter to freeze it with
 cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with
@@ -245,7 +210,6 @@ cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
 cases/dbg_union_generic added after R6: no rewriter to freeze it with
-cases/decl_prototype_names stale since R6: tests/cases/decl_prototype_names.ts changed since the rewrite was frozen (5d85993fb6f2b881 -> ab1a1de3555c18c0)
 cases/deny_panics_arr_map added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
@@ -262,11 +226,6 @@ cases/destructure_stack added after R6: no rewriter to freeze it with
 cases/destructure_zero_cost added after R6: no rewriter to freeze it with
 cases/deterministic_bits added after R6: no rewriter to freeze it with
 cases/deterministic_parse added after R6: no rewriter to freeze it with
-cases/div_checked stale since R6: tests/cases/div_checked.ts changed since the rewrite was frozen (8e738938be8effe2 -> 04aede4f9f127173)
-cases/div_overflow_panic stale since R6: tests/cases/div_overflow_panic.ts changed since the rewrite was frozen (dea5964a224be089 -> b558b38c9fb84d5c)
-cases/div_zero_panic stale since R6: tests/cases/div_zero_panic.ts changed since the rewrite was frozen (91b27f7a56d88f6d -> f5e45748ffb1ad9a)
-cases/entry_main stale since R6: tests/cases/entry_main.ts changed since the rewrite was frozen (8602be23191e5b88 -> c56eba56d67d4797)
-cases/entry_main_void stale since R6: tests/cases/entry_main_void.ts changed since the rewrite was frozen (b8bab27e6f6970d9 -> 610c1b9e41876223)
 cases/entry_shebang added after R6: no rewriter to freeze it with
 cases/enum_loop_for_update added after R6: no rewriter to freeze it with
 cases/enum_loop_held_several added after R6: no rewriter to freeze it with
@@ -289,7 +248,6 @@ cases/ffi_handle_class_template added after R6: no rewriter to freeze it with
 cases/ffi_handle_positions added after R6: no rewriter to freeze it with
 cases/ffi_owned_string added after R6: no rewriter to freeze it with
 cases/ffi_pointer stale since R6: tests/cases/ffi_pointer.ts changed since the rewrite was frozen (1193b1ec0373ec6c -> f84ebbd595f99a70)
-cases/ffi_scalar stale since R6: tests/cases/ffi_scalar.ts changed since the rewrite was frozen (45941925e7265218 -> 4dafbc5841cf0b88)
 cases/ffi_string_loops added after R6: no rewriter to freeze it with
 cases/ffi_string_param added after R6: no rewriter to freeze it with
 cases/ffi_string_return added after R6: no rewriter to freeze it with
@@ -356,22 +314,12 @@ cases/foreach_nested added after R6: no rewriter to freeze it with
 cases/generic_interface_class_arg added after R6: no rewriter to freeze it with
 cases/host_handle_native added after R6: no rewriter to freeze it with
 cases/hygiene_quiet added after R6: no rewriter to freeze it with
-cases/i64_literal_2pow53 stale since R6: tests/cases/i64_literal_2pow53.ts changed since the rewrite was frozen (3c7249e8ce53f1b3 -> 755a95c8b6176730)
-cases/int_min_literal stale since R6: tests/cases/int_min_literal.ts changed since the rewrite was frozen (7bbb7fe37df51532 -> 6916c0c6e809e0c0)
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
 cases/io_create_exclusive added after R6: no rewriter to freeze it with
-cases/io_files stale since R6: tests/cases/io_files.ts changed since the rewrite was frozen (38c245b6f0081593 -> 64f6457560c50af4)
-cases/io_getenv stale since R6: tests/cases/io_getenv.ts changed since the rewrite was frozen (4f6306d8a23c27cb -> f843dcee441c7235)
-cases/io_host stale since R6: tests/cases/io_host.ts changed since the rewrite was frozen (a86447ac51b0c283 -> 968b4d308bcaf226)
-cases/io_is_directory stale since R6: tests/cases/io_is_directory.ts changed since the rewrite was frozen (eaf02081e7c064c0 -> 7783804a86781899)
-cases/io_mkdir stale since R6: tests/cases/io_mkdir.ts changed since the rewrite was frozen (0f6fba84d4f3a24c -> c63f68805917aca5)
 cases/io_mkdir_mode added after R6: no rewriter to freeze it with
-cases/io_realpath stale since R6: tests/cases/io_realpath.ts changed since the rewrite was frozen (e0180357719623ee -> 07e3d088a017ffd8)
 cases/io_rename added after R6: no rewriter to freeze it with
-cases/io_spawn stale since R6: tests/cases/io_spawn.ts changed since the rewrite was frozen (f04baba63065a9e3 -> 0d3b7215327f2cbc)
 cases/io_spawn_piped added after R6: no rewriter to freeze it with
 cases/io_spawn_piped_within added after R6: no rewriter to freeze it with
-cases/io_streams stale since R6: tests/cases/io_streams.ts changed since the rewrite was frozen (0e02099aae6c4e7d -> 003f7fca9eafb5db)
 cases/io_unlink added after R6: no rewriter to freeze it with
 cases/io_write_bytes added after R6: no rewriter to freeze it with
 cases/io_write_file_bytes added after R6: no rewriter to freeze it with
@@ -499,25 +447,14 @@ cases/mem_loop_scope_escape added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_forof added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_interior added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_threads added after R6: no rewriter to freeze it with
-cases/mem_nullable stale since R6: tests/cases/mem_nullable.ts changed since the rewrite was frozen (a77e05a0f8bd69f9 -> 5df3edd9c1b6bc81)
-cases/mem_reclaim_argument stale since R6: tests/cases/mem_reclaim_argument.ts changed since the rewrite was frozen (5062abac00c53da8 -> 40335fd2796c0b95)
-cases/mem_reclaim_call stale since R6: tests/cases/mem_reclaim_call.ts changed since the rewrite was frozen (19852aef16dbdaed -> 3ea7eccbcf8721b2)
 cases/mem_reclaim_guards stale since R6: tests/cases/mem_reclaim_guards.ts changed since the rewrite was frozen (e4af7d4a1888fb72 -> 034139e9618f89a5)
-cases/mem_reclaim_no_stack_alloc stale since R6: tests/cases/mem_reclaim_no_stack_alloc.ts changed since the rewrite was frozen (cf76d74726c19816 -> bd85833f2c46e9f6)
 cases/mem_return_array_callee added after R6: no rewriter to freeze it with
 cases/mem_return_array_caller added after R6: no rewriter to freeze it with
 cases/mem_return_array_nested added after R6: no rewriter to freeze it with
 cases/mem_return_array_readdir added after R6: no rewriter to freeze it with
 cases/mem_return_array_scope added after R6: no rewriter to freeze it with
-cases/mem_scope_dynamic_array stale since R6: tests/cases/mem_scope_dynamic_array.ts changed since the rewrite was frozen (5f23054d5ab17322 -> e5eeb46bcc65f062)
-cases/mem_scope_string_temp stale since R6: tests/cases/mem_scope_string_temp.ts changed since the rewrite was frozen (b22b6622a4c8ec82 -> c950eba0da965fb7)
 cases/mem_scope_tail_call_guards stale since R6: tests/cases/mem_scope_tail_call_guards.ts changed since the rewrite was frozen (7007b3f5b1c983bb -> 44fe61e302e220dd)
 cases/mem_spawn_piped_scope added after R6: no rewriter to freeze it with
-cases/mem_stack_array_literal stale since R6: tests/cases/mem_stack_array_literal.ts changed since the rewrite was frozen (333523b83970a8f7 -> c925f19dfb3853c1)
-cases/mem_stack_ctor_capture stale since R6: tests/cases/mem_stack_ctor_capture.ts changed since the rewrite was frozen (94ad7222358a284c -> 681400dc5365936a)
-cases/mem_stack_escape stale since R6: tests/cases/mem_stack_escape.ts changed since the rewrite was frozen (4c80824c5df9ba38 -> 1a24a6b5cb282dbb)
-cases/mem_stack_loop stale since R6: tests/cases/mem_stack_loop.ts changed since the rewrite was frozen (b740ba70733688f3 -> 6ce27457fdc3c7d6)
-cases/mem_stack_struct stale since R6: tests/cases/mem_stack_struct.ts changed since the rewrite was frozen (8561faa44c62f435 -> 3eafbfff5e12b714)
 cases/mem_terminal_size_scope added after R6: no rewriter to freeze it with
 cases/mem_using_arena added after R6: no rewriter to freeze it with
 cases/mem_using_arena_or_return added after R6: no rewriter to freeze it with
@@ -600,7 +537,6 @@ cases/param_generic added after R6: no rewriter to freeze it with
 cases/param_method added after R6: no rewriter to freeze it with
 cases/param_rest added after R6: no rewriter to freeze it with
 cases/param_rest_escape added after R6: no rewriter to freeze it with
-cases/parse_numbers stale since R6: tests/cases/parse_numbers.ts changed since the rewrite was frozen (83ef33c1caa41a0b -> a6e3f82ca5b17109)
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_drop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_quiet added after R6: no rewriter to freeze it with
@@ -611,7 +547,6 @@ cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
-cases/perf_clamp_order stale since R6: tests/cases/perf_clamp_order.ts changed since the rewrite was frozen (5a47ee6519bf18bb -> 382c725bc7b38935)
 cases/perf_kept_memory added after R6: no rewriter to freeze it with
 cases/perf_kept_memory_direct added after R6: no rewriter to freeze it with
 cases/perf_kept_memory_quiet added after R6: no rewriter to freeze it with
@@ -665,7 +600,6 @@ cases/port_utf8_offset_argument added after R6: no rewriter to freeze it with
 cases/port_utf8_offset_helper_return added after R6: no rewriter to freeze it with
 cases/port_utf8_offset_index added after R6: no rewriter to freeze it with
 cases/port_utf8_offset_loop_bound added after R6: no rewriter to freeze it with
-cases/process_exit stale since R6: tests/cases/process_exit.ts changed since the rewrite was frozen (7e91883a1ae285ff -> 4c8401a8da9b74fb)
 cases/region_cache added after R6: no rewriter to freeze it with
 cases/region_child_builder_list added after R6: no rewriter to freeze it with
 cases/region_child_chain added after R6: no rewriter to freeze it with
@@ -675,20 +609,10 @@ cases/region_child_local_map added after R6: no rewriter to freeze it with
 cases/region_child_map added after R6: no rewriter to freeze it with
 cases/region_child_plain added after R6: no rewriter to freeze it with
 cases/region_copied_churn added after R6: no rewriter to freeze it with
-cases/res_basic stale since R6: tests/cases/res_basic.ts changed since the rewrite was frozen (d9ce8209ebdf70b4 -> 000db62227278a34)
-cases/res_by_value stale since R6: tests/cases/res_by_value.ts changed since the rewrite was frozen (7fefa182442103bf -> 2143c7247862d68a)
-cases/res_by_value_param stale since R6: tests/cases/res_by_value_param.ts changed since the rewrite was frozen (d4668cd429510f47 -> 09c2160f562665c9)
-cases/res_by_value_payloads stale since R6: tests/cases/res_by_value_payloads.ts changed since the rewrite was frozen (688222b7986580de -> f69f35477178531d)
-cases/res_by_value_propagate stale since R6: tests/cases/res_by_value_propagate.ts changed since the rewrite was frozen (5726da2e2ae7a18c -> 1760f47a16504eed)
 cases/res_let_reassign added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
-cases/res_propagate stale since R6: tests/cases/res_propagate.ts changed since the rewrite was frozen (326519de8b6bbac5 -> 12d067e798f2cf9c)
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
-cases/res_stack stale since R6: tests/cases/res_stack.ts changed since the rewrite was frozen (942b760639916ba8 -> 78b67d658dca27fc)
-cases/res_struct_error stale since R6: tests/cases/res_struct_error.ts changed since the rewrite was frozen (1a1616b05791c3df -> 8f6b8a0be682a978)
-cases/res_unwrap stale since R6: tests/cases/res_unwrap.ts changed since the rewrite was frozen (ac34e1f10ba23caf -> 8e3b1f2c6581cb76)
-cases/res_void stale since R6: tests/cases/res_void.ts changed since the rewrite was frozen (1351614be1ca79e6 -> 53c73b6c57590812)
 cases/reserved_label_names added after R6: no rewriter to freeze it with
 cases/reserved_label_names_dbg added after R6: no rewriter to freeze it with
 cases/result_loop_outer_let added after R6: no rewriter to freeze it with
@@ -771,7 +695,6 @@ cases/term_calls added after R6: no rewriter to freeze it with
 cases/term_import added after R6: no rewriter to freeze it with
 cases/term_pty added after R6: no rewriter to freeze it with
 cases/term_restore added after R6: no rewriter to freeze it with
-cases/u_div_zero_panic stale since R6: tests/cases/u_div_zero_panic.ts changed since the rewrite was frozen (bb1e903f400f4ac5 -> 90e43ff38df75488)
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
 cases/union_generic_call added after R6: no rewriter to freeze it with
