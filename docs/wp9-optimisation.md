@@ -232,6 +232,11 @@ llvm-profdata merge -o app.profdata app-*.profraw
 scripts/build.sh app.ll runtime/runtime.c -o app --profile speed --pgo-use app.profdata
 ```
 
+`nish --link` takes the same two flags (`nish app.ts --link app.instr
+--pgo-generate`, then `--pgo-use app.profdata`), instruments or optimises the
+runtime and SQLite with the program, and never mixes those objects with the
+runtime cache's ([the guide](guide/using-nish/cli.md#optimizing-a-build-with-a-profile)).
+
 PGO works for the `speed`, `size` and `napi` profiles, and needs compiler-rt's
 profile runtime. Measured while overflow was still undefined, training on the
 benchmark input: **fib 356 → 288 ms (−19 %), past C's 297–311**, from block
