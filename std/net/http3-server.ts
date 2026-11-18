@@ -574,6 +574,19 @@ export class Http3Server {
   private free: i32[]
   /** Per slot: 1 while on the ready ring, 2 while on the dirty stack. */
   private queued: i32[]
+  /**
+   * The stream buffers every slot's connection borrows from, made by the
+   * constructor for the stream table `quicConfig` gives every slot: `null`
+   * when its streams have none. Each pool makes a buffer only when a stream
+   * first needs one, so an idle server holds none (QUIC-3). It is made even
+   * for a configuration `quicConnConfigFits` refuses; a slot's connection
+   * shares it only when its stream buffers are the pools' size.
+   */
+  streamPools: QuicStreamPools | null = null
+  /** The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. */
+  dataPool: BufferPool
+  /** The `maxFieldSectionSize`-byte HEADERS buffers every slot's `Http3Connection` borrows around a decode. */
+  sectionPool: BufferPool
   /** When the answer budget was last topped up, -1 before the first answer. */
   private answerRefilled: i64 = -1
   /** The caller's clock in microseconds, from `clock`, or -1: what each connection's pacer counts. */
@@ -588,8 +601,6 @@ export class Http3Server {
   private slots: i32 = 1
   /** The slots ever accepted into, 0 up: one past it has never held a connection, so is free without being on `free`. */
   private used: i32 = 0
-  /** Set by `stop`: a slot built after it is released as it is made, so it holds no keys. */
-  private stopped: boolean = false
   /** What is left of the answer budget (see `answerRefilled`). */
   private answerBudget: i32 = 0
   /** Connections accepted into a slot, for a log or a test; saturating at 2^31 - 1. */
@@ -599,21 +610,18 @@ export class Http3Server {
   /** Datagrams no slot owns dropped past the answer budget before the listener read them, saturating. */
   limited: i32 = 0
   private sendErrors: i32 = 0
+  /**
+   * The ECN bits of the datagram being handed on (`udpRecvFrom`'s second
+   * metadata word, 0 where the platform does not report them), which `serve`
+   * gives the slot's connection as its `arrivalEcn`, so that the server's
+   * ACKs echo the counts (RFC 9000 §13.4.1). `receive` sets it for every
+   * datagram it reads; a caller of `datagram` sets it before the call.
+   */
+  arrivalEcn: i32 = 0
   /** Whether the platform sends ECN marks: true until a marked send answers -95, and every slot's `ecnMarking` with it. */
   ecn: boolean = true
-  /**
-   * The stream buffers every slot's connection borrows from, made by the
-   * constructor for the stream table `quicConfig` gives every slot: `null`
-   * when its streams have none. Each pool makes a buffer only when a stream
-   * first needs one, so an idle server holds none (QUIC-3). It is made even
-   * for a configuration `quicConnConfigFits` refuses; a slot's connection
-   * shares it only when its stream buffers are the pools' size.
-   */
-  streamPools: QuicStreamPools | null = null
-  /** The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. */
-  dataPool: BufferPool
-  /** The `maxFieldSectionSize`-byte HEADERS buffers every slot's `Http3Connection` borrows around a decode. */
-  sectionPool: BufferPool
+  /** Set by `stop`: a slot built after it is released as it is made, so it holds no keys. */
+  private stopped: boolean = false
 
   /**
    * A pool of `size` slots serving HTTP/3 under `config` over QUIC under
@@ -859,6 +867,8 @@ export class Http3Server {
         return count
       }
       const segment: i32 = this.meta[0] > 0 ? this.meta[0] : n
+      // One receive is one ECN codepoint for every GRO segment of it.
+      this.arrivalEcn = this.meta[1] & 3
       let at: i32 = 0
       while (at < n && segment > 0) {
         const length: i32 = n - at < segment ? n - at : segment
@@ -1045,6 +1055,7 @@ export class Http3Server {
   serve(slot: i32, buf: u8[], at: i32, len: i32, address: u8[], now: i64, key: Secret<u8[]>): void {
     const quic: QuicConnection = this.quics[slot]
     quic.recovery.micros = this.micros
+    quic.arrivalEcn = this.arrivalEcn
     quic.receiveWindowFrom(buf, at, len, address, now)
     const input: u8[] | null = quic.signatureInput()
     if (input !== null) {

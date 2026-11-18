@@ -542,6 +542,7 @@ class QuicConnection
 | `application: QuicConnSpace` | The Application Data packet number space, which holds the 1-RTT keys. |
 | `appReadSlot: i32` | Which of the Application Data space's two read slots, and two write slots, hold the current keys. |
 | `appWriteSlot: i32` | Which of the Application Data space's two write slots holds the current keys, 0 or 1. |
+| `arrivalEcn: i32` | The ECN bits the next datagram handed to `receive`, `receiveWindow` or `receiveWindowFrom` arrived with (the IP header's two low traffic-class bits: 0 Not-ECT, 1 ECT(1), 2 ECT(0), 3 CE), which the carrier sets before the call and keeps for every coalesced packet of that datagram. Each packet that opens and is not a duplicate adds them to its packet number space's counts (RFC 9000 §13.4.1), which the space's ACKs then carry as an ACK_ECN. A carrier that cannot read the bits leaves it 0, and its ACKs stay plain. `reset` clears it. |
 | `authFailures: i64` | Packets that failed to authenticate over the connection, against `integrityLimit`. |
 | `bytesReceived: i64` | Bytes received and sent, for the anti-amplification limit (RFC 9000 §8.1). |
 | `bytesSent: i64` | Bytes sent, which may not pass three times `bytesReceived` before the address is validated. |
