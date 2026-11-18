@@ -1169,7 +1169,8 @@ const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
 }
 
 /** Whether the class `decl` writes `implements Compact` (WP48). */
-export const declaresCompact = (ctx: CheckContext, decl: Node): boolean => declaresMarker(ctx, decl, "Compact")
+export const declaresCompact = (ctx: CheckContext, decl: Node): boolean =>
+  declaresMarker(ctx, decl, "Compact")
 
 /** Whether the class `decl` writes `implements Wide` (WP48), which the compact-class rule never picks. */
 export const declaresWide = (ctx: CheckContext, decl: Node): boolean => declaresMarker(ctx, decl, "Wide")
