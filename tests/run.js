@@ -41601,7 +41601,7 @@ if (!only || "persist".includes(only)) {
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
-      ["compact", "tests/cases/compact_root_page.ts", "50000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
+      ["compact", "tests/module-storage/persist/compact_chain.ts", "200000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
     ]) {
       const mode = drive ?? stem
       const out = path.join(dir, stem)
