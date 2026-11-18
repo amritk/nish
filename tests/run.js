@@ -190,6 +190,29 @@ const RUNTIME_C = [
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
 const DRIVER_C = path.join(root, "tests", "driver.c")
 
+/** Whether util-linux's `prlimit` is on the path, for `spawnFaulting`. */
+const HAS_PRLIMIT = spawnSync("prlimit", ["--version"], { stdio: "ignore" }).status === 0
+
+/**
+ * `spawnSync(exe, args, options)` for a program a check expects to die of a
+ * signal, run with `RLIMIT_CORE` at 1 byte so the kernel writes no core for
+ * it. A process that reserved the debug arena or the compact-class range
+ * dumps every page of the reservation: a 1 TiB core, and minutes of kernel
+ * time on a CI runner whose `core_pattern` pipes the core to a helper. A limit
+ * of 1 is the one the kernel reads as "no core" for a pipe too, where 0 would
+ * only stop a core file. Without `prlimit` the program runs as it is, and the
+ * first such run prints one `NOTE` line saying the cores are back.
+ */
+let warnedNoPrlimit = false
+const spawnFaulting = (exe, args, options) => {
+  if (HAS_PRLIMIT) return spawnSync("prlimit", ["--core=1:1", "--", exe, ...args], options)
+  if (!warnedNoPrlimit) {
+    warnedNoPrlimit = true
+    console.log("NOTE  no `prlimit` on the path: the checks that expect a fault run with this shell's core limit")
+  }
+  return spawnSync(exe, args, options)
+}
+
 /**
  * The C a case is linked against -- `runtime.c`, `runtime-os.c` and the shared
  * driver -- compiled to object files once per run instead of once per case.
@@ -17223,7 +17246,7 @@ if (dealtHere("runtimeChecks")) {
         ],
         { cwd: root, encoding: "utf8" }
       )
-      const debugRun = debugCc.status === 0 ? spawnSync(debugExe, [], { encoding: "utf8" }) : null
+      const debugRun = debugCc.status === 0 ? spawnFaulting(debugExe, [], { encoding: "utf8" }) : null
       check(
         `debug arena with the compact-class range${suffix}: a pointer kept across a release dies of SIGSEGV at the read`,
         debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
@@ -17293,7 +17316,7 @@ if (dealtHere("runtimeChecks")) {
         ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", ...flags, ...RUNTIME_C, "tests/runtime/debug-arena-test.c", "-lm", "-o", exe],
         { cwd: root, encoding: "utf8" }
       )
-      const run = cc.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      const run = cc.status === 0 ? spawnFaulting(exe, [], { encoding: "utf8" }) : null
       return { cc, run, shown: cc.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "") }
     }
     const plain = staleBuild("debug_arena_plain", [])
