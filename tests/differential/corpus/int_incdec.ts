@@ -2,7 +2,7 @@
 // across the wrap boundary are the `nish:unsafe` calls that ask for the wrap.
 import { wrappingAdd, wrappingSub } from "nish:unsafe";
 
-export function main(): number {
+export const main = (): number => {
   let x = 5;
   const a = x++;
   const b = ++x;
@@ -43,4 +43,4 @@ export function main(): number {
   console.log(w);
   console.log(k);
   return 0;
-}
+};

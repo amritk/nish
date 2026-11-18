@@ -1,11 +1,11 @@
 // Recursion: fib, ackermann, factorial (wrapping), gcd, mutual recursion, power by squaring.
 import { wrappingMul } from "nish:unsafe";
 
-function fib(n: number): number {
+const fib = (n: number): number => {
   return n < 2 ? n : fib(n - 1) + fib(n - 2);
-}
+};
 
-function ackermann(m: number, n: number): number {
+const ackermann = (m: number, n: number): number => {
   if (m === 0) {
     return n + 1;
   }
@@ -13,40 +13,40 @@ function ackermann(m: number, n: number): number {
     return ackermann(m - 1, 1);
   }
   return ackermann(m - 1, ackermann(m, n - 1));
-}
+};
 
-function factorial(n: number): number {
+const factorial = (n: number): number => {
   return n <= 1 ? 1 : wrappingMul(n, factorial(n - 1));
-}
+};
 
-function gcd(a: number, b: number): number {
+const gcd = (a: number, b: number): number => {
   return b === 0 ? a : gcd(b, a % b);
-}
+};
 
-function isEven(n: number): boolean {
+const isEven = (n: number): boolean => {
   return n === 0 ? true : isOdd(n - 1);
-}
+};
 
-function isOdd(n: number): boolean {
+const isOdd = (n: number): boolean => {
   return n === 0 ? false : isEven(n - 1);
-}
+};
 
-function power(base: number, exp: number): number {
+const power = (base: number, exp: number): number => {
   if (exp === 0) {
     return 1;
   }
   const half = power(base, exp / 2);
   return exp % 2 === 0 ? wrappingMul(half, half) : wrappingMul(wrappingMul(half, half), base);
-}
+};
 
-function sumTo(n: number): number {
+const sumTo = (n: number): number => {
   if (n === 0) {
     return 0;
   }
   return n + sumTo(n - 1);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   for (let i = 0; i <= 20; i++) {
     console.log(`fib(${i}) = ${fib(i)}`);
   }
@@ -69,4 +69,4 @@ export function main(): number {
   console.log(power(-2, 31));
   console.log(sumTo(1000));
   return 0;
-}
+};

@@ -2,6 +2,6 @@
 // refuses its element (NL2661).
 import { setupCounter } from "./counter"
 
-export function start(): void {
+export const start = (): void => {
   setupCounter()
 }

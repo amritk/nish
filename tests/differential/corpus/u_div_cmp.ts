@@ -1,15 +1,15 @@
 // Unsigned division, remainder and ordering. Every value here is above
 // INT_MAX in its width, which is precisely where `udiv` and `icmp ult` differ
 // from the signed instructions: as an i32, 4000000000 is negative.
-function divU32(a: u32, b: u32): u32 {
+const divU32 = (a: u32, b: u32): u32 => {
   return a / b;
-}
+};
 
-function ltU32(a: u32, b: u32): boolean {
+const ltU32 = (a: u32, b: u32): boolean => {
   return a < b;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const big: u32 = 4000000000;
   const small: u32 = 7;
   console.log(`${divU32(big, small)}`);
@@ -51,4 +51,4 @@ export function main(): number {
   }
   console.log(`${n} ${steps}`);
   return 0;
-}
+};

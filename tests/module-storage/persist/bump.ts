@@ -6,11 +6,11 @@ class Box {
 
 const box = new Array<Box | null>(1)
 
-export function init(): void {
+export const init = (): void => {
   box[0] = new Box()
 }
 
-export function step(): i32 {
+export const step = (): i32 => {
   const b = box[0]
   if (b === null) return -1
   b.n = b.n + 1

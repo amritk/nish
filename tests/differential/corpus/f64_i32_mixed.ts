@@ -1,9 +1,9 @@
 // --number-mode f64 with explicit i32 locals: they still wrap; toI32 from f64 saturates.
-function wrapping(n: i32): i32 {
+const wrapping = (n: i32): i32 => {
   return n * 3 + 1;
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   const big: i32 = 2147483647;
   console.log(wrapping(big));
   console.log(big + 1);
@@ -34,4 +34,4 @@ export function main(): void {
   console.log(k * k);
   console.log(toF64(k) * toF64(k));
   console.log(`${big} ${toF64(big)} ${toI32(3.7)}`);
-}
+};

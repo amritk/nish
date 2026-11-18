@@ -1,5 +1,5 @@
 // Bubble sort, in-place reverse, and a selection of the k smallest values.
-function bubbleSort(xs: number[]): number {
+const bubbleSort = (xs: number[]): number => {
   let swaps = 0;
   for (let i = 0; i < xs.length; i++) {
     for (let j = 0; j + 1 < xs.length - i; j++) {
@@ -12,9 +12,9 @@ function bubbleSort(xs: number[]): number {
     }
   }
   return swaps;
-}
+};
 
-function reverse(xs: number[]): void {
+const reverse = (xs: number[]): void => {
   let lo = 0;
   let hi = xs.length - 1;
   while (lo < hi) {
@@ -24,17 +24,17 @@ function reverse(xs: number[]): void {
     lo++;
     hi--;
   }
-}
+};
 
-function show(xs: number[]): string {
+const show = (xs: number[]): string => {
   let s = "[";
   for (let i = 0; i < xs.length; i++) {
     s = i === 0 ? `${s}${xs[i]}` : `${s}, ${xs[i]}`;
   }
   return s + "]";
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const xs = [5, -3, 99, 0, 2147483647, -2147483647 - 1, 42, 42, 7, -1];
   console.log(show(xs));
   console.log(bubbleSort(xs));
@@ -59,4 +59,4 @@ export function main(): number {
   reverse(seq);
   console.log(seq[0]);
   return 0;
-}
+};

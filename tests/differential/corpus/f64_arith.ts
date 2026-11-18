@@ -1,9 +1,9 @@
 // --number-mode f64: division, remainder, and accumulation in doubles.
-function mean(a: number, b: number, c: number): number {
+const mean = (a: number, b: number, c: number): number => {
   return (a + b + c) / 3;
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   console.log(10 / 4);
   console.log(-10 / 4);
   console.log(1 / 3);
@@ -48,4 +48,4 @@ export function main(): void {
   console.log(100 - 99.9);
   console.log(1 - 1e-17);
   console.log(1e308 * 10 - 1e308 * 10);
-}
+};

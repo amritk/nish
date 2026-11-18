@@ -3,11 +3,11 @@
 // stays on a character boundary. Only in-range, non-negative pairs appear,
 // because that is the whole of what `slice` accepts — out of range panics
 // rather than clamping, and there is nothing to compare a panic against.
-function show(s: string, cut: number): void {
+const show = (s: string, cut: number): void => {
   console.log(`[${s.slice(0, cut)}] [${s.slice(cut)}] [${s.slice(cut, cut)}] [${s.slice(0, s.length)}]`);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   show("hello", 2);
   show("héllo", 3);
   show("", 0);
@@ -23,4 +23,4 @@ export function main(): number {
     start = start + at + 1;
   }
   return 0;
-}
+};

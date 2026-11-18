@@ -311,189 +311,189 @@ program cases/u_div_zero_panic
   module bb1e903f400f4ac5 tests/cases/u_div_zero_panic.ts 752dfc84f6cbf50c u_div_zero_panic.mjs
   entry 031363ce59fc53b7 __entry.mjs
 program corpus/argv_words
-  module 7655b9e26728eafe tests/differential/corpus/argv_words.ts d49206fca2e6d84a argv_words.mjs
+  module 00df672e19f5c1d5 tests/differential/corpus/argv_words.ts d49206fca2e6d84a argv_words.mjs
   entry b8ecd4096f0534dc __entry.mjs
 program corpus/arr_2d
-  module f37c25a6b0d02948 tests/differential/corpus/arr_2d.ts c552375f9f352148 arr_2d.mjs
+  module f901cb67424ca0fb tests/differential/corpus/arr_2d.ts c552375f9f352148 arr_2d.mjs
   entry 840d9e0005035f6f __entry.mjs
 program corpus/arr_bounds_edge
-  module 8ee47d594597f059 tests/differential/corpus/arr_bounds_edge.ts 6e29a1199217dc05 arr_bounds_edge.mjs
+  module 7a39616ca2e6bc8c tests/differential/corpus/arr_bounds_edge.ts 6e29a1199217dc05 arr_bounds_edge.mjs
   entry ffac0e2e5c8c928a __entry.mjs
 program corpus/arr_for_of
-  module 872a27e864acd35f tests/differential/corpus/arr_for_of.ts 73ef457ff23d241a arr_for_of.mjs
+  module d59b04e3b38c174f tests/differential/corpus/arr_for_of.ts 73ef457ff23d241a arr_for_of.mjs
   entry 769e27d07c82cbed __entry.mjs
 program corpus/arr_methods
-  module aa8c03bb536ccf1e tests/differential/corpus/arr_methods.ts e1cddbf92952c225 arr_methods.mjs
+  module a3c571d9137f3e8d tests/differential/corpus/arr_methods.ts e1cddbf92952c225 arr_methods.mjs
   entry 280fea406d20c58c __entry.mjs
 program corpus/arr_oob_exit
-  module 04797dabf5bff8dd tests/differential/corpus/arr_oob_exit.ts 33a3a05dcde3da22 arr_oob_exit.mjs
+  module 4270baca5085c56d tests/differential/corpus/arr_oob_exit.ts 33a3a05dcde3da22 arr_oob_exit.mjs
   entry 2eab3c5635dad3a6 __entry.mjs
 program corpus/arr_oob_negative
-  module c78b06207cb9385c tests/differential/corpus/arr_oob_negative.ts 05d9945e9b20b61e arr_oob_negative.mjs
+  module a09fc1c32634e8f7 tests/differential/corpus/arr_oob_negative.ts 05d9945e9b20b61e arr_oob_negative.mjs
   entry 3e029ef7a8704a2f __entry.mjs
 program corpus/arr_push_growth
-  module c5cfa2aabbcff513 tests/differential/corpus/arr_push_growth.ts b93309b5faba3bee arr_push_growth.mjs
+  module 4acf17d44d7fd876 tests/differential/corpus/arr_push_growth.ts b93309b5faba3bee arr_push_growth.mjs
   entry a6a3fabe74ed95c9 __entry.mjs
 program corpus/arr_sort_reverse
-  module 9827f8cccbd275a1 tests/differential/corpus/arr_sort_reverse.ts fbf41f0798b5d649 arr_sort_reverse.mjs
+  module 3ecf23dfed881d0a tests/differential/corpus/arr_sort_reverse.ts fbf41f0798b5d649 arr_sort_reverse.mjs
   entry 66701803a3587605 __entry.mjs
 program corpus/bit_compound_target
-  module 32cbc9f8c8ee3556 tests/differential/corpus/bit_compound_target.ts a3f2f5c75e6ffa8a bit_compound_target.mjs
+  module 4ede3e68e4d4891a tests/differential/corpus/bit_compound_target.ts a3f2f5c75e6ffa8a bit_compound_target.mjs
   entry ef851390879273eb __entry.mjs
 program corpus/bit_ops
-  module 495f3365592806a3 tests/differential/corpus/bit_ops.ts 1b567ff16394887c bit_ops.mjs
+  module 6fada9c6fb166f36 tests/differential/corpus/bit_ops.ts 1b567ff16394887c bit_ops.mjs
   entry d986900b85f728f5 __entry.mjs
 program corpus/bit_shifts
-  module 1487267cbfa35b09 tests/differential/corpus/bit_shifts.ts 1c1bd6c005eaa771 bit_shifts.mjs
+  module 2036c973a066a88e tests/differential/corpus/bit_shifts.ts 1c1bd6c005eaa771 bit_shifts.mjs
   entry 95148cf398ae1f7a __entry.mjs
 program corpus/cf_switch
-  module 522e6e6c8f5df940 tests/differential/corpus/cf_switch.ts be4f7c7159cdb142 cf_switch.mjs
+  module 8d06b07c99817f4a tests/differential/corpus/cf_switch.ts be4f7c7159cdb142 cf_switch.mjs
   entry 49a9370cd4afb086 __entry.mjs
 program corpus/class_prefix
-  module 9fb506c9a8591196 tests/differential/corpus/class_prefix.ts fe1f223afe40d599 class_prefix.mjs
+  module 3bc04ad3b39ff1a0 tests/differential/corpus/class_prefix.ts fe1f223afe40d599 class_prefix.mjs
   entry a06b060365c7aab7 __entry.mjs
 program corpus/collatz
-  module 6720fc741f5e96da tests/differential/corpus/collatz.ts 8b31c85903813759 collatz.mjs
+  module 36dc81dab2b298cc tests/differential/corpus/collatz.ts 8b31c85903813759 collatz.mjs
   entry 987c043ed218bc89 __entry.mjs
 program corpus/const_modules
-  module b2bc632db4ba4a5d tests/differential/corpus/const_modules/main.ts f4d06c528fa3bab5 main.mjs
-  module ecc1d0690d098d0e tests/differential/corpus/const_modules/kinds.ts 1e11df4b989502c3 kinds.mjs
+  module d7065755930bb314 tests/differential/corpus/const_modules/main.ts f4d06c528fa3bab5 main.mjs
+  module 0b318241540e45aa tests/differential/corpus/const_modules/kinds.ts 1e11df4b989502c3 kinds.mjs
   entry d4641ebfc283daff __entry.mjs
 program corpus/conv_bit_patterns
-  module 2ab71ff03c485920 tests/differential/corpus/conv_bit_patterns.ts 094740614b99d88c conv_bit_patterns.mjs
+  module dca2c47952dc9fda tests/differential/corpus/conv_bit_patterns.ts 094740614b99d88c conv_bit_patterns.mjs
   entry 50c33b0df5c3bd86 __entry.mjs
 program corpus/exit_code
-  module 2916653e03dfec97 tests/differential/corpus/exit_code.ts 6f49c328a9ce41cb exit_code.mjs
+  module 6c7016af6d65c78b tests/differential/corpus/exit_code.ts 6f49c328a9ce41cb exit_code.mjs
   entry 5d8fa8359cf5c17d __entry.mjs
 program corpus/exit_code_large
-  module bacacd8d5958bbb9 tests/differential/corpus/exit_code_large.ts ed0979c0966c87e9 exit_code_large.mjs
+  module 0501a8123b9d6de3 tests/differential/corpus/exit_code_large.ts ed0979c0966c87e9 exit_code_large.mjs
   entry 914a940842e61ad6 __entry.mjs
 program corpus/f32_round
-  module a27b5ed1c5d92c48 tests/differential/corpus/f32_round.ts 73eef6b6f56e2709 f32_round.mjs
+  module 06ed317495633826 tests/differential/corpus/f32_round.ts 73eef6b6f56e2709 f32_round.mjs
   entry ce9cfadd32aaed05 __entry.mjs
 program corpus/f64_arith
   flags --number-mode f64
-  module 8f701bae57105628 tests/differential/corpus/f64_arith.ts cbcd500e3db07943 f64_arith.mjs
+  module d9ce17224f635dee tests/differential/corpus/f64_arith.ts cbcd500e3db07943 f64_arith.mjs
   entry 1f558ece881099e3 __entry.mjs
 program corpus/f64_format
   flags --number-mode f64
-  module c137e7010f997103 tests/differential/corpus/f64_format.ts aee9a9aab5dd6334 f64_format.mjs
+  module fe1dc17bb6596550 tests/differential/corpus/f64_format.ts aee9a9aab5dd6334 f64_format.mjs
   entry 2b4c30ac9cd823f9 __entry.mjs
 program corpus/f64_i32_mixed
   flags --number-mode f64
-  module 76c0d0cd539040cc tests/differential/corpus/f64_i32_mixed.ts 6d8a50178ef6978b f64_i32_mixed.mjs
+  module 53fb5aa5e6cc1df2 tests/differential/corpus/f64_i32_mixed.ts 6d8a50178ef6978b f64_i32_mixed.mjs
   entry b6548281aecf10fe __entry.mjs
 program corpus/f64_libm
   flags --number-mode f64
-  module 1b59de1012ac2609 tests/differential/corpus/f64_libm.ts 32a43a05c6d8ab19 f64_libm.mjs
+  module f65865b20b9e09e9 tests/differential/corpus/f64_libm.ts 32a43a05c6d8ab19 f64_libm.mjs
   entry b23fb317f02b4681 __entry.mjs
 program corpus/f64_math
   flags --number-mode f64
-  module 141c7e4e040a1ff1 tests/differential/corpus/f64_math.ts 80631b50944a5d5b f64_math.mjs
+  module 81c271c4e6c08663 tests/differential/corpus/f64_math.ts 80631b50944a5d5b f64_math.mjs
   entry bf040ba4e64c97ca __entry.mjs
 program corpus/f64_minmax_nan
   flags --number-mode f64
-  module 18b32927ef2e660b tests/differential/corpus/f64_minmax_nan.ts bdd05b896a17d1a4 f64_minmax_nan.mjs
+  module a488994beee13e1b tests/differential/corpus/f64_minmax_nan.ts bdd05b896a17d1a4 f64_minmax_nan.mjs
   entry 4238da9aa99f7131 __entry.mjs
 program corpus/f64_pow_spec
   flags --number-mode f64
-  module 379f0b411c09e881 tests/differential/corpus/f64_pow_spec.ts 38f5b72938eeb5fb f64_pow_spec.mjs
+  module 948aa017af6613e3 tests/differential/corpus/f64_pow_spec.ts 38f5b72938eeb5fb f64_pow_spec.mjs
   entry 4f84c2f6a1709433 __entry.mjs
 program corpus/f64_round_negzero
   flags --number-mode f64
-  module dca58486aec05471 tests/differential/corpus/f64_round_negzero.ts 448c5e5403a10b9a f64_round_negzero.mjs
+  module 3b84a65494423094 tests/differential/corpus/f64_round_negzero.ts 448c5e5403a10b9a f64_round_negzero.mjs
   entry 01c67c5a76aca33a __entry.mjs
 program corpus/int_abs_minmax
-  module 52e53101927e7c13 tests/differential/corpus/int_abs_minmax.ts 49702424fb3d60b2 int_abs_minmax.mjs
+  module e47a807e491c7216 tests/differential/corpus/int_abs_minmax.ts 49702424fb3d60b2 int_abs_minmax.mjs
   entry 32204ad4c234c06d __entry.mjs
 program corpus/int_div_overflow
-  module f8500387b7ceb139 tests/differential/corpus/int_div_overflow.ts 47c7751ba9dac62c int_div_overflow.mjs
+  module 99db5746d3c18e0b tests/differential/corpus/int_div_overflow.ts 47c7751ba9dac62c int_div_overflow.mjs
   entry b52c0bf72116d1e4 __entry.mjs
 program corpus/int_div_zero
-  module 3651993605f90574 tests/differential/corpus/int_div_zero.ts ae1c9177c1c23455 int_div_zero.mjs
+  module f56f83bfbd06f7c7 tests/differential/corpus/int_div_zero.ts ae1c9177c1c23455 int_div_zero.mjs
   entry 985153049deb4725 __entry.mjs
 program corpus/int_divmod
-  module d36637abb5e4cf31 tests/differential/corpus/int_divmod.ts 2802a16960225e3c int_divmod.mjs
+  module 7acf3ca12e3b5285 tests/differential/corpus/int_divmod.ts 2802a16960225e3c int_divmod.mjs
   entry b43b7275b62843d4 __entry.mjs
 program corpus/io_missing_file
-  module 7e7d8813f8c66972 tests/differential/corpus/io_missing_file.ts 901394e2e88eee11 io_missing_file.mjs
+  module ce3156994fbf62c5 tests/differential/corpus/io_missing_file.ts 901394e2e88eee11 io_missing_file.mjs
   entry 27cf0e48edc1d2ee __entry.mjs
 program corpus/io_panic
-  module 7751b41b1eb66b70 tests/differential/corpus/io_panic.ts fddd8748e8c586bc io_panic.mjs
+  module 3dca48f5cb2f1f75 tests/differential/corpus/io_panic.ts fddd8748e8c586bc io_panic.mjs
   entry 47d66dbe7e2f0c4d __entry.mjs
 program corpus/io_roundtrip
-  module 8b006704dbf0fd4c tests/differential/corpus/io_roundtrip.ts ea89a675b90934a8 io_roundtrip.mjs
+  module 65eedb356c0121dd tests/differential/corpus/io_roundtrip.ts ea89a675b90934a8 io_roundtrip.mjs
   entry 91783128fe1910bf __entry.mjs
 program corpus/io_streams
-  module ce0d3b2bf9424e8a tests/differential/corpus/io_streams.ts 51875491f0bfb8ce io_streams.mjs
+  module 8fae812d765fe746 tests/differential/corpus/io_streams.ts 51875491f0bfb8ce io_streams.mjs
   entry a13011b0c09aa6bd __entry.mjs
 program corpus/loops_break_continue
-  module a4d5d5bba6657193 tests/differential/corpus/loops_break_continue.ts 242f81d255d13e60 loops_break_continue.mjs
+  module 69df8f2383113c69 tests/differential/corpus/loops_break_continue.ts 242f81d255d13e60 loops_break_continue.mjs
   entry 2205e5ded89b47bd __entry.mjs
 program corpus/loops_nested
-  module 277f9a1c45afbd5c tests/differential/corpus/loops_nested.ts 861a54ddff523e80 loops_nested.mjs
+  module cf2ecae776eab877 tests/differential/corpus/loops_nested.ts 861a54ddff523e80 loops_nested.mjs
   entry 3c3b99ca45d69501 __entry.mjs
 program corpus/main_return_code
-  module 88db86638a11ac11 tests/differential/corpus/main_return_code.ts 69ee0d7fd2236bd5 main_return_code.mjs
+  module 97d8342a83e8bf99 tests/differential/corpus/main_return_code.ts 69ee0d7fd2236bd5 main_return_code.mjs
   entry e4a6aeb97e4e224b __entry.mjs
 program corpus/main_return_negative
-  module 778c6d9e30d51628 tests/differential/corpus/main_return_negative.ts 785dadd9b93807da main_return_negative.mjs
+  module 958b45cd0c68cbf5 tests/differential/corpus/main_return_negative.ts 785dadd9b93807da main_return_negative.mjs
   entry dc8f14ff0565fee2 __entry.mjs
 program corpus/modules_basic
-  module 09cbe82aa98809ed tests/differential/corpus/modules_basic/main.ts 7ddf80d25f4c8deb main.mjs
-  module f82fc6fb7867c35f tests/differential/corpus/modules_basic/math.ts 7f336cbee1e2ed91 math.mjs
-  module 3f0751bdb0e1c259 tests/differential/corpus/modules_basic/text.ts 75ffa85a06ee21d0 text.mjs
+  module fc2f67e3de6366de tests/differential/corpus/modules_basic/main.ts 7ddf80d25f4c8deb main.mjs
+  module d0b97355229b2b60 tests/differential/corpus/modules_basic/math.ts 7f336cbee1e2ed91 math.mjs
+  module c98f92f879748442 tests/differential/corpus/modules_basic/text.ts 75ffa85a06ee21d0 text.mjs
   entry d4641ebfc283daff __entry.mjs
 program corpus/modules_diamond
-  module 13c1d7756fbd973d tests/differential/corpus/modules_diamond/main.ts a891385c76287c16 main.mjs
-  module 79ec7629f5084461 tests/differential/corpus/modules_diamond/left.ts a92223a999bdc663 left.mjs
-  module d6f474b17b5e550a tests/differential/corpus/modules_diamond/common.ts 740c9cdce3bf9544 common.mjs
-  module 781dd3616e1fd265 tests/differential/corpus/modules_diamond/right.ts 77230515f5cfac2c right.mjs
+  module f17b031872af7079 tests/differential/corpus/modules_diamond/main.ts a891385c76287c16 main.mjs
+  module 384925c83b6d0045 tests/differential/corpus/modules_diamond/left.ts a92223a999bdc663 left.mjs
+  module 8ede8d9a9e36960c tests/differential/corpus/modules_diamond/common.ts 740c9cdce3bf9544 common.mjs
+  module 70c7574476b12a4e tests/differential/corpus/modules_diamond/right.ts 77230515f5cfac2c right.mjs
   entry d4641ebfc283daff __entry.mjs
 program corpus/parse_argv_sum
-  module cbef058994762e99 tests/differential/corpus/parse_argv_sum.ts 55c432256acf7d1d parse_argv_sum.mjs
+  module a884f4a18684ef17 tests/differential/corpus/parse_argv_sum.ts 55c432256acf7d1d parse_argv_sum.mjs
   entry b29eb1b6b9bc56d1 __entry.mjs
 program corpus/parse_strings
-  module e2b98c0ef6244f15 tests/differential/corpus/parse_strings.ts b502913344eeca81 parse_strings.mjs
+  module c6c4ac3bd00ea179 tests/differential/corpus/parse_strings.ts b502913344eeca81 parse_strings.mjs
   entry 959a1e8fbf8763a6 __entry.mjs
 program corpus/scopes_shadow
-  module 11d14a816b066c05 tests/differential/corpus/scopes_shadow.ts 50d9faf1ac997480 scopes_shadow.mjs
+  module 865d7bbf6673fcd4 tests/differential/corpus/scopes_shadow.ts 50d9faf1ac997480 scopes_shadow.mjs
   entry c8de2dd4fa9cdc65 __entry.mjs
 program corpus/short_circuit
-  module 57a846db6fd5a22f tests/differential/corpus/short_circuit.ts b137ecadd1426ebe short_circuit.mjs
+  module 8eb72150331bd742 tests/differential/corpus/short_circuit.ts b137ecadd1426ebe short_circuit.mjs
   entry a45f6a0026075757 __entry.mjs
 program corpus/str_basic
-  module 4cf2c0388573c6ba tests/differential/corpus/str_basic.ts 0c93fdccb84f2907 str_basic.mjs
+  module 4477b0ce02ef2a16 tests/differential/corpus/str_basic.ts 0c93fdccb84f2907 str_basic.mjs
   entry b95d39cb0b439a04 __entry.mjs
 program corpus/str_build_loop
-  module 45717312e0ec02c8 tests/differential/corpus/str_build_loop.ts d4116f376dea7dfe str_build_loop.mjs
+  module 4b86d5ee7020ce6a tests/differential/corpus/str_build_loop.ts d4116f376dea7dfe str_build_loop.mjs
   entry e6f6f9cb09b525c7 __entry.mjs
 program corpus/str_large
-  module 8639367cb04261d3 tests/differential/corpus/str_large.ts 56c6e12b4d7e7261 str_large.mjs
+  module 8205ad412264b101 tests/differential/corpus/str_large.ts 56c6e12b4d7e7261 str_large.mjs
   entry 03c7c7a46dbfd8ba __entry.mjs
 program corpus/str_methods
-  module 9111cda529e1c57a tests/differential/corpus/str_methods.ts a04f2b461cae5ed8 str_methods.mjs
+  module 3fafa9a1fcc5d3be tests/differential/corpus/str_methods.ts a04f2b461cae5ed8 str_methods.mjs
   entry a65a178b2b0c6b18 __entry.mjs
 program corpus/str_nul_escapes
-  module f5eb2be0f6b0fc42 tests/differential/corpus/str_nul_escapes.ts 40690675cf1d2c98 str_nul_escapes.mjs
+  module 7a337e285468ec27 tests/differential/corpus/str_nul_escapes.ts 40690675cf1d2c98 str_nul_escapes.mjs
   entry 9cbc48a91300a1dd __entry.mjs
 program corpus/str_slice
-  module edea9c77fbc4ef06 tests/differential/corpus/str_slice.ts 1e6c7b1419b30fcc str_slice.mjs
+  module cacf012d73874ddc tests/differential/corpus/str_slice.ts 1e6c7b1419b30fcc str_slice.mjs
   entry edf2ee9242915f97 __entry.mjs
 program corpus/str_template
-  module 88cf8b50397323b6 tests/differential/corpus/str_template.ts 5a02a084951b33f2 str_template.mjs
+  module 6baa4353ff73dbbc tests/differential/corpus/str_template.ts 5a02a084951b33f2 str_template.mjs
   entry 76f3151ca7be5d9e __entry.mjs
 program corpus/str_unicode
-  module a846947fb693a025 tests/differential/corpus/str_unicode.ts dad39c4a265ecd9e str_unicode.mjs
+  module 361e8620bb343e07 tests/differential/corpus/str_unicode.ts dad39c4a265ecd9e str_unicode.mjs
   entry 5d7bb58b2a18d7ae __entry.mjs
 program corpus/ternary_chain
-  module 40d14aad3e6680ee tests/differential/corpus/ternary_chain.ts dbd311751491c62b ternary_chain.mjs
+  module 0561a9bcac4e2ee8 tests/differential/corpus/ternary_chain.ts dbd311751491c62b ternary_chain.mjs
   entry 2cd477a785936da7 __entry.mjs
 program corpus/u_convert_shift
-  module 8539e1ee7b5939df tests/differential/corpus/u_convert_shift.ts d9a94ec0fee54d24 u_convert_shift.mjs
+  module 571f12b4deefa06f tests/differential/corpus/u_convert_shift.ts d9a94ec0fee54d24 u_convert_shift.mjs
   entry 999177042b069aa6 __entry.mjs
 program corpus/u_wrap
-  module d7ba1beae41f5375 tests/differential/corpus/u_wrap.ts 90ef4896e0a39675 u_wrap.mjs
+  module 9daf1f5ad3d92ca5 tests/differential/corpus/u_wrap.ts 90ef4896e0a39675 u_wrap.mjs
   entry 5d416e3b40934f1b __entry.mjs
 body ceb29fd9cb279e13 23 870
 import * as __nish from "<root>/runtime/shim.mjs";

@@ -1,10 +1,10 @@
 // process.exit with a non-zero code stops the program; output before it is kept.
-function finish(code: number): number {
+const finish = (code: number): number => {
   console.log(`exiting with ${code}`);
   process.exit(code);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   let total = 0;
   for (let i = 1; i <= 10; i++) {
     total += i;
@@ -15,4 +15,4 @@ export function main(): number {
   }
   console.log("not printed");
   return 1;
-}
+};

@@ -1,7 +1,7 @@
 // --number-mode f64: transcendental functions on non-trivial arguments. llvm.sin/cos/exp/log/pow
 // become glibc libm calls; V8 uses its own fdlibm port, so a few results differ by one ulp.
 // Listed in known-failures.txt; see docs/wp13-differential.md.
-export function main(): void {
+export const main = (): void => {
   const xs = [0.5, 1, 1.5, 2, 2.5, 3, 10, 100, 0.1, 0.001, -1, -2.5, 1e-10, 1e10];
   for (const x of xs) {
     console.log(`sin(${x}) = ${Math.sin(x)}`);
@@ -28,4 +28,4 @@ export function main(): void {
   console.log(Math.pow(10, 308));
   console.log(Math.pow(10, -308));
   console.log(Math.pow(0, 0));
-}
+};

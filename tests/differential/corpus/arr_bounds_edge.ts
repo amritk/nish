@@ -1,17 +1,17 @@
 // Index edges that are still in range: a[0], a[a.length - 1], computed indices, writes at the end.
-function last(xs: number[]): number {
+const last = (xs: number[]): number => {
   return xs[xs.length - 1];
-}
+};
 
-function rotate(xs: number[]): void {
+const rotate = (xs: number[]): void => {
   const first = xs[0];
   for (let i = 0; i + 1 < xs.length; i++) {
     xs[i] = xs[i + 1];
   }
   xs[xs.length - 1] = first;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const xs = [10, 20, 30, 40, 50];
   console.log(xs[0]);
   console.log(last(xs));
@@ -42,4 +42,4 @@ export function main(): number {
   const idx: f64 = 2.9;
   console.log(xs[toI32(idx)]);
   return 0;
-}
+};
