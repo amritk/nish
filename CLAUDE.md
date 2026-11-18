@@ -46,7 +46,10 @@ before pushing.
 `docs/security/*.md` and `docs/BENCHMARKS.md`, check each "only", "cannot"
 and "never" against the code's real match (a seccomp row matches syscall
 numbers, not descriptors), and each route, figure and command against what
-was run.
+was run. A PR that adds to those files or to a WP design note greps every
+`check(...)` string it cites in `tests/run.js`, recomputes every figure from
+its source (the budget constant, the script's printed output, the recorded
+run), and states in its body how many it checked.
 
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
