@@ -595,7 +595,6 @@ export const explainLayout = (
   const refused = notNative(opts, programs)
   const native = refused.length > 0 ? refused : pointers
   const graph = buildGraph(modules)
-  const loose = getenv("NISH_RULE_LOOSE") !== null
   // Each class's shown name and call-graph key are made once, before the
   // report loop, so no pass of that loop allocates a string it keeps.
   const names: string[] = []
@@ -629,7 +628,7 @@ export const explainLayout = (
       // why a class that does save bytes was not picked.
       let unpaid = ""
       if (after < before) {
-        if (pays(before, after) || loose) {
+        if (pays(before, after)) {
           saver = shownName
           saving = `${before} → ${after}`
         } else {
@@ -650,7 +649,7 @@ export const explainLayout = (
           const held = narrowedSize(table, holder, NO_TARGET, wasm)
           const narrowed = narrowedSize(table, holder, info.type, wasm)
           if (narrowed < held) {
-            if (loose || (pays(held, narrowed) && madeInLoop(graph, holderKey))) {
+            if (pays(held, narrowed) && madeInLoop(graph, holderKey)) {
               saver = holderName
               saving = `${held} → ${narrowed}`
             } else if (unpaid.length === 0) {
