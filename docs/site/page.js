@@ -159,9 +159,14 @@
     // With no mode class the system's scheme decides, and it can change too.
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeColor)
   }
+  // Nothing here is on screen, so its first pass waits for an idle main
+  // thread rather than add to the page's blocking time. Safari has no
+  // requestIdleCallback; a timeout stands in.
+  const idle = () =>
+    window.requestIdleCallback ? requestIdleCallback(start, { timeout: 2000 }) : setTimeout(start, 0)
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start)
+    document.addEventListener("DOMContentLoaded", idle)
   } else {
-    start()
+    idle()
   }
 })()

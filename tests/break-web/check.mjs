@@ -16,7 +16,9 @@ import zlib from "node:zlib"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 // The compiler whose answers the hero terminal repeats: tests/run.js passes its own.
-const nish = path.resolve(process.argv[2] ?? path.join(root, "build", "nish"))
+// `--write-hero` instead rewrites the landing page's hero markup from site.js and exits.
+const writeHero = process.argv.includes("--write-hero")
+const nish = path.resolve(process.argv.slice(2).find((a) => !a.startsWith("--")) ?? path.join(root, "build", "nish"))
 const results = []
 const check = (name, ok, detail) => {
   results.push(ok ? `ok ${name}` : `not ok ${name}\t${detail === undefined ? "" : String(detail).replace(/\n/g, " ")}`)
@@ -40,7 +42,10 @@ class Node {
     // The fake document that made it, whose activeElement focus and removal move.
     this.doc = null
     const node = this
-    this.classList = { add: (c) => (node.className = `${node.className} ${c}`.trim()) }
+    this.classList = {
+      add: (c) => (node.className = `${node.className} ${c}`.trim()),
+      contains: (c) => node.className.split(" ").includes(c),
+    }
     this.style = { setProperty: () => {} }
   }
   /** The tag as a browser spells an HTML element's: upper case. */
@@ -107,12 +112,27 @@ class Node {
       }
     }
   }
-  /** The first element below this one with tag `tag`: the one selector break.mjs asks for. */
-  querySelector(tag) {
-    return [...this.all()].find((n) => n.tag === tag) ?? null
+  /** The first element below this one with tag `tag`, or with class `c` for `.c`: the selectors site.js and break.mjs ask for. */
+  querySelector(selector) {
+    if (selector.startsWith(".")) {
+      return this.find(selector.slice(1))
+    }
+    return [...this.all()].find((n) => n.tag === selector) ?? null
   }
   find(className) {
     return [...this.all()].find((n) => n.className.split(" ").includes(className)) ?? null
+  }
+  /** The element as HTML: its class, then its attributes in the order they were set. */
+  get outerHTML() {
+    const escape = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    const attrs = [...(this.className ? [["class", this.className]] : []), ...Object.entries(this.attributes)]
+      .map(([name, value]) => ` ${name}="${escape(value).replace(/"/g, "&quot;")}"`)
+      .join("")
+    if (this.tag === "input" || this.tag === "img") {
+      return `<${this.tag}${attrs}>`
+    }
+    const inner = escape(this.text) + this.children.map((c) => (typeof c === "string" ? escape(c) : c.outerHTML)).join("")
+    return `<${this.tag}${attrs}>${inner}</${this.tag}>`
   }
 }
 
@@ -131,7 +151,7 @@ const makeDocument = () => {
     readyState: "complete",
     createElement: made,
     createElementNS: (_ns, tag) => made(tag),
-    querySelectorAll: () => (host.children.length === 0 ? [host] : []),
+    querySelectorAll: () => [host],
     addEventListener: () => {},
   }
   return { document, host }
@@ -190,9 +210,10 @@ check(
 // the lazy shell: site.js may grow by under 500 B gzipped for it (the input,
 // and the prompt the hero's run ends on). The baseline is site.js on main
 // before the terminal took keys (71c41439), plus 300 B for keeping the hero
-// across the client app's swap of the page on a first load, which is no part
-// of the terminal.
-const SITE_GZIP_BEFORE = 3480 + 300
+// across the client app's swap of the page on a first load, and 150 B for
+// wiring the hero's static markup in docs/guide/index.md, neither of which is
+// part of the terminal.
+const SITE_GZIP_BEFORE = 3480 + 300 + 150
 const SITE_GZIP_GROWTH = 500
 const gzipped = zlib.gzipSync(site, { level: 9 }).length
 check(
@@ -291,6 +312,25 @@ const runSite = (load) => {
   )
   run(document, window, class { observe() {} }, () => {}, Node, () => selection, load)
   return { document, host, selection, terminal: host.find("nish-hero__terminal") }
+}
+
+// The landing page's hero is site.js's hero(), serialized into docs/guide/index.md
+// so that the server's HTML paints it: the two may not drift apart.
+{
+  const indexFile = path.join(root, "docs", "guide", "index.md")
+  const index = fs.readFileSync(indexFile, "utf8")
+  const markup = `<div data-nish-hero class="nish-hero">${runSite(() => new Promise(() => {})).host.children[0].outerHTML}</div>`
+  const line = /^<div data-nish-hero\b.*$/m
+  if (writeHero) {
+    fs.writeFileSync(indexFile, index.replace(line, () => markup))
+    console.log(`wrote the hero into ${path.relative(root, indexFile)}`)
+    process.exit(0)
+  }
+  check(
+    "docs/guide/index.md's hero is the markup site.js builds",
+    index.match(line)?.[0] === markup,
+    "run node tests/break-web/check.mjs --write-hero"
+  )
 }
 
 {
