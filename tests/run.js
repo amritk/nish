@@ -33181,7 +33181,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     fuzz: {
       "compiler-cache": compilerCache,
       "bash scripts/fuzz.sh --smoke": ["scripts/fuzz.sh", "tests/fuzz/harness.c"],
-      "node tests/run.js runtime_sanitize": [...importsOf("tests/run.js")],
+      "node tests/run.js runtime_sanitize": [...importsOf("tests/run.js"), "tests/runtime/range-test.c"],
     },
     postgres: {
       "compiler-cache": compilerCache,
@@ -33212,6 +33212,29 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
   )
 
+  // A lane whose job runs tests/run.js reads all of tests/ but tests/ci-scope:
+  // a section can open any fixture there, and #1746's second review found a
+  // hand-picked list missing tests/runtime/range-test.c.
+  const testsFiles = filesUnder("tests").filter((f) => !f.startsWith("tests/ci-scope/"))
+  const runJsLanes = ciScope.LANES.filter((l) =>
+    l.jobs.some((j) => /^\s+(?:\$run )?node tests\/run\.js /m.test(ciJob(ciYmlText, j)))
+  )
+  const runJsMisses = runJsLanes.flatMap((l) =>
+    unread(l.name, testsFiles)
+      .slice(0, 5)
+      .map((f) => `${l.name}: ${f}`)
+  )
+  const ciScopeRead = ciScope.LANES.filter(
+    (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
+  )
+  check(
+    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
+    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.length === 0,
+    `lanes running tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
+      `misses: ${runJsMisses.join(", ") || "none"}\n` +
+      `lanes a tests/ci-scope change turns on: ${ciScopeRead.map((l) => l.name).join(", ") || "none"}`
+  )
+
   // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
   // with itself, and compares (scripts/bootstrap.sh --verify).
   const bootstrapJob = ciJob(ciYmlText, "bootstrap")
@@ -33237,10 +33260,13 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
   // `--delegate-sanitizers` (DELEGATE_SANITIZERS): `fuzz-smoke` builds and
   // replays every target and runs the runtime unit test under the sanitizers.
   const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  // The fuzz lane reads tests/ wholesale (but tests/ci-scope): a list picked
+  // file by file missed tests/runtime/range-test.c, which runtime_sanitize
+  // compiles under ASan and UBSan.
   const sanitizerMisses = unread("fuzz", [
-    ...filesUnder("src", "std", "runtime", "tests/fuzz"),
+    ...filesUnder("src", "std", "runtime"),
+    ...testsFiles,
     "scripts/fuzz.sh",
-    ...importsOf("tests/run.js"),
   ])
   check(
     "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
