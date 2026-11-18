@@ -188,6 +188,14 @@ export class CheckContext {
    */
   wasm: boolean
   /**
+   * WP48: a compact class's links are 32-bit offsets in this build. True for
+   * a native target; false on wasm32, where a pointer is already 4 bytes, and
+   * under the AddressSanitizer harness (`NISH_ASAN` in the compiler's
+   * environment), whose runtime mallocs every block outside the range. Set
+   * by the driver after construction.
+   */
+  compressLinks: boolean
+  /**
    * The build is for wasm with no WASI under it (`isFreestandingWasmBuild`),
    * whose runtime has no stdin: `nish:term` reads it to refuse itself there.
    * Set with `wasm`, and false everywhere else.
@@ -386,6 +394,7 @@ export class CheckContext {
     this.numberSpellings = 0
     this.strictExports = strictExports
     this.wasm = false
+    this.compressLinks = false
     this.wasmFreestanding = false
     this.pageModule = false
     this.deterministic = false

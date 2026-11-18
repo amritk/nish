@@ -155,6 +155,24 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
 }
 
 /**
+ * WP48: whether a field of `type` is a link, a 32-bit offset in this build:
+ * `type` is exactly a compact class or that class `| null`, and the build
+ * compresses. A generic class's fields stay full pointers, since a field
+ * written `T` cannot be told from one written as the class.
+ */
+export const isLinkType = (ctx: CheckContext, type: i32): boolean => {
+  if (!ctx.compressLinks) {
+    return false
+  }
+  const inner = ctx.table.stripNull(type)
+  if (!ctx.table.isStruct(inner)) {
+    return false
+  }
+  const target = ctx.program.struct(ctx.table.nameOf(inner))
+  return target !== null && target.compact
+}
+
+/**
  * Offsets in declaration order, and the size and alignment clang would
  * compute. Answers the struct's *floor*: the smallest size any order of these
  * fields could reach — the sum of their widths, rounded up to the alignment —
@@ -174,8 +192,9 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
   let align = 1
   let used = 0
   for (const field of info.fields) {
-    const need = fieldAlign(ctx.table, field, pointer)
-    const width = fieldWidth(ctx.table, field, pointer)
+    field.link = !info.layout && info.instance === null && isLinkType(ctx, field.type)
+    const need = field.link ? 4 : fieldAlign(ctx.table, field, pointer)
+    const width = field.link ? 4 : fieldWidth(ctx.table, field, pointer)
     offset = roundUpTo(offset, need)
     field.offset = offset
     offset = offset + width

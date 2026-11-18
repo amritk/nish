@@ -918,6 +918,7 @@ export class Compilation {
       packageName
     )
     checker.ctx.wasm = isWasmBuild(this.opts)
+    checker.ctx.compressLinks = !checker.ctx.wasm && getenv("NISH_ASAN") === null
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
     checker.ctx.deterministic = this.opts.deterministic
@@ -4379,6 +4380,21 @@ export class Compilation {
   }
 
   /** Program-wide attribute analysis, then one IR module per source module. */
+  /** Whether a checked module lays out a compact class's links as offsets (`Options.compactLinks`). */
+  compressesLinks(): boolean {
+    for (const unit of this.modules) {
+      if (!unit.checker.ctx.compressLinks) {
+        continue
+      }
+      for (const info of unit.checker.program.structList) {
+        if (info.compact) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
   emit(): EmittedModule[] {
     const facts = this.analyze()
     // `--sandbox` confines the program to what `main` reaches, the set the
@@ -4395,6 +4411,7 @@ export class Compilation {
       this.opts.sandboxNetRings = net && fact !== null && fact.ringListen ? this.netRings : 0
     }
     this.opts.panicSites = this.guardsPanics()
+    this.opts.compactLinks = this.compressesLinks()
     this.opts.rootSymbols = this.rootSymbols()
     const units = this.analysisUnits
     const stems = this.outputStems()

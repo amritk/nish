@@ -2558,10 +2558,10 @@ const linkProgram = (
  * Whether a program has a compact class, a class whose references are 32-bit
  * offsets into the arena's reserved range (WP48, docs/wp48-ref32-classes.md
  * §3.1), so its binary must link the range runtime (`--arena-range`). Stage 1
- * ships that runtime and no compact class, so no program has one yet; stage 2
- * reads the rule here.
+ * ships that runtime; stage 2's `Compilation.emit` sets `compactLinks` when a module
+ * declares one on a target that compresses (not wasm32, not an ASAN build).
  */
-const hasCompactClass = (_compilation: Compilation): boolean => false
+const hasCompactClass = (compilation: Compilation): boolean => compilation.opts.compactLinks
 
 /**
  * The flags that pick `scripts/build.sh`'s recipe, the same for the link and

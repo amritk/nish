@@ -1058,10 +1058,19 @@ export class FieldInfo {
    * address of that member inside the object (`emitPropertyAccess`).
    */
   nested: StructInfo | null
+  /**
+   * WP48: the field is a link, typed exactly `R` or `R | null` for a compact
+   * `R`, stored as a 32-bit offset into the reserved range: an LLVM `i32`
+   * slot 4 wide and 4 aligned, decoded by `loadField` and encoded by
+   * `storeField` (`src/emit-classes.ts`). Set by `computeLayout` where the
+   * build compresses (`CheckContext.compressLinks`); false everywhere else.
+   */
+  link: boolean
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
     this.nested = null
+    this.link = false
     this.type = type
     this.index = 0
     this.offset = 0

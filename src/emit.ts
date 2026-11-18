@@ -234,10 +234,11 @@ import {
   ARRAY_TYPE,
   inlineAllocator,
   inlineAllocatorAttrs,
+  inlineRefAllocator,
   RuntimeTable,
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
-import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
+import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader, zeroBasedLinks } from "./target"
 import { accessAlign, isForeignBuffer, isHostWindow, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
@@ -313,6 +314,10 @@ export class Emitter {
   constructorsGlobal: i32
   /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
   readsArenaGlobal: boolean
+  /** Whether a link decode or encode read `@nish_ref_base` (WP48, the based decode). */
+  readsRefBase: boolean
+  /** Whether a compact class's links decode zero-based on this target (`zeroBasedLinks`). */
+  zeroBasedLinks: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
   /**
@@ -466,6 +471,8 @@ export class Emitter {
     this.usedRuntime = new StringSet()
     this.definesRuntime = new StringSet()
     this.readsArenaGlobal = false
+    this.readsRefBase = false
+    this.zeroBasedLinks = zeroBasedLinks(opts.target)
     this.strings = new StringMap()
     this.enumTables = new StringSet()
     this.stringRefs = []
@@ -1325,9 +1332,13 @@ export class Emitter {
 
   emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls
-    const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct")
+    const wantsRef = this.usedRuntime.has("nish_alloc_ref")
+    const wantsAlloc = all || wantsRef || this.usedRuntime.has("nish_alloc_struct")
     if (wantsAlloc) {
       this.usedRuntime.add("nish_arena_grow")
+    }
+    if (this.readsRefBase) {
+      this.module.addGlobal("@nish_ref_base = external global i8*, align 8")
     }
     if (wantsAlloc || this.readsArenaGlobal) {
       this.module.addTypeDecl(ARENA_TYPE)
@@ -1356,7 +1367,15 @@ export class Emitter {
       this.module.addDeclaration(`${rt.signature}${group}`)
     }
     if (wantsAlloc) {
-      this.module.addRawDefinition(inlineAllocator(this.module.attrGroupFor(inlineAllocatorAttrs())))
+      const group = this.module.attrGroupFor(inlineAllocatorAttrs())
+      if (all || this.usedRuntime.has("nish_alloc_struct")) {
+        this.module.addRawDefinition(inlineAllocator(group, this.opts.compactLinks))
+      }
+      // WP48: a compact class's own 4-rounding bump.
+      if (wantsRef) {
+        this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
+        this.module.addRawDefinition(inlineRefAllocator(group))
+      }
     }
   }
 
