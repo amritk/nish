@@ -84,16 +84,20 @@ A class `R` is compact when all of these hold:
    Nish does not own.
 2. **Something links to `R`**: some class, `R` itself included, has a field
    typed exactly `R` or `R | null`.
-3. **Narrowing saves memory on every instance**: `computeLayout` run both
-   ways takes at least a quarter off `R`'s own size after rounding. A class
+3. **Narrowing saves memory on every instance**: `R` is at least 24 bytes,
+   and `computeLayout` run both ways takes at least a quarter off its own
+   size after rounding. A 16-byte cell already packs four to a cache line;
+   narrowed to 8 it measured slower in both programs that make one in
+   bulk (`bench/awfy` List, `bench/goose/bintrees`, §5.5), so it is left
+   alone. A class
    with one link among wide fields that rounding gives back is left alone,
    because it would pay the decode for nothing, and so is a smaller saving:
    it pays the decode on every link read for a few percent of one class.
    Stage 3 first also counted a quarter off a class holding the link, when
-   that holder is made in a loop; on the corpus and the compiler itself that
-   picked only 8-byte savings in 16- to 40-byte holders, which measured
-   inside the noise band (§5.5), so only `R`'s own size counts. The refusal
-   still names the holder that would have saved.
+   that holder is made in a loop; on the corpus that picked only `Deflater`,
+   for an 8-byte saving in one 256-byte `ZlibCompressor` per stream (§5.5),
+   too little to pay for a decode on every read, so only `R`'s own size
+   counts. The refusal still names the holder that would have saved.
 4. **`R` is made in a loop or in a recursive function**: some `new R(...)`
    is lexically inside a loop, or inside a function that can reach itself in
    the call graph. A class made once or a few times per run is left alone.
@@ -501,6 +505,62 @@ NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --program tree --rounds 
 All three print 33554431 and 134079322148. Band: widest per-round gap 16.8%,
 median per-round gap 3.5%. Verdict: `ptr-range` wall +2.5% against `ptr`,
 within the widest band and within the median band. Peak RSS moves by 0.1 MB.
+
+### 5.5 Stage 3: the rule's picks and its gate
+
+The rule (§3.1) run with `--explain-layout` over the nish-cmp corpus, every
+`tests/link` program, `bench/goose` and `bench/wp48-refs`, as `--link`
+builds. Before stage 3 no class was compact without `implements Compact`.
+
+| program | class | first rule (a quarter, `R` or a holder) | final rule |
+| --- | --- | --- | --- |
+| `bench/goose/tree.ts` | `TNode` | 24 → 12 | 24 → 12 |
+| `bench/treesum.ts` | `TreeNode` | 24 → 12 | 24 → 12 |
+| `bench/wp48-refs/sibling.ts` | `Node` | 32 → 20 | 32 → 20 |
+| `bench/goose/bintrees.ts` | `TNode` | 16 → 8 | refused, under 24 bytes |
+| `bench/awfy` `list.ts` | `Element` | 16 → 8 | refused, under 24 bytes |
+| `bench/awfy` `towers.ts` | `TowersDisk` | 16 → 8 | refused, under 24 bytes |
+| `tests/link/alias_export_nullable` | `Node` | 16 → 8 | refused, under 24 bytes |
+| `tests/link/std_json_typed` `keys.ts` | `Link` | 8 → 4 | refused, under 24 bytes |
+| `tests/link/std_compress*` | `Deflater` (held by `ZlibCompressor`) | holder 8 → 4 | refused, not `R` itself |
+| the compiler (`src/compile.ts`) | any | 0 of 291 | 0 of 291 |
+
+No `std/` class is picked, `std/crypto` included (ECC-9 in
+`docs/security/crypto-ecc.md`), so the compiler and every program that picks
+nothing build the same IR with `--compact on` and `--compact off`;
+`explain_layout` pins that byte for byte. Each program in the table prints
+the same stdout both ways.
+
+**The gate.** Each picked program built both ways by the same compiler,
+`--compact on` against `--compact off`, run interleaved off then on in each
+round, timed as process wall under one 4-core cloud container. "Gap" is the
+per-round on/off ratio; its median and range are the noise band.
+
+| program (args) | rounds | off s | on s | median gap | gap range | peak RSS off → on |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `goose/tree` (depth 20) | 11 | 0.1838 | 0.1017 | −43.2% | −56.2 .. −25.6% | 50.5 → 25.9 MB |
+| `treesum` | 11 | 0.5181 | 0.3974 | −23.8% | −31.4 .. −6.7% | 25.8 → 13.6 MB |
+| `wp48-refs/sibling` (1M, 4) | 11 | 0.0934 | 0.1003 | +5.6% | −18.0 .. +31.2% | 32.7 → 20.9 MB |
+| `wp48-refs/sibling` (4M, 4) | 9 | 0.4132 | 0.4132 | +0.4% | −10.4 .. +9.4% | 126.6 → 79.7 MB |
+| `awfy` List (20 × 1500), first rule | 11 + 9 | 0.4447 | 0.5507 | +26.9% | +5.5 .. +48.8% | 1.5 → 1.5 MB |
+| `goose/bintrees` (depth 17), first rule | 11 | 0.1175 | 0.1396 | +18.3% | −14.5 .. +64.1% | 9.4 → 5.4 MB |
+| `goose/bintrees` (depth 19), first rule | 9 | 0.5727 | 0.6446 | +18.8% | +1.8 .. +25.5% | 34.0 → 17.7 MB |
+| `awfy` Towers (20 × 600), first rule | 11 | 0.2912 | 0.2958 | +1.5% | −14.3 .. +56.5% | 1.6 → 1.5 MB |
+
+The first rule failed the gate: the `awfy` List cells ran slower in every
+round, and `bintrees` at depth 19 in every round. Both are 16-byte cells,
+four to a cache line already: List's lists are short enough to stay in L1,
+so the widening on each hop is all cost, and `bintrees` frees each tree
+before the next, so halving its nodes saves little traffic. Every 24- and
+32-byte node held even or gained. Test 3 therefore asks that `R` be at least
+24 bytes; the programs it refuses now build the same IR as `--compact off`,
+and of the three it keeps, `sibling`'s 1M run sits inside its band (which
+crosses zero) and its 4M run is even, while `tree` and `treesum` gain a
+quarter to two fifths and halve their peak RSS. A holder-only saving is not
+counted (§3.1): the one the corpus has, `Deflater`'s link in the 256-byte
+`ZlibCompressor`, is 8 bytes of one object per stream. The self-build,
+unchanged by either rule, ran 2.740 s with `--compact off` and 2.673 s with
+the rule on: identical IR, so that 2.5% is the run's own noise.
 
 ## 6. Where the emitter changes
 
