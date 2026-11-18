@@ -1175,6 +1175,29 @@ export class TypeTable {
     return kind === K_STRUCT || kind === K_ARRAY || kind === K_UNION || type === T_STRING || type === T_CPTR
   }
 
+  /**
+   * Whether the value's LLVM type is a pointer: a class, array, string,
+   * union, `Result` or `CPtr`, nullable or not. Its width is the target's,
+   * four bytes under wasm32's `p:32:32` and eight natively, where every other
+   * value's is `alignOf`'s, which no target moves.
+   */
+  isPointerValue(type: i32): boolean {
+    const kind = this.kinds[type]
+    if (kind === K_NULLABLE || kind === K_MAYBE) {
+      return this.isPointerValue(this.refs[type])
+    }
+    return kind === K_RESULT || this.isPointer(type)
+  }
+
+  /**
+   * `alignOf` on a target whose pointer is `pointer` bytes (`isPointerValue`).
+   * A pointer's size equals its alignment on every target, so this is also
+   * the bytes the value occupies in a struct field.
+   */
+  alignWithPointer(type: i32, pointer: i32): i32 {
+    return this.isPointerValue(type) ? pointer : this.alignOf(type)
+  }
+
   isNullable(type: i32): boolean {
     return this.kinds[type] === K_NULLABLE
   }
