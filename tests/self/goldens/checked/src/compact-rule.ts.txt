@@ -299,9 +299,9 @@ function explainLayout(opts: Options, table: TypeTable, modules: LayoutModule[])
   sharedWrite: via buildGraph
   calls: LayoutReport.constructor SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText buildGraph classKey collectClasses collectInstances displayName forbidden isWasmBuild linksTo narrowedSize nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 notNative
   pointer opts: size=248 writesThrough=false captured=false passedTo=isWasmBuild#0 notNative#0
-  pointer table: size=160 writesThrough=false captured=false passedTo=narrowedSize#0 displayName#0 linksTo#0 narrowedSize#0 displayName#0 forbidden#0
+  pointer table: size=160 writesThrough=false captured=false passedTo=displayName#0 narrowedSize#0 linksTo#0 narrowedSize#0 forbidden#0
   pointer modules: size=0 writesThrough=false captured=false passedTo=collectInstances#0 buildGraph#0
-  stackSites=6 stackLocals=6
+  stackSites=8 stackLocals=8
   local +0:9 wasm: boolean (const)
   callee +0:16 isWasmBuild -> @isWasmBuild
   local +4:9 instances: StructInfo[] (const)
@@ -317,41 +317,45 @@ function explainLayout(opts: Options, table: TypeTable, modules: LayoutModule[])
   callee +20:18 notNative -> @notNative
   local +21:9 graph: CallGraph (const)
   callee +21:17 buildGraph -> @buildGraph
-  local +22:9 lines: StringBuilder (const)
-  callee +22:17 new StringBuilder -> @StringBuilder.constructor
-  local +23:7 classes: i32 (let)
-  local +24:7 picked: i32 (let)
-  local +25:7 k: i32 (let)
-  local +27:11 info: StructInfo (const)
-  local +28:11 module: LayoutModule (const)
-  local +29:11 source: SourceFile (const)
-  local +33:13 after: i32 (const)
-  callee +33:21 narrowedSize -> @narrowedSize
-  local +34:11 linked: boolean (let)
-  local +35:13 shownName: string (const)
-  callee +35:25 displayName -> @displayName
-  local +36:11 saver: string (let)
-  local +37:11 saving: string (let)
-  local +38:18 holder: StructInfo (const)
-  callee +39:14 linksTo -> @linksTo
-  local +44:17 narrowed: i32 (const)
-  callee +44:28 narrowedSize -> @narrowedSize
-  callee +46:21 displayName -> @displayName
-  local +51:13 key: string (const)
-  callee +51:19 classKey -> @classKey
-  local +52:11 made: boolean (let)
-  local +53:18 site: MadeSite (const)
-  local +58:13 forbids: string (const)
-  callee +58:23 forbidden -> @forbidden
-  local +59:11 verdict: string (let)
-  local +71:13 shown: i32 (const)
-  local +72:13 name: Node (const)
-  callee +73:7 StringBuilder.add -> @StringBuilder.add
-  callee +73:35 SourceFile.lineOf -> @SourceFile.lineOf
-  callee +73:64 SourceFile.columnOf -> @SourceFile.columnOf
-  callee +74:7 StringBuilder.add -> @StringBuilder.add
-  callee +81:9 StringBuilder.add -> @StringBuilder.add
-  callee +83:7 StringBuilder.add -> @StringBuilder.add
-  callee +86:3 StringBuilder.add -> @StringBuilder.add
-  callee +87:10 new LayoutReport -> @LayoutReport.constructor
-  callee +87:27 StringBuilder.toText -> @StringBuilder.toText
+  local +24:9 names: string[] (const)
+  local +25:9 keys: string[] (const)
+  local +26:14 each: StructInfo (const)
+  callee +27:16 displayName -> @displayName
+  callee +28:15 classKey -> @classKey
+  local +30:9 lines: StringBuilder (const)
+  callee +30:17 new StringBuilder -> @StringBuilder.constructor
+  local +31:7 classes: i32 (let)
+  local +32:7 picked: i32 (let)
+  local +33:7 k: i32 (let)
+  local +35:11 info: StructInfo (const)
+  local +36:11 module: LayoutModule (const)
+  local +37:11 source: SourceFile (const)
+  local +38:11 shownName: string (const)
+  local +39:11 key: string (const)
+  local +43:13 after: i32 (const)
+  callee +43:21 narrowedSize -> @narrowedSize
+  local +44:11 linked: boolean (let)
+  local +45:11 saver: string (let)
+  local +46:11 saving: string (let)
+  local +47:11 h: i32 (let)
+  local +49:15 holder: StructInfo (const)
+  local +50:15 holderName: string (const)
+  callee +52:14 linksTo -> @linksTo
+  local +57:17 narrowed: i32 (const)
+  callee +57:28 narrowedSize -> @narrowedSize
+  local +64:11 made: boolean (let)
+  local +65:18 site: MadeSite (const)
+  local +70:13 forbids: string (const)
+  callee +70:23 forbidden -> @forbidden
+  local +71:11 verdict: string (let)
+  local +83:13 shown: i32 (const)
+  local +84:13 name: Node (const)
+  callee +85:7 StringBuilder.add -> @StringBuilder.add
+  callee +85:35 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +85:64 SourceFile.columnOf -> @SourceFile.columnOf
+  callee +86:7 StringBuilder.add -> @StringBuilder.add
+  callee +93:9 StringBuilder.add -> @StringBuilder.add
+  callee +95:7 StringBuilder.add -> @StringBuilder.add
+  callee +98:3 StringBuilder.add -> @StringBuilder.add
+  callee +99:10 new LayoutReport -> @LayoutReport.constructor
+  callee +99:27 StringBuilder.toText -> @StringBuilder.toText

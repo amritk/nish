@@ -550,23 +550,36 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
   }
   const native = notNative(opts, programs)
   const graph = buildGraph(modules)
+  // Each class's shown name and call-graph key are made once, before the
+  // report loop, so no pass of that loop allocates a string it keeps.
+  const names: string[] = []
+  const keys: string[] = []
+  for (const each of all) {
+    names.push(displayName(table, each))
+    keys.push(classKey(each))
+  }
   const lines = new StringBuilder()
   let classes = 0
   let picked = 0
   let k = 0
-  while (k < all.length && k < owners.length) {
+  while (k < all.length && k < owners.length && k < names.length && k < keys.length) {
     const info = all[k]
     const module = modules[owners[k]]
     const source = module.program.source
+    const shownName = names[k]
+    const key = keys[k]
     k = k + 1
     {
       classes = classes + 1
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
-      const shownName = displayName(table, info)
       let saver = after < info.size ? shownName : ""
       let saving = after < info.size ? `${info.size} → ${after}` : ""
-      for (const holder of all) {
+      let h = 0
+      while (h < all.length && h < names.length) {
+        const holder = all[h]
+        const holderName = names[h]
+        h = h + 1
         if (!linksTo(table, holder, info.type)) {
           continue
         }
@@ -574,12 +587,11 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
         if (saver.length === 0 && holder !== info) {
           const narrowed = narrowedSize(table, holder, info.type, wasm)
           if (narrowed < holder.size) {
-            saver = displayName(table, holder)
+            saver = holderName
             saving = `${holder.size} → ${narrowed}`
           }
         }
       }
-      const key = classKey(info)
       let made = false
       for (const site of graph.sites) {
         if (site.key === key && (site.inLoop || graph.nodes[site.fn].recursive)) {
