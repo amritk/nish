@@ -202,7 +202,8 @@ index has it, and then `rowid`. Column `n` is the `n`th name. If the list
 does not match the schema, the open fails with `SQLITE_SCHEMA`, so a
 changed schema cannot be misread.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";
 
 export const main = (): i32 => {
