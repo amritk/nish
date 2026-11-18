@@ -112,6 +112,16 @@ new positive `tests/cases/*` is registered with
 `docs/LANGUAGE.md`: rewrite it with `node scripts/gen-reference.mjs`; CI's
 `--check` fails on a stale, extra or hand-edited page
 ([`docs/README.md`](docs/README.md#the-library-reference)).
+`docs/IR_COOKBOOK.md` is generated too, by `docs/cookbook/regen.sh`, and moves
+with any codegen change its entries show: run
+`NISH=build/nish bash docs/cookbook/regen.sh --check` before pushing a `src/`
+change. CI runs it in shard 1 after the suite, so a red shard 1 with 0 failed
+tests is usually this.
+
+**nish-cmp hides a wasm32 program behind its sidecars.** A default run reports
+a wasm32 program whose sidecar build both compilers refuse as "refused by
+both", not as a difference. Before concluding that a wasm32 change needs no
+`DECLARED` entry, run it again with `--no-sidecars`.
 
 **The emit-ts known list is Node-version-specific.** Regenerate
 `tests/differential/emit-ts-known.txt` only under the Node that
