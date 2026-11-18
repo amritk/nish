@@ -1,10 +1,10 @@
 ---
 name: WP67 — every error keeps its cause chain
-overview: Nish errors are Result values, and today a function that converts one failure into another drops the original (the guide's own example does), std flattens causes into message text, and expect prints only its own message. Give error classes a typed cause field, a builtin that renders the whole chain, make expect and std keep and print every link, and add a checker warning that refuses to let a conversion silently drop the failure it converts.
+overview: Nish errors are Result values, and today a function that converts one failure into another drops the original (the guide's own example does), std flattens causes into message text, and expect prints only its own message. Give error classes a typed cause field, a builtin that renders the whole chain, make expect and std keep and print every link, and make it a compile error for a conversion to drop the failure it converts.
 stages:
   - id: s0-proposal
     title: S0 — the WP67 proposal (docs only)
-    goal: docs/wp67-error-causes.md and docs/roadmap/wp67-error-causes.md exist, every claim checked against main, the std conversion-site inventory recorded, owner decisions D1 to D6 listed.
+    goal: docs/wp67-error-causes.md and docs/roadmap/wp67-error-causes.md exist, every claim checked against main, the std conversion-site inventory recorded, owner decisions D1 to D6 recorded (D4 and D5 still open).
     verification: npm run lint && node docs/check-links.mjs && node scripts/gen-reference.mjs --check
     todos:
       - id: inventory-sites
@@ -95,6 +95,20 @@ stages:
       - id: roadmap-tick
         content: Tick each stage on docs/roadmap/wp67-error-causes.md in the PR that lands it — see S5 — the guide
         status: pending
+  - id: s6-self
+    title: S6 — the compiler keeps its own causes
+    goal: Once a release ships errorChain and the guard, src/ is built under the guard with zero hits and each of its error conversions keeps its cause.
+    verification: bash scripts/fetch-seed.sh --force && node tests/run.js wasi && node tests/run.js performance && node tests/self/goldens.js --update && npm run check
+    todos:
+      - id: self-wait-release
+        content: Start only after the release carrying S1 to S4 is the seed in build/seed — see S6 — the compiler
+        status: pending
+      - id: self-inventory
+        content: List every src/ site that converts one Result error into another — see S6 — the compiler
+        status: pending
+      - id: self-adopt
+        content: Give each src/ error class a cause and store it at every listed site, then turn the guard on for src/ — see S6 — the compiler
+        status: pending
 ---
 
 # WP67 — every error keeps its cause chain
@@ -148,12 +162,12 @@ This stage is one PR and changes docs only, the way WP62 and WP66 began. It writ
 - **Inventory.** List every std site that returns a new `Err` from inside an `isErr()` branch or after a null fault, with file:line and what it keeps (pass-through, text, nothing). Today's grep finds 44 `Err(` sites across 8 std files. The note records the complete list, and S3 and S4 are measured against it.
 - **Preconditions.** Confirm that a class field may be `Self | null` and a union of classes (no sidecar flag), and trace how `expect` and `panic` lower to `nish_panic`. If a precondition fails, the note names the stage that lifts it.
 - **Decisions for the owner:**
-  - D1: the field's name. `cause` matches ES2022 and `--emit-ts`.
-  - D2: whether the guard is a warning or an error, and its opt-out spelling.
-  - D3: whether changing `expect`'s stderr is a breaking change.
-  - D4: the depth cap (64) and the cycle rule.
-  - D5: whether a `Dyn<Failure>` cause waits for WP60 stage 3.
-  - D6: whether `src/` adopts causes for its own `Result`s once the rolling freeze allows it.
+  - D1, decided: the field is named `cause`, matching ES2022 and `--emit-ts`.
+  - D2, decided: the guard is an error, not a warning. It has no opt-out: the only way past it is to keep the cause.
+  - D3, decided: changing `expect`'s stderr is not treated as a breaking change for now.
+  - D4, open: how the chain walk ends when a chain loops back on itself (`a.cause = b; b.cause = a`), and how long a chain may be before printing stops. The proposal is to stop at a link already seen, or after 64 links, and to print `(cause chain truncated)`.
+  - D5, open: whether a cause of any error type (`Dyn<Failure>`) waits for WP60 stage 3. The recommendation is not to wait: ship concrete typed causes now and add `Dyn` as one more cause type when WP60 lands.
+  - D6, decided: `src/` adopts causes for its own errors once the rolling freeze allows it (S6).
 
 ## S1 — the cause field and the chain builtin
 
@@ -185,11 +199,15 @@ Changing a string error to a class is a breaking API change on 0.x (`feat(...)!`
 
 ## S4 — the guard
 
-Inside a branch where `r` is narrowed to its error arm (`isErr()`, `!r.ok`, or the else of `isOk()`), a `return Err(x)` whose expression never reads `r.error` is reported with this message: `` the failure in `r` is dropped: keep `r.error` as the new error's `cause` ``. Passing `r` itself or `r.error` anywhere in `x` satisfies the guard. The check sits beside the existing Result narrowing in `src/expressions.ts`, with the next free number in its band in `src/codes.ts` (never reused, never moved). It ships with a `tests/link` negative that has an `expected.err`. S3 lands first, so std builds clean under the guard.
+Inside a branch where `r` is narrowed to its error arm (`isErr()`, `!r.ok`, or the else of `isOk()`), a `return Err(x)` whose expression never reads `r.error` is a compile error (D2) with this message: `` the failure in `r` is dropped: keep `r.error` as the new error's `cause` ``. Passing `r` itself or `r.error` anywhere in `x` satisfies the guard. The check sits beside the existing Result narrowing in `src/expressions.ts`, with the next free number in its band in `src/codes.ts` (never reused, never moved). It ships with a `tests/link` negative that has an `expected.err`. S3 lands first, so std builds clean under the guard.
 
 ## S5 — the guide
 
 The guide's `ConfigError.BadPort` example becomes the `ConfigError(message, cause)` shown above. The page also shows `errorText`, the new `expect` output and an `nish:err` block for the guard. Every page that shows `expect` output or an old std error message is grepped and updated, along with `docs/AI.md` and the IR cookbook.
+
+## S6 — the compiler
+
+Per D6, the compiler adopts causes for its own errors once the rolling freeze allows it. `src/` may not use `errorChain`, `errorText` or a `cause` the guard checks until a release ships them and that release is the seed. S6 waits for that release, lists every place `src/` converts one Result error into another, gives each error class a `cause`, and turns the guard on for `src/`. A change to `src/` also runs `node tests/run.js wasi` and `node tests/run.js performance`, and regenerates the checked goldens.
 
 ## Out of scope
 
