@@ -43118,7 +43118,7 @@ if (!only || "cpu-level".includes(only)) {
   const nish = (args, env = {}) =>
     spawnSync(NISH, args, { cwd: root, encoding: "utf8", env: { ...process.env, ...env } })
   const refusals = [
-    ["`native`", ["--cpu", "native"], "--cpu native is refused: the constant-time check (CT-16) refuses"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["`x86-64-v4`", ["--cpu", "x86-64-v4"], "unknown cpu level `x86-64-v4`"],
     ["`armv8.2-a`", ["--cpu", "armv8.2-a"], "unknown cpu level `armv8.2-a`"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
@@ -43145,11 +43145,11 @@ if (!only || "cpu-level".includes(only)) {
     "cpu level: nish run --cpu native is refused with exit 2 before anything runs",
     runRefused.status === 2 &&
       runRefused.stdout === "" &&
-      runRefused.stderr.includes("--cpu native is refused: the constant-time check (CT-16)"),
+      runRefused.stderr.includes("--cpu native is refused: under clang 18 the constant-time check (CT-16)"),
     `${runRefused.status}: ${runRefused.stderr}`
   )
   for (const [what, flags, says] of [
-    ["`native`", ["--cpu", "native"], "--cpu takes x86-64-v3, not 'native'"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
     ["the wasm profile", ["--profile", "wasm", "--cpu", "x86-64-v3"], "the wasm profile does not take it"],
     ["the wasi profile", ["--profile", "wasi", "--cpu", "x86-64-v3"], "the wasi profile does not take it"],

@@ -497,14 +497,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](../../security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
-- **`--cpu native` is refused for a measured reason.** Read at
-  `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
   `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
   check refuses: clang keeps a public loop counter or overflow flag in a stack
-  slot there, and the check reads a stack slot as secret. Whether a leak or the
-  check's model, it does not pass, so a native build on such a CPU would ship
-  assembly no check passed. The refusal says so (`--cpu native is refused: the
-  constant-time check (CT-16) refuses ...`, exit 2).
+  slot there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ## Profile-guided builds
 

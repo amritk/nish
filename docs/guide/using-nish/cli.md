@@ -177,7 +177,7 @@ likely to add to it:
   `nish` accepts; anything else, and the flag with `--profile wasi` or a
   non-x86-64 `--target`, is refused with exit 2. `--cpu native` is refused
   too: on some CPUs (AMD Zen 2 to Zen 4, Intel Sapphire Rapids) the
-  constant-time check does not pass the code clang makes for that CPU, so
+  constant-time check does not pass the code clang 18 makes for that CPU, so
   `nish` does not build it. What your program computes does not change. A
   binary built with it **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
   that stay on machines you know; ship anything else without it.

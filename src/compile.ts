@@ -151,12 +151,13 @@ const CPU_LEVEL: string = "x86-64-v3"
 
 /**
  * Why `--cpu native` is refused (docs/security/ct-verification.md, CT-16):
- * read at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
- * `ct_asm_chacha20poly1305` fixture holds a branch the checker refuses, so a
- * native build on those CPUs could ship assembly the check does not pass.
+ * read under clang 18 at `-march=znver2`, `znver3`, `znver4` and
+ * `sapphirerapids`, the `ct_asm_chacha20poly1305` fixture holds a branch the
+ * checker refuses, so a native build on those CPUs could ship assembly the
+ * check does not pass.
  */
 const NATIVE_REFUSED: string =
-  "the constant-time check (CT-16) refuses the assembly clang makes for some CPUs native names (znver2 to znver4, sapphirerapids)"
+  "under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids)"
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one

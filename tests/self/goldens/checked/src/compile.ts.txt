@@ -3321,7 +3321,7 @@ import sqliteFingerprint from "./run-cache" -> function @sqliteFingerprint
 import sqliteUnits from "./run-cache" -> function @sqliteUnits
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
 const CPU_LEVEL: string = "x86-64-v3"
-const NATIVE_REFUSED: string = "the constant-time check (CT-16) refuses the assembly clang makes for some CPUs native names (znver2 to znver4, sapphirerapids)"
+const NATIVE_REFUSED: string = "under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids)"
 const INDEXED_PROFILE_MAGIC: readonly i32[] = [255, 108, 112, 114, 111, 102, 105, 129]
 const RAW_PROFILE_MAGIC: readonly i32[] = [129, 114, 102, 111, 114, 112, 108, 255]
 const PROFILE_KIND_SCRIPT: string = "if [ -d \"$1\" ]; then exit 4; fi; if [ -f \"$1\" ]; then exit 0; fi; exit 5"
