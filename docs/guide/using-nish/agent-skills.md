@@ -189,7 +189,8 @@ Put each skill at `skills/<name>/SKILL.md` in your package, list `skills` in
 `package.json`'s `files` so npm publishes it, and offer your source under the
 `nish` condition as every Nish package does:
 
-```json nish:ok file=node_modules/greet/package.json
+<!-- nish:ok -->
+```json node_modules/greet/package.json
 {
   "name": "greet",
   "version": "1.0.0",
@@ -198,12 +199,14 @@ Put each skill at `skills/<name>/SKILL.md` in your package, list `skills` in
 }
 ```
 
-```ts nish:ok file=node_modules/greet/src/index.ts
+<!-- nish:ok -->
+```ts node_modules/greet/src/index.ts
 // node_modules/greet/src/index.ts
 export const greet = (name: string): string => `hello, ${name}`;
 ```
 
-```ts nish:ok file=main.ts
+<!-- nish:ok -->
+```ts main.ts
 // main.ts
 import { greet } from "greet";
 

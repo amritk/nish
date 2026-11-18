@@ -38,7 +38,7 @@ import {
   PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
 } from "nish/net/postgres-async"
 
-async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+const title = async (pool: PgAsyncPool, id: i32): Promise<void> => {
   const ticket: i32 = await pgAsyncClaim(pool)
   if (ticket < 0) {
     return  // no live connection, or none came free in time
@@ -52,7 +52,7 @@ async function title(pool: PgAsyncPool, id: i32): Promise<void> {
   }
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const config = new PgConfig()
   config.user = "app"
   const pool = new PgAsyncPool(4)
@@ -330,11 +330,11 @@ with `reusable` false. It only reads the pool, so a spawned task may call
 it.
 
 ```ts
-function pgAsyncAnswer(
+const pgAsyncAnswer: (
   pool: PgAsyncPool,
   ticket: i32,
   turn: i32,
-): Promise<PgAsyncResult>
+) => Promise<PgAsyncResult>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -374,9 +374,7 @@ connection is never taken by a task that would close it at its first wait.
 It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts
-function pgAsyncClaim(
-  pool: PgAsyncPool,
-): Promise<i32>
+const pgAsyncClaim: (pool: PgAsyncPool) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -405,12 +403,12 @@ spawned task: it holds the password. A slot that fails stays unconnected;
 call it again to retry.
 
 ```ts
-function pgAsyncConnect(
+const pgAsyncConnect: (
   pool: PgAsyncPool,
   config: PgConfig,
   password: Secret<u8[]>,
   target: PgTarget,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -456,12 +454,12 @@ is answered. It writes only numbers into the pool, so a spawned task may
 call it.
 
 ```ts
-function pgAsyncDone(
+const pgAsyncDone: (
   pool: PgAsyncPool,
   ticket: i32,
   turn: i32,
   reusable: boolean,
-): void
+) => void
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -497,10 +495,10 @@ on each connection, the first time a task sends it there. Call it from
 start: it grows the pool.
 
 ```ts
-function pgAsyncPrepare(
+const pgAsyncPrepare: (
   pool: PgAsyncPool,
   sql: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -530,12 +528,12 @@ its ReadyForQuery, waiting on the socket while other tasks run. It only
 reads the pool; its buffers and the answer are the calling task's.
 
 ```ts
-function pgAsyncQuery(
+const pgAsyncQuery: (
   pool: PgAsyncPool,
   ticket: i32,
   sql: string,
   params: PgAsyncParams,
-): Promise<PgAsyncResult>
+) => Promise<PgAsyncResult>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -580,11 +578,11 @@ ticket that is not the slot's current claim (a second release, or one after
 may call it.
 
 ```ts
-function pgAsyncRelease(
+const pgAsyncRelease: (
   pool: PgAsyncPool,
   ticket: i32,
   reusable: boolean,
-): void
+) => void
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -622,10 +620,10 @@ only while none waits.
 It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts
-function pgAsyncSeat(
+const pgAsyncSeat: (
   pool: PgAsyncPool,
   statement: i32,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -659,11 +657,11 @@ the socket while other tasks run. It only reads the pool; its buffer is the
 calling task's.
 
 ```ts
-function pgAsyncSend(
+const pgAsyncSend: (
   pool: PgAsyncPool,
   ticket: i32,
   params: PgAsyncParams,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -709,11 +707,11 @@ input. It writes only numbers into the pool, so a spawned task may call it;
 `pgAsyncAnswer` then builds the answer in the task's memory.
 
 ```ts
-function pgAsyncTurn(
+const pgAsyncTurn: (
   pool: PgAsyncPool,
   ticket: i32,
   sent: i32,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>

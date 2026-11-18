@@ -10,7 +10,7 @@
  *       PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
  *     } from "nish/net/postgres-async"
  *
- *     async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+ *     const title = async (pool: PgAsyncPool, id: i32): Promise<void> => {
  *       const ticket: i32 = await pgAsyncClaim(pool)
  *       if (ticket < 0) {
  *         return  // no live connection, or none came free in time
@@ -24,7 +24,7 @@
  *       }
  *     }
  *
- *     export async function main(): Promise<i32> {
+ *     export const main = async (): Promise<i32> => {
  *       const config = new PgConfig()
  *       config.user = "app"
  *       const pool = new PgAsyncPool(4)

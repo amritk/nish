@@ -12,7 +12,8 @@ and [Builtin modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#
 Put `export` on the declaration itself. It works on functions, constants,
 classes, interfaces, enums and type aliases:
 
-```ts nish:ok file=geometry.ts
+<!-- nish:ok -->
+```ts geometry.ts
 // geometry.ts
 export interface Point {
   x: i32;
@@ -29,7 +30,8 @@ export const distance2 = (a: Point, b: Point): i32 => {
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 
-```ts nish:ok file=main.ts
+<!-- nish:ok -->
+```ts main.ts
 // main.ts
 import { distance2, Point } from "./geometry";
 
@@ -67,7 +69,8 @@ form TypeScript has is refused: a default import, a namespace import
 `import x = require(…)`. On the export side the same goes for
 `export default`, `export { a }` and `export * from`.
 
-```ts nish:err NL2119
+<!-- nish:err NL2119 -->
+```ts
 import * as geometry from "./geometry";
 
 export const main = (): i32 => 0;
@@ -100,7 +103,8 @@ else, generic classes and interfaces included, can be renamed with `as`.
   `nish:io` or `exit` from `nish:process` is fine too: those are not functions
   of your program.
 
-```ts nish:err NL3037
+<!-- nish:err NL3037 -->
+```ts
 export const write = (line: string): i32 => toI32(line.length);
 
 export const main = (): i32 => write("hello");
@@ -125,7 +129,8 @@ local name:
 | `nish:simd` | sixteen-byte vectors and the calls that make, load and store them ([Vectors](simd.md)), available only through the import |
 | `nish:async` | `spawn` and `awaitAll` for `async` functions ([Async functions](async.md)), available only through the import |
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { argv } from "nish:process";
 import { write } from "nish:io";
 
@@ -153,7 +158,8 @@ and you import it as `nish/` followed by the module's name: `nish/text`,
 and so on. It is compiled into your program like your own code, so a module
 you import but never call costs nothing.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { splitWhitespace, trim } from "nish/text";
 
 export const main = (): i32 => {
@@ -178,7 +184,8 @@ A package is compiled from its TypeScript source, not from built JavaScript,
 so it is checked and optimised exactly as your own code is. Its
 `package.json` says which file to compile under the `nish` export condition:
 
-```json nish:ok file=node_modules/hash/package.json
+<!-- nish:ok -->
+```json node_modules/hash/package.json
 {
   "name": "hash",
   "version": "1.0.0",
@@ -192,7 +199,8 @@ so it is checked and optimised exactly as your own code is. Its
 
 With `src/index.ts` and `src/blake3.ts` beside it in the package,
 
-```ts nish:ok file=node_modules/hash/src/index.ts
+<!-- nish:ok -->
+```ts node_modules/hash/src/index.ts
 // node_modules/hash/src/index.ts
 export const fnv1a = (text: string): u32 => {
   let h: u32 = 2166136261;
@@ -203,7 +211,8 @@ export const fnv1a = (text: string): u32 => {
 };
 ```
 
-```ts nish:ok file=node_modules/hash/src/blake3.ts
+<!-- nish:ok -->
+```ts node_modules/hash/src/blake3.ts
 // node_modules/hash/src/blake3.ts
 export const blake3Name = (): string => "BLAKE3";
 ```
@@ -211,7 +220,8 @@ export const blake3Name = (): string => "BLAKE3";
 a program imports the package by its name, and the subpath by the name of
 its export:
 
-```ts nish:ok file=main.ts
+<!-- nish:ok -->
+```ts main.ts
 // main.ts
 import { fnv1a } from "hash";
 import { blake3Name } from "hash/blake3";

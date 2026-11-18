@@ -167,7 +167,7 @@ stream's do.
 A load failure's name, for a message.
 
 ```ts
-function yamlJsonErrorName(code: i32): string
+const yamlJsonErrorName: (code: i32) => string
 ```
 
 <scalar-field name="code" type="i32" required>

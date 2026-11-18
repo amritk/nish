@@ -17,7 +17,8 @@ native only.
 
 ## A first server
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";
 import { Http1Config } from "nish/net/http1-server";
 import { Router, RouterLimits } from "nish/net/router";

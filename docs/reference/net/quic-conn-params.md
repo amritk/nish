@@ -136,9 +136,9 @@ default, every byte-valued one only when its `has*` flag is set, and
 this endpoint's own values, and a value no varint holds is left out.
 
 ```ts
-function quicEncodeTransportParameters(
+const quicEncodeTransportParameters: (
   p: QuicTransportParameters,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="p" type="QuicTransportParameters" required>
@@ -161,10 +161,10 @@ slot that keeps one array for its parameters grows it only when they
 outgrow every earlier connection's.
 
 ```ts
-function quicEncodeTransportParametersInto(
+const quicEncodeTransportParametersInto: (
   p: QuicTransportParameters,
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="p" type="QuicTransportParameters" required>
@@ -189,10 +189,10 @@ lists, with `errorParameter` naming the parameter; on an error the other
 fields hold what was read so far and are not to be used.
 
 ```ts
-function quicParseTransportParameters(
+const quicParseTransportParameters: (
   bytes: u8[],
   fromServer: boolean,
-): QuicTransportParameters
+) => QuicTransportParameters
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -221,11 +221,11 @@ their arrays have: a connection slot parses each client's parameters into
 one object of its own. Answers `p`.
 
 ```ts
-function quicParseTransportParametersInto(
+const quicParseTransportParametersInto: (
   p: QuicTransportParameters,
   bytes: u8[],
   fromServer: boolean,
-): QuicTransportParameters
+) => QuicTransportParameters
 ```
 
 <scalar-field name="p" type="QuicTransportParameters" required>

@@ -8,7 +8,8 @@ rules are in the reference under [`Map` and `Set`](https://github.com/amritk/nis
 
 ## Making and filling one
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
   ages.set("ada", 36).set("alan", 41).set("grace", 85);
@@ -39,7 +40,8 @@ instances. A class instance is compared by identity, so two objects with the
 same fields are two keys. An interface, an array, a nullable type or a `Result`
 cannot be a key, because none of them has a value or an identity to hash:
 
-```ts nish:err NL2353
+<!-- nish:err NL2353 -->
+```ts
 interface Point {
   x: i32;
   y: i32;
@@ -62,7 +64,8 @@ into the high half and the second taken unsigned (`toU32`) into the low half. Wr
 operand as an `i64`, because under Node an `i64` is a `BigInt`, which will not
 mix with a plain number:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const cell = (row: i32, col: i32): i64 => (toI64(row) << toI64(32)) | toI64(toU32(col));
 
 export const main = (): i32 => {
@@ -88,7 +91,8 @@ string on every lookup.
 may not be there. Nish lets you use that answer in three ways, the three a
 program checked by `tsc --strict` would use:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const counts = new Map<string, i32>();
   for (const word of ["a", "b", "a"]) {
@@ -121,7 +125,8 @@ which of the three to use instead: it cannot be stored in a `let`, passed to a
 function, returned, or used in arithmetic until it has been given a default or
 tested.
 
-```ts nish:err NL2367
+<!-- nish:err NL2367 -->
+```ts
 export const main = (): i32 => {
   const stock = new Map<string, i32>();
   const n = stock.get("apples");
@@ -148,7 +153,8 @@ run.
 `for...of` walks a map's `keys()` or `values()`, or a set directly, in
 insertion order:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
   ages.set("ada", 36).set("grace", 85);
@@ -179,7 +185,8 @@ instead (see [forEach](#foreach)). Walking a `Map` directly would mean walking
 its entries, so it is refused with the rewrite: walk `keys()` and call `get`,
 or walk `values()`.
 
-```ts nish:err NL2375
+<!-- nish:err NL2375 -->
+```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
   for (const entry of ages) {
@@ -205,7 +212,8 @@ or the value and the key, and for a `Set` the element alone. Like an array
 callback, it may not assign a local of the function around it: walk with
 `for...of` to add up.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const ages = new Map<string, i32>();
   ages.set("ada", 36).set("grace", 85);
@@ -226,7 +234,8 @@ for `n` entries up front, so filling the map never has to grow it.
 `value` first if the key is missing, with one lookup. Under Node they are
 ordinary functions with the same results, so the program still runs there.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { getOrInsert, reserve } from "nish/map";
 
 export const main = (): i32 => {

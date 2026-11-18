@@ -272,7 +272,7 @@ Private helpers share the importing program's flat symbol namespace
 listener and UDP flags before it, the same in every process.
 
 ```ts
-function preforkArgs(args: string[]): string[]
+const preforkArgs: (args: string[]) => string[]
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -293,7 +293,7 @@ a new list of the arguments the user gave, without the flags the
 The worker index `args` carries in its last element, or -1 when none.
 
 ```ts
-function preforkIndex(args: string[]): i32
+const preforkIndex: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -314,7 +314,7 @@ this worker's index, 0 to `N - 1`, or -1 in the supervisor (or any
 In a worker, the listener the supervisor bound for it (`listenPort`); -1 when none.
 
 ```ts
-function preforkListener(args: string[]): i32
+const preforkListener: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -335,9 +335,7 @@ the listening socket's descriptor to serve instead of binding one,
 In a worker, its end of its channel to the service worker; -1 in the service worker or when none.
 
 ```ts
-function preforkServiceChannel(
-  args: string[],
-): i32
+const preforkServiceChannel: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -357,10 +355,10 @@ the descriptor this worker reaches the service worker through, or -1
 In the service worker, its end of the channel to worker `index`; -1 for itself or elsewhere.
 
 ```ts
-function preforkServiceChannelOf(
+const preforkServiceChannelOf: (
   args: string[],
   index: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -402,12 +400,12 @@ or a refused steering that leaves one worker beside a `serviceWorker` past
 0, answers `PREFORK_SPAWN_FAILED` before any worker starts.
 
 ```ts
-function preforkSupervise<S>(
+const preforkSupervise: <S>(
   args: string[],
   config: PreforkConfig,
   state: S,
   onChannel: (state: S, index: i32, fd: i32, events: i32) => void,
-): i32
+) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -449,9 +447,7 @@ in a worker, its index at once; in the supervisor, once it is done,
 In a worker, its end of its supervisor channel; -1 when it has none.
 
 ```ts
-function preforkSupervisorChannel(
-  args: string[],
-): i32
+const preforkSupervisorChannel: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -474,7 +470,7 @@ In a worker, how many workers share its steered UDP port (`listenUdp`): the
 `workerIndex`. 0 exactly when `preforkUdpListener` answers -1.
 
 ```ts
-function preforkUdpCount(args: string[]): i32
+const preforkUdpCount: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -495,7 +491,7 @@ In a worker, the UDP socket the supervisor bound for it (`listenUdp`); -1
 when none, or when the flag is not the supervisor's `<fd>,<N>`.
 
 ```ts
-function preforkUdpListener(args: string[]): i32
+const preforkUdpListener: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -522,10 +518,10 @@ listener could be made (no worker is started). Panics on a config
 dropped; `preforkSupervise` hands them to the program.
 
 ```ts
-function preforkWith(
+const preforkWith: (
   args: string[],
   config: PreforkConfig,
-): i32
+) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>
@@ -556,10 +552,10 @@ is a positive whole number, else `requested` when positive, else the
 platform's default.
 
 ```ts
-function preforkWorkerCount(
+const preforkWorkerCount: (
   requested: i32,
   env: string | null,
-): i32
+) => i32
 ```
 
 <scalar-field name="requested" type="i32" required>
@@ -587,7 +583,7 @@ how many worker processes the supervisor starts, always 1 or more
 `preforkWith` with the default `PreforkConfig`.
 
 ```ts
-function preforkWorkers(args: string[]): i32
+const preforkWorkers: (args: string[]) => i32
 ```
 
 <scalar-field name="args" type="string[]" required>

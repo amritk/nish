@@ -22,7 +22,7 @@
     "src/break-voices.ts": "f9224a3524cf7960cf68be61cd2be4c564fcad5c58f26991b6bb7f769ac65c76",
     "std/base64.ts": "068f7c677f7bffb55a1179bfc4f7de179883b7c85253caf2c474f1ca9edb33fb",
     "std/host/game.ts": "3004d84b9390960f9944ad3b6fe1364a6e930f3db5464984f445e979dcfdd2e4",
-    "std/host/ring.ts": "da5ea5f3cf216c2303a94c96f808f115be09a6890df67d392fd779e382c4606e",
+    "std/host/ring.ts": "335aacd3687d0b6d569cd5486c0ff7fc85c44670e3bf8a5c7bb96d5be5cc503d",
     "std/input.ts": "3f8c9ab34f172ad387160339f8f2ce35b22f944f02e617c2d26982396563cdc7",
     "std/random.ts": "e7e360a36acfa0e02b8c644c5499e0bc8dc3fada41a36062adeb2dd590c51c13",
     "std/raster.ts": "e6ef8eddbbb09c24384ab6f01ca1f7d826e50e87fc271b3822e4a238340243fa",

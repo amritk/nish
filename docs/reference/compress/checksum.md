@@ -100,11 +100,7 @@ loop.
 The Adler-32 of `buf[off .. off + len)`. A window outside `buf` panics.
 
 ```ts
-function adler32(
-  buf: u8[],
-  off: i32,
-  len: i32,
-): u32
+const adler32: (buf: u8[], off: i32, len: i32) => u32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -138,12 +134,12 @@ The Adler-32 of the bytes `adler` was the Adler-32 of, followed by
 window outside `buf` panics.
 
 ```ts
-function adler32Update(
+const adler32Update: (
   adler: u32,
   buf: u8[],
   off: i32,
   len: i32,
-): u32
+) => u32
 ```
 
 <scalar-field name="adler" type="u32" required>
@@ -185,7 +181,7 @@ call, which costs about as much as checksumming 5 KB: keep a `Crc32` for
 anything repeated. A window outside `buf` panics.
 
 ```ts
-function crc32(buf: u8[], off: i32, len: i32): u32
+const crc32: (buf: u8[], off: i32, len: i32) => u32
 ```
 
 <scalar-field name="buf" type="u8[]" required>

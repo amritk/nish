@@ -21,7 +21,8 @@ There are also `u8`, `u16`, `u32` and `u64` (unsigned, and they wrap on
 overflow — handy for bytes and hashes) and `f32`. Write the explicit width when
 you mean one: `i32` reads the same in either number mode, `number` does not.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const count: i32 = 7;
   const big: i64 = 9000000000;
@@ -41,7 +42,8 @@ must match the initializer exactly.
 `u32 + i32` are refused, because the compiler will not guess which width you
 meant:
 
-```ts nish:err NL2231
+<!-- nish:err NL2231 -->
+```ts
 const total = (a: i32, b: i64): i64 => {
   return a + b;
 };
@@ -50,7 +52,8 @@ const total = (a: i32, b: i64): i64 => {
 Convert explicitly with `toI32`, `toI64`, `toF64` (and `toU8`, `toU16`,
 `toU32`, `toU64`, `toF32`):
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const total = (a: i32, b: i64): i64 => {
   return toI64(a) + b;
 };
@@ -90,7 +93,8 @@ JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
 `std/math.ts` rather than called from the C library, so they answer the same
 on every target, WebAssembly included, within one unit in the last place.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const angle: f64 = Math.atan2(1.0, 1.0);
   console.log(`${Math.hypot(3.0, 4.0)} ${Math.sign(-7)} ${Math.imul(65536, 65536)}`); // 5 -1 0
@@ -110,7 +114,8 @@ Nish has no truthiness: `if (n)`, `if (s.length)` and `!xs.length` are
 errors. Compare instead — `n !== 0`, `s.length !== 0`. The
 [Control flow](control-flow.md#conditions) page has the details.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const n: i32 = 3;
   const s: string = "hi";
@@ -129,7 +134,8 @@ are how you print a number, through a template literal: `` `${n}` ``. `String(n)
 not exist. The [Arrays and strings](arrays-and-strings.md#strings) page covers what you
 can do with one.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const n: i32 = 42;
   const s: string = "answer: " + `${n}`;
@@ -150,7 +156,8 @@ value a program writes (the one place it appears is a `Map` lookup — see
 Before you read anything off a nullable value, test it. Inside the test, the
 compiler treats the variable as plain `T`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const firstLong = (words: string[]): string | null => {
   for (const w of words) {
     if (w.length > 4) {
@@ -173,7 +180,8 @@ export const main = (): i32 => {
 
 Reading a nullable without the test is an error:
 
-```ts nish:err-body NL2187
+<!-- nish:err-body NL2187 -->
+```ts
 const s: string | null = null;
 console.log(`${s.length}`);
 ```
@@ -197,7 +205,8 @@ When all you want is a fallback, `a ?? fallback` gives `a` where it is not
 test afterwards, and because it reads `a` only once, it works on a property
 path too:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   value: i32;
   next: Node | null = null;
@@ -227,7 +236,8 @@ for "past the end", where Node reads `undefined` and takes the fallback, but
 Nish checks the index and stops the program instead. Test the index against
 `xs.length` first:
 
-```ts nish:err-body NL2489
+<!-- nish:err-body NL2489 -->
+```ts
 const names = new Array<string | null>(2);
 console.log(names[5] ?? "none");
 ```
@@ -238,7 +248,8 @@ To read through several nullable links, write a `?.` chain and end it with a
 default. Each `?.` stops the chain when the value before it is `null`, and
 the whole expression is then the default:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Address {
   city: string;
   constructor(city: string) {
@@ -290,7 +301,8 @@ range. Taking a value out is free, and every operator reads it as a plain
 `i32`. Because the compiler knows the bounds, a ranged value used as an
 index can also spare the bounds check:
 
-```ts nish:err-body NL2384
+<!-- nish:err-body NL2384 -->
+```ts
 const digit: integer<0, 9> = 12;
 ```
 
@@ -307,7 +319,8 @@ operations on it; there is no arithmetic.
 An enum whose members are numbers is a **numeric enum**. A member without a
 value counts up from the one before it, starting at `0`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   If = 1,
   While = 2,
@@ -325,7 +338,8 @@ An enum whose members are all strings is a **string enum**. Every member
 gives its string, and `String(r)` reads it back; it costs one load, not a
 copy:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Role {
   Admin = "admin",
   Guest = "guest",
@@ -350,7 +364,8 @@ export const main = (): i32 => {
 
 One enum holds one kind of member. Mixing strings and numbers is refused:
 
-```ts nish:err NL1043
+<!-- nish:err NL1043 -->
+```ts
 enum Mixed {
   A = "a",
   B = 2,
@@ -361,7 +376,8 @@ A string enum is still not a `string`. Comparing it with a string is refused,
 because the compiler compares members, never text; compare with a member
 instead, `r === Role.Admin`:
 
-```ts nish:err NL2788
+<!-- nish:err NL2788 -->
+```ts
 enum Role {
   Admin = "admin",
   Guest = "guest",
@@ -373,7 +389,8 @@ const isAdmin = (r: Role): boolean => r === "admin";
 Nor does it turn into a `string` on its own. Write `String(r)` where you want
 the text:
 
-```ts nish:err NL2789
+<!-- nish:err NL2789 -->
+```ts
 enum Role {
   Admin = "admin",
   Guest = "guest",
@@ -398,7 +415,8 @@ annotation, `Kind.Array` is a slot that holds that one member and nothing
 else, which is how a class records which of an enum's cases it is: a
 `readonly` field of the member's type, set to the member.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   Scalar,
   Array,
@@ -422,7 +440,8 @@ Only the member itself goes into such a slot. Another member is a compile
 error, and so is a plain `Kind` value, because the compiler cannot tell which
 member that holds:
 
-```ts nish:err NL2519
+<!-- nish:err NL2519 -->
+```ts
 enum Kind {
   Scalar,
   Array,
@@ -440,7 +459,8 @@ A `let` with no annotation follows TypeScript. Start it from a value that
 already has the member type and it keeps that type. Start it from the
 member's constant and it is a `Kind`, so it can take another member later:
 
-```ts nish:err NL2519
+<!-- nish:err NL2519 -->
+```ts
 enum Kind {
   Scalar,
   Array,
@@ -483,7 +503,8 @@ An array of a member type is built with `[]` and `push`. `new Array<T>(n)`
 fills its slots with 0, which here is `Kind.Scalar`, so the compiler refuses
 it for any member but the one whose value is 0:
 
-```ts nish:err NL2520
+<!-- nish:err NL2520 -->
+```ts
 enum Kind {
   Scalar,
   Array,

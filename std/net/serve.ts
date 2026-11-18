@@ -9,7 +9,7 @@
  *     const HOME: i32 = 0   // module constants, in the order the routes are added
  *     const USER: i32 = 1
  *
- *     async function handle(req: Request): Promise<Response> {
+ *     const handle = async (req: Request): Promise<Response> => {
  *       switch (req.route) {
  *         case HOME: return new Response(200).text("hello\n")
  *         case USER: {
@@ -20,7 +20,7 @@
  *       }
  *     }
  *
- *     export async function main(): Promise<i32> {
+ *     export const main = async (): Promise<i32> => {
  *       const router = new Router(new RouterLimits())
  *       router.add("GET", "/")
  *       router.add("GET", "/users/:id")

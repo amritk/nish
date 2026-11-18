@@ -194,11 +194,11 @@ is `i64` arithmetic on numbers that are not negative, so `--number-mode
 f64` writes the same bytes.
 
 ```ts
-function httpDateWrite(
+const httpDateWrite: (
   out: u8[],
   at: i32,
   seconds: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -231,7 +231,7 @@ the index just past the date's last octet (`at + HTTP_DATE_SIZE`),
 The octets of `text`, one a character: what a field name or value is sent as.
 
 ```ts
-function httpFieldBytes(text: string): u8[]
+const httpFieldBytes: (text: string) => u8[]
 ```
 
 <scalar-field name="text" type="string" required>
@@ -256,10 +256,10 @@ the fields RFC 9110 §7.6.1 names, `keep-alive`, `proxy-connection`,
 `trailers`.
 
 ```ts
-function httpFieldConnectionSpecific(
+const httpFieldConnectionSpecific: (
   name: u8[],
   value: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="name" type="u8[]" required>
@@ -286,10 +286,7 @@ true when the field belongs to one HTTP/1.1 hop and must not be
 Whether the octets of `bytes` spell `text` exactly.
 
 ```ts
-function httpFieldIs(
-  bytes: u8[],
-  text: string,
-): boolean
+const httpFieldIs: (bytes: u8[], text: string) => boolean
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -317,7 +314,7 @@ non-empty token in lowercase (RFC 9110 §5.1, RFC 9113 §8.2.1, RFC 9114
 §4.2). A pseudo-header's name starts with a colon and is not one.
 
 ```ts
-function httpFieldNameValid(name: u8[]): boolean
+const httpFieldNameValid: (name: u8[]) => boolean
 ```
 
 <scalar-field name="name" type="u8[]" required>
@@ -343,7 +340,7 @@ is compressed beside it, so a secret sent indexed can leak through the
 compressed length (CRIME's shape).
 
 ```ts
-function httpFieldSensitive(name: u8[]): boolean
+const httpFieldSensitive: (name: u8[]) => boolean
 ```
 
 <scalar-field name="name" type="u8[]" required>
@@ -365,7 +362,7 @@ space or tab as its first or last octet (RFC 9113 §8.2.1, RFC 9114 §4.2).
 Other octets, obs-text included, pass as they are.
 
 ```ts
-function httpFieldValueValid(value: u8[]): boolean
+const httpFieldValueValid: (value: u8[]) => boolean
 ```
 
 <scalar-field name="value" type="u8[]" required>
@@ -391,10 +388,10 @@ version's writer refuses what this refuses, so that a program's string can
 never reach the wire as a field it was not.
 
 ```ts
-function httpFieldsCheckOutgoing(
+const httpFieldsCheckOutgoing: (
   names: u8[][],
   values: u8[][],
-): i32
+) => i32
 ```
 
 <scalar-field name="names" type="u8[][]" required>

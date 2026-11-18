@@ -278,14 +278,14 @@ any write at or past `out.length`. On an error the bytes before it have been
 written. What is decoded is not checked as UTF-8.
 
 ```ts
-function percentDecode(
+const percentDecode: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -338,14 +338,14 @@ fails at — the `%` of a malformed escape or of `%00`, or the first byte
 `percentDecode` would have written before the error.
 
 ```ts
-function percentDecodeErrorAt(
+const percentDecodeErrorAt: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -397,14 +397,14 @@ and `%2F` is a 0x2F byte in the segment. Split the path with
 `UrlPathSegments` first, then decode each segment.
 
 ```ts
-function percentDecodePathSegment(
+const percentDecodePathSegment: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -457,10 +457,7 @@ or what it decodes to is not valid UTF-8, which is where
 wire is. It allocates its answer.
 
 ```ts
-function urlDecode(
-  s: string,
-  flags: i32,
-): string | null
+const urlDecode: (s: string, flags: i32) => string | null
 ```
 
 <scalar-field name="s" type="string" required>
@@ -486,7 +483,7 @@ The decoded text, or null for a refused escape or `%00`, or text that is not UTF
 The port a scheme uses when a URL names none.
 
 ```ts
-function urlDefaultPort(scheme: string): i32
+const urlDefaultPort: (scheme: string) => i32
 ```
 
 <scalar-field name="scheme" type="string" required>
@@ -512,11 +509,11 @@ percent-encoded or sub-delims byte in a reg-name is not. It is the rule an
 HTTP server holds a `Host` field to (RFC 9112 §3.2). Allocates nothing.
 
 ```ts
-function urlIsHostPort(
+const urlIsHostPort: (
   bytes: u8[],
   a: i32,
   b: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -554,7 +551,7 @@ different origins, and so are `a.com.` and `a.com`: equal strings are the
 same origin, and a split errs toward "different".
 
 ```ts
-function urlOrigin(u: Url): string | null
+const urlOrigin: (u: Url) => string | null
 ```
 
 <scalar-field name="u" type="Url" required>
@@ -586,7 +583,7 @@ The path's dot segments are removed, as RFC 3986 §5.2.2 removes them from a
 reference with a scheme. Nothing is decoded. It allocates its answer.
 
 ```ts
-function urlParse(s: string): Url | null
+const urlParse: (s: string) => Url | null
 ```
 
 <scalar-field name="s" type="string" required>
@@ -612,10 +609,7 @@ matches nothing. Call it again for the next pair with the same key.
 with its UTF-16 code units, so a non-ASCII name answers differently.
 
 ```ts
-function urlQueryFind(
-  q: UrlQuery,
-  name: string,
-): i32
+const urlQueryFind: (q: UrlQuery, name: string) => i32
 ```
 
 <scalar-field name="q" type="UrlQuery" required>
@@ -645,10 +639,10 @@ key is absent, the value is malformed or not UTF-8, or the key comes after
 `URL_DEFAULT_MAX_PAIRS` pairs. It allocates its answer.
 
 ```ts
-function urlQueryGet(
+const urlQueryGet: (
   target: string,
   name: string,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="target" type="string" required>
@@ -676,11 +670,11 @@ none. The path is `[off, q)` and the query `(q, off + len)`; nothing is
 copied. A `#` is not looked for: a request target holds no fragment.
 
 ```ts
-function urlQueryStart(
+const urlQueryStart: (
   bytes: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -716,10 +710,7 @@ or wss URL without a host. `base`'s fragment is never carried over. It
 allocates its answer and does not change `base`.
 
 ```ts
-function urlResolve(
-  base: Url,
-  ref: string,
-): Url | null
+const urlResolve: (base: Url, ref: string) => Url | null
 ```
 
 <scalar-field name="base" type="Url" required>
@@ -748,7 +739,7 @@ with `//` under no authority is written after `/.`, as the WHATWG URL
 Standard writes it, so the string does not read back with an authority.
 
 ```ts
-function urlSerialize(u: Url): string
+const urlSerialize: (u: Url) => string
 ```
 
 <scalar-field name="u" type="Url" required>

@@ -222,11 +222,11 @@ Write `stats` as two short lines, inverse, into `corner` (a `CORNER_*`) of
 the frames dropped and the backend cap. A screen too small clips them.
 
 ```ts
-function drawStatsOverlay(
+const drawStatsOverlay: (
   screen: Screen,
   stats: TermStats,
   corner: i32,
-): void
+) => void
 ```
 
 <scalar-field name="screen" type="Screen" required>

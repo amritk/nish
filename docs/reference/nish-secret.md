@@ -126,10 +126,7 @@ facts are in. It reaches no I/O and no C through any depth of calls
 arrow writes it down, NL2452): that type is what leaves.
 
 ```ts
-function expose<T, R>(
-  s: Secret<T>,
-  f: (value: T) => R,
-): R
+const expose: <T, R>(s: Secret<T>, f: (value: T) => R) => R
 ```
 
 <scalar-field name="s" type="Secret&lt;T&gt;" required>
@@ -158,11 +155,11 @@ captures nothing. `f` writes nothing through `arg` either (NL2450), which
 would be a road out its result type does not name.
 
 ```ts
-function exposeWith<T, A, R>(
+const exposeWith: <T, A, R>(
   s: Secret<T>,
   arg: A,
   f: (value: T, arg: A) => R,
-): R
+) => R
 ```
 
 <scalar-field name="s" type="Secret&lt;T&gt;" required>
@@ -201,7 +198,7 @@ Pass a copy instead: `const copy: u8[] = new Array<u8>(raw.length);
 copy.set(raw)`, then `secret(copy)`.
 
 ```ts
-function secret<T>(value: T): Secret<T>
+const secret: <T>(value: T) => Secret<T>
 ```
 
 <scalar-field name="value" type="T" required>
@@ -225,7 +222,7 @@ remove. The `Secret` may not be read again (NL2443). A holder's field is
 wiped only in that holder's own `wipe()` (NL2547).
 
 ```ts
-function wipe<T>(target: Secret<T>): void
+const wipe: <T>(target: Secret<T>) => void
 ```
 
 <scalar-field name="target" type="Secret&lt;T&gt;" required>
@@ -239,7 +236,7 @@ Zero an array or record of integers that `expose`'s function holds, with
 the same volatile store. Anything else, a `string` included, is NL2438.
 
 ```ts
-function wipe(target: object): void
+const wipe: (target: object) => void
 ```
 
 <scalar-field name="target" type="object" required>
