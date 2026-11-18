@@ -539,6 +539,34 @@ export class LayoutReport {
  * and a summary line. `pointers` is why this build keeps every link a full
  * pointer though it is native (a page module, `NISH_ASAN`), or `""`.
  */
+/**
+ * Whether narrowing `size` bytes to `narrowed` pays (test 3): at least a
+ * quarter of the class gone, so the 4-byte heap rounding and the decode on
+ * every link read cost less than the cache lines saved.
+ *
+ * @param size the class's size with no class narrowed
+ * @param narrowed its size with the candidate's links narrowed
+ * @returns true when the saving is at least a quarter of `size`
+ */
+const pays = (size: i32, narrowed: i32): boolean => narrowed * 4 <= size * 3
+
+/**
+ * Whether the class under `key` is made at a site inside a loop or in a
+ * recursive function (test 4).
+ *
+ * @param graph the call graph over every module
+ * @param key the class's call-graph key
+ * @returns true when some such site makes it
+ */
+const madeInLoop = (graph: CallGraph, key: string): boolean => {
+  for (const site of graph.sites) {
+    if (site.key === key && (site.inLoop || graph.nodes[site.fn].recursive)) {
+      return true
+    }
+  }
+  return false
+}
+
 export const explainLayout = (
   opts: Options,
   table: TypeTable,
@@ -568,6 +596,7 @@ export const explainLayout = (
   const refused = notNative(opts, programs)
   const native = refused.length > 0 ? refused : pointers
   const graph = buildGraph(modules)
+  const loose = getenv("NISH_RULE_LOOSE") !== null
   // Each class's shown name and call-graph key are made once, before the
   // report loop, so no pass of that loop allocates a string it keeps.
   const names: string[] = []
@@ -595,12 +624,24 @@ export const explainLayout = (
       const before = narrowedSize(table, info, NO_TARGET, wasm)
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
-      let saver = after < before ? shownName : ""
-      let saving = after < before ? `${before} → ${after}` : ""
+      let saver = ""
+      let saving = ""
+      // The best saving refused, named when nothing pays, so the line says
+      // why a class that does save bytes was not picked.
+      let unpaid = ""
+      if (after < before) {
+        if (pays(before, after) || loose) {
+          saver = shownName
+          saving = `${before} → ${after}`
+        } else {
+          unpaid = `${shownName} saves ${before} → ${after}, under a quarter`
+        }
+      }
       let h = 0
-      while (h < all.length && h < names.length) {
+      while (h < all.length && h < names.length && h < keys.length) {
         const holder = all[h]
         const holderName = names[h]
+        const holderKey = keys[h]
         h = h + 1
         if (!linksTo(table, holder, info.type)) {
           continue
@@ -610,17 +651,18 @@ export const explainLayout = (
           const held = narrowedSize(table, holder, NO_TARGET, wasm)
           const narrowed = narrowedSize(table, holder, info.type, wasm)
           if (narrowed < held) {
-            saver = holderName
-            saving = `${held} → ${narrowed}`
+            if (loose || (pays(held, narrowed) && madeInLoop(graph, holderKey))) {
+              saver = holderName
+              saving = `${held} → ${narrowed}`
+            } else if (unpaid.length === 0) {
+              unpaid = pays(held, narrowed)
+                ? `${holderName} saves ${held} → ${narrowed}, but is not made in a loop or recursion`
+                : `${holderName} saves ${held} → ${narrowed}, under a quarter`
+            }
           }
         }
       }
-      let made = false
-      for (const site of graph.sites) {
-        if (site.key === key && (site.inLoop || graph.nodes[site.fn].recursive)) {
-          made = true
-        }
-      }
+      const made = madeInLoop(graph, key)
       const forbids = forbidden(table, info)
       let verdict = "compact"
       if (!opts.compact) {
@@ -634,7 +676,7 @@ export const explainLayout = (
       } else if (!linked) {
         verdict = "2 no link"
       } else if (saver.length === 0) {
-        verdict = "3 no saving"
+        verdict = unpaid.length > 0 ? `3 no saving that pays: ${unpaid}` : "3 no saving"
       } else if (!made) {
         verdict = "4 not made in a loop or recursion"
       } else if (info.wide) {
