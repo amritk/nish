@@ -13,6 +13,8 @@ stages:
         content: Define the atom / molecule / organism tiers, the import rule between them, and where each tier lives — see Layering
       - id: constraints
         content: Record what bounds an extraction (seed freeze, public std surface and gen-reference, nish-cmp IR moves, goldens, code size, wasm) — see Constraints
+      - id: modernise-on-extract
+        content: Inventory the constructs and builtins that landed after each cluster's copies were written, and set the rule that an extraction rewrites in today's Nish within the seed freeze — see Modern code
       - id: staged-extraction
         content: Order the extraction stages, one cluster per stage, each with its acceptance test and the measurement it must not regress — see Stages
       - id: owner-decisions
@@ -48,6 +50,10 @@ The atomic-design mapping, adapted to a library:
 
 The note decides: the directory (e.g. `std/core/` or per-tier dirs), whether lower tiers are public `std` API or internal (and how "internal" is expressed, given every public `std` declaration needs a doc comment and a reference page), and how the import rule is enforced (a lint or `tests/run.js` check that an atom imports nothing).
 
+## Modern code
+
+Much of the duplicated code predates the constructs it would use if written today. An extraction is the moment to rewrite it in current Nish, not to copy it. The note: (a) lists the language constructs and builtins that landed since each cluster's oldest copy (from `CHANGELOG.md`, `docs/LANGUAGE.md` and `git log -S` on the sites): e.g. generics, generics over unions, arrow-function declarations, `Map`, string enums, destructuring declarations, `for…of`/foreach, function references, `Result`, ranged integers, typed JSON, SIMD helpers, whichever apply; (b) per cluster, names the modern form the shared version uses and what it replaces (a hand-rolled table, a manual loop, a sentinel return); (c) states the rule each extraction stage follows: write the shared module in the most current Nish the code's consumers allow. For anything `src/` imports, that is what the **seed** compiles (the rolling freeze), so a construct newer than the last release waits for the next one, and the note marks which clusters are blocked on that; (d) requires the stage to show the rewrite does not regress IR size or the benchmark table, since a modern form is not automatically as cheap as the hand-written one.
+
 ## Constraints
 
 - **Rolling freeze**: `src/` is built by the seed, so a module it imports must compile under the last release; it may not use a construct newer than the seed.
@@ -58,7 +64,7 @@ The note decides: the directory (e.g. `std/core/` or per-tier dirs), whether low
 
 ## Stages
 
-S1 is this note. S2 onward: one cluster per stage, atoms first (they have no dependencies), each with its sites, its acceptance test (the copies deleted, every caller importing the shared one, an import-rule check), and the measurement it must not regress. Mark which stages can run in parallel.
+S1 is this note. S2 onward: one cluster per stage, atoms first (they have no dependencies), each with its sites, the modern form it is rewritten in (see Modern code), its acceptance test (the copies deleted, every caller importing the shared one, an import-rule check), and the measurement it must not regress. Mark which stages can run in parallel.
 
 ## Decisions
 
