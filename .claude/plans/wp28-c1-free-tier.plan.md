@@ -166,7 +166,7 @@ updates from `main` before it starts editing.
 
 ### c1-nullish
 
-**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/compilation.ts`, `src/emit.ts`, `src/bounds.ts`, `src/checker.ts`, `src/arrays.ts`, `src/validator.ts`, `src/expressions.ts`, `src/members.ts`, `src/emit-util.ts`, `src/emit-map.ts`, `src/emit-ts-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_optional_*`, `tests/cases/reject_nullish*`, `tests/cases/nullish_*`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`
+**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/compilation.ts`, `src/emit.ts`, `src/bounds.ts`, `src/checker.ts`, `src/arrays.ts`, `src/validator.ts`, `src/expressions.ts`, `src/members.ts`, `src/emit-util.ts`, `src/emit-map.ts`, `src/emit-ts-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_optional_*`, `tests/cases/reject_nullish*`, `tests/cases/nullish_*`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`
 
 **Depends on:** none.
 
@@ -181,13 +181,13 @@ the end both stay refused, each with a diagnostic that says why.
 
 ### c1-strings
 
-**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/statements.ts`, `src/emit-control.ts`, `src/emit-strings.ts`, `src/emit-ts-control.ts`, `src/emit-ts-strings.ts`, `src/loop-flow.ts`, `src/program.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_switch_*`, `tests/cases/reject_for_of_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`
+**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/statements.ts`, `src/emit-control.ts`, `src/emit-strings.ts`, `src/emit-ts-control.ts`, `src/emit-ts-strings.ts`, `src/loop-flow.ts`, `src/program.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_switch_*`, `tests/cases/reject_for_of_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`
 
 **Depends on:** c1-nullish, which must merge before this stage starts. It needs the shared query, the feature-naming note and the erasure list.
 
 ### c1-signatures
 
-**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/declarations.ts`, `src/annotations.ts`, `src/statements.ts`, `src/expressions.ts`, `src/emit.ts`, `src/emit-classes.ts`, `src/emit-ts-*.ts`, `src/interop-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_param_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `docs/roadmap/wp28-compatibility-mode.md`, `docs/roadmap/wp33-round-trip.md`
+**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/declarations.ts`, `src/annotations.ts`, `src/statements.ts`, `src/expressions.ts`, `src/emit.ts`, `src/emit-classes.ts`, `src/emit-ts-*.ts`, `src/interop-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_param_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `docs/roadmap/wp28-compatibility-mode.md`, `docs/roadmap/wp33-round-trip.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`
 
 **Depends on:** c1-strings, which must merge before this stage starts.
 
@@ -196,6 +196,8 @@ Every stage may also regenerate these: `tests/self/goldens/checked/**`,
 `tests/differential/goldens/**` and `tests/differential/emit-ts-known.txt`
 (only under the Node version CI pins). A new file a stage needs and no glob
 covers is named in the PR body.
+
+**Amended 2026-11-18 (#1770's blockers):** each stage also owns `src/options.ts`, `tests/nish-cmp.js` (its `DECLARED` entries, which CLAUDE.md requires in the same PR), `tests/wordings/**` (diagnostic coverage reads only that folder), and `tests/cases/*.ll`/`*.out` goldens that the stage's change moves, regenerated with the repo's tooling.
 
 ## Acceptance
 
