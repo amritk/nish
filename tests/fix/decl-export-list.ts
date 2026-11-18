@@ -1,6 +1,6 @@
 // `export { ... }` (NL2128): the list goes, and `export` goes before each
 // declaration it names, whatever kind of declaration that is.
-const f = (): i32 => {
+function f(): i32 {
   return 1
 }
 const g = (): i32 => 2

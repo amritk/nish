@@ -99,8 +99,13 @@
  * the module's source at `<ref>` must hash to the frozen key, and
  * `arrowify`'s block-bodied `rewrite` of that source must give the
  * working-tree file byte for byte. Then the key moves and the stored body is
- * kept. A module failing either check, a record whose flags moved, and a
- * record missing a body stay stale, are named, and the exit status is 1.
+ * kept. A module failing either check (or on which `arrowify` throws), a
+ * record whose flags moved, and a record missing a body stay stale, are
+ * named, and the exit status is 1; the records that passed are still written,
+ * so a refusal costs only the refused programs. The mode does not itself check
+ * that the kept body is still what the new source rewrites to: that rests on
+ * §8b, and its backstop is every differential run, which compares the native
+ * build of the source against the kept body.
  */
 import crypto from "node:crypto"
 import { execFileSync } from "node:child_process"
@@ -481,7 +486,13 @@ const rekeyRefusal = (module, rev, arrowify) => {
     return `${module.source} at ${rev} is not UTF-8`
   }
   const now = fs.readFileSync(path.join(root, module.source))
-  if (!Buffer.from(arrowify(text, module.source).text, "utf8").equals(now)) {
+  let rewritten
+  try {
+    rewritten = arrowify(text, module.source).text
+  } catch (error) {
+    return `arrowify threw on ${module.source} at ${rev}: ${error instanceof Error ? error.message : String(error)}`
+  }
+  if (!Buffer.from(rewritten, "utf8").equals(now)) {
     return `${module.source} is not \`scripts/arrowify.mjs\` of its source at ${rev}: it changed in some other way`
   }
   return null

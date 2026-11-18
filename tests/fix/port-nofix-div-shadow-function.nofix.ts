@@ -1,6 +1,6 @@
 // A function declaration named `toU32` gets the module no review edit for a
 // `u32` `/=`.
-const toU32 = (x: u32): u32 => {
+function toU32(x: u32): u32 {
   return x + 1000
 }
 
