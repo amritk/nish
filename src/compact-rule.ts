@@ -347,9 +347,12 @@ const buildGraph = (modules: LayoutModule[]): CallGraph => {
   return graph
 }
 
-/** Every class a report line is about: a declared class (not an instantiation), in its module's source order. */
-const ownClasses = (program: CheckedProgram): StructInfo[] => {
-  const classes: StructInfo[] = []
+/**
+ * Appends every class a report line is about to `into`: each declared class
+ * of `program` (not an instantiation), in its module's source order.
+ */
+const collectClasses = (program: CheckedProgram, into: StructInfo[]): void => {
+  const first = into.length
   for (const info of program.structList) {
     if (
       info.origin === program.source &&
@@ -357,22 +360,23 @@ const ownClasses = (program: CheckedProgram): StructInfo[] => {
       info.instance === null &&
       !info.poisoned
     ) {
-      classes.push(info)
+      into.push(info)
     }
   }
   // `structList` is in collection order; a report reads in source order.
-  let i = 1
-  while (i < classes.length) {
-    const item = classes[i]
-    let j = i - 1
-    while (j >= 0 && classes[j].decl.start > item.decl.start) {
-      classes[j + 1] = classes[j]
+  let i = first + 1
+  while (i < into.length) {
+    const item = into[i]
+    let j = i
+    while (j > first && j >= 1 && j < into.length && into[j - 1].decl.start > item.decl.start) {
+      into[j] = into[j - 1]
       j = j - 1
     }
-    classes[j + 1] = item
+    if (j >= 0 && j < into.length) {
+      into[j] = item
+    }
     i = i + 1
   }
-  return classes
 }
 
 /** Test 1's refusal, the flag or target that makes the build not a native executable, or `""`. */
@@ -396,17 +400,6 @@ const notNative = (opts: Options): string => {
     return "--emit-dts"
   }
   return ""
-}
-
-/** Every class in the program, for test 2's and test 3's scan of the holders. */
-const everyClass = (modules: LayoutModule[]): StructInfo[] => {
-  const all: StructInfo[] = []
-  for (const module of modules) {
-    for (const info of ownClasses(module.program)) {
-      all.push(info)
-    }
-  }
-  return all
 }
 
 /** Whether any field of `info` links to the class whose pointer type is `target`. */
@@ -453,14 +446,29 @@ export class LayoutReport {
 export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutModule[]): LayoutReport => {
   const wasm = isWasmBuild(opts)
   const native = notNative(opts)
-  const all = everyClass(modules)
+  // Every class in the program, for test 2's and test 3's scan of the
+  // holders, and the index of the module each one is declared in.
+  const all: StructInfo[] = []
+  const owners: i32[] = []
+  let m = 0
+  while (m < modules.length) {
+    collectClasses(modules[m].program, all)
+    while (owners.length < all.length) {
+      owners.push(m)
+    }
+    m = m + 1
+  }
   const graph = buildGraph(modules)
   const lines = new StringBuilder()
   let classes = 0
   let picked = 0
-  for (const module of modules) {
+  let k = 0
+  while (k < all.length && k < owners.length) {
+    const info = all[k]
+    const module = modules[owners[k]]
     const source = module.program.source
-    for (const info of ownClasses(module.program)) {
+    k = k + 1
+    {
       classes = classes + 1
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
