@@ -2792,9 +2792,12 @@ in is in parentheses.
   measures the vector schedule (#1186).
 - [`http1-conn/`](http1-conn/README.md): `Http1Connection` per request on one
   connection, over a cold pool and over an idle `Http1Server` pool with
-  `idleInput`, and the peak RSS of one idle connection.
+  `idleInput`, and the peak RSS of one idle connection; `bytes.ts` counts
+  what one connection holds, object by object.
 - [`http1-request/`](http1-request/README.md): `std/net/http1`'s request
-  parser on a browser, an API, a short and a 4 KB JSON request (#1187).
+  parser on a browser, an API, a short and a 4 KB JSON request (#1187), and
+  a minimal GET with 0, 4 or 10 unread fields; `breakdown.mjs` gives its
+  instructions by source function.
 - [`jwt-verify/`](jwt-verify/README.md): decoding and verifying an HS256 JWT
   (#1188).
 - [`pg-decode/`](pg-decode/README.md): the PostgreSQL wire decoder on

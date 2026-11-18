@@ -23811,6 +23811,8 @@ if (dealtHere("cliChecks")) {
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
+      "--pgo-generate",
+      "--pgo-use",
       "--profile",
       "--warn-portability",
       "--fix",
@@ -43485,6 +43487,293 @@ if (!only || "cpu-level".includes(only)) {
         )
       }
     }
+  }
+}
+
+// ---- Profile-guided builds ----------------------------------------------------------
+// `--pgo-generate` and `--pgo-use <file>` (docs/LANGUAGE.md, "Profile-guided
+// builds") are link flags: build.sh puts -fprofile-generate or -fprofile-use
+// on every unit it compiles, the runtime's and SQLite's included, and on the
+// link. A line where either would do nothing is refused with exit 2 before
+// anything compiles; a missing llvm-profdata is exit 3. A profile-guided link
+// compiles every unit itself, so the runtime cache neither serves it nor keeps
+// what it compiled, and a plain link after it is the plain link before it.
+if (!only || "pgo".includes(only)) {
+  const pgoDir = path.join(buildDir, "pgo")
+  fs.rmSync(pgoDir, { recursive: true, force: true })
+  fs.mkdirSync(pgoDir, { recursive: true })
+  // Every spawn here has a timeout, so a hung link or binary fails its check
+  // instead of stalling the shard.
+  const nish = (args, env = {}, cwd = root) =>
+    spawnSync(NISH, args, { cwd, encoding: "utf8", env: { ...process.env, ...env }, timeout: 600000 })
+  const oneLine = (r) => r.stderr.split("\n").filter((l) => l.length > 0).length === 1
+  const hello = path.join(root, "examples", "hello.ts")
+  const stray = path.join(pgoDir, "stray.profraw")
+  fs.writeFileSync(stray, Buffer.from([0x81, 0x72, 0x66, 0x6f, 0x72, 0x70, 0x6c, 0xff, 0, 0, 0, 0]))
+  const junk = path.join(pgoDir, "junk.profdata")
+  fs.writeFileSync(junk, "not a profile\n")
+  // The indexed magic and nothing after it: past the magic check, short of
+  // what llvm-profdata reads.
+  const indexedMagic = path.join(pgoDir, "magic.profdata")
+  fs.writeFileSync(indexedMagic, Buffer.from([0xff, 0x6c, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x81, 0, 0, 0, 0]))
+  // Special files: a FIFO with no writer would block a read, /dev/null is a
+  // device. Each is refused by its type before anything opens it.
+  const fifo = path.join(pgoDir, "fifo.profdata")
+  const madeFifo = spawnSync("sh", ["-c", 'mkfifo "$1"', "sh", fifo], { timeout: 120000 }).status === 0
+  // A regular file the compiler cannot open: mode 000. Root reads it anyway,
+  // so the row runs only for another user.
+  const unreadable = path.join(pgoDir, "unreadable.profdata")
+  fs.writeFileSync(unreadable, Buffer.from([0xff, 0x6c, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x81, 0, 0, 0, 0]))
+  fs.chmodSync(unreadable, 0o000)
+  const asRoot = process.getuid?.() === 0
+  const refused = path.join(pgoDir, "refused")
+  const refusals = [
+    ["--pgo-generate without --link", ["--pgo-generate"], "--pgo-generate needs --link"],
+    ["--pgo-use without --link", ["--pgo-use", junk], "--pgo-use needs --link"],
+    ["both flags", ["--link", refused, "--pgo-generate", "--pgo-use", junk], "cannot be used together"],
+    ["--pgo-use with no file", ["--link", refused, "--pgo-use"], "--pgo-use needs a profile"],
+    ["--pgo-use with an empty file name", ["--link", refused, "--pgo-use", ""], "--pgo-use needs a profile"],
+    ["--pgo-use with an empty file name and no --link", ["--pgo-use", ""], "--pgo-use needs a profile"],
+    ["a character device", ["--link", refused, "--pgo-use", "/dev/null"], "is not a regular file"],
+    ...(madeFifo ? [["a FIFO", ["--link", refused, "--pgo-use", fifo], "is not a regular file"]] : []),
+    ["a missing profile", ["--link", refused, "--pgo-use", path.join(pgoDir, "none.profdata")], "no profile at"],
+    ["a directory", ["--link", refused, "--pgo-use", pgoDir], "is a directory, not a profile"],
+    ["a raw .profraw", ["--link", refused, "--pgo-use", stray], "merge it first"],
+    ["a file that is not a profile", ["--link", refused, "--pgo-use", junk], "is not a profile"],
+    ...(asRoot ? [] : [["an unreadable profile", ["--link", refused, "--pgo-use", unreadable], "cannot be read"]]),
+    [
+      "--profile debug",
+      ["--link", refused, "--pgo-generate", "--profile", "debug"],
+      "cannot be used with --profile debug",
+    ],
+    [
+      "--profile wasi",
+      ["--link", refused, "--pgo-generate", "--profile", "wasi"],
+      "cannot be used with --profile wasi",
+    ],
+    [
+      "a non-host --target",
+      ["--link", refused, "--pgo-generate", "--target", "wasm32-unknown-unknown"],
+      "the target is wasm32-unknown-unknown",
+    ],
+  ]
+  if (!madeFifo) {
+    skip("pgo: mkfifo failed, so the FIFO refusal is not checked")
+  }
+  if (asRoot) {
+    skip("pgo: running as root, which reads a mode-000 file, so the unreadable-profile refusal is not checked")
+  }
+  for (const [what, flags, says] of refusals) {
+    // A timeout, so a refusal that reads a FIFO fails here rather than hanging.
+    const r = spawnSync(NISH, [hello, "-o", path.join(pgoDir, "refused.ll"), ...flags], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 60000,
+    })
+    check(
+      `pgo: ${what} is refused with exit 2 and one line, before anything is written`,
+      r.status === 2 &&
+        r.stdout === "" &&
+        oneLine(r) &&
+        r.stderr.includes(says) &&
+        !fs.existsSync(path.join(pgoDir, "refused.ll")) &&
+        !fs.existsSync(refused),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+  for (const flags of [["--pgo-generate"], ["--pgo-use", junk]]) {
+    const r = nish(["run", ...flags, hello])
+    check(
+      `pgo: nish run ${flags[0]} is refused with exit 2 before anything runs`,
+      r.status === 2 && r.stdout === "" && r.stderr.includes(`\`${flags[0]}\` cannot be used with`),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+
+  // llvm-profdata, or Ubuntu's llvm-profdata-18 under the name nish asks for.
+  const tools = path.join(pgoDir, "tools")
+  fs.mkdirSync(tools, { recursive: true })
+  const profdata = ["llvm-profdata", "llvm-profdata-18"].find(has)
+  if (profdata !== undefined) {
+    const real = spawnSync("which", [profdata], { encoding: "utf8" }).stdout.trim()
+    fs.symlinkSync(real, path.join(tools, "llvm-profdata"))
+  }
+  if (!HAS_CLANG) {
+    skip("pgo: clang not on PATH, so nothing can be linked with a profile")
+  } else {
+    // A PATH holding clang alone: no llvm-profdata on it.
+    const bare = path.join(pgoDir, "bare")
+    fs.mkdirSync(bare, { recursive: true })
+    fs.symlinkSync(spawnSync("which", ["clang"], { encoding: "utf8" }).stdout.trim(), path.join(bare, "clang"))
+    const noTool = path.join(pgoDir, "no-tool")
+    for (const flags of [["--pgo-generate"], ["--pgo-use", indexedMagic]]) {
+      const r = nish([hello, "-o", path.join(pgoDir, "no-tool.ll"), "--link", noTool, ...flags], {
+        PATH: bare,
+        CC: "clang",
+      })
+      check(
+        `pgo: ${flags[0]} with no llvm-profdata on PATH is a toolchain failure (exit 3) naming it, and links nothing`,
+        r.status === 3 && r.stderr.includes("llvm-profdata is not on PATH") && !fs.existsSync(noTool),
+        `${r.status}: ${r.stderr}`
+      )
+    }
+  }
+  // compiler-rt's profile runtime, which Ubuntu packages apart from clang: a
+  // bare name back means clang has none, and an instrumented link fails.
+  const profileRuntime =
+    HAS_CLANG &&
+    spawnSync("clang", [`-print-file-name=libclang_rt.profile-${os.arch() === "arm64" ? "aarch64" : "x86_64"}.a`], {
+      encoding: "utf8",
+    }).stdout.includes("/")
+  if (!HAS_CLANG || profdata === undefined) {
+    skip("pgo: no clang or no llvm-profdata, so no profile can be trained or used")
+  } else if (!profileRuntime) {
+    skip("pgo: clang has no libclang_rt.profile (libclang-rt-<ver>-dev), so no instrumented binary links")
+  } else {
+    const ccLog = path.join(pgoDir, "cc.log")
+    fs.writeFileSync(path.join(tools, "cc-args"), `#!/bin/sh\necho "$*" >> '${ccLog}'\nexec clang "$@"\n`, {
+      mode: 0o755,
+    })
+    const cache = path.join(pgoDir, "cache")
+    const env = { XDG_CACHE_HOME: cache, CC: "cc-args", PATH: `${tools}:${process.env.PATH}` }
+    const ccLines = () => {
+      const lines = fs.existsSync(ccLog) ? fs.readFileSync(ccLog, "utf8").split("\n") : []
+      fs.rmSync(ccLog, { force: true })
+      return lines.filter((l) => l.length > 0 && l !== "--version" && l !== "-dumpmachine")
+    }
+    const entries = () => {
+      const dir = path.join(cache, "nish", "runtime")
+      return fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []
+    }
+    // A stripped binary keeps its section names: the counters live in
+    // __llvm_prf_cnts, which only an instrumented binary has. The speed recipe
+    // strips, so llvm-nm finds no __llvm_profile_ symbol in either kind and
+    // its silence would prove nothing; the section is the witness.
+    const instrumented = (exe) => fs.existsSync(exe) && fs.readFileSync(exe).includes("__llvm_prf_cnts")
+    // Under LTO the runtime's sources go on the link line itself, so a unit is
+    // counted wherever it is named.
+    const runtimeUnits = (lines) =>
+      lines
+        .flatMap((l) => l.match(/\/runtime\/runtime(-[a-z0-9]+)?\.c(?= |$)/g) ?? [])
+        .sort()
+        .join(",")
+    const sqliteC = (l) => / -c /.test(l) && /(^| )sqlite3\.c( |$)/.test(l)
+
+    const unread = path.join(pgoDir, "unread")
+    const truncated = nish([hello, "-o", path.join(pgoDir, "unread.ll"), "--link", unread, "--pgo-use", indexedMagic], env)
+    ccLines()
+    check(
+      "pgo: a profile with the indexed magic that llvm-profdata cannot read is refused with exit 2, and links nothing",
+      truncated.status === 2 && truncated.stderr.includes("llvm-profdata cannot read") && !fs.existsSync(unread),
+      `${truncated.status}: ${truncated.stderr}`
+    )
+    const program = path.join(root, "tests", "link", "sqlite_link", "main.ts")
+    const expected = "3.54.1 3054001 0\n"
+    const plainSqlite = path.join(pgoDir, "sqlite-plain")
+    const plain = nish([program, "-o", path.join(pgoDir, "plain.ir") + "/", "--link", plainSqlite], env)
+    ccLines()
+    const instr = path.join(pgoDir, "sqlite-instr")
+    const trained = nish(
+      [program, "-o", path.join(pgoDir, "instr.ir") + "/", "--link", instr, "--pgo-generate"],
+      env
+    )
+    const trainedLines = ccLines()
+    check(
+      "pgo: --pgo-generate puts -fprofile-generate on the program, every runtime unit, SQLite and the link",
+      trained.status === 0 &&
+        runtimeUnits(trainedLines).includes("/runtime/runtime.c") &&
+        trainedLines.some(sqliteC) &&
+        trainedLines.some((l) => !/ -c /.test(l)) &&
+        trainedLines.every((l) => l.includes("-fprofile-generate")),
+      trained.stderr + trainedLines.join("\n")
+    )
+    const runs = path.join(pgoDir, "runs")
+    fs.mkdirSync(runs, { recursive: true })
+    const ranPlain = spawnSync(plainSqlite, [], { encoding: "utf8", timeout: 120000 })
+    const ranInstr = spawnSync(instr, [], {
+      cwd: runs,
+      encoding: "utf8",
+      timeout: 120000,
+      env: { ...process.env, LLVM_PROFILE_FILE: path.join(runs, "app-%p.profraw") },
+    })
+    const raws = fs.readdirSync(runs).filter((f) => f.endsWith(".profraw"))
+    const profile = path.join(pgoDir, "app.profdata")
+    const merged = spawnSync(
+      path.join(tools, "llvm-profdata"),
+      ["merge", "-o", profile, ...raws.map((f) => path.join(runs, f))],
+      { encoding: "utf8", timeout: 120000 }
+    )
+    const shown = spawnSync(path.join(tools, "llvm-profdata"), ["show", "--all-functions", profile], {
+      encoding: "utf8",
+      timeout: 120000,
+    })
+    check(
+      "pgo: the instrumented binary prints what the plain one does and its profile covers SQLite and the runtime",
+      plain.status === 0 &&
+        ranPlain.status === 0 &&
+        ranPlain.stdout === expected &&
+        ranInstr.status === 0 &&
+        ranInstr.stdout === ranPlain.stdout &&
+        raws.length === 1 &&
+        merged.status === 0 &&
+        /^\s+sqlite3_\w+:$/m.test(shown.stdout) &&
+        /^\s+nish_str_\w+:$/m.test(shown.stdout),
+      `${ranPlain.status} ${JSON.stringify(ranPlain.stdout)} ${ranInstr.status} ${JSON.stringify(ranInstr.stdout)} ${raws.join(",")} ${merged.stderr} ${shown.stderr}`
+    )
+    // Relative to a working directory that is neither the checkout nor
+    // runtime/sqlite/, which build.sh compiles SQLite from inside.
+    const useDir = path.join(pgoDir, "elsewhere")
+    fs.mkdirSync(useDir, { recursive: true })
+    const optimised = path.join(pgoDir, "sqlite-pgo")
+    const used = nish(
+      [program, "-o", path.join(pgoDir, "pgo.ir") + "/", "--link", optimised, "--pgo-use", "../app.profdata"],
+      env,
+      useDir
+    )
+    const usedLines = ccLines()
+    const ranPgo = spawnSync(optimised, [], { encoding: "utf8", timeout: 120000 })
+    check(
+      "pgo: --pgo-use with a relative profile puts its real path on every unit and the link, and the binary prints the same",
+      used.status === 0 &&
+        runtimeUnits(usedLines) === runtimeUnits(trainedLines) &&
+        usedLines.some(sqliteC) &&
+        usedLines.every((l) => l.includes(`-fprofile-use=${fs.realpathSync(profile)}`)) &&
+        ranPgo.status === 0 &&
+        ranPgo.stdout === ranPlain.stdout &&
+        !instrumented(optimised),
+      used.stderr + usedLines.join("\n") + ranPgo.stderr
+    )
+
+    // One cache, three links: plain, instrumented, plain.
+    const first = nish([hello, "-o", path.join(pgoDir, "hello.ll"), "--link", path.join(pgoDir, "hello-1")], env)
+    const afterFirst = entries()
+    const mid = nish(
+      [hello, "-o", path.join(pgoDir, "hello.ll"), "--link", path.join(pgoDir, "hello-instr"), "--pgo-generate"],
+      env
+    )
+    const afterMid = entries()
+    const second = nish([hello, "-o", path.join(pgoDir, "hello.ll"), "--link", path.join(pgoDir, "hello-2")], env)
+    ccLines()
+    check(
+      "pgo: an instrumented link between two plain ones adds no runtime cache entry, and only it is instrumented",
+      first.status === 0 &&
+        mid.status === 0 &&
+        second.status === 0 &&
+        afterMid.join(",") === afterFirst.join(",") &&
+        entries().join(",") === afterFirst.join(",") &&
+        afterFirst.length > 0 &&
+        instrumented(path.join(pgoDir, "hello-instr")) &&
+        !instrumented(path.join(pgoDir, "hello-1")) &&
+        !instrumented(path.join(pgoDir, "hello-2")) &&
+        !instrumented(plainSqlite),
+      `${first.stderr}${mid.stderr}${second.stderr}${afterFirst.join(",")} / ${afterMid.join(",")}`
+    )
+    check(
+      "pgo: the plain links before and after the instrumented one are byte-identical",
+      fs.existsSync(path.join(pgoDir, "hello-1")) &&
+        fs.readFileSync(path.join(pgoDir, "hello-1")).equals(fs.readFileSync(path.join(pgoDir, "hello-2"))),
+      "hello-1 and hello-2 differ"
+    )
   }
 }
 

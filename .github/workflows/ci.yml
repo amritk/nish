@@ -127,19 +127,37 @@ env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
-# A newer push to a pull request makes the older run's answer worthless, so
-# that run is cancelled. A push to main is never superseded that way: each one
-# is a merge, and its run is the only record of whether main was green after
-# it. With `cancel-in-progress: true` for every event, the next merge landing
-# within the half hour a run takes cancelled the one before it, and #396's and
-# #397's runs on main ended cancelled -- neither green nor red, and nothing
-# said which merge broke main if one had. So only a pull request's runs cancel;
-# main's queue up in the same group and each finishes. A merge-queue run has a
-# ref of its own per queued entry, so it shares a group with nothing and the
-# queue, not this setting, decides when it is superseded.
+# Every run shares one group per ref, and the newest run cancels the one it
+# replaces: a newer push to a pull request makes the older run's answer
+# worthless, and so does a newer merge to main. A main push's run tests a tree
+# the merge queue already tested (`merge_group` below runs this workflow on
+# main plus everything queued ahead, and merges only what passed there), and
+# runs every lane (`scope` turns lanes off for pull requests only), so the
+# next merge's run tests a superset of what a cancelled one would have. Which
+# merge broke main is the queue's record, one run per entry, not this one's:
+# before the queue, #396's and #397's main runs ended cancelled and nothing
+# said which merge broke main, which is why main used to queue instead.
+#
+# Two kinds of main push are pinned instead: each gets a group of its own (its
+# run id) and is never cancelled, nor cancels the run before it.
+# - The Release PR's merge, recognised by its squash subject
+#   (`chore(release): <version>`) or by the push adding `changelog/<version>.json`,
+#   which only the release PR writes. Either is enough: a false match only
+#   leaves an ordinary run uncancelled, while a miss would let the next merge
+#   cancel the release commit's run.
+# - Re-runs (a later attempt), so recovering an older run never cancels the
+#   tip's run.
+# Release CI proper is untouched: release.yml calls this workflow at the tag,
+# where `github.ref` is `refs/tags/v*`, and the Release PR's own runs are
+# `pull_request` runs like any other. A merge-queue run has a ref of its own
+# per queued entry, so it shares a group with nothing and the queue, not this
+# setting, decides when it is superseded. interop.yml uses the same rule.
+# `run_attempt` is a string in the `github` context, hence `'1'`.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ci-${{ github.workflow }}-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
 jobs:
   # Which side jobs this run needs (docs/wp10-ci.md, "Scoped lanes"). One
