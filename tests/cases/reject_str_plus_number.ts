@@ -1,3 +1,3 @@
-function f(): string {
+const f = (): string => {
   return "a" + 1;
-}
+};

@@ -7,13 +7,13 @@ enum Kind {
 
 const array = (): Kind.Array => Kind.Array;
 const scalar = (): Kind.Scalar => Kind.Scalar;
-function map<T, U>(xs: T[], f: (x: T) => U): U[] {
+const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
   const out: U[] = [];
   for (const x of xs) {
     out.push(f(x));
   }
   return out;
-}
+};
 
 export const test = (c: boolean, k: Kind): number => {
   const a: Kind.Array = array();

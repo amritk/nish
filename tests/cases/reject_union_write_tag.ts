@@ -19,7 +19,7 @@ const retag = (s: Circle | Square): void => {
   s.kind = Kind.Circle;
 };
 
-export function run(): i32 {
+export const run = (): i32 => {
   retag(new Circle());
   return 0;
-}
+};

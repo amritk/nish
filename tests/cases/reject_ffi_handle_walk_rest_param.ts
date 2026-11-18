@@ -22,8 +22,8 @@ class File {
   }
 }
 
-function count(...fs: File[]): i32 {
+const count = (...fs: File[]): i32 => {
   return 0
-}
+};
 
 export const main = (): i32 => 0

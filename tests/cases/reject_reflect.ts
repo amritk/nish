@@ -1,1 +1,4 @@
-function f(o: number): number { Reflect.get(o, 1); return 1; }
+const f = (o: number): number => {
+  Reflect.get(o, 1);
+  return 1;
+};

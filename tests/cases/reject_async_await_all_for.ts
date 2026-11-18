@@ -12,4 +12,4 @@ async function run(): Promise<void> {
   }
 }
 
-function main(): void {}
+const main = (): void => {};

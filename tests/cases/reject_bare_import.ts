@@ -3,6 +3,6 @@
 // where a package name (WP21 S2) is not.
 import { square } from "/usr/lib/math";
 
-function f(): number {
+const f = (): number => {
   return square(1);
-}
+};

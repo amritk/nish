@@ -25,8 +25,8 @@ class File {
   }
 }
 
-function give(ch: Channel<File>, f: File): void {
+const give = (ch: Channel<File>, f: File): void => {
   ch.send(f)
-}
+};
 
 export const main = (): i32 => 0

@@ -24,13 +24,13 @@ class File {
   }
 }
 
-export function drain(p: string): i32 {
+export const drain = (p: string): i32 => {
   let x = 0
   do {
     using f = new File(p)
     x += f.read()
   } while (f.read() > 0)
   return x
-}
+};
 
 export const main = (): i32 => 0

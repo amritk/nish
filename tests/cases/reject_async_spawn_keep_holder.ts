@@ -28,9 +28,9 @@ class Bag {
   }
 }
 
-function fill(h: Holder, t: Tally): void {
+const fill = (h: Holder, t: Tally): void => {
   h.t = t
-}
+};
 
 async function work(tally: Tally, ms: i32): Promise<void> {
   await sleep(ms)

@@ -6,6 +6,6 @@ class Point {
   x: i32 = 0;
 }
 
-export function test(): number {
+export const test = (): number => {
   return 0;
-}
+};

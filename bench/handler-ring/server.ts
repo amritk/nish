@@ -291,6 +291,10 @@ export const main = (): i32 => {
   const limits: HandlerLimits = new HandlerLimits()
   limits.slots = parseInt(args[2])
   limits.maxEvents = 128
+  // The loadgen opens every connection before its first request, and 300,000
+  // take about 95 s to open: past the carrier's 60 s default the first ones
+  // would be closed as idle before the window starts. Ten minutes covers it.
+  limits.http.idleTimeout = 600000
   const ring: string | null = getenv("BENCH_RING")
   limits.ring = ring !== null && ring === "1"
   const listener: i32 = limits.listen("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)

@@ -5,7 +5,7 @@ import { scope } from "nish/threads";
 
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
 
-export function main(): i32 {
+export const main = (): i32 => {
   const b: u8[] = [104, 105, 10];
   {
     using s = scope();
@@ -14,4 +14,4 @@ export function main(): i32 {
     });
   }
   return 0;
-}
+};

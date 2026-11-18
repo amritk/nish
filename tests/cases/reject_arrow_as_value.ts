@@ -4,8 +4,8 @@
 // diagnostic; the call through it afterwards stays silent.
 const double = (n: i32): i32 => n * 2
 
-export function main(): number {
+export const main = (): number => {
   const k = double(1)
   const alias = (n: i32): i32 => n * k
   return alias(1)
-}
+};

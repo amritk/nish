@@ -1,1 +1,3 @@
-function f(): number { return globalThis.x; }
+const f = (): number => {
+  return globalThis.x;
+};
