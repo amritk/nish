@@ -680,18 +680,21 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    *Tail latency* ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-rings-tail-latency-and-300000-connections)):
    `run.sh` now reports p50, p99 and p99.9 and takes `--think` for a
    closed-loop load. The entry's 65 ms p99 for one ring process, against
-   20 ms for five epoll processes, does not reproduce on one shared core. At
-   every offered load from 30,000 to 56,000 requests a second at 90,000
-   connections, the ring process's p99 was below the five's. One epoll
+   20 ms for five epoll processes, does not reproduce on one shared core. In
+   every round at every offered load from 30,000 to 56,250 requests a second
+   at 90,000 connections, the ring process's p99 was below the five's, though
+   from 45,000 up the five were saturated and their p99 is a backlog. One epoll
    process, which the box's hard limit of 20,000 descriptors caps at 19,936
    connections, is the control at 18,000 and the same rates: at 45,000 a
-   second its p99 was 27 to 40 ms against the ring's 7.1 to 12.7, so one
-   process on one core tails whatever it waits with. The tail is a queue,
+   second its p99 was 27 to 40 ms against the ring's 7.1 to 12.7, and at
+   36,000 it was 4.7 to 4.9 against the ring's 5.6 to 8.1, so one process on
+   one core tails whatever it waits with. The tail is a queue,
    not a stall: in a traced run at 45,000 (`bench/handler-ring/trace.sh`,
    which applies `trace.patch` for one build) no pass of the loop took more
    than 8.60 ms inside the load window, but a burst left at least 1,910
-   slots ready with the oldest 26 ms old. The p99 is noisy: one design
-   moved up to 6.6x between rounds. No fix is made; a second core should
+   slots ready with the oldest up to 26 ms old. The p99 is noisy: one design
+   at one load moved by as much as 11.8x between rounds (epoll at 96,000;
+   7.2x in the 90,000 sweep). No fix is made; a second core should
    shorten it, which is not measured. The final code at 96,000
    (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
    request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.

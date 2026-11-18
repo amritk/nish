@@ -21,7 +21,8 @@
  * last byte of its response, into a log-linear histogram (32 buckets an
  * octave, so a percentile reads within about 3%), and the run waits up to
  * 2 s past the window for the window's last answers. `lat_lost` counts the
- * window's requests still unanswered then; they are not in the histogram, so
+ * window's requests still unanswered then (the window closes before the
+ * last /proc reads, so a request sent during them is outside it); they are not in the histogram, so
  * a nonzero count makes every percentile a lower bound, and with no answer
  * at all they print n/a. win_lo and win_hi bound the window, CLOCK_MONOTONIC
  * seconds. `send_failed` counts sends that
@@ -388,8 +389,8 @@ static long tcp_mem_pages(void) {
   return mem;
 }
 
-static void take(struct sample *s, const int *pids, int npids, int nchild) {
-  s->t = now();
+static void take(struct sample *s, double t, const int *pids, int npids, int nchild) {
+  s->t = t;
   server_ticks(pids, npids, &s->ticks_user, &s->ticks_sys);
   box_ticks(&s->box_busy, &s->box_softirq);
   s->responses = 0;
@@ -467,11 +468,14 @@ int main(int argc, char **argv) {
   sh->go = 1;
   usleep((useconds_t)(warmup * 1e6));
   struct sample a, b;
+  /* Each edge is set before its /proc reads, so the window is exactly
+   * [win_lo, win_hi): a request sent while take() reads /proc is either in
+   * the window and its count of answers, or in neither. */
   sh->win_lo = now();
-  take(&a, pids, npids, nchild);
+  take(&a, sh->win_lo, pids, npids, nchild);
   usleep((useconds_t)(seconds * 1e6));
-  take(&b, pids, npids, nchild);
-  sh->win_hi = b.t;
+  sh->win_hi = now();
+  take(&b, sh->win_hi, pids, npids, nchild);
 
   long rss = 0, pss = 0, fds = 0;
   for (int i = 0; i < npids; i++) {
