@@ -58,6 +58,7 @@ import {
   HTTP3_SERVER_START_BYTES,
   HTTP3_SERVER_SLOT_BYTES,
   RUNTIME_BUDGETS,
+  SQLITE_BUILD_DEFINES,
   TLS_TCP_START_BYTES,
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
@@ -42968,14 +42969,16 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  */
 const sizeReportDisagreements = (report, budgets, measured) => {
   const unitKey = (src, flags) => `${src} ${flags}`.trim()
+  const entryKey = (entry) =>
+    unitKey(`${entry.src}${entry.baseline === null ? "" : ` less ${entry.baseline}`}`, entry.flags.join(" "))
   const rowPattern =
-    /^(.*?)\s+(\d+)\s+clang -Oz (?:(.*) )?-c (\S+) && size -A \(\.text\*; budget (\d+), (\w+)\)$/
+    /^(.*?)\s+(\d+)\s+clang -Oz (?:(.*) )?-c (\S+) && size -A \(\.text\*(?:, less the same for (\S+))?; budget (\d+), (\w+)\)$/
   const rows = report
     .split("\n")
     .map((line) => rowPattern.exec(line))
     .filter((m) => m !== null)
-    .map(([, , bytes, flags, src, budget, constant]) => ({
-      key: unitKey(src, flags ?? ""),
+    .map(([, , bytes, flags, src, baseline, budget, constant]) => ({
+      key: unitKey(`${src}${baseline === undefined ? "" : ` less ${baseline}`}`, flags ?? ""),
       bytes: Number(bytes),
       budget: Number(budget),
       constant,
@@ -42983,7 +42986,7 @@ const sizeReportDisagreements = (report, budgets, measured) => {
   const problems = []
   for (const entry of budgets) {
     const label = budgetLabel(entry)
-    const key = unitKey(entry.src, entry.flags.join(" "))
+    const key = entryKey(entry)
     const found = rows.filter((r) => r.key === key)
     if (found.length !== 1) {
       problems.push(`${label}: the report prints ${found.length} rows for it, not 1`)
@@ -43000,7 +43003,7 @@ const sizeReportDisagreements = (report, budgets, measured) => {
       problems.push(`${label}: the report measured ${row.bytes} bytes, the gate ${measured.get(label)}`)
     }
   }
-  const keys = new Set(budgets.map((entry) => unitKey(entry.src, entry.flags.join(" "))))
+  const keys = new Set(budgets.map(entryKey))
   for (const row of rows.filter((r) => !keys.has(r.key))) {
     problems.push(`${row.key}: the report has a row the gate does not measure`)
   }
@@ -43055,26 +43058,57 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   if (reason !== null) {
     skip(reason)
   } else {
+    // The SQLite row compiles with build.sh's options; a list that drifted from them
+    // would measure a build no program links. THREADSAFE is build.sh's default, 0.
+    const buildSh = fs.readFileSync(path.join(root, "scripts/build.sh"), "utf8")
+    const sqliteLoop = /^for d in (-DSQLITE_[^;]*); do$/ms.exec(buildSh)?.[1] ?? ""
+    const buildDefines = sqliteLoop
+      .split(/[\s\\]+/)
+      .filter((word) => word !== "")
+      .map((word) => word.replace(/^"|"$/g, "").replace("$sqlite_threadsafe", "0"))
+    check(
+      "runtime budgets: the nish-sqlite.c row compiles with scripts/build.sh's SQLite options",
+      buildDefines.join(" ") === SQLITE_BUILD_DEFINES.join(" "),
+      `build.sh: ${buildDefines.join(" ")}\nSQLITE_BUILD_DEFINES: ${SQLITE_BUILD_DEFINES.join(" ")}`
+    )
     const measured = new Map()
     for (const entry of RUNTIME_BUDGETS) {
-      const { src, budget, constant, flags } = entry
-      const name = path.basename(src)
+      const { src, budget, constant, flags, baseline } = entry
       const label = budgetLabel(entry)
-      // One object per configuration: `-DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` is `_arena_range_threads`.
-      const suffix = flags.map((flag) => `_${flag.replace(/^-DNISH_|=1$/g, "").toLowerCase()}`).join("")
-      const stem = `${name.replace(/\.c$/, "")}${suffix}`
-      const obj = path.join(buildDir, `${stem}_budget.o`)
-      const cc = spawnSync("clang", ["-Oz", ...flags, "-c", src, "-o", obj], { cwd: root })
-      const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null
+      // One object per configuration: `-DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` is
+      // `_arena_range_threads`. A row over a baseline has build.sh's flags, the same for
+      // both compiles, and its objects are named for the two files.
+      const objOf = (file) => {
+        const suffix =
+          baseline === null
+            ? flags.map((flag) => `_${flag.replace(/^-DNISH_|=1$/g, "").toLowerCase()}`).join("")
+            : "_build_defines"
+        return path.join(buildDir, `${path.basename(file).replace(/\.c$/, "")}${suffix}_budget.o`)
+      }
       // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
       // name starts with `.text` counts, whatever clang decided to call it.
-      const sections = String(sz?.stdout ?? "")
-        .split("\n")
-        .map((line) => line.trim().split(/\s+/))
-        .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
-        .map((row) => [row[0], Number(row[1])])
-      const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0)
-      const breakdown = sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ")
+      const measure = (file) => {
+        const obj = objOf(file)
+        const cc = spawnSync("clang", ["-Oz", ...flags, "-c", file, "-o", obj], { cwd: root })
+        const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null
+        const sections = String(sz?.stdout ?? "")
+          .split("\n")
+          .map((line) => line.trim().split(/\s+/))
+          .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
+          .map((row) => [row[0], Number(row[1])])
+        return { cc, sz, sections, total: sections.reduce((sum, [, bytes]) => sum + bytes, 0) }
+      }
+      const unit = measure(src)
+      // The adapter includes the amalgamation, so its own bytes are the unit's less
+      // SQLite's, compiled alone with the same options.
+      const base = baseline === null || unit.cc.status !== 0 ? null : measure(baseline)
+      const failed = base !== null && (base.cc.status !== 0 || base.sections.length === 0) ? base : unit
+      const { cc, sz } = failed
+      const sections = failed.sections
+      const total = unit.total - (base?.total ?? 0)
+      const breakdown =
+        sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ") +
+        (base === null ? "" : `, less ${base.total} for ${baseline}`)
       if (cc.status === 0 && sections.length > 0) {
         measured.set(label, total)
       }

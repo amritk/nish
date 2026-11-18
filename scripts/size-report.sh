@@ -60,12 +60,22 @@ text_sum() {                             # text_sum <object>: every .text* secti
 }
 sect() { size -A "$2" | awk -v s="$1" '$1 == s { print $2 }'; }
 budgets=$(node tests/runtime-budgets.js)
-while IFS=$'\t' read -r label src budget constant flags; do
+# A row with a baseline (nish-sqlite.c, which includes the SQLite amalgamation) counts
+# what its unit adds over the baseline compiled alone with the same flags.
+while IFS=$'\t' read -r label src budget constant flags baseline; do
   obj="build/size/$(printf '%s' "$label" | tr -c 'A-Za-z0-9' _).o"
   # shellcheck disable=SC2086 # the flags are words
   "${CC:-clang}" -Oz $flags -c "$src" -o "$obj"
-  row "$label" "$(text_sum "$obj")" \
-    "clang -Oz ${flags:+$flags }-c $src && size -A (.text*; budget $budget, $constant)"
+  n=$(text_sum "$obj")
+  less=""
+  if [ -n "$baseline" ]; then
+    # shellcheck disable=SC2086 # the flags are words
+    "${CC:-clang}" -Oz $flags -c "$baseline" -o "$obj.base.o"
+    n=$((n - $(text_sum "$obj.base.o")))
+    less=", less the same for $baseline"
+  fi
+  row "$label" "$n" \
+    "clang -Oz ${flags:+$flags }-c $src && size -A (.text*$less; budget $budget, $constant)"
 done <<< "$budgets"
 row rodata "$(sect .rodata build/size/runtime_text_c.o)" "the text object's .rodata (no budget; the Zmij table lives here)"
 if [ "$budgets_only" = 1 ]; then exit 0; fi
