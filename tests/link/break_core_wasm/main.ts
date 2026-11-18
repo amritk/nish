@@ -3,7 +3,8 @@
 // can reach it, and constructed with no terminal, so the menu has no frame
 // rate or graphics rows and F4 and F6 step nothing. Scripted keys play the
 // intro, the menu and a level, and each checkpoint prints a hash of the
-// framebuffer. The suite links the wasm32 IR natively to run it.
+// framebuffer. The suite compiles it for wasm32, and runs a native build of the
+// same flags.
 import { Suite } from "../../../std/testing"
 import {
   ACTION_PRESS,

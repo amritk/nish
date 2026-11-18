@@ -7590,6 +7590,16 @@ const runLinkProgram = async (name) => {
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
+  // A program that runs but whose `args` name a wasm32 target is linked and run
+  // as a native build of the same flags: a wasm32 module lays a class's pointer
+  // field out in 4 bytes (WP48 stage 6), and build.sh's clang replaces the
+  // module's datalayout with the host's, so a native link of wasm32 IR would
+  // write 8-byte pointers into objects allocated for 4-byte ones. The wasm32
+  // compile itself is still made, below, and must succeed.
+  const targetAt = args.indexOf("--target")
+  const wasmRun =
+    targetAt >= 0 && String(args[targetAt + 1]).startsWith("wasm32") && !fs.existsSync(side("expected.err"))
+  const linkArgs = wasmRun ? args.filter((_, i) => i !== targetAt && i !== targetAt + 1) : args
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
   // This program's own directory: no other program in flight names it.
@@ -7607,7 +7617,7 @@ const runLinkProgram = async (name) => {
   // safely (CLI-5; see above).
   const r = await spawnAsync(
     NISH,
-    [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
+    [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs],
     { cwd: root }
   )
   const stderr = String(r.stderr)
@@ -7638,6 +7648,25 @@ const runLinkProgram = async (name) => {
     expect(`link/${name}: compiles and links`, false, stderr)
     return record
   }
+  if (wasmRun) {
+    const wasmDir = path.join(buildDir, "link", `${name}.wasm32`) + path.sep
+    // Named after the program, like `outDir`.
+    fs.rmSync(wasmDir, { recursive: true, force: true })
+    const w = await spawnAsync(NISH, [side("main.ts"), "-o", wasmDir, ...args], { cwd: root, encoding: "utf8" })
+    const wasmModules = w.status === 0 ? fs.readdirSync(wasmDir).filter((f) => f.endsWith(".ll")) : []
+    const rejected = []
+    for (const f of HAS_LLVM_AS ? wasmModules : []) {
+      const as = await spawnAsync("llvm-as", [path.join(wasmDir, f), "-o", "/dev/null"], { encoding: "utf8" })
+      if (as.status !== 0) {
+        rejected.push(`${f}: ${as.stderr}`)
+      }
+    }
+    expect(
+      `link/${name}: its wasm32 compile succeeds and llvm-as accepts its ${wasmModules.length} module(s)`,
+      w.status === 0 && wasmModules.length > 0 && rejected.length === 0,
+      w.status === 0 ? rejected.join("\n") : w.stderr
+    )
+  }
   if (DELEGATE_IR_CHECKS) {
     record.irDelegated = true
   } else {
@@ -7652,7 +7681,7 @@ const runLinkProgram = async (name) => {
     // compile (a function reference crosses an exported signature, which an
     // open build hands a host: WP51 §5.2), so its listing links too.
     const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...args, "--emit-panics", panicsFile], {
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile], {
       cwd: root,
       encoding: "utf8",
     })
@@ -7699,7 +7728,7 @@ const runLinkProgram = async (name) => {
       fs.rmSync(warnedDir, { recursive: true, force: true })
       const warned = await spawnAsync(
         NISH,
-        [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+        [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"],
         {
           cwd: root,
           encoding: "utf8",
