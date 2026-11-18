@@ -392,7 +392,9 @@ export class Database {
     const h: i32 = nishsqlite_cursor_open(this.handle, name, columns)
     if (h < 0) {
       if (-h === SQLITE_SCHEMA) {
-        return Err(new SqliteError(-h, `no table or index ${name} with columns "${columns}" that a cursor reads`))
+        return Err(
+          new SqliteError(-h, `no table or index ${name} with columns "${columns}" that a cursor reads`)
+        )
       }
       return Err(this.error(-h))
     }
