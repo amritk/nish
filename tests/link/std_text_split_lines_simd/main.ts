@@ -1,32 +1,13 @@
-// `splitLines` from `nish/text` scans sixteen positions at a time with
-// `nish:simd` and finishes the last fewer-than-sixteen one at a time. This
-// program holds it to the one-position-at-a-time loop it replaced, kept here as
-// `splitLinesScalar`, on every length either side of one and two blocks, on a
-// newline at every position of a block, and on the endings the doc comment
-// decides. `tests/run.js` runs it under Node too, against the same
-// `expected.out`.
+// `splitLinesLanes` in `tests/nish/lines.ts`, the runner's line split, scans
+// sixteen positions at a time with `nish:simd` over a 4096-position flag
+// buffer and finishes the last fewer-than-sixteen one at a time. This program
+// holds it to `splitLines` from `nish/text`, one position at a time, on every
+// length either side of one and two blocks, on both sides of one and two
+// chunks, on a newline at every position of a block and at each chunk edge,
+// and on the endings the doc comment decides. `tests/run.js` runs it under
+// Node too, against the same `expected.out`.
+import { splitLinesLanes } from "../../nish/lines";
 import { splitLines } from "nish/text";
-
-const NEWLINE: i32 = 10;
-
-/** The scalar `splitLines`: one position at a time, the reference the lanes must match. */
-const splitLinesScalar = (text: string): string[] => {
-  const length: i32 = toI32(text.length);
-  const lines: string[] = [];
-  let start: i32 = 0;
-  for (let i: i32 = 0; i < length; i += 1) {
-    if (toI32(text.charCodeAt(i)) === NEWLINE) {
-      if (start >= 0 && start < length) {
-        lines.push(text.substring(start, i));
-      }
-      start = i + 1;
-    }
-  }
-  if (start < length) {
-    lines.push(text.substring(start, length));
-  }
-  return lines;
-};
 
 /** Whether the two splits have the same lines in the same order. */
 const sameLines = (a: string[], b: string[]): boolean => {
@@ -82,26 +63,26 @@ export const main = (): number => {
   ];
   for (let k: i32 = 0; k < named.length; k += 1) {
     const text = named[k];
-    const lanes = splitLines(text);
-    const scalar = splitLinesScalar(text);
+    const lanes = splitLinesLanes(text);
+    const scalar = splitLines(text);
     if (!sameLines(lanes, scalar)) {
       mismatches += 1;
     }
-    console.log(`text ${k}: ${lanes.length} lines, scalar ${scalar.length}`);
+    console.log(`text ${k}: ${lanes.length} lines, std ${scalar.length}`);
   }
   // `\r\n` keeps its `\r`, so a line ends in byte 13 either way.
-  const crlf = splitLines("a\r\nb\r\n");
+  const crlf = splitLinesLanes("a\r\nb\r\n");
   console.log(`crlf keeps cr: ${crlf.length === 2 && crlf[0] === "a\r" && crlf[1] === "b\r"}`);
   // U+010A's low byte is 10: under Node a UTF-16 unit, natively two UTF-8
   // bytes, and in neither a newline.
-  console.log(`U+010A is not a newline: ${splitLines("ĊĊ").length === 1}`);
+  console.log(`U+010A is not a newline: ${splitLinesLanes("ĊĊ").length === 1}`);
   // Every length from 0 to 48, three newline patterns each: both block edges
   // and every tail length.
   let patterned: i32 = 0;
   for (let n: i32 = 0; n <= 48; n += 1) {
     for (let step: i32 = 1; step <= 3; step += 1) {
       const text = pattern(n, step, n);
-      if (!sameLines(splitLines(text), splitLinesScalar(text))) {
+      if (!sameLines(splitLinesLanes(text), splitLines(text))) {
         mismatches += 1;
       }
       patterned += 1;
@@ -113,12 +94,38 @@ export const main = (): number => {
   let placed: i32 = 0;
   for (let at: i32 = 0; at < 33; at += 1) {
     const text = oneNewline(33, at);
-    if (!sameLines(splitLines(text), splitLinesScalar(text))) {
+    if (!sameLines(splitLinesLanes(text), splitLines(text))) {
       mismatches += 1;
     }
     placed += 1;
   }
   console.log(`one newline placed: ${placed}`);
+  // Either side of one and two 4096-position chunks, three patterns each, and
+  // one newline at each position next to a chunk edge.
+  const long: readonly i32[] = [4095, 4096, 4097, 8193];
+  let chunked: i32 = 0;
+  for (let k: i32 = 0; k < long.length; k += 1) {
+    const n = long[k];
+    for (let step: i32 = 1; step <= 3; step += 1) {
+      const text = pattern(n, step, n);
+      if (!sameLines(splitLinesLanes(text), splitLines(text))) {
+        mismatches += 1;
+      }
+      chunked += 1;
+    }
+    const edges: readonly i32[] = [0, 4079, 4094, 4095, 4096, 4097, 8191, 8192];
+    for (let e: i32 = 0; e < edges.length; e += 1) {
+      if (edges[e] < n) {
+        const text = oneNewline(n, edges[e]);
+        if (!sameLines(splitLinesLanes(text), splitLines(text))) {
+          mismatches += 1;
+        }
+        chunked += 1;
+      }
+    }
+    console.log(`${n} positions: ${splitLinesLanes(pattern(n, 1, n)).length} lines`);
+  }
+  console.log(`chunk-edge texts: ${chunked}`);
   console.log(`mismatches: ${mismatches}`);
   return mismatches === 0 ? 0 : 1;
 };
