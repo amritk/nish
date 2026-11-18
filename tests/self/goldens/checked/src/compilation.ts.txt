@@ -576,49 +576,49 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   callee +64:24 isWasmBuild -> @isWasmBuild
   callee +65:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
   callee +66:30 buildsPageModule -> @buildsPageModule
-  local +73:11 unit: ModuleUnit (const)
-  callee +73:18 new ModuleUnit -> @ModuleUnit.constructor
-  callee +81:41 threadsModuleName -> @threadsModuleName
-  callee +84:5 StringMap.set -> @StringMap.set
-  callee +87:29 Compilation.hostModules -> @Compilation.hostModules
-  local +100:11 beforeValidation: i32 (const)
-  callee +100:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +101:5 validate -> @validate
-  local +102:11 failedValidation: boolean (const)
+  local +75:11 unit: ModuleUnit (const)
+  callee +75:18 new ModuleUnit -> @ModuleUnit.constructor
+  callee +83:41 threadsModuleName -> @threadsModuleName
+  callee +86:5 StringMap.set -> @StringMap.set
+  callee +89:29 Compilation.hostModules -> @Compilation.hostModules
+  local +102:11 beforeValidation: i32 (const)
   callee +102:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +103:54 DiagnosticSink.count -> @DiagnosticSink.count
-  local +113:11 beforeNames: i32 (const)
-  callee +113:25 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +114:5 Checker.declareNames -> @Checker.declareNames
-  callee +126:29 DiagnosticSink.count -> @DiagnosticSink.count
-  local +127:11 signaturesFailed: boolean (const)
-  local +128:11 dir: string (const)
-  callee +128:17 dirname -> @dirname
-  local +129:9 ok: boolean (let)
-  local +135:9 failedDecl: Node | null (let)
-  local +136:16 imp: ImportBinding (const)
-  callee +138:11 isBuiltinSpecifier -> @isBuiltinSpecifier
-  callee +141:11 StringMap.has -> @StringMap.has
-  local +148:13 found: ResolvedModule (const)
-  callee +148:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
-  local +152:15 fix: Edit[] (const)
-  callee +154:13 fsSpecifierFix -> @fsSpecifierFix
-  callee +157:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
-  callee +159:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +165:13 target: string (const)
-  local +166:11 missing: boolean (let)
-  local +169:15 _a: i64 (const)
-  callee +173:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee +176:91 stdModuleNames -> @stdModuleNames
-  callee +184:10 buildsPageModule -> @buildsPageModule
-  callee +186:9 StringSet.has -> @StringSet.has
-  callee +186:33 Compilation.identityOf -> @Compilation.identityOf
-  callee +188:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +201:13 targetIdentity: string (const)
-  callee +201:30 Compilation.identityOf -> @Compilation.identityOf
-  callee +204:12 Compilation.discover -> @Compilation.discover
-  callee +209:9 StringMap.set -> @StringMap.set
-  callee +209:42 StringMap.get -> @StringMap.get
+  callee +103:5 validate -> @validate
+  local +104:11 failedValidation: boolean (const)
+  callee +104:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +105:54 DiagnosticSink.count -> @DiagnosticSink.count
+  local +115:11 beforeNames: i32 (const)
+  callee +115:25 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +116:5 Checker.declareNames -> @Checker.declareNames
+  callee +128:29 DiagnosticSink.count -> @DiagnosticSink.count
+  local +129:11 signaturesFailed: boolean (const)
+  local +130:11 dir: string (const)
+  callee +130:17 dirname -> @dirname
+  local +131:9 ok: boolean (let)
+  local +137:9 failedDecl: Node | null (let)
+  local +138:16 imp: ImportBinding (const)
+  callee +140:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  callee +143:11 StringMap.has -> @StringMap.has
+  local +150:13 found: ResolvedModule (const)
+  callee +150:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
+  local +154:15 fix: Edit[] (const)
+  callee +156:13 fsSpecifierFix -> @fsSpecifierFix
+  callee +159:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
+  callee +161:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +167:13 target: string (const)
+  local +168:11 missing: boolean (let)
+  local +171:15 _a: i64 (const)
+  callee +175:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee +178:91 stdModuleNames -> @stdModuleNames
+  callee +186:10 buildsPageModule -> @buildsPageModule
+  callee +188:9 StringSet.has -> @StringSet.has
+  callee +188:33 Compilation.identityOf -> @Compilation.identityOf
+  callee +190:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +203:13 targetIdentity: string (const)
+  callee +203:30 Compilation.identityOf -> @Compilation.identityOf
+  callee +206:12 Compilation.discover -> @Compilation.discover
+  callee +211:9 StringMap.set -> @StringMap.set
+  callee +211:42 StringMap.get -> @StringMap.get
 function Compilation.resolveSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Compilation.resolveBareSpecifier
