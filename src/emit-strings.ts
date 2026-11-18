@@ -210,7 +210,7 @@ export const emitStringLength = (emitter: Emitter, expr: Node): string => {
 /** Byte length, from the header the string pointer points at. */
 const loadStringLength = (emitter: Emitter, str: string): string => {
   const header = emitter.fn.emitValue(`bitcast i8* ${str} to i64*`)
-  return emitter.fn.emitValue(`load i64, i64* ${header}${emitter.alignSuffix(T_STRING)}`)
+  return emitter.fn.emitValue(`load i64, i64* ${header}${emitter.align8()}`)
 }
 
 /** The bytes themselves: past the 8-byte length header. */

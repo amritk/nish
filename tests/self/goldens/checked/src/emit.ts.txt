@@ -379,7 +379,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=424 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=160 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=248 writesThrough=true captured=true passedTo=isWasmBuild#0 isWasmBuild#0
+  pointer opts: size=248 writesThrough=true captured=true passedTo=isWasmBuild#0 isWasmBuild#0 isWasmBuild#0
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -400,6 +400,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   callee +50:26 new StringSet -> @StringSet.constructor
   local +53:16 library: AnalysisUnit (const)
   callee +57:20 new DebugInfo -> @DebugInfo.constructor
+  callee +57:68 isWasmBuild -> @isWasmBuild
   callee +59:10 isWasmBuild -> @isWasmBuild
   local +64:13 target: Target | null (const)
   callee +64:22 resolveTarget -> @resolveTarget
@@ -1679,12 +1680,13 @@ function Emitter.llvmAbi(this: Emitter, type: i32, isPrivate: boolean): string -
 function Emitter.align(this: Emitter, type: i32): i32 -> @Emitter.align [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.alignOf TypeTable.isVector accessAlign
+  calls: TypeTable.alignWithPointer TypeTable.isVector accessAlign isWasmBuild
   pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:41 TypeTable.isVector -> @TypeTable.isVector
   callee +1:14 accessAlign -> @accessAlign
-  callee +1:26 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +1:26 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
+  callee +1:60 isWasmBuild -> @isWasmBuild
 function Emitter.alignSuffix(this: Emitter, type: i32): string -> @Emitter.alignSuffix [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
