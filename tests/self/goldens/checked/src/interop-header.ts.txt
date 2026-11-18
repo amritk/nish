@@ -66,7 +66,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   callee +8:13 cType -> @cType
 function structDefinitions(compilation: Compilation): string[] -> @structDefinitions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: StringSet.has TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf spaceAfter structsHoldingLayouts structsHoldingVectors tsKeyword
+  calls: StringSet.has TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName holdsLink isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf spaceAfter structsHoldingLayouts structsHoldingVectors tsKeyword
   pointer compilation: size=224 writesThrough=false captured=false passedTo=structsHoldingVectors#0 structsHoldingLayouts#0
   stackSites=2 stackLocals=2
   local +0:9 table: TypeTable (const)
@@ -93,19 +93,25 @@ function structDefinitions(compilation: Compilation): string[] -> @structDefinit
   callee +58:9 secretFieldOf -> @secretFieldOf
   callee +69:9 StringSet.has -> @StringSet.has
   callee +79:9 StringSet.has -> @StringSet.has
-  local +94:16 f: FieldInfo (const)
-  local +95:13 t: string (const)
-  callee +95:17 cFieldType -> @cFieldType
-  local +97:13 name: string (const)
-  callee +97:20 cParamName -> @cParamName
-  local +99:13 note: string (const)
-  callee +100:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +100:45 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +101:31 tsKeyword -> @tsKeyword
-  callee +103:27 spaceAfter -> @spaceAfter
+  callee +90:9 holdsLink -> @holdsLink
+  local +105:16 f: FieldInfo (const)
+  local +106:13 t: string (const)
+  callee +106:17 cFieldType -> @cFieldType
+  local +108:13 name: string (const)
+  callee +108:20 cParamName -> @cParamName
+  local +110:13 note: string (const)
+  callee +111:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +111:45 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +112:31 tsKeyword -> @tsKeyword
+  callee +114:27 spaceAfter -> @spaceAfter
+function holdsLink(info: StructInfo): boolean -> @holdsLink
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer info: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 f: FieldInfo (const)
 function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: StringSet.has isCollectionStruct isSecretStruct nish_array_grow secretFieldOf structsHoldingLayouts structsHoldingVectors
+  calls: StringSet.has holdsLink isCollectionStruct isSecretStruct nish_array_grow secretFieldOf structsHoldingLayouts structsHoldingVectors
   pointer compilation: size=224 writesThrough=false captured=false passedTo=structsHoldingVectors#0 structsHoldingLayouts#0
   stackSites=0 stackLocals=0
   local +0:9 out: i32[] (const)
@@ -120,7 +126,8 @@ function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
   callee +10:9 isSecretStruct -> @isSecretStruct
   callee +11:9 secretFieldOf -> @secretFieldOf
   callee +12:9 StringSet.has -> @StringSet.has
-  local +16:18 f: FieldInfo (const)
+  callee +13:9 holdsLink -> @holdsLink
+  local +17:18 f: FieldInfo (const)
 function prototypeComment(table: TypeTable, fn: ExternalFunction): string -> @prototypeComment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: cAliasReason cFunctionName elementNotes nish_str_concat tsSignatureLine
@@ -146,16 +153,16 @@ function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFi
   callee +1:43 guardStem -> @guardStem
   local +2:9 lines: string[] (const)
   callee +3:14 banner -> @banner
-  callee +28:3 pushAll -> @pushAll
-  callee +28:18 structDefinitions -> @structDefinitions
-  callee +30:3 pushAll -> @pushAll
-  callee +30:18 resultDefinitions -> @resultDefinitions
-  callee +30:48 structFieldTypes -> @structFieldTypes
-  local +34:7 lastPath: string (let)
-  local +35:7 anyModule: boolean (let)
-  local +36:14 fn: ExternalFunction (const)
-  callee +45:9 tsSignatureLine -> @tsSignatureLine
-  local +54:11 proto: string (const)
-  callee +54:19 cPrototype -> @cPrototype
-  callee +57:9 tsSignatureLine -> @tsSignatureLine
-  callee +61:16 prototypeComment -> @prototypeComment
+  callee +39:3 pushAll -> @pushAll
+  callee +39:18 structDefinitions -> @structDefinitions
+  callee +41:3 pushAll -> @pushAll
+  callee +41:18 resultDefinitions -> @resultDefinitions
+  callee +41:48 structFieldTypes -> @structFieldTypes
+  local +45:7 lastPath: string (let)
+  local +46:7 anyModule: boolean (let)
+  local +47:14 fn: ExternalFunction (const)
+  callee +56:9 tsSignatureLine -> @tsSignatureLine
+  local +65:11 proto: string (const)
+  callee +65:19 cPrototype -> @cPrototype
+  callee +68:9 tsSignatureLine -> @tsSignatureLine
+  callee +72:16 prototypeComment -> @prototypeComment

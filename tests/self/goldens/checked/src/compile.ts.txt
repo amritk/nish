@@ -3811,31 +3811,31 @@ function commandMain(): i32 -> @commandMain
   callee +920:22 acceptsSidecars -> @acceptsSidecars
   callee +920:56 cDeclared -> @cDeclared
   callee +921:5 report -> @report
-  local +925:7 hostFlag: string (let)
-  callee +933:31 refuseCompactSidecars -> @refuseCompactSidecars
-  callee +934:5 report -> @report
-  local +937:9 emitted: EmittedModule[] (const)
-  callee +937:19 Compilation.emit -> @Compilation.emit
-  local +938:9 arenaRange: boolean (const)
-  callee +938:22 hasCompactClass -> @hasCompactClass
-  local +940:11 cached: CachedBinary (const)
-  callee +940:20 cachedBinary -> @cachedBinary
-  callee +943:7 basenameWithout -> @basenameWithout
-  callee +953:37 watchState -> @watchState
-  callee +953:76 isCheckout -> @isCheckout
-  callee +958:12 runProgram -> @runProgram
-  callee +961:7 basenameWithout -> @basenameWithout
-  local +972:9 stems: string[] (const)
-  local +973:9 paths: string[] (const)
-  local +976:14 module: EmittedModule (const)
-  local +980:9 outputs: string[] (const)
-  callee +980:19 planOutputs -> @planOutputs
-  local +985:7 i: i32 (let)
-  local +987:11 file: string (const)
-  callee +988:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +997:22 writeSidecars -> @writeSidecars
-  callee +1003:10 linkProgram -> @linkProgram
-  callee +1014:5 anyCallsSqlite -> @anyCallsSqlite
+  local +928:7 hostFlag: string (let)
+  callee +934:31 refuseCompactSidecars -> @refuseCompactSidecars
+  callee +935:5 report -> @report
+  local +938:9 emitted: EmittedModule[] (const)
+  callee +938:19 Compilation.emit -> @Compilation.emit
+  local +939:9 arenaRange: boolean (const)
+  callee +939:22 hasCompactClass -> @hasCompactClass
+  local +941:11 cached: CachedBinary (const)
+  callee +941:20 cachedBinary -> @cachedBinary
+  callee +944:7 basenameWithout -> @basenameWithout
+  callee +954:37 watchState -> @watchState
+  callee +954:76 isCheckout -> @isCheckout
+  callee +959:12 runProgram -> @runProgram
+  callee +962:7 basenameWithout -> @basenameWithout
+  local +973:9 stems: string[] (const)
+  local +974:9 paths: string[] (const)
+  local +977:14 module: EmittedModule (const)
+  local +981:9 outputs: string[] (const)
+  callee +981:19 planOutputs -> @planOutputs
+  local +986:7 i: i32 (let)
+  local +988:11 file: string (const)
+  callee +989:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +998:22 writeSidecars -> @writeSidecars
+  callee +1004:10 linkProgram -> @linkProgram
+  callee +1015:5 anyCallsSqlite -> @anyCallsSqlite
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
