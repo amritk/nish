@@ -1,5 +1,5 @@
 ---
-name: WP67 — shared libraries, layered like atomic design
+name: WP67 — shared, faster libraries, layered like atomic design
 overview: Add a work package to the roadmap that measures the code duplicated across std/ and src/ and proposes extracting it into layered, reusable libraries (atoms, molecules, organisms), with one extraction stage per cluster. This run lands the proposal only; the extractions are WP67's own stages, picked up later.
 stages:
   - id: s1-wp67-note
@@ -13,6 +13,8 @@ stages:
         content: Define the atom / molecule / organism tiers, the import rule between them, and where each tier lives — see Layering
       - id: constraints
         content: Record what bounds an extraction (seed freeze, public std surface and gen-reference, nish-cmp IR moves, goldens, code size, wasm) — see Constraints
+      - id: performance-first
+        content: Make performance the first rule of every extraction — the shared version is the fastest copy or faster, measured, and the clusters are ranked by what a faster shared copy buys — see Performance first
       - id: modernise-on-extract
         content: Inventory the constructs and builtins that landed after each cluster's copies were written, and set the rule that an extraction rewrites in today's Nish within the seed freeze — see Modern code
       - id: staged-extraction
@@ -35,7 +37,7 @@ One docs-only PR, like WP66's. The extraction itself is not done here: each clus
 
 ## Survey
 
-A measured table, not impressions. For each cluster: what it is, every site (file:line), lines duplicated, whether the copies agree or diverge (and how — a divergence is a bug candidate or a reason it can't merge), and whether a std module already provides it. Method stated in the note (the grep/AST pass used, so it can be rerun). Cover at least: character codes and ASCII classes, hex/decimal digit decoding and encoding, string quoting and escaping (JSON, YAML, C, IR), integer bounds and overflow helpers, byte readers/writers and varints, UTF-8 encode/decode, growable byte/string builders, cursor/scanner patterns in the tokenizers (json, yaml, regex, lexer, http), and hashing. Rank clusters by lines saved × sites × risk.
+A measured table, not impressions. For each cluster: what it is, every site (file:line), lines duplicated, whether the copies agree or diverge (and how — a divergence is a bug candidate or a reason it can't merge), and whether a std module already provides it. Method stated in the note (the grep/AST pass used, so it can be rerun). Cover at least: character codes and ASCII classes, hex/decimal digit decoding and encoding, string quoting and escaping (JSON, YAML, C, IR), integer bounds and overflow helpers, byte readers/writers and varints, UTF-8 encode/decode, growable byte/string builders, cursor/scanner patterns in the tokenizers (json, yaml, regex, lexer, http), and hashing. Rank clusters by the ranking in Performance first.
 
 ## Layering
 
@@ -49,6 +51,16 @@ The atomic-design mapping, adapted to a library:
 | templates / pages | existing std modules and the compiler | `std/json.ts`, `std/net/*`, `src/*` | any lower tier |
 
 The note decides: the directory (e.g. `std/core/` or per-tier dirs), whether lower tiers are public `std` API or internal (and how "internal" is expressed, given every public `std` declaration needs a doc comment and a reference page), and how the import rule is enforced (a lint or `tests/run.js` check that an atom imports nothing).
+
+## Performance first
+
+The order of priorities for every WP67 stage is **performance, then one shared copy, then modern code**. Deduplication and modernising never buy a slower program.
+
+- **Baseline is the fastest copy.** For each cluster the survey benchmarks the existing copies against each other (a micro-benchmark per cluster under `bench/`, plus the programs that call it hottest: the compiler compiling itself, the JSON/YAML/HTTP benches) and names the fastest. The shared version starts from that one, not from the most readable one.
+- **Extraction is an optimisation opportunity.** Once one copy serves every caller, it is worth tuning: table-driven ASCII classes, SIMD (`std` already has AVX2/SSE paths), branch-free digit decoding, fewer bounds checks the prover can discharge, `inline`-friendly shapes across module boundaries. The note lists, per cluster, the optimisation the shared copy should get and the measured gain it expects.
+- **Ranking.** Clusters are ordered by measured performance gain first (hot paths in the compiler and the server benches), then lines saved × sites, then risk.
+- **The gate.** Each stage carries a `Measured:` trailer per `.claude/testing.md` — interleaved same-machine runs with a noise band — showing no caller got slower beyond noise and naming what got faster, plus compiler self-build time and binary size. A shared version that loses to any copy it replaces on a hot path does not merge; that site keeps its copy, recorded as an exception with the figures.
+- A modern construct (below) that costs time is not used; the note says which constructs were measured and how they compared.
 
 ## Modern code
 
@@ -64,7 +76,7 @@ Much of the duplicated code predates the constructs it would use if written toda
 
 ## Stages
 
-S1 is this note. S2 onward: one cluster per stage, atoms first (they have no dependencies), each with its sites, the modern form it is rewritten in (see Modern code), its acceptance test (the copies deleted, every caller importing the shared one, an import-rule check), and the measurement it must not regress. Mark which stages can run in parallel.
+S1 is this note. S2 onward: one cluster per stage, ordered by Performance first's ranking (atoms before what builds on them), each with its sites, its baseline (the fastest copy and its figures), the optimisation it gets, the modern form it is rewritten in (see Modern code), its acceptance test (the copies deleted, every caller importing the shared one, an import-rule check), and the measurement it must not regress. Mark which stages can run in parallel.
 
 ## Decisions
 
