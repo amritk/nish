@@ -16011,8 +16011,10 @@ are not all in `[0, length)`; and the second check of a compound store
   A `nish:simd` access is proven exactly where its check is left out (the
   guard on its last lane under
   [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
-  program may call a guarded one (`tests/link/simd_deny_panics_guarded`) and
-  is refused an unguarded one (`tests/link/simd_deny_panics_unguarded`)
+  program may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 

@@ -1870,7 +1870,7 @@ const DECLARED = [
     program: "tests/link/simd_deny_panics_guarded/main.ts",
     file: "exit",
     changelog: "a guarded nish:simd access as a proven panic site",
-    why: "the program is built with --deny-panics and its one `loadU8x16` is guarded, which the candidate records as a proven site; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
+    why: "the program is built with --deny-panics and the `loadU8x16` and `store` in its `simd_mask` dependency are guarded, which the candidate records as proven sites; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
   },
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
