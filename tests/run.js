@@ -24919,6 +24919,8 @@ if (dealtHere("cliChecks")) {
   // at no earlier one.
   if (!only || "explain_layout".includes(only) || "cli".includes(only)) {
     const layoutDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-layout-"))
+    // The directory goes even when a check below throws.
+    try {
     const layoutOf = (stderr) =>
       stderr
         .split("\n")
@@ -25110,7 +25112,8 @@ if (dealtHere("cliChecks")) {
           "forbidden.ts:2:15: layout: P: 5 forbidden: a declare class, 4 → 4 bytes; Holder saves 16 → 8",
           "forbidden.ts:5:7: layout: Holder: 2 no link, 16 → 16 bytes",
           "forbidden.ts:9:7: layout: S: 5 forbidden: holds a Secret in k, 24 → 16 bytes",
-          "explain-layout: 0 of 3 classes compact",
+          "std/secret.ts:18:14: layout: Secret<u8[]> (std): 4 not made in a loop or recursion, 8 → 8 bytes; S saves 24 → 16",
+          "explain-layout: 0 of 4 classes compact",
         ],
       },
       // Test 4 through a generic function: each instantiation is its own
@@ -25193,7 +25196,11 @@ if (dealtHere("cliChecks")) {
           "",
         ].join("\n"),
         args: [],
-        want: ["genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+        want: [
+          "genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "genericMethod.ts:5:7: layout: Box<i32>: 2 no link, 4 → 4 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
       },
       // Its pair: a generic method that calls another method, not itself.
       {
@@ -25226,7 +25233,115 @@ if (dealtHere("cliChecks")) {
         args: [],
         want: [
           "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericMethodOnce.ts:5:7: layout: Box<i32>: 2 no link, 4 → 4 bytes",
+          "explain-layout: 0 of 2 classes compact",
+        ],
+      },
+      // A generic class is reported once per instantiation, at its template's
+      // declaration: `TNode<i32>` is bench/goose/tree.ts's TNode made generic,
+      // its two `TNode<T> | null` fields links to itself, and `new TNode<i32>`
+      // in the recursive `build` its made-site, so it is picked at the same
+      // 24 → 12. The template's other instantiation, `TNode<i64>`, is made by
+      // the same written `new TNode`, so test 4 counts it too: a site names the
+      // template, not the type arguments.
+      {
+        name: "a generic self-linking node built recursively",
+        file: "genericTree.ts",
+        source: [
+          "class TNode<T> {",
+          "  left: TNode<T> | null",
+          "  right: TNode<T> | null",
+          "  v: T",
+          "  constructor(left: TNode<T> | null, right: TNode<T> | null, v: T) {",
+          "    this.left = left",
+          "    this.right = right",
+          "    this.v = v",
+          "  }",
+          "}",
+          "const build = (d: i32): TNode<i32> | null => {",
+          "  if (d === 0) {",
+          "    return null",
+          "  }",
+          "  return new TNode<i32>(build(d - 1), build(d - 1), d)",
+          "};",
+          "const check = (t: TNode<i32> | null): i32 => {",
+          "  if (t === null) {",
+          "    return 0",
+          "  }",
+          "  return 1 + check(t.left) + check(t.right)",
+          "};",
+          "export const main = (): i32 => {",
+          "  const wide = new TNode<i64>(null, null, 7)",
+          "  return check(build(6)) + (wide.left === null ? 0 : 1)",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericTree.ts:1:7: layout: TNode<i32>: compact, 24 → 12 bytes",
+          "genericTree.ts:1:7: layout: TNode<i64>: compact, 24 → 16 bytes",
+          "explain-layout: 2 of 2 classes compact",
+        ],
+      },
+      // A generic node made once, outside any loop or recursion, links to
+      // itself and saves bytes, and stays refused by test 4.
+      {
+        name: "test 4, a generic node made once",
+        file: "genericLinkOnce.ts",
+        source: [
+          "class Link<T> {",
+          "  next: Link<T> | null = null",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "}",
+          "export const main = (): i32 => {",
+          "  const l = new Link<i32>(3)",
+          "  return l.v",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericLinkOnce.ts:1:7: layout: Link<i32>: 4 not made in a loop or recursion, 16 → 8 bytes",
           "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // A plain class holding an instantiation is that instantiation's holder
+      // (test 3): `Cell<i32>` links nothing to itself, `Grid`'s two
+      // `Cell<i32> | null` fields are its links, and `Grid` is what narrowing
+      // them saves on.
+      {
+        name: "test 3, a plain class holds a generic instantiation",
+        file: "genericHeld.ts",
+        source: [
+          "class Cell<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "}",
+          "class Grid {",
+          "  a: Cell<i32> | null = null",
+          "  b: Cell<i32> | null = null",
+          "}",
+          "export const main = (): i32 => {",
+          "  let n = 0",
+          "  for (let i = 0; i < 3; i = i + 1) {",
+          "    const g = new Grid()",
+          "    g.a = new Cell<i32>(i)",
+          "    n = n + (g.a === null ? 0 : 1)",
+          "  }",
+          "  return n",
+          "};",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericHeld.ts:1:7: layout: Cell<i32>: compact, 4 → 4 bytes; Grid saves 16 → 8",
+          "genericHeld.ts:7:7: layout: Grid: 2 no link, 16 → 16 bytes",
+          "explain-layout: 1 of 2 classes compact",
         ],
       },
       // A parameter named like its function shadows it: `walk(n)` calls the
@@ -25291,16 +25406,17 @@ if (dealtHere("cliChecks")) {
     for (const [reason, args] of [
       ["wasm32", ["--target", "wasm32-wasi"]],
       ["no --link, so a host may link the IR", []],
-      ["--emit-header", ["--emit-header", path.join(layoutDir, "lib.h")]],
-      ["--emit-napi", ["--emit-napi", path.join(layoutDir, "napi.c")]],
-      ["--emit-napi-async", ["--threads", "--emit-napi-async", path.join(layoutDir, "napi-async.c")]],
-      ["--emit-dts", ["--emit-dts", path.join(layoutDir, "lib.d.ts")]],
+      ["--emit-header", ["--emit-header", "@/lib.h"]],
+      ["--emit-napi", ["--emit-napi", "@/napi.c"]],
+      ["--emit-napi-async", ["--threads", "--emit-napi-async", "@/napi-async.c"]],
+      ["--emit-dts", ["--emit-dts", "@/lib.d.ts"]],
     ]) {
       layoutCases.push({
         name: `test 1, ${reason}`,
         file: "notNative.ts",
         source: loopNode,
         args,
+        outputs: args.filter((arg) => arg.includes("@")),
         noLink: true,
         want: [
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
@@ -25344,44 +25460,84 @@ if (dealtHere("cliChecks")) {
         "};",
         "",
       ].join("\n"),
-      args: ["--emit-ts", path.join(layoutDir, "ts")],
+      args: ["--emit-ts", "@/ts"],
+      outputs: ["@/ts"],
       noIr: true,
       noLink: true,
       want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
     })
+    // Every file under `out` (one file, or a directory's tree), named and in
+    // order, so two outputs compare as one string.
+    const layoutTree = (out) => {
+      if (!fs.existsSync(out)) {
+        return null
+      }
+      if (!fs.statSync(out).isDirectory()) {
+        return fs.readFileSync(out, "utf8")
+      }
+      return fs
+        .readdirSync(out, { recursive: true })
+        .map(String)
+        .sort()
+        .map((name) => {
+          const full = path.join(out, name)
+          return fs.statSync(full).isDirectory() ? `${name}/` : `${name}\n${fs.readFileSync(full, "utf8")}`
+        })
+        .join("\n")
+    }
     // Each case is built twice, with and without the flag, and its IR compared:
-    // the report changes no byte of it in any test-1 mode.
+    // the report changes no byte of it in any test-1 mode. A case's `outputs`
+    // are the files its own flags write (the header, the N-API shim, the
+    // typings, the `--emit-ts` tree), written with `@` for the directory each
+    // build writes into, so both share every file name, and they are compared
+    // too. `--emit-ts` writes no IR (it
+    // refuses `-o`), so its TypeScript is what the report could have moved.
     for (const c of layoutCases) {
       const file = path.join(layoutDir, c.file)
       fs.writeFileSync(file, c.source)
       const base = path.basename(c.file, ".ts")
-      const build = (ll, extra) =>
+      const outputs = c.outputs ?? []
+      const placed = (arg, variant) => (arg.includes("@") ? path.join(layoutDir, arg.replace("@", variant)) : arg)
+      const build = (variant, extra) =>
         spawnSync(
           NISH,
           [
             file,
-            ...(c.noIr ? [] : ["-o", ll]),
+            ...(c.noIr ? [] : ["-o", path.join(layoutDir, variant, `${base}.ll`)]),
             ...(c.noLink ? [] : ["--link", path.join(layoutDir, base)]),
-            ...c.args,
+            ...c.args.map((arg) => placed(arg, variant)),
             ...extra,
           ],
           { cwd: root, encoding: "utf8" }
         )
-      const r = build(path.join(layoutDir, `${base}.layout.ll`), ["--explain-layout"])
+      for (const variant of ["plain", "explained"]) {
+        fs.rmSync(path.join(layoutDir, variant), { recursive: true, force: true })
+        fs.mkdirSync(path.join(layoutDir, variant))
+      }
+      const r = build("explained", ["--explain-layout"])
       check(
         `explain layout: ${c.name}`,
         r.status === 0 && layoutOf(r.stderr) === c.want.join("\n"),
         `--- expected\n${c.want.join("\n")}\n--- actual\n${layoutOf(r.stderr)}\n${shown(r)}`
       )
+      const plain = build("plain", [])
       if (!c.noIr) {
-        const plain = build(path.join(layoutDir, `${base}.ll`), [])
         check(
           `explain layout: --explain-layout changes no byte of the IR, ${c.name}`,
           plain.status === 0 &&
             r.status === 0 &&
-            fs.readFileSync(path.join(layoutDir, `${base}.ll`), "utf8") ===
-              fs.readFileSync(path.join(layoutDir, `${base}.layout.ll`), "utf8"),
+            fs.readFileSync(path.join(layoutDir, "plain", `${base}.ll`), "utf8") ===
+              fs.readFileSync(path.join(layoutDir, "explained", `${base}.ll`), "utf8"),
           `${shown(plain)}\n${shown(r)}`
+        )
+      }
+      for (const out of outputs) {
+        const without = layoutTree(placed(out, "plain"))
+        const withFlag = layoutTree(placed(out, "explained"))
+        check(
+          `explain layout: --explain-layout changes no byte of ${out.replace("@/", "")}, ${c.name}`,
+          plain.status === 0 && r.status === 0 && without !== null && without.length > 0 && without === withFlag,
+          `${shown(plain)}\n${shown(r)}\n--- without\n${without}\n--- with\n${withFlag}`
         )
       }
     }
@@ -25449,7 +25605,9 @@ if (dealtHere("cliChecks")) {
         layoutCapsLines[layoutCapsLines.length - 1].startsWith("capabilities: "),
       shown(layoutCaps)
     )
-    fs.rmSync(layoutDir, { recursive: true, force: true })
+    } finally {
+      fs.rmSync(layoutDir, { recursive: true, force: true })
+    }
   }
 
   // ---- `nish run`: a script built into a cache and started ----------------------------
