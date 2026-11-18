@@ -3,6 +3,6 @@ import type { i32 } from "nish"
 export class Point {
   x: i32 = 0
 }
-export function norm(p: Point): i32 {
+export const norm = (p: Point): i32 => {
   return p.x
-}
+};

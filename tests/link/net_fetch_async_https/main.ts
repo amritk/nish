@@ -26,7 +26,7 @@ class Outcome {
 }
 
 /** Options trusting the roots in `pem`, with no proxy from the environment. */
-function trusting(pem: string): HttpOptions {
+const trusting = (pem: string): HttpOptions => {
   const options: HttpOptions = new HttpOptions()
   options.useEnvProxy = false
   options.rootsPemPath = pem
@@ -34,13 +34,13 @@ function trusting(pem: string): HttpOptions {
   options.readTimeoutMs = 5000
   options.totalTimeoutMs = 20000
   return options
-}
+};
 
-function initFor(options: HttpOptions): RequestInit {
+const initFor = (options: HttpOptions): RequestInit => {
   const init: RequestInit = new RequestInit()
   init.options = options
   return init
-}
+};
 
 async function get(url: string, options: HttpOptions): Promise<Outcome> {
   const out: Outcome = new Outcome()
@@ -54,22 +54,22 @@ async function get(url: string, options: HttpOptions): Promise<Outcome> {
   return out
 }
 
-function body(o: Outcome): string {
+const body = (o: Outcome): string => {
   const res: FetchResponse | null = o.res
   return res !== null ? res.text() : "<none>"
-}
+};
 
-function conn(o: Outcome): string {
+const conn = (o: Outcome): string => {
   const res: FetchResponse | null = o.res
   if (res === null) {
     return "none"
   }
   const v: string | null = res.header("x-conn")
   return v !== null ? v : "none"
-}
+};
 
 /** Whether the async fetch failed with `code` and with the sentence `fetchSync` gives the same URL. */
-function same(o: Outcome, url: string, options: HttpOptions, code: i32): boolean {
+const same = (o: Outcome, url: string, options: HttpOptions, code: i32): boolean => {
   const client: FetchSyncClient = new FetchSyncClient(options)
   const res: HttpResponse | null = client.fetch(new HttpRequest("GET", url))
   const want: string = client.errorText
@@ -78,7 +78,7 @@ function same(o: Outcome, url: string, options: HttpOptions, code: i32): boolean
     console.log(`  async ${o.code} "${o.text}"; fetchSync ${client.error} "${want}"`)
   }
   return ok
-}
+};
 
 /** A fetch of `url`, logged with `label`, then closes the listener `fd`. */
 async function loggedThenClose(label: string, url: string, options: HttpOptions, fd: i32): Promise<i32> {

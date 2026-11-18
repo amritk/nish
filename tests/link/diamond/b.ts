@@ -1,5 +1,5 @@
 import { base } from "./d";
 
-export function twice(): number {
+export const twice = (): number => {
   return base() * 2;
-}
+};

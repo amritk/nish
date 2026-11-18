@@ -4,7 +4,7 @@ import { Registry } from "./lib";
 // `Registry`'s own signatures. The layout must still be in this module (the
 // field reads are `getelementptr`s into `%struct.Entry`) and so must the
 // symbols (`@Entry.label` is defined in lib.ts).
-export function main(): number {
+export const main = (): number => {
   const registry = new Registry();
   registry.add("a", 1);
   registry.add("b", 2);
@@ -19,4 +19,4 @@ export function main(): number {
     total = total + head.count;
   }
   return total - 4;
-}
+};

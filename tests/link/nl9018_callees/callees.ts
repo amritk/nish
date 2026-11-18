@@ -33,36 +33,36 @@ const more = (t: Tally): boolean => {
   return t.left >= 0
 }
 
-function c(t: Tally, kind: i32): void {
+const c = (t: Tally, kind: i32): void => {
   const s = `c ${kind}`
   t.last = new Entry(kind)
   t.n = t.n + s.length
-}
+};
 
-function a(t: Tally, kind: i32): void {
+const a = (t: Tally, kind: i32): void => {
   b(t, kind)
   c(t, kind)
-}
+};
 
-function b(t: Tally, kind: i32): void {
+const b = (t: Tally, kind: i32): void => {
   if (kind === 1) {
     a(t, 0)
   }
-}
+};
 
-function serveA(t: Tally): void {
+const serveA = (t: Tally): void => {
   while (more(t)) {
     t.last = new Entry(t.left)
     a(t, 2)
   }
-}
+};
 
-function serveB(t: Tally): void {
+const serveB = (t: Tally): void => {
   while (more(t)) {
     t.last = new Entry(t.left)
     b(t, 1)
   }
-}
+};
 
 class Handler {
   n: i32
@@ -76,19 +76,19 @@ class Handler {
   }
 }
 
-function handle(t: Tally): void {
+const handle = (t: Tally): void => {
   const h = new Handler(t, 1)
   t.n = t.n + h.n
-}
+};
 
-function serveCtor(t: Tally): void {
+const serveCtor = (t: Tally): void => {
   while (more(t)) {
     t.last = new Entry(t.left)
     handle(t)
   }
-}
+};
 
-function step(t: Tally, kind: i32): void {
+const step = (t: Tally, kind: i32): void => {
   let current = 3
   current = current + t.left
   if (kind === current) {
@@ -96,32 +96,32 @@ function step(t: Tally, kind: i32): void {
     t.last = new Entry(kind)
     t.n = t.n + s.length
   }
-}
+};
 
-function serveLet(t: Tally): void {
+const serveLet = (t: Tally): void => {
   while (more(t)) {
     t.last = new Entry(t.left)
     step(t, 1)
   }
-}
+};
 
-function check(t: Tally, kind: i32): void {
+const check = (t: Tally, kind: i32): void => {
   t.last = new Entry(kind)
   t.n = t.n + 1
   if (kind === 7) {
     const msg = `bad kind ${kind}`
     panic(msg)
   }
-}
+};
 
-function servePanic(t: Tally): void {
+const servePanic = (t: Tally): void => {
   while (more(t)) {
     t.last = new Entry(t.left)
     check(t, 1)
   }
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   const t = new Tally()
   serveA(t)
   serveB(t)
@@ -129,4 +129,4 @@ export function main(): void {
   serveLet(t)
   servePanic(t)
   console.log(t.n)
-}
+};
