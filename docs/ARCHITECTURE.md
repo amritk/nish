@@ -753,7 +753,10 @@ Node header directory for `napi`.
 Profile-guided optimisation (WP9): `--pgo-generate` adds
 `-fprofile-generate` to the `speed`, `size`, and `napi` profiles and
 `--pgo-use <file.profdata>` adds `-fprofile-use=<file>` (a missing file is
-refused with a hint). The recipe (instrumented link, training runs with
+refused with a hint). `nish --link` passes both through, on the main link
+only, after refusing a line where they would do nothing and checking the
+profile; such a link bypasses the runtime cache (`docs/LANGUAGE.md`,
+"Profile-guided builds"). The recipe (instrumented link, training runs with
 `LLVM_PROFILE_FILE`, `llvm-profdata merge`, final link) and what it bought
 on the suite are in [wp9-optimisation.md](wp9-optimisation.md); the
 instrumented link needs the compiler-rt profile runtime
