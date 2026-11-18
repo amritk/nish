@@ -95,7 +95,10 @@ export const main = (): i32 => {
         s += sumSide(buf, side)
       }
       best[side] = least(best[side], monotonicNanos() - t0)
-      sums[side] = (sums[side] * 31 + (s & toI64(1073741823))) % 1000000007
+      // Every bit of `s` is folded, so a load wrong in its top byte shows. `s`
+      // is under 10 passes of 2^22 words of 2^32, about 2^58, and the running
+      // sum is under 31 * 2^30, so the fold stays inside `i64`.
+      sums[side] = (sums[side] * 31 + s) % 1000000007
     }
   }
   return report(names, best, sums)

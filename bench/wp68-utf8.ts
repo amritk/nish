@@ -2,9 +2,11 @@
 // std/ carries, timed side by side, to pick the one a shared copy starts from.
 // 4 MiB of text is cut into 4 KiB segments, each well formed on its own; each
 // side validates every segment and folds which ones pass into a checksum the
-// program prints, and all must agree. Every round breaks one byte at a
+// program prints, and all must agree. Every round breaks the text at a
 // position that moves with the round, so each round has a different invalid
-// segment. `urlB` is `urlA` byte for byte, so the distance between those two
+// segment, and with a different ill-formed case: 0xFF, a lone continuation
+// byte, overlongs, surrogates, values above U+10FFFF, and forms cut short by a
+// letter or by the segment's end (`breakAt`). `urlB` is `urlA` byte for byte, so the distance between those two
 // is the run's noise band. The minimum of each side over the rounds is
 // printed, for two texts: `mixed` (a quarter of the symbols non-ASCII) and
 // `ascii` (one in 64):
@@ -14,7 +16,8 @@
 import { monotonicNanos } from "nish:process"
 import { least, report } from "./wp68-report"
 
-const ROUNDS: i32 = 9
+/** One round for each ill-formed case `breakAt` writes. */
+const ROUNDS: i32 = 11
 const PASSES: i32 = 10
 const SIZE: i32 = 4194304
 const SEGMENT: i32 = 4096
@@ -399,19 +402,87 @@ const text = (wide: u32): u8[] => {
   return buf
 }
 
+// biome-ignore format: one sequence a row, padded with 0 to four bytes
+/**
+ * The ill-formed sequences a round writes, one a round, four bytes a row with
+ * the count in `BROKEN_LEN`: a byte never in UTF-8, a lone continuation byte,
+ * three overlongs, two surrogates, two values above U+10FFFF and a truncated
+ * form cut short by a letter. A tenth case, a four-byte form cut short by the
+ * end of its segment, is written by `breakAt`.
+ */
+const BROKEN: readonly u8[] = [
+  0xff, 0, 0, 0,
+  0x80, 0, 0, 0,
+  0xc0, 0xaf, 0, 0,
+  0xe0, 0x80, 0xaf, 0,
+  0xf0, 0x80, 0x80, 0xaf,
+  0xed, 0xa0, 0x80, 0,
+  0xed, 0xbf, 0xbf, 0,
+  0xf4, 0x90, 0x80, 0x80,
+  0xf5, 0x80, 0x80, 0x80,
+  0xe2, 0x82, 0x61, 0,
+]
+const BROKEN_LEN: readonly i32[] = [1, 1, 2, 3, 4, 3, 3, 4, 4, 3]
+/** The case that `breakAt` writes at a segment's end rather than from the table. */
+const CUT_AT_END: i32 = 10
+
+/**
+ * Breaks `buf` near `at0` with case `which`, and answers where it wrote, or
+ * -1 when it could not. A table case starts at the first character boundary
+ * at or before `at0` and stays inside its segment; `CUT_AT_END` writes the
+ * first three bytes of a four-byte form over the last three of the segment,
+ * which `text` always fills with letters.
+ */
+const breakAt = (buf: u8[], at0: i32, which: i32): i32 => {
+  const n: i32 = toI32(buf.length)
+  if (which === CUT_AT_END) {
+    const at: i32 = at0 - (at0 % SEGMENT) + SEGMENT - 3
+    if (at < 0 || at + 2 >= n) {
+      return -1
+    }
+    buf[at] = toU8(0xf0)
+    buf[at + 1] = toU8(0x9f)
+    buf[at + 2] = toU8(0x98)
+    return at
+  }
+  if (which < 0 || which >= BROKEN_LEN.length) {
+    return -1
+  }
+  const len: i32 = BROKEN_LEN[which]
+  let at: i32 = at0
+  const room: i32 = SEGMENT - (at % SEGMENT)
+  if (room < len) {
+    at -= len - room
+  }
+  while (at > 0 && at < n && buf[at] >= 0x80 && buf[at] <= 0xbf) {
+    at -= 1
+  }
+  for (let k: i32 = 0; k < len; k += 1) {
+    const from: i32 = which * 4 + k
+    if (at + k < 0 || at + k >= n || from < 0 || from >= BROKEN.length) {
+      return -1
+    }
+    buf[at + k] = BROKEN[from]
+  }
+  return at
+}
+
 /** Times every side over `buf` and prints the report under `title`. */
 const measure = (title: string, buf: u8[]): i32 => {
   console.log(title)
   const names: string[] = ["urlA", "urlB", "bytesWalk", "jsonTokWalk", "wordSkip"]
   const best: i64[] = [-1, -1, -1, -1, -1]
   const sums: i64[] = [0, 0, 0, 0, 0]
+  const kept = new Array<u8>(SIZE)
+  for (let i: i32 = 0; i < SIZE && i < toI32(buf.length) && i < toI32(kept.length); i += 1) {
+    kept[i] = buf[i]
+  }
   for (let round = 0; round < ROUNDS; round++) {
-    const at: i32 = (round * MOVE) % SIZE
-    if (at < 0 || at >= buf.length) {
+    // Each round writes a different ill-formed case, the last the one at a segment's end.
+    const at: i32 = breakAt(buf, (round * MOVE) % SIZE, round)
+    if (at < 0) {
       return 1
     }
-    const kept: u8 = buf[at]
-    buf[at] = toU8(0xff)
     // Each round starts at a different side, so no side always runs first.
     for (let k = 0; k < 5; k++) {
       const side: i32 = (round + k) % 5
@@ -423,7 +494,11 @@ const measure = (title: string, buf: u8[]): i32 => {
       best[side] = least(best[side], monotonicNanos() - t0)
       sums[side] = (sums[side] * 31 + s) % 1000000007
     }
-    buf[at] = kept
+    for (let k: i32 = 0; k < 4; k += 1) {
+      if (at + k >= 0 && at + k < toI32(buf.length) && at + k < toI32(kept.length)) {
+        buf[at + k] = kept[at + k]
+      }
+    }
   }
   return report(names, best, sums)
 }

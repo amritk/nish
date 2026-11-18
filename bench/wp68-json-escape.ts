@@ -1,14 +1,19 @@
 // WP68 S1 (docs/wp68-shared-libraries.md §4): the JSON string quoters std/ and
 // src/ carry, timed side by side, to pick the one a shared copy starts from.
-// 4 MiB of text is cut into strings, mostly letters, with a quote, a
-// backslash, a newline or a control byte at random; each side quotes every string into one
+// 4 MiB of text is cut into strings, mostly letters, with 0x7f or a byte at
+// or above 0x80 now and then, and an escaped byte at random: a quote, a
+// backslash, one of the five letter escapes, or a control byte that takes
+// `\u00xx` (a-f digits included); each side quotes every string into one
 // output and the program prints a checksum of that output, which must agree.
 // Every round changes one byte at a position that moves with the round, so no
 // round's input is another's. `byteB` is `byteA` byte for byte, so the
 // distance between those two is the run's noise band. Only the quoting is
 // timed; the checksum is read after the clock stops. The minimum of each side
-// over the rounds is printed, for short strings dense with escapes and for
-// long ones with few:
+// over the rounds is printed for each case, each with its own twin band and
+// checksums: length and density vary apart (64 and 1024 bytes, each at 1 in
+// 16 and 1 in 256 escaped), and 8, 16 and 32 bytes at 1 in 256 sit around
+// `JSON_PLAIN_RUN_MIN` = 16 (std/json.ts), where std's writer turns from its
+// byte loop to `runs`:
 //
 //   build/seed/bin/nish bench/wp68-json-escape.ts --link build/wp68-json-escape --profile speed
 //   taskset -c 2 build/wp68-json-escape
@@ -256,22 +261,28 @@ const foldText = (text: string): i64 => {
   return s
 }
 
-/** One of the bytes of the input: a letter, except when `x & mask` is 0 to 3, which picks a quote, a backslash, a newline or byte 1. */
+// biome-ignore format: one class a row
+/** The bytes an escape is drawn from: the two-letter escapes, then bytes below 32 that take `\u00xx`, the a-f digits among them. */
+const ESCAPED: readonly u8[] = [
+  34, 92, 10, 9, 13, 8, 12,
+  0, 1, 11, 14, 15, 26, 27, 31,
+]
+
+/** One of the bytes of the input: when `x & mask` is 0 to 3, a byte of `ESCAPED`; otherwise a letter, or 1 time in 16 a byte that needs no escape but is not a letter (0x7f, or one at or above 0x80). */
 const symbol = (x: u32, mask: u32): u8 => {
   const pick: u32 = x & mask
-  if (pick === 0) {
-    return toU8(34)
+  const at: i32 = toI32((x >> 12) % toU32(ESCAPED.length))
+  if (pick < 4 && at >= 0 && at < ESCAPED.length) {
+    return ESCAPED[at]
   }
-  if (pick === 1) {
-    return toU8(92)
+  const other: u32 = (x >> 8) & 15
+  if (other === 0) {
+    return toU8(127)
   }
-  if (pick === 2) {
-    return toU8(10)
+  if (other === 1) {
+    return toU8(128 + toI32((x >> 16) & 127))
   }
-  if (pick === 3) {
-    return toU8(1)
-  }
-  return toU8(97 + toI32((x >> 8) % 26))
+  return toU8(97 + toI32((x >> 16) % 26))
 }
 
 /** Quotes every string of `src` with byte side `side` into `out`; the end, or -1 when it ran out of room. */
@@ -289,7 +300,7 @@ const quoteAll = (out: u8[], src: u8[], side: i32, size: i32): i32 => {
   return at
 }
 
-/** Times every side over strings of `size` bytes, one in `mask + 1` of them escaped by four, and prints the report under `title`. */
+/** Times every side over strings of `size` bytes, four bytes in `mask + 1` escaped, and prints the report under `title`. */
 const measure = (title: string, size: i32, mask: u32): i32 => {
   console.log(title)
   const src = new Array<u8>(SIZE)
@@ -309,7 +320,11 @@ const measure = (title: string, size: i32, mask: u32): i32 => {
     if (at < 0 || at >= src.length) {
       return 1
     }
-    src[at] = symbol(toU32(round), 3)
+    const pick: i32 = round % toI32(ESCAPED.length)
+    if (pick < 0 || pick >= ESCAPED.length) {
+      return 1
+    }
+    src[at] = ESCAPED[pick]
     // The `string` copies `builder` reads, made before any clock starts.
     const texts: string[] = []
     for (let off: i32 = 0; off + size <= SIZE; off += size) {
@@ -347,7 +362,15 @@ const measure = (title: string, size: i32, mask: u32): i32 => {
 }
 
 export const main = (): i32 => {
-  const short = measure("short: 64-byte strings, 1 byte in 16 escaped", 64, 63)
-  const long = measure("long: 1024-byte strings, 1 byte in 256 escaped", 1024, 1023)
-  return short + long
+  let failed: i32 = 0
+  // Length and density apart: each length at both densities.
+  failed += measure("64-byte strings, 1 byte in 16 escaped", 64, 63)
+  failed += measure("64-byte strings, 1 byte in 256 escaped", 64, 1023)
+  failed += measure("1024-byte strings, 1 byte in 16 escaped", 1024, 63)
+  failed += measure("1024-byte strings, 1 byte in 256 escaped", 1024, 1023)
+  // Around JSON_PLAIN_RUN_MIN = 16 (std/json.ts), at one density.
+  failed += measure("8-byte strings, 1 byte in 256 escaped", 8, 1023)
+  failed += measure("16-byte strings, 1 byte in 256 escaped", 16, 1023)
+  failed += measure("32-byte strings, 1 byte in 256 escaped", 32, 1023)
+  return failed
 }

@@ -10,9 +10,11 @@
 //   build/seed/bin/nish bench/wp68-hex.ts --link build/wp68-hex --profile speed
 //   taskset -c 2 build/wp68-hex
 //
-// The bytes are drawn from 32 symbols, 22 of them hex digits: the shape of a
-// percent-escape, a `\u` escape or a hash, where most bytes asked about are
-// digits and the rest must answer -1.
+// Two inputs are timed, each with its own twin band and checksums. "mixed"
+// draws from 32 symbols, 22 of them hex digits, every class at random: the
+// worst case for a copy that branches on the class, so its ratios are a
+// maximum, not a typical gain. "hash" draws lower-case hex digits only, the
+// shape of a hash, where every branch is predictable.
 import { monotonicNanos } from "nish:process"
 import { least, report } from "./wp68-report"
 
@@ -28,7 +30,10 @@ const HEX: readonly u8[] = [
   255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
 ]
 
-const SYMBOLS: string = "0123456789abcdefABCDEFgxyz %-_GZ"
+/** Every class at random: the worst case for a copy that branches on the class. */
+const MIXED: string = "0123456789abcdefABCDEFgxyz %-_GZ"
+/** Lower-case digits only, the shape of a hash: the predictable case. */
+const HASH: string = "0123456789abcdef"
 const ROUNDS: i32 = 9
 const PASSES: i32 = 20
 const SIZE: i32 = 4194304
@@ -128,14 +133,16 @@ const sumTable = (buf: u8[]): i64 => {
   return s
 }
 
-export const main = (): i32 => {
+/** Times every side over 4 MiB drawn from `symbols`, whose length is `mask + 1`, and prints the report under `title`. */
+const measure = (title: string, symbols: string, mask: u32): i32 => {
+  console.log(title)
   const buf = new Array<u8>(SIZE)
   let x: u32 = 2463534242
   for (let i = 0; i < SIZE && i < buf.length; i++) {
     x ^= x << 13
     x ^= x >> 17
     x ^= x << 5
-    buf[i] = toU8(SYMBOLS.charCodeAt(toI32(x & 31)))
+    buf[i] = toU8(symbols.charCodeAt(toI32(x & mask)))
   }
   const names: string[] = ["chainA", "chainB", "lower", "mask", "table"]
   const best: i64[] = [-1, -1, -1, -1, -1]
@@ -145,7 +152,7 @@ export const main = (): i32 => {
     if (at < 0 || at >= buf.length) {
       return 1
     }
-    buf[at] = toU8(SYMBOLS.charCodeAt(round & 31))
+    buf[at] = toU8(symbols.charCodeAt(round & toI32(mask)))
     // Each round starts at a different side, so no side always runs first.
     for (let k = 0; k < 5; k++) {
       const side: i32 = (round + k) % 5
@@ -172,4 +179,10 @@ export const main = (): i32 => {
     }
   }
   return report(names, best, sums)
+}
+
+export const main = (): i32 => {
+  const mixed = measure("mixed: 32 symbols, 22 of them hex digits, every class at random", MIXED, 31)
+  const hash = measure("hash: lower-case hex digits only", HASH, 15)
+  return mixed + hash
 }

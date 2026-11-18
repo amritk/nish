@@ -8,8 +8,10 @@
 //
 //   node bench/wp68-run.mjs --compiler build/seed/bin/nish [--runs N] [name ...]
 //
-// A name (`hex`, `utf8`, ...) runs that bench alone. The script exits 1 when a
-// bench fails to build, exits non-zero, or prints "checksums DIFFER".
+// A name (`hex`, `utf8`, ...) runs that bench alone. After each run a WARN
+// line names every side whose ratio is no further from 1 than its twin's. The
+// script exits 1 when a bench fails to build, fails to start, exits non-zero,
+// or prints "checksums DIFFER".
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -29,7 +31,7 @@ if (!Number.isInteger(runs) || runs < 1) {
   console.error("bench/wp68-run.mjs: --runs needs a positive integer")
   process.exit(2)
 }
-const wanted = args.filter((a, i) => a !== "--runs" && i !== runsAt + 1)
+const wanted = args.filter((_, i) => runsAt < 0 || (i !== runsAt && i !== runsAt + 1))
 
 const all = fs
   .readdirSync(here)
@@ -44,7 +46,52 @@ for (const name of names) {
   }
 }
 
-const pin = spawnSync("taskset", ["--version"]).status === 0 ? ["taskset", "-c", "2"] : []
+// Pinned only when `taskset -c 2` itself runs: a host without CPU 2, or
+// without taskset, runs the benches unpinned and says so.
+const pin = spawnSync("taskset", ["-c", "2", "true"]).status === 0 ? ["taskset", "-c", "2"] : []
+if (pin.length === 0) {
+  console.log("note: `taskset -c 2` does not run here, so the benches run unpinned")
+}
+/**
+ * A WARN line for every side whose ratio is no further from 1 than its
+ * case's twin (the second side): such a side is inside that run's noise band,
+ * whatever the note calls it. The script cannot know which sides are claimed
+ * as gains, so it warns for every side but the first two.
+ */
+const noiseWarnings = (stdout) => {
+  const warnings = []
+  let title = ""
+  let sides = []
+  const flush = () => {
+    if (sides.length >= 2) {
+      const band = Math.abs(sides[1].ratio - 1)
+      for (const side of sides.slice(2)) {
+        if (Math.abs(side.ratio - 1) <= band) {
+          const where = title ? ` (${title})` : ""
+          warnings.push(
+            `WARN${where}: ${side.name} ${side.ratio.toFixed(3)}x is inside the twin band ${sides[1].ratio.toFixed(3)}x`
+          )
+        }
+      }
+    }
+    sides = []
+  }
+  for (const line of stdout.split("\n")) {
+    const m = /^(\w+): [\d.]+ us, ([\d.e+-]+)x of /.exec(line)
+    if (m) {
+      sides.push({ name: m[1], ratio: Number(m[2]) })
+    } else if (line.startsWith("checksums ")) {
+      flush()
+      title = ""
+    } else if (line.trim() !== "") {
+      flush()
+      title = line.trim()
+    }
+  }
+  flush()
+  return warnings
+}
+
 fs.mkdirSync(outDir, { recursive: true })
 let failed = false
 for (const name of names) {
@@ -64,9 +111,14 @@ for (const name of names) {
     const cmd = pin.length > 0 ? pin[0] : exe
     const rest = pin.length > 0 ? [...pin.slice(1), exe] : []
     const out = spawnSync(cmd, rest, { encoding: "utf8" })
-    process.stdout.write(out.stdout)
-    if (out.status !== 0 || out.stdout.includes("checksums DIFFER")) {
-      console.error(`${name}: exit ${out.status}${out.stderr ? `\n${out.stderr}` : ""}`)
+    const stdout = out.stdout ?? ""
+    process.stdout.write(stdout)
+    for (const line of noiseWarnings(stdout)) {
+      console.log(line)
+    }
+    if (out.error || out.status !== 0 || stdout.includes("checksums DIFFER")) {
+      const why = out.error ? `spawn failed: ${out.error.message}` : `exit ${out.status}`
+      console.error(`${name}: ${why}${out.stderr ? `\n${out.stderr}` : ""}`)
       failed = true
     }
   }

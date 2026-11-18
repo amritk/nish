@@ -1316,6 +1316,11 @@ const RECURSION_ARENA_WHY =
 
 const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
+/** The changelog words of the pull request that proposes WP68 and adds its `bench/wp68-*` programs. */
+const WP68_BENCH = "WP68, shared libraries layered like atomic design"
+const WP68_BENCH_WHY =
+  "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
+
 const DECLARED = [
   {
     program: "tests/cases/host_import_call.ts",
@@ -8838,6 +8843,42 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  {
+    program: "bench/wp68-be-load.ts",
+    file: "wp68-be-load.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-decimal.ts",
+    file: "wp68-decimal.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-hex.ts",
+    file: "wp68-hex.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "wp68-json-escape.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "wp68-utf8.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
 ]
 
 /**
