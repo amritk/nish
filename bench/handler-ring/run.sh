@@ -14,6 +14,11 @@
 #   bash bench/handler-ring/run.sh --conns "18000 60000" --rounds 3
 #   bash bench/handler-ring/run.sh --compiler build/nish
 #   bash bench/handler-ring/run.sh --conns 90000 --think 4 --warmup 4 --designs "ring epoll"
+#   bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "ring epoll1 epoll epoll-copy"
+#
+# --nodb runs every server with BENCH_NODB=1: /plaintext answers its 129 bytes
+# without a query, so the CPU a request costs is the handler's and the
+# codec's (docs/BENCHMARKS.md, "A minimal GET on Http1Server").
 #
 # --think S runs the load closed-loop: each connection sends its next request
 # S seconds after its last answer, as a keep-alive client with think time
@@ -75,8 +80,9 @@ while [ $# -gt 0 ]; do
   --think) think="$2"; shift ;;
   --designs) designs_arg="$2"; shift ;;
   --server-cpus) server_cpus="$2"; shift ;;
+  --nodb) export BENCH_NODB=1 ;;
   *)
-    echo "usage: run.sh [--quick] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish]" >&2
+    echo "usage: run.sh [--quick] [--nodb] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish]" >&2
     exit 2
     ;;
   esac
@@ -135,6 +141,7 @@ else
   echo "rate $rate req/s, warm-up ${warmup}s, window ${seconds}s, $rounds rounds"
 fi
 echo "server cpus ${server_cpus:-unpinned}, load cpus ${load_cpus:-unpinned}; designs $designs_arg"
+if [ "${BENCH_NODB:-}" = 1 ]; then echo "no query a request (BENCH_NODB=1)"; else echo "a SQLite lookup a request"; fi
 
 results="$out/results.txt"
 : >"$results"
