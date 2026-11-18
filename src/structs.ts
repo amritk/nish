@@ -91,6 +91,14 @@ import {
  */
 const sizeOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignOf(type)
 
+/**
+ * The width and alignment the padding warning gives a field: four bytes for a
+ * link (WP48), which `computeLayout` lays out as an `i32` offset, else its
+ * type's.
+ */
+const paddingWidth = (ctx: CheckContext, field: FieldInfo): i32 =>
+  field.link ? 4 : sizeOfField(ctx, field.type)
+
 /** The next multiple of `align` at or above `value`; shared with `result.ts`. */
 export const roundUpTo = (value: i32, align: i32): i32 => {
   const remainder = value % align
@@ -212,7 +220,7 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
 const layoutSize = (ctx: CheckContext, fields: FieldInfo[], align: i32): i32 => {
   let offset = 0
   for (const field of fields) {
-    offset = roundUpTo(offset, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
+    offset = roundUpTo(offset, paddingWidth(ctx, field)) + paddingWidth(ctx, field)
   }
   return roundUpTo(offset, align)
 }
@@ -237,7 +245,7 @@ const widestFirst = (ctx: CheckContext, fields: FieldInfo[], align: i32): FieldI
   let width = align
   while (width >= 1) {
     for (const field of fields) {
-      if (ctx.table.alignOf(field.type) === width) {
+      if (paddingWidth(ctx, field) === width) {
         sorted.push(field)
       }
     }
@@ -286,7 +294,7 @@ const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): 
     let chosenAlign = 0
     let index = 0
     for (const field of remaining) {
-      const alignment = ctx.table.alignOf(field.type)
+      const alignment = paddingWidth(ctx, field)
       const pad = roundUpTo(offset, alignment) - offset
       if (chosen === null || pad < chosenPad || (pad === chosenPad && alignment > chosenAlign)) {
         chosen = field
@@ -300,7 +308,7 @@ const leastPaddingFirst = (ctx: CheckContext, fields: FieldInfo[], start: i32): 
       return order
     }
     order.push(chosen)
-    offset = offset + chosenPad + sizeOfField(ctx, chosen.type)
+    offset = offset + chosenPad + paddingWidth(ctx, chosen)
     const next: FieldInfo[] = []
     index = 0
     for (const field of remaining) {
@@ -413,7 +421,7 @@ const reportWastefulPadding = (
   for (const field of info.fields) {
     if (fields.length < fixed) {
       fields.push(field)
-      prefixEnd = roundUpTo(prefixEnd, ctx.table.alignOf(field.type)) + sizeOfField(ctx, field.type)
+      prefixEnd = roundUpTo(prefixEnd, paddingWidth(ctx, field)) + paddingWidth(ctx, field)
     } else {
       rest.push(field)
     }

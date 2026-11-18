@@ -5663,6 +5663,21 @@ if (dealtHere("performance")) {
     gap.stderr
   )
 
+  // WP48: a link of a compact class is a four-byte offset, so the warning
+  // measures it as one. `Spill` packs to 16 only with the link beside the
+  // `i32`; measured as a pointer no order would shrink it and the warning
+  // would say nothing. `Pair` has no gap in any order and stays quiet.
+  const compactPad = compile("perf_padding_compact", "perf_padding_compact_report.ll")
+  const compactPadLines = summaries(compactPad.stderr)
+  check(
+    "performance: the padding warning measures a compact class's link as four bytes, and names the order that packs it",
+    compactPad.status === 0 &&
+      compactPadLines.length === 1 &&
+      positions(compactPadLines) === "14:14" &&
+      compactPadLines[0].endsWith(padSentence("Spill", "weight: f64, next: Spill | null, count: i32")),
+    compactPad.stderr
+  )
+
   const str = compile("perf_str_concat_loop", "perf_str.ll")
   const strLines = summaries(str.stderr)
   // `for`, `while`, a nested loop whose accumulator is declared one level out,
