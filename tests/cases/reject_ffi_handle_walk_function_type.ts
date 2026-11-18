@@ -23,12 +23,12 @@ class File {
   }
 }
 
-function apply(g: (f: File) => i32): i32 {
+const apply = (g: (f: File) => i32): i32 => {
   return 0
-}
+};
 
-function call(g: (f: File) => i32, f: File): i32 {
+const call = (g: (f: File) => i32, f: File): i32 => {
   return g(f)
-}
+};
 
 export const main = (): i32 => 0

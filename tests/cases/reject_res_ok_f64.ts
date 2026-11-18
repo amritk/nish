@@ -5,11 +5,11 @@
 // `Ok(toI32(3))` when the payload has to be an i32. `tests/run.js --parity`
 // found the two compilers disagreeing here (WP19 §A2): stage1 was threading
 // the payload type down as a hint.
-function status(): Result<i32, string> {
+const status = (): Result<i32, string> => {
   return Ok(3);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const r = status();
   return r.isOk() ? 0 : 1;
-}
+};

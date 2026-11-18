@@ -1,4 +1,4 @@
-export function main(): number {
+export const main = (): number => {
   (process.argv).push("extra");
   return 0;
-}
+};

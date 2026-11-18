@@ -8,7 +8,7 @@ declare class Lconv {
 
 declare function localeconv(): CPtr;
 
-export function main(): i32 {
+export const main = (): i32 => {
   const lc = readStruct<Lconv>(localeconv());
   return 0;
-}
+};

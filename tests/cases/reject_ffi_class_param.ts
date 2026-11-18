@@ -7,6 +7,6 @@ class Point {
 
 declare function plot(p: Point): void;
 
-export function main(): i32 {
+export const main = (): i32 => {
   return 0;
-}
+};

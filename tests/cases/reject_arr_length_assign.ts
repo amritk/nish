@@ -1,1 +1,3 @@
-function f(xs: number[]): void { xs.length = 0; }
+const f = (xs: number[]): void => {
+  xs.length = 0;
+};

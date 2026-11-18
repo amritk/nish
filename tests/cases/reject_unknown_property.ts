@@ -1,3 +1,3 @@
-function f(s: string): number {
+const f = (s: string): number => {
   return s.foo;
-}
+};

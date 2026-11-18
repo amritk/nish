@@ -3,8 +3,8 @@
 class Counter {
   n: i32 = 0;
 }
-export function test(): number {
+export const test = (): number => {
   const c = new Counter();
   c.n++;
   return c.n;
-}
+};

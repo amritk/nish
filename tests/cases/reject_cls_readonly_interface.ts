@@ -8,9 +8,9 @@ interface Config {
   size: number;
 }
 
-export function main(): number {
+export const main = (): number => {
   const c: Config = { name: "a", size: 1 };
   c.size = 2;
   c.name = "b";
   return 0;
-}
+};

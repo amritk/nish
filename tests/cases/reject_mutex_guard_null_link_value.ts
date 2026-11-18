@@ -6,11 +6,11 @@ class Link {
   next: Link | null = null
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const m = new Mutex<Link | null>(new Link())
   {
     using g = m.lock()
     g.value = null
   }
   return 0
-}
+};

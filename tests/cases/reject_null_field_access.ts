@@ -7,7 +7,7 @@ class Node {
   }
 }
 
-function second(n: Node): number {
+const second = (n: Node): number => {
   const next = n.next;
   return next.value;
-}
+};
