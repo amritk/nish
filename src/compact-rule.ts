@@ -422,9 +422,9 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
       if (verdict === "compact") {
         picked = picked + 1
       }
-      // Past test 3, the line names the class whose saving passed it: `R`
-      // itself, or a class holding the link.
-      if (linked && saver.length > 0) {
+      // When the saving that passed test 3 is a holder's, not `R`'s own, the
+      // line names that holder.
+      if (linked && saver.length > 0 && saver !== info.name) {
         lines.add(`; ${saver} saves ${saving}`)
       }
       lines.add("\n")

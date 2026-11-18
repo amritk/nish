@@ -24725,6 +24725,274 @@ if (dealtHere("cliChecks")) {
     }
   }
 
+  // ---- `--explain-layout`: which classes the compact-class rule picks ---------------
+  // The report runs the five tests of docs/roadmap/wp48-ref32-classes.md §3.1 over
+  // every class and prints one line per class: `compact`, or the first test that
+  // refuses it. Nothing in the build reads the verdict yet, so the flag changes no
+  // byte of the IR. Each refusal has a program below that stops at that test and
+  // at no earlier one.
+  if (!only || "explain_layout".includes(only) || "cli".includes(only)) {
+    const layoutDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-layout-"))
+    const layoutOf = (stderr) =>
+      stderr
+        .split("\n")
+        .filter((line) => line.includes(": layout: ") || line.startsWith("explain-layout: "))
+        .join("\n")
+        .split(`${layoutDir}/`)
+        .join("")
+        .split(`${root}/`)
+        .join("")
+    // The three design figures (§3.1): each bench file's linked node class is
+    // picked, at the size the design states.
+    const benchWant = {
+      "bench/goose/tree.ts": [
+        "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
+        "explain-layout: 1 of 1 classes compact",
+      ],
+      "bench/goose/bintrees.ts": [
+        "bench/goose/bintrees.ts:11:7: layout: TNode: compact, 16 → 8 bytes",
+        "explain-layout: 1 of 1 classes compact",
+      ],
+      "bench/wp48-refs/sibling.ts": [
+        "bench/wp48-refs/sibling.ts:13:7: layout: Node: compact, 32 → 20 bytes",
+        "bench/wp48-refs/sibling.ts:26:7: layout: Builder: 2 no link, 16 → 16 bytes",
+        "explain-layout: 1 of 2 classes compact",
+      ],
+    }
+    for (const [file, want] of Object.entries(benchWant)) {
+      const base = path.basename(file, ".ts")
+      const plainLl = path.join(layoutDir, `${base}.ll`)
+      const explainedLl = path.join(layoutDir, `${base}.layout.ll`)
+      const plain = spawnSync(NISH, [file, "-o", plainLl], { cwd: root, encoding: "utf8" })
+      const explained = spawnSync(NISH, [file, "-o", explainedLl, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: ${file} matches the golden report`,
+        explained.status === 0 && layoutOf(explained.stderr) === want.join("\n"),
+        `--- expected\n${want.join("\n")}\n--- actual\n${layoutOf(explained.stderr)}\n${shown(explained)}`
+      )
+      check(
+        `explain layout: --explain-layout changes no byte of ${file}'s IR`,
+        plain.status === 0 &&
+          explained.status === 0 &&
+          fs.readFileSync(plainLl, "utf8") === fs.readFileSync(explainedLl, "utf8"),
+        `${shown(plain)}\n${shown(explained)}`
+      )
+    }
+    // A linked class the program makes in a loop, so only test 1 and the
+    // class's own shape can refuse it.
+    const loopNode = [
+      "class W {",
+      "  a: i64",
+      "  b: i64",
+      "  next: W | null",
+      "  constructor() {",
+      "    this.a = 0",
+      "    this.b = 0",
+      "    this.next = null",
+      "  }",
+      "}",
+      "class L {",
+      "  next: L | null = null",
+      "  v: i32 = 0",
+      "}",
+      "export function main(): i32 {",
+      "  let n = 0",
+      "  for (let i = 0; i < 3; i = i + 1) {",
+      "    const w = new W()",
+      "    const l = new L()",
+      "    n = n + (w.next === null ? 1 : 0) + l.v",
+      "  }",
+      "  return n",
+      "}",
+      "",
+    ].join("\n")
+    const layoutCases = [
+      // Test 3: two i64 fields keep W 8-aligned, so a 4-wide link pads back to 24.
+      {
+        name: "test 3, no saving",
+        file: "noSaving.ts",
+        source: loopNode,
+        args: [],
+        want: [
+          "noSaving.ts:1:7: layout: W: 3 no saving, 24 → 24 bytes",
+          "noSaving.ts:11:7: layout: L: compact, 16 → 8 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
+      },
+      // Test 4: made once, outside any loop, in a function that does not reach itself.
+      {
+        name: "test 4, made once",
+        file: "madeOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const l = new L()",
+          "console.log(`${l.v}`)",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // Test 4 passes through recursion alone: `Chain`'s constructor makes a
+      // `Chain`, so the `new L` in it runs once per level.
+      {
+        name: "test 4, recursion through a constructor",
+        file: "recursive.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Chain {",
+          "  head: L",
+          "  constructor(n: i32) {",
+          "    this.head = new L()",
+          "    if (n > 0) {",
+          "      const c = new Chain(n - 1)",
+          "      this.head.next = c.head",
+          "    }",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  return new Chain(3).head.v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "recursive.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "recursive.ts:5:7: layout: Chain: 2 no link, 8 → 8 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
+      },
+      // Tests 2 and 5: `Holder` links to no class like itself; `P` is a declare
+      // class, whose layout is the foreign side's, and the saving that passed
+      // test 3 is `Holder`'s; `S` holds a Secret, whose wipe the narrowing
+      // must not move.
+      {
+        name: "test 2 and both reasons of test 5",
+        file: "forbidden.ts",
+        source: [
+          'import { Secret, secret, wipe } from "nish:secret"',
+          "declare class P {",
+          "  x: i32",
+          "}",
+          "class Holder {",
+          "  p: P | null = null",
+          "  n: i32 = 0",
+          "}",
+          "class S {",
+          "  next: S | null",
+          "  n: i32",
+          "  readonly k: Secret<u8[]>",
+          "  constructor() {",
+          "    const bytes: u8[] = [1, 2]",
+          "    this.k = secret(bytes)",
+          "    this.next = null",
+          "    this.n = 0",
+          "  }",
+          "  wipe(): void {",
+          "    wipe(this.k)",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  let n = 0",
+          "  for (let i = 0; i < 3; i = i + 1) {",
+          "    const h = new Holder()",
+          "    const s = new S()",
+          "    s.wipe()",
+          "    const p = new P()",
+          "    h.p = p",
+          "    n = n + p.x + h.n + s.n",
+          "  }",
+          "  return n",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "forbidden.ts:2:15: layout: P: 5 forbidden: a declare class, 4 → 4 bytes; Holder saves 16 → 8",
+          "forbidden.ts:5:7: layout: Holder: 2 no link, 16 → 16 bytes",
+          "forbidden.ts:9:7: layout: S: 5 forbidden: holds a Secret in k, 24 → 16 bytes",
+          "explain-layout: 0 of 3 classes compact",
+        ],
+      },
+    ]
+    // Test 1: every output that is not a plain native build refuses every class.
+    for (const [reason, args] of [
+      ["wasm32", ["--target", "wasm32-wasi"]],
+      ["--emit-header", ["--emit-header", path.join(layoutDir, "lib.h")]],
+      ["--emit-napi", ["--emit-napi", path.join(layoutDir, "napi.c")]],
+      ["--emit-napi-async", ["--threads", "--emit-napi-async", path.join(layoutDir, "napi-async.c")]],
+      ["--emit-dts", ["--emit-dts", path.join(layoutDir, "lib.d.ts")]],
+    ]) {
+      layoutCases.push({
+        name: `test 1, ${reason}`,
+        file: "notNative.ts",
+        source: loopNode,
+        args,
+        want: [
+          `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 16 bytes`,
+          "explain-layout: 0 of 2 classes compact",
+        ],
+      })
+    }
+    for (const c of layoutCases) {
+      const file = path.join(layoutDir, c.file)
+      fs.writeFileSync(file, c.source)
+      const r = spawnSync(
+        NISH,
+        [file, "-o", path.join(layoutDir, `${path.basename(c.file, ".ts")}.ll`), ...c.args, "--explain-layout"],
+        { cwd: root, encoding: "utf8" }
+      )
+      check(
+        `explain layout: ${c.name}`,
+        r.status === 0 && layoutOf(r.stderr) === c.want.join("\n"),
+        `--- expected\n${c.want.join("\n")}\n--- actual\n${layoutOf(r.stderr)}\n${shown(r)}`
+      )
+    }
+    // The usage errors are `--explain-memory`'s: no checked program under
+    // `--emit-ast`, no IR under `--fix`, and diagnostics only under `--json`.
+    const refusedSource = path.join(layoutDir, "refused.ts")
+    fs.writeFileSync(refusedSource, loopNode)
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--explain-layout` reports on a checked program, and --emit-ast stops before the check"],
+      ["--fix", "`--explain-layout` cannot be used with --fix"],
+      ["--json", "`--explain-layout` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      const refused = spawnSync(NISH, [refusedSource, flag, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: --explain-layout with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    check(
+      "explain layout: a refused `--fix` left the source as it was",
+      fs.readFileSync(refusedSource, "utf8") === loopNode,
+      "the source changed"
+    )
+    // `nish run` takes it: the report, then the program.
+    const layoutRun = spawnSync(NISH, ["run", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "explain layout: `nish run --explain-layout` prints the report and runs the program",
+      layoutRun.status === 0 &&
+        layoutRun.stdout.length > 0 &&
+        layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
+      shown(layoutRun)
+    )
+    fs.rmSync(layoutDir, { recursive: true, force: true })
+  }
+
   // ---- `nish run`: a script built into a cache and started ----------------------------
   // `nish run [flags] <file.ts> [args ...]` compiles every time, links only when the
   // IR (or the recipe, or the runtime) is new, and answers the program's own exit

@@ -763,6 +763,12 @@ leaves the IR unchanged.
   it allocates past its arena scope, and why
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`
   takes the flag; `--emit-ast`, `--json` and `--fix` do not.
+- **`--explain-layout`** prints one line for each class: whether the
+  compact-class rule would pick it, or the first of the rule's five tests
+  that refuses it, with its size in bytes now and with its links narrowed
+  to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
+  Nothing uses the verdict yet, and the flag changes no byte of the build.
+  `nish run` takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.
 
