@@ -41505,8 +41505,8 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // forces a compaction, which must throw a NishPanic and leave the fake's bytes
 // as written. Before the fix the compactor rewrote the fake's field for the
 // first two and walked the len into a bare out-of-bounds trap. A seventh,
-// tests/cases/compact_root_page.ts, is the chain with a class that implements
-// `Compact` (WP48): a page module keeps its links as pointers, and the chain
+// tests/module-storage/persist/compact-chain.ts, is the chain with a class
+// that implements `Compact` (WP48): wasm32 keeps its links as pointers, and the chain
 // driver's 8 bytes a node fails if the trace or the layout read one as an
 // offset.
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
@@ -41601,7 +41601,7 @@ if (!only || "persist".includes(only)) {
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
-      ["compact", "tests/module-storage/persist/compact_chain.ts", "200000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
+      ["compact", "tests/module-storage/persist/compact-chain.ts", "200000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
     ]) {
       const mode = drive ?? stem
       const out = path.join(dir, stem)
