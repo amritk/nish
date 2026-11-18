@@ -18,15 +18,15 @@ declare function strdup(s: string): CPtr | null;
 declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
 declare function free(p: CPtr): void;
 
-function churn(): i32 {
+const churn = (): i32 => {
   const t: string[] = [];
   for (let i = 0; i < 4000; i++) {
     t.push(`${i}`);
   }
   return t.join("").length;
-}
+};
 
-function find(n: i32): string {
+const find = (n: i32): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -40,9 +40,9 @@ function find(n: i32): string {
   }
   free(p);
   return "none";
-}
+};
 
-function last(n: i32): string {
+const last = (n: i32): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -53,9 +53,9 @@ function last(n: i32): string {
   }
   free(p);
   return s;
-}
+};
 
-function whiles(n: i32): string {
+const whiles = (n: i32): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -68,9 +68,9 @@ function whiles(n: i32): string {
   }
   free(p);
   return s;
-}
+};
 
-function does(n: i32): string {
+const does = (n: i32): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -83,9 +83,9 @@ function does(n: i32): string {
   } while (i < n);
   free(p);
   return s;
-}
+};
 
-function ofs(xs: i32[]): string {
+const ofs = (xs: i32[]): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -98,9 +98,9 @@ function ofs(xs: i32[]): string {
   }
   free(p);
   return s;
-}
+};
 
-function nested(n: i32): string {
+const nested = (n: i32): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -113,9 +113,9 @@ function nested(n: i32): string {
   }
   free(p);
   return s;
-}
+};
 
-function findWhile(n: i32): string {
+const findWhile = (n: i32): string => {
   let i = 0;
   while (i < n) {
     const p = strdup(`while ${i}`);
@@ -130,9 +130,9 @@ function findWhile(n: i32): string {
     i = i + 1;
   }
   return "none";
-}
+};
 
-function findDo(n: i32): string {
+const findDo = (n: i32): string => {
   let i = 0;
   do {
     const p = strdup(`do ${i}`);
@@ -147,9 +147,9 @@ function findDo(n: i32): string {
     i = i + 1;
   } while (i < n);
   return "none";
-}
+};
 
-function findOf(xs: i32[]): string {
+const findOf = (xs: i32[]): string => {
   for (const x of xs) {
     const p = strdup(`of ${x}`);
     if (p !== null && x > 7) {
@@ -162,9 +162,9 @@ function findOf(xs: i32[]): string {
     }
   }
   return "none";
-}
+};
 
-function findNested(n: i32): string {
+const findNested = (n: i32): string => {
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       const p = strdup(`nested ${i} ${j}`);
@@ -179,9 +179,9 @@ function findNested(n: i32): string {
     }
   }
   return "none";
-}
+};
 
-function into(n: i32): string[] {
+const into = (n: i32): string[] => {
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const p = strdup(`into ${i}`);
@@ -191,9 +191,9 @@ function into(n: i32): string[] {
     }
   }
   return out;
-}
+};
 
-function owned(s: string): string {
+const owned = (s: string): string => {
   const p = strdup(s);
   if (p === null) {
     return "";
@@ -201,9 +201,9 @@ function owned(s: string): string {
   const copy = readCString(p);
   free(p);
   return copy;
-}
+};
 
-function here(): string {
+const here = (): string => {
   const p = realpath(".", null);
   if (p === null) {
     return "";
@@ -211,9 +211,9 @@ function here(): string {
   const path = readCString(p);
   free(p);
   return path;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const a = find(9);
   const b = last(3);
   const e = whiles(5);
@@ -242,4 +242,4 @@ export function main(): i32 {
   console.log(z);
   console.log(o.join("|"));
   return 0;
-}
+};

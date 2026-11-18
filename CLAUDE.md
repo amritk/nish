@@ -46,7 +46,10 @@ before pushing.
 `docs/security/*.md` and `docs/BENCHMARKS.md`, check each "only", "cannot"
 and "never" against the code's real match (a seccomp row matches syscall
 numbers, not descriptors), and each route, figure and command against what
-was run.
+was run. Every `docs/BENCHMARKS.md` table names the commit whose bench code
+produced it and claims only the fields that version prints. A per-second
+maximum is quoted as a maximum, never as a typical cost. Each "up to",
+"every" or "lower than" is checked against the table it summarises.
 
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
@@ -117,6 +120,9 @@ new positive `tests/cases/*` is registered with
 
 **Moving where a fact lives moves every pointer to it in the same PR.** Grep
 the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
+A builtin whose answer changes greps its old answer across
+`docs/LANGUAGE.md`, `docs/guide/` and `runtime/nish.d.ts`. A security record
+whose counts change updates its row in `docs/security/README.md`.
 
 ## Spending tokens
 

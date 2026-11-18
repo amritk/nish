@@ -2,11 +2,11 @@
 // NOT exactly representable in a float, so a missing `Math.fround` in the
 // rewrite shows up immediately: 0.1 prints 0.1 as an f64 and
 // 0.10000000149011612 as an f32.
-function scale(x: f32, k: f32): f32 {
+const scale = (x: f32, k: f32): f32 => {
   return x * k;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const tenth: f32 = 0.1;
   const third: f32 = 0.3333333333333333;
   const e: f32 = 2.718281828459045;
@@ -51,4 +51,4 @@ export function main(): number {
   xs[2] += tenth;
   console.log(`${xs[0]} ${xs[1]} ${xs[2]} ${xs.length}`);
   return 0;
-}
+};

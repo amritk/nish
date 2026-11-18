@@ -19,28 +19,28 @@ class Box {
   }
 }
 
-function fill(b: Box, i: number): string {
+const fill = (b: Box, i: number): string => {
   const s = `v${i}`;
   b.text = s;
   return s;
-}
+};
 
-function sweep(i: number): string {
+const sweep = (i: number): string => {
   if (Arena.mark() < 0) {
     return "empty";
   }
   return `r${i}`;
-}
+};
 
-function label(i: number): Result<string, number> {
+const label = (i: number): Result<string, number> => {
   return Ok(`L${i}`);
-}
+};
 
-function plain(i: number): string {
+const plain = (i: number): string => {
   return `p${i}`;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const b = new Box("");
   console.log(fill(b, 1));
   console.log(b.text);
@@ -48,4 +48,4 @@ export function main(): number {
   console.log(label(3).unwrapOr("none"));
   console.log(plain(4));
   return 0;
-}
+};

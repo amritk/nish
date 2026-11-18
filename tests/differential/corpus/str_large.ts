@@ -1,9 +1,9 @@
 // Strings and arrays that outgrow the first 64 KB arena chunk several times over.
-function checksum(s: string): number {
+const checksum = (s: string): number => {
   return s.length * 31 + (s === "" ? 0 : 1);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   let s = "0123456789";
   let doublings = 0;
   while (s.length < 300000) {
@@ -42,4 +42,4 @@ export function main(): number {
   console.log(total);
   console.log(strs[4999]);
   return 0;
-}
+};

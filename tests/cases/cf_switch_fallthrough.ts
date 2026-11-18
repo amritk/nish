@@ -1,7 +1,7 @@
 // A clause with statements that does not end in a `break`, `return` or
 // `continue` runs on into the next clause, as in TypeScript: the branch
 // falls into the next clause's block, with no flag.
-function grade(n: number): number {
+const grade = (n: number): number => {
   let points = 0;
   switch (n) {
     case 3:
@@ -15,9 +15,9 @@ function grade(n: number): number {
       points = -1;
   }
   return points;
-}
+};
 
-function last(n: number): number {
+const last = (n: number): number => {
   let out = 0;
   switch (n) {
     case 0:
@@ -26,8 +26,8 @@ function last(n: number): number {
       out += 1;
   }
   return out;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return grade(3) + grade(2) + grade(1) + grade(9) + last(0) + last(4);
-}
+};

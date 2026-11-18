@@ -31,25 +31,26 @@ struct Options (class) size=248 align=8 exported
   field denyRetention: boolean index=25 offset=137
   field emitArena: string index=26 offset=144
   field explainMemory: boolean index=27 offset=152
-  field noPanicListed: boolean index=28 offset=153
-  field capabilityReport: boolean index=29 offset=154
-  field allowCapabilities: i32 index=30 offset=156
-  field denyCapabilities: i32 index=31 offset=160
-  field deterministic: boolean index=32 offset=164
-  field sandbox: i32 index=33 offset=168
-  field sandboxCapabilities: i32 index=34 offset=172
-  field sandboxNetRings: i32 index=35 offset=176
-  field panicSites: boolean index=36 offset=180
-  field rootSymbols: string[] index=37 offset=184
-  field holdsRoots: boolean index=38 offset=192
-  field sandboxRead: string[] index=39 offset=200
-  field sandboxWrite: string[] index=40 offset=208
-  field sandboxExec: string[] index=41 offset=216
-  field updateCapabilityLock: boolean index=42 offset=224
-  field compat: boolean index=43 offset=225
-  field compatFlag: boolean index=44 offset=226
-  field compatFeatures: string[] index=45 offset=232
-  field numberModeFlag: boolean index=46 offset=240
+  field explainLayout: boolean index=28 offset=153
+  field noPanicListed: boolean index=29 offset=154
+  field capabilityReport: boolean index=30 offset=155
+  field allowCapabilities: i32 index=31 offset=156
+  field denyCapabilities: i32 index=32 offset=160
+  field deterministic: boolean index=33 offset=164
+  field sandbox: i32 index=34 offset=168
+  field sandboxCapabilities: i32 index=35 offset=172
+  field sandboxNetRings: i32 index=36 offset=176
+  field panicSites: boolean index=37 offset=180
+  field rootSymbols: string[] index=38 offset=184
+  field holdsRoots: boolean index=39 offset=192
+  field sandboxRead: string[] index=40 offset=200
+  field sandboxWrite: string[] index=41 offset=208
+  field sandboxExec: string[] index=42 offset=216
+  field updateCapabilityLock: boolean index=43 offset=224
+  field compat: boolean index=44 offset=225
+  field compatFlag: boolean index=45 offset=226
+  field compatFeatures: string[] index=46 offset=232
+  field numberModeFlag: boolean index=47 offset=240
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]

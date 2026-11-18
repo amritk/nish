@@ -13,29 +13,29 @@ class Holder {
   }
 }
 
-function constLocal(): i64 {
+const constLocal = (): i64 => {
   const b: u8[] = [97, 10];
   return write(1, b, toU64(b.length));
-}
+};
 
-function param(b: readonly u8[]): i64 {
+const param = (b: readonly u8[]): i64 => {
   return write(1, b, toU64(b.length));
-}
+};
 
-function field(h: Holder): i64 {
+const field = (h: Holder): i64 => {
   return write(1, h.buf, toU64(h.buf.length));
-}
+};
 
-function alias(b: u8[]): i64 {
+const alias = (b: u8[]): i64 => {
   const other = b;
   return write(1, b, toU64(other.length));
-}
+};
 
-function another(b: u8[], c: u8[]): i64 {
+const another = (b: u8[], c: u8[]): i64 => {
   return write(1, b, toU64(c.length));
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   constLocal();
   const p: u8[] = [98, 10];
   param(p);
@@ -43,4 +43,4 @@ export function main(): i32 {
   alias([100, 10]);
   another([101, 10], [0, 0]);
   return 0;
-}
+};

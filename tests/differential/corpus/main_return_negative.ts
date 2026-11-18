@@ -1,5 +1,5 @@
 // A negative return from main wraps to an 8-bit exit status (-1 -> 255).
-export function main(): number {
+export const main = (): number => {
   const xs = new Array<number>(0);
   console.log(xs.length);
   xs.push(-1);
@@ -11,4 +11,4 @@ export function main(): number {
     console.log(y);
   }
   return xs[0];
-}
+};

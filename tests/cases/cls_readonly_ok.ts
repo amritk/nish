@@ -20,7 +20,7 @@ class Version {
   }
 }
 
-export function main(): number {
+export const main = (): number => {
   const v = new Version(1, 4);
   v.bump();
   v.bump();
@@ -28,4 +28,4 @@ export function main(): number {
   console.log(v.render());
   console.log(v.major * 100 + v.minor);
   return 0;
-}
+};

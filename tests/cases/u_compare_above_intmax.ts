@@ -1,10 +1,10 @@
 // Ordering on an unsigned type is `icmp ult`/`ugt`, not `slt`/`sgt`.
 // 4000000000 has bit 31 set, so as an i32 it is negative: a signed compare
 // would say it is *less* than 7. This is the case that proves the difference.
-export function test(): number {
+export const test = (): number => {
   const big: u32 = 4000000000;
   const small: u32 = 7;
   const again: u32 = 4000000000;
   console.log(`${big > small} ${big < small} ${big >= again} ${small <= big}`);
   return 0;
-}
+};

@@ -1,4 +1,4 @@
-export function main(): number {
+export const main = (): number => {
   const n = 4;
   const xs = new Array<number>(n);
   console.log(xs.length);
@@ -8,4 +8,4 @@ export function main(): number {
   const flags = new Array<boolean>(2);
   console.log(flags[0]);
   return 0;
-}
+};

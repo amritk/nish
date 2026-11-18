@@ -9,18 +9,18 @@ interface Tagged {
   pair: Pair;
 }
 
-function swap(p: Pair): Pair {
+const swap = (p: Pair): Pair => {
   return { first: p.second, second: p.first };
-}
+};
 
-function describe(t: Tagged): number {
+const describe = (t: Tagged): number => {
   if (t.ok) {
     console.log(t.tag);
   }
   return t.pair.first * 10 + t.pair.second;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const p: Pair = { first: 1, second: 2 };
   const q = swap(p);
   console.log(q.first);
@@ -31,4 +31,4 @@ export function main(): number {
   t.pair.first = 7;
   console.log(p.first);
   return 0;
-}
+};

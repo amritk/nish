@@ -1,4 +1,4 @@
-function gcd(a: number, b: number): number {
+const gcd = (a: number, b: number): number => {
   let x = a;
   let y = b;
   while (y !== 0) {
@@ -7,8 +7,8 @@ function gcd(a: number, b: number): number {
     x = t;
   }
   return x;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return gcd(48, 18);
-}
+};

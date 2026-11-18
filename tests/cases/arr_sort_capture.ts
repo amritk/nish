@@ -11,7 +11,7 @@ const show = (xs: i32[]): string => {
   return line
 }
 
-export function main(): number {
+export const main = (): number => {
   const k: i32 = 3
   const near: i32[] = [7, 1, 4, 2, 9, 3]
   // By distance from `k`; a tie keeps the earlier element first.
@@ -29,4 +29,4 @@ export function main(): number {
   byRank.sort((a, b) => scale * (rank[a] - rank[b]))
   console.log(show(byRank))
   return 0
-}
+};

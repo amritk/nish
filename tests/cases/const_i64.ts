@@ -3,7 +3,7 @@
 const BILLION: i64 = 1000000000;
 const BIG: i64 = BILLION * 10;
 
-export function main(): number {
+export const main = (): number => {
   console.log(BIG);
   return 0;
-}
+};

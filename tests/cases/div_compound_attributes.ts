@@ -6,15 +6,15 @@
 class Box {
   v: i32 = 10;
 }
-export function localDiv(k: i32): i32 {
+export const localDiv = (k: i32): i32 => {
   let x = 10;
   x /= k;
   return x;
-}
-export function fieldDiv(b: Box, k: i32): i32 {
+};
+export const fieldDiv = (b: Box, k: i32): i32 => {
   b.v %= k;
   return b.v;
-}
-export function plainDiv(a: i32, k: i32): i32 {
+};
+export const plainDiv = (a: i32, k: i32): i32 => {
   return a / k;
-}
+};

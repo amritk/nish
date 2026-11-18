@@ -188,6 +188,37 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
   return roundUpTo(used, align)
 }
 
+/**
+ * The size `info` would lay out to if every field that links to the class
+ * whose pointer type is `target` (typed exactly that class or it `| null`)
+ * were a four-byte reference, four-aligned: `computeLayout`'s walk, in the
+ * same order, with those fields narrowed (docs/wp48-ref32-classes.md §3.1,
+ * test 3). It reads `info` and writes nothing, so the layout every build
+ * uses stays the one `computeLayout` settled; `src/compact-rule.ts` asks it.
+ */
+export const narrowedSize = (table: TypeTable, info: StructInfo, target: i32, wasm: boolean): i32 => {
+  const pointer = info.layout && wasm ? 4 : 8
+  let offset = 0
+  let align = 1
+  for (const field of info.fields) {
+    const link = isLinkTo(table, field, target)
+    const need = link ? 4 : fieldAlign(table, field, pointer)
+    offset = roundUpTo(offset, need) + (link ? 4 : fieldWidth(table, field, pointer))
+    if (need > align) {
+      align = need
+    }
+  }
+  return roundUpTo(offset, align)
+}
+
+/**
+ * Whether `field` holds a pointer to the class whose pointer type is
+ * `target`: typed exactly that class or it `| null`. A `declare class`
+ * embedded by value (`FieldInfo.nested`) is its bytes, not a link.
+ */
+export const isLinkTo = (table: TypeTable, field: FieldInfo, target: i32): boolean =>
+  field.nested === null && !field.boxed && !field.inline() && table.stripNull(field.type) === target
+
 /** The size `fields` lay out to in the order given, rounded up to `align`. */
 const layoutSize = (ctx: CheckContext, fields: FieldInfo[], align: i32): i32 => {
   let offset = 0
