@@ -8809,6 +8809,11 @@ const DECLARED = [
         "testing.ll",
       ],
       "tests/link/std_host_game/main.ts": ["game.ll", "input.ll", "main.ll", "testing.ll"],
+      // Compared only under `--no-sidecars`: with the WP8 sidecars on, both
+      // compilers refuse the two (a union no sidecar describes, root storage
+      // in a shim build).
+      "tests/cases/root_storage_page.ts": ["root_storage_page.ll"],
+      "tests/cases/wasm_union_generic.ts": ["wasm_union_generic.ll"],
     }
   ),
 ]
