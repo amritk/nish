@@ -42,9 +42,9 @@ import { Secret, exposeWith, wipe } from "nish:secret"
 /** The bytes of an ASCII literal, for the two HMAC labels. */
 const scramAscii = (text: string): u8[] => {
   const n: i32 = toI32(text.length)
-  const out: u8[] = new Array<u8>(n)
+  const out: u8[] = []
   for (let i: i32 = 0; i < n; i++) {
-    out[i] = toU8(text.charCodeAt(i))
+    out.push(toU8(text.charCodeAt(i)))
   }
   return out
 }
