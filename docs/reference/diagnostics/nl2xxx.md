@@ -997,7 +997,7 @@ class Shape {
   side: i32 = 0;
 }
 
-function Shape(): void {}
+const Shape = (): void => {};
 ```
 
 ```text
@@ -1394,9 +1394,9 @@ Operator `===` requires two operands of the same type, got string and i32
 // A handle of one kind does not compare with a handle of another.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(c: Canvas, s: Socket): boolean {
+export const f = (c: Canvas, s: Socket): boolean => {
   return c === s
-}
+};
 ```
 
 ```text
@@ -1592,12 +1592,12 @@ The message of an error contains:
 // A handle of one kind is not a handle of another, as an argument.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-function draw(c: Canvas): i32 {
+const draw = (c: Canvas): i32 => {
   return 1
-}
-export function f(s: Socket): i32 {
+};
+export const f = (s: Socket): i32 => {
   return draw(s)
-}
+};
 ```
 
 ```text
@@ -1973,9 +1973,9 @@ The message of an error contains:
 
 ```ts
 // NL2140: `main` returns the process exit code, so the message names what a return type may be.
-export function main(): string {
+export const main = (): string => {
   return "a";
-}
+};
 ```
 
 ```text
@@ -2511,11 +2511,11 @@ Cannot assign string to i32 field `x`
 // A handle variable holds a handle, and a number is not one.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(): Canvas {
+export const f = (): Canvas => {
   let c: Canvas = 0
   c = 3
   return c
-}
+};
 ```
 
 ```text
@@ -3336,9 +3336,9 @@ Operator `+` requires two operands of the same numeric type or two strings, got 
 // A handle names something on the page; it is not a number to count with.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(c: Canvas): Canvas {
+export const f = (c: Canvas): Canvas => {
   return c + 1
-}
+};
 ```
 
 ```text
@@ -3365,10 +3365,10 @@ Optional/default parameters are not supported…
 
 ```ts
 // NL2233: An arrow written as a value gives no parameter a default: only a declaration's own list does.
-export function main(): void {
+export const main = (): void => {
   const xs = [1, 2]
   console.log(xs.map((x: i32, i: i32 = 0): i32 => x + i).length)
-}
+};
 ```
 
 ```text
@@ -3408,10 +3408,10 @@ Rest parameters are not supported…
 
 ```ts
 // NL2235: An arrow written as a value ends in no rest: only a declaration's own list does.
-export function main(): void {
+export const main = (): void => {
   const xs = [1, 2]
   console.log(xs.map((x: i32, ...r: i32[]): i32 => x + r.length).length)
-}
+};
 ```
 
 ```text
@@ -3775,9 +3775,9 @@ Unsupported expression in Phase 1: …
 // No cast takes a handle out to a number.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(c: Canvas): number {
+export const f = (c: Canvas): number => {
   return c as number
-}
+};
 ```
 
 ```text
@@ -3790,9 +3790,9 @@ Unsupported expression in Phase 1: AsExpression
 // No cast makes a handle out of a number: the page gives handles out.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(): Canvas {
+export const f = (): Canvas => {
   return 0 as Canvas
-}
+};
 ```
 
 ```text
@@ -4027,10 +4027,10 @@ type Socket = HostHandle<"socket">
 interface Slot {
   c: Canvas
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   const s: Slot = { c: 7 }
   return s.c
-}
+};
 ```
 
 ```text
@@ -4345,9 +4345,9 @@ The message of an error contains:
 ```ts
 // NL2300: the entry point is called by the C runtime, which has no type
 // arguments to give it, so there is no tuple to monomorphise `main` at.
-export function main<T>(x: T): i32 {
+export const main = <T>(x: T): i32 => {
   return 0;
-}
+};
 ```
 
 ```text
@@ -10470,14 +10470,14 @@ class Link {
   next: Link | null = null
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const m = new Mutex<Link>(new Link())
   {
     using g = m.lock()
     g.value.next = null
   }
   return 0
-}
+};
 ```
 
 ```text
@@ -10721,9 +10721,9 @@ class Holder {
     wipe(this.k);
   }
 }
-function id(s: Secret<u8[]>): Secret<u8[]> {
+const id = (s: Secret<u8[]>): Secret<u8[]> => {
   return s;
-}
+};
 export const main = (): i32 => {
   const h = new Holder();
   const a = id(h.k);
@@ -11524,12 +11524,12 @@ The message of an error contains:
 
 ```ts
 // NL2595: A default is a constant the call passes, not an expression the callee runs.
-function f(x: i32, y: i32 = x + 1): i32 {
+const f = (x: i32, y: i32 = x + 1): i32 => {
   return x + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11548,12 +11548,12 @@ The message of an error contains:
 
 ```ts
 // NL2596: A parameter of a type parameter's type has no one constant default.
-function f<T>(x: T, y: T = 0): T {
+const f = <T>(x: T, y: T = 0): T => {
   return x
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11572,12 +11572,12 @@ The message of an error contains:
 
 ```ts
 // NL2597: A parameter after one with a default has a default too.
-function f(x: i32 = 1, y: i32): i32 {
+const f = (x: i32 = 1, y: i32): i32 => {
   return x + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1, 2))
-}
+};
 ```
 
 ```text
@@ -11596,12 +11596,12 @@ The message of an error contains:
 
 ```ts
 // NL2598: A default's parameter is annotated: the type is not inferred from the default.
-function f(x: i32, y = 2): i32 {
+const f = (x: i32, y = 2): i32 => {
   return x + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11620,12 +11620,12 @@ The message of an error contains:
 
 ```ts
 // NL2599: A default and a rest in one signature are not combined in this version.
-function f(x: i32 = 1, ...xs: i32[]): i32 {
+const f = (x: i32 = 1, ...xs: i32[]): i32 => {
   return x + xs.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f())
-}
+};
 ```
 
 ```text
@@ -11644,12 +11644,12 @@ The message of an error contains:
 
 ```ts
 // NL2600: A rest parameter has no default: leaving it out passes `[]`.
-function f(...xs: i32[] = [1]): i32 {
+const f = (...xs: i32[] = [1]): i32 => {
   return xs.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f())
-}
+};
 ```
 
 ```text
@@ -11669,15 +11669,15 @@ The message of an error contains:
 ```ts
 // NL2601: A function with a rest is no value for a function parameter: a call through
 // `f` passes one array where Node would gather every argument into `xs`.
-function total(...xs: i32[]): i32 {
+const total = (...xs: i32[]): i32 => {
   return xs.length
-}
-function apply(f: (a: i32[]) => i32): i32 {
+};
+const apply = (f: (a: i32[]) => i32): i32 => {
   return f([1, 2, 3])
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(apply(total))
-}
+};
 ```
 
 ```text
@@ -11696,12 +11696,12 @@ The message of an error contains:
 
 ```ts
 // NL2602: A rest parameter has an array type.
-function f(...xs: i32): i32 {
+const f = (...xs: i32): i32 => {
   return xs
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11720,12 +11720,12 @@ The message of an error contains:
 
 ```ts
 // NL2603: A rest parameter is the last one.
-function f(...xs: i32[], y: i32): i32 {
+const f = (...xs: i32[], y: i32): i32 => {
   return xs.length + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1, 2))
-}
+};
 ```
 
 ```text
@@ -11744,15 +11744,15 @@ The message of an error contains:
 
 ```ts
 // NL2604: A function parameter names the function a call passes; it has no default.
-function twice(x: i32): i32 {
+const twice = (x: i32): i32 => {
   return x * 2
-}
-function apply(x: i32, g: (a: i32) => i32 = twice): i32 {
+};
+const apply = (x: i32, g: (a: i32) => i32 = twice): i32 => {
   return g(x)
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(apply(1, twice))
-}
+};
 ```
 
 ```text
@@ -11771,12 +11771,12 @@ Optional parameters are not supported: give `…
 
 ```ts
 // NL2605: `x?: T` stays refused: a parameter a call may leave out has a default.
-function f(x: i32, y?: i32): i32 {
+const f = (x: i32, y?: i32): i32 => {
   return x
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11795,13 +11795,13 @@ Spread arguments are not supported: pass the array itself to a parameter of arra
 
 ```ts
 // NL2606: `f(...xs)` is refused: pass the array to a parameter of array type.
-function total(...xs: i32[]): i32 {
+const total = (...xs: i32[]): i32 => {
   return xs.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   const a = [1, 2]
   console.log(total(...a))
-}
+};
 ```
 
 ```text
@@ -11820,12 +11820,12 @@ The message of an error contains:
 
 ```ts
 // NL2607: A default is a number, a boolean, a string or an enum member.
-function f(x: i32, ys: i32[] = []): i32 {
+const f = (x: i32, ys: i32[] = []): i32 => {
   return x + ys.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11847,16 +11847,16 @@ A rest parameter copies each `…
 interface Cell {
   v: number
 }
-function bumpAll(...cs: Cell[]): void {
+const bumpAll = (...cs: Cell[]): void => {
   for (const c of cs) {
     c.v = c.v + 100
   }
-}
-export function main(): void {
+};
+export const main = (): void => {
   const p: Cell = { v: 1 }
   bumpAll(p, { v: 2 })
   console.log(p.v)
-}
+};
 ```
 
 ```text
@@ -12295,9 +12295,9 @@ The message of an error contains:
 
 ```ts
 import { size } from "./host/any_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12308,9 +12308,9 @@ Parameter `v` of host function `size` is `any`, and only a scalar, an enum or a 
 
 ```ts
 import { norm } from "./host/class_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12321,9 +12321,9 @@ Parameter `p` of host function `norm` is `Point`, and only a scalar, an enum or 
 
 ```ts
 import { each } from "./host/function_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12334,9 +12334,9 @@ Parameter `f` of host function `each` is a function type, and only a scalar, an 
 
 ```ts
 import { count } from "./host/object_array_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12347,9 +12347,9 @@ A parameter of host function `count` is an object type, and only a scalar, an en
 
 ```ts
 import { area } from "./host/object"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12360,9 +12360,9 @@ A parameter of host function `area` is an object type, and only a scalar, an enu
 
 ```ts
 import { corner } from "./host/object_result"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12373,9 +12373,9 @@ The result of host function `corner` is an object type, and only a scalar, an en
 
 ```ts
 import { size } from "./host/unknown_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12394,9 +12394,9 @@ The message of an error contains:
 
 ```ts
 import { first } from "./host/generic"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12415,9 +12415,9 @@ The message of an error contains:
 
 ```ts
 import { later } from "./host/promise"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12456,9 +12456,9 @@ The message of an error contains:
 
 ```ts
 declare function c_abs(x: i32): i32
-export function f(): i32 {
+export const f = (): i32 => {
   return c_abs(-1)
-}
+};
 ```
 
 ```text
@@ -12469,9 +12469,9 @@ export function f(): i32 {
 
 ```ts
 declare function c_abs(x: i32): i32
-export function f(): i32 {
+export const f = (): i32 => {
   return c_abs(-1)
-}
+};
 ```
 
 ```text
@@ -12490,9 +12490,9 @@ The message of an error contains:
 
 ```ts
 import { title } from "./host/name"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12510,10 +12510,10 @@ The message of an error contains:
 [`nl2668_string_literal_type.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2668_string_literal_type.ts):
 
 ```ts
-export function f(): i32 {
+export const f = (): i32 => {
   const s: "x" = "x"
   return 0
-}
+};
 ```
 
 ```text
@@ -12533,9 +12533,9 @@ The message of an error contains:
 ```ts
 // A handle has a kind, and the bare name gives none.
 type Canvas = HostHandle
-export function f(c: Canvas): i32 {
+export const f = (c: Canvas): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12546,9 +12546,9 @@ export function f(c: Canvas): i32 {
 
 ```ts
 type Canvas = HostHandle<canvas>
-export function f(c: Canvas): i32 {
+export const f = (c: Canvas): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12572,9 +12572,9 @@ type Socket = HostHandle<"socket">
 class Slot {
   c: Canvas = 7
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   return new Slot().c
-}
+};
 ```
 
 ```text
@@ -12590,9 +12590,9 @@ type Socket = HostHandle<"socket">
 class Slot {
   c: Canvas = -5
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   return new Slot().c
-}
+};
 ```
 
 ```text
@@ -12604,9 +12604,9 @@ Field `c` of class `Slot` is HostHandle<"canvas">, and a handle starts as `0`, t
 ```ts
 // A parameter's default may not forge a handle either: only `0`, the one that names nothing.
 type Canvas = HostHandle<"canvas">
-export function f(c: Canvas = 7): Canvas {
+export const f = (c: Canvas = 7): Canvas => {
   return c
-}
+};
 ```
 
 ```text
@@ -12705,9 +12705,9 @@ The message of an error contains:
 
 ```ts
 import { fill } from "./host/window_element"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12726,9 +12726,9 @@ The message of an error contains:
 
 ```ts
 import { fill } from "./host/buffer"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12747,9 +12747,9 @@ The message of an error contains:
 
 ```ts
 import { fill } from "./host/window_width"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -13977,14 +13977,14 @@ class Box {
   }
 }
 
-function u0(p: Point, b: Box): i32 {
+const u0 = (p: Point, b: Box): i32 => {
   return p.x;
-}
+};
 
-function u3(p: Point, b: Box): i32 {
+const u3 = (p: Point, b: Box): i32 => {
   b.last = p;
   return p.x;
-}
+};
 
 export const main = (): i32 => {
   let h = u0;
@@ -14199,9 +14199,9 @@ The message of an error contains:
 declare class Point {
   x: i32
 }
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -14214,9 +14214,9 @@ export function f(): i32 {
 declare class Point {
   x: i32
 }
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text

@@ -1,6 +1,6 @@
 import { f } from "./a";
 import { f } from "./b";
 
-export function main(): number {
+export const main = (): number => {
   return f();
-}
+};

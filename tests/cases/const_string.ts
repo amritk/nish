@@ -2,8 +2,8 @@
 // though it is used twice.
 const GREETING: string = "hello, " + "world";
 
-export function test(): number {
+export const test = (): number => {
   console.log(GREETING);
   console.log(GREETING);
   return 0;
-}
+};

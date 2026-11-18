@@ -1,7 +1,7 @@
 // A `break` that names the loop around a `switch` leaves both at once, and a
 // labelled `continue` from a clause goes to the next turn of the loop it
 // names; a `break` that names the `switch` leaves only the switch.
-function run(ops: number[]): number {
+const run = (ops: number[]): number => {
   let acc = 0;
   loop: for (const op of ops) {
     sw: switch (op) {
@@ -22,8 +22,8 @@ function run(ops: number[]): number {
     acc += 1000;
   }
   return acc;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return run([1, 2, 5, 1, 2, 0, 7]);
-}
+};

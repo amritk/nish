@@ -19,16 +19,16 @@ class Wrap {
     this.box = box;
   }
 }
-function build(n: i32): string {
+const build = (n: i32): string => {
   // The function hands the memory back, so its caller owns what it made and
   // there was never a scope here to lose (WP9's call-site reclaim is what
   // reclaims this one).
   let s = "a" + "b";
   s = s + "c";
   return s;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   // The rewrite the warning names: each value gets its own binding, and the
   // function gets its arena scope.
   const a = "x" + "y";
@@ -87,4 +87,4 @@ export function test(): number {
     box.inner.length +
     (chain.prev !== null ? 1 : 0)
   );
-}
+};

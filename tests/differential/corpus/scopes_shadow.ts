@@ -1,5 +1,5 @@
 // Block scoping: shadowing in nested blocks and loops, `let` in for initializers.
-export function main(): number {
+export const main = (): number => {
   let x = 1;
   {
     let x = 2;
@@ -42,4 +42,4 @@ export function main(): number {
   console.log(s);
   console.log(x);
   return 0;
-}
+};

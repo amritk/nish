@@ -5,11 +5,11 @@
 class Node {
   value: i32 = 0;
 }
-export function test(): number {
+export const test = (): number => {
   const slots: (Node | null)[] = new Array<Node | null>(2);
   const first = new Node();
   first.value = 7;
   slots[0] = first;
   const found = slots[0];
   return found === null ? -1 : found.value;
-}
+};

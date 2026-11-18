@@ -4,19 +4,19 @@
 // nothing else out of its frame, everything it bumped underneath that string is
 // garbage. `%arena.mark` before the call and `@nish_arena_keep` after it are
 // the bracket; the kept string moves down to the mark.
-function piece(i: number): string {
+const piece = (i: number): string => {
   return `${i},`;
-}
+};
 
-function join(n: number): string {
+const join = (n: number): string => {
   let s = "";
   for (let i = 0; i < n; i++) {
     s = s + piece(i);
   }
   return s;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(join(4));
   return 0;
-}
+};

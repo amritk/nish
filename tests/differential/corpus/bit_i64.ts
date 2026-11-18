@@ -1,7 +1,7 @@
 // The same seven operators at 64 bits, where JavaScript needs BigInt: its
 // shifts do not mask the count and it has no `>>>` at all, so the rewrite
 // routes these through the shim rather than through a JS operator.
-export function main(): number {
+export const main = (): number => {
   const one: i64 = 1;
   const neg: i64 = -1;
   for (let n: i64 = 0; n < 70; n = n + 1) {
@@ -33,4 +33,4 @@ export function main(): number {
   bits &= 1048575;
   console.log(bits);
   return 0;
-}
+};

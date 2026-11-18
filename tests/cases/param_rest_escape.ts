@@ -1,8 +1,8 @@
 // A rest array that outlives its call -- returned, stored in a field, or
 // kept in an outer array -- lives in the arena, not on the caller's stack.
-function keep(...xs: number[]): number[] {
+const keep = (...xs: number[]): number[] => {
   return xs
-}
+};
 
 class Bag {
   items: number[]
@@ -16,7 +16,7 @@ class Bag {
   }
 }
 
-export function main(): void {
+export const main = (): void => {
   const a = keep(1, 2, 3)
   const b = keep(4, 5)
   console.log(a.length + b.length)
@@ -36,4 +36,4 @@ export function main(): void {
   }
   console.log(sum)
   console.log(outer[2][1])
-}
+};

@@ -1,7 +1,7 @@
 // Labelled jumps out of the loops the emitter lowers on their own paths: a
 // `for...of` over an array, a walk of a `Map`, and a labelled `switch` whose
 // clauses fall through, each building strings a pass can release.
-function labelsOverArrays(): string {
+const labelsOverArrays = (): string => {
   const grid: i32[][] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
   let out = ""
   rows: for (const row of grid) {
@@ -14,9 +14,9 @@ function labelsOverArrays(): string {
     out = out + "|"
   }
   return out
-}
+};
 
-function labelsOverMap(): i32 {
+const labelsOverMap = (): i32 => {
   const m = new Map<string, i32>()
   m.set("a", 1)
   m.set("b", 2)
@@ -31,9 +31,9 @@ function labelsOverMap(): i32 {
     }
   }
   return sum
-}
+};
 
-function fallMix(n: i32): string {
+const fallMix = (n: i32): string => {
   let s = ""
   for (let i: i32 = 0; i < n; i++) {
     const piece = `p${i}`
@@ -51,11 +51,11 @@ function fallMix(n: i32): string {
     }
   }
   return s
-}
+};
 
 // The outer loop's passes are scoped: `continue outer` and `break outer`
 // release the pass they leave, as the end of the body does.
-function labelledPasses(): number {
+const labelledPasses = (): number => {
   let n = 0
   outer: for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
@@ -66,11 +66,11 @@ function labelledPasses(): number {
     }
   }
   return n
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   console.log(labelsOverArrays())
   console.log(labelsOverMap())
   console.log(fallMix(9))
   console.log(labelledPasses())
-}
+};

@@ -3,14 +3,14 @@
 // its name must be unique across the whole program. Compare
 // `tests/cases/export_fn`, the same source under the default, where `helper` is
 // `internal`.
-export function double(n: number): number {
+export const double = (n: number): number => {
   return n * 2;
-}
+};
 
-function helper(n: number): number {
+const helper = (n: number): number => {
   return n + 1;
-}
+};
 
-export function next(n: number): number {
+export const next = (n: number): number => {
   return helper(double(n));
-}
+};

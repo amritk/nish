@@ -1,7 +1,7 @@
 // `console.error` and the newline-free `write` / `writeError` (WP14 B2), plus
 // `readFileSyncOrNull` (B3), whose `null` is what lets a program report a
 // missing file itself instead of exiting inside the read.
-export function main(): number {
+export const main = (): number => {
   write("no");
   write(" newline");
   write("\n");
@@ -18,4 +18,4 @@ export function main(): number {
     console.log(`found ${text.length} bytes`);
   }
   return 0;
-}
+};

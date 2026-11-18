@@ -2,7 +2,7 @@
 // arguments are summed three ways; the odd ones out exercise the no-digits
 // (0), trailing-garbage (parseFloat keeps the prefix, Number gives NaN) and
 // saturation (parseInt clamps into i32) cases.
-export function main(): number {
+export const main = (): number => {
   const args = process.argv;
   let ints = 0;
   let floats: f64 = 0;
@@ -21,4 +21,4 @@ export function main(): number {
   console.log(`numbers ${numbers}`);
   console.log(`Number(ints) + Number(true) = ${Number(ints) + Number(true)}`);
   return ints;
-}
+};

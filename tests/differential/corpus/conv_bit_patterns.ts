@@ -1,4 +1,4 @@
-export function main(): number {
+export const main = (): number => {
   const values: f64[] = [0.0, 1.0, -1.0, 0.5, 3.141592653589793, 1e308, 1e-308];
   for (const v of values) {
     const bits: i64 = f64ToBits(v);
@@ -10,4 +10,4 @@ export function main(): number {
   console.log(f64ToBits(-0.0) < 0);
   console.log(f64ToBits(0.0) === 0);
   return 0;
-}
+};

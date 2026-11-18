@@ -6,10 +6,10 @@
 //
 // The paths are ones every POSIX host has, so what this prints does not depend
 // on the working directory the harness happens to run it from.
-export function main(): number {
+export const main = (): number => {
   console.log(`cwd: ${isDirectorySync(".")}`);
   console.log(`root: ${isDirectorySync("/")}`);
   console.log(`device: ${isDirectorySync("/dev/null")}`);
   console.log(`missing: ${isDirectorySync("/no/such/directory")}`);
   return 0;
-}
+};

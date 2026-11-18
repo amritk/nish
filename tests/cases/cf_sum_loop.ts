@@ -11,14 +11,14 @@
 // left to vectorise.
 import { wrappingAdd } from "nish:unsafe";
 
-export function sumTo(n: number): number {
+export const sumTo = (n: number): number => {
   let sum = 0;
   for (let i = 0; i < n; i++) {
     sum = wrappingAdd(sum, i % 1000);
   }
   return sum;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return sumTo(1000);
-}
+};

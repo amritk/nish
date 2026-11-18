@@ -1,5 +1,5 @@
 // .length is the UTF-8 byte length; bytes pass through concat and output unchanged.
-export function main(): number {
+export const main = (): number => {
   const accented = "héllo";
   const kanji = "日本語";
   const emoji = "🎉";
@@ -29,4 +29,4 @@ export function main(): number {
   console.log("é".length);
   console.log("Ω≈ç√∫".length);
   return 0;
-}
+};

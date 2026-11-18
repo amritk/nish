@@ -8,20 +8,20 @@
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
 declare function pwrite(fd: i32, buf: readonly u8[], n: u64, off: i64): i64;
 
-function grow(b: u8[]): i32 {
+const grow = (b: u8[]): i32 => {
   b.push(33);
   b.push(10);
   return 1;
-}
+};
 
-function zero(): i64 {
+const zero = (): i64 => {
   return 0;
-}
+};
 
-function shrink(b: u8[]): i64 {
+const shrink = (b: u8[]): i64 => {
   b.pop();
   return 0;
-}
+};
 
 class Popper {
   off: i64;
@@ -31,30 +31,30 @@ class Popper {
   }
 }
 
-export function noResize(): i64 {
+export const noResize = (): i64 => {
   const buf: u8[] = [1, 2];
   return pwrite(-1, buf, toU64(buf.length), zero());
-}
+};
 
-export function resizing(): i64 {
+export const resizing = (): i64 => {
   const buf: u8[] = [1, 2];
   return pwrite(-1, buf, toU64(buf.length), shrink(buf));
-}
+};
 
-export function inlinePop(): i64 {
+export const inlinePop = (): i64 => {
   const buf: u8[] = [1, 2];
   return pwrite(-1, buf, toU64(buf.length), toI64(buf.pop()));
-}
+};
 
-export function viaNew(): i64 {
+export const viaNew = (): i64 => {
   const buf: u8[] = [1, 2];
   return pwrite(-1, buf, toU64(buf.length), new Popper(buf).off);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const b: u8[] = [104, 105];
   write(grow(b), b, 4);
   const r = noResize();
   write(1, r < 0 ? [45, 10] : [43, 10], 2);
   return 0;
-}
+};

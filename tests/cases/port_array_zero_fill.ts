@@ -11,11 +11,11 @@ class Grid {
   }
 }
 
-function startingWith<T>(n: i32, first: T): T[] {
+const startingWith = <T>(n: i32, first: T): T[] => {
   const out = new Array<T>(n);
   out[0] = first;
   return out;
-}
+};
 
 const total = (xs: f64[]): f64 => {
   let sum: f64 = 0;

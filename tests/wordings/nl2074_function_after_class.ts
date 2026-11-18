@@ -3,4 +3,4 @@ class Shape {
   side: i32 = 0;
 }
 
-function Shape(): void {}
+const Shape = (): void => {};

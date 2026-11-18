@@ -1,7 +1,7 @@
 // `push` / `pop` / `indexOf` / `join` against Node. `pop` on an empty array
 // panics here and returns `undefined` there, so the empty case is the last
 // thing the program does.
-export function main(): number {
+export const main = (): number => {
   const parts: string[] = [];
   for (let i = 0; i < 5; i++) {
     parts.push(`p${i}`);
@@ -24,4 +24,4 @@ export function main(): number {
   none.push(single.pop());
   console.log(none.join("+"));
   return 0;
-}
+};

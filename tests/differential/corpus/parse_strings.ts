@@ -1,11 +1,11 @@
 // String-to-number parsing without the command line: whitespace, signs,
 // exponents, Infinity, blank strings and garbage, plus Number on the other
 // primitive types.
-function report(s: string): void {
+const report = (s: string): void => {
   console.log(`[${s}] -> ${parseInt(s)} | ${parseFloat(s)} | ${Number(s)}`);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   report("42");
   report("  -17abc");
   report("+3.99");
@@ -27,4 +27,4 @@ export function main(): number {
   const x: f64 = 0.5;
   console.log(`${Number(flag)} ${Number(n)} ${Number(big)} ${Number(x)}`);
   return parseInt("7");
-}
+};

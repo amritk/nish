@@ -7,25 +7,25 @@ interface IoError {
   path: string;
 }
 
-function openFile(path: string): Result<i32, IoError> {
+const openFile = (path: string): Result<i32, IoError> => {
   if (path === "") {
     const problem: IoError = { code: 2, path: path };
     return Err(problem);
   }
   return Ok(3);
-}
+};
 
-function describe(path: string): string {
+const describe = (path: string): string => {
   const opened = openFile(path);
   if (opened.isErr()) {
     const failure = opened.error;
     return `error ${failure.code}`;
   }
   return `fd ${opened.value}`;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(describe("/etc/hosts"));
   console.log(describe(""));
   return 0;
-}
+};

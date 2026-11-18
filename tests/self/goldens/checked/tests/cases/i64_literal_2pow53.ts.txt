@@ -6,4 +6,4 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i64
   stackSites=0 stackLocals=0
-  local +0:38 big: i64 (let)
+  local +0:41 big: i64 (let)

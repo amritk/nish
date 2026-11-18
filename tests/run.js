@@ -10849,6 +10849,15 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
         new RegExp(`^instructions: all ${Object.keys(counts.programs).length} within `, "m").test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     )
+    // Printed on a pass too. The baselines were counted under more than one
+    // glibc and valgrind, and a runner whose own counts sit lower can pass a
+    // real rise that this container fails (#1727, bench/README.md "Which
+    // environment a count is from"). Each runner's table shows its counts.
+    if (counted.status === 0) {
+      for (const line of counted.stdout.split("\n")) {
+        if (/^(instructions: valgrind|program |\S+ +\S+ +[\d,]+ +[\d,]+ )/.test(line)) console.log(`  ${line}`)
+      }
+    }
   }
 }
 
