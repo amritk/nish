@@ -7,13 +7,26 @@
  * no request outstanding: a fixed rate keeps the offered load the same for
  * both designs at every C, so their CPU per request compares like for like.
  *
+ * With -t <think s> it runs closed-loop instead: each connection sends its
+ * next request <think s> after its last response, the first requests spread
+ * evenly over the first <think s>, so the offered rate is about C / think and
+ * a slow server sees fewer requests, as a keep-alive client with think time
+ * would send. -r is ignored then.
+ *
  * Then it measures the server: the user and system time of the pids it is
  * given (/proc/<pid>/stat), their RSS and PSS, their descriptor tables, and
  * the box's non-idle CPU (/proc/stat), over a window after a warm-up, and
- * prints one `key=value` line.
+ * prints one `key=value` line. The same window gives the latency
+ * percentiles: every request sent inside it is timed from its send to the
+ * last byte of its response, into a log-linear histogram (32 buckets an
+ * octave, so a percentile reads within about 3%), and the run waits up to
+ * 2 s past the window for the window's last answers. `lat_lost` counts the
+ * window's requests still unanswered then. The connect burst is outside the
+ * window: it starts after every connection is up and the warm-up has run.
  *
  * Usage: loadgen -c <conns> -r <req/s> -p <port> -w <warmup s> -d <seconds>
- *                -n <server pid,pid,...> [-P <client processes>] [-l <label>] */
+ *                -n <server pid,pid,...> [-t <think s>] [-P <client processes>]
+ *                [-l <label>] */
 #define _GNU_SOURCE
 #include "common.h"
 
@@ -34,11 +47,20 @@
 #define MAX_PIDS 64
 #define PER_CHILD_MAX 19000
 #define INFLIGHT_CONNECTS 512
+/* The latency histogram: microseconds below 64 one bucket each, then 32
+ * buckets an octave up to 2^40 µs. */
+#define LAT_SUB 32
+#define LAT_BUCKETS (64 + (40 - 6) * LAT_SUB)
 
 struct shared {
   volatile int go, stop;
+  /* The measured window, CLOCK_MONOTONIC seconds: a request sent in
+   * [win_lo, win_hi) is timed. win_hi is 0 while the window is open. */
+  volatile double win_lo, win_hi;
   volatile long established[MAX_CHILD], failed[MAX_CHILD], ready[MAX_CHILD];
   volatile long responses[MAX_CHILD], sent[MAX_CHILD], starved[MAX_CHILD];
+  volatile long win_sent[MAX_CHILD], win_answered[MAX_CHILD];
+  volatile long lat[MAX_CHILD][LAT_BUCKETS];
 };
 
 static struct shared *sh;
@@ -56,7 +78,34 @@ struct conn {
   uint8_t state;
   uint16_t got;
   uint8_t tries;
+  double sent_at;
 };
+
+static int lat_bucket(double us) {
+  if (us < 64) return us < 0 ? 0 : (int)us;
+  uint64_t v = (uint64_t)us;
+  int e = 63 - __builtin_clzll(v);
+  if (e >= 40) return LAT_BUCKETS - 1;
+  return 64 + (e - 6) * LAT_SUB + (int)((v >> (e - 5)) & (LAT_SUB - 1));
+}
+
+/* The middle of bucket b, in microseconds. */
+static double lat_value(int b) {
+  if (b < 64) return b + 0.5;
+  int e = 6 + (b - 64) / LAT_SUB, sub = (b - 64) % LAT_SUB;
+  double lo = (double)(1ull << e) * (1.0 + (double)sub / LAT_SUB);
+  return lo + (double)(1ull << e) / LAT_SUB / 2;
+}
+
+static int in_window(double t) { return sh->win_lo > 0 && t >= sh->win_lo && (sh->win_hi == 0 || t < sh->win_hi); }
+
+static int send_request(struct conn *c, int k, double t) {
+  if (send(c->fd, REQUEST, REQUEST_LEN, MSG_NOSIGNAL) != (ssize_t)REQUEST_LEN) return 0;
+  c->state = C_BUSY;
+  c->sent_at = t;
+  if (in_window(t)) sh->win_sent[k]++;
+  return 1;
+}
 
 static int start_connect(struct conn *c, int ep, uint32_t idx, struct sockaddr_in *src, struct sockaddr_in *dst) {
   int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
@@ -83,7 +132,7 @@ static int start_connect(struct conn *c, int ep, uint32_t idx, struct sockaddr_i
   return 0;
 }
 
-static void child(int k, long n, double rate, int port) {
+static void child(int k, long n, double rate, double think, int port) {
   (void)raise_nofile();
   struct sockaddr_in src, dst;
   memset(&src, 0, sizeof src);
@@ -145,28 +194,54 @@ static void child(int k, long n, double rate, int port) {
 
   double t0 = now();
   long sent = 0, responses = 0, starved = 0, cursor = 0;
+  /* Closed-loop: the connections waiting out their think time, in the order
+   * they become due. Each connection is in it at most once, so n entries do. */
+  struct due {
+    uint32_t idx;
+    double at;
+  } *q = NULL;
+  long qh = 0, qn = 0;
+  if (think > 0) {
+    q = calloc((size_t)n, sizeof *q);
+    for (long i = 0; i < n; i++) {
+      q[i].idx = (uint32_t)i;
+      q[i].at = t0 + think * (double)i / (double)n;
+    }
+    qn = n;
+  }
   while (!sh->stop) {
-    long due = (long)(rate * (now() - t0)) - sent;
-    for (long j = 0; j < due; j++) {
-      long scanned = 0;
-      while (scanned < n && cs[cursor].state != C_IDLE) {
+    double t = now();
+    if (think > 0) {
+      while (qn > 0 && q[qh].at <= t) {
+        struct conn *c = &cs[q[qh].idx];
+        qh = (qh + 1) % n;
+        qn--;
+        if (c->state == C_IDLE && send_request(c, k, t)) sent++;
+      }
+    } else {
+      long due = (long)(rate * (t - t0)) - sent;
+      for (long j = 0; j < due; j++) {
+        long scanned = 0;
+        while (scanned < n && cs[cursor].state != C_IDLE) {
+          cursor = (cursor + 1) % n;
+          scanned++;
+        }
+        if (scanned == n) {
+          /* Every connection has a request outstanding: the server is behind. */
+          starved += due - j;
+          sent += due - j;
+          break;
+        }
+        (void)send_request(&cs[cursor], k, t);
         cursor = (cursor + 1) % n;
-        scanned++;
+        sent++;
       }
-      if (scanned == n) {
-        /* Every connection has a request outstanding: the server is behind. */
-        starved += due - j;
-        sent += due - j;
-        break;
-      }
-      struct conn *c = &cs[cursor];
-      if (send(c->fd, REQUEST, REQUEST_LEN, MSG_NOSIGNAL) == (ssize_t)REQUEST_LEN) c->state = C_BUSY;
-      cursor = (cursor + 1) % n;
-      sent++;
     }
     int m = epoll_wait(ep, evs, 1024, 1);
+    t = now();
     for (int i = 0; i < m; i++) {
-      struct conn *c = &cs[evs[i].data.u32];
+      uint32_t idx = evs[i].data.u32;
+      struct conn *c = &cs[idx];
       ssize_t r = read(c->fd, buf, sizeof buf);
       if (r <= 0) {
         if (r == 0 || (errno != EAGAIN && errno != EINTR)) {
@@ -179,6 +254,16 @@ static void child(int k, long n, double rate, int port) {
       while (got >= (long)RESPONSE_LEN) {
         got -= (long)RESPONSE_LEN;
         responses++;
+        if (c->state == C_BUSY && in_window(c->sent_at)) {
+          sh->lat[k][lat_bucket((t - c->sent_at) * 1e6)]++;
+          sh->win_answered[k]++;
+        }
+        if (c->state == C_BUSY && think > 0) {
+          long tail = (qh + qn) % n;
+          q[tail].idx = idx;
+          q[tail].at = t + think;
+          qn++;
+        }
         c->state = C_IDLE;
       }
       c->got = (uint16_t)got;
@@ -298,11 +383,11 @@ static void take(struct sample *s, const int *pids, int npids, int nchild) {
 
 int main(int argc, char **argv) {
   long conns = 1000;
-  double rate = 20000, warmup = 3, seconds = 10;
+  double rate = 20000, warmup = 3, seconds = 10, think = 0;
   int port = 8080, nchild = 0, npids = 0, opt;
   int pids[MAX_PIDS];
   const char *label = "run";
-  while ((opt = getopt(argc, argv, "c:r:p:w:d:n:P:l:")) != -1) {
+  while ((opt = getopt(argc, argv, "c:r:p:w:d:n:P:l:t:")) != -1) {
     switch (opt) {
     case 'c': conns = atol(optarg); break;
     case 'r': rate = atof(optarg); break;
@@ -311,11 +396,12 @@ int main(int argc, char **argv) {
     case 'd': seconds = atof(optarg); break;
     case 'P': nchild = atoi(optarg); break;
     case 'l': label = optarg; break;
+    case 't': think = atof(optarg); break;
     case 'n':
       for (char *t = strtok(optarg, ","); t && npids < MAX_PIDS; t = strtok(NULL, ",")) pids[npids++] = atoi(t);
       break;
     default:
-      fprintf(stderr, "usage: loadgen -c conns -r rate -p port -w warmup -d seconds -n pids [-P procs] [-l label]\n");
+      fprintf(stderr, "usage: loadgen -c conns -r rate -p port -w warmup -d seconds -n pids [-t think] [-P procs] [-l label]\n");
       return 2;
     }
   }
@@ -334,7 +420,7 @@ int main(int argc, char **argv) {
     long n = conns / nchild + (k < conns % nchild ? 1 : 0);
     double r = rate * (double)n / (double)conns;
     kids[k] = fork();
-    if (kids[k] == 0) child(k, n, r, port);
+    if (kids[k] == 0) child(k, n, r, think, port);
   }
   double t_conn = now();
   for (;;) {
@@ -360,9 +446,11 @@ int main(int argc, char **argv) {
   sh->go = 1;
   usleep((useconds_t)(warmup * 1e6));
   struct sample a, b;
+  sh->win_lo = now();
   take(&a, pids, npids, nchild);
   usleep((useconds_t)(seconds * 1e6));
   take(&b, pids, npids, nchild);
+  sh->win_hi = b.t;
 
   long rss = 0, pss = 0, fds = 0;
   for (int i = 0; i < npids; i++) {
@@ -372,6 +460,16 @@ int main(int argc, char **argv) {
   }
   long used_mb = (meminfo_kb("MemTotal:") - meminfo_kb("MemAvailable:")) / 1024;
   long tcp_mb = tcp_mem_pages() * 4 / 1024;
+  /* Wait for the window's last answers, up to 2 s. */
+  for (double t_end = now() + 2; now() < t_end;) {
+    long ws = 0, wa = 0;
+    for (int k = 0; k < nchild; k++) {
+      ws += sh->win_sent[k];
+      wa += sh->win_answered[k];
+    }
+    if (wa >= ws) break;
+    usleep(10000);
+  }
   sh->stop = 1;
   long sent = 0, starved = 0;
   for (int k = 0; k < nchild; k++) {
@@ -379,6 +477,34 @@ int main(int argc, char **argv) {
     starved += sh->starved[k];
   }
   for (int k = 0; k < nchild; k++) waitpid(kids[k], NULL, 0);
+  long lat_n = 0, lat_lost = 0;
+  static long hist[LAT_BUCKETS];
+  for (int k = 0; k < nchild; k++) {
+    lat_lost += sh->win_sent[k] - sh->win_answered[k];
+    for (int i = 0; i < LAT_BUCKETS; i++) {
+      hist[i] += sh->lat[k][i];
+      lat_n += sh->lat[k][i];
+    }
+  }
+  /* p50, p99, p99.9 and the largest, in ms. */
+  const double qs[3] = {0.50, 0.99, 0.999};
+  double pv[4] = {0, 0, 0, 0};
+  for (int j = 0; j < 3; j++) {
+    long want = (long)((double)lat_n * qs[j] + 0.999999), acc = 0;
+    for (int i = 0; i < LAT_BUCKETS && lat_n > 0; i++) {
+      acc += hist[i];
+      if (acc >= want) {
+        pv[j] = lat_value(i) / 1000;
+        break;
+      }
+    }
+  }
+  for (int i = LAT_BUCKETS - 1; i >= 0; i--) {
+    if (hist[i] > 0) {
+      pv[3] = lat_value(i) / 1000;
+      break;
+    }
+  }
 
   double hz = (double)sysconf(_SC_CLK_TCK);
   double dt = b.t - a.t;
@@ -389,8 +515,10 @@ int main(int argc, char **argv) {
   double si_us = (double)(b.box_softirq - a.box_softirq) / hz * 1e6 / req;
   printf("label=%s conns=%ld up=%ld failed=%ld clients=%d connect_s=%.1f rps=%.0f srv_us=%.2f srv_user_us=%.2f "
          "srv_sys_us=%.2f box_us=%.2f softirq_us=%.2f srv_rss_mb=%.1f srv_pss_mb=%.1f srv_fds=%ld mem_used_mb=%ld "
-         "tcp_mem_mb=%ld starved=%ld sent=%ld\n",
+         "tcp_mem_mb=%ld starved=%ld sent=%ld think_s=%.2f p50_ms=%.3f p99_ms=%.3f p999_ms=%.3f max_ms=%.3f "
+         "lat_n=%ld lat_lost=%ld\n",
          label, conns, up, failed, nchild, connect_s, req / dt, us_user + us_sys, us_user, us_sys, box_us, si_us,
-         (double)rss / 1024, (double)pss / 1024, fds, used_mb, tcp_mb, starved, sent);
+         (double)rss / 1024, (double)pss / 1024, fds, used_mb, tcp_mb, starved, sent, think, pv[0], pv[1], pv[2], pv[3],
+         lat_n, lat_lost);
   return 0;
 }

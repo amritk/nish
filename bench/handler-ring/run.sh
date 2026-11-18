@@ -13,6 +13,18 @@
 #   bash bench/handler-ring/run.sh --quick          # 18k, 1 round, short windows
 #   bash bench/handler-ring/run.sh --conns "18000 60000" --rounds 3
 #   bash bench/handler-ring/run.sh --compiler build/nish
+#   bash bench/handler-ring/run.sh --conns 90000 --think 4 --designs "ring epoll"
+#
+# --think S runs the load closed-loop: each connection sends its next request
+# S seconds after its last answer, as a keep-alive client with think time
+# does, and the offered rate is C / S. Without it the load is --rate across
+# all connections. Latency (p50, p99, p99.9) is counted over the measured
+# window only, so the connect burst is outside it. The server runs on
+# --server-cpus (default 0, one core: the prefork workers share it) and the
+# load on the remaining cores; --server-cpus "" runs both unpinned.
+# --designs picks from ring, epoll (five SO_REUSEPORT processes), epoll-copy
+# (its byte-identical copy, the noise band) and epoll1 (one process on
+# descriptors, held to the limit's C).
 #
 # The box's C is the most connections five descriptor processes hold under
 # the limit L (65535, or this shell's hard limit if lower), each keeping 800
@@ -36,6 +48,9 @@ rate=30000
 warmup=3
 seconds=10
 port=9312
+think=0
+designs_arg="ring epoll epoll-copy"
+server_cpus=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -51,8 +66,11 @@ while [ $# -gt 0 ]; do
   --seconds) seconds="$2"; shift ;;
   --warmup) warmup="$2"; shift ;;
   --compiler) compiler="$2"; shift ;;
+  --think) think="$2"; shift ;;
+  --designs) designs_arg="$2"; shift ;;
+  --server-cpus) server_cpus="$2"; shift ;;
   *)
-    echo "usage: run.sh [--quick] [--conns \"C ...\"] [--rounds N] [--rate R] [--seconds S] [--warmup S] [--compiler nish]" >&2
+    echo "usage: run.sh [--quick] [--conns \"C ...\"] [--rounds N] [--rate R] [--think S] [--seconds S] [--warmup S] [--designs \"D ...\"] [--server-cpus LIST] [--compiler nish]" >&2
     exit 2
     ;;
   esac
@@ -64,6 +82,25 @@ limit=65535
 if [ "$hard" != unlimited ] && [ "$hard" -lt "$limit" ]; then limit=$hard; fi
 boxc=$((5 * (limit - 800) / 1000 * 1000))
 if [ -z "$conns" ]; then conns="18000 $boxc"; fi
+
+# The server's cores and the load's: the load takes every core the server
+# does not, so neither steals the other's time.
+srv_pin=()
+load_pin=()
+if [ -n "$server_cpus" ]; then
+  srv_pin=(taskset -c "$server_cpus")
+  load_cpus=$(node -e '
+    const n = Number(process.argv[1]), own = new Set();
+    for (const part of process.argv[2].split(",")) {
+      const [a, b = a] = part.split("-").map(Number);
+      for (let i = a; i <= b; i++) own.add(i);
+    }
+    const rest = [];
+    for (let i = 0; i < n; i++) if (!own.has(i)) rest.push(i);
+    process.stdout.write(rest.join(","));
+  ' "$(nproc)" "$server_cpus")
+  if [ -n "$load_cpus" ]; then load_pin=(taskset -c "$load_cpus"); fi
+fi
 
 mkdir -p "$out"
 gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
@@ -79,7 +116,12 @@ grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //'
 echo "cpus $(nproc), $(awk '/MemTotal/ {printf "%.1f GiB", $2 / 1048576}' /proc/meminfo)"
 echo "kernel $(uname -r), virt $(systemd-detect-virt 2>/dev/null || echo unknown)"
 echo "hard RLIMIT_NOFILE $hard; every server runs under $limit:$limit; the box's C is $boxc"
-echo "rate $rate req/s, warm-up ${warmup}s, window ${seconds}s, $rounds rounds"
+if [ "$think" != 0 ]; then
+  echo "closed loop: think ${think}s per connection, warm-up ${warmup}s, window ${seconds}s, $rounds rounds"
+else
+  echo "rate $rate req/s, warm-up ${warmup}s, window ${seconds}s, $rounds rounds"
+fi
+echo "server cpus ${server_cpus:-unpinned}, load cpus ${load_cpus:-unpinned}; designs $designs_arg"
 
 results="$out/results.txt"
 : >"$results"
@@ -114,7 +156,7 @@ run() {
   ring)
     n=1
     slots=$((c + 1024))
-    env -u BENCH_CORES BENCH_RING=1 prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    env -u BENCH_CORES BENCH_RING=1 "${srv_pin[@]}" prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     # `rings` follows `listening`: wait for the line the check reads.
     wait_for '^rings '
@@ -129,28 +171,41 @@ run() {
     # Every descriptor the limit leaves: SO_REUSEPORT does not split C evenly.
     slots=$((limit - 64))
     if [ "$design" = epoll-copy ]; then bin=$out/server-copy; fi
-    env -u BENCH_RING BENCH_CORES=5 prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    env -u BENCH_RING BENCH_CORES=5 "${srv_pin[@]}" prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
     server=$!
     wait_for listening
     # Worker 0 prints `listening`; the others bind beside it.
     sleep 1
     pids=$(pgrep -P "$server" | paste -sd, -)
     ;;
+  epoll1)
+    n=1
+    slots=$((limit - 64))
+    env -u BENCH_RING -u BENCH_CORES "${srv_pin[@]}" prlimit --nofile="$limit:$limit" "$bin" "$port" "$slots" "$out/feed.db" >"$out/server.out" 2>"$out/server.err" &
+    server=$!
+    wait_for listening
+    pids=$server
+    ;;
+  *)
+    echo "unknown design $design" >&2
+    exit 2
+    ;;
   esac
   local line
-  line=$("$out/loadgen" -c "$c" -r "$rate" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
+  line=$("${load_pin[@]}" "$out/loadgen" -c "$c" -r "$rate" -t "$think" -p "$port" -w "$warmup" -d "$seconds" -n "$pids" -l "$design")
   echo "round=$r procs=$n $line" | tee -a "$results"
   stop_server
   sleep 1
 }
 
-designs=(ring epoll epoll-copy)
+read -r -a designs <<<"$designs_arg"
+nd=${#designs[@]}
 for c in $conns; do
   echo "== C=$c"
   for r in $(seq "$rounds"); do
     # Rotate the order each round so no design always runs first.
-    for i in 0 1 2; do
-      run "${designs[$(((i + r) % 3))]}" "$c" "$r"
+    for i in $(seq 0 $((nd - 1))); do
+      run "${designs[$(((i + r) % nd))]}" "$c" "$r"
     done
   done
 done
@@ -184,6 +239,9 @@ awk -v limit="$limit" '
     for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }
     k = v["conns"] SUBSEP v["label"]
     n[k]++; us[k, n[k]] = v["srv_us"]; box[k, n[k]] = v["box_us"]; rps[k, n[k]] = v["rps"]
+    p50[k, n[k]] = v["p50_ms"]; p99[k, n[k]] = v["p99_ms"]; p999[k, n[k]] = v["p999_ms"]
+    p99lo[k] = (n[k] == 1 || v["p99_ms"] < p99lo[k]) ? v["p99_ms"] : p99lo[k]
+    p99hi[k] = (n[k] == 1 || v["p99_ms"] > p99hi[k]) ? v["p99_ms"] : p99hi[k]
     lo[k] = (n[k] == 1 || v["srv_us"] < lo[k]) ? v["srv_us"] : lo[k]
     hi[k] = (n[k] == 1 || v["srv_us"] > hi[k]) ? v["srv_us"] : hi[k]
     if (n[k] == 1 || v["up"] < up[k]) up[k] = v["up"]
@@ -191,17 +249,17 @@ awk -v limit="$limit" '
     if (!(v["conns"] in seen)) { seen[v["conns"]] = 1; order[++nc] = v["conns"] }
   }
   END {
-    printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB"
+    printf "%-8s %-10s %5s %8s %6s %18s %8s %8s %8s %8s %7s %20s %8s\n", "C", "design", "procs", "held", "fds", "srv µs/req", "box µs", "rps", "PSS MB", "box MB", "p50 ms", "p99 ms", "p99.9 ms"
     for (ci = 1; ci <= nc; ci++) {
       c = order[ci]
-      split("ring epoll epoll-copy", ds, " ")
-      for (di = 1; di <= 3; di++) {
+      split("ring epoll epoll-copy epoll1", ds, " ")
+      for (di = 1; di <= 4; di++) {
         k = c SUBSEP ds[di]
         if (!(k in n)) continue
-        delete a; delete b; delete q
-        for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i] }
+        delete a; delete b; delete q; delete l50; delete l99; delete l999
+        for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i]; l50[i] = p50[k, i]; l99[i] = p99[k, i]; l999[i] = p999[k, i] }
         m[k] = med(a, n[k]); mb = med(b, n[k]); mq = med(q, n[k])
-        printf "%-8s %-10s %5s %8s %6s %7.2f (%.2f-%.2f) %8.2f %8.0f %8s %8s\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], mb, mq, pss[k], mem[k]
+        printf "%-8s %-10s %5s %8s %6s %7.2f (%.2f-%.2f) %8.2f %8.0f %8s %8s %7.2f %7.2f (%.2f-%.2f) %8.2f\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], mb, mq, pss[k], mem[k], med(l50, n[k]), med(l99, n[k]), p99lo[k], p99hi[k], med(l999, n[k])
       }
       e = c SUBSEP "epoll"; ec = c SUBSEP "epoll-copy"; u = c SUBSEP "ring"
       if ((e in m) && (ec in m) && (u in m)) {
