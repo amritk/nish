@@ -1,12 +1,12 @@
-function f(a: number): number {
+const f = (a: number): number => {
   return a + true;
-}
+};
 
-function g(s: string): number {
+const g = (s: string): number => {
   let x: number = s;
   return x + 1;
-}
+};
 
-function h(b: boolean): boolean {
+const h = (b: boolean): boolean => {
   return !b + 1;
-}
+};

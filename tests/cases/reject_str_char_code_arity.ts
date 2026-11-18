@@ -1,4 +1,4 @@
 // `charCodeAt` takes exactly the index.
-function f(s: string): number {
+const f = (s: string): number => {
   return s.charCodeAt();
-}
+};

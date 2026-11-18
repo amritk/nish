@@ -4,12 +4,12 @@
 declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
 declare function free(p: CPtr | null): void;
 
-function via(f: (p: CPtr | null) => void): void {
+const via = (f: (p: CPtr | null) => void): void => {
   const p = realpath(".", null);
   f(p);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   via(free);
   return 0;
-}
+};

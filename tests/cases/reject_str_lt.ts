@@ -1,3 +1,3 @@
-function f(s: string, n: number): boolean {
+const f = (s: string, n: number): boolean => {
   return s < n;
-}
+};

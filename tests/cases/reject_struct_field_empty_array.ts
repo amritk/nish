@@ -7,7 +7,7 @@ interface Bag {
   xs: i32[];
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const bag: Bag = { xs: [] };
   return toI32(bag.xs.length);
-}
+};

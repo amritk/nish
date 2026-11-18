@@ -4,6 +4,6 @@
 // §8f), so it is refused like every array but WP53's `u8[]` buffer.
 declare function execvp(file: string, argv: string[]): i32;
 
-export function main(): i32 {
+export const main = (): i32 => {
   return 0;
-}
+};

@@ -1,1 +1,4 @@
-function f(): number { var x = 1; return x; }
+const f = (): number => {
+  var x = 1;
+  return x;
+};

@@ -7,7 +7,7 @@ class Node {
   }
 }
 
-function walk(head: Node | null): number {
+const walk = (head: Node | null): number => {
   let cur = head;
   let total = 0;
   if (cur !== null) {
@@ -17,4 +17,4 @@ function walk(head: Node | null): number {
     }
   }
   return total;
-}
+};

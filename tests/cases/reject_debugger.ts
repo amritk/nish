@@ -1,1 +1,4 @@
-function f(): number { debugger; return 1; }
+const f = (): number => {
+  debugger;
+  return 1;
+};

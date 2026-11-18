@@ -22,8 +22,8 @@ class File {
   }
 }
 
-function count(f: File, g: File): i32 {
+const count = (f: File, g: File): i32 => {
   return f === g ? 1 : 0
-}
+};
 
 export const main = (): i32 => 0

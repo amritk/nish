@@ -15,11 +15,11 @@ class Links {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const m = new Mutex<Links>(new Links())
   {
     using g = m.lock()
     g.value.items[1] = null
   }
   return 0
-}
+};

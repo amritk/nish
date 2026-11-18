@@ -22,9 +22,9 @@ class File {
   }
 }
 
-function isOpen(f: File): boolean {
+const isOpen = (f: File): boolean => {
   const p = f.file
   return p !== null
-}
+};
 
 export const main = (): i32 => 0

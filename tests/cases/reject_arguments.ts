@@ -1,1 +1,3 @@
-function f(): number { return arguments.length; }
+const f = (): number => {
+  return arguments.length;
+};

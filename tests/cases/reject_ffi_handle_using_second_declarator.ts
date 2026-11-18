@@ -24,9 +24,9 @@ class File {
   }
 }
 
-function count(path: string): i32 {
+const count = (path: string): i32 => {
   using a = new File(path), b = a
   return b.read()
-}
+};
 
 export const main = (): i32 => 0

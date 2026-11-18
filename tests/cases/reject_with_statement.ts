@@ -1,1 +1,4 @@
-function f(o: number): number { with (o) { } return 1; }
+const f = (o: number): number => {
+  with (o) { }
+  return 1;
+};

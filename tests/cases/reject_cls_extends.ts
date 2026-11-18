@@ -9,6 +9,6 @@ class Derived extends Base {
   y: number = 1;
 }
 
-export function test(): number {
+export const test = (): number => {
   return new Derived().y;
-}
+};

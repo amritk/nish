@@ -27,9 +27,9 @@ class Pair {
   n: i32 = 0
   file: i32 = 0
 }
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   const pair: Pair = { n: 1, file: f }
   return pair.n
-}
+};
 
 export const main = (): i32 => 0
