@@ -17,11 +17,11 @@ class Counter {
   }
 }
 
-function dot(a: Vec, b: Vec): number {
+const dot = (a: Vec, b: Vec): number => {
   return a.x * b.x + a.y * b.y;
-}
+};
 
-export function run(n: number): number {
+export const run = (n: number): number => {
   const c = new Counter(3);
   let last = 0;
   for (let i = 0; i < n; i++) {
@@ -29,4 +29,4 @@ export function run(n: number): number {
   }
   const v: Vec = { x: last, y: 2 };
   return dot(v, v);
-}
+};

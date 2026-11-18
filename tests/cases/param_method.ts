@@ -21,7 +21,7 @@ class Counter {
   }
 }
 
-export function main(): void {
+export const main = (): void => {
   const c = new Counter()
   console.log(c.bump())
   console.log(c.bump(3))
@@ -31,4 +31,4 @@ export function main(): void {
   console.log(d.bump())
   const e = new Counter(10)
   console.log(e.bump(2))
-}
+};

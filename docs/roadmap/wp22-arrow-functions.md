@@ -1,18 +1,18 @@
 # WP22: Arrow functions as the declaration form
 
-**State:** In progress · **Done:** 3 of 5 · **Design note:** [`docs/wp22-arrow-functions.md`](https://github.com/amritk/nish/blob/main/docs/wp22-arrow-functions.md)
+**State:** In progress · **Done:** 4 of 5 · **Design note:** [`docs/wp22-arrow-functions.md`](https://github.com/amritk/nish/blob/main/docs/wp22-arrow-functions.md)
 
 ## Stages
 
 - [x] A: both compilers accept `const f = (...) => ...`
 - [x] B: both spellings emit byte-identical IR
 - [x] C: docs, examples, `src/`, `std/` and tooling rewritten; a Biome rule blocks new `function` declarations
-- [ ] C: rewrite the test corpus, which Biome does not read
+- [x] C: rewrite the test corpus, which Biome does not read
 - [ ] D: reject a `function` definition, a breaking change *(open question)*
 
 ## Next
 
-Waiting on the decision about stage D. C's corpus rewrite is mechanical and pays off only if D goes ahead.
+Waiting on the decision about stage D. Every stage before it is done: the test corpus is arrows, and the `arrow-corpus` check in `tests/run.js` keeps it so, but for the files `tests/function-spelling-allowlist.txt` lists with a reason.
 
 ## Open questions
 

@@ -12,7 +12,7 @@
 // and separated — are read at their true value by the number path since #267
 // and are pinned by `literal_spellings`, not here: this case is about the
 // warning, and a spelling the fold does not read is one it does not warn on.
-export function test(): number {
+export const test = (): number => {
   const hexShift = 1 << 0x20;
   return hexShift;
-}
+};

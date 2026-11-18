@@ -8,15 +8,15 @@
 declare function read(fd: i32, buf: u8[], n: u64): i64;
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
 
-function echo(fd: i32, size: i32): i64 {
+const echo = (fd: i32, size: i32): i64 => {
   const buf = new Array<u8>(size);
   const n = read(fd, buf, toU64(buf.length));
   if (n > 0) {
     write(1, buf, toU64(n));
   }
   return n;
-}
+};
 
-export function run(fd: i32): i32 {
+export const run = (fd: i32): i32 => {
   return toI32(echo(fd, 64));
-}
+};

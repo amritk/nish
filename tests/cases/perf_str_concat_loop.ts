@@ -1,7 +1,7 @@
 // WP15 §8: `out = out + ...` inside a loop copies the whole accumulator every
 // pass, so the compiler names the `string[]` + `join` rewrite. The program is
 // legal and still exits 0; only the warning is new.
-export function test(): number {
+export const test = (): number => {
   let out = "";
   for (let i = 0; i < 4; i = i + 1) {
     out = out + "ab";
@@ -35,4 +35,4 @@ export function test(): number {
   } while (k < 2);
 
   return out.length + tagged.length + rows + tail.length;
-}
+};

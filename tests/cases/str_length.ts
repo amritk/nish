@@ -1,7 +1,7 @@
-function len(s: string): number {
+const len = (s: string): number => {
   return s.length;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return len("hello") + "".length;
-}
+};

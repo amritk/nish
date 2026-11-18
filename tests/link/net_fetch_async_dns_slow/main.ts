@@ -30,7 +30,7 @@ const ASKED: i32 = 0
 const OPEN: i32 = 1
 
 /** A resolver config whose one server is `127.0.0.1:port`, one try of one second. */
-function configFor(port: i32): DnsConfig {
+const configFor = (port: i32): DnsConfig => {
   const text: string = "nameserver 127.0.0.1\noptions timeout:1 attempts:1\n"
   const b: u8[] = new Array<u8>(text.length)
   for (let i: i32 = 0; i < text.length; i += 1) {
@@ -40,13 +40,13 @@ function configFor(port: i32): DnsConfig {
   dnsParseResolvConf(b, 0, toI32(b.length), c)
   setU16BE(c.servers, 16, toU16(port))
   return c
-}
+};
 
 /**
  * The answer to the query `q[0, len)`: its question, then `127.0.0.1` for an
  * A query and nothing for any other type. Any EDNS record is left out.
  */
-function dnsAnswer(q: u8[], len: i32): u8[] {
+const dnsAnswer = (q: u8[], len: i32): u8[] => {
   let at: i32 = 12
   while (at < len && q[at] !== toU8(0)) {
     at += toI32(q[at]) + 1
@@ -69,7 +69,7 @@ function dnsAnswer(q: u8[], len: i32): u8[] {
     }
   }
   return out
-}
+};
 
 /** Answers `count` queries on `udp`, none of them before the gate opens. */
 async function dnsServer(udp: i32, count: i32): Promise<void> {
@@ -113,7 +113,7 @@ async function beside(port: i32): Promise<void> {
   gate[OPEN] = 1
 }
 
-function initFor(dns: DnsConfig, outbound: OutboundPolicy | null, connectMs: i32): RequestInit {
+const initFor = (dns: DnsConfig, outbound: OutboundPolicy | null, connectMs: i32): RequestInit => {
   const init: RequestInit = new RequestInit()
   const options: HttpOptions = init.options
   options.useEnvProxy = false
@@ -121,7 +121,7 @@ function initFor(dns: DnsConfig, outbound: OutboundPolicy | null, connectMs: i32
   options.outbound = outbound
   options.connectTimeoutMs = connectMs
   return init
-}
+};
 
 /** The three lookups through the DNS servers on `dnsPort` and `deadPort`, in turn. */
 async function lookups(port: i32, dnsPort: i32, deadPort: i32): Promise<i32> {

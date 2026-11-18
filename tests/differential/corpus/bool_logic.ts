@@ -1,15 +1,15 @@
 // Boolean truth tables, negation, equality on booleans, comparisons of every numeric type.
 import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
-function xor(a: boolean, b: boolean): boolean {
+const xor = (a: boolean, b: boolean): boolean => {
   return (a || b) && !(a && b);
-}
+};
 
-function implies(a: boolean, b: boolean): boolean {
+const implies = (a: boolean, b: boolean): boolean => {
   return !a || b;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const vals = [false, true];
   for (const a of vals) {
     for (const b of vals) {
@@ -44,4 +44,4 @@ export function main(): number {
   console.log((3 > 2) === (2 > 1));
   console.log((3 > 2) !== (1 > 2));
   return 0;
-}
+};

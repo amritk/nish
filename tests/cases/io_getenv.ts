@@ -7,7 +7,7 @@
 // driver that treats it as "unset, use the default" would be wrong. The values
 // come from `io_getenv.env`, because the language has no `setenv` and a golden
 // that read the developer's own environment would not be a golden.
-export function main(): number {
+export const main = (): number => {
   const set = getenv("NISH_TEST_VALUE");
   console.log(`set: ${set === null ? "<null>" : set}`);
   const empty = getenv("NISH_TEST_EMPTY");
@@ -20,4 +20,4 @@ export function main(): number {
     console.log(`length: ${set.length}`);
   }
   return 0;
-}
+};

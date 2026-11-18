@@ -6,7 +6,7 @@ const ENABLED: boolean = LIMIT > 5;
 const RATIO: f64 = 1.0 / 4.0;
 const BIG: i64 = 4000000000;
 
-export function main(): number {
+export const main = (): number => {
   console.log(LABEL);
   console.log(MIN_I32);
   console.log(RATIO);
@@ -19,4 +19,4 @@ export function main(): number {
   }
   console.log(total);
   return STEP;
-}
+};

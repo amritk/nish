@@ -2,7 +2,7 @@
 // natively (`pread` returns 0) and under Node (`bytesRead === 0`). A read
 // that starts before the end and asks past it answers the bytes that are
 // there. A `len` of 0 answers 0 without asking the file system.
-export function main(): number {
+export const main = (): number => {
   const path = "build/test/file_read_at_eof.bin";
   const bytes: u8[] = [1, 2, 3, 4, 5];
   writeFileBytesSync(path, bytes);
@@ -22,4 +22,4 @@ export function main(): number {
   console.log(`len 0: ${fileReadAt(fd, buf, 0, 0, start)}`);
   console.log(`closed: ${fileClose(fd)}`);
   return 0;
-}
+};

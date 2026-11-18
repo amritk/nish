@@ -4,118 +4,118 @@
 # Do not edit by hand — `goldens.js`'s header says what is keyed on what.
 # 157 programs, 320 modules, 316 distinct (167.1 KiB live, 166.7 KiB stored)
 program cases/argv_echo
-  module 56997a70169032e1 tests/cases/argv_echo.ts ceb29fd9cb279e13 argv_echo.mjs
+  module 61a603fd6093e8a4 tests/cases/argv_echo.ts ceb29fd9cb279e13 argv_echo.mjs
   entry 6df9d521190d8543 __entry.mjs
 program cases/arr_bounds_panic
-  module b42b82e1dc77c77f tests/cases/arr_bounds_panic.ts 8e46aea6ec12cc46 arr_bounds_panic.mjs
+  module f596981293c1e7ee tests/cases/arr_bounds_panic.ts 8e46aea6ec12cc46 arr_bounds_panic.mjs
   entry fb22ddbb25e86790 __entry.mjs
 program cases/arr_bounds_shrink_panic
   module ca3d4aaa8c31f586 tests/cases/arr_bounds_shrink_panic.ts 19e35313346baa22 arr_bounds_shrink_panic.mjs
   entry 8b72cf42d1633751 __entry.mjs
 program cases/arr_element_bitwise_assign
-  module 44a1ea6b2ff66098 tests/cases/arr_element_bitwise_assign.ts 2ad84e70cd75b160 arr_element_bitwise_assign.mjs
+  module 19fe4be4ae453f5b tests/cases/arr_element_bitwise_assign.ts 2ad84e70cd75b160 arr_element_bitwise_assign.mjs
   entry 86965ca30de7e66c __entry.mjs
 program cases/arr_f64
   flags --number-mode f64
-  module feef47cf159eb51a tests/cases/arr_f64.ts a6bd273e543c57f3 arr_f64.mjs
+  module b51050296bf074ca tests/cases/arr_f64.ts a6bd273e543c57f3 arr_f64.mjs
   entry 537d3b85ced7c98e __entry.mjs
 program cases/arr_for_of
-  module a35ca6f821e64d62 tests/cases/arr_for_of.ts ebca77bc3f1030f1 arr_for_of.mjs
+  module d30062f78a3df1c5 tests/cases/arr_for_of.ts ebca77bc3f1030f1 arr_for_of.mjs
   entry 769e27d07c82cbed __entry.mjs
 program cases/arr_index_read_write
-  module 1a00a3c9d42134bb tests/cases/arr_index_read_write.ts 69056f1d5df77bdd arr_index_read_write.mjs
+  module e2dd7b201486ae68 tests/cases/arr_index_read_write.ts 69056f1d5df77bdd arr_index_read_write.mjs
   entry dfdce6684f9b4060 __entry.mjs
 program cases/arr_length
-  module 5906b614ed701634 tests/cases/arr_length.ts 15fcb325649fc352 arr_length.mjs
+  module 2a3955f363bac6ed tests/cases/arr_length.ts 15fcb325649fc352 arr_length.mjs
   entry b9425e3d5bbef899 __entry.mjs
 program cases/arr_literal
-  module c445a1498c624ae0 tests/cases/arr_literal.ts 0c53ba161f9e2b53 arr_literal.mjs
+  module 03ef696ad6ef34c3 tests/cases/arr_literal.ts 0c53ba161f9e2b53 arr_literal.mjs
   entry 1a1309108fb6807c __entry.mjs
 program cases/arr_nested
-  module fcb5a84fdf857dfc tests/cases/arr_nested.ts 99eb66710817cdaf arr_nested.mjs
+  module 6301a4ba40cf2d81 tests/cases/arr_nested.ts 99eb66710817cdaf arr_nested.mjs
   entry 9e124da6021c86c5 __entry.mjs
 program cases/arr_new_zeroed
-  module f42ed49c1c8446bf tests/cases/arr_new_zeroed.ts c0ebb3dfbdee8182 arr_new_zeroed.mjs
+  module aacad6dadffc064b tests/cases/arr_new_zeroed.ts c0ebb3dfbdee8182 arr_new_zeroed.mjs
   entry e49fd350569cb7e7 __entry.mjs
 program cases/arr_push
-  module d1e6d9ea8a6e47e1 tests/cases/arr_push.ts 3292c2d276fcfdd4 arr_push.mjs
+  module 520937be9c5bceb0 tests/cases/arr_push.ts 3292c2d276fcfdd4 arr_push.mjs
   entry 4a5a38ef49439b8f __entry.mjs
 program cases/arr_readonly_field
-  module c508009d9b86395f tests/cases/arr_readonly_field.ts 9b6b74f09288450b arr_readonly_field.mjs
+  module 34c9653f97c95e01 tests/cases/arr_readonly_field.ts 9b6b74f09288450b arr_readonly_field.mjs
   entry 3cb68c74e9bde7e4 __entry.mjs
 program cases/arr_readonly_param
-  module 8c2735c0995a71e6 tests/cases/arr_readonly_param.ts 85cbbf35b8b2cf5b arr_readonly_param.mjs
+  module 760e2a6c7c90144d tests/cases/arr_readonly_param.ts 85cbbf35b8b2cf5b arr_readonly_param.mjs
   entry 04b081813c3ce17d __entry.mjs
 program cases/arr_sort
-  module 1be25fb3538cbdad tests/cases/arr_sort.ts f6c640d681feeac4 arr_sort.mjs
+  module 6f3701a8227b7bd2 tests/cases/arr_sort.ts f6c640d681feeac4 arr_sort.mjs
   entry f3c6c5f92c6bb431 __entry.mjs
 program cases/arr_stack_f64
   flags --number-mode f64
-  module 58ae4e8e011087ce tests/cases/arr_stack_f64.ts 3269c339349f2146 arr_stack_f64.mjs
+  module 8f3976d3abcaaa14 tests/cases/arr_stack_f64.ts 3269c339349f2146 arr_stack_f64.mjs
   entry f3217d847566159f __entry.mjs
 program cases/arr_strings
-  module ce0815e9eaaf9dd9 tests/cases/arr_strings.ts 9763835bf59dd58c arr_strings.mjs
+  module 798844552d09c8e5 tests/cases/arr_strings.ts 9763835bf59dd58c arr_strings.mjs
   entry 8101845727cc8f65 __entry.mjs
 program cases/arr_typed_views
-  module e18b566b5dec237c tests/cases/arr_typed_views.ts 78f106d6fbac1678 arr_typed_views.mjs
+  module 71927bc280a8f53d tests/cases/arr_typed_views.ts 78f106d6fbac1678 arr_typed_views.mjs
   entry 0e583d247054a8dd __entry.mjs
 program cases/arr_u8
-  module 2e224cfc237d9cbd tests/cases/arr_u8.ts 7dd23c3154228bc7 arr_u8.mjs
+  module b2f44433f7b34868 tests/cases/arr_u8.ts 7dd23c3154228bc7 arr_u8.mjs
   entry 1a1a16d0b59c595b __entry.mjs
 program cases/bit_shift_narrow
-  module 699f596c8bcaffd7 tests/cases/bit_shift_narrow.ts e53cfbee8f62b0b8 bit_shift_narrow.mjs
+  module 7dc0e7a2d812ec68 tests/cases/bit_shift_narrow.ts e53cfbee8f62b0b8 bit_shift_narrow.mjs
   entry 2e27c18ce74a4979 __entry.mjs
 program cases/cf_return_void_call
   module 613f731a52e1c893 tests/cases/cf_return_void_call.ts c84e39dae3ab62b6 cf_return_void_call.mjs
   entry 5a8c1a5066c3ccea __entry.mjs
 program cases/cls_compound_field
-  module b9e86586299ca6a5 tests/cases/cls_compound_field.ts db67da8392d9b757 cls_compound_field.mjs
+  module d00d19d19892202e tests/cases/cls_compound_field.ts db67da8392d9b757 cls_compound_field.mjs
   entry 595e7d52b34b4e2a __entry.mjs
 program cases/cls_field_bitwise_assign
-  module 976f46200aca4d0f tests/cases/cls_field_bitwise_assign.ts b0d00666d0851977 cls_field_bitwise_assign.mjs
+  module f0587c35ab65994b tests/cases/cls_field_bitwise_assign.ts b0d00666d0851977 cls_field_bitwise_assign.mjs
   entry 491d2fc6628352a7 __entry.mjs
 program cases/cls_field_write
-  module a0470716eb70c98a tests/cases/cls_field_write.ts a39d6b66456fb028 cls_field_write.mjs
+  module 260ee58cca4d4eea tests/cases/cls_field_write.ts a39d6b66456fb028 cls_field_write.mjs
   entry 8b2782cea56595c0 __entry.mjs
 program cases/cls_implements
-  module eb71f89ccec6c920 tests/cases/cls_implements.ts a3483f9edd85159d cls_implements.mjs
+  module 21038b291330faa6 tests/cases/cls_implements.ts a3483f9edd85159d cls_implements.mjs
   entry ae3d4f39d01845af __entry.mjs
 program cases/cls_implements_prefix
-  module ccc0ac10a0a8cf8f tests/cases/cls_implements_prefix.ts d6c55bcd3e3a13a3 cls_implements_prefix.mjs
+  module 3f65ae7e85a8f336 tests/cases/cls_implements_prefix.ts d6c55bcd3e3a13a3 cls_implements_prefix.mjs
   entry 47214d7167959571 __entry.mjs
 program cases/cls_initializers
-  module ba06aca5f8e28ad9 tests/cases/cls_initializers.ts 61a10eaf93931599 cls_initializers.mjs
+  module a21b3d1fd143acf5 tests/cases/cls_initializers.ts 61a10eaf93931599 cls_initializers.mjs
   entry b30b8d8bad3e292e __entry.mjs
 program cases/cls_interface_literal
-  module 69344bbdc0bf00bc tests/cases/cls_interface_literal.ts 47c7e9e1d58d1e1b cls_interface_literal.mjs
+  module 44f129c0059e895c tests/cases/cls_interface_literal.ts 47c7e9e1d58d1e1b cls_interface_literal.mjs
   entry 384fe31791fbe33b __entry.mjs
 program cases/cls_nested
-  module 7c40d528ee112dd0 tests/cases/cls_nested.ts 589e628ca6633069 cls_nested.mjs
+  module 2a1fd986bcb71550 tests/cases/cls_nested.ts 589e628ca6633069 cls_nested.mjs
   entry 649359d43571a2dc __entry.mjs
 program cases/cls_point
-  module 435fd35a3955d03c tests/cases/cls_point.ts 34b968f5c301eb61 cls_point.mjs
+  module 558dd8e0012f1c30 tests/cases/cls_point.ts 34b968f5c301eb61 cls_point.mjs
   entry f2c65110997a4bd7 __entry.mjs
 program cases/cls_readonly_ok
-  module a17880e5b5a9eb78 tests/cases/cls_readonly_ok.ts e2485ceecf2c0cd9 cls_readonly_ok.mjs
+  module 723864c55e102e05 tests/cases/cls_readonly_ok.ts e2485ceecf2c0cd9 cls_readonly_ok.mjs
   entry 640d68d04f937320 __entry.mjs
 program cases/cls_this_method_call
-  module fe78fbd1d72f2f6f tests/cases/cls_this_method_call.ts edac4a8722523949 cls_this_method_call.mjs
+  module cdc4e3f11dd7c112 tests/cases/cls_this_method_call.ts edac4a8722523949 cls_this_method_call.mjs
   entry e1421ee793ff1054 __entry.mjs
 program cases/cls_vector
   flags --number-mode f64
-  module 9fced3344599ceff tests/cases/cls_vector.ts 160d6d9b4ee7ffe7 cls_vector.mjs
+  module b88a3735bf0851eb tests/cases/cls_vector.ts 160d6d9b4ee7ffe7 cls_vector.mjs
   entry 1a799c454dfcc5c8 __entry.mjs
 program cases/const_f64
-  module 3ecb93ffb4859d93 tests/cases/const_f64.ts 8bdec118c980afce const_f64.mjs
+  module 36a8d86f0c14448c tests/cases/const_f64.ts 8bdec118c980afce const_f64.mjs
   entry 1b2467738a4f7434 __entry.mjs
 program cases/const_i64
-  module 907e63c796228d65 tests/cases/const_i64.ts 38564fc4e2c22c62 const_i64.mjs
+  module 4dd5c14827daa500 tests/cases/const_i64.ts 38564fc4e2c22c62 const_i64.mjs
   entry bbd8dbc7de7ef80c __entry.mjs
 program cases/conv_f64_bits
-  module ece6de317c53eb3d tests/cases/conv_f64_bits.ts ec31814d751c08a1 conv_f64_bits.mjs
+  module 205a0789cad3bc04 tests/cases/conv_f64_bits.ts ec31814d751c08a1 conv_f64_bits.mjs
   entry fe7e7db8d9c38960 __entry.mjs
 program cases/conv_f64_context
-  module 89bcd75694730a11 tests/cases/conv_f64_context.ts b5f464ca96442987 conv_f64_context.mjs
+  module dab24b3c58bfdb38 tests/cases/conv_f64_context.ts b5f464ca96442987 conv_f64_context.mjs
   entry 9b52359dbec8e132 __entry.mjs
 program cases/dbg_arrow
   flags -g
@@ -126,25 +126,25 @@ program cases/dbg_utf8
   module 11910e163f1ff9bc tests/cases/dbg_utf8.ts 19a2e713bdb40398 dbg_utf8.mjs
   entry 163fb07c36ac0afa __entry.mjs
 program cases/decl_prototype_names
-  module 5d85993fb6f2b881 tests/cases/decl_prototype_names.ts 99711ad029e51f33 decl_prototype_names.mjs
+  module ab1a1de3555c18c0 tests/cases/decl_prototype_names.ts 99711ad029e51f33 decl_prototype_names.mjs
   entry 9c666be6e4eda296 __entry.mjs
 program cases/div_checked
-  module 8e738938be8effe2 tests/cases/div_checked.ts 71d83cbb9c9f78fe div_checked.mjs
+  module 04aede4f9f127173 tests/cases/div_checked.ts 71d83cbb9c9f78fe div_checked.mjs
   entry 77743c838eeacf99 __entry.mjs
 program cases/div_overflow_panic
-  module dea5964a224be089 tests/cases/div_overflow_panic.ts 7e104ad4be98543e div_overflow_panic.mjs
+  module b558b38c9fb84d5c tests/cases/div_overflow_panic.ts 7e104ad4be98543e div_overflow_panic.mjs
   entry 8e1cbd393f95dfd0 __entry.mjs
 program cases/div_zero_panic
-  module 91b27f7a56d88f6d tests/cases/div_zero_panic.ts 13b617472b625380 div_zero_panic.mjs
+  module f5e45748ffb1ad9a tests/cases/div_zero_panic.ts 13b617472b625380 div_zero_panic.mjs
   entry 54e97da3cfe34694 __entry.mjs
 program cases/entry_main
-  module 8602be23191e5b88 tests/cases/entry_main.ts 15f790b1800f242f entry_main.mjs
+  module c56eba56d67d4797 tests/cases/entry_main.ts 15f790b1800f242f entry_main.mjs
   entry 7d63e71573fa0c3d __entry.mjs
 program cases/entry_main_void
-  module b8bab27e6f6970d9 tests/cases/entry_main_void.ts 0c7fb89ff319e938 entry_main_void.mjs
+  module 610c1b9e41876223 tests/cases/entry_main_void.ts 0c7fb89ff319e938 entry_main_void.mjs
   entry 187d796fcf1eeaf1 __entry.mjs
 program cases/ffi_scalar
-  module 45941925e7265218 tests/cases/ffi_scalar.ts 35652595f711e28e ffi_scalar.mjs
+  module 4dafbc5841cf0b88 tests/cases/ffi_scalar.ts 35652595f711e28e ffi_scalar.mjs
   entry dee998fc8aa8c347 __entry.mjs
 program cases/fn_arrow
   module c9a4cdddf574a6a8 tests/cases/fn_arrow.ts 7ae08ec71d6fda24 fn_arrow.mjs
@@ -159,25 +159,25 @@ program cases/fn_arrow_hoisting
   module 1687429ce4b84b5e tests/cases/fn_arrow_hoisting.ts 37c8539d289af342 fn_arrow_hoisting.mjs
   entry 78b68a0da66d1309 __entry.mjs
 program cases/i64_literal_2pow53
-  module 3c7249e8ce53f1b3 tests/cases/i64_literal_2pow53.ts 5e3de95067cd68d5 i64_literal_2pow53.mjs
+  module 755a95c8b6176730 tests/cases/i64_literal_2pow53.ts 5e3de95067cd68d5 i64_literal_2pow53.mjs
   entry 160eaf0f13587821 __entry.mjs
 program cases/int_min_literal
-  module 7bbb7fe37df51532 tests/cases/int_min_literal.ts b18912474c7ee927 int_min_literal.mjs
+  module 6916c0c6e809e0c0 tests/cases/int_min_literal.ts b18912474c7ee927 int_min_literal.mjs
   entry 29b37363f38ad177 __entry.mjs
 program cases/io_files
-  module 38c245b6f0081593 tests/cases/io_files.ts 0b8d575b8c0828e4 io_files.mjs
+  module 64f6457560c50af4 tests/cases/io_files.ts 0b8d575b8c0828e4 io_files.mjs
   entry d729ad48faaa2c04 __entry.mjs
 program cases/io_getenv
-  module 4f6306d8a23c27cb tests/cases/io_getenv.ts 9f27a491d6286352 io_getenv.mjs
+  module f843dcee441c7235 tests/cases/io_getenv.ts 9f27a491d6286352 io_getenv.mjs
   entry f3455e92527b304a __entry.mjs
 program cases/io_host
-  module a86447ac51b0c283 tests/cases/io_host.ts e25cf7d3e7e71c58 io_host.mjs
+  module 968b4d308bcaf226 tests/cases/io_host.ts e25cf7d3e7e71c58 io_host.mjs
   entry 1e7b6fd130353088 __entry.mjs
 program cases/io_is_directory
-  module eaf02081e7c064c0 tests/cases/io_is_directory.ts 4765bd1ec76c7319 io_is_directory.mjs
+  module 7783804a86781899 tests/cases/io_is_directory.ts 4765bd1ec76c7319 io_is_directory.mjs
   entry 43c199a76d5ee254 __entry.mjs
 program cases/io_mkdir
-  module 0f6fba84d4f3a24c tests/cases/io_mkdir.ts 971ec1673848c7ae io_mkdir.mjs
+  module c63f68805917aca5 tests/cases/io_mkdir.ts 971ec1673848c7ae io_mkdir.mjs
   entry 5c81586bb3127bec __entry.mjs
 program cases/io_monotonic
   module 0567022fa8b418b0 tests/cases/io_monotonic.ts 348771fb65f3a0db io_monotonic.mjs
@@ -198,10 +198,10 @@ program cases/io_readdir_null
   module 6973202bc540e697 tests/cases/io_readdir_null.ts 3a1c86d724de38a1 io_readdir_null.mjs
   entry bb4defd0eaa09bc4 __entry.mjs
 program cases/io_realpath
-  module e0180357719623ee tests/cases/io_realpath.ts 8c9ed077b45bf226 io_realpath.mjs
+  module 07e3d088a017ffd8 tests/cases/io_realpath.ts 8c9ed077b45bf226 io_realpath.mjs
   entry 53459745f63d8882 __entry.mjs
 program cases/io_spawn
-  module f04baba63065a9e3 tests/cases/io_spawn.ts 8c6acdcd86cdbe63 io_spawn.mjs
+  module 0d3b7215327f2cbc tests/cases/io_spawn.ts 8c6acdcd86cdbe63 io_spawn.mjs
   entry 611124d7a39945db __entry.mjs
 program cases/io_spawn_to
   module 838e303ec96a1255 tests/cases/io_spawn_to.ts 3986ab6e7155e78f io_spawn_to.mjs
@@ -210,7 +210,7 @@ program cases/io_spawn_to_inherit
   module b0661455f49c0b56 tests/cases/io_spawn_to_inherit.ts b8de0525e1f6581b io_spawn_to_inherit.mjs
   entry d0b1b32cc6877664 __entry.mjs
 program cases/io_streams
-  module 0e02099aae6c4e7d tests/cases/io_streams.ts 17328795d077c15b io_streams.mjs
+  module 003f7fca9eafb5db tests/cases/io_streams.ts 17328795d077c15b io_streams.mjs
   entry a13011b0c09aa6bd __entry.mjs
 program cases/math_literal_operand_forms
   module 013f78d761048910 tests/cases/math_literal_operand_forms.ts beabb3d0359a4826 math_literal_operand_forms.mjs
@@ -219,281 +219,281 @@ program cases/mem_getenv_scope
   module 78d67350da7c2022 tests/cases/mem_getenv_scope.ts de8c7e6f1ef6174d mem_getenv_scope.mjs
   entry 9b6e2e13940fa172 __entry.mjs
 program cases/mem_nullable
-  module a77e05a0f8bd69f9 tests/cases/mem_nullable.ts eaeaa8eef9703f63 mem_nullable.mjs
+  module 5df3edd9c1b6bc81 tests/cases/mem_nullable.ts eaeaa8eef9703f63 mem_nullable.mjs
   entry bb0e00e48d4ce4f3 __entry.mjs
 program cases/mem_readdir_scope
   module 01b245394bb86557 tests/cases/mem_readdir_scope.ts d43cc3056a8f999a mem_readdir_scope.mjs
   entry 2e5276928378cf89 __entry.mjs
 program cases/mem_reclaim_argument
-  module 5062abac00c53da8 tests/cases/mem_reclaim_argument.ts 84e1462aba23b0d4 mem_reclaim_argument.mjs
+  module 40335fd2796c0b95 tests/cases/mem_reclaim_argument.ts 84e1462aba23b0d4 mem_reclaim_argument.mjs
   entry 32916bcfbb382d78 __entry.mjs
 program cases/mem_reclaim_call
-  module 19852aef16dbdaed tests/cases/mem_reclaim_call.ts 6e70ff521aeea425 mem_reclaim_call.mjs
+  module 3ea7eccbcf8721b2 tests/cases/mem_reclaim_call.ts 6e70ff521aeea425 mem_reclaim_call.mjs
   entry d5f68bcec6e18c09 __entry.mjs
 program cases/mem_reclaim_no_stack_alloc
   flags --no-stack-alloc
-  module cf76d74726c19816 tests/cases/mem_reclaim_no_stack_alloc.ts 6ee8be6eb2158702 mem_reclaim_no_stack_alloc.mjs
+  module bd85833f2c46e9f6 tests/cases/mem_reclaim_no_stack_alloc.ts 6ee8be6eb2158702 mem_reclaim_no_stack_alloc.mjs
   entry d7c805f133571356 __entry.mjs
 program cases/mem_scope_dynamic_array
-  module 5f23054d5ab17322 tests/cases/mem_scope_dynamic_array.ts d181fd629c6c5c7e mem_scope_dynamic_array.mjs
+  module e5eeb46bcc65f062 tests/cases/mem_scope_dynamic_array.ts d181fd629c6c5c7e mem_scope_dynamic_array.mjs
   entry 27a0f6f594755a7d __entry.mjs
 program cases/mem_scope_string_temp
-  module b22b6622a4c8ec82 tests/cases/mem_scope_string_temp.ts 80cf809dcd70b77a mem_scope_string_temp.mjs
+  module c950eba0da965fb7 tests/cases/mem_scope_string_temp.ts 80cf809dcd70b77a mem_scope_string_temp.mjs
   entry a9e617db80a58031 __entry.mjs
 program cases/mem_scope_tail_call
   module dbe6d58b2630d08b tests/cases/mem_scope_tail_call.ts e6250a564a4ae58e mem_scope_tail_call.mjs
   entry 3bc52f8106acc625 __entry.mjs
 program cases/mem_stack_array_literal
-  module 333523b83970a8f7 tests/cases/mem_stack_array_literal.ts d2017f178073463d mem_stack_array_literal.mjs
+  module c925f19dfb3853c1 tests/cases/mem_stack_array_literal.ts d2017f178073463d mem_stack_array_literal.mjs
   entry d7633498757dc7b2 __entry.mjs
 program cases/mem_stack_ctor_capture
-  module 94ad7222358a284c tests/cases/mem_stack_ctor_capture.ts 3895dc37256f0a2c mem_stack_ctor_capture.mjs
+  module 681400dc5365936a tests/cases/mem_stack_ctor_capture.ts 3895dc37256f0a2c mem_stack_ctor_capture.mjs
   entry d134ec0762a788a7 __entry.mjs
 program cases/mem_stack_escape
-  module 4c80824c5df9ba38 tests/cases/mem_stack_escape.ts 3e02fcbf19ad75ea mem_stack_escape.mjs
+  module 1a24a6b5cb282dbb tests/cases/mem_stack_escape.ts 3e02fcbf19ad75ea mem_stack_escape.mjs
   entry 46f7197a22410d22 __entry.mjs
 program cases/mem_stack_loop
-  module b740ba70733688f3 tests/cases/mem_stack_loop.ts a28c18f98efb0afc mem_stack_loop.mjs
+  module 6ce27457fdc3c7d6 tests/cases/mem_stack_loop.ts a28c18f98efb0afc mem_stack_loop.mjs
   entry 962afb866dd5343c __entry.mjs
 program cases/mem_stack_struct
-  module 8561faa44c62f435 tests/cases/mem_stack_struct.ts fe6cd74942224231 mem_stack_struct.mjs
+  module 3eafbfff5e12b714 tests/cases/mem_stack_struct.ts fe6cd74942224231 mem_stack_struct.mjs
   entry 5f032b4cfa09671c __entry.mjs
 program cases/mem_threads_arena
   flags --threads
   module 1cd9b06330cd087a tests/cases/mem_threads_arena.ts 3c365d27f51d0db9 mem_threads_arena.mjs
   entry 6feba3d33c98ad3f __entry.mjs
 program cases/parse_numbers
-  module 83ef33c1caa41a0b tests/cases/parse_numbers.ts 5be2e92d13e2dca9 parse_numbers.mjs
+  module a6e3f82ca5b17109 tests/cases/parse_numbers.ts 5be2e92d13e2dca9 parse_numbers.mjs
   entry 7ed08a87464f4b79 __entry.mjs
 program cases/perf_clamp_order
-  module 5a47ee6519bf18bb tests/cases/perf_clamp_order.ts 4cdd83fce9af56f8 perf_clamp_order.mjs
+  module 382c725bc7b38935 tests/cases/perf_clamp_order.ts 4cdd83fce9af56f8 perf_clamp_order.mjs
   entry de42b94573b93bcf __entry.mjs
 program cases/perf_clamp_rebind
   module c54ebd3ce3ab3bb7 tests/cases/perf_clamp_rebind.ts 59dc0873af893011 perf_clamp_rebind.mjs
   entry df737dc7b4ba1015 __entry.mjs
 program cases/process_exit
-  module 7e91883a1ae285ff tests/cases/process_exit.ts c907a75f5e05ff60 process_exit.mjs
+  module 4c8401a8da9b74fb tests/cases/process_exit.ts c907a75f5e05ff60 process_exit.mjs
   entry bd706080c2a0dda2 __entry.mjs
 program cases/res_basic
-  module d9ce8209ebdf70b4 tests/cases/res_basic.ts be3d913bd8cfb725 res_basic.mjs
+  module 000db62227278a34 tests/cases/res_basic.ts be3d913bd8cfb725 res_basic.mjs
   entry 38a5ef56bbf7277f __entry.mjs
 program cases/res_by_value
-  module 7fefa182442103bf tests/cases/res_by_value.ts 4bc0aab8eba2597c res_by_value.mjs
+  module 2143c7247862d68a tests/cases/res_by_value.ts 4bc0aab8eba2597c res_by_value.mjs
   entry 4b2e26dda4f7eca4 __entry.mjs
 program cases/res_by_value_param
-  module d4668cd429510f47 tests/cases/res_by_value_param.ts f563934fe149d9f1 res_by_value_param.mjs
+  module 09c2160f562665c9 tests/cases/res_by_value_param.ts f563934fe149d9f1 res_by_value_param.mjs
   entry 9127523652ed1cb2 __entry.mjs
 program cases/res_by_value_payloads
-  module 688222b7986580de tests/cases/res_by_value_payloads.ts 9d17b018c3148e81 res_by_value_payloads.mjs
+  module f69f35477178531d tests/cases/res_by_value_payloads.ts 9d17b018c3148e81 res_by_value_payloads.mjs
   entry 72c2cefad2c09165 __entry.mjs
 program cases/res_by_value_propagate
-  module 5726da2e2ae7a18c tests/cases/res_by_value_propagate.ts a58f44d73b5bbaab res_by_value_propagate.mjs
+  module 1760f47a16504eed tests/cases/res_by_value_propagate.ts a58f44d73b5bbaab res_by_value_propagate.mjs
   entry 42aaeab2a83e23eb __entry.mjs
 program cases/res_propagate
-  module 326519de8b6bbac5 tests/cases/res_propagate.ts 6531614e82bb9838 res_propagate.mjs
+  module 12d067e798f2cf9c tests/cases/res_propagate.ts 6531614e82bb9838 res_propagate.mjs
   entry f2eb3eeeebb9f5d0 __entry.mjs
 program cases/res_stack
-  module 942b760639916ba8 tests/cases/res_stack.ts 7ddd43e87ff58263 res_stack.mjs
+  module 78b67d658dca27fc tests/cases/res_stack.ts 7ddd43e87ff58263 res_stack.mjs
   entry 3296c4c380241098 __entry.mjs
 program cases/res_struct_error
-  module 1a1616b05791c3df tests/cases/res_struct_error.ts 443c5da3a2078bcc res_struct_error.mjs
+  module 8f6b8a0be682a978 tests/cases/res_struct_error.ts 443c5da3a2078bcc res_struct_error.mjs
   entry 954b43b6def85319 __entry.mjs
 program cases/res_unwrap
-  module ac34e1f10ba23caf tests/cases/res_unwrap.ts 4dda2a1901ad4a86 res_unwrap.mjs
+  module 8e3b1f2c6581cb76 tests/cases/res_unwrap.ts 4dda2a1901ad4a86 res_unwrap.mjs
   entry edbb335f075a8e17 __entry.mjs
 program cases/res_void
-  module 1351614be1ca79e6 tests/cases/res_void.ts baf30aac55561243 res_void.mjs
+  module 53c73b6c57590812 tests/cases/res_void.ts baf30aac55561243 res_void.mjs
   entry a6c8d1958beb2ff6 __entry.mjs
 program cases/str_slice_panic
   module 35688cb89dbdbe85 tests/cases/str_slice_panic.ts bae28b1bc89bd9b2 str_slice_panic.mjs
   entry d2e427f72b982e1a __entry.mjs
 program cases/u_div_zero_panic
-  module bb1e903f400f4ac5 tests/cases/u_div_zero_panic.ts 752dfc84f6cbf50c u_div_zero_panic.mjs
+  module 90e43ff38df75488 tests/cases/u_div_zero_panic.ts 752dfc84f6cbf50c u_div_zero_panic.mjs
   entry 031363ce59fc53b7 __entry.mjs
 program corpus/argv_words
-  module 7655b9e26728eafe tests/differential/corpus/argv_words.ts d49206fca2e6d84a argv_words.mjs
+  module 00df672e19f5c1d5 tests/differential/corpus/argv_words.ts d49206fca2e6d84a argv_words.mjs
   entry b8ecd4096f0534dc __entry.mjs
 program corpus/arr_2d
-  module f37c25a6b0d02948 tests/differential/corpus/arr_2d.ts c552375f9f352148 arr_2d.mjs
+  module f901cb67424ca0fb tests/differential/corpus/arr_2d.ts c552375f9f352148 arr_2d.mjs
   entry 840d9e0005035f6f __entry.mjs
 program corpus/arr_bounds_edge
-  module 8ee47d594597f059 tests/differential/corpus/arr_bounds_edge.ts 6e29a1199217dc05 arr_bounds_edge.mjs
+  module 7a39616ca2e6bc8c tests/differential/corpus/arr_bounds_edge.ts 6e29a1199217dc05 arr_bounds_edge.mjs
   entry ffac0e2e5c8c928a __entry.mjs
 program corpus/arr_for_of
-  module 872a27e864acd35f tests/differential/corpus/arr_for_of.ts 73ef457ff23d241a arr_for_of.mjs
+  module d59b04e3b38c174f tests/differential/corpus/arr_for_of.ts 73ef457ff23d241a arr_for_of.mjs
   entry 769e27d07c82cbed __entry.mjs
 program corpus/arr_methods
-  module aa8c03bb536ccf1e tests/differential/corpus/arr_methods.ts e1cddbf92952c225 arr_methods.mjs
+  module a3c571d9137f3e8d tests/differential/corpus/arr_methods.ts e1cddbf92952c225 arr_methods.mjs
   entry 280fea406d20c58c __entry.mjs
 program corpus/arr_oob_exit
-  module 04797dabf5bff8dd tests/differential/corpus/arr_oob_exit.ts 33a3a05dcde3da22 arr_oob_exit.mjs
+  module 4270baca5085c56d tests/differential/corpus/arr_oob_exit.ts 33a3a05dcde3da22 arr_oob_exit.mjs
   entry 2eab3c5635dad3a6 __entry.mjs
 program corpus/arr_oob_negative
-  module c78b06207cb9385c tests/differential/corpus/arr_oob_negative.ts 05d9945e9b20b61e arr_oob_negative.mjs
+  module a09fc1c32634e8f7 tests/differential/corpus/arr_oob_negative.ts 05d9945e9b20b61e arr_oob_negative.mjs
   entry 3e029ef7a8704a2f __entry.mjs
 program corpus/arr_push_growth
-  module c5cfa2aabbcff513 tests/differential/corpus/arr_push_growth.ts b93309b5faba3bee arr_push_growth.mjs
+  module 4acf17d44d7fd876 tests/differential/corpus/arr_push_growth.ts b93309b5faba3bee arr_push_growth.mjs
   entry a6a3fabe74ed95c9 __entry.mjs
 program corpus/arr_sort_reverse
-  module 9827f8cccbd275a1 tests/differential/corpus/arr_sort_reverse.ts fbf41f0798b5d649 arr_sort_reverse.mjs
+  module 3ecf23dfed881d0a tests/differential/corpus/arr_sort_reverse.ts fbf41f0798b5d649 arr_sort_reverse.mjs
   entry 66701803a3587605 __entry.mjs
 program corpus/bit_compound_target
-  module 32cbc9f8c8ee3556 tests/differential/corpus/bit_compound_target.ts a3f2f5c75e6ffa8a bit_compound_target.mjs
+  module 4ede3e68e4d4891a tests/differential/corpus/bit_compound_target.ts a3f2f5c75e6ffa8a bit_compound_target.mjs
   entry ef851390879273eb __entry.mjs
 program corpus/bit_ops
-  module 495f3365592806a3 tests/differential/corpus/bit_ops.ts 1b567ff16394887c bit_ops.mjs
+  module 6fada9c6fb166f36 tests/differential/corpus/bit_ops.ts 1b567ff16394887c bit_ops.mjs
   entry d986900b85f728f5 __entry.mjs
 program corpus/bit_shifts
-  module 1487267cbfa35b09 tests/differential/corpus/bit_shifts.ts 1c1bd6c005eaa771 bit_shifts.mjs
+  module 2036c973a066a88e tests/differential/corpus/bit_shifts.ts 1c1bd6c005eaa771 bit_shifts.mjs
   entry 95148cf398ae1f7a __entry.mjs
 program corpus/cf_switch
-  module 522e6e6c8f5df940 tests/differential/corpus/cf_switch.ts be4f7c7159cdb142 cf_switch.mjs
+  module 8d06b07c99817f4a tests/differential/corpus/cf_switch.ts be4f7c7159cdb142 cf_switch.mjs
   entry 49a9370cd4afb086 __entry.mjs
 program corpus/class_prefix
-  module 9fb506c9a8591196 tests/differential/corpus/class_prefix.ts fe1f223afe40d599 class_prefix.mjs
+  module 3bc04ad3b39ff1a0 tests/differential/corpus/class_prefix.ts fe1f223afe40d599 class_prefix.mjs
   entry a06b060365c7aab7 __entry.mjs
 program corpus/collatz
-  module 6720fc741f5e96da tests/differential/corpus/collatz.ts 8b31c85903813759 collatz.mjs
+  module 36dc81dab2b298cc tests/differential/corpus/collatz.ts 8b31c85903813759 collatz.mjs
   entry 987c043ed218bc89 __entry.mjs
 program corpus/const_modules
-  module b2bc632db4ba4a5d tests/differential/corpus/const_modules/main.ts f4d06c528fa3bab5 main.mjs
-  module ecc1d0690d098d0e tests/differential/corpus/const_modules/kinds.ts 1e11df4b989502c3 kinds.mjs
+  module d7065755930bb314 tests/differential/corpus/const_modules/main.ts f4d06c528fa3bab5 main.mjs
+  module 0b318241540e45aa tests/differential/corpus/const_modules/kinds.ts 1e11df4b989502c3 kinds.mjs
   entry d4641ebfc283daff __entry.mjs
 program corpus/conv_bit_patterns
-  module 2ab71ff03c485920 tests/differential/corpus/conv_bit_patterns.ts 094740614b99d88c conv_bit_patterns.mjs
+  module dca2c47952dc9fda tests/differential/corpus/conv_bit_patterns.ts 094740614b99d88c conv_bit_patterns.mjs
   entry 50c33b0df5c3bd86 __entry.mjs
 program corpus/exit_code
-  module 2916653e03dfec97 tests/differential/corpus/exit_code.ts 6f49c328a9ce41cb exit_code.mjs
+  module 6c7016af6d65c78b tests/differential/corpus/exit_code.ts 6f49c328a9ce41cb exit_code.mjs
   entry 5d8fa8359cf5c17d __entry.mjs
 program corpus/exit_code_large
-  module bacacd8d5958bbb9 tests/differential/corpus/exit_code_large.ts ed0979c0966c87e9 exit_code_large.mjs
+  module 0501a8123b9d6de3 tests/differential/corpus/exit_code_large.ts ed0979c0966c87e9 exit_code_large.mjs
   entry 914a940842e61ad6 __entry.mjs
 program corpus/f32_round
-  module a27b5ed1c5d92c48 tests/differential/corpus/f32_round.ts 73eef6b6f56e2709 f32_round.mjs
+  module 06ed317495633826 tests/differential/corpus/f32_round.ts 73eef6b6f56e2709 f32_round.mjs
   entry ce9cfadd32aaed05 __entry.mjs
 program corpus/f64_arith
   flags --number-mode f64
-  module 8f701bae57105628 tests/differential/corpus/f64_arith.ts cbcd500e3db07943 f64_arith.mjs
+  module d9ce17224f635dee tests/differential/corpus/f64_arith.ts cbcd500e3db07943 f64_arith.mjs
   entry 1f558ece881099e3 __entry.mjs
 program corpus/f64_format
   flags --number-mode f64
-  module c137e7010f997103 tests/differential/corpus/f64_format.ts aee9a9aab5dd6334 f64_format.mjs
+  module fe1dc17bb6596550 tests/differential/corpus/f64_format.ts aee9a9aab5dd6334 f64_format.mjs
   entry 2b4c30ac9cd823f9 __entry.mjs
 program corpus/f64_i32_mixed
   flags --number-mode f64
-  module 76c0d0cd539040cc tests/differential/corpus/f64_i32_mixed.ts 6d8a50178ef6978b f64_i32_mixed.mjs
+  module 53fb5aa5e6cc1df2 tests/differential/corpus/f64_i32_mixed.ts 6d8a50178ef6978b f64_i32_mixed.mjs
   entry b6548281aecf10fe __entry.mjs
 program corpus/f64_libm
   flags --number-mode f64
-  module 1b59de1012ac2609 tests/differential/corpus/f64_libm.ts 32a43a05c6d8ab19 f64_libm.mjs
+  module f65865b20b9e09e9 tests/differential/corpus/f64_libm.ts 32a43a05c6d8ab19 f64_libm.mjs
   entry b23fb317f02b4681 __entry.mjs
 program corpus/f64_math
   flags --number-mode f64
-  module 141c7e4e040a1ff1 tests/differential/corpus/f64_math.ts 80631b50944a5d5b f64_math.mjs
+  module 81c271c4e6c08663 tests/differential/corpus/f64_math.ts 80631b50944a5d5b f64_math.mjs
   entry bf040ba4e64c97ca __entry.mjs
 program corpus/f64_minmax_nan
   flags --number-mode f64
-  module 18b32927ef2e660b tests/differential/corpus/f64_minmax_nan.ts bdd05b896a17d1a4 f64_minmax_nan.mjs
+  module a488994beee13e1b tests/differential/corpus/f64_minmax_nan.ts bdd05b896a17d1a4 f64_minmax_nan.mjs
   entry 4238da9aa99f7131 __entry.mjs
 program corpus/f64_pow_spec
   flags --number-mode f64
-  module 379f0b411c09e881 tests/differential/corpus/f64_pow_spec.ts 38f5b72938eeb5fb f64_pow_spec.mjs
+  module 948aa017af6613e3 tests/differential/corpus/f64_pow_spec.ts 38f5b72938eeb5fb f64_pow_spec.mjs
   entry 4f84c2f6a1709433 __entry.mjs
 program corpus/f64_round_negzero
   flags --number-mode f64
-  module dca58486aec05471 tests/differential/corpus/f64_round_negzero.ts 448c5e5403a10b9a f64_round_negzero.mjs
+  module 3b84a65494423094 tests/differential/corpus/f64_round_negzero.ts 448c5e5403a10b9a f64_round_negzero.mjs
   entry 01c67c5a76aca33a __entry.mjs
 program corpus/int_abs_minmax
-  module 52e53101927e7c13 tests/differential/corpus/int_abs_minmax.ts 49702424fb3d60b2 int_abs_minmax.mjs
+  module e47a807e491c7216 tests/differential/corpus/int_abs_minmax.ts 49702424fb3d60b2 int_abs_minmax.mjs
   entry 32204ad4c234c06d __entry.mjs
 program corpus/int_div_overflow
-  module f8500387b7ceb139 tests/differential/corpus/int_div_overflow.ts 47c7751ba9dac62c int_div_overflow.mjs
+  module 99db5746d3c18e0b tests/differential/corpus/int_div_overflow.ts 47c7751ba9dac62c int_div_overflow.mjs
   entry b52c0bf72116d1e4 __entry.mjs
 program corpus/int_div_zero
-  module 3651993605f90574 tests/differential/corpus/int_div_zero.ts ae1c9177c1c23455 int_div_zero.mjs
+  module f56f83bfbd06f7c7 tests/differential/corpus/int_div_zero.ts ae1c9177c1c23455 int_div_zero.mjs
   entry 985153049deb4725 __entry.mjs
 program corpus/int_divmod
-  module d36637abb5e4cf31 tests/differential/corpus/int_divmod.ts 2802a16960225e3c int_divmod.mjs
+  module 7acf3ca12e3b5285 tests/differential/corpus/int_divmod.ts 2802a16960225e3c int_divmod.mjs
   entry b43b7275b62843d4 __entry.mjs
 program corpus/io_missing_file
-  module 7e7d8813f8c66972 tests/differential/corpus/io_missing_file.ts 901394e2e88eee11 io_missing_file.mjs
+  module ce3156994fbf62c5 tests/differential/corpus/io_missing_file.ts 901394e2e88eee11 io_missing_file.mjs
   entry 27cf0e48edc1d2ee __entry.mjs
 program corpus/io_panic
-  module 7751b41b1eb66b70 tests/differential/corpus/io_panic.ts fddd8748e8c586bc io_panic.mjs
+  module 3dca48f5cb2f1f75 tests/differential/corpus/io_panic.ts fddd8748e8c586bc io_panic.mjs
   entry 47d66dbe7e2f0c4d __entry.mjs
 program corpus/io_roundtrip
-  module 8b006704dbf0fd4c tests/differential/corpus/io_roundtrip.ts ea89a675b90934a8 io_roundtrip.mjs
+  module 65eedb356c0121dd tests/differential/corpus/io_roundtrip.ts ea89a675b90934a8 io_roundtrip.mjs
   entry 91783128fe1910bf __entry.mjs
 program corpus/io_streams
-  module ce0d3b2bf9424e8a tests/differential/corpus/io_streams.ts 51875491f0bfb8ce io_streams.mjs
+  module 8fae812d765fe746 tests/differential/corpus/io_streams.ts 51875491f0bfb8ce io_streams.mjs
   entry a13011b0c09aa6bd __entry.mjs
 program corpus/loops_break_continue
-  module a4d5d5bba6657193 tests/differential/corpus/loops_break_continue.ts 242f81d255d13e60 loops_break_continue.mjs
+  module 69df8f2383113c69 tests/differential/corpus/loops_break_continue.ts 242f81d255d13e60 loops_break_continue.mjs
   entry 2205e5ded89b47bd __entry.mjs
 program corpus/loops_nested
-  module 277f9a1c45afbd5c tests/differential/corpus/loops_nested.ts 861a54ddff523e80 loops_nested.mjs
+  module cf2ecae776eab877 tests/differential/corpus/loops_nested.ts 861a54ddff523e80 loops_nested.mjs
   entry 3c3b99ca45d69501 __entry.mjs
 program corpus/main_return_code
-  module 88db86638a11ac11 tests/differential/corpus/main_return_code.ts 69ee0d7fd2236bd5 main_return_code.mjs
+  module 97d8342a83e8bf99 tests/differential/corpus/main_return_code.ts 69ee0d7fd2236bd5 main_return_code.mjs
   entry e4a6aeb97e4e224b __entry.mjs
 program corpus/main_return_negative
-  module 778c6d9e30d51628 tests/differential/corpus/main_return_negative.ts 785dadd9b93807da main_return_negative.mjs
+  module 958b45cd0c68cbf5 tests/differential/corpus/main_return_negative.ts 785dadd9b93807da main_return_negative.mjs
   entry dc8f14ff0565fee2 __entry.mjs
 program corpus/modules_basic
-  module 09cbe82aa98809ed tests/differential/corpus/modules_basic/main.ts 7ddf80d25f4c8deb main.mjs
-  module f82fc6fb7867c35f tests/differential/corpus/modules_basic/math.ts 7f336cbee1e2ed91 math.mjs
-  module 3f0751bdb0e1c259 tests/differential/corpus/modules_basic/text.ts 75ffa85a06ee21d0 text.mjs
+  module fc2f67e3de6366de tests/differential/corpus/modules_basic/main.ts 7ddf80d25f4c8deb main.mjs
+  module d0b97355229b2b60 tests/differential/corpus/modules_basic/math.ts 7f336cbee1e2ed91 math.mjs
+  module c98f92f879748442 tests/differential/corpus/modules_basic/text.ts 75ffa85a06ee21d0 text.mjs
   entry d4641ebfc283daff __entry.mjs
 program corpus/modules_diamond
-  module 13c1d7756fbd973d tests/differential/corpus/modules_diamond/main.ts a891385c76287c16 main.mjs
-  module 79ec7629f5084461 tests/differential/corpus/modules_diamond/left.ts a92223a999bdc663 left.mjs
-  module d6f474b17b5e550a tests/differential/corpus/modules_diamond/common.ts 740c9cdce3bf9544 common.mjs
-  module 781dd3616e1fd265 tests/differential/corpus/modules_diamond/right.ts 77230515f5cfac2c right.mjs
+  module f17b031872af7079 tests/differential/corpus/modules_diamond/main.ts a891385c76287c16 main.mjs
+  module 384925c83b6d0045 tests/differential/corpus/modules_diamond/left.ts a92223a999bdc663 left.mjs
+  module 8ede8d9a9e36960c tests/differential/corpus/modules_diamond/common.ts 740c9cdce3bf9544 common.mjs
+  module 70c7574476b12a4e tests/differential/corpus/modules_diamond/right.ts 77230515f5cfac2c right.mjs
   entry d4641ebfc283daff __entry.mjs
 program corpus/parse_argv_sum
-  module cbef058994762e99 tests/differential/corpus/parse_argv_sum.ts 55c432256acf7d1d parse_argv_sum.mjs
+  module a884f4a18684ef17 tests/differential/corpus/parse_argv_sum.ts 55c432256acf7d1d parse_argv_sum.mjs
   entry b29eb1b6b9bc56d1 __entry.mjs
 program corpus/parse_strings
-  module e2b98c0ef6244f15 tests/differential/corpus/parse_strings.ts b502913344eeca81 parse_strings.mjs
+  module c6c4ac3bd00ea179 tests/differential/corpus/parse_strings.ts b502913344eeca81 parse_strings.mjs
   entry 959a1e8fbf8763a6 __entry.mjs
 program corpus/scopes_shadow
-  module 11d14a816b066c05 tests/differential/corpus/scopes_shadow.ts 50d9faf1ac997480 scopes_shadow.mjs
+  module 865d7bbf6673fcd4 tests/differential/corpus/scopes_shadow.ts 50d9faf1ac997480 scopes_shadow.mjs
   entry c8de2dd4fa9cdc65 __entry.mjs
 program corpus/short_circuit
-  module 57a846db6fd5a22f tests/differential/corpus/short_circuit.ts b137ecadd1426ebe short_circuit.mjs
+  module 8eb72150331bd742 tests/differential/corpus/short_circuit.ts b137ecadd1426ebe short_circuit.mjs
   entry a45f6a0026075757 __entry.mjs
 program corpus/str_basic
-  module 4cf2c0388573c6ba tests/differential/corpus/str_basic.ts 0c93fdccb84f2907 str_basic.mjs
+  module 4477b0ce02ef2a16 tests/differential/corpus/str_basic.ts 0c93fdccb84f2907 str_basic.mjs
   entry b95d39cb0b439a04 __entry.mjs
 program corpus/str_build_loop
-  module 45717312e0ec02c8 tests/differential/corpus/str_build_loop.ts d4116f376dea7dfe str_build_loop.mjs
+  module 4b86d5ee7020ce6a tests/differential/corpus/str_build_loop.ts d4116f376dea7dfe str_build_loop.mjs
   entry e6f6f9cb09b525c7 __entry.mjs
 program corpus/str_large
-  module 8639367cb04261d3 tests/differential/corpus/str_large.ts 56c6e12b4d7e7261 str_large.mjs
+  module 8205ad412264b101 tests/differential/corpus/str_large.ts 56c6e12b4d7e7261 str_large.mjs
   entry 03c7c7a46dbfd8ba __entry.mjs
 program corpus/str_methods
-  module 9111cda529e1c57a tests/differential/corpus/str_methods.ts a04f2b461cae5ed8 str_methods.mjs
+  module 3fafa9a1fcc5d3be tests/differential/corpus/str_methods.ts a04f2b461cae5ed8 str_methods.mjs
   entry a65a178b2b0c6b18 __entry.mjs
 program corpus/str_nul_escapes
-  module f5eb2be0f6b0fc42 tests/differential/corpus/str_nul_escapes.ts 40690675cf1d2c98 str_nul_escapes.mjs
+  module 7a337e285468ec27 tests/differential/corpus/str_nul_escapes.ts 40690675cf1d2c98 str_nul_escapes.mjs
   entry 9cbc48a91300a1dd __entry.mjs
 program corpus/str_slice
-  module edea9c77fbc4ef06 tests/differential/corpus/str_slice.ts 1e6c7b1419b30fcc str_slice.mjs
+  module cacf012d73874ddc tests/differential/corpus/str_slice.ts 1e6c7b1419b30fcc str_slice.mjs
   entry edf2ee9242915f97 __entry.mjs
 program corpus/str_template
-  module 88cf8b50397323b6 tests/differential/corpus/str_template.ts 5a02a084951b33f2 str_template.mjs
+  module 6baa4353ff73dbbc tests/differential/corpus/str_template.ts 5a02a084951b33f2 str_template.mjs
   entry 76f3151ca7be5d9e __entry.mjs
 program corpus/str_unicode
-  module a846947fb693a025 tests/differential/corpus/str_unicode.ts dad39c4a265ecd9e str_unicode.mjs
+  module 361e8620bb343e07 tests/differential/corpus/str_unicode.ts dad39c4a265ecd9e str_unicode.mjs
   entry 5d7bb58b2a18d7ae __entry.mjs
 program corpus/ternary_chain
-  module 40d14aad3e6680ee tests/differential/corpus/ternary_chain.ts dbd311751491c62b ternary_chain.mjs
+  module 0561a9bcac4e2ee8 tests/differential/corpus/ternary_chain.ts dbd311751491c62b ternary_chain.mjs
   entry 2cd477a785936da7 __entry.mjs
 program corpus/u_convert_shift
-  module 8539e1ee7b5939df tests/differential/corpus/u_convert_shift.ts d9a94ec0fee54d24 u_convert_shift.mjs
+  module 571f12b4deefa06f tests/differential/corpus/u_convert_shift.ts d9a94ec0fee54d24 u_convert_shift.mjs
   entry 999177042b069aa6 __entry.mjs
 program corpus/u_wrap
-  module d7ba1beae41f5375 tests/differential/corpus/u_wrap.ts 90ef4896e0a39675 u_wrap.mjs
+  module 9daf1f5ad3d92ca5 tests/differential/corpus/u_wrap.ts 90ef4896e0a39675 u_wrap.mjs
   entry 5d416e3b40934f1b __entry.mjs
 body ceb29fd9cb279e13 23 870
 import * as __nish from "<root>/runtime/shim.mjs";

@@ -29,7 +29,7 @@ class File {
   }
 }
 
-export function nested(k: i32): i32 {
+export const nested = (k: i32): i32 => {
   using outer = new File("data")
   let c = outer.read()
   {
@@ -43,9 +43,9 @@ export function nested(k: i32): i32 {
     return 2
   }
   return c
-}
+};
 
-export function whileBody(n: i32): i32 {
+export const whileBody = (n: i32): i32 => {
   let i = 0
   let total = 0
   while (i < n) {
@@ -54,7 +54,7 @@ export function whileBody(n: i32): i32 {
     i++
   }
   return total
-}
+};
 
 class Probe {
   first: i32
@@ -64,27 +64,27 @@ class Probe {
   }
 }
 
-export function built(): i32 {
+export const built = (): i32 => {
   const p = new Probe()
   return p.first
-}
+};
 
-function readWith<T>(x: T): T {
+const readWith = <T>(x: T): T => {
   using f = new File("data")
   f.read()
   return x
-}
+};
 
-export function specialised(): i32 {
+export const specialised = (): i32 => {
   const s = readWith("ab")
   return readWith(s.length)
-}
+};
 
-function around(n: i32, g: (n: i32) => i32): i32 {
+const around = (n: i32, g: (n: i32) => i32): i32 => {
   using f = new File("data")
   return g(n) + f.read()
-}
+};
 
-export function passed(n: i32): i32 {
+export const passed = (n: i32): i32 => {
   return around(n, (m: i32): i32 => m * 2)
-}
+};

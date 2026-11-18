@@ -1,12 +1,12 @@
-function trace(m: number[][]): number {
+const trace = (m: number[][]): number => {
   let t = 0;
   for (let i = 0; i < m.length; i++) {
     t += m[i][i];
   }
   return t;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const m: number[][] = [];
   for (let i = 0; i < 3; i++) {
     const row = new Array<number>(3);
@@ -24,4 +24,4 @@ export function main(): number {
   grid.push(new Array<number>(2));
   console.log(grid[0][1]);
   return 0;
-}
+};

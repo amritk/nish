@@ -13,12 +13,12 @@ class Point {
   }
 }
 
-function render(p: Point): string {
+const render = (p: Point): string => {
   return `(${p.x},${p.y})`;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const p = new Point(3, 4);
   console.log(render(p));
   return 0;
-}
+};

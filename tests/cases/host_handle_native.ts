@@ -10,17 +10,17 @@ class Slot {
 
 const named = (c: Canvas): boolean => c !== 0
 
-function orNone(c: Canvas = 0): boolean {
+const orNone = (c: Canvas = 0): boolean => {
   return c === 0
-}
+};
 
-function keep(c: Canvas): Canvas {
+const keep = (c: Canvas): Canvas => {
   return c
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const slot = new Slot()
   const kept = keep(slot.c)
   console.log(`${kept === 0} ${0 === kept} ${named(kept)} ${orNone()} ${orNone(kept)}`)
   return 0
-}
+};

@@ -19,11 +19,11 @@ class Acc {
   }
 }
 
-function poly(x: number, y: number): number {
+const poly = (x: number, y: number): number => {
   return x * x - 3 * y + -x;
-}
+};
 
-function sum(xs: number[], acc: Acc): number {
+const sum = (xs: number[], acc: Acc): number => {
   let s = 0;
   for (let i = 0; i < xs.length; i++) {
     s += xs[i];
@@ -31,21 +31,21 @@ function sum(xs: number[], acc: Acc): number {
     acc.total -= xs[i] / 2;
   }
   return s % 1000;
-}
+};
 
 /** Unsigned arithmetic: the same three instructions, and never a no-wrap flag. */
-function mix(a: u32, b: u32): u32 {
+const mix = (a: u32, b: u32): u32 => {
   let m = a * b;
   m += a - b;
   m--;
   return m;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   const acc = new Acc();
   const xs = [1, 2, 3, 4];
   let n = poly(5, 2);
   n++;
   n--;
   return n + sum(xs, acc) + acc.total + toI32(mix(3, 2));
-}
+};

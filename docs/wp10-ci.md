@@ -211,14 +211,14 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
-  1. The `simd` group's six (the AVX2, AES-NI, SHA-NI, ChaCha20 and CRC-32
-  paths, the lowered AES kernels) run in shard 2, where
-  `DEALT_SECTIONS.simd.pinned` keeps that group, 173 s with the seven steps
-  there were then; a check in `tests/run.js` holds their `if:` to it. The
-  seventh, SHA-256 throughput, printed figures and asserted only that the
-  driver printed something, which the `simd` section's `sha256-calls` check
-  already holds, so it was removed; `simd-arm64` and `sha256-macos` keep
-  their platforms' figures.
+  1. The `simd` group's seven steps (the AVX2, AES-NI, SHA-NI, ChaCha20,
+  CRC-32 and SSSE3 Adler-32 paths, the lowered AES kernels) run in shard 2,
+  where `DEALT_SECTIONS.simd.pinned` keeps that group; a check in
+  `tests/run.js` holds their `if:` to it. The group measured 173 s when it
+  had eight: the eighth, SHA-256 throughput, printed figures and asserted
+  only that the driver printed something, which the `simd` section's
+  `sha256-calls` check already holds, so it was removed; `simd-arm64` and
+  `sha256-macos` keep their platforms' figures.
 - **`runner`**, three ways, and one process per core in each.
   `build/nish-runner --shard <i>/<n>` starts itself `--jobs` times (the core
   count up to 8 by default) as `--shard <i>/<n> --part <k>/<p>`, so job `i`
@@ -472,7 +472,19 @@ linked binary under a hash of everything the link reads, and the
 a run whose compiler sources (the modules the seed's front end names: `src/`
 and the nine `std/` modules it imports), seed and toolchain match an earlier
 one copies stage1 instead of linking it, and a job that runs the suite more than once
-links it at most once. The golden cases are dealt too: a shard compiles
+links it at most once. A shard that still spends 70-80 s on the step is a
+miss, not a broken cache:
+[run 44241824047](https://github.com/amritk/nish/actions/runs/44241824047),
+a push to `main` whose `src/` change made a new key, linked and saved on
+every row (63-83 s a test shard), and
+[run 44243579767](https://github.com/amritk/nish/actions/runs/44243579767),
+the next push, which changed tests only, restored it in 4-6 s a shard. In
+the first, `fuzz-smoke` and `postgres-live` spent 96 s and 113 s on
+`npm run build`, which links stage1 and then stage2 from it; they now take
+the `test` job's stage1 through the same action under the same key (stage2
+is the same compiler, which `bootstrap (x86_64-linux)` asserts), and
+`nish-cmp elision`'s candidate, the same `--link` with its row's seed, comes
+through it too. The golden cases are dealt too: a shard compiles
 all of them and does the other work of its eighth only, which took section A
 from 59 s to 30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),

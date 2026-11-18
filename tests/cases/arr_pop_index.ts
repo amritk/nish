@@ -1,6 +1,6 @@
 // `pop` shortens the array and hands back the last element; `indexOf`
 // compares with `===`, so strings match by content and numbers by value.
-export function test(): number {
+export const test = (): number => {
   const names: string[] = ["a", "b", "c"];
   const last = names.pop();
   const nums: number[] = [4, 8, 15];
@@ -12,4 +12,4 @@ export function test(): number {
     (nums.indexOf(99) + 1) * 10 +
     (names.indexOf("c") + 1)
   );
-}
+};

@@ -925,7 +925,7 @@ const ends = (app: App): void => {
   check(app, "lookup: a name with no address is UPSTREAM_E_LOOKUP", nowhere.error === UPSTREAM_E_LOOKUP && failed(app, nowhere, 913, "/") === UPSTREAM_E_LOOKUP)
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const app = new App()
   slowUpstream(app)
   keepAlive(app)
@@ -937,4 +937,4 @@ export function main(): i32 {
   lateReply(app)
   ends(app)
   return app.failures === 0 ? 0 : 1
-}
+};
