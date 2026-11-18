@@ -219,6 +219,12 @@ export class CheckContext {
    * `std/math.ts`'s, as on a page module, and a NaN's bits are the quiet one.
    */
   deterministic: boolean
+  /**
+   * WP28: the compatibility features this build allows, empty for the strict
+   * dialect. Set from `opts.compatFeatures` when `opts.compat` is on, with
+   * `wasm`; nothing reads it but `compatAllows`.
+   */
+  compatFeatures: string[]
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -406,6 +412,7 @@ export class CheckContext {
     this.wasmFreestanding = false
     this.pageModule = false
     this.deterministic = false
+    this.compatFeatures = []
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.peers = []
@@ -444,6 +451,19 @@ export class CheckContext {
     this.pending = []
     this.pendingFinish = []
     this.exportedLayoutUses = []
+  }
+
+  /**
+   * WP28: whether this build's dialect allows compatibility feature `name`.
+   * Every site that accepts a construct only under `--compat` asks here.
+   */
+  compatAllows(name: string): boolean {
+    for (const feature of this.compatFeatures) {
+      if (feature === name) {
+        return true
+      }
+    }
+    return false
   }
 
   /**
