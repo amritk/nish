@@ -470,8 +470,8 @@ const erase = async (name) => {
     return result
   }
   /** `base` against `dialect`, the second with its mark taken out; true when they differ. */
-  const compare = async (flags, base, dialect, claim) => {
-    const marked = await compile(name, [...flags, ...dialect])
+  const compare = async (flags, base, against, claim) => {
+    const marked = await compile(name, [...flags, ...against])
     const { answer, missing } = unmarked(marked)
     if (reject && base.status !== 0 && marked.status === 0) {
       differs(

@@ -174,7 +174,13 @@ import {
   emitTemplate,
   isEnumStringCall,
 } from "./emit-strings"
-import { dottedName, intrinsicType, isAssignmentOperator, isOptionalChain, receiverIsValue } from "./emit-util"
+import {
+  dottedName,
+  intrinsicType,
+  isAssignmentOperator,
+  isOptionalChain,
+  receiverIsValue,
+} from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {

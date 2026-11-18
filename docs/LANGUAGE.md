@@ -16363,7 +16363,11 @@ allows admits. This compiler has built two features, `nullish` and
   `reject_nullish_nullable`). The default is never run, but it is still
   checked as the left operand's type, as TypeScript checks it (NL2370,
   `tests/link/compat_nullish_never_missing`). A `??` on a nullable left
-  operand is the strict dialect's own and unchanged.
+  operand is the strict dialect's own and unchanged. An element read is not
+  never missing, whatever its element type: past the end of the array Node
+  reads `undefined` and answers the default, where the bounds check panics,
+  so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
+  (`reject_nullish_element_never_missing`).
 - **The dialect only adds.** A strict build is unchanged by all of the above,
   byte for byte. A compat build is `--number-mode f64` for every program the
   strict dialect accepts: the same IR but for the mark, the same refusals in

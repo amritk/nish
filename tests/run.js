@@ -26122,6 +26122,47 @@ export const main = (): void => {
         skippedRun.stderr.includes("index out of range: 7 >= 3"),
       shown(skippedBuild) + shown(skippedRun)
     )
+    // `--emit-ts` writes an element read inside a `?.` chain back as written:
+    // its receiver may be missing, and the bounds-checked helper would read
+    // the element of `undefined`, which throws where Node skips the statement.
+    const chained = path.join(work, "chained_element.ts")
+    fs.writeFileSync(
+      chained,
+      `class Row {
+  n: number = 0
+  bump(): void {
+    this.n += 1
+  }
+}
+
+class Grid {
+  rows: Row[]
+  constructor() {
+    this.rows = [new Row()]
+  }
+}
+
+export const main = (): void => {
+  const none: Grid | null = null
+  none?.rows[0].bump()
+  const some: Grid | null = new Grid()
+  some?.rows[0].bump()
+  console.log(some === null ? -1 : some.rows[0].n)
+}
+`
+    )
+    const chainedOut = path.join(work, "chained_element_ts")
+    fs.rmSync(chainedOut, { recursive: true, force: true })
+    const chainedEmit = nish([chained, "--compat=optional-chaining", "--emit-ts", chainedOut])
+    const chainedRun =
+      chainedEmit.status === 0
+        ? spawnSync("node", [...emitTsNodeFlags, path.join(chainedOut, "entry.ts")], { cwd: root, encoding: "utf8" })
+        : chainedEmit
+    check(
+      "compat: `--emit-ts` leaves an element read inside a `?.` chain to the chain, so Node skips it on a missing link",
+      chainedEmit.status === 0 && chainedRun.status === 0 && chainedRun.stdout === "1\n",
+      shown(chainedEmit) + shown(chainedRun)
+    )
     const placed = [
       ["--compat", "Dialect"],
       ["--number-mode", "Dialect"],

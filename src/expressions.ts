@@ -3491,15 +3491,13 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * runs. Strict refuses it, in the words Phase 0 always used. The `nullish`
  * feature of the compatibility dialect (WP28 C1) accepts it with Node's
  * meaning, the left operand alone, and warns that the default is dead; only
- * a left operand whose every part is listed in `neverMissing` qualifies, so
- * an element read, which JavaScript answers `undefined` past the end, keeps
- * the refusal it has with a nullable left.
+ * a left operand whose every part is listed in `neverMissing` qualifies. An
+ * element read, which JavaScript answers `undefined` past the end, is not
+ * one: it keeps strict's refusal, word for word and with no feature named,
+ * in both dialects.
  */
 const checkNeverMissingCoalesce = (ctx: CheckContext, expr: Node, scope: Scope, left: i32): i32 => {
   const operand = unwrapParens(expr.children[0])
-  if (operand.kind === NodeKind.Index) {
-    return checkNullableCoalesce(ctx, expr, scope, left)
-  }
   const refusal = "Nullish coalescing `??` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
   if (!neverMissing(operand)) {
     return ctx.errorType(expr, refusal)

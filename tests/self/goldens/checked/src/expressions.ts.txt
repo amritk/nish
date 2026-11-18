@@ -2320,30 +2320,29 @@ function checkCoalesce(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @che
   callee +21:158 TypeTable.typeName -> @TypeTable.typeName
 function checkNeverMissingCoalesce(ctx: CheckContext, expr: Node, scope: Scope, left: i32): i32 -> @checkNeverMissingCoalesce
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via checkNullableCoalesce
+  sharedWrite: via CheckContext.errorType
   escaping: left
-  calls: CheckContext.compatAllows CheckContext.errorFeature CheckContext.errorType CheckContext.performance CheckContext.textOf TypeTable.assignable TypeTable.typeName checkExpression checkNullableCoalesce neverMissing nish_panic_index nish_str_concat unwrapParens
-  pointer ctx: size=368 writesThrough=true captured=true passedTo=checkNullableCoalesce#0 CheckContext.errorType#0 CheckContext.compatAllows#0 CheckContext.errorFeature#0 checkExpression#0 CheckContext.errorType#0 CheckContext.performance#0 CheckContext.textOf#0 CheckContext.textOf#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=checkNullableCoalesce#1 CheckContext.errorType#1 CheckContext.errorFeature#1 CheckContext.performance#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkNullableCoalesce#2 checkExpression#2
+  calls: CheckContext.compatAllows CheckContext.errorFeature CheckContext.errorType CheckContext.performance CheckContext.textOf TypeTable.assignable TypeTable.typeName checkExpression neverMissing nish_panic_index nish_str_concat unwrapParens
+  pointer ctx: size=368 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.compatAllows#0 CheckContext.errorFeature#0 checkExpression#0 CheckContext.errorType#0 CheckContext.performance#0 CheckContext.textOf#0 CheckContext.textOf#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorFeature#1 CheckContext.performance#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
   local +0:9 operand: Node (const)
   callee +0:19 unwrapParens -> @unwrapParens
-  callee +2:12 checkNullableCoalesce -> @checkNullableCoalesce
-  local +4:9 refusal: string (const)
-  callee +5:8 neverMissing -> @neverMissing
-  callee +6:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +8:8 CheckContext.compatAllows -> @CheckContext.compatAllows
-  callee +9:5 CheckContext.errorFeature -> @CheckContext.errorFeature
-  local +12:9 fallback: i32 (const)
-  callee +12:20 checkExpression -> @checkExpression
-  callee +16:8 TypeTable.assignable -> @TypeTable.assignable
-  callee +17:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +19:85 TypeTable.typeName -> @TypeTable.typeName
-  callee +19:157 TypeTable.typeName -> @TypeTable.typeName
-  callee +22:3 CheckContext.performance -> @CheckContext.performance
-  callee +24:10 CheckContext.textOf -> @CheckContext.textOf
-  callee +24:164 CheckContext.textOf -> @CheckContext.textOf
+  local +1:9 refusal: string (const)
+  callee +2:8 neverMissing -> @neverMissing
+  callee +3:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +5:8 CheckContext.compatAllows -> @CheckContext.compatAllows
+  callee +6:5 CheckContext.errorFeature -> @CheckContext.errorFeature
+  local +9:9 fallback: i32 (const)
+  callee +9:20 checkExpression -> @checkExpression
+  callee +13:8 TypeTable.assignable -> @TypeTable.assignable
+  callee +14:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +16:85 TypeTable.typeName -> @TypeTable.typeName
+  callee +16:157 TypeTable.typeName -> @TypeTable.typeName
+  callee +19:3 CheckContext.performance -> @CheckContext.performance
+  callee +21:10 CheckContext.textOf -> @CheckContext.textOf
+  callee +21:164 CheckContext.textOf -> @CheckContext.textOf
 function neverMissing(node: Node): boolean -> @neverMissing
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: neverMissing nish_panic_index
