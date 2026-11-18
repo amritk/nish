@@ -26058,13 +26058,13 @@ if (dealtHere("releaseChecks")) {
           flagged[0].line === 2,
         JSON.stringify(flagged)
       )
-      const stray = strayMarkers(
+      const strayLines = strayMarkers(
         ["```ts nish:ok", "x", "```", "<!-- nish:ok -->", "text", "<!-- nish:ok -->", "```ts", "y", "```"].join("\n")
       )
       check(
         "docs: a marker in a fence's own line, or one no fence follows, is reported",
-        stray.join(",") === "1,4",
-        JSON.stringify(stray)
+        strayLines.join(",") === "1,4",
+        JSON.stringify(strayLines)
       )
     }
 
