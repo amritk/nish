@@ -13,6 +13,7 @@ import StringBuilder from "./strings" -> struct StringBuilder
 import isLinkTo from "./structs" -> function @isLinkTo
 import narrowedSize from "./structs" -> function @narrowedSize
 import TypeTable from "./types" -> struct TypeTable
+import buildModeOf from "./visibility" -> function @buildModeOf
 import isWasmBuild from "./visibility" -> function @isWasmBuild
 struct LayoutModule (class) size=16 align=8 exported
   field program: CheckedProgram index=0 offset=0
@@ -223,12 +224,14 @@ function collectClasses(program: CheckedProgram, into: StructInfo[]): void -> @c
   local +4:7 i: i32 (let)
   local +6:11 item: StructInfo (const)
   local +7:9 j: i32 (let)
-function notNative(opts: Options): string -> @notNative
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: isWasmBuild
-  pointer opts: size=248 writesThrough=false captured=false passedTo=isWasmBuild#0
+function notNative(opts: Options, programs: CheckedProgram[]): string -> @notNative
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: buildModeOf isWasmBuild nish_arena_mark nish_arena_release
+  pointer opts: size=248 writesThrough=false captured=false passedTo=isWasmBuild#0 buildModeOf#0
+  pointer programs: size=0 writesThrough=false captured=false passedTo=buildModeOf#1
   stackSites=0 stackLocals=0
   callee +0:7 isWasmBuild -> @isWasmBuild
+  callee +18:7 buildModeOf -> @buildModeOf
 function linksTo(table: TypeTable, info: StructInfo, target: i32): boolean -> @linksTo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: target
@@ -258,47 +261,49 @@ function explainLayout(opts: Options, table: TypeTable, modules: LayoutModule[])
   pointer opts: size=248 writesThrough=false captured=false passedTo=isWasmBuild#0 notNative#0
   pointer table: size=160 writesThrough=false captured=false passedTo=narrowedSize#0 linksTo#0 narrowedSize#0 forbidden#0
   pointer modules: size=0 writesThrough=false captured=false passedTo=buildGraph#0
-  stackSites=3 stackLocals=3
+  stackSites=4 stackLocals=4
   local +0:9 wasm: boolean (const)
   callee +0:16 isWasmBuild -> @isWasmBuild
-  local +1:9 native: string (const)
-  callee +1:18 notNative -> @notNative
-  local +4:9 all: StructInfo[] (const)
-  local +5:9 owners: i32[] (const)
+  local +3:9 all: StructInfo[] (const)
+  local +4:9 owners: i32[] (const)
+  local +5:9 programs: CheckedProgram[] (const)
   local +6:7 m: i32 (let)
-  callee +8:5 collectClasses -> @collectClasses
-  local +14:9 graph: CallGraph (const)
-  callee +14:17 buildGraph -> @buildGraph
-  local +15:9 lines: StringBuilder (const)
-  callee +15:17 new StringBuilder -> @StringBuilder.constructor
-  local +16:7 classes: i32 (let)
-  local +17:7 picked: i32 (let)
-  local +18:7 k: i32 (let)
-  local +20:11 info: StructInfo (const)
-  local +21:11 module: LayoutModule (const)
-  local +22:11 source: SourceFile (const)
-  local +26:13 after: i32 (const)
-  callee +26:21 narrowedSize -> @narrowedSize
-  local +27:11 linked: boolean (let)
-  local +28:11 saver: string (let)
-  local +29:11 saving: string (let)
-  local +30:18 holder: StructInfo (const)
-  callee +31:14 linksTo -> @linksTo
-  local +36:17 narrowed: i32 (const)
-  callee +36:28 narrowedSize -> @narrowedSize
-  local +43:11 made: boolean (let)
-  local +44:18 site: MadeSite (const)
-  local +49:13 forbids: string (const)
-  callee +49:23 forbidden -> @forbidden
-  local +50:11 verdict: string (let)
-  local +62:13 shown: i32 (const)
-  local +63:13 name: Node (const)
-  callee +64:7 StringBuilder.add -> @StringBuilder.add
-  callee +64:35 SourceFile.lineOf -> @SourceFile.lineOf
-  callee +64:64 SourceFile.columnOf -> @SourceFile.columnOf
-  callee +65:7 StringBuilder.add -> @StringBuilder.add
-  callee +72:9 StringBuilder.add -> @StringBuilder.add
-  callee +74:7 StringBuilder.add -> @StringBuilder.add
-  callee +77:3 StringBuilder.add -> @StringBuilder.add
-  callee +78:10 new LayoutReport -> @LayoutReport.constructor
-  callee +78:27 StringBuilder.toText -> @StringBuilder.toText
+  local +8:11 program: CheckedProgram (const)
+  callee +10:5 collectClasses -> @collectClasses
+  local +16:9 native: string (const)
+  callee +16:18 notNative -> @notNative
+  local +17:9 graph: CallGraph (const)
+  callee +17:17 buildGraph -> @buildGraph
+  local +18:9 lines: StringBuilder (const)
+  callee +18:17 new StringBuilder -> @StringBuilder.constructor
+  local +19:7 classes: i32 (let)
+  local +20:7 picked: i32 (let)
+  local +21:7 k: i32 (let)
+  local +23:11 info: StructInfo (const)
+  local +24:11 module: LayoutModule (const)
+  local +25:11 source: SourceFile (const)
+  local +29:13 after: i32 (const)
+  callee +29:21 narrowedSize -> @narrowedSize
+  local +30:11 linked: boolean (let)
+  local +31:11 saver: string (let)
+  local +32:11 saving: string (let)
+  local +33:18 holder: StructInfo (const)
+  callee +34:14 linksTo -> @linksTo
+  local +39:17 narrowed: i32 (const)
+  callee +39:28 narrowedSize -> @narrowedSize
+  local +46:11 made: boolean (let)
+  local +47:18 site: MadeSite (const)
+  local +52:13 forbids: string (const)
+  callee +52:23 forbidden -> @forbidden
+  local +53:11 verdict: string (let)
+  local +65:13 shown: i32 (const)
+  local +66:13 name: Node (const)
+  callee +67:7 StringBuilder.add -> @StringBuilder.add
+  callee +67:35 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +67:64 SourceFile.columnOf -> @SourceFile.columnOf
+  callee +68:7 StringBuilder.add -> @StringBuilder.add
+  callee +75:9 StringBuilder.add -> @StringBuilder.add
+  callee +77:7 StringBuilder.add -> @StringBuilder.add
+  callee +80:3 StringBuilder.add -> @StringBuilder.add
+  callee +81:10 new LayoutReport -> @LayoutReport.constructor
+  callee +81:27 StringBuilder.toText -> @StringBuilder.toText
