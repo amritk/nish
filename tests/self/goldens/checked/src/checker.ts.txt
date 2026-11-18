@@ -112,6 +112,7 @@ import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import Scope from "./symbols" -> struct Scope
 import sourceLocal from "./symbols" -> function @sourceLocal
 import checkCompactClass from "./structs" -> function @checkCompactClass
+import refuseCompactTemplate from "./structs" -> function @refuseCompactTemplate
 import checkImplements from "./structs" -> function @checkImplements
 import collectStructMembers from "./structs" -> function @collectStructMembers
 import declaresCompact from "./structs" -> function @declaresCompact
@@ -249,7 +250,7 @@ function Checker.declareNames(this: Checker): void -> @Checker.declareNames [exp
 function Checker.collectSignatures(this: Checker): void -> @Checker.collectSignatures [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CheckedProgram.struct CheckedProgram.structTemplate Checker.collectConstants Checker.collectFunction Checker.finishPendingStructs Checker.qualifySymbols aliasType checkCompactClass checkDefiniteAssignment checkExportedLayouts checkImplements collectStructMembers declareMethodTypeParameters declaresCompact markTemplateImplements nish_panic_index refuseTopLevelForm refuseUnsupportedForms resolveStructTemplateConstraints
+  calls: CheckedProgram.struct CheckedProgram.structTemplate Checker.collectConstants Checker.collectFunction Checker.finishPendingStructs Checker.qualifySymbols aliasType checkCompactClass checkDefiniteAssignment checkExportedLayouts checkImplements collectStructMembers declareMethodTypeParameters declaresCompact markTemplateImplements nish_panic_index refuseCompactTemplate refuseTopLevelForm refuseUnsupportedForms resolveStructTemplateConstraints
   pointer this: size=24 writesThrough=false captured=false passedTo=Checker.collectConstants#0 Checker.collectFunction#0 Checker.finishPendingStructs#0 Checker.qualifySymbols#0
   stackSites=0 stackLocals=0
   local -1:16 info: StructInfo (const)
@@ -264,19 +265,20 @@ function Checker.collectSignatures(this: Checker): void -> @Checker.collectSigna
   callee +47:28 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
   callee +49:13 resolveStructTemplateConstraints -> @resolveStructTemplateConstraints
   callee +50:13 markTemplateImplements -> @markTemplateImplements
-  callee +52:11 declareMethodTypeParameters -> @declareMethodTypeParameters
-  callee +55:9 Checker.collectConstants -> @Checker.collectConstants
-  callee +57:9 Checker.collectFunction -> @Checker.collectFunction
-  callee +63:9 refuseTopLevelForm -> @refuseTopLevelForm
-  local +70:16 info: StructInfo (const)
-  callee +73:9 checkImplements -> @checkImplements
-  callee +74:9 checkDefiniteAssignment -> @checkDefiniteAssignment
-  callee +75:9 checkCompactClass -> @checkCompactClass
-  callee +81:5 Checker.finishPendingStructs -> @Checker.finishPendingStructs
-  callee +83:5 checkExportedLayouts -> @checkExportedLayouts
-  local +90:16 alias: AliasInfo (const)
-  callee +93:9 aliasType -> @aliasType
-  callee +97:5 Checker.qualifySymbols -> @Checker.qualifySymbols
+  callee +51:13 refuseCompactTemplate -> @refuseCompactTemplate
+  callee +53:11 declareMethodTypeParameters -> @declareMethodTypeParameters
+  callee +56:9 Checker.collectConstants -> @Checker.collectConstants
+  callee +58:9 Checker.collectFunction -> @Checker.collectFunction
+  callee +64:9 refuseTopLevelForm -> @refuseTopLevelForm
+  local +71:16 info: StructInfo (const)
+  callee +74:9 checkImplements -> @checkImplements
+  callee +75:9 checkDefiniteAssignment -> @checkDefiniteAssignment
+  callee +76:9 checkCompactClass -> @checkCompactClass
+  callee +82:5 Checker.finishPendingStructs -> @Checker.finishPendingStructs
+  callee +84:5 checkExportedLayouts -> @checkExportedLayouts
+  local +91:16 alias: AliasInfo (const)
+  callee +94:9 aliasType -> @aliasType
+  callee +98:5 Checker.qualifySymbols -> @Checker.qualifySymbols
 function Checker.importCollections(this: Checker): void -> @Checker.importCollections [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via scanCollectionNames

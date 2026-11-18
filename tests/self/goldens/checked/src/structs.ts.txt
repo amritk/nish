@@ -120,7 +120,7 @@ function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   local +15:9 slots: i32 (const)
   callee +15:17 roundUpTo -> @roundUpTo
   callee +16:10 roundUpTo -> @roundUpTo
-function isLinkType(ctx: CheckContext, type: i32): boolean -> @isLinkType [exported]
+function isLinkType(ctx: CheckContext, type: i32): boolean -> @isLinkType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
@@ -531,29 +531,29 @@ function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): v
   pointer owner: size=176 writesThrough=false captured=false passedTo=StructInfo.hasMember#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -62:9 name: string (const)
-  local -61:9 what: string (const)
-  callee -60:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -59:5 CheckContext.error -> @CheckContext.error
-  callee -55:5 CheckContext.error -> @CheckContext.error
-  callee -48:5 CheckContext.error -> @CheckContext.error
-  local -42:9 annotation: Node (const)
-  local -41:9 before: i32 (const)
-  local -40:9 type: i32 (const)
-  callee -40:16 resolveType -> @resolveType
-  callee -35:5 CheckContext.error -> @CheckContext.error
-  local -27:9 nested: StructInfo | null (const)
-  callee -27:18 layoutClass -> @layoutClass
-  callee -24:7 CheckContext.error -> @CheckContext.error
-  callee -18:5 collectStructMembers -> @collectStructMembers
-  callee -17:15 isLayoutScalar -> @isLayoutScalar
-  callee -17:39 TypeTable.stripNull -> @TypeTable.stripNull
-  local -16:11 inner: i32 (const)
-  callee -16:19 TypeTable.stripNull -> @TypeTable.stripNull
-  local -15:11 target: StructInfo | null (const)
-  callee -15:39 TypeTable.isStruct -> @TypeTable.isStruct
-  callee -15:67 CheckedProgram.struct -> @CheckedProgram.struct
-  callee -15:86 TypeTable.nameOf -> @TypeTable.nameOf
+  local -64:9 name: string (const)
+  local -63:9 what: string (const)
+  callee -62:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -61:5 CheckContext.error -> @CheckContext.error
+  callee -57:5 CheckContext.error -> @CheckContext.error
+  callee -50:5 CheckContext.error -> @CheckContext.error
+  local -44:9 annotation: Node (const)
+  local -43:9 before: i32 (const)
+  local -42:9 type: i32 (const)
+  callee -42:16 resolveType -> @resolveType
+  callee -37:5 CheckContext.error -> @CheckContext.error
+  local -29:9 nested: StructInfo | null (const)
+  callee -29:18 layoutClass -> @layoutClass
+  callee -26:7 CheckContext.error -> @CheckContext.error
+  callee -20:5 collectStructMembers -> @collectStructMembers
+  callee -19:15 isLayoutScalar -> @isLayoutScalar
+  callee -19:39 TypeTable.stripNull -> @TypeTable.stripNull
+  local -18:11 inner: i32 (const)
+  callee -18:19 TypeTable.stripNull -> @TypeTable.stripNull
+  local -17:11 target: StructInfo | null (const)
+  callee -17:39 TypeTable.isStruct -> @TypeTable.isStruct
+  callee -16:9 CheckedProgram.struct -> @CheckedProgram.struct
+  callee -16:28 TypeTable.nameOf -> @TypeTable.nameOf
   callee -13:7 CheckContext.error -> @CheckContext.error
   callee -13:35 compactLayoutFieldMessage -> @compactLayoutFieldMessage
   callee -10:5 CheckContext.error -> @CheckContext.error
@@ -578,7 +578,7 @@ function collectLayoutMembers(ctx: CheckContext, info: StructInfo): void -> @col
   local +17:11 word: string (let)
   callee +23:7 CheckContext.error -> @CheckContext.error
   callee +29:3 computeLayout -> @computeLayout
-function namesCompactMarker(ctx: CheckContext, iface: Node): boolean -> @namesCompactMarker [exported]
+function namesCompactMarker(ctx: CheckContext, iface: Node): boolean -> @namesCompactMarker
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.importNamed isCompactExport nish_str_eq
   pointer ctx: size=344 writesThrough=false captured=false
@@ -586,7 +586,7 @@ function namesCompactMarker(ctx: CheckContext, iface: Node): boolean -> @namesCo
   stackSites=0 stackLocals=0
   local +0:9 imported: ImportBinding | null (const)
   callee +0:20 CheckedProgram.importNamed -> @CheckedProgram.importNamed
-  callee +1:75 isCompactExport -> @isCompactExport
+  callee +2:70 isCompactExport -> @isCompactExport
 function declaresCompact(ctx: CheckContext, decl: Node): boolean -> @declaresCompact [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: namesCompact nish_panic_index
@@ -615,6 +615,20 @@ function checkCompactClass(ctx: CheckContext, info: StructInfo): void -> @checkC
   callee +0:18 secretFieldOf -> @secretFieldOf
   callee +2:5 CheckContext.error -> @CheckContext.error
   callee +2:40 compactSecretMessage -> @compactSecretMessage
+function refuseCompactTemplate(ctx: CheckContext, decl: Node): void -> @refuseCompactTemplate [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error compactTemplateMessage declaresCompact nish_panic_index
+  pointer ctx: size=344 writesThrough=true captured=false passedTo=declaresCompact#0 CheckContext.error#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=declaresCompact#1
+  stackSites=0 stackLocals=0
+  callee +0:7 declaresCompact -> @declaresCompact
+  callee +1:5 CheckContext.error -> @CheckContext.error
+  callee +1:33 compactTemplateMessage -> @compactTemplateMessage
+function compactTemplateMessage(name: string): string -> @compactTemplateMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function compactLayoutMessage(name: string): string -> @compactLayoutMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

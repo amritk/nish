@@ -475,26 +475,27 @@ function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitField
   callee +22:7 storeField -> @storeField
   callee +22:50 guardKeep -> @guardKeep
   callee +25:5 storeField -> @storeField
-  local +30:9 ptr: string (const)
-  callee +30:15 structFieldPointer -> @structFieldPointer
-  local +31:9 ty: string (const)
-  callee +31:14 Emitter.llvm -> @Emitter.llvm
-  local +32:9 old: string (const)
-  callee +32:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +32:64 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +33:7 value: string (let)
-  callee +34:7 isBitwiseAssignment -> @isBitwiseAssignment
-  callee +35:13 emitBitwiseCombine -> @emitBitwiseCombine
-  local +37:11 rhs: string (const)
-  callee +37:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +38:13 isFloat -> @isFloat
-  callee +39:9 emitFloatArithmetic -> @emitFloatArithmetic
-  callee +39:38 withoutEquals -> @withoutEquals
-  callee +40:9 emitIntBinary -> @emitIntBinary
-  callee +42:11 compoundIntegerOpcode -> @compoundIntegerOpcode
-  callee +49:3 emitRangedStore -> @emitRangedStore
-  callee +50:3 IRFunction.emit -> @IRFunction.emit
-  callee +50:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +31:18 internalErrorFor -> @internalErrorFor
+  local +35:9 ptr: string (const)
+  callee +35:15 structFieldPointer -> @structFieldPointer
+  local +36:9 ty: string (const)
+  callee +36:14 Emitter.llvm -> @Emitter.llvm
+  local +37:9 old: string (const)
+  callee +37:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +37:64 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +38:7 value: string (let)
+  callee +39:7 isBitwiseAssignment -> @isBitwiseAssignment
+  callee +40:13 emitBitwiseCombine -> @emitBitwiseCombine
+  local +42:11 rhs: string (const)
+  callee +42:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +43:13 isFloat -> @isFloat
+  callee +44:9 emitFloatArithmetic -> @emitFloatArithmetic
+  callee +44:38 withoutEquals -> @withoutEquals
+  callee +45:9 emitIntBinary -> @emitIntBinary
+  callee +47:11 compoundIntegerOpcode -> @compoundIntegerOpcode
+  callee +54:3 emitRangedStore -> @emitRangedStore
+  callee +55:3 IRFunction.emit -> @IRFunction.emit
+  callee +55:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function structTypeDeclarations(emitter: Emitter): string[] -> @structTypeDeclarations [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rootClosureStructs

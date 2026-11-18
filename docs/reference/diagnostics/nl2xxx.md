@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 789 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 790 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15438,4 +15438,12 @@ export const main = (): i32 => {
 
 ```text
 `Holder` implements `Compact` and holds the `Secret` field `k`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement `Compact`; keep the secret in a class of its own that does not
+```
+
+## NL2798
+
+The message of an error contains:
+
+```text
+` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
 ```
