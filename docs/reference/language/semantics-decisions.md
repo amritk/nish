@@ -1322,14 +1322,20 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](expressions.md#element-access): a dominating guard, a loop bounded by the length,
   or every call site proving the argument (`tests/cases/panics_index`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](builtins.md#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
+  program may call a guarded one (`tests/link/simd_deny_panics_guarded`) and
+  is refused an unguarded one (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 
