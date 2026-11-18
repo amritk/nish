@@ -4,7 +4,7 @@
 // a call of a function returning a fresh `string` is.
 declare function strerror(errnum: i32): string;
 
-function looped(n: i32): string {
+const looped = (n: i32): string => {
   let s = "";
   {
     using a = arena();
@@ -13,19 +13,19 @@ function looped(n: i32): string {
     }
   }
   return s;
-}
+};
 
-function direct(): string {
+const direct = (): string => {
   let s = "";
   {
     using a = arena();
     s = strerror(13);
   }
   return s;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(looped(4));
   console.log(direct());
   return 0;
-}
+};

@@ -23,8 +23,8 @@ class File {
   }
 }
 
-function check(f: File): Result<i32, File> {
+const check = (f: File): Result<i32, File> => {
   return Ok(f.read())
-}
+};
 
 export const main = (): i32 => 0

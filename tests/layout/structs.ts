@@ -117,128 +117,128 @@ class J {
 
 // One allocation per class: tests/run.js reads `nish_alloc_struct(i64 N)` from each body.
 // (f64 and struct arguments arrive as parameters: in i32 mode a literal is an i32.)
-export function makeA(): A {
+export const makeA = (): A => {
   return new A(1);
-}
-export function makeB(d: f64): B {
+};
+export const makeB = (d: f64): B => {
   return new B(1, d);
-}
-export function makeC(d: f64): C {
+};
+export const makeC = (d: f64): C => {
   return new C(d, 2);
-}
-export function makeD(): D {
+};
+export const makeD = (): D => {
   return new D(true, 1, false);
-}
-export function makeE(): E {
+};
+export const makeE = (): E => {
   return new E(true, false, true);
-}
-export function makeF(s: string): F {
+};
+export const makeF = (s: string): F => {
   return new F(s, 1);
-}
-export function makeG(s: string, d: f64): G {
+};
+export const makeG = (s: string, d: f64): G => {
   return new G(1, s, true, d);
-}
-export function makeH(a: A): H {
+};
+export const makeH = (a: A): H => {
   return new H(true, a, 1);
-}
-export function makeI(): I {
+};
+export const makeI = (): I => {
   return new I(1, 2, 3, true);
-}
-export function makeJ(s: string, d: f64): J {
+};
+export const makeJ = (s: string, d: f64): J => {
   return new J(true, d, false, 2, true, s);
-}
+};
 
 // Field getters: C fills each struct through its own definition and checks these.
-export function A_a(p: A): number {
+export const A_a = (p: A): number => {
   return p.a;
-}
-export function B_a(p: B): number {
+};
+export const B_a = (p: B): number => {
   return p.a;
-}
-export function B_b(p: B): f64 {
+};
+export const B_b = (p: B): f64 => {
   return p.b;
-}
-export function C_a(p: C): f64 {
+};
+export const C_a = (p: C): f64 => {
   return p.a;
-}
-export function C_b(p: C): number {
+};
+export const C_b = (p: C): number => {
   return p.b;
-}
-export function D_a(p: D): boolean {
+};
+export const D_a = (p: D): boolean => {
   return p.a;
-}
-export function D_b(p: D): number {
+};
+export const D_b = (p: D): number => {
   return p.b;
-}
-export function D_c(p: D): boolean {
+};
+export const D_c = (p: D): boolean => {
   return p.c;
-}
-export function E_a(p: E): boolean {
+};
+export const E_a = (p: E): boolean => {
   return p.a;
-}
-export function E_b(p: E): boolean {
+};
+export const E_b = (p: E): boolean => {
   return p.b;
-}
-export function E_c(p: E): boolean {
+};
+export const E_c = (p: E): boolean => {
   return p.c;
-}
-export function F_a(p: F): string {
+};
+export const F_a = (p: F): string => {
   return p.a;
-}
-export function F_b(p: F): number {
+};
+export const F_b = (p: F): number => {
   return p.b;
-}
-export function G_a(p: G): number {
+};
+export const G_a = (p: G): number => {
   return p.a;
-}
-export function G_b(p: G): string {
+};
+export const G_b = (p: G): string => {
   return p.b;
-}
-export function G_c(p: G): boolean {
+};
+export const G_c = (p: G): boolean => {
   return p.c;
-}
-export function G_d(p: G): f64 {
+};
+export const G_d = (p: G): f64 => {
   return p.d;
-}
-export function H_a(p: H): boolean {
+};
+export const H_a = (p: H): boolean => {
   return p.a;
-}
-export function H_b(p: H): A {
+};
+export const H_b = (p: H): A => {
   return p.b;
-}
-export function H_c(p: H): number {
+};
+export const H_c = (p: H): number => {
   return p.c;
-}
-export function I_a(p: I): number {
+};
+export const I_a = (p: I): number => {
   return p.a;
-}
-export function I_b(p: I): number {
+};
+export const I_b = (p: I): number => {
   return p.b;
-}
-export function I_c(p: I): number {
+};
+export const I_c = (p: I): number => {
   return p.c;
-}
-export function I_d(p: I): boolean {
+};
+export const I_d = (p: I): boolean => {
   return p.d;
-}
-export function J_a(p: J): boolean {
+};
+export const J_a = (p: J): boolean => {
   return p.a;
-}
-export function J_b(p: J): f64 {
+};
+export const J_b = (p: J): f64 => {
   return p.b;
-}
-export function J_c(p: J): boolean {
+};
+export const J_c = (p: J): boolean => {
   return p.c;
-}
-export function J_d(p: J): number {
+};
+export const J_d = (p: J): number => {
   return p.d;
-}
-export function J_e(p: J): boolean {
+};
+export const J_e = (p: J): boolean => {
   return p.e;
-}
-export function J_f(p: J): string {
+};
+export const J_f = (p: J): string => {
   return p.f;
-}
+};
 
 // WP25: a class that `implements` an interface lays the interface's fields out
 // first and its own after them, so the C twin lists the flattened fields (not a
@@ -322,87 +322,87 @@ class O {
   }
 }
 
-export function makeK(d: f64): K {
+export const makeK = (d: f64): K => {
   return new K(1, d, true);
-}
-export function makeL(d: f64): L {
+};
+export const makeL = (d: f64): L => {
   return new L(d, 2, 3);
-}
-export function makeM(s: string, d: f64): M {
+};
+export const makeM = (s: string, d: f64): M => {
   return new M(1, d, true, s);
-}
-export function makeN(d: u64): N {
+};
+export const makeN = (d: u64): N => {
   return new N(1, 2, 3, d, 4);
-}
-export function makeO(a: f32, b: f64): O {
+};
+export const makeO = (a: f32, b: f64): O => {
   return new O(a, b, a);
-}
+};
 
-export function K_a(p: K): number {
+export const K_a = (p: K): number => {
   return p.a;
-}
-export function K_b(p: K): f64 {
+};
+export const K_b = (p: K): f64 => {
   return p.b;
-}
-export function K_c(p: K): boolean {
+};
+export const K_c = (p: K): boolean => {
   return p.c;
-}
-export function L_a(p: L): f64 {
+};
+export const L_a = (p: L): f64 => {
   return p.a;
-}
-export function L_b(p: L): number {
+};
+export const L_b = (p: L): number => {
   return p.b;
-}
-export function L_c(p: L): number {
+};
+export const L_c = (p: L): number => {
   return p.c;
-}
-export function M_a(p: M): number {
+};
+export const M_a = (p: M): number => {
   return p.a;
-}
-export function M_b(p: M): f64 {
+};
+export const M_b = (p: M): f64 => {
   return p.b;
-}
-export function M_c(p: M): boolean {
+};
+export const M_c = (p: M): boolean => {
   return p.c;
-}
-export function M_d(p: M): string {
+};
+export const M_d = (p: M): string => {
   return p.d;
-}
+};
 // An `M` read through the getter of the interface it implements: the prefix
 // layout in action, and the one widening the language has (WP25).
-export function Widened_b(p: Widened): f64 {
+export const Widened_b = (p: Widened): f64 => {
   return p.b;
-}
-export function M_as_B_b(p: M): f64 {
+};
+export const M_as_B_b = (p: M): f64 => {
   return Widened_b(p);
-}
-export function N_a(p: N): u8 {
+};
+export const N_a = (p: N): u8 => {
   return p.a;
-}
-export function N_b(p: N): u16 {
+};
+export const N_b = (p: N): u16 => {
   return p.b;
-}
-export function N_c(p: N): u32 {
+};
+export const N_c = (p: N): u32 => {
   return p.c;
-}
-export function N_d(p: N): u64 {
+};
+export const N_d = (p: N): u64 => {
   return p.d;
-}
-export function N_e(p: N): u8 {
+};
+export const N_e = (p: N): u8 => {
   return p.e;
-}
-export function O_a(p: O): f32 {
+};
+export const O_a = (p: O): f32 => {
   return p.a;
-}
-export function O_b(p: O): f64 {
+};
+export const O_b = (p: O): f64 => {
   return p.b;
-}
-export function O_c(p: O): f32 {
+};
+export const O_c = (p: O): f32 => {
   return p.c;
-}
-export function O_d(p: O): boolean {
+};
+export const O_d = (p: O): boolean => {
   return p.d;
-}
+};
 
 // WP15 §2a: an array of records is contiguous storage — `N` structs end to
 // end at exactly the stride clang gives the matching C array — so the C twin
@@ -416,13 +416,13 @@ interface P {
   tag: number;
 }
 
-export function makeP(x: f64, tag: number): P {
+export const makeP = (x: f64, tag: number): P => {
   return { x: x, y: x * 2.0, tag: tag };
-}
+};
 
 // Grown well past the initial capacity of 4, so `nish_array_grow` has moved
 // `sizeof(P)` bytes per element at least twice by the time C sees the block.
-export function buildPs(n: number): P[] {
+export const buildPs = (n: number): P[] => {
   const ps: P[] = [];
   let i = 0;
   while (i < n) {
@@ -430,17 +430,17 @@ export function buildPs(n: number): P[] {
     i = i + 1;
   }
   return ps;
-}
+};
 
-export function P_x(p: P): f64 {
+export const P_x = (p: P): f64 => {
   return p.x;
-}
-export function P_y(p: P): f64 {
+};
+export const P_y = (p: P): f64 => {
   return p.y;
-}
-export function P_tag(p: P): number {
+};
+export const P_tag = (p: P): number => {
   return p.tag;
-}
+};
 
 // WP18 G5: an instantiated generic class is laid out exactly as the monomorphic
 // twin somebody would have written, so the C file declares that twin. One

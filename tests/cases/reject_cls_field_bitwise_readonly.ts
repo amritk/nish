@@ -12,6 +12,6 @@ class Flags {
   }
 }
 
-export function test(): number {
+export const test = (): number => {
   return new Flags(2).mask;
-}
+};

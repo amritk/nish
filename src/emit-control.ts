@@ -11,7 +11,13 @@
 // `phi`; mutable locals already live in allocas, so loops load and store them
 // and `mem2reg` builds the loop phis later.
 
-import { closeHeaderScope, emitAppendRange, openHeaderScope } from "./emit-arrays"
+import {
+  closeHeaderScope,
+  emitAddGuards,
+  emitAppendRange,
+  openHeaderScope,
+  releaseAddGuards,
+} from "./emit-arrays"
 import { Emitter, LoopTarget } from "./emit"
 import { emitScopeJoins } from "./emit-parallel"
 import { emitRangedStore } from "./emit-builtins"
@@ -172,6 +178,8 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
   }
   // An append loop copies in one go when it can; the loop below is its fallback.
   emitAppendRange(emitter, stmt, endBlock)
+  // A counted loop's `x + i` additions test for overflow once, here.
+  const guards = emitAddGuards(emitter, stmt)
   openHeaderScope(emitter, stmt)
   branch(emitter, head)
 
@@ -194,6 +202,7 @@ export const emitFor = (emitter: Emitter, stmt: Node): void => {
   }
 
   closeHeaderScope(emitter)
+  releaseAddGuards(emitter, guards)
   if (hasCond || loop.hasBreak) {
     fn.placeBlock(endBlock)
     if (isAlwaysTrue(condition) && !loop.hasBreak) {

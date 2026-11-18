@@ -1,19 +1,19 @@
 // i64: wrapping at 2^63, negative division and remainder, abs/min/max, conversions, printing.
 import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
-function square(x: i64): i64 {
+const square = (x: i64): i64 => {
   return wrappingMul(x, x);
-}
+};
 
-function pow2(n: number): i64 {
+const pow2 = (n: number): i64 => {
   let r: i64 = 1;
   for (let i = 0; i < n; i++) {
     r = wrappingMul(r, 2);
   }
   return r;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const big: i64 = 3000000000;
   console.log(big);
   console.log(square(big));
@@ -75,4 +75,4 @@ export function main(): number {
   const y = x--;
   console.log(`${x} ${y}`);
   return 0;
-}
+};

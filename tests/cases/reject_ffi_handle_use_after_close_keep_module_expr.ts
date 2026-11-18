@@ -26,8 +26,8 @@ class File {
 }
 
 const kept: i32 = 0
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   return (kept = f).read()
-}
+};
 
 export const main = (): i32 => 0

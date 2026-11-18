@@ -5,6 +5,6 @@ export const LANGUAGE: string = "Nish";
 
 const INTERNAL_BASE: i32 = 100;
 
-export function offset(kind: i32): i32 {
+export const offset = (kind: i32): i32 => {
   return INTERNAL_BASE + kind;
-}
+};

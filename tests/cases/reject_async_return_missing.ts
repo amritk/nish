@@ -2,4 +2,4 @@
 // `Promise<T>`, not just "a return type".
 async function h() {}
 
-function main(): void {}
+const main = (): void => {};

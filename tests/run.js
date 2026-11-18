@@ -7471,6 +7471,24 @@ const functionHeaders = (ir) => {
 }
 
 /**
+ * Job `name` of a workflow's text, its comment lines left out: a comment that
+ * mentions a flag is not a step that passes it. Empty when there is no such job.
+ */
+const ciJob = (text, name) => {
+  const lines = text.split("\n")
+  const start = lines.indexOf(`  ${name}:`)
+  if (start < 0) {
+    return ""
+  }
+  const end = lines.findIndex((l, i) => i > start && /^ {2}\S/.test(l))
+  return lines
+    .slice(start, end < 0 ? lines.length : end)
+    .filter((l) => !l.trimStart().startsWith("#"))
+    .join("\n")
+}
+const ciYmlText = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
+
+/**
  * `--delegate-ir-checks`, which the macOS `runtime-net` job passes: of each link
  * program, link it and run it, and leave every check of the compile -- the
  * module goldens, llvm-as and opt, the declare/define agreement, expected.ir,
@@ -8653,7 +8671,10 @@ if (dealtHere("selfHosting")) {
         `${nishCmp.stdout}${nishCmp.stderr}`
       )
 
-      const stage1FuzzSeed = 20261001
+      // The window starts at the first generated program a declaration in
+      // fuzz.js reaches (20261176 holds a guarded counted loop), since an entry
+      // no program in the run uses fails as stale; any 16 programs are as random.
+      const stage1FuzzSeed = 20261176
       const stage1Fuzz = spawnSync(
         "node",
         [
@@ -8765,19 +8786,6 @@ if (dealtHere("selfHosting")) {
   // the `bootstrap` job no longer runs `--verify` would be a green run with
   // the fixed point proved nowhere. Comment lines are left out, because a
   // comment that mentions a flag is not a step that passes it.
-  const ciJob = (text, name) => {
-    const lines = text.split("\n")
-    const start = lines.indexOf(`  ${name}:`)
-    if (start < 0) {
-      return ""
-    }
-    const end = lines.findIndex((l, i) => i > start && /^ {2}\S/.test(l))
-    return lines
-      .slice(start, end < 0 ? lines.length : end)
-      .filter((l) => !l.trimStart().startsWith("#"))
-      .join("\n")
-  }
-  const ciYmlText = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
   const testJobText = ciJob(ciYmlText, "test")
   const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
   check(
@@ -9940,6 +9948,19 @@ if (dealtHere("cryptoBench")) {
 // nothing another section writes; one that came to need another's output
 // would go back after the split, where shard 1 runs everything.
 
+// `--delegate-sanitizers` hands the `sanitizers` section's builds and runs to
+// ci.yml's `fuzz-smoke` job, which makes the same ones on every push: its
+// `scripts/fuzz.sh --smoke` builds every fuzz target with this checkout's
+// compiler and replays it over its corpus and regressions before it fuzzes,
+// and its next step is `node tests/run.js runtime_sanitize`, which fails on a
+// SKIP. So the `test` job passes the flag, and the checks are delegated to
+// that job rather than made twice. Like `--delegate-fixed-point`, the flag is
+// honoured only in a GitHub Actions run: from a terminal it names a job that is
+// not running, and the checks run here. The guard on ci.yml (with the other
+// ci.yml checks, after the link programs) fails if the `test` job asks for
+// the delegation while `fuzz-smoke` no longer runs both.
+const DELEGATE_SANITIZERS = process.argv.includes("--delegate-sanitizers") && process.env.GITHUB_ACTIONS === "true"
+
 /**
  * Whether clang can link a program under `flags` (`-fsanitize=...`): null when
  * it can, `{ skip }` when the toolchain lacks the sanitizer runtimes, and
@@ -9976,7 +9997,7 @@ const sanitizerProbe = (flags) => {
 // rather than print and carry on, so the check cannot pass over one.
 if (dealtHere("sanitizers") && (!only || "runtime_sanitize".includes(only))) {
   const flags = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
-  const probe = sanitizerProbe(flags)
+  const probe = DELEGATE_SANITIZERS ? null : sanitizerProbe(flags)
   // The range unit test (tests/runtime/range-test.c) builds the range runtime
   // without -DNISH_ASAN, so its chunks are carved; ASan's shadow lies where the
   // fixed range would be, so it takes the based shape, as on macOS.
@@ -10003,6 +10024,10 @@ if (dealtHere("sanitizers") && (!only || "runtime_sanitize".includes(only))) {
     ],
   ]) {
     const name = `runtime_sanitize: the ${test === "tests/runtime-test.c" ? "runtime" : "range"} unit test (${label}) runs clean under ASan and UBSan`
+    if (DELEGATE_SANITIZERS) {
+      delegate(name, "ci.yml's `fuzz-smoke` job, which runs `node tests/run.js runtime_sanitize`")
+      continue
+    }
     if (probe?.skip !== undefined) {
       skip(`${name} (${probe.skip})`)
       continue
@@ -10036,7 +10061,8 @@ if (dealtHere("sanitizers") && (!only || "runtime_sanitize".includes(only))) {
 // built by scripts/fuzz.sh with this checkout's compiler, and replayed once
 // over its seed corpus and its regressions. A regression input is a crash a
 // fix removed, so a replay that crashes is that bug back. Fuzzing itself is
-// CI's `fuzz-smoke` job and the scheduled fuzz.yml, not this suite.
+// CI's `fuzz-smoke` job and the scheduled fuzz.yml, not this suite; in CI the
+// replays are that job's too (`--delegate-sanitizers`, above).
 if (dealtHere("sanitizers") && (!only || "fuzz".includes(only))) {
   const script = fs.readFileSync(path.join(root, "scripts", "fuzz.sh"), "utf8")
   const listed = (script.match(/^RUNTIME_C=\(\n([\s\S]*?)\n\)/m)?.[1] ?? "").split(/\s+/).filter(Boolean)
@@ -10050,15 +10076,21 @@ if (dealtHere("sanitizers") && (!only || "fuzz".includes(only))) {
     .filter((f) => f.endsWith(".ts"))
     .map((f) => f.slice(0, -3))
     .sort()
-  const probe = sanitizerProbe(["-fsanitize=fuzzer,address,undefined"])
+  const probe = DELEGATE_SANITIZERS ? null : sanitizerProbe(["-fsanitize=fuzzer,address,undefined"])
   for (const target of targets) {
     const name = `fuzz: ${target} builds and replays its corpus and regressions without a crash`
+    const corpus = path.join(root, "tests", "fuzz", "corpus", target)
+    const seeds = fs.existsSync(corpus) ? fs.readdirSync(corpus).length : 0
+    // scripts/fuzz.sh replays a target with regressions and no seed corpus,
+    // and this check does not, so an empty corpus still fails here.
+    if (DELEGATE_SANITIZERS && seeds > 0) {
+      delegate(name, "ci.yml's `fuzz-smoke` job, whose `scripts/fuzz.sh --smoke` builds and replays every target")
+      continue
+    }
     if (probe?.skip !== undefined) {
       skip(`${name} (${probe.skip})`)
       continue
     }
-    const corpus = path.join(root, "tests", "fuzz", "corpus", target)
-    const seeds = fs.existsSync(corpus) ? fs.readdirSync(corpus).length : 0
     const r =
       probe === null
         ? spawnSync("bash", ["scripts/fuzz.sh", "--replay", target], {
@@ -10083,7 +10115,8 @@ if (dealtHere("sanitizers") && (!only || "fuzz".includes(only))) {
 // runner spawns a compiler per case, so a full pass costs about four and a half
 // minutes, and paying that on every `npm test` would double the suite to prove
 // what a handful of cases already prove — one golden, one native round trip and
-// three rejections. `npm run test:nish` is the full pass.
+// three rejections. `npm run test:nish` is the full pass, and CI's `runner` job
+// runs it on the Release PR and the release tag (`.claude/testing.md`).
 if (dealtHere("nishRunner")) {
   const irDir = path.join(buildDir, "nish-runner.ir") + path.sep
   const runnerExe = path.join(buildDir, "nish-runner")
@@ -16498,6 +16531,33 @@ if (dealtHere("arrayChecks")) {
         ran.stdout === "",
       ran === null ? built.stderr : shown(ran)
     )
+    // ovf_loop_guard's `x + i` additions test for overflow once before their loop
+    // (src/emit-arrays.ts, emitAddGuards); a loop that may overflow keeps the checked
+    // add, so each case prints every value up to the overflow and then panics there.
+    const guardLl = path.join(buildDir, "ovf_loop_guard.ll")
+    const guardExe = path.join(buildDir, "ovf_loop_guard")
+    const guard = fs.existsSync(guardLl) ? linkNative(guardExe, guardLl) : null
+    if (guard !== null && guard.status === 0) {
+      const wants = [
+        "2147483645\n2147483646\n2147483647\n",
+        "9223372036854775806\n9223372036854775807\n",
+        "",
+      ]
+      const failed = []
+      for (let k = 0; k < wants.length; k++) {
+        const run = spawnSync(guardExe, [String(k)], { encoding: "utf8" })
+        if (run.status !== 1 || !run.stderr.includes("attempt to add with overflow") || run.stdout !== wants[k]) {
+          failed.push(`case ${k}: want ${JSON.stringify(wants[k])}, got ${shown(run)}`)
+        }
+      }
+      check(
+        'ovf_loop_guard: cases 0-2 print each value up to the overflowing `x + i`, then exit 1 with "attempt to add with overflow"',
+        failed.length === 0,
+        failed.join("\n")
+      )
+    } else if (guard !== null) {
+      check("ovf_loop_guard: links", false, String(guard.stderr))
+    }
   }
 
   // ---- Self-recursive checked sums ------------------------------------------------
@@ -32198,6 +32258,52 @@ for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
 if (SHARD > 1) {
   delegate("every section after the tests/link programs that is not dealt", shardJob(1))
   summarise()
+}
+// Two of CI's checks run in a job other than the one that used to make them,
+// and each move is a claim about ci.yml, read here on every run, local ones
+// included, so an edit that leaves a check running nowhere turns this red
+// rather than every row green.
+if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // `--delegate-sanitizers` (DELEGATE_SANITIZERS) is honest only while
+  // `fuzz-smoke` builds and replays every target and runs the runtime unit
+  // test under the sanitizers.
+  const testJob = ciJob(ciYmlText, "test")
+  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  // A step that runs them counts only while it must run and must pass: no
+  // `continue-on-error`, and no `if:` but `!cancelled()`. A job-level `if:`
+  // or `continue-on-error` would leave them running nowhere, or failing
+  // unseen, while the `test` job still prints DELEGATED.
+  const fuzzSmokeSteps = fuzzSmoke.split(/\n {6}- /).slice(1)
+  const binding = (pattern) => {
+    const step = fuzzSmokeSteps.find((s) => pattern.test(s))
+    return (
+      step !== undefined &&
+      !/^ {8}continue-on-error:/m.test(step) &&
+      [...step.matchAll(/^ {8}if: (.*)$/gm)].every((m) => m[1] === "${{ !cancelled() }}")
+    )
+  }
+  check(
+    "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
+    testJob !== "" &&
+      (!testJob.includes("--delegate-sanitizers") ||
+        (!/^ {4}(if|continue-on-error):/m.test(fuzzSmoke) &&
+          binding(/^ {8}run: bash scripts\/fuzz\.sh --smoke$/m) &&
+          binding(/^\s+node tests\/run\.js runtime_sanitize /m))),
+    `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+  )
+  // The `runner` job, the whole corpus through the golden runner written in
+  // Nish, runs per release rather than per push: on the Release PR, and in
+  // the run release.yml makes of this workflow at the tag, which its
+  // `release` job needs. The per-push proof of the runner is the
+  // `nishRunner` section above.
+  const runnerIf = /^ {4}if: (.*)$/m.exec(ciJob(ciYmlText, "runner"))?.[1] ?? ""
+  const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+  check(
+    "ci.yml: the `runner` job runs on the release tag and the Release PR, and release.yml still calls ci.yml",
+    runnerIf === "github.ref_type == 'tag' || github.head_ref == 'release/next'" &&
+      /^ {4}uses: \.\/\.github\/workflows\/ci\.yml$/m.test(ciJob(releaseYml, "ci")),
+    `runner job's if: ${runnerIf || "(none)"}`
+  )
 }
 // A name in `LINK_READ_LATER` that is no longer a program would pin nothing,
 // and the checks that read its output skip a file that is not there.

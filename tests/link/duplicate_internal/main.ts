@@ -5,10 +5,10 @@ import { twice } from "./helper";
 // is keyed by symbol name, so sharing one would give each function the other's
 // attributes. The name rule is therefore unconditional, and this is refused
 // whatever `--strict-exports` says.
-function add(a: number, b: number): number {
+const add = (a: number, b: number): number => {
   return a + b;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   return add(twice(20), 2);
-}
+};

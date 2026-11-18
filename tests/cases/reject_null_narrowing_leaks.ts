@@ -6,9 +6,9 @@ class Node {
   }
 }
 
-function valueOf(n: Node | null): number {
+const valueOf = (n: Node | null): number => {
   if (n !== null) {
     console.log(n.value);
   }
   return n.value;
-}
+};

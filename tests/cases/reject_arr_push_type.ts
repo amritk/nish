@@ -1,1 +1,3 @@
-function f(xs: number[]): number { return xs.push("x"); }
+const f = (xs: number[]): number => {
+  return xs.push("x");
+};

@@ -145,12 +145,13 @@ test is **data, not code**: a source file next to the output it must produce.
 - **A delegated check is neither a pass nor a skip.** `delegate(name, job)`
   records a check that another job of the same CI run proves with the same
   inputs on the same platform; the summary then ends `…, K delegated.` and
-  names the job, and the run is only as green as that job is. There is one:
-  CI's `test` job passes `--delegate-fixed-point`, and the bootstrap's fixed
-  point is left to the `bootstrap (x86_64-linux)` row, which asserts the same
-  two equalities with the same seed. The flag is honoured only inside GitHub
+  names the job, and the run is only as green as that job is. CI's `test`
+  job passes two: `--delegate-fixed-point` leaves the bootstrap's fixed
+  point to the `bootstrap (x86_64-linux)` row, which asserts the same two
+  equalities with the same seed, and `--delegate-sanitizers` leaves the
+  `runtime_sanitize` rows and the fuzz replays to `fuzz-smoke`. The flag is honoured only inside GitHub
   Actions, so a local `npm test` still runs it, and a check reads `ci.yml` so
-  the delegation cannot outlive the job it names. Do not delegate anything
+  each delegation cannot outlive the job it names. Do not delegate anything
   that is not already proved elsewhere in the same workflow run.
 
 ## What every construct ships with
@@ -358,11 +359,15 @@ build/nish-runner --jobs 1        # one process, as `tests/run.js` runs it
 
 `npm test` builds it and runs it over the `pop` cases — one golden, one native
 round trip and three rejections — because it spawns a compiler per case and a
-second full pass would double the suite. The full pass runs in CI as its own
-parallel job (`.github/workflows/ci.yml`), which is what keeps it honest: a
-harness nobody runs is a harness that rots. It is also the only place
-`readdirSync`, `spawnSyncTo` and `monotonicNanos` are exercised together on a
-real workload.
+second full pass would double the suite. The full pass runs in CI's `runner`
+job (`.github/workflows/ci.yml`), on the Release PR and the release tag only:
+its assertions are ones the `test` job makes on every push, so per push it cost
+about 36 runner-minutes for nothing new, and the `pop` run holds the harness
+in between. Running it at each release is what keeps it honest: a harness
+nobody runs is a harness that rots. It is also the only place `readdirSync`,
+`spawnSyncTo` and `monotonicNanos` are exercised together on a real workload,
+and a check in `tests/run.js` fails if the job's `if:` stops being exactly
+`github.ref_type == 'tag' || github.head_ref == 'release/next'`.
 
 Two POSIX utilities stand in for builtins the language does not have, and both
 are deliberate: `env(1)` gives a child its `.env` (including `env -u` for a name
@@ -594,7 +599,9 @@ corpus, CI's jobs, and "Reading a crash". The rules a change has to keep:
 - **`npm test`** has two sections. `fuzz` builds every target and replays its
   corpus and regressions. `runtime_sanitize` runs `tests/runtime-test.c` under
   ASan and UBSan, single-threaded and `-DNISH_THREADS`. Both skip, with a
-  reason, when clang cannot link the sanitizers. Read the skip line.
+  reason, when clang cannot link the sanitizers. Read the skip line. In
+  CI's `test` job both are `DELEGATED` to `fuzz-smoke`
+  (`--delegate-sanitizers`), which runs the same replays and section.
 - **CI**: `fuzz-smoke` (`ci.yml`, every PR) runs `fuzz.sh --smoke` for 30
   seconds a target from `-seed=1`, one target per core (`FUZZ_JOBS`), then
   `runtime_sanitize`, and fails on a skip. `fuzz.yml` (Saturdays and on

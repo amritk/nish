@@ -1,9 +1,9 @@
 // --number-mode f64: Math intrinsics with exactly representable results.
-function roundAll(x: number): string {
+const roundAll = (x: number): string => {
   return `${x}: floor ${Math.floor(x)} ceil ${Math.ceil(x)} trunc ${Math.trunc(x)} round ${Math.round(x)}`;
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   console.log(roundAll(2.5));
   console.log(roundAll(-2.5));
   console.log(roundAll(0.5));
@@ -47,4 +47,4 @@ export function main(): void {
     acc += Math.floor(i / 3) + Math.round(i / 7) - Math.ceil(i / 11);
   }
   console.log(acc);
-}
+};

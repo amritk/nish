@@ -13,6 +13,6 @@ class Point {
   }
 }
 
-export function test(): number {
+export const test = (): number => {
   return new Point(false).x;
-}
+};

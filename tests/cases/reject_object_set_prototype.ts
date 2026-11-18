@@ -1,1 +1,4 @@
-function f(o: number): number { Object.setPrototypeOf(o, null); return 1; }
+const f = (o: number): number => {
+  Object.setPrototypeOf(o, null);
+  return 1;
+};

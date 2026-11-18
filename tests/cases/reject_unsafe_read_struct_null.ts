@@ -9,9 +9,9 @@ declare class Passwd {
 
 declare function getpwnam(name: string): CPtr | null;
 
-export function main(): i32 {
+export const main = (): i32 => {
   const p = getpwnam("root");
   const unnarrowed: Passwd = readStruct(p);
   const none: Passwd = readStruct();
   return unnarrowed.name === none.name ? 0 : 1;
-}
+};

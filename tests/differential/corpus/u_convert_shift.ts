@@ -1,7 +1,7 @@
 // Conversions across every adjacent pair of widths and both signednesses, plus
 // the shifts. `toU32(-1)` is 4294967295 and `i32 >>> n` keeps the signed bits,
 // which is the difference `u32` exists to make visible.
-export function main(): number {
+export const main = (): number => {
   const w: u32 = 4000000000;
   console.log(`${toI32(w)}`);
   console.log(`${toU32(toI32(w))}`);
@@ -49,4 +49,4 @@ export function main(): number {
   console.log(`${l >> 2}`);
   console.log(`${l >>> 2}`);
   return 0;
-}
+};

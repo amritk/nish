@@ -571,6 +571,7 @@ cases/os_signal added after R6: no rewriter to freeze it with
 cases/os_signal_import added after R6: no rewriter to freeze it with
 cases/os_spawn added after R6: no rewriter to freeze it with
 cases/os_wait added after R6: no rewriter to freeze it with
+cases/ovf_loop_guard added after R6: no rewriter to freeze it with
 cases/ovf_matrix added after R6: no rewriter to freeze it with
 cases/ovf_repro added after R6: no rewriter to freeze it with
 cases/owner_checks added after R6: no rewriter to freeze it with

@@ -1,1 +1,3 @@
-function f(o: number): boolean { return typeof o === "number"; }
+const f = (o: number): boolean => {
+  return typeof o === "number";
+};

@@ -5,9 +5,9 @@
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
-function apply(g: () => i32): i32 {
+const apply = (g: () => i32): i32 => {
   return g()
-}
+};
 
 class File {
   readonly file: CPtr | null
@@ -29,8 +29,8 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   return apply((): i32 => f.read())
-}
+};
 
 export const main = (): i32 => 0

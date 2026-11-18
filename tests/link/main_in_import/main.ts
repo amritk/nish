@@ -1,5 +1,5 @@
 import { helper } from "./lib";
 
-export function main(): number {
+export const main = (): number => {
   return helper();
-}
+};

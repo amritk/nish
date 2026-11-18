@@ -36,15 +36,15 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
 | `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp` |
-| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
+| `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut, once that run is approved (`release-pr.yml` pushes with `GITHUB_TOKEN` unless a `RELEASE_PR_TOKEN` secret is set, so the run waits as `action_required`), and otherwise first at the tag |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
-| `lint` | Ubuntu | `npm ls --package-lock-only`, `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
+| `lint` | Ubuntu | `npm ls --package-lock-only`, `npm run check` (`tsc`, once a push: it ran in all eight `test` shards before), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
 Every job that compiles anything compiles with `src/`, built from the seed:
 there is no other compiler in the repository. The jobs that compared two
@@ -71,6 +71,16 @@ is a third count beside passed and skipped, honoured only under GitHub Actions
 on a host with a seed target, and a check fails if `test` asks for it while
 `bootstrap` has stopped running `--verify`. A local `npm test` always runs the
 fixed point.
+
+`--delegate-sanitizers` does the same for the `sanitizers` section: its
+`runtime_sanitize` rows and each target's `fuzz: <target> builds and replays…`
+row are delegated to `fuzz-smoke`, whose `scripts/fuzz.sh --smoke` builds and
+replays every target's corpus and regressions and which then runs
+`node tests/run.js runtime_sanitize`, failing on a skip. A target with no
+corpus is still replayed by the suite, since `fuzz.sh` accepts one with only
+regressions, and the `fuzz.sh links the runtime units` check always runs. A
+check fails if `test` asks for the delegation while `fuzz-smoke` stops running
+either command.
 
 ### Shards and time limits
 
@@ -201,10 +211,14 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
-  1. The `simd` group's seven (the AVX2, AES-NI, SHA-NI, ChaCha20 and CRC-32
-  paths, the lowered AES kernels, SHA-256 throughput) run in shard 2, where
-  `DEALT_SECTIONS.simd.pinned` keeps that group, 173 s with those steps; a
-  check in `tests/run.js` holds their `if:` to it.
+  1. The `simd` group's seven steps (the AVX2, AES-NI, SHA-NI, ChaCha20,
+  CRC-32 and SSSE3 Adler-32 paths, the lowered AES kernels) run in shard 2,
+  where `DEALT_SECTIONS.simd.pinned` keeps that group; a check in
+  `tests/run.js` holds their `if:` to it. The group measured 173 s when it
+  had eight: the eighth, SHA-256 throughput, printed figures and asserted
+  only that the driver printed something, which the `simd` section's
+  `sha256-calls` check already holds, so it was removed; `simd-arm64` and
+  `sha256-macos` keep their platforms' figures.
 - **`runner`**, three ways, and one process per core in each.
   `build/nish-runner --shard <i>/<n>` starts itself `--jobs` times (the core
   count up to 8 by default) as `--shard <i>/<n> --part <k>/<p>`, so job `i`
@@ -458,7 +472,19 @@ linked binary under a hash of everything the link reads, and the
 a run whose compiler sources (the modules the seed's front end names: `src/`
 and the nine `std/` modules it imports), seed and toolchain match an earlier
 one copies stage1 instead of linking it, and a job that runs the suite more than once
-links it at most once. The golden cases are dealt too: a shard compiles
+links it at most once. A shard that still spends 70-80 s on the step is a
+miss, not a broken cache:
+[run 44241824047](https://github.com/amritk/nish/actions/runs/44241824047),
+a push to `main` whose `src/` change made a new key, linked and saved on
+every row (63-83 s a test shard), and
+[run 44243579767](https://github.com/amritk/nish/actions/runs/44243579767),
+the next push, which changed tests only, restored it in 4-6 s a shard. In
+the first, `fuzz-smoke` and `postgres-live` spent 96 s and 113 s on
+`npm run build`, which links stage1 and then stage2 from it; they now take
+the `test` job's stage1 through the same action under the same key (stage2
+is the same compiler, which `bootstrap (x86_64-linux)` asserts), and
+`nish-cmp elision`'s candidate, the same `--link` with its row's seed, comes
+through it too. The golden cases are dealt too: a shard compiles
 all of them and does the other work of its eighth only, which took section A
 from 59 s to 30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
