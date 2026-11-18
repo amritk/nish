@@ -67,6 +67,7 @@ import { resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.
 import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
+import * as ciScope from "../scripts/ci-scope.mjs"
 import { cwdFor } from "./differential/lib.js"
 import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
@@ -7633,6 +7634,19 @@ const runLinkProgram = async (name) => {
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
+  // A program that runs but whose `args` name a wasm32 target is linked and run
+  // as a native build of the same flags: a wasm32 module lays a class's pointer
+  // field out in 4 bytes (WP48 stage 6), and build.sh's clang replaces the
+  // module's datalayout with the host's, so a native link of wasm32 IR would
+  // write 8-byte pointers into objects allocated for 4-byte ones. The wasm32
+  // compile itself is still made, below, and must succeed. Only the two-token
+  // `--target wasm32` is recognised: it is the one form every wasm32 `args` in
+  // tests/link uses, and an `args` spelling `--target=wasm32` or `--profile wasi`
+  // would be linked natively as wasm32 IR, the mismatch above.
+  const targetAt = args.indexOf("--target")
+  const wasmRun =
+    targetAt >= 0 && String(args[targetAt + 1]).startsWith("wasm32") && !fs.existsSync(side("expected.err"))
+  const linkArgs = wasmRun ? args.filter((_, i) => i !== targetAt && i !== targetAt + 1) : args
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
   // This program's own directory: no other program in flight names it.
@@ -7650,7 +7664,7 @@ const runLinkProgram = async (name) => {
   // safely (CLI-5; see above).
   const r = await spawnAsync(
     NISH,
-    [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
+    [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs],
     { cwd: root }
   )
   const stderr = String(r.stderr)
@@ -7681,6 +7695,31 @@ const runLinkProgram = async (name) => {
     expect(`link/${name}: compiles and links`, false, stderr)
     return record
   }
+  if (wasmRun) {
+    const wasmDir = path.join(buildDir, "link", `${name}.wasm32`) + path.sep
+    // Named after the program, like `outDir`.
+    fs.rmSync(wasmDir, { recursive: true, force: true })
+    const w = await spawnAsync(NISH, [side("main.ts"), "-o", wasmDir, ...args], { cwd: root, encoding: "utf8" })
+    const wasmModules = w.status === 0 ? fs.readdirSync(wasmDir).filter((f) => f.endsWith(".ll")) : []
+    const rejected = []
+    for (const f of HAS_LLVM_AS ? wasmModules : []) {
+      const as = await spawnAsync("llvm-as", [path.join(wasmDir, f), "-o", "/dev/null"], { encoding: "utf8" })
+      if (as.status !== 0) {
+        rejected.push(`${f}: ${as.stderr}`)
+      }
+      // The verifier reads what llvm-as does not: a load's alignment against
+      // the wasm32 datalayout the module declares.
+      const v = HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(wasmDir, f)], { encoding: "utf8" }) : null
+      if (v !== null && v.status !== 0) {
+        rejected.push(`${f}: ${v.stderr}`)
+      }
+    }
+    expect(
+      `link/${name}: its wasm32 compile succeeds and llvm-as and opt -passes=verify accept its ${wasmModules.length} module(s)`,
+      w.status === 0 && wasmModules.length > 0 && rejected.length === 0,
+      w.status === 0 ? rejected.join("\n") : w.stderr
+    )
+  }
   if (DELEGATE_IR_CHECKS) {
     record.irDelegated = true
   } else {
@@ -7695,7 +7734,7 @@ const runLinkProgram = async (name) => {
     // compile (a function reference crosses an exported signature, which an
     // open build hands a host: WP51 §5.2), so its listing links too.
     const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...args, "--emit-panics", panicsFile], {
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile], {
       cwd: root,
       encoding: "utf8",
     })
@@ -7742,7 +7781,7 @@ const runLinkProgram = async (name) => {
       fs.rmSync(warnedDir, { recursive: true, force: true })
       const warned = await spawnAsync(
         NISH,
-        [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+        [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"],
         {
           cwd: root,
           encoding: "utf8",
@@ -8824,21 +8863,9 @@ if (dealtHere("selfHosting")) {
     )
   }
 
-  // The delegation above is a claim about ci.yml, so ci.yml is read for it on
-  // every run, local ones included: a `test` job that still asks for it while
-  // the `bootstrap` job no longer runs `--verify` would be a green run with
-  // the fixed point proved nowhere. Comment lines are left out, because a
-  // comment that mentions a flag is not a step that passes it.
-  const testJobText = ciJob(ciYmlText, "test")
-  const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
-  check(
-    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
-    testJobText !== "" &&
-      (!testJobText.includes("--delegate-fixed-point") ||
-        (/^\s+needs: seeds$/m.test(bootstrapJobText) &&
-          bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
-    `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
-  )
+  // The delegation above is a claim about ci.yml, read for it on every run
+  // with the sanitizers' twin, under "ci.yml: the `test` job delegates the
+  // fixed point" below: cheaply, and outside this section, which builds.
 
   // A sharded job runs `--shard "$SHARD/<n>"` over a `shard:` list,
   // and the two numbers are written apart. A list shorter than `n` is a green
@@ -8863,6 +8890,7 @@ if (dealtHere("selfHosting")) {
   // (build/test/simd/) or its kernels' lines run in the shard the group is
   // pinned to, or they read a file no step there wrote.
   const simdShard = DEALT_SECTIONS.simd.pinned
+  const testJobText = ciJob(ciYmlText, "test")
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
@@ -25276,7 +25304,9 @@ if (dealtHere("cliChecks")) {
         noLink: true,
         want: [
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
-          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 8 bytes`,
+          // On wasm32, L's pointer field is 4 bytes, so its current layout is
+          // already the compact 8; natively the 8-byte pointer pads it to 16.
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? 8 : 16} → 8 bytes`,
           "explain-layout: 0 of 2 classes compact",
         ],
       })
@@ -32961,33 +32991,484 @@ if (SHARD > 1) {
 // and each move is a claim about ci.yml, read here on every run, local ones
 // included, so an edit that leaves a check running nowhere turns this red
 // rather than every row green.
-if (selects("ci.yml", "runtime_sanitize", "fuzz", "nish-runner")) {
-  // `--delegate-sanitizers` (DELEGATE_SANITIZERS) is honest only while
-  // `fuzz-smoke` builds and replays every target and runs the runtime unit
-  // test under the sanitizers.
+// scripts/ci-scope.mjs: the `scope` job's decision and the `ci-gate` verdict.
+// A wrong decision skips a check on a pull request it would have failed, so
+// every case that must run everything is pinned, and so is the replay of
+// recorded merged pull requests.
+if (selects("ci-scope", "ci.yml")) {
+  const on = (files, extra = {}) =>
+    ciScope.decide({
+      event: "pull_request",
+      files: files.map((f) => (typeof f === "string" ? { path: f, status: "modified" } : f)),
+      ...extra,
+    })
+  const lanes = ciScope.LANES.map((l) => l.name)
+  const everything = (r) => r.full !== null && lanes.every((l) => r.lanes[l] === true)
+  const docs = [{ path: "docs/x.md", status: "modified" }]
+  const fullCases = [
+    ["a push to main", ciScope.decide({ event: "push", files: docs })],
+    ["a merge_group", ciScope.decide({ event: "merge_group", files: docs })],
+    ["a workflow_call", ciScope.decide({ event: "workflow_call", files: docs })],
+    ["a workflow_dispatch", ciScope.decide({ event: "workflow_dispatch", files: docs })],
+    ["no event", ciScope.decide({ files: docs })],
+    ["the ci:full label", on(["docs/x.md"], { labels: ["ci:full"] })],
+    ["NISH_CI_SCOPE=full", on(["docs/x.md"], { mode: "full" })],
+    ["NISH_CI_SCOPE=FULL", on(["docs/x.md"], { mode: " FULL " })],
+    ["a CI:Full label", on(["docs/x.md"], { labels: ["CI:Full"] })],
+    ["an empty file list", on([])],
+    ["an unknown file list", ciScope.decide({ event: "pull_request" })],
+    ["a truncated file list", on(["docs/x.md"], { truncated: true })],
+    ["a file with no path", on([{ status: "modified" }])],
+    ["a deleted docs file", on([{ path: "docs/x.md", status: "removed" }])],
+    ["an unknown status", on([{ path: "docs/x.md", status: "unchanged" }])],
+    ["a rename with no old path", on([{ path: "docs/x.md", status: "renamed" }])],
+    ["a rename out of src/", on([{ path: "docs/x.ts", status: "renamed", previous: "src/x.ts" }])],
+    ["a rename into std/", on([{ path: "std/x.ts", status: "renamed", previous: "docs/x.ts" }])],
+    // tests/postgres/ is read by the postgres lane alone: a rename out of it
+    // into docs/ is on every other lane's allowlist at both ends.
+    ["a rename out of one lane's read set", on([{ path: "docs/x.ts", status: "renamed", previous: "tests/postgres/x.ts" }])],
+    ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
+    ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
+    ["a change to package.json", on(["package.json"])],
+    ["a change to package-lock.json", on(["package-lock.json"])],
+    ["a nested package.json", on(["docs/cookbook/node_modules/p/package.json"])],
+    ["a change to scripts/ci-scope.mjs", on(["scripts/ci-scope.mjs"])],
+  ]
+  const notFull = fullCases.filter(([, r]) => !everything(r)).map(([n]) => n)
+  check(
+    "ci-scope: every case that must run every lane does",
+    notFull.length === 0,
+    `ran less than everything: ${notFull.join(", ")}`
+  )
+
+  const docsOnly = on(["docs/guide/index.md", "README.md"])
+  const srcChange = on(["src/compile.ts"])
+  const inertRename = on([{ path: "docs/b.md", status: "renamed", previous: "docs/a.md" }])
+  check(
+    "ci-scope: a docs-only change skips every lane, a src/ change runs every lane, an inert rename skips",
+    docsOnly.full === null &&
+      lanes.every((l) => docsOnly.lanes[l] === false) &&
+      lanes.every((l) => srcChange.lanes[l] === true) &&
+      lanes.every((l) => inertRename.lanes[l] === false),
+    JSON.stringify({ docsOnly, srcChange, inertRename })
+  )
+  const unknownPath = on(["somewhere/new.txt"])
+  check(
+    "ci-scope: a path on no lane's allowlist of unread paths runs every lane",
+    lanes.every((l) => unknownPath.lanes[l] === true),
+    JSON.stringify(unknownPath)
+  )
+
+  const ok = { result: "success" }
+  const skipped = { result: "skipped" }
+  check(
+    "ci-scope: the gate passes only when every job succeeded or was skipped by its own if:",
+    ciScope.gate({ a: ok, b: skipped }, ["b"]).length === 0 &&
+      ciScope.gate({ a: ok, b: skipped }, []).length === 1 &&
+      ciScope.gate({ a: { result: "failure" } }, []).length === 1 &&
+      ciScope.gate({ a: { result: "cancelled" } }, ["a"]).length === 1 &&
+      ciScope.gate({ a: {} }, []).length === 1 &&
+      ciScope.gate({}, []).length === 1 &&
+      ciScope.gate(null, []).length === 1,
+    "a gate verdict differs"
+  )
+
+  // ci.yml and the module name the same lanes, and the gate waits for every
+  // other job: a job left out of its `needs` could fail under a green gate.
+  const scopeJob = ciJob(ciYmlText, "scope")
+  const gateJob = ciJob(ciYmlText, "ci-gate")
+  const outputs = [...scopeJob.matchAll(/^ {6}([a-z0-9_]+): \$\{\{ steps\.scope\.outputs\.\1 \}\}$/gm)].map((m) => m[1])
+  const read = [...new Set([...ciYmlText.matchAll(/needs\.scope\.outputs\.([a-z0-9_]+)/g)].map((m) => m[1]))]
+  const jobIds = [...ciYmlText.slice(ciYmlText.search(/^jobs:$/m)).matchAll(/^ {2}([a-z0-9-]+):$/gm)]
+    .map((m) => m[1])
+    .filter((j) => j !== "ci-gate")
+  const gateNeeds = [...(/^ {4}needs:\n((?: {6}- [a-z0-9-]+\n)+)/m.exec(gateJob)?.[1] ?? "").matchAll(/- ([a-z0-9-]+)/g)]
+    .map((m) => m[1])
+  const ungated = jobIds.filter((j) => !gateNeeds.includes(j))
+  check(
+    "ci-scope: the scope job outputs every lane, ci.yml reads no other, and ci-gate needs every job",
+    [...lanes, "why"].every((l) => outputs.includes(l)) &&
+      outputs.length === lanes.length + 1 &&
+      read.every((u) => outputs.includes(u)) &&
+      jobIds.length > 0 &&
+      ungated.length === 0 &&
+      /^ {4}if: always\(\)$/m.test(gateJob),
+    `outputs: ${outputs.join(" ")}\nread: ${read.join(" ")}\njobs not in ci-gate's needs: ${ungated.join(" ")}`
+  )
+
+  // The backtest charges a failed job to the lane whose ci.yml `name:` it
+  // matches exactly, so each lane's `names` must be its jobs' templates.
+  const yamlName = (id) => {
+    const job = ciJob(ciYmlText, id)
+    return /^ {4}name: (.*)$/m.exec(job)?.[1] ?? (job === "" ? null : id)
+  }
+  const nameDrift = ciScope.LANES.filter(
+    (l) => l.names.length !== l.jobs.length || l.jobs.some((id, i) => yamlName(id) !== l.names[i])
+  ).map((l) => `${l.name}: ${l.names.join(", ")} vs ${l.jobs.map(yamlName).join(", ")}`)
+  const asRun = (name) => name.replace(/\$\{\{.*?\}\}/g, "x86_64-linux")
+  const misMapped = [
+    ...ciScope.LANES.flatMap((l) => l.names.map((n) => [asRun(n), l.name])),
+    ["nish-cmp elision (aarch64-linux)", "elision"],
+    ["nish-cmp (aarch64-linux)", "nish_cmp"],
+    ["the NEON path agrees (aarch64-linux)", "simd"],
+    ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
+    ["test (ubuntu-latest, shard 1/8)", null],
+    ["lint", null],
+    ["the golden cases, in Nish (shard 1/3)", null],
+    ["nish-cmp", null],
+  ].filter(([display, lane]) => (ciScope.laneOf(display)?.name ?? null) !== lane)
+  check(
+    "ci-scope: every lane's names are its jobs' ci.yml name: templates, and a job's display name maps to its lane alone",
+    nameDrift.length === 0 && misMapped.length === 0,
+    `names that differ from ci.yml: ${nameDrift.join("; ") || "none"}\nmis-mapped: ${JSON.stringify(misMapped)}`
+  )
+
+  // The file list: a short page ends it; a 30th full page means the API cut
+  // it off, which runs everything.
+  const pages = (sizes) => {
+    const asked = []
+    const get = async (url) => {
+      const page = Number(new URL(url).searchParams.get("page"))
+      asked.push(page)
+      const n = sizes[page - 1] ?? 0
+      return { ok: true, json: async () => Array.from({ length: n }, (_, i) => ({ filename: `docs/${page}-${i}.md`, status: "modified" })) }
+    }
+    return ciScope.fetchFiles("o/r", "1", "t", get).then((r) => ({ ...r, asked }))
+  }
+  const [thirty, short, failed] = await Promise.all([
+    pages(Array(30).fill(100)),
+    pages([100, 100, 7]),
+    ciScope.fetchFiles("o/r", "1", "t", async () => ({ ok: false, status: 502 })).then(() => "resolved", (e) => e.message),
+  ])
+  check(
+    "ci-scope: 30 full pages of changed files is a truncated list, a short page ends it, and an HTTP error throws",
+    thirty.truncated === true &&
+      thirty.asked.length === 30 &&
+      everything(on(thirty.files.map((f) => f.path), { truncated: thirty.truncated })) &&
+      short.truncated === false &&
+      short.files.length === 207 &&
+      short.asked.join() === "1,2,3" &&
+      /502/.test(failed),
+    JSON.stringify({ thirty: [thirty.truncated, thirty.asked.length], short: [short.truncated, short.files.length], failed })
+  )
+
+  // The command line: labels it cannot parse count as `ci:full`, and the
+  // reason written to GITHUB_OUTPUT stays on one line whatever a path holds.
+  const scopeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ci-scope-"))
+  const runScope = (files, env) => {
+    const list = path.join(scopeDir, "files.txt")
+    const output = path.join(scopeDir, "output.txt")
+    fs.writeFileSync(list, files.join("\n"))
+    fs.writeFileSync(output, "")
+    const ran = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--files", list], {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", NISH_CI_SCOPE: "", GITHUB_STEP_SUMMARY: "", ...env, GITHUB_OUTPUT: output },
+    })
+    return { ran, lines: fs.readFileSync(output, "utf8").split("\n").filter(Boolean) }
+  }
+  const badLabels = runScope(["docs/x.md"], { PR_LABELS: "[not json" })
+  const goodLabels = runScope(["docs/x.md"], { PR_LABELS: "[]" })
+  const carriage = runScope([".github/a\rb.yml"], { PR_LABELS: "[]" })
+  const laneLines = (lines) => lines.filter((l) => !l.startsWith("why="))
+  check(
+    "ci-scope: unparseable PR_LABELS runs every lane, and the why= output is one line even for a path with a carriage return",
+    badLabels.ran.status === 0 &&
+      laneLines(badLabels.lines).length === lanes.length &&
+      laneLines(badLabels.lines).every((l) => l.endsWith("=true")) &&
+      goodLabels.ran.status === 0 &&
+      laneLines(goodLabels.lines).every((l) => l.endsWith("=false")) &&
+      carriage.ran.status === 0 &&
+      carriage.lines.length === lanes.length + 1 &&
+      carriage.lines.every((l) => !l.includes("\r")) &&
+      carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
+    JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
+  )
+  fs.rmSync(scopeDir, { recursive: true, force: true })
+
+  // The replay passes with no miss and excuses exactly the flakes the data
+  // names: a new excuse is a change to this list, reviewed like a miss.
+  const replay = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--backtest"], {
+    encoding: "utf8",
+  })
+  const excusedFlakes = [...replay.stdout.matchAll(/^ {2}excused flake (#\d+ \S+)/gm)].map((m) => m[1])
+  check(
+    "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke",
+    replay.status === 0 && /^misses: 0$/m.test(replay.stdout) && excusedFlakes.join() === "#1666 fuzz-smoke",
+    `excused: ${excusedFlakes.join(", ") || "none"}\n${replay.stdout}${replay.stderr}`
+  )
+}
+
+if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish-runner")) {
+  // Each delegation is honest only while the job it names makes the check on
+  // every run that could change its answer. Those jobs are scoped lanes
+  // (scripts/ci-scope.mjs), whose steps skip when their lane is `false`, so
+  // each claim is held to two things:
+  //
+  //   - the step that makes the check runs whenever its lane does, and must
+  //     pass: no `continue-on-error`, no job-level `if:` beyond the one named
+  //     here, and a step `if:` that is exactly the lane's gate (with
+  //     `!cancelled()` first on runtime_sanitize, which runs after a failed
+  //     smoke);
+  //   - the lane runs for a change to any file the check reads: `decide`
+  //     turns it on for every file under the trees named below and for
+  //     tests/run.js and everything it imports. A lane whose read set loses
+  //     one of them would skip the only run of the check on a pull request
+  //     that changes it.
   const testJob = ciJob(ciYmlText, "test")
-  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
-  // A step that runs them counts only while it must run and must pass: no
-  // `continue-on-error`, and no `if:` but `!cancelled()`. A job-level `if:`
-  // or `continue-on-error` would leave them running nowhere, or failing
-  // unseen, while the `test` job still prints DELEGATED.
-  const fuzzSmokeSteps = fuzzSmoke.split(/\n {6}- /).slice(1)
-  const binding = (pattern) => {
-    const step = fuzzSmokeSteps.find((s) => pattern.test(s))
+  const gateOf = (lane) => `needs.scope.outputs.${lane} != 'false'`
+  const stepsOf = (job) => job.split(/\n {6}- /).slice(1)
+  const binding = (job, pattern, ifs) => {
+    const step = stepsOf(job).find((s) => pattern.test(s))
+    const stepIfs = [...(step ?? "").matchAll(/^ {8}if: (.*)$/gm)].map((m) => m[1])
     return (
       step !== undefined &&
       !/^ {8}continue-on-error:/m.test(step) &&
-      [...step.matchAll(/^ {8}if: (.*)$/gm)].every((m) => m[1] === "${{ !cancelled() }}")
+      stepIfs.length === 1 &&
+      ifs.includes(stepIfs[0])
     )
   }
+  const filesUnder = (...dirs) =>
+    dirs.flatMap((dir) =>
+      fs
+        .readdirSync(path.join(root, dir), { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => path.relative(root, path.join(e.parentPath, e.name)).split(path.sep).join("/"))
+    )
+  const importsOf = (file, seen = new Set()) => {
+    if (seen.has(file) || !fs.existsSync(path.join(root, file))) {
+      return seen
+    }
+    seen.add(file)
+    const text = fs.readFileSync(path.join(root, file), "utf8")
+    for (const m of text.matchAll(/^import [^"]*"(\.\.?\/[^"]+)"/gm)) {
+      importsOf(path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])), seen)
+    }
+    return seen
+  }
+  const unread = (lane, files) =>
+    files.filter(
+      (f) => !ciScope.decide({ event: "pull_request", files: [{ path: f, status: "modified" }] }).lanes[lane]
+    )
+  const laneJob = (job, jobIf) =>
+    job !== "" &&
+    /^ {4}needs: (scope|\[[^\]]*\bscope\b[^\]]*\])$/m.test(job) &&
+    !/^ {4}continue-on-error:/m.test(job) &&
+    [...job.matchAll(/^ {4}if: (.*)$/gm)].every((m) => m[1] === jobIf)
+
+  // Every command each lane's job runs, with files it opens: its entry
+  // script, what that imports, and the fixtures it compiles (the composite
+  // compiler-cache action counts as a command of every lane that uses it).
+  // An entry here proves only that a change to a listed file turns its lane on;
+  // it cannot find a read nobody listed. package.json is left out because it is
+  // in FULL and turns every lane on whatever the lane lists; the tests/ entries
+  // of simd, sha256_macos and fuzz record what those commands read, though the
+  // tests/run.js check below already turns those lanes on for all of tests/.
+  // Re-derived from each step's `run:` after #1746's review found the
+  // bootstrap lane missing the fixtures tests/nish/cli.ts compiles and the
+  // postgres lane missing tests/self/. A lane whose read set drops one of
+  // these skips the command's only run on a pull request that changes it.
+  const compilerCache = [
+    "tests/self/compiler-cache.js",
+    "tests/self/seed.js",
+    "scripts/fetch-seed.sh",
+    "scripts/build.sh",
+    "src/compile.ts",
+    "std/term.ts",
+    "runtime/nish.d.ts",
+  ]
+  const laneCommands = {
+    bootstrap: {
+      "bash scripts/bootstrap.sh --verify": [
+        "scripts/bootstrap.sh",
+        "scripts/build.sh",
+        "tests/self/bootstrap.js",
+        "src/capability-lock.ts",
+        "src/compile.ts",
+        "runtime/nish.d.ts",
+      ],
+      "node scripts/check-hardening.mjs": ["scripts/check-hardening.mjs"],
+      "build/nish tests/nish/cli.ts, then build/nish-cli build/nish": [
+        "tests/nish/cli.ts",
+        "tests/cases/caps_pure.ts",
+        "tests/cases/caps_generic.ts",
+        "tests/cases/caps_generic.caps.json",
+        "tests/cases/sandbox_hello.ts",
+        "tests/link/caps_lock_growth/main.ts",
+      ],
+    },
+    nish_cmp: {
+      "node tests/nish-cmp.js": [
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+        "tests/self/seed.js",
+        "tests/cases/caps_pure.ts",
+        "tests/driver.c",
+        "CHANGELOG.md",
+      ],
+      "node tests/differential/fuzz.js --stage1 / --emit-ts": [
+        "tests/differential/fuzz.js",
+        "tests/self/seed.js",
+        "tests/pool.js",
+      ],
+    },
+    elision: {
+      "compiler-cache": compilerCache,
+      "node tests/differential/soundness.js": [
+        "tests/differential/soundness.js",
+        "tests/cases/caps_pure.ts",
+        "tests/differential/corpus/argv_words.ts",
+        "tests/driver.c",
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+      ],
+    },
+    simd: {
+      "compiler-cache": compilerCache,
+      "node tests/run.js simd / float-corpus / the kernels": [
+        ...importsOf("tests/run.js"),
+        "docs/LANGUAGE.md",
+        "tests/simd/sha256.c",
+        "tests/link/sha256_hw_vectors/main.ts",
+        "tests/cases/caps_pure.ts",
+      ],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+      "node bench/crc32.mjs, adler32.mjs, chacha20.mjs": [
+        "bench/crc32.mjs",
+        "bench/adler32.mjs",
+        "bench/chacha20.mjs",
+      ],
+    },
+    sha256_macos: {
+      "compiler-cache": compilerCache,
+      "clang tests/simd/sha256.c, sha256-calls.c": [
+        "tests/simd/sha256.c",
+        "tests/simd/sha256-calls.c",
+        "runtime/runtime-sha256.c",
+      ],
+      "node tests/run.js sha256_hw": [...importsOf("tests/run.js"), "tests/link/sha256_hw_vectors/main.ts"],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+    },
+    fuzz: {
+      "compiler-cache": compilerCache,
+      "bash scripts/fuzz.sh --smoke": ["scripts/fuzz.sh", "tests/fuzz/harness.c"],
+      "node tests/run.js runtime_sanitize": [...importsOf("tests/run.js"), "tests/runtime/range-test.c"],
+    },
+    postgres: {
+      "compiler-cache": compilerCache,
+      "bash tests/postgres/live/tls-certs.sh": ["tests/postgres/live/tls-certs.sh"],
+      "node tests/postgres/live/run.mjs": [
+        "tests/postgres/live/run.mjs",
+        "tests/postgres/live/live.ts",
+        "tests/postgres/live/tls.ts",
+        "tests/postgres/carrier.ts",
+        "tests/postgres/serve-pool.ts",
+        "bench/techempower/db-main.ts",
+        "bench/techempower/async-db-main.ts",
+      ],
+    },
+  }
+  const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
+    ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
+    ...Object.entries(commands).flatMap(([command, files]) => [
+      ...(files.length === 0 ? [`${lane}: ${command}: no file`] : []),
+      ...files.filter((f) => !fs.existsSync(path.join(root, f))).map((f) => `${lane}: ${command}: ${f} does not exist`),
+      ...unread(lane, files).map((f) => `${lane}: ${command}: ${f} would not turn it on`),
+    ]),
+  ])
+  const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
+  check(
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every listed command (21) of all seven lanes",
+    commandGaps.length === 0 && uncoveredLanes.length === 0,
+    `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
+  )
+
+  // A lane whose job runs tests/run.js reads all of tests/ but tests/ci-scope:
+  // a section can open any fixture there, and #1746's second review found a
+  // hand-picked list missing tests/runtime/range-test.c.
+  const testsFiles = filesUnder("tests").filter((f) => !f.startsWith("tests/ci-scope/"))
+  const runJsLanes = ciScope.LANES.filter((l) =>
+    l.jobs.some((j) => /^\s+(?:\$run )?node tests\/run\.js /m.test(ciJob(ciYmlText, j)))
+  )
+  const runJsMisses = runJsLanes.flatMap((l) =>
+    unread(l.name, testsFiles)
+      .slice(0, 5)
+      .map((f) => `${l.name}: ${f}`)
+  )
+  const ciScopeRead = ciScope.LANES.filter(
+    (l) => ciScope.decide({ event: "pull_request", files: [{ path: "tests/ci-scope/README.md" }] }).lanes[l.name]
+  )
+  check(
+    "ci-scope: every lane whose job runs tests/run.js turns on for any file under tests/ but tests/ci-scope",
+    runJsLanes.length >= 3 && runJsMisses.length === 0 && ciScopeRead.length === 0,
+    `lanes running tests/run.js: ${runJsLanes.map((l) => l.name).join(", ") || "none"}\n` +
+      `misses: ${runJsMisses.join(", ") || "none"}\n` +
+      `lanes a tests/ci-scope change turns on: ${ciScopeRead.map((l) => l.name).join(", ") || "none"}`
+  )
+
+  // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
+  // with itself, and compares (scripts/bootstrap.sh --verify).
+  const bootstrapJob = ciJob(ciYmlText, "bootstrap")
+  const fixedPointMisses = unread("bootstrap", [
+    ...filesUnder("src", "std", "runtime"),
+    "scripts/bootstrap.sh",
+    "scripts/build.sh",
+    "tests/self/bootstrap.js",
+    "nish-capabilities.lock.json",
+  ])
+  check(
+    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
+    testJob !== "" &&
+      (!testJob.includes("--delegate-fixed-point") ||
+        (laneJob(bootstrapJob, "needs.seeds.outputs.rows != '[]'") &&
+          /^ {4}needs: \[seeds, scope\]$/m.test(bootstrapJob) &&
+          binding(bootstrapJob, /bash scripts\/bootstrap\.sh --verify$/m, [gateOf("bootstrap")]) &&
+          fixedPointMisses.length === 0)),
+    `files the bootstrap lane would skip on: ${fixedPointMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `bootstrap job:\n${bootstrapJob || "(not found)"}`
+  )
+
+  // `--delegate-sanitizers` (DELEGATE_SANITIZERS): `fuzz-smoke` builds and
+  // replays every target and runs the runtime unit test under the sanitizers.
+  const fuzzSmoke = ciJob(ciYmlText, "fuzz-smoke")
+  // The fuzz lane reads tests/ wholesale (but tests/ci-scope): a list picked
+  // file by file missed tests/runtime/range-test.c, which runtime_sanitize
+  // compiles under ASan and UBSan.
+  const sanitizerMisses = unread("fuzz", [
+    ...filesUnder("src", "std", "runtime"),
+    ...testsFiles,
+    "scripts/fuzz.sh",
+  ])
   check(
     "ci.yml: the `test` job delegates the sanitizers only while `fuzz-smoke` runs scripts/fuzz.sh --smoke and node tests/run.js runtime_sanitize",
     testJob !== "" &&
       (!testJob.includes("--delegate-sanitizers") ||
-        (!/^ {4}(if|continue-on-error):/m.test(fuzzSmoke) &&
-          binding(/^ {8}run: bash scripts\/fuzz\.sh --smoke$/m) &&
-          binding(/^\s+node tests\/run\.js runtime_sanitize /m))),
-    `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+        (laneJob(fuzzSmoke, "") &&
+          !/^ {4}if:/m.test(fuzzSmoke) &&
+          binding(fuzzSmoke, /^ {8}run: bash scripts\/fuzz\.sh --smoke$/m, [gateOf("fuzz")]) &&
+          binding(fuzzSmoke, /^\s+node tests\/run\.js runtime_sanitize /m, [
+            `\${{ (!cancelled()) && ${gateOf("fuzz")} }}`,
+          ]) &&
+          sanitizerMisses.length === 0)),
+    `files the fuzz lane would skip on: ${sanitizerMisses.slice(0, 20).join(", ") || "none"}\n\n` +
+      `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
+  )
+
+  // #1724: the runtime_sanitize step fails on a failed or skipped check. It
+  // pipes the run through `tee`, so without `set -o pipefail` the step's
+  // status is tee's; it requires a non-zero passed count with 0 failed, and
+  // a SKIP line fails it (a missing sanitizer runtime prints one and passes
+  // nothing). `|| true` anywhere in it would hide all three.
+  const sanitizeStep = stepsOf(fuzzSmoke).find((s) => /^\s+node tests\/run\.js runtime_sanitize /m.test(s)) ?? ""
+  check(
+    "ci.yml: fuzz-smoke's runtime_sanitize step fails on a failed check, on no passed checks and on a SKIP",
+    /^ {10}set -o pipefail$/m.test(sanitizeStep) &&
+      /^ {10}node tests\/run\.js runtime_sanitize .*\| tee "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}grep -E '\^\[1-9\]\[0-9\]\* passed, 0 failed' "\$RUNNER_TEMP\/runtime-sanitize\.log"$/m.test(sanitizeStep) &&
+      /^ {10}if grep -E '\^SKIP {2}' "\$RUNNER_TEMP\/runtime-sanitize\.log"; then exit 1; fi$/m.test(sanitizeStep) &&
+      !/\|\|\s*(true|:)(\s|$)/m.test(sanitizeStep) &&
+      !/continue-on-error/.test(sanitizeStep) &&
+      sanitizeStep.indexOf("set -o pipefail") < sanitizeStep.indexOf("node tests/run.js runtime_sanitize"),
+    `runtime_sanitize step:\n${sanitizeStep || "(not found)"}`
   )
   // The `runner` job, the whole corpus through the golden runner written in
   // Nish, runs per release rather than per push: on the Release PR, and in
@@ -39774,7 +40255,7 @@ if (!only || "host-import".includes(only)) {
       fs.writeFileSync(path.join(scratch, `${name}.host.ts`), hostText)
       fs.writeFileSync(
         path.join(scratch, `${name}.ts`),
-        `import { first } from "./${name}.host"\nexport function f(): i32 {\n  return first(1)\n}\n`
+        `import { first } from "./${name}.host"\nexport const f = (): i32 => {\n  return first(1)\n};\n`
       )
       return spawnSync(
         NISH,
@@ -39877,12 +40358,12 @@ if (!only || "host-import".includes(only)) {
       [
         'import type { i32, u16 } from "nish"',
         'import { hI32, hU16 } from "./host"',
-        "export function rI32(x: i32): i32 {",
+        "export const rI32 = (x: i32): i32 => {",
         "  return hI32(x)",
-        "}",
-        "export function rU16(x: u16): u16 {",
+        "};",
+        "export const rU16 = (x: u16): u16 => {",
         "  return hU16(x)",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -39922,7 +40403,7 @@ if (!only || "host-import".includes(only)) {
       [
         "examples/arrays.ts",
         "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "91ce0443911068f9c1bd57103d51a102f733d808c555db8b586336a4bb77aa0c",
+        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -41007,9 +41488,10 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // 100,000 steps; the driver checks the answers and that linear memory and the
 // kept heap stay flat after warm-up; the director also runs its first 40,000
 // steps beside an instance whose keep does nothing and must match it frame for
-// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
-// call to 200,000 nodes, which every compaction traces end to end: a trace
-// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// frame. A third, tests/module-storage/persist/chain.ts, grows one list a node
+// a call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. Each call also drops a scratch node,
+// so every compaction has half the region to pack away. A fourth, tests/module-storage/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
 // and empty arrays and strings through a compaction at least every third call
 // (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
@@ -41115,7 +41597,7 @@ if (!only || "persist".includes(only)) {
     for (const [stem, source, steps, says, drive] of [
       ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
-      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["chain", "tests/module-storage/persist/chain.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
@@ -41458,6 +41940,226 @@ if (!only || "game-page".includes(only)) {
     exported !== undefined && exported.types === "./runtime/page-game.d.ts" && exported.default === "./runtime/page-game.mjs",
     JSON.stringify(exported)
   )
+}
+
+// ---- WP48 stage 6: a class's layout on wasm32 is LLVM's -----------------------------
+// computeLayout lays a pointer field (a class, nullable or not, a string, an
+// array) in the target's pointer width: four bytes under wasm32's `p:32:32`,
+// eight natively. The program below compiles with `--target wasm32`, and
+// `--emit-checked` prints the size, alignment and every field offset the
+// compiler recorded. For each class the test then asks LLVM: it appends to the
+// emitted module's types a function per number, `ptrtoint` of a `getelementptr` from
+// null (one past the struct for its size, into `{ i1, %T }` for its alignment,
+// to each field's index for its offset), and `opt -passes=instcombine` folds
+// each under the module's own data layout. The two must agree, the size must
+// be what `nish_alloc_struct` is asked for, and the linked node is pinned at 8
+// bytes on wasm32 and 16 natively, so a pointer slot back at 8 bytes fails.
+if (!only || "wasm32-layout".includes(only)) {
+  if (!has("opt")) {
+    skip("wasm32-layout: opt not installed: the data layout cannot fold the probes")
+  } else {
+    const dir = path.join(buildDir, "wasm32-layout")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const entry = path.join(dir, "classes.ts")
+    fs.writeFileSync(
+      entry,
+      `class Node {
+  next: Node | null
+  value: i32
+  constructor(next: Node | null, value: i32) {
+    this.next = next
+    this.value = value
+  }
+}
+
+class Mixed {
+  a: f64
+  link: Node | null
+  n: i32
+  b: i64
+  name: string
+  constructor(a: f64, link: Node | null, n: i32, b: i64, name: string) {
+    this.a = a
+    this.link = link
+    this.n = n
+    this.b = b
+    this.name = name
+  }
+}
+
+class Links {
+  head: Node
+  tail: Node | null
+  mixed: Mixed | null
+  count: i32
+  items: i32[]
+  done: boolean
+  constructor(head: Node, tail: Node | null, mixed: Mixed | null, count: i32, items: i32[], done: boolean) {
+    this.head = head
+    this.tail = tail
+    this.mixed = mixed
+    this.count = count
+    this.items = items
+    this.done = done
+  }
+}
+
+enum Kind {
+  Round,
+  Flat,
+}
+
+class Round {
+  readonly kind: Kind.Round = Kind.Round
+  r: f64
+  constructor(r: f64) {
+    this.r = r
+  }
+}
+
+class Flat {
+  readonly kind: Kind.Flat = Kind.Flat
+  w: i32
+  constructor(w: i32) {
+    this.w = w
+  }
+}
+
+const parse = (n: i32): Result<i32, string> => (n > 0 ? Ok(n) : Err("neg"))
+
+class Wide {
+  flag: boolean
+  shape: Round | Flat
+  tags: string[]
+  nodes: Node[]
+  outcome: Result<i32, string>
+  last: u16
+  constructor(flag: boolean, shape: Round | Flat, tags: string[], nodes: Node[], outcome: Result<i32, string>, last: u16) {
+    this.flag = flag
+    this.shape = shape
+    this.tags = tags
+    this.nodes = nodes
+    this.outcome = outcome
+    this.last = last
+  }
+}
+
+export const main = (): i32 => {
+  const a = new Node(null, 1)
+  const b = new Node(a, 2)
+  const m = new Mixed(1.5, b, 3, 4, "m")
+  const l = new Links(a, b, m, 2, [1, 2, 3], true)
+  const w = new Wide(true, new Flat(2), ["x", "y"], [a, b], parse(3), 4)
+  return l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
+}
+`
+    )
+    const names = ["Node", "Mixed", "Links", "Wide"]
+    // `struct T (class) size=S align=A`, then `  field f: T index=I offset=O`.
+    const layouts = (args) => {
+      const r = spawnSync(NISH, [entry, "--emit-checked", ...args], { cwd: root, encoding: "utf8" })
+      const found = new Map()
+      let current = null
+      for (const line of r.status === 0 ? r.stdout.split("\n") : []) {
+        const struct = /^struct (\w+) \(class\) size=(\d+) align=(\d+)/.exec(line)
+        if (struct !== null) {
+          current = { size: Number(struct[2]), align: Number(struct[3]), fields: [] }
+          found.set(struct[1], current)
+          continue
+        }
+        const field = /^ {2}field (\w+): .* index=(\d+) offset=(\d+)/.exec(line)
+        if (field !== null && current !== null) {
+          current.fields.push({ name: field[1], index: Number(field[2]), offset: Number(field[3]) })
+        }
+      }
+      return { r, found }
+    }
+    const wasm = layouts(["--target", "wasm32"])
+    const native = layouts([])
+    const ll = path.join(dir, "classes.ll")
+    const emitted = spawnSync(NISH, [entry, "--target", "wasm32", "-o", ll], { cwd: root, encoding: "utf8" })
+    if (
+      check(
+        "wasm32-layout: the program compiles for wasm32 and both targets print every class's layout",
+        wasm.r.status === 0 && native.r.status === 0 && emitted.status === 0 && names.every((n) => wasm.found.has(n)),
+        `${shown(wasm.r)}\n${shown(emitted)}`
+      )
+    ) {
+      // One probe per number, each `add`ed to 0 so instcombine folds it.
+      const probe = (label, type, gep) =>
+        `define i64 @probe.${label}() {\n  %v = add i64 ptrtoint (${type}* getelementptr ${gep} to i64), 0\n  ret i64 %v\n}\n`
+      const probes = []
+      for (const name of names) {
+        const t = `%struct.${name}`
+        const info = wasm.found.get(name)
+        probes.push(probe(`${name}.size`, t, `(${t}, ${t}* null, i32 1)`))
+        probes.push(probe(`${name}.align`, t, `({ i1, ${t} }, { i1, ${t} }* null, i32 0, i32 1)`))
+        for (const f of info.fields) {
+          probes.push(probe(`${name}.${f.name}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${f.index})`))
+        }
+      }
+      // The probes run in a module of their own: the emitted one's data layout
+      // and type definitions, and nothing for instcombine to rewrite but them.
+      const kept = fs
+        .readFileSync(ll, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("target datalayout") || /^%[\w.]+ = type /.test(line))
+      const probed = path.join(dir, "probed.ll")
+      fs.writeFileSync(probed, `${kept.join("\n")}\n\n${probes.join("\n")}`)
+      const folded = spawnSync("opt", ["-S", "-passes=instcombine", probed], { encoding: "utf8", maxBuffer: 1 << 28 })
+      const llvm = new Map()
+      for (const m of folded.stdout.matchAll(/define i64 @"?probe\.([\w.]+)"?\(\)[^{]*\{\n\s*ret i64 (\d+)/g)) {
+        llvm.set(m[1], Number(m[2]))
+      }
+      const text = fs.readFileSync(ll, "utf8")
+      for (const name of names) {
+        const info = wasm.found.get(name)
+        const mine = [`size=${info.size}`, `align=${info.align}`, ...info.fields.map((f) => `${f.name}=${f.offset}`)]
+        const theirs = [
+          `size=${llvm.get(`${name}.size`)}`,
+          `align=${llvm.get(`${name}.align`)}`,
+          ...info.fields.map((f) => `${f.name}=${llvm.get(`${name}.${f.name}`)}`),
+        ]
+        check(
+          `wasm32-layout: ${name}'s size, alignment and field offsets are what LLVM's wasm32 DataLayout gives %struct.${name}`,
+          folded.status === 0 && mine.join(" ") === theirs.join(" "),
+          `compiler: ${mine.join(" ")}\nLLVM:     ${theirs.join(" ")}\n${folded.stderr}`
+        )
+        // A class's own heap allocation is the call whose result is cast to
+        // its struct on the next line, so two classes of one size cannot stand
+        // in for each other. One that does not escape is an `alloca` of its
+        // struct instead, sized by the type the probe above already pinned.
+        const sites = [
+          ...text.matchAll(
+            new RegExp(`call i8\\* @nish_alloc_struct\\(i64 (\\d+)\\)\\n\\s*%\\d+ = bitcast i8\\* %\\d+ to %struct\\.${name}\\*\\n`, "g")
+          ),
+        ].map((m) => Number(m[1]))
+        const onStack = text.includes(`= alloca %struct.${name}, `)
+        check(
+          `wasm32-layout: every heap ${name} asks nish_alloc_struct for its ${info.size} bytes, and every ${name} is allocated`,
+          (sites.length > 0 || onStack) && sites.every((size) => size === info.size),
+          `allocation sizes cast to %struct.${name}*: ${sites.join(", ") || "none"}; alloca: ${onStack}`
+        )
+      }
+      const node = wasm.found.get("Node")
+      const nativeNode = native.found.get("Node")
+      check(
+        "wasm32-layout: `next: Node | null; value: i32` is 8 bytes, 4-aligned, on wasm32 and 16, 8-aligned, natively",
+        node.size === 8 && node.align === 4 && nativeNode !== undefined && nativeNode.size === 16 && nativeNode.align === 8,
+        `wasm32 ${JSON.stringify(node)}\nnative ${JSON.stringify(nativeNode)}`
+      )
+      // A wasm build inlines no array field (`BuildMode.layoutsShared`), so an
+      // array of pointers stays one pointer to its header: the inline slots'
+      // stride is only ever a native one.
+      const wide = text.split("\n").find((line) => line.startsWith("%struct.Wide = type ")) ?? ""
+      check(
+        "wasm32-layout: `tags: string[]` and `nodes: Node[]` stay pointers to an array on wasm32, with no inline slots",
+        wide === "%struct.Wide = type { i1, %union.tagged*, %struct.nish_array*, %struct.nish_array*, %struct.nish_result.i32.str*, i16 }",
+        wide
+      )
+    }
+  }
 }
 
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------

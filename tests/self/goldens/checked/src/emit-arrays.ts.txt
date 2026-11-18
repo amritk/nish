@@ -1449,8 +1449,8 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
   escaping: arr
-  calls: ArrayBase.constructor Emitter.align8 Emitter.declare Emitter.emitExpression Emitter.stringConstant Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock allocRefusedBytes elementPointer loadLength nish_panic_index nish_str_concat nish_str_from_i32 nish_str_from_i64 stringLength valueSlotAccess
-  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.stringConstant#0 loadLength#0 stringLength#0 Emitter.declare#0 elementPointer#0 Emitter.align8#0 valueSlotAccess#0 stringLength#0 Emitter.useRuntime#0 Emitter.align8#0 elementPointer#0 Emitter.align8#0 valueSlotAccess#0 stringLength#0
+  calls: ArrayBase.constructor Emitter.align8 Emitter.alignSuffix Emitter.declare Emitter.emitExpression Emitter.stringConstant Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock allocRefusedBytes elementPointer loadLength nish_panic_index nish_str_concat nish_str_from_i32 nish_str_from_i64 stringLength valueSlotAccess
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.stringConstant#0 loadLength#0 stringLength#0 Emitter.declare#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0 stringLength#0 Emitter.useRuntime#0 Emitter.align8#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0 stringLength#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -1502,8 +1502,8 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
   callee +34:43 new ArrayBase -> @ArrayBase.constructor
   local +35:9 part: string (const)
   callee +35:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +36:33 Emitter.align8 -> @Emitter.align8
-  callee +36:52 valueSlotAccess -> @valueSlotAccess
+  callee +36:33 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +36:65 valueSlotAccess -> @valueSlotAccess
   local +38:9 total: string (const)
   callee +38:17 IRFunction.emitValue -> @IRFunction.emitValue
   local +39:9 grown: string (const)
@@ -1561,8 +1561,8 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
   callee +78:43 new ArrayBase -> @ArrayBase.constructor
   local +79:9 item: string (const)
   callee +79:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +80:33 Emitter.align8 -> @Emitter.align8
-  callee +80:52 valueSlotAccess -> @valueSlotAccess
+  callee +80:33 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee +80:65 valueSlotAccess -> @valueSlotAccess
   local +82:9 itemLen: string (const)
   callee +82:19 stringLength -> @stringLength
   local +83:9 itemData: string (const)

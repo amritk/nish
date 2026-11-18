@@ -487,7 +487,7 @@ export class Emitter {
       this.libraries.push(library.program)
     }
     if (opts.debugInfo) {
-      this.debug = new DebugInfo(this.module, this.program, table)
+      this.debug = new DebugInfo(this.module, this.program, table, isWasmBuild(opts) ? 32 : 64)
     }
     if (!isWasmBuild(opts)) {
       this.module.definitionAttrs = HARDENING_ATTRS
@@ -2365,13 +2365,15 @@ export class Emitter {
    * Alignment an access to a type claims, or 0 when attributes are disabled.
    * A `nish:simd` vector lays out at 16 (`TypeTable.alignOf`), as clang's
    * `vector_size(16)` does, but the arena's blocks are 8-byte aligned
-   * (`nish_alloc_struct`), so no access claims more than 8.
+   * (`nish_alloc_struct`), so no access claims more than 8. A pointer
+   * claims the target's width, four on wasm32, which is where a class lays
+   * a pointer field out there (`computeLayout`, WP48 stage 6).
    */
   align(type: i32): i32 {
     // A vector's ABI alignment is sixteen, more than an arena block promises,
     // so its accesses state their alignment even with the attributes off.
     if (this.opts.optimizeAttributes || this.table.isVector(type)) {
-      return accessAlign(this.table.alignOf(type))
+      return accessAlign(this.table.alignWithPointer(type, isWasmBuild(this.opts) ? 4 : 8))
     }
     return 0
   }

@@ -256,16 +256,18 @@ const runDirector = () => {
 };
 
 /**
- * tests/cases/root_storage_page.ts, one node pushed a call: a list as long as
- * the run, which every compaction traces end to end. A trace that recursed
- * would run out of stack long before the end; this one keeps a work list.
+ * tests/module-storage/persist/chain.ts, one node pushed a call: a list as
+ * long as the run, which every compaction traces end to end. A trace that
+ * recursed would run out of stack long before the end; this one keeps a work
+ * list.
  *
- * A `Node` is 8 bytes on wasm32 (an i32 and a pointer), but `push` allocates
- * 16 for it: `nish_alloc_struct` takes the size the host IR writes. A
- * compaction packs each node to the 8 its descriptor says, so right after one
- * the kept heap is exactly the fixed part below the list plus 8 bytes a node.
- * A run whose keep never compacts has no such reading: its heap only grows,
- * 16 bytes a node, and it fails on the count of compactions.
+ * A `Node` is 8 bytes on wasm32 (an i32 and a 4-byte pointer), and each push
+ * also replaces a scratch node in a second root, so a call keeps 8 bytes and
+ * drops 8. A compaction packs the garbage away, so right after one the kept
+ * heap is exactly the fixed part below the list (the one scratch node kept
+ * included) plus 8 bytes a node. A run whose keep never compacts has no such
+ * reading: its heap only grows, 16 bytes a node, and it fails on the count of
+ * compactions.
  */
 const runChain = () => {
   let sum = 0;
