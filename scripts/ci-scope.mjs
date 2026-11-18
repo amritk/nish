@@ -33,8 +33,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 /**
  * Paths no lane reads. Each entry was checked against the lanes' entry points
- * and the files they import or open (an `strace -f` of every lane command's
- * opens, docs/wp10-ci.md "Scoped lanes"). A lane's own `reads` carve paths back out.
+ * and the files they import or open: read from the code for every command, and
+ * for some also traced with `strace -f` on x86_64 Linux (docs/wp10-ci.md
+ * "Scoped lanes" lists which). A lane's own `reads` carve paths back out.
  */
 const INERT = [
   "docs/**",
@@ -80,8 +81,9 @@ const CORPUS = [
 
 /**
  * What `tests/run.js` opens for the simd, sha256_hw, float-corpus, kernel and
- * runtime_sanitize sections (an `strace -f` of each), plus `scripts/fuzz.sh`'s
- * tests/fuzz. Its top level reads every file directly in tests/.
+ * runtime_sanitize sections (each traced with `strace -f` on x86_64 Linux),
+ * plus `scripts/fuzz.sh`'s tests/fuzz. Its top level reads every file directly
+ * in tests/.
  */
 const RUN_JS = [
   "tests/*",
@@ -145,7 +147,8 @@ export const LANES = [
     names: ["the NEON path agrees (aarch64-linux)"],
     minutes: 5.5,
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
-    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    // The `crc32 kernel` section's std_compress_gzip_files gzips docs/LANGUAGE.md.
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**", "docs/LANGUAGE.md"],
     inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
   },
   {

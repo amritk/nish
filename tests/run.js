@@ -33102,7 +33102,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     "scripts/fetch-seed.sh",
     "scripts/build.sh",
     "src/compile.ts",
-    "std/fs.ts",
+    "std/term.ts",
     "runtime/nish.d.ts",
     "package.json",
   ]
@@ -33112,7 +33112,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
         "scripts/bootstrap.sh",
         "scripts/build.sh",
         "tests/self/bootstrap.js",
-        "nish-capabilities.lock.json",
+        "src/capability-lock.ts",
         "src/compile.ts",
         "runtime/nish.d.ts",
       ],
@@ -33156,6 +33156,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       "compiler-cache": compilerCache,
       "node tests/run.js simd / float-corpus / the kernels": [
         ...importsOf("tests/run.js"),
+        "docs/LANGUAGE.md",
         "tests/simd/sha256.c",
         "tests/link/sha256_hw_vectors/main.ts",
         "tests/cases/caps_pure.ts",
