@@ -3325,6 +3325,7 @@ const INDEXED_PROFILE_MAGIC: readonly i32[] = [255, 108, 112, 114, 111, 102, 105
 const RAW_PROFILE_MAGIC: readonly i32[] = [129, 114, 102, 111, 114, 112, 108, 255]
 const PROFILE_KIND_SCRIPT: string = "if [ -d \"$1\" ]; then exit 4; fi; if [ -f \"$1\" ]; then exit 0; fi; exit 5"
 const PROFILE_KIND_DIRECTORY: i32 = 4
+const PROFILE_KIND_OTHER: i32 = 5
 const COMMA: i32 = 44
 const COLON: i32 = 58
 const ON_PATH_SCRIPT: string = "i=0; for p do i=$((i + 1)); if [ -x \"$p\" ] && [ ! -d \"$p\" ]; then exit \"$i\"; fi; done; exit 0"
@@ -3592,9 +3593,9 @@ function pgoProblem(flag: string, generate: boolean, use: string, real: string |
   callee +0:18 resolveTarget -> @resolveTarget
   local +8:9 merge: string (const)
   local +18:9 kind: i32 (const)
-  local +25:9 bytes: u8[] | null (const)
-  callee +29:7 startsWithMagic -> @startsWithMagic
-  callee +32:8 startsWithMagic -> @startsWithMagic
+  local +28:9 bytes: u8[] | null (const)
+  callee +32:7 startsWithMagic -> @startsWithMagic
+  callee +35:8 startsWithMagic -> @startsWithMagic
 function capabilityListMask(flag: string, list: string, scopes: string[]): i32 -> @capabilityListMask
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

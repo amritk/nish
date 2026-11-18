@@ -43237,7 +43237,7 @@ if (!only || "pgo".includes(only)) {
   // Special files: a FIFO with no writer would block a read, /dev/null is a
   // device. Each is refused by its type before anything opens it.
   const fifo = path.join(pgoDir, "fifo.profdata")
-  const madeFifo = spawnSync("sh", ["-c", 'mkfifo "$1"', "sh", fifo]).status === 0
+  const madeFifo = spawnSync("sh", ["-c", 'mkfifo "$1"', "sh", fifo], { timeout: 120000 }).status === 0
   // A regular file the compiler cannot open: mode 000. Root reads it anyway,
   // so the row runs only for another user.
   const unreadable = path.join(pgoDir, "unreadable.profdata")

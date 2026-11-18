@@ -521,13 +521,16 @@ const startsWithMagic = (bytes: u8[], magic: readonly i32[]): boolean => {
 
 /**
  * The `/bin/sh` script `pgoProblem` asks a profile's type with: exit 0 for a
- * regular file, `PROFILE_KIND_DIRECTORY` for a directory, and 5 for anything
- * else. `$1` is the profile's real path, an operand, never script text.
+ * regular file, `PROFILE_KIND_DIRECTORY` for a directory, and
+ * `PROFILE_KIND_OTHER` for anything else. `$1` is the profile's real path, an operand, never script text.
  */
 const PROFILE_KIND_SCRIPT: string = 'if [ -d "$1" ]; then exit 4; fi; if [ -f "$1" ]; then exit 0; fi; exit 5'
 
 /** The status `PROFILE_KIND_SCRIPT` exits with for a directory. */
 const PROFILE_KIND_DIRECTORY: i32 = 4
+
+/** The status `PROFILE_KIND_SCRIPT` exits with for a FIFO, device or socket. */
+const PROFILE_KIND_OTHER: i32 = 5
 
 /**
  * Why a `--pgo-generate` or `--pgo-use` line is refused, without the
@@ -572,14 +575,17 @@ const pgoProblem = (
   // read below with no writer, and a device never ends. The question goes to
   // `/bin/sh`, as `distrustOf`'s does, because `lstatOwnerModeSync` is refused
   // on a wasm32 build and `src/` is also the web compiler. It fails closed: a
-  // probe that cannot run, or any status but the two it names, is not a
-  // regular file.
+  // probe that cannot run, or answers with a status the script never exits
+  // with, refuses the profile as one whose type could not be checked.
   const kind = spawnSyncTo(["/bin/sh", "-c", PROFILE_KIND_SCRIPT, "sh", real], "/dev/null", "/dev/null")
   if (kind === PROFILE_KIND_DIRECTORY) {
     return `--pgo-use: \`${use}\` is a directory, not a profile; ${merge}`
   }
-  if (kind !== 0) {
+  if (kind === PROFILE_KIND_OTHER) {
     return `--pgo-use: \`${use}\` is not a regular file, so not a profile; ${merge}`
+  }
+  if (kind !== 0) {
+    return `--pgo-use: the type of \`${use}\` could not be checked, because \`/bin/sh\` did not answer; the profile is refused`
   }
   const bytes = readFileBytesSync(real)
   if (bytes === null) {
