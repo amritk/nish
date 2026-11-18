@@ -174,18 +174,6 @@ const exportGap = (lines, unit) => {
 }
 
 /**
- * Every reading this file makes, as `{ file, fn, target, kind, expect, ok, detail }`:
- * `kind` `exports` for each unit's exported functions being exactly the kernels
- * read here and its resolver (`resolver`), so another kernel cannot go unread; `kernel` for
- * each kernel on each target clean, with at least one loop branch read; and
- * `leak` for each leaky variant refused for its kind (`expect` the words for
- * it). tests/run.js names the checks, so that a record citing one finds it
- * there.
- *
- * `march` empty reads both targets at the baseline; a level (`x86-64-v3`)
- * reads x86-64 alone with `-march=` that level, `target` naming it.
- */
-/**
  * Every `ct_asm_*` fixture's promises read at `-march=march`: the checks
  * tests/run.js's ct_asm section makes at x86-64-v3, run on the golden `.ll`
  * (what `nish` compiles the fixture to) at any CPU clang knows. CI reads only
@@ -242,6 +230,18 @@ export const fixtureChecks = (root, march) => {
   return results
 }
 
+/**
+ * Every reading this file makes, as `{ file, fn, target, kind, expect, ok, detail }`:
+ * `kind` `exports` for each unit's exported functions being exactly the kernels
+ * read here and its resolver (`resolver`), so another kernel cannot go unread; `kernel` for
+ * each kernel on each target clean, with at least one loop branch read; and
+ * `leak` for each leaky variant refused for its kind (`expect` the words for
+ * it). tests/run.js names the checks, so that a record citing one finds it
+ * there.
+ *
+ * `march` empty reads both targets at the baseline; a level (`x86-64-v3`)
+ * reads x86-64 alone with `-march=` that level, `target` naming it.
+ */
 export const runtimeChecks = (root, march = "") => {
   const results = []
   /** `fn` read from `asm` with `secretArgs`: its violations and back edges, or why there is nothing to read. */
