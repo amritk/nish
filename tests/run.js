@@ -7595,7 +7595,10 @@ const runLinkProgram = async (name) => {
   // field out in 4 bytes (WP48 stage 6), and build.sh's clang replaces the
   // module's datalayout with the host's, so a native link of wasm32 IR would
   // write 8-byte pointers into objects allocated for 4-byte ones. The wasm32
-  // compile itself is still made, below, and must succeed.
+  // compile itself is still made, below, and must succeed. Only the two-token
+  // `--target wasm32` is recognised: it is the one form every wasm32 `args` in
+  // tests/link uses, and an `args` spelling `--target=wasm32` or `--profile wasi`
+  // would be linked natively as wasm32 IR, the mismatch above.
   const targetAt = args.indexOf("--target")
   const wasmRun =
     targetAt >= 0 && String(args[targetAt + 1]).startsWith("wasm32") && !fs.existsSync(side("expected.err"))
@@ -40975,10 +40978,20 @@ export const main = (): i32 => {
           folded.status === 0 && mine.join(" ") === theirs.join(" "),
           `compiler: ${mine.join(" ")}\nLLVM:     ${theirs.join(" ")}\n${folded.stderr}`
         )
+        // A class's own heap allocation is the call whose result is cast to
+        // its struct on the next line, so two classes of one size cannot stand
+        // in for each other. One that does not escape is an `alloca` of its
+        // struct instead, sized by the type the probe above already pinned.
+        const sites = [
+          ...text.matchAll(
+            new RegExp(`call i8\\* @nish_alloc_struct\\(i64 (\\d+)\\)\\n\\s*%\\d+ = bitcast i8\\* %\\d+ to %struct\\.${name}\\*\\n`, "g")
+          ),
+        ].map((m) => Number(m[1]))
+        const onStack = text.includes(`= alloca %struct.${name}, `)
         check(
-          `wasm32-layout: a new ${name} asks nish_alloc_struct for its ${info.size} bytes`,
-          text.includes(`call i8* @nish_alloc_struct(i64 ${info.size})`),
-          text.split("\n").filter((l) => l.includes("nish_alloc_struct(i64")).join("\n")
+          `wasm32-layout: every heap ${name} asks nish_alloc_struct for its ${info.size} bytes, and every ${name} is allocated`,
+          (sites.length > 0 || onStack) && sites.every((size) => size === info.size),
+          `allocation sizes cast to %struct.${name}*: ${sites.join(", ") || "none"}; alloca: ${onStack}`
         )
       }
       const node = wasm.found.get("Node")
