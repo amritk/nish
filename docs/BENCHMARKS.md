@@ -3211,3 +3211,111 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
+
+<!-- crypto:begin -->
+## Crypto against other languages
+
+Written by `node bench/crypto/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The programs, the inputs and the measurement rules are in [bench/crypto/README.md](https://github.com/amritk/nish/blob/main/bench/crypto/README.md).
+
+Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round and reversed on every other block. The last two columns divide Nish portable's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend), and Nish's by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. Nish portable is the Nish binary with its runtime's AES-NI and PCLMULQDQ, ChaCha20 vector and SHA-NI kernels pinned off (`NISH_AES`, `NISH_CHACHA20` and `NISH_SHA256` set to `soft`); a family that calls none of them runs the same code in both columns. Every cell more than 1.5x behind the best portable twin is analysed in [docs/crypto-performance.md](crypto-performance.md). The Band column is the row's noise band, the gap between Nish and a byte-identical copy of its binary, and each quotient beside it is read against it: within the band is no difference.
+
+Machine: Intel(R) Xeon(R) Processor @ 2.30GHz (x64, 4 CPUs); flags: aes yes, pclmulqdq yes, sha_ni yes, avx2 yes, avx512f yes.
+
+Toolchains: Nish 0.42.0; Ubuntu clang version 18.1.3, OpenSSL 3.0.13 30 Jan 2024 (Library: OpenSSL 3.0.13 30 Jan 2024); go version go1.26.0 linux/amd64; rustc 1.97.0 (2d8144b78 2026-07-07); Node v22.23.5. 11 round(s) asked, each case rounded up to a multiple of twice its columns.
+
+### AES-GCM and ChaCha20-Poly1305 (`bench/crypto/aead`)
+
+| Kernel | Size | Unit | Nish | Nish portable | OpenSSL | OpenSSL portable | Go | Go purego | Rust | Rust soft | Node | Band | Nish / best portable | Nish / best assembly |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| aes128gcm-seal | 64 B | MB/s | 291 | 53.9 | 299 | 80.4 | 443 | 85.7 | 318 | 75.7 | 17.3 | ±0.8% | 1.589x slower (go-purego) | 1.522x slower (go) |
+| aes128gcm-seal | 1350 B | MB/s | 708 | 93.7 | 822 | 121 | 803 | 127 | 717 | 130 | 152 | ±0.1% | 1.393x slower (rust-soft) | 1.161x slower (openssl) |
+| aes128gcm-seal | 16 KiB | MB/s | 753 | 96.8 | 890 | 125 | 842 | 131 | 771 | 137 | 628 | ±0.7% | 1.414x slower (rust-soft) | 1.182x slower (openssl) |
+| aes128gcm-seal | 1 MiB | MB/s | 724 | 98.4 | 854 | 125 | 821 | 130 | 761 | 135 | 635 | ±2.8% | 1.376x slower (rust-soft) | 1.180x slower (openssl) |
+| aes128gcm-open | 64 B | MB/s | 324 | 54.9 | 329 | 82.6 | 576 | 87.1 | 364 | 78.1 | 23.4 | ±1.7% | 1.586x slower (go-purego) | 1.779x slower (go) |
+| aes128gcm-open | 1350 B | MB/s | 700 | 90.7 | 813 | 121 | 816 | 126 | 729 | 127 | 197 | ±0.2% | 1.406x slower (rust-soft) | 1.166x slower (go) |
+| aes128gcm-open | 16 KiB | MB/s | 758 | 98.1 | 892 | 126 | 850 | 132 | 785 | 137 | 647 | ±0.6% | 1.395x slower (rust-soft) | 1.176x slower (openssl) |
+| aes128gcm-open | 1 MiB | MB/s | 532 | 99.3 | 822 | 126 | 717 | 130 | 723 | 135 | 665 | ±8.0% | 1.355x slower (rust-soft) | 1.545x slower (openssl) |
+| aes256gcm-seal | 64 B | MB/s | 288 | 44.7 | 295 | 66.2 | 420 | 75.6 | 305 | 63.9 | 18.7 | ±1.4% | 1.693x slower (go-purego) | 1.458x slower (go) |
+| aes256gcm-seal | 1350 B | MB/s | 697 | 76.4 | 815 | 96.6 | 785 | 113 | 702 | 111 | 172 | ±0.9% | 1.483x slower (go-purego) | 1.169x slower (openssl) |
+| aes256gcm-seal | 16 KiB | MB/s | 744 | 82.0 | 891 | 97.7 | 828 | 118 | 780 | 117 | 650 | ±0.2% | 1.437x slower (go-purego) | 1.197x slower (openssl) |
+| aes256gcm-seal | 1 MiB | MB/s | 709 | 81.8 | 874 | 96.3 | 805 | 117 | 743 | 118 | 655 | ±1.4% | 1.438x slower (rust-soft) | 1.233x slower (openssl) |
+| aes256gcm-open | 64 B | MB/s | 317 | 45.7 | 329 | 69.2 | 549 | 79.3 | 364 | 67.1 | 22.3 | ±1.4% | 1.734x slower (go-purego) | 1.730x slower (go) |
+| aes256gcm-open | 1350 B | MB/s | 695 | 76.6 | 821 | 95.8 | 807 | 114 | 726 | 112 | 196 | ±0.6% | 1.490x slower (go-purego) | 1.182x slower (openssl) |
+| aes256gcm-open | 16 KiB | MB/s | 741 | 81.3 | 891 | 97.6 | 840 | 116 | 782 | 118 | 659 | ±0.7% | 1.455x slower (rust-soft) | 1.202x slower (openssl) |
+| aes256gcm-open | 1 MiB | MB/s | 637 | 81.2 | 844 | 98.3 | 748 | 116 | 731 | 117 | 697 | ±2.6% | 1.438x slower (rust-soft) | 1.325x slower (openssl) |
+| chacha20poly1305-seal | 64 B | MB/s | 137 | 138 | 98.6 | 173 | 285 | 172 | 45.2 | 179 | 13.4 | ±1.2% | 1.299x slower (rust-soft) | 2.076x slower (go) |
+| chacha20poly1305-seal | 1350 B | MB/s | 395 | 242 | 533 | 549 | 628 | 332 | 351 | 317 | 150 | ±0.4% | 2.266x slower (openssl-portable) | 1.589x slower (go) |
+| chacha20poly1305-seal | 16 KiB | MB/s | 456 | 261 | 703 | 637 | 684 | 360 | 550 | 345 | 498 | ±0.7% | 2.443x slower (openssl-portable) | 1.541x slower (openssl) |
+| chacha20poly1305-seal | 1 MiB | MB/s | 454 | 266 | 760 | 638 | 688 | 359 | 551 | 337 | 572 | ±0.4% | 2.396x slower (openssl-portable) | 1.673x slower (openssl) |
+| chacha20poly1305-open | 64 B | MB/s | 149 | 148 | 125 | 174 | 307 | 168 | 46.2 | 188 | 18.6 | ±0.5% | 1.267x slower (rust-soft) | 2.064x slower (go) |
+| chacha20poly1305-open | 1350 B | MB/s | 395 | 246 | 574 | 556 | 649 | 338 | 357 | 322 | 198 | ±0.9% | 2.262x slower (openssl-portable) | 1.643x slower (go) |
+| chacha20poly1305-open | 16 KiB | MB/s | 462 | 262 | 704 | 647 | 691 | 366 | 541 | 347 | 521 | ±0.7% | 2.468x slower (openssl-portable) | 1.525x slower (openssl) |
+| chacha20poly1305-open | 1 MiB | MB/s | 447 | 258 | 751 | 612 | 674 | 352 | 543 | 331 | 636 | ±0.4% | 2.374x slower (openssl-portable) | 1.680x slower (openssl) |
+
+- Node has no portable column: node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off
+- Node keys a cipher per message, since node:crypto holds no expanded key across nonces; the other twins key once, before the clock.
+
+### X25519, P-256 and Ed25519 (`bench/crypto/curves`)
+
+| Kernel | Size | Unit | Nish | Nish portable | OpenSSL | OpenSSL portable | Go | Go purego | Rust | Rust soft | Node | Band | Nish / best portable | Nish / best assembly |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| x25519-base | 32 B | op/s | 12,542 | 12,486 | 29,446 | — | 30,436 | 24,967 | 84,357 | — | 15,803 | ±3.4% | 2.000x slower (go-purego) | 6.726x slower (rust) |
+| x25519 | 32 B | op/s | 12,470 | 12,506 | 31,520 | 29,187 | 30,464 | 25,081 | 26,921 | — | 25,430 | ±0.4% | 2.334x slower (openssl-portable) | 2.528x slower (openssl) |
+| p256-sign | 64 B | op/s | 16,417 | 15,965 | 53,682 | 51,782 | 34,099 | 15,590 | 32,321 | — | 42,106 | ±1.2% | 3.243x slower (openssl-portable) | 3.270x slower (openssl) |
+| p256-verify | 64 B | op/s | 2,992 | 2,959 | 16,664 | 18,079 | 16,144 | 6,883 | 9,123 | — | 15,771 | ±0.0% | 6.110x slower (openssl-portable) | 5.569x slower (openssl) |
+| ed25519-sign | 64 B | op/s | 4,808 | 4,784 | 30,906 | — | 62,888 | 51,444 | 77,460 | — | 29,557 | ±1.4% | 10.753x slower (go-purego) | 16.109x slower (rust) |
+| ed25519-verify | 64 B | op/s | 4,918 | 4,913 | 11,286 | — | 25,849 | 21,498 | 33,140 | 29,797 | 10,381 | ±0.4% | 6.065x slower (rust-soft) | 6.738x slower (rust) |
+
+- OpenSSL has no portable x25519-base: OpenSSL's X25519 of the base point runs the same C (fe51) code whatever the mask
+- OpenSSL has no portable ed25519-sign: OpenSSL's Ed25519 runs the same C curve code whatever the mask; only its SHA-512 changes
+- OpenSSL has no portable ed25519-verify: OpenSSL's Ed25519 runs the same C curve code whatever the mask; only its SHA-512 changes
+- Rust has no portable x25519-base: curve25519-dalek's base-point multiply is table code, the same whichever backend
+- Rust has no portable x25519: curve25519-dalek's Montgomery ladder is serial field code, the same whichever backend
+- Rust has no portable p256-sign: RustCrypto's p256 is pure Rust, so there is no assembly to switch off
+- Rust has no portable p256-verify: RustCrypto's p256 is pure Rust, so there is no assembly to switch off
+- Rust has no portable ed25519-sign: ed25519-dalek's signing multiplies the base point by table, the same whichever backend
+- Node has no portable column: node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off
+
+### TLS 1.3 and QUIC handshakes (`bench/crypto/handshake`)
+
+| Kernel | Size | Unit | Nish | Nish portable | OpenSSL | OpenSSL portable | Go | Go purego | Rust | Rust soft | Node | Band | Nish / best portable | Nish / best assembly |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| tls13 | 32 B | op/s | 1,116 | 1,034 | 2,170 | — | 2,700 | 1,701 | 5,052 | — | 992 | ±0.2% | 1.645x slower (go-purego) | 4.528x slower (rust) |
+| quic | 32 B | op/s | 1,052 | 901 | — | — | 1,338 | 833 | 3,529 | — | — | ±10.8% | 0.924x within the band (go-purego) | 3.354x slower (rust) |
+
+- OpenSSL has no quic: This twin drives OpenSSL 3.0's libssl, which has no QUIC server (that came in 3.5)
+- OpenSSL has no portable column: OpenSSL's P-256 and X25519 assembly runs whatever OPENSSL_ia32cap says: masking every bit it reads moves a handshake by under 10% (README.md), so no mask makes a column that proves anything
+- Rust has no portable column: ring picks its assembly at run time and has no feature or cfg that turns it off
+- Node has no quic: Node has no stable QUIC
+- Node has no portable column: node:tls is OpenSSL's libssl with its assembly, and Node has no switch that turns it off
+- Every QUIC column runs in memory, with no socket: Nish and Rust (quinn-proto) hand each datagram to the other endpoint, and Go runs quic-go over a pair of in-memory net.PacketConns.
+- Node's server sends OpenSSL's default two TLS 1.3 tickets, which node:tls cannot turn off; every other twin sends none, and nothing resumes.
+
+### SHA-2, HMAC and HKDF (`bench/crypto/hash`)
+
+| Kernel | Size | Unit | Nish | Nish portable | OpenSSL | OpenSSL portable | Go | Go purego | Rust | Rust soft | Node | Band | Nish / best portable | Nish / best assembly |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| sha256 | 64 B | MB/s | 180 | 115 | 430 | 163 | 391 | 119 | 631 | 184 | 47.2 | ±0.3% | 1.598x slower (rust-soft) | 3.510x slower (rust) |
+| sha256 | 1 KiB | MB/s | 1,135 | 330 | 1,555 | 396 | 1,526 | 259 | 1,676 | 366 | 549 | ±0.4% | 1.199x slower (openssl-portable) | 1.477x slower (rust) |
+| sha256 | 1 MiB | MB/s | 1,686 | 364 | 1,850 | 427 | 1,859 | 280 | 1,873 | 388 | 1,836 | ±0.0% | 1.170x slower (openssl-portable) | 1.111x slower (rust) |
+| sha512 | 64 B | MB/s | 80.9 | 80.6 | 196 | 182 | 201 | 150 | 235 | 211 | 40.5 | ±1.3% | 2.612x slower (rust-soft) | 2.899x slower (rust) |
+| sha512 | 1 KiB | MB/s | 306 | 304 | 659 | 571 | 586 | 369 | 615 | 488 | 376 | ±0.4% | 1.876x slower (openssl-portable) | 2.157x slower (openssl) |
+| sha512 | 1 MiB | MB/s | 402 | 402 | 807 | 691 | 720 | 437 | 694 | 559 | 801 | ±0.6% | 1.721x slower (openssl-portable) | 2.009x slower (openssl) |
+| hmac-sha256 | 64 B | MB/s | 83.7 | 46.0 | 89.1 | 50.1 | 114 | 38.9 | 282 | 74.0 | 38.2 | ±5.7% | 1.609x slower (rust-soft) | 3.371x slower (rust) |
+| hmac-sha256 | 1 KiB | MB/s | 753 | 255 | 857 | 295 | 956 | 200 | 1,401 | 301 | 478 | ±1.5% | 1.180x slower (rust-soft) | 1.861x slower (rust) |
+| hkdf-sha256 | 32 B | op/s | 403,749 | 260,835 | 460,177 | 287,328 | 681,916 | 246,471 | 1,919,935 | 567,625 | 171,326 | ±1.7% | 2.176x slower (rust-soft) | 4.755x slower (rust) |
+
+- Node has no portable column: node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off
+
+### X.509 certificates (`bench/crypto/x509`)
+
+| Kernel | Size | Unit | Nish | Nish portable | OpenSSL | OpenSSL portable | Go | Go purego | Rust | Rust soft | Node | Band | Nish / best portable | Nish / best assembly |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| x509-mint | 16 B | op/s | 8,184 | 8,081 | 5,646 | 5,607 | 9,248 | 4,274 | 29,259 | — | — | ±2.0% | 0.694x faster (openssl-portable) | 3.575x slower (rust) |
+| x509-parse | 338 B | op/s | 2,760 | 2,602 | 6,391 | 6,520 | 14,705 | 6,286 | 8,813 | — | 7,350 | ±1.3% | 2.506x slower (openssl-portable) | 5.327x slower (go) |
+
+- Rust has no portable column: RustCrypto's p256, rcgen and x509-parser are pure Rust, so there is no curve assembly to switch off
+- Node has no x509-mint: node:crypto's X509Certificate reads certificates and cannot write one
+- Node has no portable column: node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off
+
+<!-- crypto:end -->
