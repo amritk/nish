@@ -17,7 +17,7 @@ Nothing scheduled: every stage is built. S5 measured the cheaper wins on S4's st
 
 ## Open questions
 
-None open. S3 decided D2 (`nish.netRings` in `package.json`, 1 to 64, default 1). S2 decided D1 (the bit is opt-in) and S4 kept it: the ring path is not dearer at 18,000 or 96,000, but it costs about four times the memory a connection and no low C was measured beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default and D3 (one thread with N rings). [§11](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#11-open-questions).
+None open. S3 decided D2 (`nish.netRings` in `package.json`, 1 to 64, default 1). S2 decided D1 (the bit is opt-in) and S4 kept it: the ring path is not dearer at 18,000 or 96,000, but it cost about four times the memory a connection (141.4 against 128.9 MB at 96,000 once an idle slot frees its receive queue, NURING-38) and no low C was measured beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default and D3 (one thread with N rings). [§11](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#11-open-questions).
 
 ## Not planned
 

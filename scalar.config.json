@@ -2971,6 +2971,18 @@
                   "meta": [{ "property": "og:title", "content": "Changelog" }],
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/changelog" }]
                 }
+              },
+              "/crypto-performance": {
+                "type": "page",
+                "title": "Crypto behind portable code",
+                "filepath": "docs/crypto-performance.md",
+                "head": {
+                  "title": "Crypto behind portable code · Nish",
+                  "meta": [{ "property": "og:title", "content": "Crypto behind portable code" }],
+                  "links": [
+                    { "rel": "canonical", "href": "https://nishlang.com/reference/crypto-performance" }
+                  ]
+                }
               }
             }
           },

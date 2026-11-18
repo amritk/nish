@@ -574,8 +574,14 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * from whichever file holds it, and the speed build's full LTO optimises across the
  * units either way. The split would add a sixth budget and a cross-unit interface for
  * no smaller program and no faster one.
+ * **11,190 bytes** on 2026-11-18 once WP63 ring gaps gave `netShutdown` and `netMss` a
+ * slot path (11,008 to 11,264; main measured 10,994): `nish_net_shutdown`'s slot branch,
+ * which decodes the handle and queues the shutdown behind the slot's sends (+169),
+ * `nr_send`'s refusal after a write shut (+11), and `nish_net_mss`'s explicit `-1` on a
+ * slot (+16), NURING-39. It stays here for the reason above. The budget is the next
+ * 256-byte boundary, leaving 74.
  */
-const NET_TEXT_BUDGET = 11008
+const NET_TEXT_BUDGET = 11264
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
@@ -1073,8 +1079,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * Moved to **111,080 bytes** (-8) by growing an array where it is
  * (`nish_array_grow_here`, runtime.c): an array the build pushes to extends its
  * block instead of leaving the smaller one behind it in the arena.
+ *
+ * Moved to **111,160 bytes** (+80) by echoing ECN counts (RFC 9000 §13.4.1,
+ * QUIC-10, `docs/security/quic.md`): each of the three spaces' `QuicAckRanges`
+ * counts ECT(0), ECT(1) and CE, and the connection and the server each keep
+ * the codepoint the datagram in hand arrived with.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111080
+export const HTTP3_SERVER_SLOT_BYTES = 111160
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

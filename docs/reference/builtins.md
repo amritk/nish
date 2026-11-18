@@ -1746,7 +1746,8 @@ the socket.
 
 the MSS; -1, never an errno, for anything else (a descriptor that is not open, a
   socket with no peer such as a listener or one never connected, though the kernel answers
-  its default `536` for those, a socket that is not TCP), and always on wasm.
+  its default `536` for those, a socket that is not TCP, a connection a `NET_LISTEN_RING`
+  listener accepted, whose ring cannot ask for it), and always on wasm.
 
 </scalar-field>
 
@@ -1872,6 +1873,11 @@ the option's value: 0 or 1 for the switches, a byte count for the buffer sizes.
 Shut one or both directions of a connection. Not callable in a `scope()` task or a parallel body.
 Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
 
+On a connection a `NET_LISTEN_RING` listener accepted, the shutdown goes behind the
+bytes already written, so the peer reads them and then the end of the stream; a later
+`netWrite` answers -32 once the write side is shut, and `netRead` answers what is queued
+and then 0 once the read side is.
+
 ```ts
 function netShutdown(fd: i32, how: i32): i32
 ```
@@ -1890,7 +1896,7 @@ the read side (0), the write side (1) or both (2).
 
 <scalar-field name="returns" type="i32">
 
-0, or a negative errno; -22 for any other `how`.
+0, or a negative errno; -22 for any other `how`, -9 for a closed ring connection.
 
 </scalar-field>
 

@@ -38,7 +38,7 @@ the record that found it. The notes below the table name each such finding.
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 6 ⁹ | 0 / 0 / 0 / 2 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 11 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/`, the agent-skill linker | 3 / 0 / 6 / 25 | 0 / 0 / 0 / 0 ⁶ |
-| HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ⁷ |
+| HTTP/1.1 and WebSocket | [http1-codec.md](http1-codec.md) | `std/net/http1-codec.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 3 / 6 | 0 / 0 / 0 / 0 ⁷ |
 | HTTP/1.1 client | [http1-client-codec.md](http1-client-codec.md) | `std/net/http1-client-codec.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 1 |
 | Blocking HTTP client | [fetch.md](fetch.md) | `std/net/fetch.ts` | 0 / 0 / 0 / 10 | 0 / 0 / 0 / 2 |
 | Outbound policy | [outbound.md](outbound.md) | `std/net/outbound.ts` | 0 / 1 / 2 / 2 | 0 / 0 / 0 / 4 |
@@ -77,7 +77,7 @@ the record that found it. The notes below the table name each such finding.
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 5 ²⁸ | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
-| **Total** ⁸ | | | **3 / 18 / 101 / 215** | **0 / 0 / 3 / 42** |
+| **Total** ⁸ | | | **3 / 18 / 101 / 216** | **0 / 0 / 3 / 41** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -195,11 +195,11 @@ the record that found it. The notes below the table name each such finding.
    (Medium), the slowloris head, was closed by #895 (`headTimeout`), H2-1
    (Medium), the arena a header block left, by #473, and H2-4 (Medium), the
    resets the server sent for the client, by #805; each is counted as a fixed
-   Medium. H1-3 is open: its record says "accepted for now", but it names
-   the fix that closes it, so it is counted open and not accepted. H1-4
+   Medium. H1-3 (Low), the arena a WebSocket accept left, is fixed: a slot
+   keeps the storage the accept key and the 101 are written into. H1-4
    (Low), the bound on when `expire` walks every slot, and H1-6 (Low), the UTF-8
    check that waited for a whole WebSocket frame, are fixed and counted as
-   fixed Lows; H1-2 is open.
+   fixed Lows, with H1-2, H1-9 and H1-10.
 8. A finding that two records both list is counted in each record, except
    K1-6, which is counted once, under K1: CG-9 and RT-7, CLI-6 and RT-4, and
    H3-1 and WT-1. The Total therefore counts those twins twice.
@@ -512,7 +512,6 @@ only.
 | --- | --- | --- | --- | --- |
 | CAPS-19 | Medium | `src/capabilities.ts` (`refuseNarrowGrants`), the sandbox's seccomp filter | A `net=<host>` grant binds only literal hosts: a host computed at run time is not checked, with or without `--sandbox` | — |
 | PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
-| H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
 | HC-1 | Low | `std/net/http1-client-codec.ts` (`http1ClientFieldLine`) | In the default strings mode each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes`. Spans mode (`fieldsAsSpans`) allocates nothing per response | Move `fetch.ts` and `websocket.ts` to spans mode |
 | H2C-1 | Low | `std/net/http2-cleartext.ts` | Cleartext by design: no confidentiality or integrity on the path. Serve h2c only behind a TLS-terminating proxy, on loopback or a private network | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_block`, `nish_aes_ctr`, `nish_aes_ghash`) | Each kernel now clears every vector register and caller-saved general register before it returns (`nish_aes_clear`), spills no vector register, and wipes the two stack buffers it owns; tests/run.js reads all three in the `-O2` assembly on x86-64, x86-64-v3 and aarch64. What is left: the `debug` profile's `-O0` stack, a signal frame taken while a kernel runs, and the operating system's saved context, none of which a store or clear in the kernel reaches | — |

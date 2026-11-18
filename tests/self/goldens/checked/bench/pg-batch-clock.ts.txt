@@ -3055,6 +3055,34 @@ function base64StdPadEncode(data: u8[]): string -> @nish.base64StdPadEncode [exp
   callee +8:38 base64StdPadCharOf -> @nish.base64StdPadCharOf
   callee +12:36 base64StdPadCharOf -> @nish.base64StdPadCharOf
   local +14:9 tail: i32 (const)
+function base64StdPadEncodeInto(data: u8[], start: i32, length: i32, out: u8[], at: i32): i32 -> @nish.base64StdPadEncodeInto [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: at start
+  calls: nish.base64StdPadCharOf nish_panic nish_panic_index nish_panic_overflow
+  pointer data: size=0 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -15:9 end: i32 (const)
+  local -11:7 j: i32 (let)
+  local -10:7 acc: i32 (let)
+  local -9:7 bits: u32 (let)
+  local -8:12 k: i32 (let)
+  callee +0:23 base64StdPadCharOf -> @nish.base64StdPadCharOf
+  callee +6:19 base64StdPadCharOf -> @nish.base64StdPadCharOf
+function base64StdPadDecodedLength(text: u8[], start: i32, length: i32): i32 -> @nish.base64StdPadDecodedLength [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64StdPadSextetOf nish_panic nish_panic_index nish_panic_overflow
+  pointer text: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 pad: i32 (let)
+  local +4:9 chars: i32 (const)
+  local +5:7 bad: i32 (let)
+  local +6:7 acc: i32 (let)
+  local +7:7 bits: i32 (let)
+  local +8:12 k: i32 (let)
+  local +9:11 v: i32 (const)
+  callee +9:20 base64StdPadSextetOf -> @nish.base64StdPadSextetOf
 function base64StdPadDecode(text: string): u8[] | null -> @nish.base64StdPadDecode [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.base64StdPadSextetOf nish_panic nish_panic_index nish_panic_overflow

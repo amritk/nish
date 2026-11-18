@@ -25,8 +25,8 @@
 //                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 22 programs executes
-//                       under valgrind's cachegrind, at the sizes in
+//     --instructions    count the instructions each of the 31 programs executes
+//                       (the crypto kernels among them) under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
 //                       tolerance; with --update, rewrite the baseline (a PR that
@@ -601,6 +601,39 @@ const PINNED_LIBC = [
 const PINNED_SIMD = "base"
 
 /**
+ * The crypto kernels' choice, pinned the same way. runtime-aes.c,
+ * runtime-chacha20.c and runtime-sha256.c each take the CPU's AES, AVX2 or SHA
+ * instructions when it has them, and a portable path when it does not or when
+ * the variable says `soft`. Each path runs a different number of instructions
+ * for the same block, so the count pins `soft`: the bitsliced AES with its
+ * carry-less multiply in scalar code, the scalar ChaCha20 and the scalar
+ * SHA-256 block, which every x86-64 host runs alike. They are the paths the
+ * crypto twins' Nish portable column times (bench/crypto/README.md).
+ */
+const PINNED_CRYPTO = { NISH_AES: "soft", NISH_CHACHA20: "soft", NISH_SHA256: "soft" }
+
+/**
+ * The crypto kernels the count gates: one run of a family's Nish program,
+ * bench/crypto/<family>/main.ts, under the contract of bench/crypto/README.md
+ * (`main <kernel> <size> <iterations>`), at the size and iterations
+ * bench/instructions.json names beside the count. One kernel stands for each
+ * code path std/crypto has: AES-GCM, ChaCha20-Poly1305, SHA-256, SHA-512, the
+ * three curves, a TLS 1.3 handshake and an X.509 parse. `--only crypto`
+ * names them all.
+ */
+const CRYPTO_COUNTED = [
+  { name: "crypto-aes128gcm-seal", family: "aead", kernel: "aes128gcm-seal" },
+  { name: "crypto-chacha20poly1305-seal", family: "aead", kernel: "chacha20poly1305-seal" },
+  { name: "crypto-sha256", family: "hash", kernel: "sha256" },
+  { name: "crypto-sha512", family: "hash", kernel: "sha512" },
+  { name: "crypto-x25519", family: "curves", kernel: "x25519" },
+  { name: "crypto-p256-verify", family: "curves", kernel: "p256-verify" },
+  { name: "crypto-ed25519-sign", family: "curves", kernel: "ed25519-sign" },
+  { name: "crypto-tls13", family: "handshake", kernel: "tls13" },
+  { name: "crypto-x509-parse", family: "x509", kernel: "x509-parse" },
+]
+
+/**
  * The hash key, pinned the same way. A string-keyed `Map` or `Set` seeds its
  * key from `getentropy` before `main`, and a different key lays out the same
  * keys differently, so the count moved by up to 0.35% from run to run.
@@ -619,8 +652,8 @@ const change = (count, base) => (count - base) / base
  * separates them from the program's own code in a stripped `--profile speed`
  * binary on a host without libc's debug symbols. They are about 120 thousand
  * of a count in the hundreds of millions. What varies with the host is pinned
- * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD`, `FIXED_KEY`
- * and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
+ * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD`,
+ * `PINNED_CRYPTO`, `FIXED_KEY` and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
  * caller's variables nor the checkout's path reach the loader. bench/README.md
  * has the measurements that show what is left.
  */
@@ -638,7 +671,12 @@ const countInstructions = (valgrind, exe, args, name) => {
     ],
     {
       cwd: dir,
-      env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: PINNED_SIMD, LD_PRELOAD: `./${FIXED_KEY}` },
+      env: {
+        GLIBC_TUNABLES: PINNED_LIBC,
+        NISH_SIMD: PINNED_SIMD,
+        ...PINNED_CRYPTO,
+        LD_PRELOAD: `./${FIXED_KEY}`,
+      },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }
@@ -658,8 +696,9 @@ const countInstructions = (valgrind, exe, args, name) => {
 
 /**
  * `--instructions`: build the eight counted bench/ programs, the four map layout
- * prototypes, the three `Map` measurements and the seven AWFY ports at the
- * sizes bench/instructions.json names, count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
+ * prototypes, the three `Map` measurements, the seven AWFY ports and the
+ * crypto families' programs, and run them at the sizes bench/instructions.json
+ * names (each crypto kernel once, at its own size and iterations); count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */
 const runInstructions = () => {
@@ -680,15 +719,16 @@ const runInstructions = () => {
     ...MAPS.map((b) => b.name),
     ...MAP_MEASURES.map((b) => b.name),
     ...AWFY.map((b) => b.name),
+    ...CRYPTO_COUNTED.map((b) => b.name),
   ]
   const listed = Object.keys(baseline.programs)
   if (listed.join(",") !== names.join(",")) {
     fail(`bench/instructions.json must list ${names.join(", ")} in that order; it lists ${listed.join(", ")}`)
   }
-  // `awfy` and `maps` name their whole group, as they do outside --instructions.
+  // `awfy`, `maps` and `crypto` name their whole group, as they do outside --instructions.
   const wanted = (name, group) => !opts.only || opts.only.has(name) || (group !== "" && opts.only.has(group))
   for (const name of opts.only ?? []) {
-    if (name !== "awfy" && name !== "maps" && !names.includes(name)) {
+    if (name !== "awfy" && name !== "maps" && name !== "crypto" && !names.includes(name)) {
       fail(`unknown benchmark \`${name}\``)
     }
   }
@@ -727,6 +767,37 @@ const runInstructions = () => {
       const inner = baseline.programs[b.name].inner
       jobs.push({ name: b.name, size: `inner=${inner}`, exe, args: [b.name, "1", String(inner)] })
     }
+  }
+  // Each family's program is built once, as bench/crypto/run.mjs builds it, and
+  // every counted kernel of the family runs from that one binary.
+  const cryptoExe = new Map()
+  for (const b of CRYPTO_COUNTED.filter((x) => wanted(x.name, "crypto"))) {
+    if (!cryptoExe.has(b.family)) {
+      const exe = path.join(dir, `crypto-${b.family}`)
+      run(
+        nishc.cmd,
+        [
+          ...nishc.prefix,
+          rel(path.join(benchDir, "crypto", b.family, "main.ts")),
+          "-o",
+          `${rel(path.join(src, `crypto-${b.family}`))}${path.sep}`,
+          "--link",
+          rel(exe),
+          "--profile",
+          "speed",
+        ],
+        `crypto-${b.family}/instructions`
+      )
+      cryptoExe.set(b.family, exe)
+      process.stderr.write(".")
+    }
+    const { size, iterations } = baseline.programs[b.name]
+    jobs.push({
+      name: b.name,
+      size: `${size}x${iterations}`,
+      exe: cryptoExe.get(b.family),
+      args: [b.kernel, String(size), String(iterations)],
+    })
   }
   process.stderr.write(" ok; counting")
 

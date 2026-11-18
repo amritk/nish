@@ -250,10 +250,13 @@ int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port) {
    keeps every handle below 2^31; their ids are not reused, so a closed
    listener's handles answer -9 for good.
 
-   Every call that takes a handle and is not one of the slot paths here
-   (`sendFd`, `netShutdown`, `connectResult`, `peerCredentials`, ...) passes it
-   to the kernel as a descriptor, which no process holds at 2^20 or above, so
-   it answers -9 (EBADF) with nothing to check.
+   `netShutdown` queues an io_uring SHUTDOWN behind the slot's sends, so the
+   peer reads every byte written before it and then the FIN (NURING-39);
+   `netMss` answers -1, its "not known", for a slot. Every other call that
+   takes a handle and is not one of the slot paths here (`sendFd`,
+   `connectResult`, `peerCredentials`, ...) passes it to the kernel as a
+   descriptor, which no process holds at 2^20 or above, so it answers -9
+   (EBADF) with nothing to check.
 
    Readiness keeps the descriptor contract: a read with nothing queued, a write
    to a full send area and an accept with nothing accepted answer -11, and the
@@ -291,6 +294,7 @@ int32_t nish_uring_sleep_ms(const struct nish_uring_set *s, int32_t timeout_ms);
 int32_t nish_uring_wait(struct nish_uring_set *s, int32_t timeout_ms, struct nish_uring_event *ev, int32_t cap);
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n);
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
+int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t how);
 int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
 int32_t nish_uring_full(const struct nish_uring_set *s);
 int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
@@ -305,6 +309,9 @@ void nish_uring_destroy(struct nish_uring_set *s);
 /* What a held slot's queue may still take from the kernel before the cancel
    lands; past it the connection ends with -105 (ENOBUFS). */
 #define NR_RECV_MAX (16 * 1024 * 1024)
+/* A slot's first receive queue, doubled as it fills: small enough for
+   glibc's thread cache, and freed once drained (NURING-38). */
+#define NR_RECV_FIRST 1024
 /* The most slots per ring: a table is the kernel's memory, sized up front. */
 #define NR_SLOTS_MAX 16384
 #define NR_EVENTS 256
@@ -320,11 +327,12 @@ struct nr_vent {
 
 /* One slot's connection. `gen` counts the slot's closes; `lingering` is a
    close the program made while bytes were still queued, which ends when they
-   are sent, the peer goes or a send fails. */
+   are sent, the peer goes or a send fails. `wshut` is a shutdown of the
+   write side, after which a write answers -32 as send's EPIPE would. */
 struct nr_conn {
   struct nr_vent v;
   uint32_t gen;
-  uint8_t open, lingering, hup, wblocked, rheld;
+  uint8_t open, lingering, hup, wblocked, rheld, wshut;
   int32_t hup_res, werr;
   uint8_t *rbuf;
   uint32_t rlen, roff, rcap;
@@ -471,13 +479,10 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
   }
   struct nr_conn *c = &S->conns[e->ring][e->slot];
   if (e->kind == 1) {
+    /* nr_close freed the queue of a slot reused here (NURING-38). */
     uint32_t gen = c->gen;
-    uint8_t *buf = c->rbuf;
-    uint32_t cap = c->rcap;
     memset(c, 0, sizeof *c);
     c->gen = gen;
-    c->rbuf = buf;
-    c->rcap = cap;
     c->open = 1;
     c->v.loop = -1;
     uint32_t i = (S->fhead + S->flen) % (S->fcap ? S->fcap : 1);
@@ -507,7 +512,6 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
        so a read never runs past the failure it reports. */
     if (c->lingering || c->hup || e->res <= 0) return;
     uint32_t n = (uint32_t)e->res;
-    if (c->roff == c->rlen) c->roff = c->rlen = 0;
     if ((uint64_t)(c->rlen - c->roff) + n > NR_RECV_MAX) {
       c->hup = 1;
       c->hup_res = -105;
@@ -521,7 +525,7 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
         c->roff = 0;
       }
       if (c->rlen + n > c->rcap) {
-        uint32_t nc = c->rcap ? c->rcap : 4096;
+        uint32_t nc = c->rcap ? c->rcap : NR_RECV_FIRST;
         while (nc < c->rlen + n) nc *= 2;
         uint8_t *p = realloc(c->rbuf, nc);
         if (!p) {
@@ -712,6 +716,13 @@ static int32_t nr_read(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     c->roff += n;
     /* A held receive goes again once the program has read half the queue. */
     if (c->rheld && c->rlen - c->roff < NR_AREA / 2 && nish_uring_hold(S->u, ring, slot, 0) == 0) c->rheld = 0;
+    /* A drained queue is freed and emptied, so an idle slot holds none
+       (NURING-38) and a receive never finds roff at rlen past 0. */
+    if (c->roff == c->rlen) {
+      free(c->rbuf);
+      c->rbuf = NULL;
+      c->rcap = c->roff = c->rlen = 0;
+    }
     return (int32_t)n;
   }
   if (c->hup) return c->hup_res < 0 ? c->hup_res : 0;
@@ -730,6 +741,7 @@ static int32_t nr_fail_code(const struct nr_conn *c) {
    queue. -11 when it has none, or the connection's errno once it has failed. */
 static int32_t nr_send(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot, const char *p, int64_t len) {
   if (nr_failed(c)) return nr_fail_code(c);
+  if (c->wshut) return -32;
   int64_t q = nish_uring_queued(S->u, ring, slot);
   if (q < 0) return -9;
   if (q >= NR_AREA) {
@@ -746,6 +758,22 @@ static int32_t nr_send(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_
     if (nr_push(&S->pend, &S->npend, &S->pcap, (uint32_t)ring << 20 | (uint32_t)slot) != 0) c->wblocked = 0;
   }
   return len > 0 && n == 0 ? -11 : n;
+}
+
+/* Half-closes a slot (NURING-39). The SHUTDOWN goes behind the queued sends,
+   so the peer reads them and then the FIN. A shut read side reads as the
+   peer's end: what is queued, then 0, with later bytes dropped. */
+static int32_t nr_shutdown(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot, int32_t how) {
+  if (nr_failed(c)) return -107;
+  int32_t r = nish_uring_shutdown(S->u, ring, slot, how);
+  if (r < 0) return r;
+  if (how != 0) c->wshut = 1;
+  if (how != 1 && !c->hup) {
+    c->hup = 1;
+    c->hup_res = 0;
+    nr_touch(&c->v);
+  }
+  return 0;
 }
 
 static int32_t nr_close(struct nr_set *S, struct nr_conn *c, int32_t ring, int32_t slot) {
@@ -1290,6 +1318,11 @@ int32_t nish_net_write2(int32_t fd, const nish_array *a, int64_t aoff, int64_t a
    are `SHUT_RD`, `SHUT_WR` and `SHUT_RDWR` on both platforms. */
 int32_t nish_net_shutdown(int32_t fd, int32_t how) {
   if ((uint32_t)how > 2) return -22;
+#if defined(__linux__)
+  if (fd >= NR_BASE) { struct nr_set *S; int32_t ring, slot;
+    struct nr_conn *c = nr_decode(fd, &S, &ring, &slot);
+    return c ? nr_shutdown(S, c, ring, slot, how) : -9; }
+#endif
   return shutdown(fd, how) != 0 ? nish_net_fail() : 0;
 }
 
@@ -1363,8 +1396,13 @@ int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value) {
    options below. Linux's `TCP_INFO` answers the current `tcpi_snd_mss`; the
    kernel copies at most the struct it has and says how much, so an answer
    too short to reach the field is not read. `TCP_MAXSEG` is the fallback,
-   and Darwin's only reading. */
+   and Darwin's only reading. A ring slot is -1 too (NURING-39): its socket
+   is a fixed file with no descriptor to ask, and io_uring's getsockopt
+   command reads only SOL_SOCKET options, not TCP's. */
 int32_t nish_net_mss(int32_t fd) {
+#if defined(__linux__)
+  if (fd >= NR_BASE) return -1;
+#endif
   struct sockaddr_storage peer;
   socklen_t len = sizeof peer;
   if (getpeername(fd, (struct sockaddr *)&peer, &len) != 0) return -1;

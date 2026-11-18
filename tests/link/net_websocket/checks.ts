@@ -5,7 +5,8 @@
 // opening handshake read through `nish/net/http1-codec`, and the client's side of
 // it: the key, the request bytes, and every check of the server's answer.
 import { Suite } from "nish/testing";
-import { HTTP1_END, HTTP1_HEAD, HTTP1_UPGRADE, Http1Parser } from "nish/net/http1-codec";
+import { base64StdPadDecodedLength, base64StdPadEncodeInto } from "nish/crypto/base64url";
+import { HTTP1_END, HTTP1_HEAD, HTTP1_NO_ROOM, HTTP1_REFUSED, HTTP1_UPGRADE, Http1Parser } from "nish/net/http1-codec";
 import { Http1ResponseParser } from "nish/net/http1-client-codec";
 import {
   WS_CLOSE,
@@ -37,6 +38,7 @@ import {
   WS_PING,
   WS_PONG,
   WS_REFUSED,
+  WsAcceptKey,
   WsDecoder,
   WsHandshake,
   websocketAcceptKey,
@@ -50,9 +52,11 @@ import {
   websocketOfferedProtocols,
   websocketOriginAllowed,
   websocketRequestKey,
+  websocketRequestKeyField,
   websocketUpgradeRequest,
   websocketUpgradeResponse,
   websocketWriteFrame,
+  websocketWriteUpgradeResponse,
 } from "nish/net/websocket";
 
 const HEX_DIGITS: string = "0123456789abcdef";
@@ -400,6 +404,64 @@ export const websocketChecks = (): i32 => {
     websocketUpgradeResponse("dGhlIHNhbXBsZSBub25jZQ==", "chat\r\nX: y") === null,
     true
   );
+
+  // --- The allocation-free accept a server connection keeps (H1-3) -------------
+  const at0: i32 = 0;
+  const sampleHead: Http1Parser = headOf(
+    "GET / HTTP/1.1\r\nHost: a\r\nUpgrade: websocket\r\nConnection: upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+  );
+  const keyField: i32 = websocketRequestKeyField(sampleHead);
+  t.eqBool("the key field of a §1.3 handshake is found", keyField >= 0, true);
+  t.eqI32(
+    "and no key field in a head that is not a handshake",
+    websocketRequestKeyField(headOf("GET / HTTP/1.1\r\nHost: a\r\n\r\n")),
+    toI32(-1)
+  );
+  const acceptKey: WsAcceptKey = new WsAcceptKey();
+  const keyBytes: u8[] = bytesOf("dGhlIHNhbXBsZSBub25jZQ==");
+  t.eqBool("WsAcceptKey takes the §1.3 key", acceptKey.compute(keyBytes, at0, toI32(keyBytes.length)), true);
+  t.eqStr("and holds §1.3's accept value", textOf(acceptKey.value, toI32(acceptKey.value.length)), SAMPLE_ACCEPT);
+  t.eqBool(
+    "WsAcceptKey refuses a key of 15 bytes",
+    acceptKey.compute(bytesOf("dGhlIHNhbXBsZSBub25j"), at0, toI32(20)),
+    false
+  );
+  t.eqBool("and a reused WsAcceptKey takes the §1.3 key again", acceptKey.compute(keyBytes, at0, toI32(keyBytes.length)), true);
+  const room: u8[] = new Array<u8>(256);
+  const headEnd: i32 = websocketWriteUpgradeResponse(room, at0, acceptKey.value, "chat");
+  t.eqStr(
+    "websocketWriteUpgradeResponse writes the bytes websocketUpgradeResponse answers",
+    headEnd < 0 ? "refused" : textOf(room, headEnd),
+    accepted === null ? "null" : textOf(accepted, toI32(accepted.length))
+  );
+  t.eqI32(
+    "and answers HTTP1_NO_ROOM when the head does not fit",
+    websocketWriteUpgradeResponse(new Array<u8>(64), at0, acceptKey.value, "chat"),
+    HTTP1_NO_ROOM
+  );
+  t.eqI32(
+    "and HTTP1_REFUSED for a protocol that is not a token",
+    websocketWriteUpgradeResponse(room, at0, acceptKey.value, "a b"),
+    HTTP1_REFUSED
+  );
+  t.eqI32(
+    "and HTTP1_REFUSED for an accept value that is not 28 bytes",
+    websocketWriteUpgradeResponse(room, at0, bytesOf("short"), ""),
+    HTTP1_REFUSED
+  );
+
+  // --- The base64 forms the accept is built from ---------------------------------
+  const encoded: u8[] = new Array<u8>(8);
+  const foo: u8[] = bytesOf("foob");
+  t.eqI32("base64StdPadEncodeInto answers the end of what it wrote", base64StdPadEncodeInto(foo, at0, toI32(4), encoded, at0), toI32(8));
+  t.eqStr("and writes RFC 4648's padded text", textOf(encoded, toI32(8)), "Zm9vYg==");
+  t.eqI32("base64StdPadDecodedLength reads back the length", base64StdPadDecodedLength(encoded, at0, toI32(8)), toI32(4));
+  t.eqI32(
+    "and answers -1 for a non-canonical last sextet",
+    base64StdPadDecodedLength(bytesOf("Zm9vYh=="), at0, toI32(8)),
+    toI32(-1)
+  );
+  t.eqI32("and -1 for a length that is not a multiple of 4", base64StdPadDecodedLength(encoded, at0, toI32(7)), toI32(-1));
 
   // --- The client's side of the handshake (§4.1) ------------------------------
   const nonce: u8[] = bytesOf("the sample nonce");

@@ -672,7 +672,11 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    processes at 18,000 (25.9% less, band 0.5%) and 26.20 against 37.17 at
    96,000, the box's C (29.5% less, band 0.7%), holding 96,000 connections with
    21 descriptors. Both halves of §4's rule hold: go. Its PSS was 518 MB
-   against 129 MB at 96,000.
+   against 129 MB at 96,000. *Re-measured after NURING-38*, which frees a
+   slot's receive queue once it is drained and starts the next at 1,024
+   bytes: `bash bench/handler-ring/run.sh --conns 96000 --compiler
+   build/nish-test`, 5 rounds on the same box shape, read 141.4 MB against
+   128.9 MB, and 21.76 against 29.27 µs a request (25.7% less, band 0.8%).
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
    not depend on S1 to S4 and can land first. *Measured in S5*
    ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5)):
@@ -697,7 +701,11 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   `sendFd` and FFI difference. *Decided in S2: opt-in, until S4's numbers. Kept in S4: the ring path is
   not dearer at 18,000 or 96,000, so the numbers allow a default, but it costs
   about four times the memory a connection at 96,000 and no low C was measured
-  beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default.*
+  beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default.
+  The memory has since narrowed: with an idle slot's receive queue freed
+  (NURING-38) the ring process held 141.4 MB against 128.9 MB at 96,000,
+  about 1.5 KB a connection against 1.3 KB. The default is still not changed:
+  18,000 and a low C are not re-measured.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The
   rings must exist before the filter loads, so their number is fixed at
   start-up, and the runtime must know before `main` that the program uses

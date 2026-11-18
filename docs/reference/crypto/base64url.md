@@ -7,7 +7,9 @@ RFC 4648 §5 base64url, unpadded, as JWS and the relay's grants spell a key or a
 ```ts
 import {
   base64StdPadDecode,
+  base64StdPadDecodedLength,
   base64StdPadEncode,
+  base64StdPadEncodeInto,
   base64urlDecode,
   base64urlEncode,
 } from "nish/crypto/base64url";
@@ -32,9 +34,21 @@ The bytes of padded standard base64 `text`, or `null` unless it is the one canon
 
 </scalar-card>
 
+<scalar-card title="base64​Std​Pad​Decoded​Length" icon="phosphor/regular/function" href="#base64stdpaddecodedlength">
+
+How many bytes the padded standard base64 in `text[start .. start + length)` decodes to, or -1 unless it is their one canonical spelling, by `base64StdPadDecode`'s rules and its masks; nothing is decoded or allocated.
+
+</scalar-card>
+
 <scalar-card title="base64​Std​Pad​Encode" icon="phosphor/regular/function" href="#base64stdpadencode">
 
 `data` in padded standard base64, as one line: PEM's body, and SCRAM's nonces, salts and proofs (RFC 5802 §5.1).
+
+</scalar-card>
+
+<scalar-card title="base64​Std​Pad​Encode​Into" icon="phosphor/regular/function" href="#base64stdpadencodeinto">
+
+`base64StdPadEncode` of `data[start .. start + length)`, written into `out` from `at` as the bytes of its characters, allocating nothing: the WebSocket accept key that a server writes for every handshake (RFC 6455 §4.2.2).
 
 </scalar-card>
 
@@ -62,7 +76,10 @@ specification that knows its lengths drop the padding, and RFC 7515 §2 does).
 
 The module also holds RFC 4648 §4 standard base64 — `+` and `/`, padded with
 `=` — as `base64StdPadEncode` and `base64StdPadDecode`, for PEM
-(`nish/crypto/x509`) and SCRAM (`nish/net/postgres`). It is as strict and as
+(`nish/crypto/x509`) and SCRAM (`nish/net/postgres`), and as
+`base64StdPadEncodeInto` and `base64StdPadDecodedLength`, which read and
+write a caller's buffer and allocate nothing, for the WebSocket handshake
+(`nish/net/websocket`). It is as strict and as
 constant-time as the URL alphabet, by the same masks, and it refuses a `=`
 anywhere but the last one or two characters of a text whose length is a
 multiple of four. They are not `nish/base64`'s `base64Encode`, which encodes
@@ -130,6 +147,47 @@ A fresh array of the decoded bytes, or `null` when `text` is not
 
 </scalar-field>
 
+### base64StdPadDecodedLength
+
+How many bytes the padded standard base64 in `text[start .. start + length)`
+decodes to, or -1 unless it is their one canonical spelling, by
+`base64StdPadDecode`'s rules and its masks; nothing is decoded or allocated.
+A WebSocket server checks a handshake's `Sec-WebSocket-Key` this way, where
+it lies in the request (RFC 6455 §4.2.1, item 5). A range outside `text`
+panics.
+
+```ts
+function base64StdPadDecodedLength(
+  text: u8[],
+  start: i32,
+  length: i32,
+): i32
+```
+
+<scalar-field name="text" type="u8[]" required>
+
+The buffer holding the text, one character a byte.
+
+</scalar-field>
+
+<scalar-field name="start" type="i32" required>
+
+Where in `text` the base64 starts.
+
+</scalar-field>
+
+<scalar-field name="length" type="i32" required>
+
+How many characters it is.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The decoded length, or -1 when the text is not canonical.
+
+</scalar-field>
+
 ### base64StdPadEncode
 
 `data` in padded standard base64, as one line: PEM's body, and SCRAM's
@@ -150,6 +208,59 @@ The bytes to encode; they are read, not changed.
 
 The padded standard base64 text, `4 × ceil(n / 3)` characters for
   `n` bytes, with no line breaks.
+
+</scalar-field>
+
+### base64StdPadEncodeInto
+
+`base64StdPadEncode` of `data[start .. start + length)`, written into `out`
+from `at` as the bytes of its characters, allocating nothing: the WebSocket
+accept key that a server writes for every handshake (RFC 6455 §4.2.2). A
+range outside `data`, or text that does not fit in `out` from `at`, panics.
+
+```ts
+function base64StdPadEncodeInto(
+  data: u8[],
+  start: i32,
+  length: i32,
+  out: u8[],
+  at: i32,
+): i32
+```
+
+<scalar-field name="data" type="u8[]" required>
+
+The buffer holding the bytes to encode; it is read, not changed.
+
+</scalar-field>
+
+<scalar-field name="start" type="i32" required>
+
+Where in `data` the bytes start.
+
+</scalar-field>
+
+<scalar-field name="length" type="i32" required>
+
+How many bytes to encode.
+
+</scalar-field>
+
+<scalar-field name="out" type="u8[]" required>
+
+The buffer the text is written into.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+Where in `out` the text starts.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The index in `out` just past the text, `at + 4 × ceil(length / 3)`.
 
 </scalar-field>
 
