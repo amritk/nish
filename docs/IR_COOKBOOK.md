@@ -15049,8 +15049,12 @@ A `declare function` is a C function this program **calls but does not define**
 (WP27 S1). It lowers to an LLVM `declare` and a plain `call`, and the whole of
 what is interesting is the attributes — specifically their absence.
 
-The declaration carries none, because nothing about a body this compiler cannot
-see is provable. What that costs is visible on the *callers*: `pureDouble` keeps
+The declaration carries none of the optimiser's, because nothing about a body
+this compiler cannot see is provable. The one attribute it does carry is the
+ABI's: a `u8`, `u16` or `boolean` parameter or result is `zeroext` on the
+`declare` and on every `call`, because C's `unsigned char`, `unsigned short` and
+`_Bool` are widened by the caller (`tests/cases/ffi_narrow_zeroext`, #1755); the
+listing's `abs` takes an `i32` and has none. What that costs is visible on the *callers*: `pureDouble` keeps
 `willreturn readnone`, `main` calls C and keeps only `nounwind`. The impurity
 travels the call graph like any other, so a function three hops above a foreign
 call loses `readnone` too.
