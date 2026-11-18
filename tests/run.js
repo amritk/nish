@@ -42826,14 +42826,27 @@ if (selects("arrow-corpus")) {
     fs.copyFileSync(path.join(root, "scripts/arrowify.mjs"), path.join(copy, "scripts/arrowify.mjs"))
     fs.mkdirSync(path.join(copy, "tests/cases"), { recursive: true })
     fs.symlinkSync(path.join(root, "node_modules"), path.join(copy, "node_modules"))
+    // Every git call names the copy's own repository, so a failed `init` can
+    // never fall through to the checkout this suite runs in.
+    const init = spawnSync("git", ["init", "-q", copy], { encoding: "utf8" })
     const git = (...args) =>
-      spawnSync("git", ["-c", "user.name=nish-tests", "-c", "user.email=tests@nish.invalid", ...args], {
-        cwd: copy,
-        encoding: "utf8",
-      })
-    git("init", "-q")
-    git("add", "-A")
-    const committed = git("commit", "-q", "--no-gpg-sign", "-m", "copy")
+      spawnSync(
+        "git",
+        [
+          `--git-dir=${path.join(copy, ".git")}`,
+          `--work-tree=${copy}`,
+          "-c",
+          "user.name=nish-tests",
+          "-c",
+          "user.email=tests@nish.invalid",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { cwd: copy, encoding: "utf8" }
+      )
+    const committed =
+      init.status === 0 && git("add", "-A").status === 0 ? git("commit", "-q", "-m", "copy") : init
     const goldens = (...args) =>
       spawnSync(process.execPath, ["tests/differential/goldens.js", ...args], { cwd: copy, encoding: "utf8" })
     const store = path.join(copy, "tests/differential/goldens/rewrites.txt")
