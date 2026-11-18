@@ -208,10 +208,10 @@ export class DebugInfo {
    */
   typeKeys: StringMap
   typeRefs: string[]
-  /** A pointer's width in bits: 32 under wasm32's `p:32:32`, 64 natively, as `computeLayout` lays it out. */
-  pointerBits: i32
   /** The `DISubprogram` of the function being emitted: the scope of every location and variable. */
   subprogram: string
+  /** A pointer's width in bits: 32 under wasm32's `p:32:32`, 64 natively, as `computeLayout` lays it out. */
+  pointerBits: i32
   /** Whether that function is a reference's dispatcher, whose every location is line 0 (WP51 §5.3). */
   synthetic: boolean
 
