@@ -787,6 +787,21 @@
                           ]
                         }
                       },
+                      "/nish-compact": {
+                        "type": "page",
+                        "title": "nish:compact",
+                        "filepath": "docs/reference/nish-compact.md",
+                        "head": {
+                          "title": "nish:compact · Nish",
+                          "meta": [{ "property": "og:title", "content": "nish:compact" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/builtins/nish-compact"
+                            }
+                          ]
+                        }
+                      },
                       "/nish-fs": {
                         "type": "page",
                         "title": "nish:fs",

@@ -3762,8 +3762,9 @@ declare module "nish:unsafe" {
  * The compiler refuses a compact class where C or Node would see its layout:
  * a build with `--emit-header`, `--emit-napi` or `--emit-napi-async`, a
  * `declare class`, a class holding a `Secret`, and a class a C or N-API surface
- * exports. wasm32 and an ASAN build compile it uncompressed, since a pointer
- * there is already 4 bytes or the range cannot hold the sanitizer's blocks.
+ * exports. wasm32, a host `--emit-dts` page module and an ASAN build compile
+ * it uncompressed: a pointer there is already 4 bytes, the page runs on the
+ * wasm runtime, or the range cannot hold the sanitizer's blocks.
  *
  * **Under Node.** `runtime/nish.mjs` answers the import with
  * `runtime/core.mjs`, where both names are empty values: a reference is the
