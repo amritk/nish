@@ -11491,7 +11491,7 @@ if (dealtHere("sqliteLink")) {
     const cacheRoot = path.join(sqDir, "cache", "nish", "runtime")
     const entries = () => (fs.existsSync(cacheRoot) ? fs.readdirSync(cacheRoot).sort() : [])
     // The entries that hold SQLite's objects rather than the runtime's.
-    const sqliteEntries = () => entries().filter((e) => fs.existsSync(path.join(cacheRoot, e, "sqlite3.o")))
+    const sqliteEntries = () => entries().filter((e) => fs.existsSync(path.join(cacheRoot, e, "nish-sqlite.o")))
     const env = (extra = {}) => ({
       ...process.env,
       XDG_CACHE_HOME: path.join(sqDir, "cache"),
@@ -11511,12 +11511,13 @@ if (dealtHere("sqliteLink")) {
       .readdirSync(path.join(root, "runtime"))
       .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
     const program = "tests/link/sqlite_link/main.ts"
-    // The units of runtime/sqlite/: the amalgamation and the `nish/sqlite`
-    // adapter. `sqliteUnits` (src/run-cache.ts) reads the directory, so a unit
-    // added there compiles, lands in the entry and is linked.
+    // The units of runtime/sqlite/: every `.c` but the amalgamation, which the
+    // `nish/sqlite` adapter includes so its cursor calls reach SQLite's static
+    // functions. `sqliteUnits` (src/run-cache.ts) reads the directory, so a
+    // unit added there compiles, lands in the entry and is linked.
     const sqliteC = fs
       .readdirSync(path.join(root, "runtime", "sqlite"))
-      .filter((f) => f.endsWith(".c"))
+      .filter((f) => f.endsWith(".c") && f !== "sqlite3.c")
       .sort()
     const vendored = sqliteC.map((f) => f.replace(/\.c$/, ".o"))
 
@@ -11529,6 +11530,7 @@ if (dealtHere("sqliteLink")) {
       first.status === 0 &&
         runOut("first").stdout === "3.54.1 3054001 0\n" &&
         firstC.length === runtimeUnits + sqliteC.length &&
+        !firstC.includes("sqlite3.c") &&
         sqliteC.every((u) => firstC.filter((c) => c === u).length === 1),
       first.stderr + firstC.join(", ")
     )
@@ -11541,7 +11543,7 @@ if (dealtHere("sqliteLink")) {
       entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
     )
     check(
-      "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
+      "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c but sqlite3.c, which nish-sqlite.c includes",
       sqEntry.length > 0 &&
         fs
           .readdirSync(sqEntry)
@@ -11835,7 +11837,7 @@ if (dealtHere("sqliteLink")) {
     const reused = linkSqCopy("copy-unit-again", callsUnit)
     const reusedC = compiledC()
     check(
-      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
+      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside nish-sqlite.o, links into a program that calls it, and a second link reuses it",
       withUnit.status === 0 &&
         runOut("copy-unit").stdout === "3.54.1 7\n" &&
         unitC.join(",") === [...sqliteC, "nish_throwaway.c"].sort().join(",") &&
@@ -11876,8 +11878,96 @@ if (dealtHere("sqliteLink")) {
       adapterLink.status === 0 &&
         runOut("copy-adapter").stdout === "3054001\n" &&
         adapterC.includes("nishsqlite_probe.c") &&
-        adapterC.includes("sqlite3.c"),
+        adapterC.includes("nish-sqlite.c"),
       `${adapterLink.stderr}compiled: ${adapterC.join(", ")}`
+    )
+
+    // The cursor programs under flags the default build leaves off. Under
+    // SQLITE_DEBUG SQLite's own asserts run, so a cursor left open across a
+    // transaction's end, or a call on one it closed, would abort here rather
+    // than read freed memory quietly.
+    const staleDir = path.join("tests", "link", "std_sqlite_cursor_stale")
+    const staleDebug = link(path.join(staleDir, "main.ts"), "stale-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const staleRun = staleDebug.status === 0 ? runOut("stale-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_stale passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      staleRun !== null &&
+        staleRun.status === 0 &&
+        staleRun.stdout === fs.readFileSync(path.join(root, staleDir, "expected.out"), "utf8"),
+      staleDebug.stderr + (staleRun ? staleRun.stdout.slice(-2000) + staleRun.stderr : "")
+    )
+    // The default build has no virtual-table module, so the schema program
+    // makes an rtree only when SQLite is built with one.
+    const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {
+      NISH_SQLITE_CFLAGS: "-DSQLITE_ENABLE_RTREE",
+    })
+    const rtreeRun = rtree.status === 0 ? runOut("schema-rtree") : null
+    check(
+      "sqlite-link: with -DSQLITE_ENABLE_RTREE, openCursor refuses an rtree virtual table and its shadow table",
+      rtreeRun !== null &&
+        rtreeRun.status === 0 &&
+        rtreeRun.stdout.includes("PASS  rtree: a virtual table is refused") &&
+        rtreeRun.stdout.includes("PASS  rtree: and its shadow table"),
+      rtree.stderr + (rtreeRun ? rtreeRun.stdout.slice(-2000) + rtreeRun.stderr : "")
+    )
+    // A scan holds its memory flat: after the first row, stepping a cursor over
+    // 10,000 rows and reading their columns allocates nothing SQLite's own
+    // counters see (SQLITE_DEFAULT_MEMSTATUS=1 turns them on).
+    const memTs = path.join(sqDir, "cursor-memory.ts")
+    fs.writeFileSync(
+      memTs,
+      [
+        'import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";',
+        "",
+        "declare function sqlite3_memory_used(): i64;",
+        "declare function sqlite3_memory_highwater(reset: i32): i64;",
+        "",
+        "export const main = (): i32 => {",
+        '  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");',
+        "  db.exec(",
+        '    "CREATE TABLE t (id INTEGER PRIMARY KEY, a INTEGER, b TEXT);" +',
+        '      "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 10000)" +',
+        "      \" INSERT INTO t SELECT x, x * 3, printf('%08d', x) FROM c\"",
+        '  ).expect("fill");',
+        '  db.beginRead().expect("beginRead");',
+        '  const cur = db.openCursor("t", "id,a,b").expect("openCursor");',
+        "  const buf = new Array<u8>(16);",
+        '  let r = cur.first().expect("first");',
+        '  cur.columnInto(2, buf, 0).expect("columnInto");',
+        "  const used = sqlite3_memory_used();",
+        "  sqlite3_memory_highwater(1);",
+        "  let rows = 0;",
+        "  let sum = toI64(0);",
+        "  while (r) {",
+        "    sum = sum + cur.columnI64(1);",
+        '    cur.columnInto(2, buf, 0).expect("columnInto");',
+        "    rows = rows + 1;",
+        '    r = cur.next().expect("next");',
+        "  }",
+        "  const peak = sqlite3_memory_highwater(0);",
+        "  const after = sqlite3_memory_used();",
+        "  console.log(`${rows} ${sum} ${used} ${peak} ${after}`);",
+        '  cur.close().expect("close");',
+        '  db.endRead().expect("endRead");',
+        '  db.close().expect("close the database");',
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const mem = link(memTs, "cursor-memory", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1" })
+    const memRun = mem.status === 0 ? runOut("cursor-memory") : null
+    const [memRows, memSum, memUsed, memPeak, memAfter] = memRun ? memRun.stdout.trim().split(" ") : []
+    check(
+      "sqlite-link: a cursor scan of 10,000 rows with column reads keeps SQLite's memory at what it held after the first row",
+      memRun !== null &&
+        memRun.status === 0 &&
+        memRows === "10000" &&
+        memSum === String(3 * 5000 * 10001) &&
+        Number(memUsed) > 0 &&
+        memPeak === memUsed &&
+        memAfter === memUsed,
+      mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
     )
 
     // A Node addon links SQLite too, and keeps its API to itself: a Node that
