@@ -3207,15 +3207,38 @@ At every load the ring process's p99 was below the five's on the same core. Both
 - `--conns 90000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"`, at 22,500 req/s: the ring process read a p99 of 0.70 to 0.76 ms against 1.23 to 1.39 ms for the five.
 - `--conns 18000 --think 0.8 --rounds 3 --warmup 5 --seconds 15 --designs "ring epoll epoll-copy epoll1"`, same rate: the ring process read 1.65 to 1.78 ms, the five 2.08 to 3.17 ms, and one epoll process 1.49 to 1.84 ms.
 
-**What the tail is: a queue on one core, not a stall.** One traced run at the 2-second think, 45,000 req/s, read a p99 of 19.7 ms. It used a counting patch to `runtime/runtime-net.c` that is not in the tree: one line a second on stderr with the loop's longest pass, the ready list's length and the age of its oldest entry. Within the window:
+**One epoll process at the same rate tails as the ring does.** The control for "one ring process" is one epoll process (`epoll1`) on the same core, but it cannot hold 90,000 connections here: it opens a descriptor a connection, the box's hard `RLIMIT_NOFILE` is 20,000, and `run.sh` gives it at most 20,000 - 64 = 19,936 slots and skips it above that. Raising the hard limit needs `CAP_SYS_RESOURCE`, which this container's root lacks (`prlimit --nofile=200000:200000` answers "Operation not permitted"). So the control runs at 18,000 connections and the rate of the 90,000 runs, with a think time five times shorter: `bash bench/handler-ring/run.sh --conns 18000 --think T --rounds 2 --warmup 8 --seconds 15 --designs "ring epoll1 epoll"` at commit `877c503e`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000. Per round (round 1 / round 2):
 
-- No pass of `nr_poll_wait` took more than 4.87 ms.
-- No completion overflowed the ring, no receive ran short of buffers, and nothing was requeued.
-- In the worst second the ready list held 2,927 slots, and the oldest of them had waited 36.1 ms. At about 18 µs a request that list is about 53 ms of work. The handler takes it in arrival order, 64 slots a wait, so the last slot in a burst waits for the whole burst.
+| think | offered req/s | ring µs/req | ring p99 ms | epoll1 µs/req | epoll1 p99 ms | epoll µs/req | epoll p99 ms |
+| ---: | ---: | --- | --- | --- | --- | --- | --- |
+| 0.5 s | 36,000 | 14.78 / 15.18 | 8.13 / 5.57 | 18.37 / 17.55 | 4.67 / 4.93 | 23.10 / 23.17 | 36.35 / 17.15 |
+| 0.4 s | 45,000 | 14.29 / 14.61 | 12.67 / 7.10 | 18.46 / 17.65 | 40.45 / 27.39 | 22.58 / 22.12 | 53.76 / 38.40 |
 
-The bursts come from the load itself. A closed loop with one fixed think time sends a connection's next request at a fixed interval after its last answer, so the requests a slow moment delays arrive together again one think time later. A server on more cores drains the same burst sooner, which is consistent with the entry's five epoll processes on several cores against one ring process on one. That is an inference: the entry's cores were not measured here. The ring process's own CPU a request, 18 µs against 25 µs, is what decides how near its core it runs at a given rate.
+Every round served within 1.2% of the offered rate but the five's first at 45,000, at 43,250. At 36,000 a second one epoll process's p99 was 4.7 to 4.9 ms against the ring's 5.6 to 8.1; at 45,000 it was 27 to 40 ms against the ring's 7.1 to 12.7, with the five at 38 to 54. A single process on one core tails at these rates whichever readiness API it uses, and the ring's lower CPU a request keeps it further from the core's limit. The 0.8-second run above, at 22,500 a second, is the same control at a light load.
 
-No fix is made in this stage. The loop spends about 0.08 µs a request pumping completions, so bounding it buys nothing. The 64-slot batch is in `std/net/handler.ts`, and making it smaller would only reorder the same queue. What should shorten the tail is a second core, with one ring process for each core, or smaller bursts from the load. Neither is measured here.
+**What the tail is: a queue on one core, not a stall.** The trace is in the tree: `bench/handler-ring/trace.patch` adds per-second counters to `runtime/runtime-net.c`'s `nr_pump`, `nr_collect` and `nr_poll_wait` (its header names every field), and `bash bench/handler-ring/trace.sh 90000 2` applies it for one build, runs the ring server on CPU 0 at 90,000 connections and a 2-second think, and reverts it; the counters go to `build/bench/handler-ring/trace.err`. One run at commit `c1b8967f`, on the 2.30GHz box above, read:
+
+```
+label=trace conns=90000 up=90000 failed=0 clients=5 connect_s=8.2 rps=44850 srv_us=19.01 srv_user_us=4.96 srv_sys_us=14.05 box_us=27.20 softirq_us=8.61 srv_rss_mb=138.9 srv_pss_mb=137.5 srv_fds=21 mem_used_mb=1434 tcp_mem_mb=0 starved=0 sent=1120329 think_s=2.00 p50_ms=0.968 p99_ms=38.400 p999_ms=41.472 max_ms=45.568 lat_n=672772 lat_lost=6 send_failed=0 closed=0
+```
+
+The worst second of the ready list, and the two longest passes of the loop, verbatim from `trace.err`:
+
+```
+tr2 ages=43736 max_age=63.23 ah(>1,2,5,10,20,50,100)=37900,37708,36609,34176,26043,6837,0 max_list=5163 taskrun=1835 overflow=0 nobufs=0 requeues=0 live=90000
+trace cycles=1769 pumps=2193 ev=43772 waits=4739 sleeps=424 sleep_full=0 max_cycle=14.59 max_out=0.55 n_at_max=64 max_in=14.04 max_pump=14.03 max_pump_ev=767 max_rounds=10 max_wait=8.075 max_sleep=3.17 max_npend=0 max_cycle_pumps=1 max_cycle_ev=767 h(>1,2,5,10,20,50,100)=306,14,1,1,0,0,0
+trace cycles=2098 pumps=2594 ev=46377 waits=5723 sleeps=496 sleep_full=0 max_cycle=7.83 max_out=6.64 n_at_max=64 max_in=4.75 max_pump=1.17 max_pump_ev=308 max_rounds=15 max_wait=1.033 max_sleep=4.28 max_npend=0 max_cycle_pumps=1 max_cycle_ev=308 h(>1,2,5,10,20,50,100)=316,1,1,0,0,0,0
+```
+
+Over the 24 seconds at full load (`live=90000`, 42,761 to 46,392 completions a second):
+
+- No pass of `nr_poll_wait` and the handler took more than 14.59 ms. That pass spent 0.55 ms in the handler on 64 ready slots and 14.03 ms in one pump of 767 completions, about 18 µs each; the next longest, 7.83 ms, spent 6.64 ms in the handler on 64 slots and pumped 308. Most of a pumped completion's cost is system time: 14.05 of the 19.01 µs a request is. In no second did more than 25 passes take over 2 ms, or more than 4 over 5 ms. One earlier line, in the connect phase before the warm-up, read a 328 ms pass over 71,564 completions while the connections were being opened; it is outside the warm-up and the window.
+- No completion overflowed the ring, no receive ran short of buffers, and nothing was requeued, in any second.
+- In the worst second the ready list held 5,163 slots, and the oldest had waited 63.2 ms: 6,837 of the 43,736 slots taken that second were more than 50 ms old. At 19 µs a request that list is about 98 ms of work. The handler takes it in arrival order, at most 64 slots a wait, so the last slot in a burst waits for the whole burst.
+
+The bursts come from the load itself. A closed loop with one fixed think time sends a connection's next request at a fixed interval after its last answer, so the requests a slow moment delays arrive together again one think time later. A server on more cores drains the same burst sooner, which is consistent with the entry's five epoll processes on several cores against one ring process on one. That is an inference: the entry's cores were not measured here. The ring process's own CPU a request, 18 µs against the five's 25 µs on the 2.10GHz box (15 against 23 µs at 18,000 connections on the 2.30GHz one), is what decides how near its core it runs at a given rate.
+
+No fix is made in this stage. Pumping is not cheap overhead to bound: a pumped completion carries the kernel work of a request, about 18 µs in the trace, and bounding the pump would move that work between passes, not remove it. The batch of 64 is `NISH_POLL_CHUNK` in `runtime/runtime-net.c`, which caps a wait below `std/net/handler.ts`'s `maxEvents` of 256; a smaller one would reorder the same queue. What should shorten the tail is a second core, with one ring process for each core, or smaller bursts from the load. Neither is measured here.
 
 **The final code at the box's C.** `bash bench/handler-ring/run.sh --conns 96000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"` at commit `d603893d`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000, at 24,000 req/s:
 

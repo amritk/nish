@@ -682,11 +682,16 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    closed-loop load. The entry's 65 ms p99 for one ring process, against
    20 ms for five epoll processes, does not reproduce on one shared core. At
    every offered load from 30,000 to 56,000 requests a second at 90,000
-   connections, the ring process's p99 was below the five's. Its tail is a
-   queue on one core, not a stall: in a traced run at 45,000 no pass of the
-   loop took more than 4.87 ms, but a burst left 2,927 slots ready with the
-   oldest 36 ms old. No fix is made; a second core should shorten it, which
-   is not measured. The final code at 96,000
+   connections, the ring process's p99 was below the five's. One epoll
+   process, which the box's hard limit of 20,000 descriptors caps at 19,936
+   connections, is the control at 18,000 and the same rates: at 45,000 a
+   second its p99 was 27 to 40 ms against the ring's 7.1 to 12.7, so one
+   process on one core tails whatever it waits with. The tail is a queue,
+   not a stall: in a traced run at 45,000 (`bench/handler-ring/trace.sh`,
+   which applies `trace.patch` for one build) no pass of the loop took more
+   than 14.59 ms, but a burst left 5,163 slots ready with the oldest 63 ms
+   old. No fix is made; a second core should shorten it, which is not
+   measured. The final code at 96,000
    (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
    request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.
    At 300,000 (`--conns 300000 --think 10 --rounds 3 --designs ring`), one
