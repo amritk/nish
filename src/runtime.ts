@@ -1751,7 +1751,8 @@ export const inlineAllocator = (attrGroup: string, realign: boolean): string =>
  * bytes. Every other block stays 8-aligned because `@nish_alloc_struct` and
  * the runtime's bumps realign in such a program.
  */
-export const inlineRefAllocator = (attrGroup: string): string => bumpAllocator("nish_alloc_ref", 4, false, attrGroup)
+export const inlineRefAllocator = (attrGroup: string): string =>
+  bumpAllocator("nish_alloc_ref", 4, false, attrGroup)
 
 /** One inline bump allocator `@<name>`, rounding to and aligned at `align`. */
 const bumpAllocator = (name: string, align: i32, realign: boolean, attrGroup: string): string => {

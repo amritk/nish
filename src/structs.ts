@@ -168,7 +168,7 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
  * compresses. A generic class's fields stay full pointers, since a field
  * written `T` cannot be told from one written as the class.
  */
-export const isLinkType = (ctx: CheckContext, type: i32): boolean => {
+const isLinkType = (ctx: CheckContext, type: i32): boolean => {
   if (!ctx.compressLinks) {
     return false
   }
@@ -1048,7 +1048,9 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     collectStructMembers(ctx, nested)
   } else if (!isLayoutScalar(type) && ctx.table.stripNull(type) !== T_CPTR) {
     const inner = ctx.table.stripNull(type)
-    const target: StructInfo | null = ctx.table.isStruct(inner) ? ctx.program.struct(ctx.table.nameOf(inner)) : null
+    const target: StructInfo | null = ctx.table.isStruct(inner)
+      ? ctx.program.struct(ctx.table.nameOf(inner))
+      : null
     if (target !== null && target.compact) {
       ctx.error(decl.children[1], compactLayoutFieldMessage(owner.name, name, target.name))
       return
@@ -1112,12 +1114,17 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
  * Whether `iface`, one entry of a class's `implements` list, names a
  * `nish:compact` marker through this module's import (an `as` rename too).
  */
-export const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
-  if (iface.kind !== NodeKind.TypeRef || (iface.children.length > 0 && iface.children[0].children.length > 0)) {
+const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
+  if (
+    iface.kind !== NodeKind.TypeRef ||
+    (iface.children.length > 0 && iface.children[0].children.length > 0)
+  ) {
     return false
   }
   const imported = ctx.program.importNamed(iface.text)
-  return imported !== null && imported.specifier === COMPACT_SPECIFIER && isCompactExport(imported.importedName)
+  return (
+    imported !== null && imported.specifier === COMPACT_SPECIFIER && isCompactExport(imported.importedName)
+  )
 }
 
 /** Whether the class `decl` writes `implements Compact` (WP48). `Wide` marks nothing yet. */

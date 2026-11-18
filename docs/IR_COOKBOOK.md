@@ -25638,7 +25638,7 @@ const pairSum = (a: i32, b: i32): i32 => {
   return next === null ? cell.value : cell.value + next.value
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(`${pairSum(3, 4)}`)
   return 0
 }

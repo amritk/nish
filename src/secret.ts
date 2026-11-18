@@ -2713,7 +2713,12 @@ const reachedEffect = (facts: FactsTable, runtime: RuntimeTable, start: Function
         queue.push(next)
         continue
       }
-      if (callee !== "nish_alloc_struct" && callee !== "nish_alloc_ref" && !callee.startsWith("llvm.") && runtime.lookup(callee) === null) {
+      if (
+        callee !== "nish_alloc_struct" &&
+        callee !== "nish_alloc_ref" &&
+        !callee.startsWith("llvm.") &&
+        runtime.lookup(callee) === null
+      ) {
         return `${C_FUNCTION}\`${callee}\`${through}`
       }
     }

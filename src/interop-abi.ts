@@ -1338,7 +1338,11 @@ const reportUninstantiated = (
  * the flag in the second. `flag` is the sidecar flag the build was given.
  * True when the program has no compact class.
  */
-export const refuseCompactSidecars = (compilation: Compilation, fns: ExternalFunction[], flag: string): boolean => {
+export const refuseCompactSidecars = (
+  compilation: Compilation,
+  fns: ExternalFunction[],
+  flag: string
+): boolean => {
   const table = compilation.table
   const reported = new StringSet()
   for (const fn of fns) {
