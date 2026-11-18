@@ -619,9 +619,10 @@ export const explainLayout = (
     k = k + 1
     {
       classes = classes + 1
-      // Sizes as no class narrowed them, so a class marked `implements
-      // Compact` neither hides its own saving nor lends one to a holder.
-      const before = narrowedSize(table, info, NO_TARGET, wasm)
+      // The size as no class narrowed it, so a class marked `implements
+      // Compact` does not hide its own saving; any other class is already
+      // laid out that way, with wasm32's 4-byte pointers.
+      const before = info.compact ? narrowedSize(table, info, NO_TARGET, wasm) : info.size
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
       let saves = false
