@@ -162,7 +162,7 @@ their commands' environment (Claude Code's `CLAUDECODE`, Gemini CLI's
 `GEMINI_CLI`) say yes.
 
 ```ts
-function agentDriven(): boolean
+const agentDriven: () => boolean
 ```
 
 <scalar-field name="returns" type="boolean">
@@ -185,7 +185,7 @@ that renders the escapes itself (Emacs's shell sets `TERM=dumb` and paints
 ANSI colour), so `TERM` does not describe it, and forcing forks nothing.
 
 ```ts
-function styleFor(fd: i32, agent: boolean): Style
+const styleFor: (fd: i32, agent: boolean) => Style
 ```
 
 <scalar-field name="fd" type="i32" required>

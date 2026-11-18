@@ -180,10 +180,10 @@ followed, bounded by `options.timeoutMs` and `OIDC_MAX_DISCOVERY_BYTES`,
 then `oidcParseDiscovery`. Only a 200 is taken.
 
 ```ts
-function oidcDiscover(
+const oidcDiscover: (
   issuer: string,
   options: OidcOptions,
-): OidcMetadata
+) => OidcMetadata
 ```
 
 <scalar-field name="issuer" type="string" required>
@@ -211,7 +211,7 @@ Where discovery asks: the issuer, less one trailing `/`, with
 §4.1).
 
 ```ts
-function oidcDiscoveryUrl(issuer: string): string
+const oidcDiscoveryUrl: (issuer: string) => string
 ```
 
 <scalar-field name="issuer" type="string" required>
@@ -234,11 +234,11 @@ connect, each read and the whole fetch bounded by `options.timeoutMs` (by
 `limit`, and `outbound` applied when it is not null.
 
 ```ts
-function oidcHttpOptions(
+const oidcHttpOptions: (
   options: OidcOptions,
   limit: i32,
   outbound: OutboundPolicy | null,
-): HttpOptions
+) => HttpOptions
 ```
 
 <scalar-field name="options" type="OidcOptions" required>
@@ -272,10 +272,10 @@ no userinfo, query or fragment (OpenID Connect Discovery 1.0 §2), or loopback
 http when `options.allowLoopbackHttp` is set.
 
 ```ts
-function oidcIssuerAllowed(
+const oidcIssuerAllowed: (
   issuer: string,
   options: OidcOptions,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="issuer" type="string" required>
@@ -305,9 +305,7 @@ directives (`no-cache`, `no-store`, `s-maxage`) are not read: the floor
 holds whatever the response says.
 
 ```ts
-function oidcLifetime(
-  cacheControl: string | null,
-): i64
+const oidcLifetime: (cacheControl: string | null) => i64
 ```
 
 <scalar-field name="cacheControl" type="string | null" required>
@@ -330,11 +328,11 @@ a URL `oidcDiscover` would fetch, and http only when the issuer is (so an
 https issuer never names an http key set). Fetches nothing.
 
 ```ts
-function oidcParseDiscovery(
+const oidcParseDiscovery: (
   issuer: string,
   doc: u8[],
   options: OidcOptions,
-): OidcMetadata
+) => OidcMetadata
 ```
 
 <scalar-field name="issuer" type="string" required>
@@ -402,7 +400,7 @@ Then:
   `OIDC_ERR_NO_KEYS`.
 
 ```ts
-function oidcParseJwks(doc: u8[]): OidcKeySet
+const oidcParseJwks: (doc: u8[]) => OidcKeySet
 ```
 
 <scalar-field name="doc" type="u8[]" required>
@@ -431,12 +429,12 @@ algorithm but the key's are refused (`JWT_ERR_ALG`); then the signature,
 by `nish/crypto/jwt`'s `JwtVerifier`, and `exp` is required.
 
 ```ts
-function oidcVerify(
+const oidcVerify: (
   keys: OidcKeys,
   token: string,
   audience: string,
   now: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="keys" type="OidcKeys" required>

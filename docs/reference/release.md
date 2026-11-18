@@ -177,7 +177,7 @@ to this machine (`127.0.0.1`, `localhost` or `[::1]`), which is what a test
 server listens on.
 
 ```ts
-function releaseBaseAllowed(base: string): boolean
+const releaseBaseAllowed: (base: string) => boolean
 ```
 
 <scalar-field name="base" type="string" required>
@@ -199,11 +199,11 @@ than `maxAgeMs`, and not dated in the future, which a clock set back or a
 planted file would give.
 
 ```ts
-function releaseCacheFresh(
+const releaseCacheFresh: (
   cache: ReleaseCache,
   nowMs: i64,
   maxAgeMs: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="cache" type="ReleaseCache" required>
@@ -237,9 +237,9 @@ lines `checked <ms>` and `latest <version>` (the version empty or valid),
 with at most a final newline after them.
 
 ```ts
-function releaseCacheParse(
+const releaseCacheParse: (
   text: string,
-): ReleaseCache | null
+) => ReleaseCache | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -264,9 +264,9 @@ the check and the read) or it does not parse. Its format is two lines,
 none.
 
 ```ts
-function releaseCacheRead(
+const releaseCacheRead: (
   path: string,
-): ReleaseCache | null
+) => ReleaseCache | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -289,11 +289,11 @@ mode 0600, and that is renamed over `path`, so a reader sees the old cache or
 the new one and a link planted at `path` is replaced, never followed.
 
 ```ts
-function releaseCacheWrite(
+const releaseCacheWrite: (
   path: string,
   latest: string,
   nowMs: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -328,13 +328,13 @@ answer (or its failure, as "") is written back so the next call within
 `maxAgeMs` asks nothing.
 
 ```ts
-function releaseCheckCached(
+const releaseCheckCached: (
   base: string,
   current: string,
   cachePath: string,
   maxAgeMs: i64,
   timeoutMs: i32,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="base" type="string" required>
@@ -381,7 +381,7 @@ version that does not parse sorts below every one that does, and two that do
 not parse compare equal.
 
 ```ts
-function releaseCompare(a: string, b: string): i32
+const releaseCompare: (a: string, b: string) => i32
 ```
 
 <scalar-field name="a" type="string" required>
@@ -411,12 +411,12 @@ that tag, never of a branch, and it goes to a file so the caller runs it with
 a directory only this user can write.
 
 ```ts
-function releaseFetchInstaller(
+const releaseFetchInstaller: (
   rawBase: string,
   version: string,
   path: string,
   timeoutMs: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="rawBase" type="string" required>
@@ -456,7 +456,7 @@ is not followed), owned by this process's effective user, and writable by
 neither its group nor every user.
 
 ```ts
-function releaseFileTrusted(path: string): boolean
+const releaseFileTrusted: (path: string) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -478,10 +478,10 @@ version that does not is never newer, and neither is the same release or an
 older one, so the answer never suggests a downgrade.
 
 ```ts
-function releaseIsNewer(
+const releaseIsNewer: (
   candidate: string,
   current: string,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="candidate" type="string" required>
@@ -510,10 +510,10 @@ no token. Null when the server cannot be reached within `timeoutMs`, answers
 anything but a 3xx, or redirects anywhere but a release tag of `base`.
 
 ```ts
-function releaseLatest(
+const releaseLatest: (
   base: string,
   timeoutMs: i32,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="base" type="string" required>
@@ -541,9 +541,9 @@ The newest version, without a `v`, or null.
 it first.
 
 ```ts
-function releaseParseVersion(
+const releaseParseVersion: (
   v: string,
-): ReleaseVersion | null
+) => ReleaseVersion | null
 ```
 
 <scalar-field name="v" type="string" required>
@@ -566,10 +566,10 @@ page, the releases list when there is no release, a query or fragment — names
 none.
 
 ```ts
-function releaseTagFromLocation(
+const releaseTagFromLocation: (
   base: string,
   location: string,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="base" type="string" required>
@@ -598,7 +598,7 @@ never `..`. What it rules out is a version that reaches past the tag in a
 path — a `/`, a `..`, a `?`, a `#`, a `%`, whitespace.
 
 ```ts
-function releaseValidVersion(v: string): boolean
+const releaseValidVersion: (v: string) => boolean
 ```
 
 <scalar-field name="v" type="string" required>

@@ -114,7 +114,7 @@ hash. `""` for a text that is not a number or whose exponent is past
 `JSON_NUMBER_MAX_EXPONENT`. Allocates the answer.
 
 ```ts
-function jsonNumberCanonical(text: string): string
+const jsonNumberCanonical: (text: string) => string
 ```
 
 <scalar-field name="text" type="string" required>
@@ -138,10 +138,7 @@ and `-0` equals `0`. A text that is not a number, or whose exponent is past
 Linear in the two lengths; allocates two small records.
 
 ```ts
-function jsonNumberCompare(
-  a: string,
-  b: string,
-): i32
+const jsonNumberCompare: (a: string, b: string) => i32
 ```
 
 <scalar-field name="a" type="string" required>
@@ -178,10 +175,10 @@ digits plus the gap between the two last digits' exponents, times the
 divisor's digits when it has more than 18.
 
 ```ts
-function jsonNumberMultipleOf(
+const jsonNumberMultipleOf: (
   value: string,
   divisor: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="value" type="string" required>

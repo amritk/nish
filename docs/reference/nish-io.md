@@ -93,7 +93,7 @@ that. It is how a program ends on an unmet invariant, since there is no
 `throw`.
 
 ```ts
-function panic(message: string): never
+const panic: (message: string) => never
 ```
 
 <scalar-field name="message" type="string" required>
@@ -113,7 +113,7 @@ Never: the program has ended.
 `s` to stdout with no trailing newline and no conversion; a statement.
 
 ```ts
-function write(s: string): void
+const write: (s: string) => void
 ```
 
 <scalar-field name="s" type="string" required>
@@ -132,11 +132,11 @@ call. A pipe whose reader has gone raises SIGPIPE natively, as it does for
 the descriptor fixed at 1; under Node the bytes go to `fs.writeSync(1, …)`.
 
 ```ts
-function writeBytes(
+const writeBytes: (
   bytes: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="bytes" type="readonly u8[]" required>
@@ -173,7 +173,7 @@ How many bytes to send.
 `s` to stderr with no trailing newline and no conversion; a statement.
 
 ```ts
-function writeError(s: string): void
+const writeError: (s: string) => void
 ```
 
 <scalar-field name="s" type="string" required>

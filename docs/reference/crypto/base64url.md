@@ -128,9 +128,7 @@ is depends on the length alone; the characters themselves are read by masks
 and judged once, after the last.
 
 ```ts
-function base64StdPadDecode(
-  text: string,
-): u8[] | null
+const base64StdPadDecode: (text: string) => u8[] | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -157,11 +155,11 @@ it lies in the request (RFC 6455 §4.2.1, item 5). A range outside `text`
 panics.
 
 ```ts
-function base64StdPadDecodedLength(
+const base64StdPadDecodedLength: (
   text: u8[],
   start: i32,
   length: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="text" type="u8[]" required>
@@ -195,7 +193,7 @@ nonces, salts and proofs (RFC 5802 §5.1). One `=` closes a final group of
 two bytes, two a group of one. An array longer than 2^31 - 1 bytes panics.
 
 ```ts
-function base64StdPadEncode(data: u8[]): string
+const base64StdPadEncode: (data: u8[]) => string
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -219,13 +217,13 @@ accept key that a server writes for every handshake (RFC 6455 §4.2.2). A
 range outside `data`, or text that does not fit in `out` from `at`, panics.
 
 ```ts
-function base64StdPadEncodeInto(
+const base64StdPadEncodeInto: (
   data: u8[],
   start: i32,
   length: i32,
   out: u8[],
   at: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -275,9 +273,7 @@ character, which splits into three bytes; a short final group of two or
 three characters fills the top of the word and gives one or two.
 
 ```ts
-function base64urlDecode(
-  text: string,
-): u8[] | null
+const base64urlDecode: (text: string) => u8[] | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -304,7 +300,7 @@ waiting — which depends on the position, never on the bytes. An array longer
 than 2^31 - 1 bytes panics.
 
 ```ts
-function base64urlEncode(data: u8[]): string
+const base64urlEncode: (data: u8[]) => string
 ```
 
 <scalar-field name="data" type="u8[]" required>

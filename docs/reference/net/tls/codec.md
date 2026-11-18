@@ -434,9 +434,9 @@ What a server's CertificateVerify signs (§4.4.3), in a fresh array
 (`tlsWriteCertificateVerifyContent`).
 
 ```ts
-function tlsCertificateVerifyContent(
+const tlsCertificateVerifyContent: (
   transcriptHash: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="transcriptHash" type="u8[]" required>
@@ -457,9 +457,7 @@ Whether `scheme` is one the client's `signature_algorithms` offers, the
 only ones a server's CertificateVerify may use (§4.4.3).
 
 ```ts
-function tlsClientOffersScheme(
-  scheme: i32,
-): boolean
+const tlsClientOffersScheme: (scheme: i32) => boolean
 ```
 
 <scalar-field name="scheme" type="i32" required>
@@ -480,9 +478,9 @@ The DER certificates of the Certificate `tlsReadCertificate` last read into
 `view`, leaf first, each a fresh array.
 
 ```ts
-function tlsCopyCertificates(
+const tlsCopyCertificates: (
   view: TlsServerFlightView,
-): u8[][]
+) => u8[][]
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -503,11 +501,11 @@ A copy of `data[at .. at + length)`, which is how a window of a view becomes
 an array of its own that outlives the buffer it was read from.
 
 ```ts
-function tlsCopyWindow(
+const tlsCopyWindow: (
   data: u8[],
   at: i32,
   length: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -539,7 +537,7 @@ A fresh array of `length` bytes; nothing from outside `data` is copied into it.
 A server's Certificate (§4.4.2) in a fresh array (`tlsWriteCertificate`).
 
 ```ts
-function tlsEncodeCertificate(chain: u8[][]): u8[]
+const tlsEncodeCertificate: (chain: u8[][]) => u8[]
 ```
 
 <scalar-field name="chain" type="u8[][]" required>
@@ -559,10 +557,10 @@ The whole message, handshake header included.
 A CertificateVerify (§4.4.3) in a fresh array (`tlsWriteCertificateVerify`).
 
 ```ts
-function tlsEncodeCertificateVerify(
+const tlsEncodeCertificateVerify: (
   scheme: i32,
   signature: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="scheme" type="i32" required>
@@ -588,7 +586,7 @@ The whole message, handshake header included.
 A ClientHello (§4.1.2) in a fresh array (`tlsWriteClientHello`).
 
 ```ts
-function tlsEncodeClientHello(
+const tlsEncodeClientHello: (
   random: u8[],
   sessionId: u8[],
   suites: i32[],
@@ -598,7 +596,7 @@ function tlsEncodeClientHello(
   serverName: string,
   alpn: string[],
   cookie: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="random" type="u8[]" required>
@@ -667,13 +665,13 @@ EncryptedExtensions (§4.3.1) in a fresh array (`tlsWriteEncryptedExtensions`),
 the ALPN protocol given as its bytes.
 
 ```ts
-function tlsEncodeEncryptedExtensions(
+const tlsEncodeEncryptedExtensions: (
   extra: u8[],
   alpn: u8[],
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null,
   recordSizeLimit: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="extra" type="u8[]" required>
@@ -717,7 +715,7 @@ The whole message, handshake header included.
 A Finished (§4.4.4) carrying `verifyData`, in a fresh array (`tlsWriteFinished`).
 
 ```ts
-function tlsEncodeFinished(verifyData: u8[]): u8[]
+const tlsEncodeFinished: (verifyData: u8[]) => u8[]
 ```
 
 <scalar-field name="verifyData" type="u8[]" required>
@@ -738,11 +736,11 @@ A HelloRetryRequest (§4.1.4) choosing `suite`, echoing `sessionId` and
 asking for `group`, in a fresh array (`tlsWriteHelloRetryRequest`).
 
 ```ts
-function tlsEncodeHelloRetryRequest(
+const tlsEncodeHelloRetryRequest: (
   sessionId: u8[],
   suite: i32,
   group: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="sessionId" type="u8[]" required>
@@ -774,13 +772,13 @@ The whole message, handshake header included.
 A NewSessionTicket (§4.6.1) in a fresh array (`tlsWriteNewSessionTicket`).
 
 ```ts
-function tlsEncodeNewSessionTicket(
+const tlsEncodeNewSessionTicket: (
   lifetime: u32,
   ageAdd: u32,
   nonce: u8[],
   ticket: u8[],
   extra: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="lifetime" type="u32" required>
@@ -826,12 +824,12 @@ A ServerHello (§4.1.3) choosing `suite` and TLS 1.3, echoing the client's
 (`tlsWriteServerHello`).
 
 ```ts
-function tlsEncodeServerHello(
+const tlsEncodeServerHello: (
   random: u8[],
   sessionId: u8[],
   suite: i32,
   serverShare: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="random" type="u8[]" required>
@@ -871,13 +869,13 @@ A resumed handshake's ServerHello naming `selectedIdentity`, in a fresh
 array (`tlsWriteServerHelloPsk`).
 
 ```ts
-function tlsEncodeServerHelloPsk(
+const tlsEncodeServerHelloPsk: (
   random: u8[],
   sessionId: u8[],
   suite: i32,
   serverShare: u8[],
   selectedIdentity: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="random" type="u8[]" required>
@@ -925,11 +923,7 @@ answers where they end: how this stack's fixed values, written out where
 they are defined, become bytes without an array of their own.
 
 ```ts
-function tlsHexInto(
-  text: string,
-  out: u8[],
-  at: i32,
-): i32
+const tlsHexInto: (text: string, out: u8[], at: i32) => i32
 ```
 
 <scalar-field name="text" type="string" required>
@@ -961,10 +955,7 @@ Where the first byte goes in `out`.
 Whether `list` holds `value`.
 
 ```ts
-function tlsListHas(
-  list: i32[],
-  value: i32,
-): boolean
+const tlsListHas: (list: i32[], value: i32) => boolean
 ```
 
 <scalar-field name="list" type="i32[]" required>
@@ -992,11 +983,11 @@ its four-byte handshake header — into a fresh `TlsClientHello`, with
 `tlsReadClientHello`'s checks and its `alert`, every field copied out.
 
 ```ts
-function tlsParseClientHello(
+const tlsParseClientHello: (
   data: u8[],
   off: i32,
   len: i32,
-): TlsClientHello
+) => TlsClientHello
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -1032,12 +1023,12 @@ it; an entry with extensions is `unsupported_extension`, because the
 client offers none that a CertificateEntry may carry.
 
 ```ts
-function tlsReadCertificate(
+const tlsReadCertificate: (
   view: TlsServerFlightView,
   data: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -1070,12 +1061,12 @@ Reads a CertificateVerify body (§4.4.3) into `view`: the scheme and the
 signature, neither of them checked here.
 
 ```ts
-function tlsReadCertificateVerify(
+const tlsReadCertificateVerify: (
   view: TlsServerFlightView,
   data: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -1121,12 +1112,12 @@ copied: the windows point into `data`, which must outlive the use made of
 them.
 
 ```ts
-function tlsReadClientHello(
+const tlsReadClientHello: (
   hello: TlsClientHelloView,
   data: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="hello" type="TlsClientHelloView" required>
@@ -1160,12 +1151,12 @@ Reads an EncryptedExtensions body (§4.3.1) into `view`: ALPN, an empty
 sets `extensionAlert`.
 
 ```ts
-function tlsReadEncryptedExtensions(
+const tlsReadEncryptedExtensions: (
   view: TlsServerFlightView,
   data: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -1199,12 +1190,12 @@ the client keeps no tickets, so it reads one only to discard it, but a
 malformed one is still `decode_error`.
 
 ```ts
-function tlsReadNewSessionTicket(
+const tlsReadNewSessionTicket: (
   view: TlsServerFlightView,
   data: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -1239,12 +1230,12 @@ header — into `view`, which tells a HelloRetryRequest from it by its
 or older server answers, which the client refuses for its version.
 
 ```ts
-function tlsReadServerHello(
+const tlsReadServerHello: (
   view: TlsServerFlightView,
   data: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -1280,10 +1271,10 @@ that offered no `pre_shared_key` or did not parse. It walks the lists
 `tlsReadClientHello` checked, and allocates nothing.
 
 ```ts
-function tlsSelectPskIdentity(
+const tlsSelectPskIdentity: (
   hello: TlsClientHelloView,
   index: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="hello" type="TlsClientHelloView" required>
@@ -1311,9 +1302,9 @@ Whether the ServerHello in `view` carries a downgrade sentinel in the last
 `illegal_parameter`.
 
 ```ts
-function tlsServerHelloDowngrade(
+const tlsServerHelloDowngrade: (
   view: TlsServerFlightView,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="view" type="TlsServerFlightView" required>
@@ -1336,12 +1327,12 @@ them. The values are big-endian pairs; a last odd byte, and any part of the
 window outside `data`, is not read.
 
 ```ts
-function tlsWindowHasU16(
+const tlsWindowHasU16: (
   data: u8[],
   at: i32,
   length: i32,
   value: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -1380,11 +1371,11 @@ The bytes of `data[at .. at + length)` as a string of one character a byte:
 ASCII here, a host name.
 
 ```ts
-function tlsWindowString(
+const tlsWindowString: (
   data: u8[],
   at: i32,
   length: i32,
-): string
+) => string
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -1418,11 +1409,11 @@ ends: an empty request context, then each DER certificate of `chain`, leaf
 first, with no extensions of its own.
 
 ```ts
-function tlsWriteCertificate(
+const tlsWriteCertificate: (
   out: u8[],
   at: i32,
   chain: u8[][],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1455,12 +1446,12 @@ Writes a CertificateVerify (§4.4.3) at `out[at]`: the signature scheme and
 the signature as it goes on the wire.
 
 ```ts
-function tlsWriteCertificateVerify(
+const tlsWriteCertificateVerify: (
   out: u8[],
   at: i32,
   scheme: i32,
   signature: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1501,13 +1492,13 @@ and the transcript hash `transcriptHash[off .. off + len)` through
 Certificate.
 
 ```ts
-function tlsWriteCertificateVerifyContent(
+const tlsWriteCertificateVerifyContent: (
   out: u8[],
   at: i32,
   transcriptHash: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1558,7 +1549,7 @@ out when `serverName` is empty), `supported_groups` (`groups`),
 echo of a HelloRetryRequest's, §4.2.2).
 
 ```ts
-function tlsWriteClientHello(
+const tlsWriteClientHello: (
   out: u8[],
   at: i32,
   random: u8[],
@@ -1570,7 +1561,7 @@ function tlsWriteClientHello(
   serverName: string,
   alpn: string[],
   cookie: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1657,7 +1648,7 @@ and the server's own `record_size_limit` (RFC 8449 §4) when
 `recordSizeLimit` is not 0.
 
 ```ts
-function tlsWriteEncryptedExtensions(
+const tlsWriteEncryptedExtensions: (
   out: u8[],
   at: i32,
   extra: u8[],
@@ -1665,7 +1656,7 @@ function tlsWriteEncryptedExtensions(
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null,
   recordSizeLimit: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1721,13 +1712,13 @@ Where the message ends in `out`: `at` plus its length, written or not.
 Writes a Finished (§4.4.4) at `out[at]`, carrying `verifyData[off .. off + len)`.
 
 ```ts
-function tlsWriteFinished(
+const tlsWriteFinished: (
   out: u8[],
   at: i32,
   verifyData: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1774,7 +1765,7 @@ a ServerHello whose `random` is the fixed HelloRetryRequest value, choosing
 `key_share`. No cookie is sent.
 
 ```ts
-function tlsWriteHelloRetryRequest(
+const tlsWriteHelloRetryRequest: (
   out: u8[],
   at: i32,
   sessionId: u8[],
@@ -1782,7 +1773,7 @@ function tlsWriteHelloRetryRequest(
   sessionIdLength: i32,
   suite: i32,
   group: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1843,7 +1834,7 @@ extensions, encoded by the caller and written as they are. The server sends
 none; RFC 8448 §3's ticket carries `early_data`.
 
 ```ts
-function tlsWriteNewSessionTicket(
+const tlsWriteNewSessionTicket: (
   out: u8[],
   at: i32,
   lifetime: u32,
@@ -1855,7 +1846,7 @@ function tlsWriteNewSessionTicket(
   ticketOff: i32,
   ticketLength: i32,
   extra: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1940,7 +1931,7 @@ and x25519 otherwise. The extensions are `key_share` then
 `supported_versions`, the order RFC 8448 §3 shows.
 
 ```ts
-function tlsWriteServerHello(
+const tlsWriteServerHello: (
   out: u8[],
   at: i32,
   random: u8[],
@@ -1949,7 +1940,7 @@ function tlsWriteServerHello(
   sessionIdLength: i32,
   suite: i32,
   serverShare: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -2016,7 +2007,7 @@ Writes the ServerHello of a resumed handshake (§4.1.3, §4.2.11) at
 resumes only in `psk_dhe_ke` and so always sends its share.
 
 ```ts
-function tlsWriteServerHelloPsk(
+const tlsWriteServerHelloPsk: (
   out: u8[],
   at: i32,
   random: u8[],
@@ -2026,7 +2017,7 @@ function tlsWriteServerHelloPsk(
   suite: i32,
   serverShare: u8[],
   selectedIdentity: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>

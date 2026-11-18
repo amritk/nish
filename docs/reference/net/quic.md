@@ -382,7 +382,7 @@ arena block, so issuing an ID keeps nothing (QUIC-3). The scratch and the
 full MAC are wiped before it returns.
 
 ```ts
-function quicConnResetTokenInto(
+const quicConnResetTokenInto: (
   mac: HmacSha256Scratch,
   key: u8[],
   cid: u8[],
@@ -390,7 +390,7 @@ function quicConnResetTokenInto(
   length: i32,
   out: u8[],
   outAt: i32,
-): void
+) => void
 ```
 
 <scalar-field name="mac" type="HmacSha256Scratch" required>
@@ -445,10 +445,10 @@ once the connection is gone, which is what lets a server that lost its
 state end the connection.
 
 ```ts
-function quicStatelessResetToken(
+const quicStatelessResetToken: (
   key: u8[],
   cid: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -477,9 +477,7 @@ The byte a server writes at the start of every connection ID it issues:
 (write nothing) otherwise.
 
 ```ts
-function quicWorkerByte(
-  config: QuicServerConfig,
-): i32
+const quicWorkerByte: (config: QuicServerConfig) => i32
 ```
 
 <scalar-field name="config" type="QuicServerConfig" required>
@@ -502,9 +500,7 @@ steered group (0 <= k < N <= 255). `QuicListener` calls it when it is built,
 before it reads a datagram, so an `Http3Server` panics through its listener.
 
 ```ts
-function quicWorkerCheck(
-  config: QuicServerConfig,
-): void
+const quicWorkerCheck: (config: QuicServerConfig) => void
 ```
 
 <scalar-field name="config" type="QuicServerConfig" required>

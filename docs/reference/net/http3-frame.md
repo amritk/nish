@@ -256,12 +256,12 @@ namespace (`docs/wp26-stdlib.md` §3e).
 Panics unless `[off, off + len)` lies inside `buf`: a window outside its buffer is the program's mistake.
 
 ```ts
-function h3CheckWindow(
+const h3CheckWindow: (
   what: string,
   buf: u8[],
   off: i32,
   len: i32,
-): void
+) => void
 ```
 
 <scalar-field name="what" type="string" required>
@@ -293,7 +293,7 @@ The window's length in bytes; negative panics, and so does an end past `buf.leng
 `count` plus one, saturating at 2^31 - 1: every counter a peer drives.
 
 ```ts
-function h3Count(count: i32): i32
+const h3Count: (count: i32) => i32
 ```
 
 <scalar-field name="count" type="i32" required>
@@ -313,10 +313,7 @@ The counter's current value.
 How many bytes a frame header of `type` and `length` takes.
 
 ```ts
-function h3FrameHeaderSize(
-  type: i64,
-  length: i64,
-): i32
+const h3FrameHeaderSize: (type: i64, length: i64) => i32
 ```
 
 <scalar-field name="type" type="i64" required>
@@ -343,7 +340,7 @@ Whether `value` is one of the `0x1f * N + 0x21` values reserved to exercise the 
 ignored (§7.2.8, §7.2.4.1, §6.2.3).
 
 ```ts
-function h3Greased(value: i64): boolean
+const h3Greased: (value: i64) => boolean
 ```
 
 <scalar-field name="value" type="i64" required>
@@ -364,13 +361,13 @@ True when `value` is 0x21 or above and 0x21 more than a multiple of 0x1f; false 
 Writes a frame header of `type` and `length` at `buf[at]`, before `end`.
 
 ```ts
-function h3PutFrameHeader(
+const h3PutFrameHeader: (
   buf: u8[],
   at: i32,
   end: i32,
   type: i64,
   length: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -417,13 +414,13 @@ CANCEL_PUSH (§7.2.6, §7.2.7, §7.2.3) — at `buf[at]`, before `end`; answers
 the offset past it, or -1.
 
 ```ts
-function h3PutIdFrame(
+const h3PutIdFrame: (
   buf: u8[],
   at: i32,
   end: i32,
   type: i64,
   id: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -473,13 +470,13 @@ not fit, the lists differ in length, or an identifier or a value is no varint. I
 what it is given: refusing a reserved identifier is the reader's job.
 
 ```ts
-function h3PutSettings(
+const h3PutSettings: (
   buf: u8[],
   at: i32,
   end: i32,
   ids: i64[],
   values: i64[],
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -528,12 +525,12 @@ and answers the offset past it, or -1 when it does not fit or no varint
 holds the value.
 
 ```ts
-function h3PutVarint(
+const h3PutVarint: (
   buf: u8[],
   at: i32,
   end: i32,
   value: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -576,12 +573,12 @@ touched). Any type and any length up to 2^62 - 1 is a header; whether the
 type is allowed where it arrived is the stream's question.
 
 ```ts
-function h3ReadFrameHeader(
+const h3ReadFrameHeader: (
   h: Http3FrameHeader,
   buf: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="h" type="Http3FrameHeader" required>
@@ -621,11 +618,11 @@ The identifier a GOAWAY, MAX_PUSH_ID or CANCEL_PUSH payload
 varint, which is H3_FRAME_ERROR (§7.1).
 
 ```ts
-function h3ReadIdPayload(
+const h3ReadIdPayload: (
   buf: u8[],
   off: i32,
   len: i32,
-): i64
+) => i64
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -662,12 +659,12 @@ ends inside a pair (§7.1), or H3_SETTINGS_ERROR for a reserved or repeated
 identifier (§7.2.4).
 
 ```ts
-function h3ReadSettings(
+const h3ReadSettings: (
   s: Http3Settings,
   buf: u8[],
   off: i32,
   len: i32,
-): i64
+) => i64
 ```
 
 <scalar-field name="s" type="Http3Settings" required>
@@ -710,11 +707,7 @@ The varint at `buf[at]`, read only from `buf[at .. end)`, or -1 when it
 does not fit there. Advance past it by `h3VarintLength(buf, at)`.
 
 ```ts
-function h3ReadVarint(
-  buf: u8[],
-  at: i32,
-  end: i32,
-): i64
+const h3ReadVarint: (buf: u8[], at: i32, end: i32) => i64
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -747,7 +740,7 @@ The value, 0 to 2^62 - 1, or -1 when `at` is outside `buf`, `end` is past `buf.l
 Whether `type` is one HTTP/2 used that HTTP/3 reserves, whose receipt is H3_FRAME_UNEXPECTED (§7.2.8).
 
 ```ts
-function h3ReservedHttp2Frame(type: i64): boolean
+const h3ReservedHttp2Frame: (type: i64) => boolean
 ```
 
 <scalar-field name="type" type="i64" required>
@@ -767,7 +760,7 @@ True for 0x02, 0x06, 0x08 and 0x09; false for every other type.
 The length of the varint whose first byte is `buf[at]`.
 
 ```ts
-function h3VarintLength(buf: u8[], at: i32): i32
+const h3VarintLength: (buf: u8[], at: i32) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>

@@ -152,7 +152,7 @@ too. Called outside an `enter` or `enterWith` `f` it is NL2702, and it
 stops the program when no region is entered.
 
 ```ts
-function child<T>(f: () => T): Region<T>
+const child: <T>(f: () => T) => Region<T>
 ```
 
 <scalar-field name="f" type="() =&gt; T" required>
@@ -173,10 +173,10 @@ The handle.
 `child`, with one outside argument handed to `f`.
 
 ```ts
-function childWith<A, T>(
+const childWith: <A, T>(
   arg: A,
   f: (arg: A) => T,
-): Region<T>
+) => Region<T>
 ```
 
 <scalar-field name="arg" type="A" required>
@@ -205,10 +205,7 @@ The handle.
 on a dead, foreign or already-entered handle.
 
 ```ts
-function enter<T, R>(
-  r: Region<T>,
-  f: (root: T) => R,
-): R
+const enter: <T, R>(r: Region<T>, f: (root: T) => R) => R
 ```
 
 <scalar-field name="r" type="Region&lt;T&gt;" required>
@@ -235,11 +232,11 @@ What `f` answers.
 `f(root, arg)`, under `enter`'s rules.
 
 ```ts
-function enterWith<T, A, R>(
+const enterWith: <T, A, R>(
   r: Region<T>,
   arg: A,
   f: (root: T, arg: A) => R,
-): R
+) => R
 ```
 
 <scalar-field name="r" type="Region&lt;T&gt;" required>
@@ -274,7 +271,7 @@ the program on a dead, foreign or entered handle, so freeing twice is a
 panic.
 
 ```ts
-function free<T>(r: Region<T>): void
+const free: <T>(r: Region<T>) => void
 ```
 
 <scalar-field name="r" type="Region&lt;T&gt;" required>
@@ -289,7 +286,7 @@ A new region: `f()` runs with every allocation landing in it, and what it
 answers is the root.
 
 ```ts
-function region<T>(f: () => T): Region<T>
+const region: <T>(f: () => T) => Region<T>
 ```
 
 <scalar-field name="f" type="() =&gt; T" required>
@@ -310,10 +307,10 @@ The handle.
 `region`, with one outside argument handed to `f`.
 
 ```ts
-function regionWith<A, T>(
+const regionWith: <A, T>(
   arg: A,
   f: (arg: A) => T,
-): Region<T>
+) => Region<T>
 ```
 
 <scalar-field name="arg" type="A" required>

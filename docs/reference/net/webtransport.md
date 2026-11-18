@@ -237,7 +237,7 @@ The application code an HTTP/3 `code` carries, or -1 when it is outside the rang
 values.
 
 ```ts
-function wtCodeFromHttp3(code: i64): i64
+const wtCodeFromHttp3: (code: i64) => i64
 ```
 
 <scalar-field name="code" type="i64" required>
@@ -259,7 +259,7 @@ The HTTP/3 code an application's 32-bit `code` is sent as (`WT_FIRST_APP_CODE` +
 the greased values).
 
 ```ts
-function wtCodeToHttp3(code: i64): i64
+const wtCodeToHttp3: (code: i64) => i64
 ```
 
 <scalar-field name="code" type="i64" required>

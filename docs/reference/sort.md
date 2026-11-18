@@ -85,10 +85,10 @@ of two of them, or a sum taken only when it stays below `n`.
 compiles to.
 
 ```ts
-function sortWith<T>(
+const sortWith: <T>(
   xs: T[],
   cmp: (a: T, b: T) => number,
-): T[]
+) => T[]
 ```
 
 <scalar-field name="xs" type="T[]" required>

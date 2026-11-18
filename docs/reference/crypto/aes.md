@@ -236,11 +236,11 @@ four blocks at once. Straight-line code with no branch and no index but
 this one; a caller has no other use for it.
 
 ```ts
-function aesBitslicedRound(
+const aesBitslicedRound: (
   q: u64[],
   rk: u64[],
   at: i32,
-): void
+) => void
 ```
 
 <scalar-field name="q" type="u64[]" required>
@@ -267,10 +267,10 @@ One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or
 `null` for another length.
 
 ```ts
-function aesEncryptBlock(
+const aesEncryptBlock: (
   key: AesKey,
   block: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="AesKey" required>
@@ -302,12 +302,12 @@ The tag is computed over the received ciphertext and compared in constant
 time before anything is decrypted, so a forgery yields no plaintext at all.
 
 ```ts
-function aesGcmOpen(
+const aesGcmOpen: (
   key: AesKey,
   iv: u8[],
   aad: u8[],
   sealed: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="AesKey" required>
@@ -350,12 +350,12 @@ bytes is the fast and usual one. `null` for an empty IV, for a key
 whose sealed form would not fit in an array.
 
 ```ts
-function aesGcmSeal(
+const aesGcmSeal: (
   key: AesKey,
   iv: u8[],
   aad: u8[],
   plaintext: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="AesKey" required>
@@ -398,12 +398,12 @@ tests the one answer. Exported, like `aesBitslicedRound`, so the
 disassembly check's copy can be held to it.
 
 ```ts
-function aesGcmTagMask(
+const aesGcmTagMask: (
   tagHi: u64,
   tagLo: u64,
   gotHi: u64,
   gotLo: u64,
-): u64
+) => u64
 ```
 
 <scalar-field name="tagHi" type="u64" required>
@@ -443,10 +443,10 @@ the 16-byte `sample` encrypted under the header-protection key. `null` for
 a sample of another length.
 
 ```ts
-function aesHeaderMask(
+const aesHeaderMask: (
   key: AesKey,
   sample: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="AesKey" required>
@@ -475,7 +475,7 @@ schedule, bitsliced, and H = E(K, 0^128) for GCM. Any other length — 24
 bytes included, since AES-192 is not offered — answers `null`.
 
 ```ts
-function aesKey(key: u8[]): AesKey | null
+const aesKey: (key: u8[]) => AesKey | null
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -519,10 +519,7 @@ reaches.
 `aesScheduleInto`, and the checks its contract needs are made here.
 
 ```ts
-function aesKeyInto(
-  key: u8[],
-  out: AesKey,
-): boolean
+const aesKeyInto: (key: u8[], out: AesKey) => boolean
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -554,7 +551,7 @@ an all-zero schedule and, its H being zero, opens nothing (`aesGcmOpen`);
 `aesKeyInto` installs a new key into it.
 
 ```ts
-function aesKeyWipe(key: AesKey): void
+const aesKeyWipe: (key: AesKey) => void
 ```
 
 <scalar-field name="key" type="AesKey" required>
@@ -583,11 +580,7 @@ of three 32 × 32 ones from `ghashMul32`. Straight-line code; exported, like
 `aesBitslicedRound`, so the disassembly check's copy can be held to it.
 
 ```ts
-function ghashMultiply(
-  y: u64[],
-  hHi: u64,
-  hLo: u64,
-): void
+const ghashMultiply: (y: u64[], hHi: u64, hLo: u64) => void
 ```
 
 <scalar-field name="y" type="u64[]" required>

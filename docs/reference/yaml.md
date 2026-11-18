@@ -192,10 +192,7 @@ it), and YAML 1.1's booleans (`yes`, `on`) are strings, as 1.2 says.
 The text a map key is matched by in a path and named by in a diagnostic.
 
 ```ts
-function keyText(
-  stream: YamlStream,
-  node: i32,
-): string
+const keyText: (stream: YamlStream, node: i32) => string
 ```
 
 <scalar-field name="stream" type="YamlStream" required>
@@ -224,7 +221,7 @@ A scalar's decoded text (its source text for a number or a boolean, `""` for a n
 Parses a YAML stream with the default options.
 
 ```ts
-function parseYaml(text: string): YamlStream
+const parseYaml: (text: string) => YamlStream
 ```
 
 <scalar-field name="text" type="string" required>
@@ -245,10 +242,10 @@ Parses a YAML stream with options. Panics when `maxDepth` is outside 1 to
 1000.
 
 ```ts
-function parseYamlWith(
+const parseYamlWith: (
   text: string,
   options: YamlOptions,
-): YamlStream
+) => YamlStream
 ```
 
 <scalar-field name="text" type="string" required>
@@ -274,11 +271,11 @@ The documents, nodes and diagnostics the parse found.
 How many steps of a path match (see `pathNode`).
 
 ```ts
-function pathMatch(
+const pathMatch: (
   stream: YamlStream,
   root: i32,
   path: string[],
-): i32
+) => i32
 ```
 
 <scalar-field name="stream" type="YamlStream" required>
@@ -315,11 +312,11 @@ map's own keys win, then the first merged map that has it, and the pair found
 is the one inside that map.
 
 ```ts
-function pathNode(
+const pathNode: (
   stream: YamlStream,
   root: i32,
   path: string[],
-): i32
+) => i32
 ```
 
 <scalar-field name="stream" type="YamlStream" required>
@@ -353,11 +350,11 @@ The node the last matching step reached, as written (an alias is not followed): 
 The last map pair a path steps through (see `pathNode`).
 
 ```ts
-function pathPair(
+const pathPair: (
   stream: YamlStream,
   root: i32,
   path: string[],
-): i32
+) => i32
 ```
 
 <scalar-field name="stream" type="YamlStream" required>
@@ -389,7 +386,7 @@ The pair, or `-1` for none.
 The name of a diagnostic code, for a message or a log line.
 
 ```ts
-function yamlErrorName(code: i32): string
+const yamlErrorName: (code: i32) => string
 ```
 
 <scalar-field name="code" type="i32" required>

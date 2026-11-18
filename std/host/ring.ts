@@ -10,7 +10,7 @@
  *
  *     const INPUT = new Int32Array(2 + 64); // head, tail, then 64 slots
  *
- *     export function tick(): void {
+ *     export const tick = (): void => {
  *       while (ringSize(INPUT) > 0) {
  *         steer(ringShift(INPUT));
  *       }
