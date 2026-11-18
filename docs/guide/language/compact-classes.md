@@ -55,8 +55,9 @@ A compact class whose fields are all 4 bytes or narrower is itself 4-byte
 aligned, so a list cell of an `i32` and one link is 8 bytes. A field of
 `string`, `f64` or `i64` keeps the class at 8.
 
-On `wasm32-wasi` a pointer is already 4 bytes, so the marker changes nothing
-there. A sanitizer build (`NISH_ASAN`) also compiles the class without it.
+On wasm32 a pointer is already 4 bytes, so the marker changes nothing there.
+A page module built for the host with `--emit-dts` runs on the wasm runtime,
+so it keeps full pointers too, and so does a sanitizer build (`NISH_ASAN`).
 Under Node the marker is an empty interface and changes nothing.
 
 ## Where a compact class is refused

@@ -12952,12 +12952,17 @@ if (dealtHere("cryptoChecks")) {
   // tests/link/crypto_bcrypt_batch and the widths one to six of
   // tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
   // WASI: all three build for wasm32 and answer every case there as natively.
-  for (const [program, what] of [
-    ["crypto_bcrypt", "the bcrypt vectors"],
-    ["crypto_bcrypt_batch", "the bcrypt batch"],
-    ["crypto_bcrypt_width", "the bcrypt widths"],
+  // WP48: the compact-class programs build for wasm32 too, where a link stays
+  // a full 32-bit pointer (nothing to compress), and print what they print
+  // natively.
+  for (const [program, what, area] of [
+    ["crypto_bcrypt", "the bcrypt vectors", "bcrypt"],
+    ["crypto_bcrypt_batch", "the bcrypt batch", "bcrypt"],
+    ["crypto_bcrypt_width", "the bcrypt widths", "bcrypt"],
+    ["compact_modules", "the compact classes across modules", "compact"],
+    ["compact_json", "the compact JSON round trip", "compact"],
   ]) {
-    if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
+    if (only && ![program, area, "wasi"].some((name) => name.includes(only))) {
       continue
     }
     if (WASI_SYSROOT && has("wasm-ld")) {
@@ -17226,6 +17231,27 @@ if (dealtHere("runtimeChecks")) {
         debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
       )
     }
+  }
+
+  // ---- A compact class in a host page module (WP48 stage 2a) ----------------------------
+  // An `--emit-dts` compile for the host is a page module: it runs on the wasm
+  // runtime, whose root trace reads each link as a pointer and which reserves
+  // no range. tests/cases/compact_root_page built that way keeps its links as
+  // pointers and names no `@nish_arena_range_abi`.
+  if (!only || "compact page module".includes(only)) {
+    const dir = path.join(buildDir, "compact-page-host")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(
+      NISH,
+      [path.join(casesDir, "compact_root_page.ts"), "-o", `${dir}${path.sep}`, "--emit-dts", path.join(dir, "main.d.ts")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_root_page.ll"), "utf8") : ""
+    check(
+      "compact: a host `--emit-dts` page module keeps a compact class's links as pointers and reserves no range",
+      c.status === 0 && ll.includes("%struct.Node = type { i32, %struct.Node* }") && !ll.includes("nish_arena_range_abi"),
+      c.status !== 0 ? shown(c) : ll.split("\n").filter((line) => line.startsWith("%struct.Node")).join("\n")
+    )
   }
 
   // ---- The io_uring ring layer (WP63 S1): runtime-uring.c from C -------------------------

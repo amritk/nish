@@ -918,9 +918,12 @@ export class Compilation {
       packageName
     )
     checker.ctx.wasm = isWasmBuild(this.opts)
-    checker.ctx.compressLinks = !checker.ctx.wasm && getenv("NISH_ASAN") === null
     checker.ctx.wasmFreestanding = isFreestandingWasmBuild(this.opts)
     checker.ctx.pageModule = buildsPageModule(this.opts)
+    // WP48: a page module runs on the wasm runtime, whose root traces read
+    // each link as a pointer and which reserves no range, so its links stay
+    // full pointers, as on wasm32.
+    checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
     checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals
@@ -4379,7 +4382,6 @@ export class Compilation {
     }
   }
 
-  /** Program-wide attribute analysis, then one IR module per source module. */
   /** Whether a checked module lays out a compact class's links as offsets (`Options.compactLinks`). */
   compressesLinks(): boolean {
     for (const unit of this.modules) {
@@ -4395,6 +4397,7 @@ export class Compilation {
     return false
   }
 
+  /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
     const facts = this.analyze()
     // `--sandbox` confines the program to what `main` reaches, the set the

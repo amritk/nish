@@ -1101,32 +1101,6 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
 }
 
 /**
- * The fields, layout, methods and constructor of a declared struct.
- *
- * **One diagnostic per declaration, however many members are wrong.** The
- * member loops below do not clear `errored`, so the first member to be refused
- * silences the ones after it: `class Pair { first: i32 = "one"; second: i32 =
- * "two"; }` names `first` and says nothing about `second` (#94,
- * `tests/cases/reject_cls_field_init_type_twice`, which fails when this
- * changes).
- *
- * That is the granularity `docs/LANGUAGE.md` states — pass 1 recovers per
- * declaration — and `errored` is how this compiler keeps it. The flag is its
- * error-value unwinding in a language with no `throw` (`context.ts`): cleared
- * per declaration in `checker.ts` and per statement in `statements.ts`, and
- * restored on purpose at the one site that reports and carries on,
- * `instantiateStruct` in `generics.ts`, which is why
- * `reject_generic_expanding_field_twice` gets two diagnostics out of one class
- * body.
- *
- * Clearing it per member would report every refused member instead. That is a
- * change to the language rule rather than a bug fix, so it is made there first,
- * and it is a question of completeness rather than soundness: the program is
- * refused either way. Measured on 2026-09-21, the reset changed the output of
- * none of the 926 programs of the corpus (`docs/wp19-stage0-retirement.md` §5a,
- * item 6), so no gate but the case above would notice it.
- */
-/**
  * Whether `iface`, one entry of a class's `implements` list, names a
  * `nish:compact` marker through this module's import (an `as` rename too).
  */
@@ -1185,6 +1159,32 @@ const compactLayoutFieldMessage = (owner: string, field: string, target: string)
 const compactSecretMessage = (owner: string, field: string): string =>
   `\`${owner}\` implements \`Compact\` and holds the \`Secret\` field \`${field}\`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement \`Compact\`; keep the secret in a class of its own that does not`
 
+/**
+ * The fields, layout, methods and constructor of a declared struct.
+ *
+ * **One diagnostic per declaration, however many members are wrong.** The
+ * member loops below do not clear `errored`, so the first member to be refused
+ * silences the ones after it: `class Pair { first: i32 = "one"; second: i32 =
+ * "two"; }` names `first` and says nothing about `second` (#94,
+ * `tests/cases/reject_cls_field_init_type_twice`, which fails when this
+ * changes).
+ *
+ * That is the granularity `docs/LANGUAGE.md` states — pass 1 recovers per
+ * declaration — and `errored` is how this compiler keeps it. The flag is its
+ * error-value unwinding in a language with no `throw` (`context.ts`): cleared
+ * per declaration in `checker.ts` and per statement in `statements.ts`, and
+ * restored on purpose at the one site that reports and carries on,
+ * `instantiateStruct` in `generics.ts`, which is why
+ * `reject_generic_expanding_field_twice` gets two diagnostics out of one class
+ * body.
+ *
+ * Clearing it per member would report every refused member instead. That is a
+ * change to the language rule rather than a bug fix, so it is made there first,
+ * and it is a question of completeness rather than soundness: the program is
+ * refused either way. Measured on 2026-09-21, the reset changed the output of
+ * none of the 926 programs of the corpus (`docs/wp19-stage0-retirement.md` §5a,
+ * item 6), so no gate but the case above would notice it.
+ */
 export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {
     return

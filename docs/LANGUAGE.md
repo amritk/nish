@@ -10479,8 +10479,11 @@ class Cell implements Compact {
   are all 4 bytes or narrower is 4-aligned and rounded to 4, so `Cell` is 8
   bytes; one with a `string` or an `f64` keeps 8. Its objects are allocated
   in the range and never on the stack.
-- **Where a pointer is already 4 bytes, nothing moves.** On `wasm32-wasi` and
-  under `NISH_ASAN` the marker compiles to the IR the class has without it.
+- **Where a pointer is already 4 bytes, nothing moves.** On wasm32
+  (`--profile wasi`, `--target wasm32`), in a page module built for the host
+  with `--emit-dts` (it runs on the wasm runtime, whose root trace reads each
+  link as a pointer: `compact_root_page`), and under `NISH_ASAN`, the marker
+  compiles to the IR the class has without it.
 - **The marker changes nothing under Node.** It is an interface with no
   members, which type stripping erases from the `implements` clause, so the
   program runs unmodified there.
