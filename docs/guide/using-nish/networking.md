@@ -641,6 +641,30 @@ transfer of one bandwidth-delay product the two finish level. The
 measurement is in
 [the QUIC security record](https://github.com/amritk/nish/blob/main/docs/security/quic.md#congestion-control).
 
+### QUIC and ECN: `arrivalEcn`
+
+`Http3Server` uses Explicit Congestion Notification (ECN) in both
+directions without any setup. It marks its packets ECT(0) wherever the
+platform sends the ECN bits, and halves its window when the client reports
+congestion (CE). Its ACKs also report the bits each client packet arrived
+with: from the first marked packet on, the ACKs of that packet-number space
+are ACK_ECN frames, with ECT(0), ECT(1) and CE counts for the space (RFC 9000
+§13.4.1). A client that validates its own path needs those counts, or it
+stops marking.
+
+A program that drives `QuicListener` itself reads the arrival bits from
+`udpRecvFrom`'s `meta[1]` and sets them on the connection before it hands
+the datagram over:
+
+```ts
+conn.arrivalEcn = meta[1] & 3;
+quicListenerReceiveSegments(conn, buf, 0, n, segment, now);
+```
+
+If `arrivalEcn` stays `0`, which means Not-ECT, the connection counts
+nothing and its ACKs stay plain. That is always the case on macOS, where
+`meta[1]` is always `0`. A packet delivered twice is counted once.
+
 ### Workers that are not restarted
 
 Set `restart` to `false` when something else restarts the service, such as
