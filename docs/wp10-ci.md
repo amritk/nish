@@ -107,21 +107,32 @@ seconds, whatever runner its rows would otherwise take.
 | --- | --- | --- |
 | `nish_cmp` | `nish-cmp` | the compiler (`src/`, `std/`, `runtime/`, `scripts/`, `bin/`, `nish-capabilities.lock.json`) or the corpus (`tests/cases`, `examples`, `docs/cookbook`, `bench`, `tests/parser`, `tests/differential`, `tests/link`, `tests/self`, `tests/nish-cmp.js`, `tests/pool.js`, `tests/driver.c`, `CHANGELOG.md`, `changelog/`) |
 | `elision` | `nish-cmp-elision` | the same as `nish_cmp` |
-| `bootstrap` | `bootstrap` | the compiler, `tests/nish/`, `tests/self/` |
-| `simd`, `sha256_macos`, `fuzz` | `simd-arm64`, `sha256-macos`, `fuzz-smoke` | the compiler, any file directly in `tests/`, `tests/{cases,differential,fix,fuzz,link,nish,self,simd,wipes}/`, `bench/`, `examples/` |
-| `postgres` | `postgres-live` | the compiler, `tests/postgres/`, `bench/techempower/` |
+| `bootstrap` | `bootstrap` | the compiler, `tests/nish/`, `tests/self/`, and `tests/cases/` and `tests/link/` (the built `nish-cli` compiles fixtures from both) |
+| `sha256_macos`, `fuzz` | `sha256-macos`, `fuzz-smoke` | the compiler, any file directly in `tests/`, `tests/{cases,differential,fix,fuzz,link,nish,self,simd,wipes}/`, `bench/`, `examples/` |
+| `simd` | `simd-arm64` | the same as `sha256_macos`, and `docs/LANGUAGE.md` (the `crc32 kernel` section gzips it) |
+| `postgres` | `postgres-live` | the compiler, `tests/self/` (the compiler-cache action), `tests/postgres/`, `bench/techempower/` |
 
 The rule fails closed. A lane is off only when **every** changed path is on that
 lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
 `.claude/`, the top-level prose files and the other lanes' test trees), and
 the read set wins over the allowlist. A path on neither list turns every lane
-on. Each list was checked against an `strace -f` of the files the lane's
-commands open. Every lane runs on:
+on. Each list was read from the code of every command the lane runs, composite
+actions included (`node tests/run.js ci-scope` pins a file per command, 19
+commands across the seven lanes). Some were also traced with `strace -f` on
+x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
+`soundness.js`, the `simd`, `float-corpus`, `sha256_hw`, `runtime_sanitize` and
+five kernel sections of `tests/run.js`, and the four `bench/` checks;
+`fuzz.js --stage1` and `scripts/fuzz.sh --smoke` only up to the build they need.
+`bootstrap.sh --verify`, `tests/nish-cmp.js`, `fuzz.js --emit-ts` and the
+postgres scripts were not traced, and no command was traced on AArch64 or
+macOS. Every lane runs on:
 
-- any event but `pull_request`: a push to `main`, `merge_group`,
-  `workflow_call` (the release) and `workflow_dispatch`;
-- the `ci:full` label, or the `NISH_CI_SCOPE` repository variable set to
-  `full` (the kill switch for every pull request at once);
+- any event other than `pull_request`: a push to `main`, `merge_group` and
+  `workflow_call` (the release);
+- the `ci:full` label (add it, then re-run the workflow: `scope` reads the
+  labels again from the API), or the `NISH_CI_SCOPE` repository variable set
+  to `full` (the kill switch for every pull request at once). Both match
+  without regard to case;
 - a changed-file list that is empty, truncated or cannot be read, a deleted
   file, an unknown status, or a rename that moves a file into or out of a
   lane's read set;
@@ -142,9 +153,13 @@ from `pr-title.yml`. Branch protection is not changed by this workflow.
 `tests/ci-scope/backtest-prs.json` (60 of them, each with the jobs that failed
 on its runs) and fails on a **miss**: a lane it would have skipped whose job
 failed on that pull request. A failure recorded as an infrastructure flake, with
-its log line, is printed as excused. On those 60 it skips 18.4 of the lanes'
-41.6 runner-minutes per pull request run (15.4% of a ~119-minute run), with no
-miss and one excused flake. `node tests/run.js ci-scope` runs the replay and
+its log line, is printed as excused. On those 60 it skips 17.9 of the lanes'
+41.6 runner-minutes per pull request run (15.0% of a ~119-minute run), with no
+miss and one excused flake (#1666's `fuzz-smoke`). That no-miss result is
+evidence only for `nish_cmp`, `fuzz` and the jobs that always run: the 60 hold
+no failure of `bootstrap`, `nish-cmp-elision`, `simd-arm64`, `sha256-macos` or
+`postgres-live`, so for those five lanes the replay shows what they skip, not
+that skipping is safe. `node tests/run.js ci-scope` runs the replay and
 pins every case that must run everything, and `node tests/run.js ci.yml` pins
 the lanes the `test` job delegates to.
 

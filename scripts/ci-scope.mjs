@@ -33,8 +33,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 /**
  * Paths no lane reads. Each entry was checked against the lanes' entry points
- * and the files they import or open (an `strace -f` of every lane command's
- * opens, docs/wp10-ci.md "Scoped lanes"). A lane's own `reads` carve paths back out.
+ * and the files they import or open: read from the code for every command, and
+ * for some also traced with `strace -f` on x86_64 Linux (docs/wp10-ci.md
+ * "Scoped lanes" lists which). A lane's own `reads` carve paths back out.
  */
 const INERT = [
   "docs/**",
@@ -80,8 +81,9 @@ const CORPUS = [
 
 /**
  * What `tests/run.js` opens for the simd, sha256_hw, float-corpus, kernel and
- * runtime_sanitize sections (an `strace -f` of each), plus `scripts/fuzz.sh`'s
- * tests/fuzz. Its top level reads every file directly in tests/.
+ * runtime_sanitize sections (each traced with `strace -f` on x86_64 Linux),
+ * plus `scripts/fuzz.sh`'s tests/fuzz. Its top level reads every file directly
+ * in tests/.
  */
 const RUN_JS = [
   "tests/*",
@@ -100,7 +102,8 @@ const RUN_JS = [
 const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nish-capabilities.lock.json"]
 
 /**
- * The lanes. `jobs` are ci.yml job ids; `minutes` is the runner time the
+ * The lanes. `jobs` are ci.yml job ids and `names` their `name:` templates,
+ * verbatim (tests/run.js pins both against ci.yml); `minutes` is the runner time the
  * lane's rows took on run 44273081341 (the saving a skip buys); `reads` is
  * the lane's read set, which wins over `inert`.
  */
@@ -108,6 +111,8 @@ export const LANES = [
   {
     name: "nish_cmp",
     jobs: ["nish-cmp"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    names: ["nish-cmp (${{ matrix.seed.asset }})"],
     minutes: 14.2,
     // tests/nish-cmp.js, then fuzz.js --stage1 and --emit-ts over the corpus.
     reads: [...COMPILER, ...CORPUS],
@@ -116,6 +121,8 @@ export const LANES = [
   {
     name: "elision",
     jobs: ["nish-cmp-elision"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    names: ["nish-cmp elision (${{ matrix.seed.asset }})"],
     minutes: 7.1,
     // tests/differential/soundness.js over tests/cases and the differential corpus.
     reads: [...COMPILER, ...CORPUS],
@@ -124,24 +131,30 @@ export const LANES = [
   {
     name: "bootstrap",
     jobs: ["bootstrap"],
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched verbatim
+    names: ["bootstrap (${{ matrix.seed.asset }})"],
     minutes: 6.4,
     // scripts/bootstrap.sh --verify, scripts/check-hardening.mjs and the
-    // tests/nish/cli.ts contract. The `test` job's fixed point is delegated
+    // tests/nish/cli.ts contract, whose built binary compiles fixtures from
+    // tests/cases and tests/link. The `test` job's fixed point is delegated
     // here, so this set holds what that check reads (tests/run.js pins it).
-    reads: [...COMPILER, "tests/nish/**", "tests/self/**"],
+    reads: [...COMPILER, "tests/nish/**", "tests/self/**", "tests/cases/**", "tests/link/**"],
     inert: [...INERT, "tests/**", "examples/**", "bench/**", "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "simd",
     jobs: ["simd-arm64"],
+    names: ["the NEON path agrees (aarch64-linux)"],
     minutes: 5.5,
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
-    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
+    // The `crc32 kernel` section's std_compress_gzip_files gzips docs/LANGUAGE.md.
+    reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**", "docs/LANGUAGE.md"],
     inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "sha256_macos",
     jobs: ["sha256-macos"],
+    names: ["SHA-256 on Apple silicon (macos-latest)"],
     minutes: 2.1,
     // tests/simd/sha256*.c, tests/run.js sha256_hw and bench/sha256/run.mjs.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
@@ -150,6 +163,7 @@ export const LANES = [
   {
     name: "fuzz",
     jobs: ["fuzz-smoke"],
+    names: ["fuzz-smoke"],
     minutes: 4.5,
     // scripts/fuzz.sh --smoke (tests/fuzz/**) and tests/run.js runtime_sanitize,
     // which the `test` job delegates here (tests/run.js pins it).
@@ -159,9 +173,12 @@ export const LANES = [
   {
     name: "postgres",
     jobs: ["postgres-live"],
+    names: ["postgres-live"],
     minutes: 1.8,
-    // tests/postgres/live/run.mjs, tls-certs.sh and the bench/techempower servers.
-    reads: [...COMPILER, "tests/postgres/**", "bench/techempower/**"],
+    // .github/actions/compiler-cache (tests/self/compiler-cache.js and
+    // seed.js), tests/postgres/live/run.mjs, tls-certs.sh and the
+    // bench/techempower servers.
+    reads: [...COMPILER, "tests/self/**", "tests/postgres/**", "bench/techempower/**"],
     inert: [...INERT, "tests/**", "examples/**", "bench/**", "CHANGELOG.md", "changelog/**"],
   },
 ]
@@ -238,10 +255,10 @@ export const decide = ({ event, labels = [], mode = "", files, truncated = false
   if (!SCOPED_EVENTS.has(event)) {
     return all(`a ${event || "unknown"} event runs every lane`)
   }
-  if (mode.trim() === "full") {
+  if (mode.trim().toLowerCase() === "full") {
     return all("the NISH_CI_SCOPE variable is `full`")
   }
-  if (labels.includes("ci:full")) {
+  if (labels.some((l) => typeof l === "string" && l.trim().toLowerCase() === "ci:full")) {
     return all("the pull request has the `ci:full` label")
   }
   if (!Array.isArray(files) || files.length === 0) {
@@ -289,13 +306,14 @@ export const decide = ({ event, labels = [], mode = "", files, truncated = false
  * @param {string} repo `owner/name`
  * @param {string} pr the pull request number
  * @param {string} token a token that can read the repository
+ * @param {typeof fetch} [get] the fetch to use (tests pass a fake)
  * @returns {Promise<{files: {path: string, status: string, previous?: string}[], truncated: boolean}>} the files
  */
-const fetchFiles = async (repo, pr, token) => {
+export const fetchFiles = async (repo, pr, token, get = fetch) => {
   const files = []
   // The endpoint lists at most 3000 files, 100 per page.
   for (let page = 1; page <= 30; page++) {
-    const res = await fetch(
+    const res = await get(
       `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`,
       {
         headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json" },
@@ -370,6 +388,25 @@ export const gate = (needs, expectSkip) => {
 }
 
 /**
+ * The lane a job's display name (as the API lists a run's jobs) belongs to,
+ * matched exactly against each lane's `names`, a `${{ ... }}` standing for
+ * one matrix value; null for a job no lane holds.
+ *
+ * @param {string} display the job's display name, e.g. `nish-cmp elision (x86_64-linux)`
+ * @returns {(typeof LANES)[number] | null} the lane, or null
+ */
+export const laneOf = (display) =>
+  LANES.find((lane) =>
+    lane.names.some((name) => {
+      const re = name
+        .split(/\$\{\{.*?\}\}/)
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("[^()]+")
+      return new RegExp(`^${re}$`).test(display)
+    })
+  ) ?? null
+
+/**
  * Replays recorded merged pull requests through `decide`.
  *
  * @param {string} file the backtest data (tests/ci-scope/backtest-prs.json)
@@ -400,7 +437,7 @@ const backtest = (file) => {
       // job, with the log line that shows the cause) is excused and printed.
       for (const run of pr.runs ?? []) {
         for (const job of run.failed ?? []) {
-          if (!lane.jobs.includes(job.split(/[ (]/)[0])) {
+          if (laneOf(job) !== lane) {
             continue
           }
           const line = `#${pr.number} ${job} (run ${run.id})`
@@ -449,7 +486,7 @@ const backtest = (file) => {
  */
 const emit = ({ full, lanes }) => {
   const why = full ?? "every changed path of a skipped lane is on its allowlist of paths it does not read"
-  const lines = [...Object.entries(lanes).map(([k, v]) => `${k}=${v}`), `why=${why.replace(/\n/g, " ")}`]
+  const lines = [...Object.entries(lanes).map(([k, v]) => `${k}=${v}`), `why=${why.replace(/[\r\n]+/g, " ")}`]
   if (process.env.GITHUB_OUTPUT) {
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`)
   }
