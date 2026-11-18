@@ -196,6 +196,13 @@ export class CheckContext {
    */
   compressLinks: boolean
   /**
+   * WP48: the names of every compact class in the compilation, shared by all
+   * its modules' contexts. A module lays out its fields before it binds its
+   * imports, so a link to an imported class is told by name here, not
+   * through `program.struct`. Filled by `Checker.markCompact`.
+   */
+  compactNames: StringSet
+  /**
    * The build is for wasm with no WASI under it (`isFreestandingWasmBuild`),
    * whose runtime has no stdin: `nish:term` reads it to refuse itself there.
    * Set with `wasm`, and false everywhere else.
@@ -395,6 +402,7 @@ export class CheckContext {
     this.strictExports = strictExports
     this.wasm = false
     this.compressLinks = false
+    this.compactNames = new StringSet()
     this.wasmFreestanding = false
     this.pageModule = false
     this.deterministic = false

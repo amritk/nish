@@ -1131,6 +1131,12 @@ export class StructInfo {
    * before any body is checked, and read by `inlineElementStruct`.
    */
   implemented: boolean
+  /**
+   * WP48: a compact class `implements` this interface, so a pointer of this
+   * type may name a block `@nish_alloc_ref` rounded to 4 and promises only
+   * `align 4`. Set in `checkImplements` with `implemented`.
+   */
+  compactImplementer: boolean
   decl: Node
   /** The module that declares it, so an importer can tell it from a re-export. */
   origin: SourceFile
@@ -1224,6 +1230,7 @@ export class StructInfo {
     this.ctor = null
     this.implementsNames = []
     this.implemented = false
+    this.compactImplementer = false
     this.decl = decl
     this.exported = false
     this.poisoned = false

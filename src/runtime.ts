@@ -1793,7 +1793,9 @@ const bumpAllocator = (name: string, align: i32, realign: boolean, attrGroup: st
   lines.push("slow:")
   if (name === "nish_alloc_ref") {
     // Stage 1's ABI symbol, which only the range runtime defines: a module
-    // that makes a compact instance cannot link against the default runtime.
+    // that makes a 4-aligned compact instance cannot link against the default
+    // runtime. One whose compact classes are all 8-aligned never calls
+    // `nish_alloc_ref`, so it does not name the symbol.
     lines.push("  %abi = load volatile i32, i32* @nish_arena_range_abi, align 4")
   }
   lines.push("  %grown = call i8* @nish_arena_grow(i64 %size.aligned)")

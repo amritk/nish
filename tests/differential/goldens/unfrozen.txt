@@ -194,9 +194,11 @@ cases/cls_inline_array_order added after R6: no rewriter to freeze it with
 cases/cls_inline_array_passed added after R6: no rewriter to freeze it with
 cases/cls_inline_array_push added after R6: no rewriter to freeze it with
 cases/cls_literal_methodless added after R6: no rewriter to freeze it with
+cases/compact_copies added after R6: no rewriter to freeze it with
 cases/compact_darwin added after R6: no rewriter to freeze it with
 cases/compact_list added after R6: no rewriter to freeze it with
 cases/compact_no_stack added after R6: no rewriter to freeze it with
+cases/compact_view added after R6: no rewriter to freeze it with
 cases/const_array_numeric added after R6: no rewriter to freeze it with
 cases/const_array_u8 added after R6: no rewriter to freeze it with
 cases/ct_asm_p256 added after R6: no rewriter to freeze it with

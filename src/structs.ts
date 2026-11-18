@@ -165,20 +165,26 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
 /**
  * WP48: whether a field of `type` is a link, a 32-bit offset in this build:
  * `type` is exactly a compact class or that class `| null`, and the build
- * compresses. A generic class's fields stay full pointers, since a field
- * written `T` cannot be told from one written as the class.
+ * compresses. An instantiation's fields follow the same rule as any other
+ * class's: `Holder<Cell>`'s `value: T` is a link, as its implementer's
+ * `value: Cell` is, since an interface parameter reads the implementer's
+ * bytes through the interface's offsets.
  */
 const isLinkType = (ctx: CheckContext, type: i32): boolean =>
   ctx.compressLinks && compactClassOf(ctx, type) !== null
 
-/** The compact class `type` is, alone or `| null`; null for any other type. */
-const compactClassOf = (ctx: CheckContext, type: i32): StructInfo | null => {
+/**
+ * The name of the compact class `type` is, alone or `| null`; null for any
+ * other type. Read from the compilation's shared names, since an imported
+ * class is not yet bound in this module when its fields are laid out.
+ */
+const compactClassOf = (ctx: CheckContext, type: i32): string | null => {
   const inner = ctx.table.stripNull(type)
   if (!ctx.table.isStruct(inner)) {
     return null
   }
-  const target = ctx.program.struct(ctx.table.nameOf(inner))
-  return target !== null && target.compact ? target : null
+  const name = ctx.table.nameOf(inner)
+  return ctx.compactNames.has(name) ? name : null
 }
 
 /**
@@ -201,7 +207,7 @@ export const computeLayout = (ctx: CheckContext, info: StructInfo): i32 => {
   let align = 1
   let used = 0
   for (const field of info.fields) {
-    field.link = !info.layout && info.instance === null && isLinkType(ctx, field.type)
+    field.link = !info.layout && isLinkType(ctx, field.type)
     const need = field.link ? 4 : fieldAlign(ctx.table, field, pointer)
     const width = field.link ? 4 : fieldWidth(ctx.table, field, pointer)
     offset = roundUpTo(offset, need)
@@ -1081,7 +1087,7 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   } else if (!isLayoutScalar(type) && ctx.table.stripNull(type) !== T_CPTR) {
     const target = compactClassOf(ctx, type)
     if (target !== null) {
-      ctx.error(decl.children[1], compactLayoutFieldMessage(owner.name, name, target.name))
+      ctx.error(decl.children[1], compactLayoutFieldMessage(owner.name, name, target))
       return
     }
     ctx.error(
@@ -1396,6 +1402,7 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
     // shared across the modules of a compilation, so marking the one here is
     // what makes every module lay `I[]` out the same way.
     iface.implemented = true
+    iface.compactImplementer = iface.compactImplementer || cls.compact
     let i = 0
     while (i < iface.fields.length) {
       const want = iface.fields[i]

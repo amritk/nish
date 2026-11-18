@@ -181,7 +181,10 @@ const build = (file, exe, { compiler, threads = false }) => {
   if (threads) {
     args.push("--threads")
   }
-  const compiled = run(compiler.cmd, args)
+  // NISH_ASAN tells the compiler this build links the -DNISH_ASAN runtime,
+  // which mallocs every block outside the compact-class range: a compact
+  // class's links stay pointers (WP48).
+  const compiled = run(compiler.cmd, args, { env: { ...process.env, NISH_ASAN: "1" } })
   if (compiled.status !== 0) {
     return { rejected: true, stderr: compiled.stderr }
   }

@@ -226,17 +226,26 @@ export class Checker {
   }
 
   /**
+   * WP48: marks this module's compact classes. The compilation runs it for
+   * every module before any module's pass 1, since a class declared above `R`,
+   * or in a module that imports `R`, may hold an `R` link and lays it out then.
+   */
+  markCompact(): void {
+    for (const info of this.declared) {
+      info.compact = info.compact || declaresCompact(this.ctx, info.decl)
+      if (info.compact) {
+        this.ctx.compactNames.add(info.name)
+      }
+    }
+  }
+
+  /**
    * Pass 1, after `declareNames` and `bindTypeImports`: members and
    * signatures, then the layout checks. A struct that fails at any step is left
    * in the registry so annotations still resolve; it is the diagnostics that
    * stop the compilation, not a missing entry.
    */
   collectSignatures(): void {
-    // WP48: every compact class is marked before any layout is computed, since
-    // a class declared above `R` may hold an `R` link.
-    for (const info of this.declared) {
-      info.compact = info.compact || declaresCompact(this.ctx, info.decl)
-    }
     for (const stmt of this.program.file.children) {
       // Per declaration: stage0 wraps each of these in `sink.recover`, so one
       // rejected class or constant costs its own diagnostic and no more

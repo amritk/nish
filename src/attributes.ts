@@ -1984,6 +1984,14 @@ const pointerAlign = (program: CheckedProgram, table: TypeTable, type: i32): i32
   if (compact !== null && compact.align < 8) {
     return compact.align
   }
+  // An interface a compact class implements may name that class's block.
+  const bare = table.stripNull(type)
+  if (table.isStruct(bare)) {
+    const view = program.struct(table.nameOf(bare))
+    if (view !== null && view.compactImplementer) {
+      return 4
+    }
+  }
   const record = inlineElementStruct(program, table, table.stripNull(type))
   if (record === null || record.align >= 8) {
     return 8

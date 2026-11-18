@@ -17301,6 +17301,78 @@ if (dealtHere("runtimeChecks")) {
     )
   }
 
+  // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
+  // A link is a 32-bit offset in the struct, so `-g` describes the member as
+  // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
+  // debugger would read past the field; the IR verifies.
+  if (!only || "compact debug".includes(only)) {
+    const dir = path.join(buildDir, "compact-debug")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(NISH, [path.join(casesDir, "compact_list.ts"), "-g", "-o", `${dir}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_list.ll"), "utf8") : ""
+    const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
+    const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
+    check(
+      "compact: -g describes Cell.next, a link, as a 32-bit unsigned member at offset 32",
+      member !== null &&
+        member[3] === "32" &&
+        member[4] === "32" &&
+        base !== null &&
+        base[1] === '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+      c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
+    )
+    if (has("opt") && c.status === 0) {
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(dir, "compact_list.ll")])
+      check("compact: opt -passes=verify accepts the -g IR of a compact class", v.status === 0, String(v.stderr))
+    }
+  }
+
+  // ---- A compact class under AddressSanitizer (WP48 stage 2a) ----------------------------
+  // The ASAN runtime (-DNISH_ASAN) mallocs every block and reserves no range,
+  // so an offset could not name one. tests/differential/asan.js runs the
+  // compiler with NISH_ASAN set: tests/cases/compact_list built that way keeps
+  // its links as pointers, and where the toolchain has the sanitizer runtimes
+  // the program runs clean under ASan and prints what it prints elsewhere.
+  if (!only || "compact asan".includes(only)) {
+    const dir = path.join(buildDir, "compact-asan")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const src = path.join(casesDir, "compact_list.ts")
+    const want = fs.readFileSync(path.join(casesDir, "compact_list.out"), "utf8")
+    const c = spawnSync(NISH, [src, "-o", `${dir}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_ASAN: "1" },
+    })
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_list.ll"), "utf8") : ""
+    const bodies = ll.split("\n").filter((line) => /^%struct\.(Cell|Tree) = /.test(line))
+    check(
+      "compact: with NISH_ASAN set, a compact class's links stay pointers and reserve no range",
+      c.status === 0 &&
+        bodies.includes("%struct.Cell = type { i32, %struct.Cell* }") &&
+        bodies.some((line) => line.startsWith("%struct.Tree = ") && !line.includes("i32, i32")) &&
+        !ll.includes("nish_arena_range_abi"),
+      c.status !== 0 ? shown(c) : bodies.join("\n")
+    )
+    const asan = await import("./differential/asan.js")
+    if (!asan.hasAsanRuntime()) {
+      skip("compact asan: clang has no AddressSanitizer runtime here")
+    } else {
+      const res = asan.runUnderAsan(src, { compiler: { label: NISH, cmd: NISH, prefix: [] }, exe: path.join(dir, "asan") })
+      const ll2 = fs.existsSync(path.join(dir, "asan.modules", "compact_list.ll"))
+        ? fs.readFileSync(path.join(dir, "asan.modules", "compact_list.ll"), "utf8")
+        : ""
+      check(
+        "compact: tests/differential/asan.js builds a compact class with pointer links, and it runs clean under ASan",
+        res.kind === "clean" && res.stdout === want && ll2.includes("%struct.Cell = type { i32, %struct.Cell* }"),
+        JSON.stringify({ kind: res.kind, detail: res.detail, error: res.error, stderr: res.stderr, stdout: res.stdout })
+      )
+    }
+  }
+
   // ---- The io_uring ring layer (WP63 S1): runtime-uring.c from C -------------------------
   // tests/runtime/uring-test.c includes the layer and runs one mode a check:
   // an echo server forked over a listener holds the parent's clients in a set
@@ -40942,7 +41014,11 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // fake cell past the arena, or sets an array's len (and cap) to 2^40, then
 // forces a compaction, which must throw a NishPanic and leave the fake's bytes
 // as written. Before the fix the compactor rewrote the fake's field for the
-// first two and walked the len into a bare out-of-bounds trap.
+// first two and walked the len into a bare out-of-bounds trap. A seventh,
+// tests/cases/compact_root_page.ts, is the chain with a class that implements
+// `Compact` (WP48): a page module keeps its links as pointers, and the chain
+// driver's 8 bytes a node fails if the trace or the layout read one as an
+// offset.
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
 // without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
 // union is fine in a page build's `.d.ts` but refused once a C header is asked
@@ -41028,14 +41104,16 @@ if (!only || "persist".includes(only)) {
   } else {
     const dir = path.join(buildDir, "persist")
     fs.rmSync(dir, { recursive: true, force: true })
-    for (const [stem, source, steps, says] of [
+    for (const [stem, source, steps, says, drive] of [
       ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
       ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
+      ["compact", "tests/cases/compact_root_page.ts", "50000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
     ]) {
+      const mode = drive ?? stem
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })
       const compiled = spawnSync(
@@ -41070,13 +41148,13 @@ if (!only || "persist".includes(only)) {
       if (linked.status !== 0) {
         continue
       }
-      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, steps], {
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", mode, path.join(out, `${stem}.mjs`), wasm, steps], {
         cwd: root,
         encoding: "utf8",
       })
       check(
         `persist: ${stem} ${says}`,
-        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: ${steps} steps`),
+        ran.status === 0 && ran.stdout.startsWith(`persist ${mode}: ${steps} steps`),
         shown(ran)
       )
     }

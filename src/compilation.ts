@@ -501,6 +501,8 @@ export class Compilation {
   dumpOnly: boolean
   /** Whether the root manifest's `nish.host` was refused (NL2694-NL2696), which ends the load at the entry. */
   hostRefused: boolean
+  /** WP48: every module's compact class names, shared (`CheckContext.compactNames`). */
+  compactNames: StringSet
   /**
    * The check got as far as the whole-program facts, so `explainMemoryText`
    * can read them even when a later refusal (`--deny-retention`) fails it.
@@ -574,6 +576,7 @@ export class Compilation {
     this.unreadableRoot = ""
     this.hostIdentities = new StringSet()
     this.hostRefused = false
+    this.compactNames = new StringSet()
     this.facts = null
     this.analysisUnits = []
     this.rootPackageDir = ""
@@ -718,6 +721,16 @@ export class Compilation {
           targets.push(index < 0 ? null : this.modules[index].checker.program)
         }
         unit.checker.bindTypeImports(targets)
+      }
+      i = i + 1
+    }
+    // WP48: every module's compact classes are marked before any module lays
+    // out a field: the entry module runs pass 1 first and may hold a link to
+    // a class one of its imports declares.
+    i = first
+    while (i < this.modules.length) {
+      if (!this.modules[i].refused) {
+        this.modules[i].checker.markCompact()
       }
       i = i + 1
     }
@@ -925,6 +938,7 @@ export class Compilation {
     // each link as a pointer and which reserves no range, so its links stay
     // full pointers, as on wasm32.
     checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
+    checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals

@@ -67,7 +67,7 @@ struct LoopFlow (class) size=192 align=8 exported
   field errors: i32 index=23 offset=184
   field active: boolean index=24 offset=188
   constructor -> @LoopFlow.constructor
-struct CheckContext (class) size=344 align=8 exported
+struct CheckContext (class) size=360 align=8 exported
   field table: TypeTable index=0 offset=0
   field program: CheckedProgram index=1 offset=8
   field sink: DiagnosticSink index=2 offset=16
@@ -77,47 +77,48 @@ struct CheckContext (class) size=344 align=8 exported
   field strictExports: boolean index=6 offset=40
   field wasm: boolean index=7 offset=41
   field compressLinks: boolean index=8 offset=42
-  field wasmFreestanding: boolean index=9 offset=43
-  field pageModule: boolean index=10 offset=44
-  field deterministic: boolean index=11 offset=45
-  field sigs: StringMap index=12 offset=48
-  field entryHasMain: boolean index=13 offset=56
-  field peers: CheckContext[] index=14 offset=64
-  field current: FunctionSig | null index=15 offset=72
-  field typeBindings: StringMap index=16 offset=80
-  field functionBindings: FunctionBindings index=17 offset=88
-  field arrowOuterScopes: Scope[] index=18 offset=96
-  field arrowOuterFunctions: FunctionBindings[] index=19 offset=104
-  field pathLocals: Local[] index=20 offset=112
-  field pathRoots: Local[] index=21 offset=120
-  field pathKeys: string[] index=22 offset=128
-  field pathNodes: Node[] index=23 offset=136
-  field thisRoot: Local index=24 offset=144
-  field pathIndexCount: i32 index=25 offset=152
-  field awaitedCall: i32 index=26 offset=156
-  field embeddedRead: i32 index=27 offset=160
-  field arrowFns: FunctionSig[] index=28 offset=168
-  field arrowScopes: Scope[] index=29 offset=176
-  field arrowModes: i32[] index=30 offset=184
-  field currentInstance: Instantiation | null index=31 offset=192
-  field currentStructInstance: StructInstantiation | null index=32 offset=200
-  field constraintsDeferred: boolean index=33 offset=208
-  field deferredConstraints: DeferredConstraint[] index=34 offset=216
-  field reportedOnce: StringSet index=35 offset=224
-  field hygiene: Diagnostic[] index=36 offset=232
-  field pending: Instantiation[] index=37 offset=240
-  field pendingFinish: StructInfo[] index=38 offset=248
-  field exportedLayoutUses: ExportedLayoutUse[] index=39 offset=256
-  field loopKinds: i32[] index=40 offset=264
-  field loopBreaks: boolean[] index=41 offset=272
-  field loopLabels: string[] index=42 offset=280
-  field loopFrames: i32[] index=43 offset=288
-  field switchFrames: SwitchFrame[] index=44 offset=296
-  field flowFrames: LoopFlow[] index=45 offset=304
-  field statementExpression: Node | null index=46 offset=312
-  field awaitStatement: Node | null index=47 offset=320
-  field forOfWalk: Node | null index=48 offset=328
-  field errored: boolean index=49 offset=336
+  field compactNames: StringSet index=9 offset=48
+  field wasmFreestanding: boolean index=10 offset=56
+  field pageModule: boolean index=11 offset=57
+  field deterministic: boolean index=12 offset=58
+  field sigs: StringMap index=13 offset=64
+  field entryHasMain: boolean index=14 offset=72
+  field peers: CheckContext[] index=15 offset=80
+  field current: FunctionSig | null index=16 offset=88
+  field typeBindings: StringMap index=17 offset=96
+  field functionBindings: FunctionBindings index=18 offset=104
+  field arrowOuterScopes: Scope[] index=19 offset=112
+  field arrowOuterFunctions: FunctionBindings[] index=20 offset=120
+  field pathLocals: Local[] index=21 offset=128
+  field pathRoots: Local[] index=22 offset=136
+  field pathKeys: string[] index=23 offset=144
+  field pathNodes: Node[] index=24 offset=152
+  field thisRoot: Local index=25 offset=160
+  field pathIndexCount: i32 index=26 offset=168
+  field awaitedCall: i32 index=27 offset=172
+  field embeddedRead: i32 index=28 offset=176
+  field arrowFns: FunctionSig[] index=29 offset=184
+  field arrowScopes: Scope[] index=30 offset=192
+  field arrowModes: i32[] index=31 offset=200
+  field currentInstance: Instantiation | null index=32 offset=208
+  field currentStructInstance: StructInstantiation | null index=33 offset=216
+  field constraintsDeferred: boolean index=34 offset=224
+  field deferredConstraints: DeferredConstraint[] index=35 offset=232
+  field reportedOnce: StringSet index=36 offset=240
+  field hygiene: Diagnostic[] index=37 offset=248
+  field pending: Instantiation[] index=38 offset=256
+  field pendingFinish: StructInfo[] index=39 offset=264
+  field exportedLayoutUses: ExportedLayoutUse[] index=40 offset=272
+  field loopKinds: i32[] index=41 offset=280
+  field loopBreaks: boolean[] index=42 offset=288
+  field loopLabels: string[] index=43 offset=296
+  field loopFrames: i32[] index=44 offset=304
+  field switchFrames: SwitchFrame[] index=45 offset=312
+  field flowFrames: LoopFlow[] index=46 offset=320
+  field statementExpression: Node | null index=47 offset=328
+  field awaitStatement: Node | null index=48 offset=336
+  field forOfWalk: Node | null index=49 offset=344
+  field errored: boolean index=50 offset=352
   constructor -> @CheckContext.constructor
   method error -> @CheckContext.error
   method errorAtSpan -> @CheckContext.errorAtSpan
@@ -166,22 +167,23 @@ function CheckContext.constructor(this: CheckContext, table: TypeTable, program:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: numberMode program sink strictExports table
   calls: FunctionBindings.constructor Local.constructor StringMap.constructor StringSet.constructor nish_alloc_struct
-  pointer this: size=344 writesThrough=true captured=false
+  pointer this: size=360 writesThrough=true captured=false
   pointer table: size=160 writesThrough=true captured=true
   pointer program: size=912 writesThrough=true captured=true
   pointer sink: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee +0:17 new StringMap -> @StringMap.constructor
-  callee +16:25 new StringMap -> @StringMap.constructor
-  callee +17:29 new FunctionBindings -> @FunctionBindings.constructor
-  callee +24:21 new Local -> @Local.constructor
-  callee +33:25 new StringSet -> @StringSet.constructor
+  callee +0:25 new StringSet -> @StringSet.constructor
+  callee +4:17 new StringMap -> @StringMap.constructor
+  callee +20:25 new StringMap -> @StringMap.constructor
+  callee +21:29 new FunctionBindings -> @FunctionBindings.constructor
+  callee +28:21 new Local -> @Local.constructor
+  callee +37:25 new StringSet -> @StringSet.constructor
 function CheckContext.error(this: CheckContext, node: Node, message: string): void -> @CheckContext.error [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtSpan
   escaping: message
   calls: CheckContext.errorAtSpan
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
@@ -190,7 +192,7 @@ function CheckContext.errorAtSpan(this: CheckContext, start: i32, end: i32, mess
   sharedWrite: +0:5
   escaping: end message start
   calls: DiagnosticSink.report
-  pointer this: size=344 writesThrough=true captured=false
+  pointer this: size=360 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -1:5 DiagnosticSink.report -> @DiagnosticSink.report
 function CheckContext.errorFix(this: CheckContext, node: Node, message: string, edits: Edit[]): void -> @CheckContext.errorFix [exported method]
@@ -198,7 +200,7 @@ function CheckContext.errorFix(this: CheckContext, node: Node, message: string, 
   sharedWrite: +0:5
   escaping: message
   calls: DiagnosticSink.reportFix
-  pointer this: size=344 writesThrough=true captured=false
+  pointer this: size=360 writesThrough=true captured=false
   pointer node: size=40 writesThrough=false captured=false
   pointer edits: size=0 writesThrough=true captured=true passedTo=DiagnosticSink.reportFix#5
   stackSites=0 stackLocals=0
@@ -208,7 +210,7 @@ function CheckContext.performanceFix(this: CheckContext, node: Node, message: st
   sharedWrite: via DiagnosticSink.reportPerformanceFix
   escaping: message
   calls: DiagnosticSink.reportPerformanceFix
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   pointer edits: size=0 writesThrough=true captured=true passedTo=DiagnosticSink.reportPerformanceFix#5
   stackSites=0 stackLocals=0
@@ -217,13 +219,13 @@ function CheckContext.edit(this: CheckContext, start: i32, end: i32, text: strin
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   escaping: end start text
   calls: Edit.constructor nish_alloc_struct
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 new Edit -> @Edit.constructor
 function CheckContext.operatorStart(this: CheckContext, node: Node): i32 -> @CheckContext.operatorStart [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.constructor Lexer.skipTrivia nish_panic_overflow nish_str_eq nish_str_new
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 scan: Lexer (const)
@@ -237,7 +239,7 @@ function CheckContext.errorAtSpecifier(this: CheckContext, node: Node, message: 
   sharedWrite: via CheckContext.error
   escaping: message
   calls: CheckContext.error CheckContext.errorAtSpan nish_panic_index nish_panic_overflow
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtSpan#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtSpan#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:11 text: string (const)
@@ -251,7 +253,7 @@ function CheckContext.errorAtProperty(this: CheckContext, member: Node, message:
   sharedWrite: via CheckContext.errorAtSpan
   escaping: message
   calls: CheckContext.errorAtSpan nish_panic_overflow
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer member: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
@@ -260,7 +262,7 @@ function CheckContext.errorAtKey(this: CheckContext, property: Node, message: st
   sharedWrite: via CheckContext.errorAtSpan
   escaping: message
   calls: CheckContext.errorAtSpan nish_panic_overflow
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer property: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
@@ -269,7 +271,7 @@ function CheckContext.performance(this: CheckContext, node: Node, message: strin
   sharedWrite: via DiagnosticSink.reportPerformance
   escaping: message
   calls: DiagnosticSink.reportPerformance
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
@@ -278,7 +280,7 @@ function CheckContext.deprecation(this: CheckContext, node: Node, message: strin
   sharedWrite: via StringSet.add
   escaping: message
   calls: DiagnosticSink.reportDeprecation StringSet.add StringSet.has nish_str_concat nish_str_from_i32
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 key: string (const)
@@ -290,7 +292,7 @@ function CheckContext.errorOnce(this: CheckContext, node: Node, start: i32, mess
   sharedWrite: +0:7
   escaping: message start
   calls: CheckContext.errorAtSpan StringSet.add StringSet.has nish_str_from_i32
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 key: string (const)
@@ -303,7 +305,7 @@ function CheckContext.errorOnceFix(this: CheckContext, node: Node, message: stri
   sharedWrite: +0:7
   escaping: message
   calls: CheckContext.errorFix StringSet.add StringSet.has nish_str_from_i32
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.errorFix#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.errorFix#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorFix#1
   pointer edits: size=0 writesThrough=true captured=true passedTo=CheckContext.errorFix#3
   stackSites=0 stackLocals=0
@@ -316,7 +318,7 @@ function CheckContext.capturesOuter(this: CheckContext, name: string): boolean -
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FunctionBindings.get Scope.lookup
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 scope: Scope (const)
   callee +1:11 Scope.lookup -> @Scope.lookup
@@ -325,7 +327,7 @@ function CheckContext.capturesOuter(this: CheckContext, name: string): boolean -
 function CheckContext.arrowMode(this: CheckContext): i32 -> @CheckContext.arrowMode [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 depth: i32 (const)
 function CheckContext.errorType(this: CheckContext, node: Node, message: string): i32 -> @CheckContext.errorType [exported method]
@@ -333,27 +335,27 @@ function CheckContext.errorType(this: CheckContext, node: Node, message: string)
   sharedWrite: via CheckContext.error
   escaping: message
   calls: CheckContext.error
-  pointer this: size=344 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer this: size=360 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.error -> @CheckContext.error
 function CheckContext.textOf(this: CheckContext, node: Node): string -> @CheckContext.textOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_panic_index nish_str_concat nish_str_new
-  pointer this: size=344 writesThrough=false captured=false passedTo=CheckContext.textOf#0
+  pointer this: size=360 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 receiver: string (const)
   callee +0:24 CheckContext.textOf -> @CheckContext.textOf
 function CheckContext.numberType(this: CheckContext): i32 -> @CheckContext.numberType [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function CheckContext.signature(this: CheckContext, name: string): FunctionSig | null -> @CheckContext.signature [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.get nish_panic_index
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
@@ -361,7 +363,7 @@ function CheckContext.template(this: CheckContext, name: string): TemplateInfo |
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.template
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 CheckedProgram.template -> @CheckedProgram.template
 function CheckContext.addFunction(this: CheckContext, sig: FunctionSig): void -> @CheckContext.addFunction [exported method]
@@ -369,7 +371,7 @@ function CheckContext.addFunction(this: CheckContext, sig: FunctionSig): void ->
   sharedWrite: +0:5
   escaping: sig
   calls: StringMap.set nish_array_grow
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   pointer sig: size=200 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
@@ -378,12 +380,12 @@ function CheckContext.pushLoop(this: CheckContext, kind: i32, label: string): vo
   sharedWrite: +0:5
   escaping: kind label
   calls: nish_array_grow
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function CheckContext.popLoop(this: CheckContext): boolean -> @CheckContext.popLoop [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_index
-  pointer this: size=344 writesThrough=false captured=false
+  pointer this: size=360 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:11 broke: boolean (const)

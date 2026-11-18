@@ -10493,7 +10493,9 @@ class Cell implements Compact {
   export whose signature holds one (NL4020, `compact_reject_export`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
-  through a full pointer (NL2797, `compact_reject_secret`).
+  through a full pointer (NL2797, `compact_reject_secret`); and as a generic
+  class, whose instantiations keep full-pointer links (NL2798,
+  `compact_reject_generic`).
 
 `Wide` is accepted and changes nothing yet; it is reserved for a class to
 refuse a compact layout the compiler would pick on its own.

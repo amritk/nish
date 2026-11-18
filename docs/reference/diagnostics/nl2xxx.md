@@ -15445,5 +15445,30 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+…` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+[`nl2798_compact_generic.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2798_compact_generic.ts):
+
+```ts
+// WP48: a generic class cannot implement `Compact` yet (NL2798), since its
+// instantiations keep full-pointer links.
+import { Compact } from "nish:compact"
+
+class Gen<T> implements Compact {
+  val: T
+  next: Gen<T> | null = null
+  constructor(val: T) {
+    this.val = val
+  }
+}
+
+export const main = (): i32 => {
+  const g = new Gen<i32>(1)
+  return g.val - 1
+}
+```
+
+```text
+`Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
 ```

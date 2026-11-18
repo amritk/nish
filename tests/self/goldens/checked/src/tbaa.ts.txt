@@ -74,8 +74,8 @@ function buildStructNode(emitter: Emitter, info: StructInfo): string -> @buildSt
   local +1:7 i: i32 (let)
   local +3:11 field: FieldInfo (const)
   callee +7:10 FieldInfo.inline -> @FieldInfo.inline
-  callee +9:32 scalarNode -> @scalarNode
-  callee +13:10 Emitter.metadata -> @Emitter.metadata
+  callee +12:32 scalarNode -> @scalarNode
+  callee +16:10 Emitter.metadata -> @Emitter.metadata
 function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string -> @fieldTbaa [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structNode
