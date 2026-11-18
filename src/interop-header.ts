@@ -196,6 +196,17 @@ const structDefinitions = (compilation: Compilation): string[] => {
       i = i + 1
       continue
     }
+    // WP48: a compact class, and any record with a field narrowed to a link,
+    // holds a 32-bit offset C would read as a pointer, so it is a handle only:
+    // made and read by exported functions, held and passed back by C.
+    if (holdsLink(info)) {
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: it holds a compact link, a 32-bit offset C would read as a pointer */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
+    }
     lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
@@ -220,6 +231,19 @@ const structDefinitions = (compilation: Compilation): string[] => {
   return lines
 }
 
+/** True for a compact class, or a record with a field laid out as a 32-bit link (WP48). */
+const holdsLink = (info: StructInfo): boolean => {
+  if (info.compact) {
+    return true
+  }
+  for (const f of info.fields) {
+    if (f.link) {
+      return true
+    }
+  }
+  return false
+}
+
 /** Every field type of every class and interface, for the `Result` definitions above. */
 const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = []
@@ -227,14 +251,15 @@ const structFieldTypes = (compilation: Compilation): i32[] => {
   const layouts = structsHoldingLayouts(compilation)
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map`, `Set` (WP32), `Secret`, holder or vector holder contributes no field to describe;
+      // An opaque `Map`, `Set` (WP32), `Secret`, holder, vector holder or link holder (WP48) contributes no field to describe;
       // nor does a `declare class`, which the header leaves out, or a record holding one.
       if (
         layouts.has(info.name) ||
         isCollectionStruct(info) ||
         isSecretStruct(info) ||
         secretFieldOf(compilation.table, info) !== null ||
-        vectored.has(info.name)
+        vectored.has(info.name) ||
+        holdsLink(info)
       ) {
         continue
       }
@@ -279,7 +304,16 @@ export const generateHeader = (
   lines.push(" * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }.")
   lines.push(" * An array of records (an interface below) holds them inline, so its data is")
   lines.push(" * a C array of that struct; every other element type is one pointer per")
-  lines.push(" * slot. The comment above each prototype says which. */")
+  lines.push(" * slot. The comment above each prototype says which.")
+  // WP48: a compact program's links count from a range the runtime reserves.
+  if (compilation.opts.compactLinks) {
+    lines.push(" *")
+    lines.push(" * This program has compact classes (WP48): compile runtime/runtime.c with")
+    lines.push(" * -DNISH_ARENA_RANGE=1 (scripts/build.sh --arena-range), the runtime that")
+    lines.push(" * reserves the range their 32-bit links count from. A class that holds a")
+    lines.push(" * link is opaque: C holds it and passes it back to an exported function.")
+  }
+  lines.push(" */")
   lines.push(`#ifndef ${guard}`)
   lines.push(`#define ${guard}`)
   lines.push("")
