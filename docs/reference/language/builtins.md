@@ -1457,12 +1457,14 @@ class Cell implements Compact {
 `docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
 makes a class `R` compact with no marker when five tests hold, asked in
 order: the build is a closed-world native one; some class has a link to `R`;
-narrowing the links takes at least a quarter off `R` itself, after rounding
-(a saving only in a class holding the link does not count); some
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
 `new R(...)` is inside a loop or a recursive function; and nothing forbids it
 (a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
 A smaller saving is left alone: it pays a widening on every link read and the
-4-byte rounding of the range for a few percent of one class.
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
 `--explain-layout` prints each class's verdict, the first test that refuses
 it, and its size now and narrowed (`explain_layout`).
 
