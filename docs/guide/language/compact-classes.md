@@ -103,7 +103,11 @@ A link is stored as a 4-byte offset, so a debugger on its own prints it as a
 number. A `-g` build names the type of each link `ref32 <Class>`, and the
 repository ships a printer for each debugger that shows the link as the
 object it names instead: `null` for an empty link, else a pointer to the
-object, whose fields you can expand. Build with debug info:
+object, whose fields you can expand. The printers are not in the npm
+package: they live in the repository's
+[`tools/`](https://github.com/amritk/nish/tree/main/tools) directory, so run
+the commands below from a checkout of the repository, or give the path to
+your copy of each file. Build with debug info:
 
 ```sh
 nish list.ts -g --link list --profile debug

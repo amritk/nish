@@ -17547,6 +17547,8 @@ if (dealtHere("runtimeChecks")) {
           '            ok = ok and shown == "null"',
           "        else:",
           '            ok = ok and shown.startswith("(Cell *) 0x")',
+          "            # The synthetic children (LinkChildren) are the linked cell's fields.",
+          '            ok = ok and link.GetChildMemberWithName("value").GetValueAsSigned(-1) == want - 1',
           "            cell = ref32.pointer(link.GetNonSyntheticValue())",
           "    process.Kill()",
           "    return ok",

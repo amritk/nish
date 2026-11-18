@@ -34,12 +34,19 @@ def zero_based(target):
 
 
 def offset_of(valobj):
-    return valobj.GetValueAsUnsigned(0) & 0xFFFFFFFF
+    """The stored offset, or None when the link itself cannot be read (optimized out, bad memory)."""
+    error = lldb.SBError()
+    offset = valobj.GetValueAsUnsigned(error, 0)
+    if error.Fail():
+        return None
+    return offset & 0xFFFFFFFF
 
 
 def decode(valobj):
-    """The address a link names, 0 for null, or None when `nish_ref_base` cannot be read."""
+    """The address a link names, 0 for null, or None when the link or `nish_ref_base` cannot be read."""
     offset = offset_of(valobj)
+    if offset is None:
+        return None
     if offset == 0:
         return 0
     target = valobj.GetTarget()
@@ -76,9 +83,13 @@ def pointer(valobj):
 
 
 def summary(valobj, _internal):
-    address = decode(valobj.GetNonSyntheticValue())
+    link = valobj.GetNonSyntheticValue()
+    offset = offset_of(link)
+    if offset is None:
+        return "(link unreadable)"
+    address = decode(link)
     if address is None:
-        return "offset 0x%x (nish_ref_base unreadable)" % offset_of(valobj.GetNonSyntheticValue())
+        return "offset 0x%x (nish_ref_base unreadable)" % offset
     if address == 0:
         return "null"
     pointee = target_type(valobj.GetNonSyntheticValue())
