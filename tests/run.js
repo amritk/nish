@@ -23408,6 +23408,7 @@ if (dealtHere("cliChecks")) {
       "--deny-retention",
       "--emit-arena",
       "--explain-memory",
+      "--explain-layout",
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
@@ -24731,6 +24732,545 @@ if (dealtHere("cliChecks")) {
         shown(ran)
       )
     }
+  }
+
+  // ---- `--explain-layout`: which classes the compact-class rule picks ---------------
+  // The report runs the five tests of docs/roadmap/wp48-ref32-classes.md §3.1 over
+  // every class and prints one line per class: `compact`, or the first test that
+  // refuses it. Nothing in the build reads the verdict yet, so the flag changes no
+  // byte of the IR. Each refusal has a program below that stops at that test and
+  // at no earlier one.
+  if (!only || "explain_layout".includes(only) || "cli".includes(only)) {
+    const layoutDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-layout-"))
+    const layoutOf = (stderr) =>
+      stderr
+        .split("\n")
+        .filter((line) => line.includes(": layout: ") || line.startsWith("explain-layout: "))
+        .join("\n")
+        .split(`${layoutDir}/`)
+        .join("")
+        .split(`${root}/`)
+        .join("")
+    // The three design figures (§3.1): each bench file's linked node class is
+    // picked, at the size the design states. Test 1 passes only for a build that
+    // writes the executable itself (`--link`, or `nish run`), so each is linked.
+    const benchWant = {
+      "bench/goose/tree.ts": [
+        "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
+        "explain-layout: 1 of 1 classes compact",
+      ],
+      "bench/goose/bintrees.ts": [
+        "bench/goose/bintrees.ts:11:7: layout: TNode: compact, 16 → 8 bytes",
+        "explain-layout: 1 of 1 classes compact",
+      ],
+      "bench/wp48-refs/sibling.ts": [
+        "bench/wp48-refs/sibling.ts:13:7: layout: Node: compact, 32 → 20 bytes",
+        "bench/wp48-refs/sibling.ts:26:7: layout: Builder: 2 no link, 16 → 16 bytes",
+        "explain-layout: 1 of 2 classes compact",
+      ],
+    }
+    for (const [file, want] of Object.entries(benchWant)) {
+      const base = path.basename(file, ".ts")
+      const plainLl = path.join(layoutDir, `${base}.ll`)
+      const explainedLl = path.join(layoutDir, `${base}.layout.ll`)
+      const exe = path.join(layoutDir, base)
+      const plain = spawnSync(NISH, [file, "-o", plainLl, "--link", exe], { cwd: root, encoding: "utf8" })
+      const explained = spawnSync(NISH, [file, "-o", explainedLl, "--link", exe, "--explain-layout"], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `explain layout: ${file} matches the golden report`,
+        explained.status === 0 && layoutOf(explained.stderr) === want.join("\n"),
+        `--- expected\n${want.join("\n")}\n--- actual\n${layoutOf(explained.stderr)}\n${shown(explained)}`
+      )
+      check(
+        `explain layout: --explain-layout changes no byte of ${file}'s IR`,
+        plain.status === 0 &&
+          explained.status === 0 &&
+          fs.readFileSync(plainLl, "utf8") === fs.readFileSync(explainedLl, "utf8"),
+        `${shown(plain)}\n${shown(explained)}`
+      )
+    }
+    // A linked class the program makes in a loop, so only test 1 and the
+    // class's own shape can refuse it.
+    const loopNode = [
+      "class W {",
+      "  a: i64",
+      "  b: i64",
+      "  next: W | null",
+      "  constructor() {",
+      "    this.a = 0",
+      "    this.b = 0",
+      "    this.next = null",
+      "  }",
+      "}",
+      "class L {",
+      "  next: L | null = null",
+      "  v: i32 = 0",
+      "}",
+      "export function main(): i32 {",
+      "  let n = 0",
+      "  for (let i = 0; i < 3; i = i + 1) {",
+      "    const w = new W()",
+      "    const l = new L()",
+      "    n = n + (w.next === null ? 1 : 0) + l.v",
+      "  }",
+      "  return n",
+      "}",
+      "",
+    ].join("\n")
+    const layoutCases = [
+      // Test 3: two i64 fields keep W 8-aligned, so a 4-wide link pads back to 24.
+      {
+        name: "test 3, no saving",
+        file: "noSaving.ts",
+        source: loopNode,
+        args: [],
+        want: [
+          "noSaving.ts:1:7: layout: W: 3 no saving, 24 → 24 bytes",
+          "noSaving.ts:11:7: layout: L: compact, 16 → 8 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
+      },
+      // Test 4: made once, outside any loop, in a function that does not reach itself.
+      {
+        name: "test 4, made once",
+        file: "madeOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "const l = new L()",
+          "console.log(`${l.v}`)",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // Test 4 passes through recursion alone: `Chain`'s constructor makes a
+      // `Chain`, so the `new L` in it runs once per level.
+      {
+        name: "test 4, recursion through a constructor",
+        file: "recursive.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Chain {",
+          "  head: L",
+          "  constructor(n: i32) {",
+          "    this.head = new L()",
+          "    if (n > 0) {",
+          "      const c = new Chain(n - 1)",
+          "      this.head.next = c.head",
+          "    }",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  return new Chain(3).head.v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "recursive.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "recursive.ts:5:7: layout: Chain: 2 no link, 8 → 8 bytes",
+          "explain-layout: 1 of 2 classes compact",
+        ],
+      },
+      // Tests 2 and 5: `Holder` links to no class like itself; `P` is a declare
+      // class, whose layout is the foreign side's, and the saving that passed
+      // test 3 is `Holder`'s; `S` holds a Secret, whose wipe the narrowing
+      // must not move.
+      {
+        name: "test 2 and both reasons of test 5",
+        file: "forbidden.ts",
+        source: [
+          'import { Secret, secret, wipe } from "nish:secret"',
+          "declare class P {",
+          "  x: i32",
+          "}",
+          "class Holder {",
+          "  p: P | null = null",
+          "  n: i32 = 0",
+          "}",
+          "class S {",
+          "  next: S | null",
+          "  n: i32",
+          "  readonly k: Secret<u8[]>",
+          "  constructor() {",
+          "    const bytes: u8[] = [1, 2]",
+          "    this.k = secret(bytes)",
+          "    this.next = null",
+          "    this.n = 0",
+          "  }",
+          "  wipe(): void {",
+          "    wipe(this.k)",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  let n = 0",
+          "  for (let i = 0; i < 3; i = i + 1) {",
+          "    const h = new Holder()",
+          "    const s = new S()",
+          "    s.wipe()",
+          "    const p = new P()",
+          "    h.p = p",
+          "    n = n + p.x + h.n + s.n",
+          "  }",
+          "  return n",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "forbidden.ts:2:15: layout: P: 5 forbidden: a declare class, 4 → 4 bytes; Holder saves 16 → 8",
+          "forbidden.ts:5:7: layout: Holder: 2 no link, 16 → 16 bytes",
+          "forbidden.ts:9:7: layout: S: 5 forbidden: holds a Secret in k, 24 → 16 bytes",
+          "explain-layout: 0 of 3 classes compact",
+        ],
+      },
+      // Test 4 through a generic function: each instantiation is its own
+      // function (`build<i32>`), and the call in its body names it as written.
+      {
+        name: "test 4, recursion through a generic function",
+        file: "genericRecursion.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function build<T>(n: i32, x: T): L {",
+          "  const l = new L()",
+          "  if (n > 0) {",
+          "    l.next = build(n - 1, x)",
+          "  }",
+          "  return l",
+          "}",
+          "export function main(): i32 {",
+          "  return build(3, 1).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: ["genericRecursion.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+      },
+      // Its pair: the same generic function with no call to itself makes one `L`
+      // per call from a straight-line `main`, so test 4 still refuses it.
+      {
+        name: "test 4, a generic function that does not reach itself",
+        file: "genericOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function build<T>(n: i32, x: T): L {",
+          "  const l = new L()",
+          "  l.v = n",
+          "  return l",
+          "}",
+          "export function main(): i32 {",
+          "  return build(3, 1).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // The same through `this.m(...)` in a generic class's method: the method
+      // is `Box<i32>.make`, the call `this.make`.
+      {
+        name: "test 4, recursion through a generic class's method",
+        file: "genericMethod.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Box<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "  make(n: i32): L {",
+          "    const l = new L()",
+          "    if (n > 0) {",
+          "      l.next = this.make(n - 1)",
+          "    }",
+          "    return l",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  return new Box<i32>(1).make(3).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: ["genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+      },
+      // Its pair: a generic method that calls another method, not itself.
+      {
+        name: "test 4, a generic class's method that does not reach itself",
+        file: "genericMethodOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Box<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "  make(n: i32): L {",
+          "    const l = new L()",
+          "    l.v = this.size(n)",
+          "    return l",
+          "  }",
+          "  size(n: i32): i32 {",
+          "    return n",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  return new Box<i32>(1).make(3).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // A parameter named like its function shadows it: `walk(n)` calls the
+      // value passed in, which is no edge, so `walk` does not reach itself.
+      {
+        name: "test 4, a parameter shadows the function's name",
+        file: "shadowed.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function walk(walk: (n: i32) => i32, n: i32): i32 {",
+          "  const l = new L()",
+          "  return walk(n) + l.v",
+          "}",
+          "export function main(): i32 {",
+          "  return walk((n: i32): i32 => n, 3)",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+      // So does a local: `walk(n)` calls the `const walk` reference to `same`.
+      {
+        name: "test 4, a local shadows the function's name",
+        file: "shadowedLocal.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function same(m: i32): i32 {",
+          "  return m",
+          "}",
+          "function walk(n: i32): i32 {",
+          "  const l = new L()",
+          "  const walk = same",
+          "  return walk(n) + l.v",
+          "}",
+          "export function main(): i32 {",
+          "  return walk(3)",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
+    ]
+    // Test 1: every build but a closed native link (`src/visibility.ts`) refuses
+    // every class. `--emit-dts` is refused on its own: a native compile still
+    // writes the `.d.ts`, though the loader beside it is for a wasm build. The
+    // wasm32 case writes IR only, as a wasm link needs a WASI sysroot; its
+    // reason is asked before the missing `--link`.
+    for (const [reason, args] of [
+      ["wasm32", ["--target", "wasm32-wasi"]],
+      ["no --link, so a host may link the IR", []],
+      ["--emit-header", ["--emit-header", path.join(layoutDir, "lib.h")]],
+      ["--emit-napi", ["--emit-napi", path.join(layoutDir, "napi.c")]],
+      ["--emit-napi-async", ["--threads", "--emit-napi-async", path.join(layoutDir, "napi-async.c")]],
+      ["--emit-dts", ["--emit-dts", path.join(layoutDir, "lib.d.ts")]],
+    ]) {
+      layoutCases.push({
+        name: `test 1, ${reason}`,
+        file: "notNative.ts",
+        source: loopNode,
+        args,
+        noLink: true,
+        want: [
+          `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 8 bytes`,
+          "explain-layout: 0 of 2 classes compact",
+        ],
+      })
+    }
+    // A `declare function` puts a C library in the link, which may be handed a
+    // class, so even a linked build is not closed. `labs` is libc's, so the
+    // link finds it.
+    layoutCases.push({
+      name: "test 1, a declare function under --link",
+      file: "declared.ts",
+      source: ["declare function labs(n: i64): i64", loopNode].join("\n"),
+      args: [],
+      want: [
+        "declared.ts:2:7: layout: W: 1 native: a declare function, so a C library is in the link, 24 → 24 bytes",
+        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 16 → 8 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
+    // `--emit-ts` writes TypeScript and no IR, so it is not native either. Its
+    // program holds no `i64`, which TypeScript would round.
+    layoutCases.push({
+      name: "test 1, --emit-ts",
+      file: "emitTs.ts",
+      source: [
+        "class L {",
+        "  next: L | null = null",
+        "  v: i32 = 0",
+        "}",
+        "export function main(): i32 {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    n = n + new L().v",
+        "  }",
+        "  return n",
+        "}",
+        "",
+      ].join("\n"),
+      args: ["--emit-ts", path.join(layoutDir, "ts")],
+      noIr: true,
+      noLink: true,
+      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // Each case is built twice, with and without the flag, and its IR compared:
+    // the report changes no byte of it in any test-1 mode.
+    for (const c of layoutCases) {
+      const file = path.join(layoutDir, c.file)
+      fs.writeFileSync(file, c.source)
+      const base = path.basename(c.file, ".ts")
+      const build = (ll, extra) =>
+        spawnSync(
+          NISH,
+          [
+            file,
+            ...(c.noIr ? [] : ["-o", ll]),
+            ...(c.noLink ? [] : ["--link", path.join(layoutDir, base)]),
+            ...c.args,
+            ...extra,
+          ],
+          { cwd: root, encoding: "utf8" }
+        )
+      const r = build(path.join(layoutDir, `${base}.layout.ll`), ["--explain-layout"])
+      check(
+        `explain layout: ${c.name}`,
+        r.status === 0 && layoutOf(r.stderr) === c.want.join("\n"),
+        `--- expected\n${c.want.join("\n")}\n--- actual\n${layoutOf(r.stderr)}\n${shown(r)}`
+      )
+      if (!c.noIr) {
+        const plain = build(path.join(layoutDir, `${base}.ll`), [])
+        check(
+          `explain layout: --explain-layout changes no byte of the IR, ${c.name}`,
+          plain.status === 0 &&
+            r.status === 0 &&
+            fs.readFileSync(path.join(layoutDir, `${base}.ll`), "utf8") ===
+              fs.readFileSync(path.join(layoutDir, `${base}.layout.ll`), "utf8"),
+          `${shown(plain)}\n${shown(r)}`
+        )
+      }
+    }
+    // The usage errors are `--explain-memory`'s: no checked program under
+    // `--emit-ast`, no IR under `--fix`, and diagnostics only under `--json`.
+    const refusedSource = path.join(layoutDir, "refused.ts")
+    fs.writeFileSync(refusedSource, loopNode)
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--explain-layout` reports on a checked program, and --emit-ast stops before the check"],
+      ["--fix", "`--explain-layout` cannot be used with --fix"],
+      ["--json", "`--explain-layout` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      const refused = spawnSync(NISH, [refusedSource, flag, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: --explain-layout with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    // `nish run` refuses the same three, before it builds anything: it takes
+    // neither `--emit-ast` nor `--fix` at all.
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--emit-ast` cannot be used with `nish run`"],
+      ["--fix", "`--fix` cannot be used with `nish run`"],
+      ["--json", "`--explain-layout` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      const refused = spawnSync(NISH, ["run", flag, "--explain-layout", refusedSource], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `explain layout: \`nish run --explain-layout\` with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    check(
+      "explain layout: a refused `--fix` left the source as it was",
+      fs.readFileSync(refusedSource, "utf8") === loopNode,
+      "the source changed"
+    )
+    // `nish run` takes it: the report, then the program.
+    const layoutRun = spawnSync(NISH, ["run", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "explain layout: `nish run --explain-layout` prints the report and runs the program",
+      layoutRun.status === 0 &&
+        layoutRun.stdout === "2097151\n8377899684\n" &&
+        layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
+      shown(layoutRun)
+    )
+    // The capability line stays the last thing on stderr (WP35): the report is
+    // printed ahead of it.
+    const layoutCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const layoutCapsLines = layoutCaps.stderr.trimEnd().split("\n")
+    check(
+      "explain layout: under `nish run --capabilities` the capability line still comes last",
+      layoutCaps.status === 0 &&
+        layoutCaps.stderr.includes("explain-layout: 1 of 1 classes compact") &&
+        layoutCapsLines[layoutCapsLines.length - 1].startsWith("capabilities: "),
+      shown(layoutCaps)
+    )
+    fs.rmSync(layoutDir, { recursive: true, force: true })
   }
 
   // ---- `nish run`: a script built into a cache and started ----------------------------
