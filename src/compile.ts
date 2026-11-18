@@ -493,6 +493,81 @@ const missingToolchain = (asker: string): string => {
   return lines.join("\n")
 }
 
+/**
+ * The first eight bytes of the indexed profile `llvm-profdata merge` writes,
+ * `\xfflprofi\x81`, and of the raw `.profraw` an instrumented binary writes,
+ * `\x81rforpl\xff`. `llvm-profdata show` reads either, so the raw one, which
+ * clang refuses as bad magic deep in the link, is told apart here.
+ */
+const INDEXED_PROFILE_MAGIC: readonly i32[] = [255, 108, 112, 114, 111, 102, 105, 129]
+const RAW_PROFILE_MAGIC: readonly i32[] = [129, 114, 102, 111, 114, 112, 108, 255]
+
+/** Whether `bytes` starts with the eight bytes of `magic`. */
+const startsWithMagic = (bytes: u8[], magic: readonly i32[]): boolean => {
+  if (bytes.length < magic.length) {
+    return false
+  }
+  let i = 0
+  while (i < magic.length) {
+    if (toI32(bytes[i]) !== magic[i]) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/**
+ * Why a `--pgo-generate` or `--pgo-use` line is refused, without the
+ * `compile: ` prefix, or `""`. The flags shape the link, so they need one;
+ * only the speed and size recipes optimise, so only they take a profile; and
+ * a profile is trained on this machine, so the target is the host. A
+ * `--pgo-use` file must be an indexed profile, not a raw `.profraw`.
+ */
+const pgoProblem = (
+  flag: string,
+  generate: boolean,
+  use: string,
+  link: string,
+  profile: string,
+  target: string
+): string => {
+  if (generate && use.length > 0) {
+    return "--pgo-generate and --pgo-use cannot be used together: link the training binary with one, then the optimised one with the other"
+  }
+  if (link.length === 0) {
+    return `${flag} needs --link: it shapes the binary the link builds, and the IR does not change`
+  }
+  if (profile !== "speed" && profile !== "size") {
+    return `${flag} cannot be used with --profile ${profile}: only speed and size optimise, so only they take a profile`
+  }
+  if (target.length > 0) {
+    const host = resolveTarget("host")
+    if (host === null || host.triple !== target) {
+      return `${flag} trains and builds for this machine, and the target is ${target}`
+    }
+  }
+  if (use.length === 0) {
+    return ""
+  }
+  const merge = "write one with `llvm-profdata merge -o <file>.profdata <runs>.profraw`"
+  const real = realpathSync(use)
+  if (real === null) {
+    return `--pgo-use: no profile at \`${use}\`; ${merge}`
+  }
+  if (isDirectorySync(real)) {
+    return `--pgo-use: \`${use}\` is a directory, not a profile; ${merge}`
+  }
+  const bytes = readFileBytesSync(real)
+  if (bytes !== null && startsWithMagic(bytes, RAW_PROFILE_MAGIC)) {
+    return `--pgo-use: \`${use}\` is a raw profile a --pgo-generate binary wrote; merge it first: \`llvm-profdata merge -o <file>.profdata ${use}\``
+  }
+  if (bytes === null || !startsWithMagic(bytes, INDEXED_PROFILE_MAGIC)) {
+    return `--pgo-use: \`${use}\` is not a profile \`llvm-profdata merge\` writes; ${merge}`
+  }
+  return ""
+}
+
 /** The byte that separates the names of one `--allow` or `--deny` value. */
 const COMMA: i32 = 44
 
@@ -719,6 +794,13 @@ const commandMain = (): number => {
   // `--cpu`: empty for the baseline CPU, else CPU_LEVEL. Driver-level like
   // the profile: it changes the link, never a byte of the IR.
   let cpu = ""
+  // `--pgo-generate` and `--pgo-use <file>`: link an instrumented binary, or
+  // one optimised with a merged profile. Driver-level like `--cpu`: the IR
+  // does not move; build.sh puts the flag on every unit and the link.
+  // `pgoUse` is the profile's real path once the line is read, because
+  // build.sh compiles SQLite from inside its own directory.
+  let pgoGenerate = false
+  let pgoUse = ""
   // `--debug-arena`: link the runtime whose arena traps a stale reference.
   // Driver-level like `--cpu`: it changes the runtime, never the IR.
   let debugArena = false
@@ -801,6 +883,19 @@ const commandMain = (): number => {
         console.error(`compile: unknown cpu level \`${cpu}\`; the one accepted is ${CPU_LEVEL}`)
         return 2
       }
+    } else if (value === "--pgo-generate") {
+      notForRun = notForRun.length === 0 ? value : notForRun
+      pgoGenerate = true
+    } else if (value === "--pgo-use") {
+      notForRun = notForRun.length === 0 ? value : notForRun
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error(
+          "compile: --pgo-use needs a profile, the .profdata `llvm-profdata merge` writes from the runs of a --pgo-generate binary"
+        )
+        return 2
+      }
+      pgoUse = process.argv[arg]
     } else if (value === "--target") {
       notForRun = notForRun.length === 0 ? value : notForRun
       irFlag = irFlag.length === 0 ? value : irFlag
@@ -1165,6 +1260,27 @@ const commandMain = (): number => {
     // `--warn-portability` is left alone: it is off unless the line asks.
     warnPerformance = false
   }
+  // After the `run` refusals, which cover both flags under `run` through
+  // `notForRun`, and after the loop, so flag order does not matter. build.sh
+  // lets the last `--pgo-*` win and drops them under debug and wasi; a flag
+  // that does nothing is refused here instead.
+  const pgoFlag = pgoUse.length > 0 ? "--pgo-use" : "--pgo-generate"
+  if (pgoGenerate || pgoUse.length > 0) {
+    const problem = pgoProblem(pgoFlag, pgoGenerate, pgoUse, link, profile, opts.target)
+    if (problem.length > 0) {
+      console.error(`compile: ${problem}`)
+      return 2
+    }
+  }
+  const pgoFlags: string[] = []
+  if (pgoGenerate) {
+    pgoFlags.push("--pgo-generate")
+  } else if (pgoUse.length > 0) {
+    const real = realpathSync(pgoUse)
+    pgoUse = real === null ? pgoUse : real
+    pgoFlags.push("--pgo-use")
+    pgoFlags.push(pgoUse)
+  }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
   if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory || opts.explainLayout)) {
@@ -1334,6 +1450,26 @@ const commandMain = (): number => {
     if (problem.length > 0) {
       reportToolchainFailure(problem, json)
       return 3
+    }
+  }
+  // The `.profraw` files an instrumented binary writes are of no use without
+  // `llvm-profdata merge`, and a profile is read by the LLVM that wrote it, so
+  // the tool is asked for before anything compiles (docs/security/cli.md,
+  // CLI-12). `show` reads the whole profile and refuses one another LLVM
+  // wrote, with the tool's own reason on stderr.
+  if (pgoGenerate || pgoUse.length > 0) {
+    if (programOnPath("llvm-profdata").length === 0) {
+      reportToolchainFailure(
+        `${pgoFlag}: llvm-profdata is not on PATH; a profile-guided build needs it to merge and read profiles. Ubuntu's llvm-18 package installs it as llvm-profdata-18: link that onto PATH as llvm-profdata.`,
+        json
+      )
+      return 3
+    }
+    if (pgoUse.length > 0 && spawnSyncTo(["llvm-profdata", "show", pgoUse], "/dev/null", "") !== 0) {
+      console.error(
+        `compile: --pgo-use: llvm-profdata cannot read \`${pgoUse}\` (above); merge it again with this LLVM`
+      )
+      return 2
     }
   }
 
@@ -1682,6 +1818,7 @@ const commandMain = (): number => {
     arenaRange,
     anyCallsSqlite(emitted),
     "",
+    pgoFlags,
     json,
     false
   )
@@ -2444,6 +2581,7 @@ const buildIntoCache = (
     arenaRange,
     sqlite,
     sqliteLines,
+    [],
     json,
     true
   )
@@ -2476,6 +2614,8 @@ const buildIntoCache = (
  *
  * `irs` is the IR of each of `outputs`, in their order, when the caller wants
  * the module cache (`nish run`), and empty otherwise; see `stageModules`.
+ * `pgo` is `--pgo-generate`, or `--pgo-use` and the profile's real path, for
+ * build.sh, or empty; `nish run` refuses both flags, so it passes none.
  */
 const linkProgram = (
   outputs: string[],
@@ -2490,6 +2630,7 @@ const linkProgram = (
   arenaRange: boolean,
   sqlite: boolean,
   sqliteLines: string,
+  pgo: string[],
   json: boolean,
   quiet: boolean
 ): number => {
@@ -2505,19 +2646,28 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const cached = cachedRuntime(
-    root,
-    quiet ? [] : outputs,
-    profile,
-    cpu,
-    debugInfo,
-    threads,
-    debugArena,
-    arenaRange,
-    sqlite,
-    sqliteLines,
-    json
-  )
+  // A profile-guided link takes nothing from the cache and adds nothing to
+  // it (docs/security/cli.md, CLI-11): the runtime and SQLite entries are
+  // keyed without the profile, so an instrumented object would be handed to
+  // a plain link, and build.sh refuses `--pgo-*` beside cached objects. Every
+  // unit is compiled for this link alone, profile and all. The module cache
+  // is the debug recipe's, which takes no profile.
+  const cached =
+    pgo.length > 0
+      ? new CachedObjects("", "", "")
+      : cachedRuntime(
+          root,
+          quiet ? [] : outputs,
+          profile,
+          cpu,
+          debugInfo,
+          threads,
+          debugArena,
+          arenaRange,
+          sqlite,
+          sqliteLines,
+          json
+        )
   if (cached === null) {
     return 3
   }
@@ -2558,10 +2708,22 @@ const linkProgram = (
   argv.push("-o")
   argv.push(link)
   pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
+  for (const flag of pgo) {
+    argv.push(flag)
+  }
   const status = spawnSync(argv)
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
-    reportToolchainFailure(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`, json)
+    // An instrumented link needs compiler-rt's profile runtime, which
+    // Ubuntu packages apart from clang.
+    const hint =
+      pgo.length > 0 && pgo[0] === "--pgo-generate"
+        ? "; an instrumented link needs compiler-rt's profile runtime (libclang_rt.profile), which Ubuntu installs with libclang-rt-18-dev"
+        : ""
+    reportToolchainFailure(
+      `--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}${hint}`,
+      json
+    )
     return 3
   }
   if (staged !== null) {
