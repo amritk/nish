@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 967
+export const RULE_COUNT: i32 = 968
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -371,6 +371,8 @@ const diagnosticRules = (): string[] => [
   "NL2441",
   "--emit-ts cannot write readable or writable from nish:async: Node has no wait on a descriptor's readiness that a task can await; keep the program native",
   "NL4017",
+  "` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker",
+  "NL2798",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",

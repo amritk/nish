@@ -70,6 +70,9 @@ their code:
   one (NL4020).
 - A `declare class` describes a C struct, so it cannot implement `Compact`
   (NL2795) or hold a field of a compact class (NL2796).
+- A generic class cannot implement `Compact` yet (NL2798): each
+  instantiation is laid out for its type argument, and its links would stay
+  full pointers. Write the class for the one type it holds instead.
 - A compact class holds no `Secret` (NL2797). Keep the secret in a class of
   its own:
 
