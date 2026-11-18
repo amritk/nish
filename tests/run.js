@@ -24922,8 +24922,91 @@ if (dealtHere("cliChecks")) {
           "explain-layout: 0 of 3 classes compact",
         ],
       },
+      // Test 4 through a generic function: each instantiation is its own
+      // function (`build<i32>`), and the call in its body names it as written.
+      {
+        name: "test 4, recursion through a generic function",
+        file: "genericRecursion.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function build<T>(n: i32, x: T): L {",
+          "  const l = new L()",
+          "  if (n > 0) {",
+          "    l.next = build(n - 1, x)",
+          "  }",
+          "  return l",
+          "}",
+          "export function main(): i32 {",
+          "  return build(3, 1).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: ["genericRecursion.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+      },
+      // The same through `this.m(...)` in a generic class's method: the method
+      // is `Box<i32>.make`, the call `this.make`.
+      {
+        name: "test 4, recursion through a generic class's method",
+        file: "genericMethod.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Box<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "  make(n: i32): L {",
+          "    const l = new L()",
+          "    if (n > 0) {",
+          "      l.next = this.make(n - 1)",
+          "    }",
+          "    return l",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  return new Box<i32>(1).make(3).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: ["genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+      },
+      // A parameter named like its function shadows it: `walk(n)` calls the
+      // value passed in, which is no edge, so `walk` does not reach itself.
+      {
+        name: "test 4, a parameter shadows the function's name",
+        file: "shadowed.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function walk(walk: (n: i32) => i32, n: i32): i32 {",
+          "  const l = new L()",
+          "  return walk(n) + l.v",
+          "}",
+          "export function main(): i32 {",
+          "  return walk((n: i32): i32 => n, 3)",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
     ]
     // Test 1: every output that is not a plain native build refuses every class.
+    // `--emit-dts` is refused on its own: a native compile still writes the
+    // `.d.ts`, though the loader beside it is for a wasm build.
     for (const [reason, args] of [
       ["wasm32", ["--target", "wasm32-wasi"]],
       ["--emit-header", ["--emit-header", path.join(layoutDir, "lib.h")]],
@@ -24943,12 +25026,40 @@ if (dealtHere("cliChecks")) {
         ],
       })
     }
+    // `--emit-ts` writes TypeScript and no IR, so it is not native either. Its
+    // program holds no `i64`, which TypeScript would round.
+    layoutCases.push({
+      name: "test 1, --emit-ts",
+      file: "emitTs.ts",
+      source: [
+        "class L {",
+        "  next: L | null = null",
+        "  v: i32 = 0",
+        "}",
+        "export function main(): i32 {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    n = n + new L().v",
+        "  }",
+        "  return n",
+        "}",
+        "",
+      ].join("\n"),
+      args: ["--emit-ts", path.join(layoutDir, "ts")],
+      noIr: true,
+      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
     for (const c of layoutCases) {
       const file = path.join(layoutDir, c.file)
       fs.writeFileSync(file, c.source)
       const r = spawnSync(
         NISH,
-        [file, "-o", path.join(layoutDir, `${path.basename(c.file, ".ts")}.ll`), ...c.args, "--explain-layout"],
+        [
+          file,
+          ...(c.noIr ? [] : ["-o", path.join(layoutDir, `${path.basename(c.file, ".ts")}.ll`)]),
+          ...c.args,
+          "--explain-layout",
+        ],
         { cwd: root, encoding: "utf8" }
       )
       check(
@@ -24986,9 +25097,23 @@ if (dealtHere("cliChecks")) {
     check(
       "explain layout: `nish run --explain-layout` prints the report and runs the program",
       layoutRun.status === 0 &&
-        layoutRun.stdout.length > 0 &&
+        layoutRun.stdout === "2097151\n8377899684\n" &&
         layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
       shown(layoutRun)
+    )
+    // The capability line stays the last thing on stderr (WP35): the report is
+    // printed ahead of it.
+    const layoutCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const layoutCapsLines = layoutCaps.stderr.trimEnd().split("\n")
+    check(
+      "explain layout: under `nish run --capabilities` the capability line still comes last",
+      layoutCaps.status === 0 &&
+        layoutCaps.stderr.includes("explain-layout: 1 of 1 classes compact") &&
+        layoutCapsLines[layoutCapsLines.length - 1].startsWith("capabilities: "),
+      shown(layoutCaps)
     )
     fs.rmSync(layoutDir, { recursive: true, force: true })
   }

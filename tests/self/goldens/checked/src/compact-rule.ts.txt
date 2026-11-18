@@ -18,16 +18,17 @@ struct LayoutModule (class) size=16 align=8 exported
   field program: CheckedProgram index=0 offset=0
   field std: boolean index=1 offset=8
   constructor -> @LayoutModule.constructor
-struct CallNode (class) size=56 align=8
+struct CallNode (class) size=64 align=8
   field key: string index=0 offset=0
   field program: CheckedProgram index=1 offset=8
   field owner: StructInfo | null index=2 offset=16
   field body: Node index=3 offset=24
   field calls: i32[] index=4 offset=32
-  field index: i32 index=5 offset=40
-  field low: i32 index=6 offset=44
-  field onStack: boolean index=7 offset=48
-  field recursive: boolean index=8 offset=49
+  field shadowed: StringMap index=5 offset=40
+  field index: i32 index=6 offset=48
+  field low: i32 index=7 offset=52
+  field onStack: boolean index=8 offset=56
+  field recursive: boolean index=9 offset=57
   constructor -> @CallNode.constructor
 struct MadeSite (class) size=16 align=8
   field info: StructInfo index=0 offset=0
@@ -53,13 +54,15 @@ function LayoutModule.constructor(this: LayoutModule, program: CheckedProgram, s
   pointer program: size=912 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CallNode.constructor(this: CallNode, key: string, program: CheckedProgram, owner: StructInfo | null, body: Node): void -> @CallNode.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: body key owner program
-  pointer this: size=56 writesThrough=true captured=false
+  calls: StringMap.constructor nish_alloc_struct
+  pointer this: size=64 writesThrough=true captured=false
   pointer program: size=912 writesThrough=true captured=true
   pointer owner: size=176 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+  callee +0:21 new StringMap -> @StringMap.constructor
 function MadeSite.constructor(this: MadeSite, info: StructInfo, fn: i32, inLoop: boolean): void -> @MadeSite.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: fn inLoop info
@@ -72,49 +75,86 @@ function CallGraph.constructor(this: CallGraph): void -> @CallGraph.constructor 
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new StringMap -> @StringMap.constructor
+function writtenName(name: string): string -> @writtenName
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText nish_panic_overflow nish_str_index_of nish_str_index_of_from
+  stackSites=1 stackLocals=1
+  local +0:9 out: StringBuilder (const)
+  callee +0:15 new StringBuilder -> @StringBuilder.constructor
+  local +1:7 depth: i32 (let)
+  local +2:7 i: i32 (let)
+  local +4:11 c: i32 (const)
+  callee +10:7 StringBuilder.addChar -> @StringBuilder.addChar
+  callee +14:10 StringBuilder.toText -> @StringBuilder.toText
 function functionKey(sig: FunctionSig): string -> @functionKey
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_concat
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat writtenName
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 origin: SourceFile | null (const)
+  local +1:9 name: string (const)
+  callee +1:16 writtenName -> @writtenName
+function memberKey(owner: StructInfo, member: string): string -> @memberKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  pointer owner: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 instance: StructInstantiation | null (const)
+  local +1:9 name: string (const)
 function functionBodyOf(decl: Node): Node | null -> @functionBodyOf
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function shadowingNames(names: StringMap, node: Node): void -> @shadowingNames
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringMap.set
+  calls: StringMap.set shadowingNames
+  pointer names: size=40 writesThrough=true captured=false passedTo=StringMap.set#0 shadowingNames#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 name: Node (const)
+  callee +2:7 StringMap.set -> @StringMap.set
+  local +5:14 child: Node (const)
+  callee +6:5 shadowingNames -> @shadowingNames
 function collectFunctions(graph: CallGraph, modules: LayoutModule[]): void -> @collectFunctions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CallNode.constructor FunctionSig.foreign StringMap.has StringMap.set functionBodyOf functionKey nish_alloc_struct nish_array_grow
+  calls: CallNode.constructor FunctionSig.foreign StringMap.has StringMap.set functionBodyOf functionKey nish_alloc_struct nish_array_grow shadowingNames
   pointer graph: size=40 writesThrough=false captured=false
   pointer modules: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -16:14 module: LayoutModule (const)
-  local -15:11 program: CheckedProgram (const)
-  local -14:16 sig: FunctionSig (const)
-  local -13:13 origin: SourceFile | null (const)
-  callee -12:59 FunctionSig.foreign -> @FunctionSig.foreign
-  local -9:13 body: Node | null (const)
-  callee -9:20 functionBodyOf -> @functionBodyOf
-  local -5:13 key: string (const)
-  callee -5:19 functionKey -> @functionKey
-  callee -4:11 StringMap.has -> @StringMap.has
-  callee -1:7 StringMap.set -> @StringMap.set
-  callee +0:24 new CallNode -> @CallNode.constructor
-function calleeIndex(graph: CallGraph, program: CheckedProgram, owner: StructInfo | null, callee: Node): i32 -> @calleeIndex
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: StringMap.get functionKey nish_panic_index nish_str_concat nish_str_eq
+  local -18:14 module: LayoutModule (const)
+  local -17:11 program: CheckedProgram (const)
+  local -16:16 sig: FunctionSig (const)
+  local -15:13 origin: SourceFile | null (const)
+  callee -14:59 FunctionSig.foreign -> @FunctionSig.foreign
+  local -11:13 body: Node | null (const)
+  callee -11:20 functionBodyOf -> @functionBodyOf
+  local -7:13 key: string (const)
+  callee -7:19 functionKey -> @functionKey
+  callee -6:11 StringMap.has -> @StringMap.has
+  callee -3:7 StringMap.set -> @StringMap.set
+  local -2:13 node: CallNode (const)
+  callee -2:20 new CallNode -> @CallNode.constructor
+  callee -1:7 shadowingNames -> @shadowingNames
+function calleeIndex(graph: CallGraph, self: CallNode, callee: Node): i32 -> @calleeIndex
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: StringMap.get StringMap.has functionKey memberKey nish_panic_index nish_str_concat nish_str_eq
   pointer graph: size=40 writesThrough=false captured=false
-  pointer program: size=912 writesThrough=false captured=false
-  pointer owner: size=176 writesThrough=false captured=false
+  pointer self: size=64 writesThrough=false captured=false
   pointer callee: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:16 binding: ImportBinding (const)
-  local +1:13 sig: FunctionSig | null (const)
-  callee +3:16 StringMap.get -> @StringMap.get
-  callee +3:32 functionKey -> @functionKey
-  callee +6:12 StringMap.get -> @StringMap.get
-  callee +9:12 StringMap.get -> @StringMap.get
+  local +0:9 program: CheckedProgram (const)
+  local +1:9 owner: StructInfo | null (const)
+  callee +3:9 StringMap.has -> @StringMap.has
+  local +6:16 binding: ImportBinding (const)
+  local +7:13 sig: FunctionSig | null (const)
+  callee +9:16 StringMap.get -> @StringMap.get
+  callee +9:32 functionKey -> @functionKey
+  callee +12:12 StringMap.get -> @StringMap.get
+  callee +15:12 StringMap.get -> @StringMap.get
+  callee +15:28 memberKey -> @memberKey
 function madeClass(program: CheckedProgram, node: Node): StructInfo | null -> @madeClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct nish_panic_index
@@ -127,7 +167,7 @@ function scanBody(graph: CallGraph, fn: i32, node: Node, inLoop: boolean): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: fn inLoop
-  calls: MadeSite.constructor StringMap.get calleeIndex isLoopKind madeClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat scanBody
+  calls: MadeSite.constructor StringMap.get calleeIndex isLoopKind madeClass memberKey nish_alloc_struct nish_array_grow nish_panic_index scanBody
   pointer graph: size=40 writesThrough=false captured=false passedTo=calleeIndex#0 scanBody#0
   pointer node: size=40 writesThrough=false captured=false passedTo=madeClass#1 isLoopKind#0
   stackSites=0 stackLocals=0
@@ -139,6 +179,7 @@ function scanBody(graph: CallGraph, fn: i32, node: Node, inLoop: boolean): void 
   callee +5:24 new MadeSite -> @MadeSite.constructor
   local +6:13 ctor: i32 (const)
   callee +6:20 StringMap.get -> @StringMap.get
+  callee +6:36 memberKey -> @memberKey
   local +12:9 loop: boolean (const)
   callee +12:16 isLoopKind -> @isLoopKind
   local +13:7 i: i32 (let)

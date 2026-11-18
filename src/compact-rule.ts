@@ -7,15 +7,22 @@
 // A class `R` is compact when five tests hold, asked in order, and the first
 // that fails is the reason it is not:
 //
-//   1. the output is a native executable: no wasm32 target, and no sidecar a
-//      host reads the layouts through (`--emit-header`, `--emit-napi`,
-//      `--emit-napi-async`, `--emit-dts`);
+//   1. the output is native: no wasm32 target, no `--emit-ts` (which writes
+//      TypeScript and no IR), and no sidecar a host reads the layouts through
+//      (`--emit-header`, `--emit-napi`, `--emit-napi-async`, `--emit-dts`);
 //   2. some class, `R` included, has a field typed exactly `R` or `R | null`;
 //   3. narrowing those fields to four bytes (`narrowedSize`) shrinks `R` or a
 //      class holding the link, after rounding;
 //   4. some `new R(...)` is lexically inside a loop, or inside a function that
 //      reaches itself through direct calls by name;
 //   5. nothing forbids it: `R` is not a `declare class` and holds no `Secret`.
+//
+// Test 1 counts the IR (`-o x.ll`), an object and an executable alike as
+// native: each is the input or the output of the same native link, and no
+// build mode makes a C library a host links against without a sidecar.
+// `--emit-dts` is refused on its own though the loader it writes is for a wasm
+// build (`rejectRootInWasiLoader`): a native compile still accepts the flag
+// and writes the `.d.ts`, whose reads follow the layouts.
 //
 // Test 5's third clause, "not exported in a C or N-API surface", has no case of
 // its own: a native build hands C a class's layout only through
@@ -27,7 +34,19 @@
 // Test 4 reads the parsed bodies, not the checked ones, because the stage that
 // uses the answer settles layouts before any body is checked
 // (`src/structs.ts`): a call by name to a function, `this.m(...)` in a method
-// and `new C(...)`'s constructor are edges; a call through a value is not.
+// and `new C(...)`'s constructor are edges; a call through a value is not,
+// and neither is a call by a name a parameter or local of the caller shadows.
+// A generic function or method is one node per instantiation (`build<i32>`),
+// and the body names it as written (`build`), so both sides are keyed by the
+// name with its type arguments dropped. Nish has no `static` member and no
+// inheritance (docs/LANGUAGE.md), so `T.m()` and an inherited `this.m()` have
+// no case to cover.
+//
+// A generic class is not reported and makes no class a holder: only a
+// class's own declaration (`info.instance === null`) is asked about. Test 5
+// reads a field's own type (`holdsSecret`): a `Secret<T>`, or an array,
+// nullable or `Result` of one; a field holding a class that holds a `Secret`
+// is not looked into.
 
 import { isLoopKind } from "./escape"
 import { StringMap } from "./map"
@@ -58,6 +77,8 @@ class CallNode {
   body: Node
   /** Indices of the functions this one calls by name. */
   calls: i32[]
+  /** Every parameter and local name declared in it: a call through one of them is a call through a value. */
+  shadowed: StringMap
   /** Tarjan's numbering: the visit order, the lowest it reaches, and whether it is on the stack. */
   index: i32
   low: i32
@@ -71,6 +92,7 @@ class CallNode {
     this.owner = owner
     this.body = body
     this.calls = []
+    this.shadowed = new StringMap()
     this.index = -1
     this.low = -1
     this.onStack = false
@@ -109,10 +131,48 @@ class CallGraph {
   }
 }
 
+/**
+ * `name` without its type arguments: `Box<i32>.pick<string>` is `Box.pick`.
+ * A generic function's instantiations are named with their arguments, and a
+ * call names the template, so both are keyed by what the source wrote.
+ */
+const writtenName = (name: string): string => {
+  if (name.indexOf("<") < 0) {
+    return name
+  }
+  const out = new StringBuilder()
+  let depth = 0
+  let i = 0
+  while (i < name.length) {
+    const c = name.charCodeAt(i)
+    if (c === 60) {
+      depth = depth + 1
+    } else if (c === 62 && depth > 0) {
+      depth = depth - 1
+    } else if (depth === 0) {
+      out.addChar(c)
+    }
+    i = i + 1
+  }
+  return out.toText()
+}
+
 /** The key a function is found by: its module's path and its name as written (`Owner.method` for a member). */
 const functionKey = (sig: FunctionSig): string => {
   const origin = sig.origin
-  return origin === null ? `#${sig.sourceName}` : `${origin.path}#${sig.sourceName}`
+  const name = writtenName(sig.sourceName)
+  return origin === null ? `#${name}` : `${origin.path}#${name}`
+}
+
+/**
+ * The key of `owner`'s member `member`: the class as written, without its type
+ * arguments. A generic class's instance is named by its symbol (`Box$i32`), so
+ * its template gives the written name.
+ */
+const memberKey = (owner: StructInfo, member: string): string => {
+  const instance = owner.instance
+  const name = instance === null ? owner.name : instance.template.sourceName
+  return `${owner.origin.path}#${name}.${member}`
 }
 
 /** The block a declaration's body is: a constructor's second child, any other function's fourth. */
@@ -121,6 +181,24 @@ const functionBodyOf = (decl: Node): Node | null => {
     return decl.children.length > 1 ? decl.children[1] : null
   }
   return decl.children.length > 3 ? decl.children[3] : null
+}
+
+/**
+ * Record in `names` every parameter and variable `node` declares, at any depth
+ * (a nested arrow's included). Over-collecting only drops an edge, which is a
+ * miss the rule allows; keeping a shadowed name would add an edge that is not
+ * there.
+ */
+const shadowingNames = (names: StringMap, node: Node): void => {
+  if ((node.kind === NodeKind.Param || node.kind === NodeKind.VarDecl) && node.children.length > 0) {
+    const name = node.children[0]
+    if (name.kind === NodeKind.Ident) {
+      names.set(name.text, 1)
+    }
+  }
+  for (const child of node.children) {
+    shadowingNames(names, child)
+  }
 }
 
 /** Every function the program's own modules define, once each, with its body. */
@@ -141,19 +219,21 @@ const collectFunctions = (graph: CallGraph, modules: LayoutModule[]): void => {
         continue
       }
       graph.byKey.set(key, graph.nodes.length)
-      graph.nodes.push(new CallNode(key, program, sig.owner, body))
+      const node = new CallNode(key, program, sig.owner, body)
+      shadowingNames(node.shadowed, sig.decl)
+      graph.nodes.push(node)
     }
   }
 }
 
 /** The function `callee` names by itself in `program`: its own, or the one an import binds. */
-const calleeIndex = (
-  graph: CallGraph,
-  program: CheckedProgram,
-  owner: StructInfo | null,
-  callee: Node
-): i32 => {
+const calleeIndex = (graph: CallGraph, self: CallNode, callee: Node): i32 => {
+  const program = self.program
+  const owner = self.owner
   if (callee.kind === NodeKind.Ident) {
+    if (self.shadowed.has(callee.text)) {
+      return -1
+    }
     for (const binding of program.imports) {
       const sig = binding.sig
       if (binding.localName === callee.text && sig !== null) {
@@ -163,7 +243,7 @@ const calleeIndex = (
     return graph.byKey.get(`${program.source.path}#${callee.text}`, -1)
   }
   if (callee.kind === NodeKind.Member && owner !== null && callee.children[0].kind === NodeKind.This) {
-    return graph.byKey.get(`${owner.origin.path}#${owner.name}.${callee.text}`, -1)
+    return graph.byKey.get(memberKey(owner, callee.text), -1)
   }
   return -1
 }
@@ -185,7 +265,7 @@ const madeClass = (program: CheckedProgram, node: Node): StructInfo | null => {
 const scanBody = (graph: CallGraph, fn: i32, node: Node, inLoop: boolean): void => {
   const self = graph.nodes[fn]
   if (node.kind === NodeKind.Call) {
-    const callee = calleeIndex(graph, self.program, self.owner, node.children[0])
+    const callee = calleeIndex(graph, self, node.children[0])
     if (callee >= 0) {
       self.calls.push(callee)
     }
@@ -193,7 +273,7 @@ const scanBody = (graph: CallGraph, fn: i32, node: Node, inLoop: boolean): void 
     const info = madeClass(self.program, node)
     if (info !== null) {
       graph.sites.push(new MadeSite(info, fn, inLoop))
-      const ctor = graph.byKey.get(`${info.origin.path}#${info.name}.constructor`, -1)
+      const ctor = graph.byKey.get(memberKey(info, "constructor"), -1)
       if (ctor >= 0) {
         self.calls.push(ctor)
       }
@@ -299,6 +379,9 @@ const ownClasses = (program: CheckedProgram): StructInfo[] => {
 const notNative = (opts: Options): string => {
   if (isWasmBuild(opts)) {
     return "wasm32"
+  }
+  if (opts.emitTs.length > 0) {
+    return "--emit-ts"
   }
   if (opts.emitHeader.length > 0) {
     return "--emit-header"
