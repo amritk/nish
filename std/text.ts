@@ -73,6 +73,10 @@ const isTextBlankByte = (code: i32): boolean =>
  * function guess at the file's provenance, and a caller that needs it gone can
  * `trimEnd` each line.
  *
+ * Each call allocates a `length`-byte flag buffer and makes one extra scalar
+ * pass over `text` to fill it, before the sixteen-at-a-time scan reads it: a
+ * string has no lane-wise load of its own.
+ *
  * @param text The text to split; an empty one has no lines.
  * @returns A fresh array of the lines, in order.
  */

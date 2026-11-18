@@ -77,6 +77,8 @@ export const main = (): number => {
     "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
     "crlf one\r\ncrlf two\r\ncrlf three\r\n",
     "héllo\nwörld\nĊĊĊĊĊĊĊĊĊĊĊĊĊĊĊĊĊĊ\nünïcödé\n",
+    // A surrogate pair under Node, four bytes natively: neither half is a newline.
+    "a😀\nb",
   ];
   for (let k: i32 = 0; k < named.length; k += 1) {
     const text = named[k];

@@ -11,6 +11,7 @@ text 9: 2 lines, scalar 2
 text 10: 17 lines, scalar 17
 text 11: 3 lines, scalar 3
 text 12: 4 lines, scalar 4
+text 13: 2 lines, scalar 2
 crlf keeps cr: true
 U+010A is not a newline: true
 patterned texts: 147

@@ -2295,6 +2295,14 @@ const DECLARED = [
     changelog: "the X25519 ladder",
     why: "std/crypto/x25519.ts's decode, encode, ladder and multiply are split into helpers the disassembly check reads, so the module every importer of nish/crypto/x25519 writes, and ed25519.ll, which compiles that field arithmetic, gain functions and renumber; no importer's own module moves",
   })),
+  // std/text.ts's splitLines scans a flag buffer sixteen positions at a time
+  // with nish:simd. Listed before the entry below, which also names text.ll,
+  // so this change is the one a moved text.ll is charged to.
+  {
+    file: "text.ll",
+    changelog: "splitLines sixteen positions at a time with nish:simd",
+    why: "std/text.ts's splitLines fills a one-byte-per-position newline flag buffer and scans it with splatU8x16, loadU8x16, eq and bitmask before a scalar tail, so the module every importer of nish/text writes rewrites that function and renumbers after it; no importer's own module moves",
+  },
   // std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd.
   {
     file: "text.ll",
