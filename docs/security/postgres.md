@@ -513,9 +513,13 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   yields to the loop (`sleep(0)`) up to `PG_ASYNC_TURN_YIELDS` (4) times
   while the answer ahead of its own is unread, then parks on its seat's turn
   lane. A done, skip or abandon that leaves a turn come rings the lanes of
-  the seats waiting on that connection in the order their answers come, so
-  seats freed together are each woken in the one loop turn. The yields are bounded, so a stalled server costs four
-  loop turns and then the same park, `claimWaitMs` and cancel as before.
+  the seats waiting on that connection in the order their answers come.
+  Under Linux epoll, which hands back distinct descriptors in the order they
+  became ready, seats freed together are each woken in the one loop turn;
+  the runtime promises only the kernel's order, and kqueue specifies none,
+  so there a seat woken early parks again and costs a turn. The yields are
+  bounded, so a stalled server costs four loop turns and then the same park,
+  `claimWaitMs` and cancel as before.
 - **`pgAsyncRead` grows its buffer only as an answer needs it.** The buffer
   starts the size of the input already read for the answer, then doubles
   (from `PG_ASYNC_INPUT_SIZE` at the least) whenever it is full, clamped to
@@ -530,6 +534,8 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   one whose waits stay within a few lanes holds a few. Under a long queue,
   with every seat waiting its turn, it holds every pair its seats can pick:
   514 descriptors for a pool of 8 or more at `depth` 16, 290 for a pool of 1.
+  The ceiling rose with the turn lanes, from 2 × (`size` + 129): a pool of
+  64 went from 386 to 514, one of 8 from 274 to 514, one of 1 from 260 to 290.
   When no pair can be opened (out of descriptors), a waiter sleeps 1 ms and
   looks again instead of failing.
 - **A pipelined connection is only as fast as its slowest statement

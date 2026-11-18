@@ -245,7 +245,7 @@ const PG_ASYNC_POOL_WAKE: i32 = PG_ASYNC_LANES
 const PG_ASYNC_WAKES: i32 = PG_ASYNC_LANES * 2 + 1
 // What a query reads first; it grows by doubling up to one `maxMessage`.
 const PG_ASYNC_INPUT_SIZE: i32 = 8192
-// Loop turns a seat yields for its turn before it parks on its slot's wake.
+// Loop turns a seat yields for its turn before it parks on its turn lane.
 const PG_ASYNC_TURN_YIELDS: i32 = 4
 // ReadyForQuery's transaction status for "idle", outside any transaction.
 const PG_ASYNC_IDLE: i32 = 73
@@ -1297,10 +1297,12 @@ const pgAsyncReady = (pool: PgAsyncPool, s: i32, except: i32): boolean => {
  * Wakes the seats waiting for their turn on slot `s`, other than `except`'s,
  * when one of them may go on: each on its turn lane, in the order their
  * answers come. A seat whose answer is read wakes the next within the same
- * loop turn only when the runtime runs them in that order, which it does for
- * lanes rung in order; one wake shared by them all ran them in the order
- * they last waited, often the reverse, so seats freed together were freed
- * one a turn.
+ * loop turn only when the loop runs them in that order. The runtime promises
+ * only the kernel's order: Linux epoll hands back distinct descriptors in the
+ * order they became ready, so lanes rung in order run in order there, while
+ * kqueue specifies no order and a seat run early re-parks and costs a turn.
+ * One wake shared by them all ran them in the order they last waited, often
+ * the reverse, so seats freed together were freed one a turn.
  */
 const pgAsyncWakeTurns = (pool: PgAsyncPool, s: i32, except: i32): void => {
   if (!pgAsyncReady(pool, s, except)) {
