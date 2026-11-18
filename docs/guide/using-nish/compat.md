@@ -166,6 +166,8 @@ export const main = (): void => {
 That prints `2`. An element read may sit inside a chain, as in
 `rows?.[i].length ?? -1`: the bounds check runs only when the array is there.
 
+### What stays refused
+
 Two forms stay refused in both dialects, because Node's answer and the
 compiled program's would part. `?.[i]` cannot end a chain (`NL1067`): past the
 end of the array Node answers `undefined`, where Nish's bounds check panics.
