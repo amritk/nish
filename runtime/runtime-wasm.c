@@ -78,6 +78,9 @@ extern unsigned char __heap_base;
  * past 2^32 truncated to the `uintptr_t` `memory.grow` takes: a request of
  * 2^48 bytes grew nothing, claimed 2^48 bytes of capacity, and the next block
  * landed at `buf + off` reduced mod 2^32, on top of live data. */
+/* No compact-class range here (`NISH_ARENA_RANGE`, runtime.c): a wasm
+   module's memory is one 32-bit space already, so this allocator and its
+   bump are unchanged and build.sh never passes the define to this file. */
 void *nish_arena_grow(uint64_t size) {
   if (!nish_arena.buf) {
     uintptr_t base = ((uintptr_t)&__heap_base + 7) & ~(uintptr_t)7;

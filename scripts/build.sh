@@ -100,6 +100,12 @@
 # runtime names it (docs/security/runtime.md, "The debug arena"). The IR is the
 # same either way; `nish --debug-arena` passes it through. Native profiles only.
 #
+# Compact-class range (WP48 stage 1): `--arena-range` compiles the runtime with
+# -DNISH_ARENA_RANGE, which carves arena chunks of 2 MiB or less from one
+# 15 GiB reservation (at [1 GiB, 16 GiB) on Linux) so a compact class's 32-bit
+# reference can name them. There is no user flag: nish passes it when the
+# program has a compact class (docs/wp48-ref32-classes.md). Native profiles only.
+#
 # Debug info (WP10): `-g` compiles every input with -g and skips the strip
 # step of the speed/size/napi profiles, so the DWARF that `nish -g`
 # put in the .ll (line table, variables) reaches the binary. `nish
@@ -169,6 +175,7 @@ pgo=()                                 # -fprofile-generate / -fprofile-use=<fil
 debug=0                                # -g: keep DWARF (nish -g emits it in the IR; runtime.c gets it here)
 threads=0                              # --threads: -DNISH_THREADS, the thread-local arena (WP20 T0)
 debug_arena=0                          # --debug-arena: -DNISH_ARENA_DEBUG, the arena that traps a stale reference
+arena_range=0                          # --arena-range: -DNISH_ARENA_RANGE, the compact-class range (WP48)
 objects_to=""                          # --runtime-objects <dir>: compile the runtime alone, into <dir>
 objects_from=""                        # --runtime-from <dir>: link against the runtime compiled there
 cpu=""                                 # --cpu x86-64-v3: the one CPU level above the baseline (WP38 S2)
@@ -185,6 +192,7 @@ while [ $# -gt 0 ]; do
     -g) debug=1; shift ;;
     --threads) threads=1; shift ;;
     --debug-arena) debug_arena=1; shift ;;
+    --arena-range) arena_range=1; shift ;;
     --cpu)
       [ -n "${2-}" ] || { echo "error: --cpu needs a level; the one taken is x86-64-v3" >&2; exit 2; }
       cpu="$2"; shift 2 ;;
@@ -217,6 +225,11 @@ fi
 if [ "$debug_arena" = 1 ]; then
   case "$profile" in
     wasm|wasm-host|wasi|napi) echo "error: --debug-arena maps pages and catches SIGSEGV, so the $profile profile does not take it" >&2; exit 2 ;;
+  esac
+fi
+if [ "$arena_range" = 1 ]; then
+  case "$profile" in
+    wasm|wasm-host|wasi|napi) echo "error: --arena-range reserves a fixed address range, so the $profile profile does not take it" >&2; exit 2 ;;
   esac
 fi
 if [ -n "$memory_mib" ] || [ -n "$inline_to" ]; then
@@ -533,6 +546,7 @@ if [ "$threads" = 1 ]; then
   tls=(-DNISH_THREADS=1 -ftls-model=initial-exec)
 fi
 if [ "$debug_arena" = 1 ]; then common+=(-DNISH_ARENA_DEBUG=1); fi
+if [ "$arena_range" = 1 ]; then common+=(-DNISH_ARENA_RANGE=1); fi
 
 # What the speed and size profiles compile every input with, beside `common`.
 # One list per profile, because the runtime cache below compiles with exactly

@@ -252,6 +252,35 @@ const RUNTIME_OS_TEXT_BUDGET = 5888
  */
 const RUNTIME_THREADS_TEXT_BUDGET = 2300
 /**
+ * Ceilings on the sum of the `.text*` sections of `clang -Oz -DNISH_ARENA_RANGE=1 -c
+ * runtime/runtime.c`, alone and with `-DNISH_THREADS=1`: the compact-class runtime of
+ * WP48 stage 1 (docs/wp48-ref32-classes.md §3.3), which `scripts/build.sh --arena-range`
+ * links only for a program with a compact class. It adds the reservation of the 15 GiB
+ * range before main, the power-of-two classes from 4 KiB to 2 MiB with a free list each
+ * under one lock, the exhaustion panic, the chunk frees that tell a range chunk from a
+ * malloc'd one by its address, and the 8-byte realign of `off` in `nish_alloc_struct`.
+ * The default rows above do not move: the objects are byte-identical to the ones before
+ * the variant existed.
+ *
+ * Measured 2,299 and 2,517 on 2026-11-17 with clang 18.1.3 on linux-x64, against 1,805
+ * and 2,010 for the default build the same day. The ceilings are the measurements, so
+ * any growth of the variant is a decision recorded here.
+ *
+ * Raised to 2,353 and 2,571 (54 more each) the same day by RT-55, RT-56 and RT-57
+ * (docs/security/runtime.md): the realign of the mark in `nish_arena_keep`, the panic
+ * that names a refused fixed mapping, the debug fault handler's first-page window, and
+ * the exhaustion check's guard against a test size under one span. The default rows
+ * still measure 1,805 and 2,010.
+ *
+ * Raised to 2,695 and 2,917 the same day by the merge of growing an array where it is
+ * (#1697) and RT-58: `nish_array_grow_here`, which the default rows above took for 289
+ * and 290, and its guard that copies an array out of a range chunk instead of passing
+ * the chunk to `realloc`, 53 and 56 more. Measured 2,695 and 2,917 against 2,094 and 2,300 for the
+ * default build, which is byte-identical to main's.
+ */
+const RUNTIME_RANGE_TEXT_BUDGET = 2695
+const RUNTIME_RANGE_THREADS_TEXT_BUDGET = 2917
+/**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
  * threads (WP20 T1, the stage under wp29's surface).
@@ -443,6 +472,11 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2896
  * kept, emptied, rather than freed, so a map at one thread stops doing a `malloc` and a
  * `free` per element. 1M short strings at `NISH_NUM_THREADS=1` went from 72.8 ms to
  * 54.9 ms, inside the loop's 56.4–57.6 ms band.
+ *
+ * The compact-class runtime (`-DNISH_ARENA_RANGE=1`, WP48 stage 1) measured **1,571
+ * bytes** on 2026-11-17 with clang 18.1.3 on linux-x64, 13 more than the default build's
+ * 1,558, for the 8-byte realign of `off` before a copy is bumped into the arena. It
+ * shares this ceiling, as its threads build shares the one below (1,648 against 1,637).
  */
 const RUNTIME_CROSS_TEXT_BUDGET = 1664
 /**
@@ -841,6 +875,11 @@ const RUNTIME_URING_TEXT_BUDGET = 8448
  * links its parent and children, `free` cascades deepest first and unlinks, and adopt
  * refuses a region in a tree. Measured **1,486 bytes** against 850 on 2026-11-10 with
  * clang 18.1.3 on linux-x64; the next 256-byte boundary.
+ *
+ * The compact-class runtime (`-DNISH_ARENA_RANGE=1`, WP48 stage 1) measured **1,501
+ * bytes** on 2026-11-17 with clang 18.1.3 on linux-x64, 15 more for the 8-byte realign
+ * of the caller's offset before adopt carves its chunk (RT-55). It shares this ceiling,
+ * as its threads build shares the one below (1,748 against 1,733).
  */
 const RUNTIME_REGION_TEXT_BUDGET = 1536
 /**
@@ -1077,6 +1116,13 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-text.c", RUNTIME_TEXT_UNIT_BUDGET, "RUNTIME_TEXT_UNIT_BUDGET", []],
   ["runtime/runtime-os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
   ["runtime/runtime.c", RUNTIME_THREADS_TEXT_BUDGET, "RUNTIME_THREADS_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
+  ["runtime/runtime.c", RUNTIME_RANGE_TEXT_BUDGET, "RUNTIME_RANGE_TEXT_BUDGET", ["-DNISH_ARENA_RANGE=1"]],
+  [
+    "runtime/runtime.c",
+    RUNTIME_RANGE_THREADS_TEXT_BUDGET,
+    "RUNTIME_RANGE_THREADS_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1", "-DNISH_THREADS=1"],
+  ],
   ["runtime/runtime-parallel.c", RUNTIME_PARALLEL_TEXT_BUDGET, "RUNTIME_PARALLEL_TEXT_BUDGET", []],
   [
     "runtime/runtime-parallel.c",
@@ -1090,6 +1136,18 @@ export const RUNTIME_BUDGETS = [
     RUNTIME_CROSS_THREADS_TEXT_BUDGET,
     "RUNTIME_CROSS_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
+  ],
+  [
+    "runtime/runtime-cross.c",
+    RUNTIME_CROSS_TEXT_BUDGET,
+    "RUNTIME_CROSS_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1"],
+  ],
+  [
+    "runtime/runtime-cross.c",
+    RUNTIME_CROSS_THREADS_TEXT_BUDGET,
+    "RUNTIME_CROSS_THREADS_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1", "-DNISH_THREADS=1"],
   ],
   ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],
   ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
@@ -1110,6 +1168,18 @@ export const RUNTIME_BUDGETS = [
     RUNTIME_REGION_THREADS_TEXT_BUDGET,
     "RUNTIME_REGION_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
+  ],
+  [
+    "runtime/runtime-region.c",
+    RUNTIME_REGION_TEXT_BUDGET,
+    "RUNTIME_REGION_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1"],
+  ],
+  [
+    "runtime/runtime-region.c",
+    RUNTIME_REGION_THREADS_TEXT_BUDGET,
+    "RUNTIME_REGION_THREADS_TEXT_BUDGET",
+    ["-DNISH_ARENA_RANGE=1", "-DNISH_THREADS=1"],
   ],
   ["runtime/runtime-async.c", RUNTIME_ASYNC_TEXT_BUDGET, "RUNTIME_ASYNC_TEXT_BUDGET", []],
   ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],

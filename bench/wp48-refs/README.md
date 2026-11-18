@@ -59,3 +59,35 @@ npx tsc --noEmit --strict --target es2022 --lib es2022 --typeRoots /nonexistent 
 
 (`--typeRoots /nonexistent` keeps `@types/node` out: its globals collide with
 `runtime/nish.d.ts`'s.)
+
+## The compact-class range: `range.mjs`
+
+[`range.mjs`](range.mjs) is WP48 stage 1's gate
+([`docs/wp48-ref32-classes.md`](../../docs/wp48-ref32-classes.md) §5.4): what
+the arena on a reserved range costs a program with no IR change. It compiles
+one program to IR once and links that module three ways at `--profile speed`:
+`ptr` on the default runtime, `ptr-copy` a byte-identical copy of it (the
+noise band) and `ptr-range` on the compact-class runtime
+(`scripts/build.sh --arena-range`). Linux only, from the repository root; the
+compiler is `build/nish`, or `$NISH` when it is set.
+
+```bash
+NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --rounds 21 --sizes 400000,4000000
+NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --program tree --rounds 21 --sizes 24
+```
+
+- `--program sibling|tree`: `sibling.ts` (the default), or `tree` for
+  [`bench/goose/tree.ts`](../goose/tree.ts).
+- `--rounds N`: rounds per size, 21 by default. Each round runs every variant
+  once, in a seeded shuffled order, each in a fresh process under
+  [`bench/rss.c`](../rss.c).
+- `--sizes a,b`: node counts for `sibling.ts` (`400000,4000000` by default,
+  with `max(4, round(1e7 / n))` walks of each kind), or the depth for
+  `tree.ts` (`24` by default).
+
+Every variant must print the same checksum first. "wall" is `sibling.ts`'s
+own build + visit + climb timers, or `tree.ts`'s process lifetime, and a
+figure is the median over the rounds. It prints two bands from the same runs,
+each with a verdict on whether `ptr-range`'s median wall is within that band of
+`ptr`'s: the widest per-round gap between `ptr` and `ptr-copy`, which covers a
+round's spread, and the median of those per-round gaps, which is tighter.

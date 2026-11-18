@@ -21,9 +21,10 @@
  * both use `-flto`, and the cold paths that lost the inlining are cold.
  */
 #define _POSIX_C_SOURCE 200809L
-#ifdef NISH_ARENA_DEBUG
+#if defined NISH_ARENA_DEBUG || defined NISH_ARENA_RANGE
 /* The debug arena's `madvise`, which POSIX leaves out (its `posix_madvise`
-   gives nothing back on glibc). */
+   gives nothing back on glibc), and the compact-class range's `MAP_ANONYMOUS`,
+   `MAP_NORESERVE` and `MAP_FIXED_NOREPLACE`. */
 #define _DEFAULT_SOURCE
 #define _DARWIN_C_SOURCE
 #endif
@@ -203,6 +204,156 @@ NISH_TLS uint64_t nish_region_chunk;
    single allocation larger than this still gets a chunk of its own size. */
 #define NISH_REGION_CHUNK_MAX ((uint64_t)1 << 20)
 
+#ifdef NISH_ARENA_RANGE
+/* A module compiled for this variant references it, so linking one against
+   the default runtime fails at the link rather than at the first reference.
+   The ASan build defines it too, so the same module links there. */
+const int nish_arena_range_abi = 1;
+/* The range's first byte: what a 32-bit reference counts from. Null under
+   NISH_ASAN, which reserves nothing. */
+char *nish_ref_base;
+#endif
+
+/* NISH_ASAN wins over NISH_ARENA_RANGE: an instrumented build reserves
+   nothing and every block stays a malloc of its own, as without the range.
+   ASan's shadow memory on x86-64 lies across [1 GiB, 16 GiB), where the
+   range would go, and a block carved from a range has no redzone. */
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN
+/* ---- The compact-class range (`-DNISH_ARENA_RANGE`; docs/wp48-ref32-classes.md
+   §3.3, docs/security/runtime.md, "The compact-class range")
+   A program with a compact class links this variant, which build.sh selects
+   when the compiler asks for it; nothing selects it by hand. Every arena chunk
+   of 2 MiB or less is cut from one 15 GiB range, so a reference into one fits
+   32 bits once it is counted in 4-byte units from the range's base. On Linux
+   the range sits at the fixed address [1 GiB, 16 GiB) and the base is a
+   constant; elsewhere (macOS) the system places it and the base is
+   `nish_ref_base`. It is reserved once, before main, read-write and without
+   committing its pages; an address something else already holds is a panic
+   that names it and the limit, never a fallback to another address, because
+   compiled code may already treat the base as a constant.
+   A chunk's `cap` is a power of two from 4 KiB to 2 MiB, its class, with its
+   16-byte header in front; a chunk a release frees goes on its class's free
+   list instead of back to malloc, and the next request of that class takes
+   it before the range's high-water mark moves. One lock covers both, for
+   every thread. A chunk is told from a malloc'd one by its address. The
+   first 64 bytes of the range are never handed out, so offset 0 is never a
+   block. A request past 2 MiB keeps an exact malloc'd chunk, as today. The
+   range never shrinks: a chunk on a free list keeps its pages. */
+#include <sys/mman.h>
+#ifdef NISH_RANGE_TEST_SIZE
+#define NISH_RANGE_SIZE ((uint64_t)(NISH_RANGE_TEST_SIZE))
+#else
+#define NISH_RANGE_SIZE ((uint64_t)15 << 30)
+#endif
+/* The fixed shape is Linux's. tests/runtime/range-test.c's sanitizer builds
+   take the based one (`NISH_RANGE_TEST_BASED`): their shadow is where the
+   fixed range would be. */
+#if defined __linux__ && !defined NISH_RANGE_TEST_BASED
+#define NISH_RANGE_FIXED ((uintptr_t)1 << 30)
+#ifndef MAP_FIXED_NOREPLACE
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
+#endif
+#define NISH_RANGE_HOLE 64
+#define NISH_RANGE_CLASS_MIN ((uint64_t)1 << 12)
+#define NISH_RANGE_CLASS_MAX ((uint64_t)1 << 21)
+#define NISH_RANGE_CLASSES 10
+/* The range's mapping, `prot` its protection (the debug arena's is
+   PROT_NONE): the fixed address or none, with a panic on anything else. */
+static char *nish_range_map(int prot) {
+#ifdef NISH_RANGE_FIXED
+  void *p = mmap((void *)NISH_RANGE_FIXED, (size_t)NISH_RANGE_SIZE, prot,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
+  /* A kernel older than MAP_FIXED_NOREPLACE takes the address as a hint and
+     maps elsewhere when it is busy: that is busy too. */
+  if (p != MAP_FAILED && p != (void *)NISH_RANGE_FIXED) munmap(p, (size_t)NISH_RANGE_SIZE);
+  /* EEXIST is the address taken; anything else (ENOMEM: a limit on address
+     space or mappings) is the system refusing the size. */
+  if (p == MAP_FAILED && errno != EEXIST)
+    nish_die("nish: the compact-class arena cannot reserve its 15 GiB range at 0x40000000 "
+             "(1 GiB to 16 GiB): the system refused the mapping (an address-space or mapping limit)\n");
+  if (p != (void *)NISH_RANGE_FIXED)
+    nish_die("nish: the compact-class arena cannot reserve its 15 GiB range at 0x40000000 "
+             "(1 GiB to 16 GiB): the address is in use\n");
+  return p;
+#else
+  void *p = mmap(0, (size_t)NISH_RANGE_SIZE, prot, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  if (p == MAP_FAILED) nish_die("nish: the compact-class arena cannot reserve its 15 GiB range\n");
+  return p;
+#endif
+}
+#endif
+
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN && !defined NISH_ARENA_DEBUG
+static int nish_range_state;  /* 0 none, 1 reserving, 2 reserved */
+static int nish_range_lock;
+static uint64_t nish_range_top = NISH_RANGE_HOLE; /* the high-water mark, under the lock */
+static nish_chunk *nish_range_free[NISH_RANGE_CLASSES];
+
+static void nish_range_reserve(void) {
+  int want = 0;
+  if (!__atomic_compare_exchange_n(&nish_range_state, &want, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+    while (__atomic_load_n(&nish_range_state, __ATOMIC_ACQUIRE) != 2) {}
+    return;
+  }
+  nish_ref_base = nish_range_map(PROT_READ | PROT_WRITE);
+  __atomic_store_n(&nish_range_state, 2, __ATOMIC_RELEASE);
+}
+/* Before main, so a busy address is a panic before the program runs. */
+__attribute__((constructor)) static void nish_range_init(void) { nish_range_reserve(); }
+
+static int nish_range_owns(const void *c) {
+  uintptr_t a = (uintptr_t)c, base = (uintptr_t)nish_ref_base;
+  return nish_ref_base && a >= base && a - base < NISH_RANGE_SIZE;
+}
+
+/* A class's index: `cap` is a power of two in [4 KiB, 2 MiB]. */
+static unsigned nish_range_class(uint64_t cap) { return (unsigned)__builtin_ctzll(cap) - 12; }
+
+static void nish_range_enter(void) {
+  while (__atomic_exchange_n(&nish_range_lock, 1, __ATOMIC_ACQUIRE)) {}
+}
+static void nish_range_leave(void) { __atomic_store_n(&nish_range_lock, 0, __ATOMIC_RELEASE); }
+
+/* A chunk of class `cap`: its free list's newest, or the next unused bytes. */
+static nish_chunk *nish_range_take(uint64_t cap) {
+  if (__atomic_load_n(&nish_range_state, __ATOMIC_ACQUIRE) != 2) nish_range_reserve();
+  unsigned k = nish_range_class(cap);
+  nish_range_enter();
+  nish_chunk *c = nish_range_free[k];
+  if (c) {
+    nish_range_free[k] = c->next;
+  } else {
+    uint64_t span = sizeof(nish_chunk) + cap;
+    /* `span > NISH_RANGE_SIZE` folds to false at 15 GiB; it keeps a smaller
+       test size (NISH_RANGE_TEST_SIZE) from wrapping the subtraction. */
+    if (span > NISH_RANGE_SIZE || nish_range_top > NISH_RANGE_SIZE - span) {
+      nish_range_leave();
+      nish_die("nish: the compact-class arena's 15 GiB range is used up\n");
+    }
+    c = (nish_chunk *)(nish_ref_base + nish_range_top);
+    nish_range_top += span;
+  }
+  nish_range_leave();
+  return c;
+}
+
+/* A chunk a release gives back: onto its class's list if the range holds it,
+   to free() if malloc made it. runtime-region.c's adopt drops through this. */
+void nish_range_drop(void *p) {
+  nish_chunk *c = p;
+  if (!nish_range_owns(c)) {
+    free(c);
+    return;
+  }
+  unsigned k = nish_range_class(NISH_CHUNK_CAP(c));
+  nish_range_enter();
+  c->next = nish_range_free[k];
+  nish_range_free[k] = c;
+  nish_range_leave();
+}
+#endif
+
 #ifdef NISH_ARENA_DEBUG
 /* ---- The debug arena (`--debug-arena`, `-DNISH_ARENA_DEBUG`;
    docs/security/runtime.md, "The debug arena")
@@ -239,7 +390,14 @@ static void nish_debug_on_fault(int sig, siginfo_t *info, void *ctx) {
   (void)ctx;
   uintptr_t a = (uintptr_t)info->si_addr, base = (uintptr_t)nish_debug_base;
   struct sigaction *old = sig == SIGSEGV ? &nish_debug_old_segv : &nish_debug_old_bus;
-  if (a >= base && a - base < __atomic_load_n(&nish_debug_next, __ATOMIC_RELAXED)) {
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN
+  /* The range's first page is never handed out: a fault there (a reference
+     of 0, counted from the base) is not a stale block. */
+  uint64_t lo = nish_debug_page;
+#else
+  uint64_t lo = 0;
+#endif
+  if (a >= base + lo && a - base < __atomic_load_n(&nish_debug_next, __ATOMIC_RELAXED)) {
     char msg[] = "nish: --debug-arena: stale arena reference at 0x0000000000000000: "
                  "the memory was released by the scope that allocated it\n";
     char *hex = msg + sizeof "nish: --debug-arena: stale arena reference at 0x" - 1;
@@ -263,6 +421,16 @@ static void nish_debug_reserve(void) {
   }
   long page = sysconf(_SC_PAGESIZE);
   nish_debug_page = page > 0 ? (uint64_t)page : 4096;
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN
+  /* With a compact class the reservation is the compact range itself, fixed
+     or based as without the debug arena, so a 32-bit reference still reaches
+     every block. No address is reused there either; its first page, which
+     holds the 64 bytes no block may have, is never handed out. */
+  nish_debug_base = nish_range_map(PROT_NONE);
+  nish_debug_size = NISH_RANGE_SIZE;
+  nish_debug_next = nish_debug_page;
+  nish_ref_base = nish_debug_base;
+#else
   for (uint64_t size = (uint64_t)1 << 40; size >= (uint64_t)1 << 30; size >>= 1) {
     void *p = mmap(0, (size_t)size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     if (p != MAP_FAILED) {
@@ -272,6 +440,7 @@ static void nish_debug_reserve(void) {
     }
   }
   if (!nish_debug_base) nish_die("nish: --debug-arena: cannot reserve address space for the arena\n");
+#endif
   struct sigaction sa;
   memset(&sa, 0, sizeof sa);
   sa.sa_sigaction = nish_debug_on_fault;
@@ -292,8 +461,13 @@ static nish_chunk *nish_debug_chunk(uint64_t cap) {
   if (cap > nish_debug_size - sizeof(nish_chunk) - nish_debug_page) nish_oom();
   uint64_t span = nish_debug_span(cap);
   uint64_t at = __atomic_fetch_add(&nish_debug_next, span, __ATOMIC_RELAXED);
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN
+  if (at > nish_debug_size - span)
+    nish_die("nish: --debug-arena: the compact-class arena's 15 GiB range is used up (no address is reused)\n");
+#else
   if (at > nish_debug_size - span)
     nish_die("nish: --debug-arena: the arena's address space is used up (no address is reused)\n");
+#endif
   char *p = nish_debug_base + at;
   if (mprotect(p, (size_t)span, PROT_READ | PROT_WRITE) != 0) nish_oom();
   return (nish_chunk *)p;
@@ -322,6 +496,14 @@ void nish_debug_drop(void *c) {
 }
 #endif
 
+#if defined NISH_ARENA_DEBUG && defined NISH_ARENA_RANGE && !defined NISH_ASAN
+/* Before main, as without the debug arena: a busy address is a panic before
+   the program runs. */
+__attribute__((constructor)) static void nish_debug_range_init(void) {
+  if (__atomic_load_n(&nish_debug_state, __ATOMIC_ACQUIRE) != 2) nish_debug_reserve();
+}
+#endif
+
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB, or a region's
    next size), bump from it. A region's chunks double from its first, up to
    NISH_REGION_CHUNK_MAX. */
@@ -345,6 +527,17 @@ void *nish_arena_grow(uint64_t size) {
   uint64_t floor = next ? next : 65536;
   uint64_t cap = size > floor ? size : floor;
   if (next) nish_region_chunk = cap < NISH_REGION_CHUNK_MAX / 2 ? cap * 2 : NISH_REGION_CHUNK_MAX;
+#endif
+#if defined NISH_ARENA_RANGE && !defined NISH_ASAN && !defined NISH_ARENA_DEBUG
+  /* Up to 2 MiB, a chunk of the range: `cap` rounded up to its class. */
+  if (cap <= NISH_RANGE_CLASS_MAX) {
+    uint64_t k = cap < NISH_RANGE_CLASS_MIN ? NISH_RANGE_CLASS_MIN : (uint64_t)1 << (64 - __builtin_clzll(cap - 1));
+    nish_chunk *r = nish_range_take(k);
+    r->next = nish_arena.chunks;
+    r->cap = k;
+    nish_arena = (struct nish_arena){ (char *)(r + 1), size, k, r };
+    return nish_arena.buf;
+  }
 #endif
   /* A 64-bit request cannot always be asked for: wasm32's `size_t` is 32 bits,
      and malloc would silently take the low half of a chunk nobody can address. */
@@ -377,11 +570,22 @@ void *nish_alloc_struct(uint64_t size) {
   return nish_asan_alloc(size);
 #endif
   size = (size + 7) & ~(uint64_t)7;
+#ifdef NISH_ARENA_RANGE
+  /* Compiled code bumps a compact class's 4-byte multiple, so `off` may sit
+     4 bytes past an 8-byte boundary: a block from here starts at the next. */
+  uint64_t at = (nish_arena.off + 7) & ~(uint64_t)7;
+  if (at + size <= nish_arena.cap) {
+    void *p = nish_arena.buf + at;
+    nish_arena.off = at + size;
+    return p;
+  }
+#else
   if (nish_arena.off + size <= nish_arena.cap) {
     void *p = nish_arena.buf + nish_arena.off;
     nish_arena.off += size;
     return p;
   }
+#endif
   return nish_arena_grow(size);
 }
 
@@ -476,6 +680,8 @@ static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
     nish_chunk *n = c->next;
 #ifdef NISH_ARENA_DEBUG
     if (!(c->cap & NISH_CHUNK_CARVED)) nish_debug_drop(c);
+#elif defined NISH_ARENA_RANGE && !defined NISH_ASAN
+    if (!(c->cap & NISH_CHUNK_CARVED)) nish_range_drop(c);
 #else
     if (!(c->cap & NISH_CHUNK_CARVED)) free(c);
 #endif
@@ -564,6 +770,12 @@ void *nish_arena_keep(uint64_t mark, void *p) {
     if (mark >= cb && mark <= cb + NISH_CHUNK_CAP(c)) break;
   }
   if (!c || (c == pc && mark > q)) return p;
+#ifdef NISH_ARENA_RANGE
+  /* A compact class's 4-byte bump may have left the mark 4 past an 8-byte
+     boundary (`nish_alloc_struct`): the kept block moves to the next one.
+     `q` is 8-aligned, so a mark at or below it rounds to at most `q`. */
+  mark = (mark + 7) & ~(uint64_t)7;
+#endif
   /* mark <= q inside one chunk implies mark + size <= q + size <= its end, so
      the second arm is only ever reached with `c` older than `pc`. */
   if (mark + size <= (uintptr_t)(c + 1) + NISH_CHUNK_CAP(c)) {
@@ -773,6 +985,12 @@ static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
 #endif
   char *data = a->data, *buf = nish_arena.buf;
   uint64_t more = want - old;
+  /* Under the compact-class range this bump needs no realign: it hands out no
+     new block, only lengthens the one that ends at `off`, by an 8-rounded
+     `more`; the block keeps the alignment it had, and every runtime bump
+     after it realigns `off` itself. An array from `nish_alloc_struct` ends
+     8-aligned, so an `off` compiled code left 4 past a boundary is never its
+     end, and that array takes the copy. */
   if (buf && data >= buf && data + old == buf + nish_arena.off && more <= nish_arena.cap - nish_arena.off) {
     nish_arena.off += more;
     return 1;
@@ -797,6 +1015,13 @@ static int nish_array_grow_here(nish_array *a, uint64_t old, uint64_t want) {
   for (int i = 0; c && i < NISH_GROW_WALK; i++, prev = c, c = c->next) {
     if ((char *)(c + 1) != data) continue;
     if ((c->cap & NISH_CHUNK_CARVED) || c->cap != old) return 0;
+#if defined NISH_ARENA_RANGE && !defined NISH_ARENA_DEBUG
+    /* A chunk of the compact-class range is no malloc's, so `realloc` may not
+       touch it: an array that fills one of its class exactly (a power-of-two
+       block of 128 KiB to 2 MiB) takes the copy. Its chunk keeps its class's
+       `cap` for the release that puts it back on its list. */
+    if (nish_range_owns(c)) return 0;
+#endif
     if (want > (uint64_t)(SIZE_MAX - sizeof(nish_chunk))) nish_oom();
     nish_chunk *n = realloc(c, sizeof *n + (size_t)want);
     if (!n) nish_oom();
