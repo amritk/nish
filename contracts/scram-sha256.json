@@ -1,0 +1,227 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "scram-sha256",
+  "source": {
+    "title": "nish/crypto/scram — the SCRAM-SHA-256 client computation",
+    "main": "scram-sha256",
+    "sha256": "c56b99b78c6966fc80697fcc74d35483cfff4b505bd8b26dead1730bfe363afe"
+  },
+  "sources": [
+    {
+      "id": "scram-sha256",
+      "path": "../specs/scram-sha256.xml"
+    },
+    {
+      "id": "rfc5802",
+      "rfc": 5802,
+      "path": "../rfcs/rfc5802.txt",
+      "file": "rfcs/rfc5802.txt",
+      "sha256": "12fcaba0dd78fe7aeb1c63f433314722977ef6746a638fce0f168c63a5bd24ba"
+    },
+    {
+      "id": "rfc7677",
+      "rfc": 7677,
+      "path": "../rfcs/rfc7677.txt",
+      "file": "rfcs/rfc7677.txt",
+      "sha256": "81490224a838bf5da7bfcce53e4ec1b1d2f69717c43c600111dec6652a386c71"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/scram"
+  },
+  "requirements": [
+    {
+      "id": "R-SHA256",
+      "source": "rfc7677",
+      "section": "3",
+      "level": "DEFINITION",
+      "quote": "the hash function for HMAC() and H() uses SHA-256 instead of SHA-1 [RFC6234]."
+    },
+    {
+      "id": "R-SALTED",
+      "source": "rfc5802",
+      "section": "3",
+      "level": "DEFINITION",
+      "quote": "SaltedPassword := Hi(Normalize(password), salt, i)"
+    },
+    {
+      "id": "R-HI",
+      "source": "rfc5802",
+      "section": "2.2",
+      "level": "DEFINITION",
+      "quote": "Hi() is, essentially, PBKDF2 [RFC2898] with HMAC() as the pseudorandom function (PRF) and with dkLen == output length of HMAC() == output length of H()."
+    },
+    {
+      "id": "R-COUNT",
+      "section": "4.1",
+      "level": "MUST",
+      "quote": "scramSha256SaltedPassword MUST return null when the iteration count is less than 1."
+    },
+    {
+      "id": "R-CLIENT-KEY",
+      "source": "rfc5802",
+      "section": "3",
+      "level": "DEFINITION",
+      "quote": "ClientKey := HMAC(SaltedPassword, \"Client Key\") StoredKey := H(ClientKey)"
+    },
+    {
+      "id": "R-PROOF",
+      "source": "rfc5802",
+      "section": "3",
+      "level": "DEFINITION",
+      "quote": "ClientSignature := HMAC(StoredKey, AuthMessage) ClientProof := ClientKey XOR ClientSignature"
+    },
+    {
+      "id": "R-SERVER-SIG",
+      "source": "rfc5802",
+      "section": "3",
+      "level": "DEFINITION",
+      "quote": "ServerKey := HMAC(SaltedPassword, \"Server Key\") ServerSignature := HMAC(ServerKey, AuthMessage)"
+    }
+  ],
+  "exclusions": [],
+  "functions": [
+    {
+      "name": "scramSha256SaltedPassword",
+      "params": [
+        {
+          "name": "password",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "salt",
+          "type": "bytes"
+        },
+        {
+          "name": "iterations",
+          "type": "i32"
+        }
+      ],
+      "returns": "secret-bytes?"
+    },
+    {
+      "name": "scramSha256ClientProof",
+      "params": [
+        {
+          "name": "saltedPassword",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "authMessage",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    },
+    {
+      "name": "scramSha256ServerSignature",
+      "params": [
+        {
+          "name": "saltedPassword",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "authMessage",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "S1",
+      "title": "RFC 7677 §3: SaltedPassword for 'pencil' under the exchange's salt and count",
+      "covers": ["R-SHA256", "R-SALTED", "R-HI"],
+      "source": {
+        "command": "python3 -c 'import base64, hashlib; print(hashlib.pbkdf2_hmac(\"sha256\", b\"pencil\", base64.b64decode(\"W22ZaJ0SNY7soEsUEjb6gQ==\"), 4096).hex())'"
+      },
+      "section": "8",
+      "call": "scramSha256SaltedPassword",
+      "args": [
+        {
+          "ascii": "pencil"
+        },
+        {
+          "hex": "5b6d99689d12358eeca04b141236fa81"
+        },
+        {
+          "int": 4096
+        }
+      ],
+      "expect": {
+        "hex": "c4a49510323ab4f952cac1fa99441939e78ea74d6be81ddf7096e87513dc615d"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "S2",
+      "title": "RFC 7677 §3: the client-final message's p=",
+      "covers": ["R-SHA256", "R-CLIENT-KEY", "R-PROOF"],
+      "source": {
+        "command": "python3 -c 'import base64; print(base64.b64decode(\"dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=\").hex())'"
+      },
+      "section": "8",
+      "call": "scramSha256ClientProof",
+      "args": [
+        {
+          "hex": "c4a49510323ab4f952cac1fa99441939e78ea74d6be81ddf7096e87513dc615d"
+        },
+        {
+          "ascii": "n=user,r=rOprNGfwEbeRWgbNEkqO,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096,c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
+        }
+      ],
+      "expect": {
+        "hex": "747cdb65aa56224e2352137e52d7bdcad6a0f738df30782caa69a2cfb0277554"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "S3",
+      "title": "RFC 7677 §3: the server-final message's v=",
+      "covers": ["R-SHA256", "R-SERVER-SIG"],
+      "source": {
+        "command": "python3 -c 'import base64; print(base64.b64decode(\"6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=\").hex())'"
+      },
+      "section": "8",
+      "call": "scramSha256ServerSignature",
+      "args": [
+        {
+          "hex": "c4a49510323ab4f952cac1fa99441939e78ea74d6be81ddf7096e87513dc615d"
+        },
+        {
+          "ascii": "n=user,r=rOprNGfwEbeRWgbNEkqO,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096,c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
+        }
+      ],
+      "expect": {
+        "hex": "eabae24d1062db75a9451ff0b6ea7e98c8546549ff741e672d3251b2397de46e"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "S4",
+      "title": "an iteration count of 0 is null",
+      "covers": ["R-COUNT"],
+      "source": {
+        "spec": "4.1"
+      },
+      "section": "8",
+      "call": "scramSha256SaltedPassword",
+      "args": [
+        {
+          "ascii": "pencil"
+        },
+        {
+          "hex": "5b6d99689d12358eeca04b141236fa81"
+        },
+        {
+          "int": 0
+        }
+      ],
+      "expect": {
+        "null": true
+      }
+    }
+  ]
+}
