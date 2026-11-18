@@ -124,6 +124,7 @@ import {
 } from "./emit-result"
 import {
   emitFusedCall,
+  emitChainStatement,
   emitChainTest,
   emitLibraryCopies,
   emitMapIntrinsic,
@@ -173,7 +174,7 @@ import {
   emitTemplate,
   isEnumStringCall,
 } from "./emit-strings"
-import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
+import { dottedName, intrinsicType, isAssignmentOperator, isOptionalChain, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {
@@ -1497,7 +1498,11 @@ export class Emitter {
         }
         return
       case NodeKind.ExprStmt:
-        this.emitExpression(stmt.children[0])
+        if (isOptionalChain(stmt.children[0])) {
+          emitChainStatement(this, stmt.children[0]) // WP28 C1
+        } else {
+          this.emitExpression(stmt.children[0])
+        }
         return
       case NodeKind.Block:
         this.emitBlock(stmt)

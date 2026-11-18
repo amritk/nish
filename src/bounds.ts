@@ -4383,6 +4383,13 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
     // guard ending in one proves the access after it. The answer is the
     // checker's own `terminatesControlFlow`, the test `checkStatement` uses
     // for unreachable code, so the two passes cannot disagree.
+    if (isOptionalChain(stmt.children[0])) {
+      // WP28 C1: a statement `?.` chain stops at any link whose receiver is
+      // `null`, as one on the left of `??` does, so it is walked the same way.
+      walkExpression(walk, cloneState(state), stmt.children[0])
+      forgetAcross(walk, state, stmt.children[0])
+      return false
+    }
     walkExpression(walk, state, stmt.children[0])
     return terminatesControlFlow(walk.ctx, stmt.children[0])
   }

@@ -164,6 +164,16 @@ stops being able to prove, which is what the `performance` warning will say.
 > passes) and rest parameters; only `x?: T` and a default that is not a
 > constant remain for this row.
 
+> **Status:** the `?.`/`??` row is built as two compat features.
+> `optional-chaining` accepts a chain as a statement (`a?.b`, `a?.m()`) and an
+> element read inside a chain (`a?.[i].b`), lowered to the null test strict
+> emits; `?.[i]` ending a chain (NL1067) and `f?.()` (NL1068) stay refused in
+> both dialects, since Node's `undefined` and Nish's bounds panic would part.
+> `nullish` accepts a `??` whose left side is never missing and keeps the left
+> alone, saying so in a `performance` warning (NL9021). `??` on a nullable was
+> strict already. A strict refusal of either names its feature
+> (docs/LANGUAGE.md, "The compatibility dialect").
+
 A callee the checker can name — an arrow written at the call, or a top-level
 function passed by name — is no longer on this list: strict accepts it as a
 function-typed parameter of a top-level function, specialised per callee with
@@ -512,7 +522,7 @@ and §10 leaves with the owner.
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
 | **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign. **Built** |
-| **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M |
+| **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M. `?.` and `??` are **built** (`optional-chaining`, `nullish`; §2.1) |
 | **C-lib** | the library tier | `Date` objects, `JSON`, `RegExp`, `Buffer`, under WP26's rules. `Map` and `Set` are strict already | L, and per §4.1 it outranks most of what follows |
 | ~~C1, labels~~ | labelled `break`/`continue`, once a C1 entry | **Built in strict**, as direct branches with no flag; it left C1 | — |
 | ~~C2a~~ | callbacks whose callee is statically known | **Built in strict**, as function-typed parameters: free at run time, as §7.4 predicted | — |

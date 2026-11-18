@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 968
+export const RULE_COUNT: i32 = 971
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -153,6 +153,8 @@ const diagnosticRules = (): string[] => [
   "NL2467",
   "`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination",
   "NL2511",
+  "`?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)",
+  "NL1067",
   "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end",
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
@@ -463,6 +465,8 @@ const diagnosticRules = (): string[] => [
   "NL3050",
   "` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body",
   "NL2474",
+  "An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first",
+  "NL1068",
   "` has a type parameter's type, so a default cannot be one value: the type is the caller's, and TypeScript refuses a constant for it too",
   "NL2596",
   ": a record field that is itself a record is a pointer to it, and storage holds no pointer; spell the inner fields on the outer record",
@@ -1095,8 +1099,6 @@ const diagnosticRules = (): string[] => [
   "NL2005",
   "` is generic, so it names no one function to pass as argument ",
   "NL2341",
-  "` is never `null` here, so `?.` has nothing to skip: write `.`",
-  "NL2490",
   "` takes its signature from the arrow; drop the annotation on `",
   "NL2273",
   "A bound of `integer<Lo, Hi>` must be an integer literal, got `",
@@ -1121,6 +1123,8 @@ const diagnosticRules = (): string[] => [
   "NL2056",
   "` in a constant requires two operands of the same type, got ",
   "NL2070",
+  "` is never `null` here, so `?.` has nothing to skip: write `",
+  "NL2490",
   "` takes an array whose elements are the vector's lane type, ",
   "NL2579",
   "`unwrapOr(...)` needs a success value to fall back to, and `",
@@ -1975,6 +1979,8 @@ const performanceRules = (): string[] => [
   "NL9012",
   "--unchecked-indexing is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call `uncheckedGet` and `uncheckedSet` from `",
   "NL9014",
+  "` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? ",
+  "NL9021",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
   "keeps an allocation on every call and runs on every pass of a loop that releases nothing",

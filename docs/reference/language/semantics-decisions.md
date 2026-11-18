@@ -1591,16 +1591,16 @@ performance warning about the same check is not printed beside the error.
 ## The compatibility dialect
 
 Nish has two dialects. The strict one is this document. The compatibility
-dialect will accept more of TypeScript, feature by feature; it has no feature
-yet, so today it differs from the strict dialect in one thing only, the
-number a bare `number` is.
+dialect accepts more of TypeScript, feature by feature: it differs from the
+strict dialect in the number a bare `number` is, and in what each feature it
+allows admits. This compiler has built two features, `nullish` and
+`optional-chaining`.
 
 - **`--compat` selects the dialect with every feature this compiler has
   built; `--compat=<feature>,...` selects it with only the features named.**
   A name that is no feature is a usage error (exit 2) that names it and
-  writes no IR, and so is an empty list (`--compat=`). No feature is built, so
-  every `--compat=<list>` is refused today. `nish run` and `--fix` take the
-  flag too.
+  writes no IR, and so is an empty list (`--compat=`). `nish run` and `--fix`
+  take the flag too.
 - **`"compat"` in the root package's `"nish"` field selects it without the
   flag**: `true` for every built feature, or an array of feature names for
   exactly those (`[]` for the dialect with no feature). The root package is
@@ -1638,19 +1638,55 @@ number a bare `number` is.
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining]`, and prints no such
   line for a strict build.
+- **A strict refusal of a construct a feature admits names the feature.** It
+  closes with the note ``add `<feature>` to `nish.compat` in package.json to
+  accept it``, and under a compat build whose list leaves the feature out it
+  also names that build's dialect (`this program's dialect is
+  `compat=<list>``).
+- **`optional-chaining` admits a `?.` chain with no `??` default** where the
+  strict dialect has none to give it. A chain that is a statement of its own,
+  `a?.b`, `a?.m()` or `a?.b.m(x)`, runs to its end when every link is there
+  and does nothing from the first one that is `null` or `undefined`, as in
+  Node: the arguments of a call it skips are not evaluated
+  (`tests/cases/compat_optional_chain_statement`, refused in the strict
+  dialect as `reject_optional_chain_statement`). `?.[i]` is admitted inside a
+  chain that a member, a method call or a `??` default follows: the element is
+  read, and bounds-checked, only when the array is there
+  (`compat_optional_chain_element`, strict `reject_optional_chain_element_inner`).
+  An index read inside a link the chain skips is not counted as checked for
+  the reads after it. Two forms stay refused in the compatibility dialect
+  too, because Node's answer and the build's would part: `?.[i]` that ends a
+  chain is NL1067, since past the end of the array Node answers `undefined`
+  and takes the default where the bounds check panics
+  (`tests/link/compat_optional_element_last`); and an optional call `f?.()`
+  is NL1068 (`compat_optional_call`).
+- **`nullish` admits a `??` whose left operand is never missing**: a value
+  whose type is not nullable, or a nullable one narrowed past `null` (the
+  strict dialect refuses both, as a default with nothing to replace). Node's
+  answer is always the left operand, so the build keeps the left operand alone
+  and says so: one `performance` warning, NL9021, at the `??`, naming the
+  default to drop (`tests/cases/compat_nullish_never_missing`,
+  `compat_nullish_narrowed`; strict `reject_nullish`,
+  `reject_nullish_nullable`). The default is never run, but it is still
+  checked as the left operand's type, as TypeScript checks it (NL2370,
+  `tests/link/compat_nullish_never_missing`). A `??` on a nullable left
+  operand is the strict dialect's own and unchanged.
 - **The dialect only adds.** A strict build is unchanged by all of the above,
-  byte for byte. A compat build with no feature is `--number-mode f64`: the
-  same IR but for the mark, the same refusals in the same words. And under one
-  number mode a compat build and a strict build differ in the mark alone.
-  `tests/compat-erasure.js` checks both over every program in `tests/cases`,
-  and a later feature may accept a program the strict dialect refuses but may
-  never change the answer for one it does not.
+  byte for byte. A compat build is `--number-mode f64` for every program the
+  strict dialect accepts: the same IR but for the mark, the same refusals in
+  the same words. And under one number mode a compat build and a strict build
+  of such a program differ in the mark alone. `tests/compat-erasure.js` checks
+  both over every program in `tests/cases`. A feature may accept a program the
+  strict dialect refuses, and that runner compiles each such case with the
+  feature, links it and runs it beside Node, which must print and exit the
+  same; it may never change the answer for a program the strict dialect
+  accepts.
 
 ## Retention as an error
 

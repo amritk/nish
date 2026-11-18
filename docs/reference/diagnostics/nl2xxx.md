@@ -8767,7 +8767,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` is never `null` here, so `?.` has nothing to skip: write `.`
+…` is never `null` here, so `?.` has nothing to skip: write `…
 ```
 
 [`nl2490_chain_never_null.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2490_chain_never_null.ts):

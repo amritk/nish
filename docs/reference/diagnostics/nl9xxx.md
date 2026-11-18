@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 20 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 21 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -537,4 +537,12 @@ The message of a warning `--no-warn-performance` turns off contains:
 
 ```text
 …beside the compatibility dialect: a bare `number` is the 32-bit integer
+```
+
+## NL9021
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? …
 ```

@@ -25848,9 +25848,9 @@ if (dealtHere("cliChecks")) {
   }
 
   // ---- WP28 C0: the compatibility dialect's machinery --------------------------------
-  // Everything a feature of the dialect plugs into, with no feature built: the
-  // allow-list on the flag, `nish.compat` in the root manifest and the ceiling
-  // it puts on a dependency, the mark in every module, and the number the
+  // Everything a feature of the dialect plugs into: the allow-list on the
+  // flag, `nish.compat` in the root manifest and the ceiling it puts on a
+  // dependency, the mark in every module, and the number the
   // dialect implies. The refusals with a code are `tests/link/compat_*`; what
   // is here is the flag, the files a build writes, and the pairs of builds that
   // have to agree. Like the section after it, it rides in this group's tail.
@@ -25867,10 +25867,10 @@ if (dealtHere("cliChecks")) {
       const r = nish([source, "-o", out, ...flags], cwd)
       return { r, ir: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "" }
     }
-    /** The dialect's mark in a module's IR: the number mode it names, or null for a module without one. */
+    /** The dialect's mark in a module's IR: the number mode it names first, or null for a module without one. */
     const markOf = (ir) => {
       const named = /^!nish\.compat = !\{(!\d+)\}$/m.exec(ir)
-      const node = named === null ? null : new RegExp(`^${named[1]} = !\\{!"(\\w+)"\\}$`, "m").exec(ir)
+      const node = named === null ? null : new RegExp(`^${named[1]} = !\\{!"(\\w+)"[,}]`, "m").exec(ir)
       return node === null ? null : node[1]
     }
     const NOTE = "`--number-mode i32` beside the compatibility dialect"
@@ -25898,7 +25898,7 @@ if (dealtHere("cliChecks")) {
         `compat: \`${flag}\` names a feature this compiler has not built: a usage error that names it, and no IR`,
         refused.r.status === 2 &&
           refused.r.stderr.includes(
-            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: this compiler has built none yet, and a bare \`--compat\` allows every one`
+            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, and a bare \`--compat\` allows every one`
           ) &&
           refused.ir === "",
         shown(refused.r)
@@ -25914,8 +25914,8 @@ if (dealtHere("cliChecks")) {
       checkedStrict.status === 0 &&
         checkedCompat.status === 0 &&
         checkedPinned.status === 0 &&
-        checkedCompat.stdout.startsWith("compat number=f64 features=[]\n") &&
-        checkedPinned.stdout === `compat number=i32 features=[]\n${checkedStrict.stdout}` &&
+        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining]\n") &&
+        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining]\n${checkedStrict.stdout}` &&
         !checkedStrict.stdout.includes("compat "),
       shown(checkedCompat) + shown(checkedPinned)
     )
@@ -26087,6 +26087,41 @@ if (dealtHere("cliChecks")) {
         flagRows.length > 30,
       `${JSON.stringify(axisAt)} ${repeated.map((row) => row.flag).join(" ")}\n${help.stdout}`
     )
+    // WP28 C1: a link a `?.` statement skips runs nothing, so it proves nothing
+    // about what follows. An index read inside the skipped call is not taken as
+    // checked for the read after it: the second read keeps its bounds check
+    // and panics on its own.
+    const skipped = path.join(work, "skipped_link.ts")
+    fs.writeFileSync(
+      skipped,
+      `class Sink {
+  total: number = 0
+  take(v: number): void {
+    this.total = this.total + v
+  }
+}
+
+const read = (b: Sink | null, xs: number[], i: number): number => {
+  b?.take(xs[i])
+  return xs[i]
+}
+
+export const main = (): void => {
+  console.log(read(null, [1, 2, 3], 7))
+}
+`
+    )
+    const skippedExe = path.join(work, "skipped_link")
+    const skippedBuild = nish([skipped, "--compat=optional-chaining", "--link", skippedExe])
+    const skippedRun = skippedBuild.status === 0 ? spawnSync(skippedExe, [], { encoding: "utf8" }) : skippedBuild
+    check(
+      "compat: an index read inside a link `?.` skips leaves the next read of the same index bounds-checked",
+      skippedBuild.status === 0 &&
+        skippedRun.status === 1 &&
+        skippedRun.stdout === "" &&
+        skippedRun.stderr.includes("index out of range: 7 >= 3"),
+      shown(skippedBuild) + shown(skippedRun)
+    )
     const placed = [
       ["--compat", "Dialect"],
       ["--number-mode", "Dialect"],
@@ -26140,13 +26175,33 @@ if (dealtHere("cliChecks")) {
 
     const corpus = erasure(NISH, "")
     const counts =
-      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics, (\d+) cases with none\), (\d+) cases the same under --compat as under `--number-mode f64`, (\d+) skipped$/m.exec(
+      /^compat-erasure: (\d+) positive cases byte-identical under --compat \((\d+) files\), (\d+) reject cases rejected alike \((\d+) coded diagnostics, (\d+) cases with none, (\d+) with the feature their refusal names left out\), (\d+) cases the same under --compat as under `--number-mode f64`, (\d+) cases a feature admits running as under Node, (\d+) skipped$/m.exec(
         corpus.stdout
       )
-    const [positiveCount, fileCount, rejectCount, codedCount, uncodedCases, numberedCount, skippedCount] = (counts ?? [])
+    const [
+      positiveCount,
+      fileCount,
+      rejectCount,
+      codedCount,
+      uncodedCases,
+      uncoveredCount,
+      numberedCount,
+      admittedCount,
+      skippedCount,
+    ] = (
+      counts ?? []
+    )
       .slice(1)
       .map(Number)
     const rejectCases = cases.filter((name) => fs.existsSync(path.join(casesDir, `${name}.err`))).length
+    // The reject cases a feature admits, and the cases written for the dialect
+    // that the strict dialect refuses: each run natively as under Node.
+    const admittedRejects = [
+      "reject_nullish",
+      "reject_nullish_nullable",
+      "reject_optional_chain_element_inner",
+      "reject_optional_chain_statement",
+    ].filter((name) => cases.includes(name))
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
       corpus.status === 0 && counts !== null,
@@ -26160,11 +26215,14 @@ if (dealtHere("cliChecks")) {
     check(
       `compat-erasure: the run covered the corpus (${cases.length} cases) and skipped none`,
       counts !== null &&
-        positiveCount === cases.length - rejectCases &&
-        rejectCount === rejectCases &&
+        positiveCount + rejectCount + admittedCount === cases.length &&
+        rejectCount === rejectCases - admittedRejects.length &&
+        admittedCount > admittedRejects.length &&
         fileCount > 0 &&
         codedCount >= rejectCount &&
         uncodedCases === 0 &&
+        uncoveredCount > 0 &&
+        uncoveredCount < rejectCount &&
         numberedCount > 0 &&
         numberedCount <= cases.length &&
         skippedCount === 0,
@@ -26186,7 +26244,7 @@ const fs = require("node:fs")
 const args = process.argv.slice(2)
 const r = spawnSync(${JSON.stringify(NISH)}, args, { maxBuffer: 64 * 1024 * 1024 })
 let [out, err] = [r.stdout.toString("latin1"), r.stderr.toString("latin1")]
-const mode = args.includes("--compat") ? process.env.COMPAT_TAMPER : undefined
+const mode = args.some((a) => a === "--compat" || a.startsWith("--compat=")) ? process.env.COMPAT_TAMPER : undefined
 const rewrite = (pattern, to) => {
   const ll = args[args.indexOf("-o") + 1]
   fs.writeFileSync(ll, fs.readFileSync(ll, "latin1").replace(pattern, to), "latin1")
@@ -26196,6 +26254,14 @@ if ((mode === "ir" || (mode === "number" && !args.includes("--number-mode"))) &&
 }
 if (mode === "mark" && r.status === 0) {
   rewrite(/^!nish\\.compat = .*\\n/m, "")
+}
+if (mode === "accept" && r.status === 1) {
+  fs.writeFileSync(args[args.indexOf("-o") + 1], "")
+  err = ""
+  r.status = 0
+}
+if (mode === "run" && args.includes("--link") && r.status === 0) {
+  fs.writeFileSync(args[args.indexOf("--link") + 1], "#!/bin/sh\\necho tampered\\nexit 1\\n", { mode: 0o755 })
 }
 if (mode === "word" && !args.includes("--json")) {
   err = err.replace("requires", "wants")
@@ -26234,6 +26300,20 @@ process.exitCode = r.status ?? 1
         "; ModuleID",
       ],
       [
+        "accept",
+        rejectCase,
+        "a reject case no feature admits that compiles",
+        `compat-erasure: ${rejectCase}: --compat accepts a reject case no feature admits (list it in ADMITTED with its feature), first at line 1\n`,
+        "exit 0",
+      ],
+      [
+        "accept",
+        "reject_ffi_handle_walk_coalesce",
+        "a reject case that compiles with the feature its refusal names",
+        "compat-erasure: reject_ffi_handle_walk_coalesce (--compat): --compat accepts a reject case no feature admits (list it in ADMITTED with its feature), first at line 1\n",
+        "exit 0",
+      ],
+      [
         "word",
         rejectCase,
         "one changed word of a diagnostic",
@@ -26262,6 +26342,21 @@ process.exitCode = r.status ?? 1
         `honest: exit ${honest.status}\n${honest.stderr}tampered: exit ${tampered.status}\n${tampered.stderr}`
       )
     }
+    // A case a feature admits whose native program parts ways with Node: the
+    // tamperer swaps the linked program for one that prints a word Node does not.
+    const admittedCase = "reject_nullish_nullable"
+    const parted = erasure(tamperer, admittedCase, { COMPAT_TAMPER: "run" })
+    const partedLines = parted.stderr.split("\n")
+    check(
+      "compat-erasure: the runner fails on a case a feature admits whose native program does not print what Node prints, and shows both",
+      parted.status === 1 &&
+        parted.stderr.includes(
+          `compat-erasure: ${admittedCase} (--compat=nullish): the native program does not print and exit as Node does, first at line 2\n`
+        ) &&
+        partedLines.some((line) => line.startsWith("  node:   ") && !line.includes("tampered")) &&
+        partedLines.some((line) => line.startsWith("  native: tampered")),
+      `exit ${parted.status}\n${parted.stderr}`
+    )
     // Nothing to compile with is the runner's own failure (exit 2), never a
     // corpus that agrees.
     const noCompiler = erasure(path.join(erasureDir, "no-such-compiler"), positiveCase)
