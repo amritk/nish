@@ -494,7 +494,7 @@ const rekeyRefusal = (module, rev, arrowify) => {
 const rekey = async (programs, store, rev) => {
   // Imported only here: the codemod pulls in `typescript`, which no other mode needs.
   const { rewrite } = await import("../../scripts/arrowify.mjs")
-  const arrowify = (text, file) => rewrite(text, file, { concise: false })
+  const arrowify = (source, file) => rewrite(source, file, { concise: false })
   const byName = new Map(programs.map((p) => [p.name, p]))
   let moved = 0
   let rekeyed = 0
