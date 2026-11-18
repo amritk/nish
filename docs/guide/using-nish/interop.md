@@ -9,7 +9,8 @@ program can call a C function you declare.
 Each direction starts from an ordinary module that `export`s the functions to
 call. This one is used throughout the page:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const add = (a: i32, b: i32): i32 => a + b;
 
 export const mean = (xs: Float64Array): f64 => {
@@ -305,10 +306,10 @@ export function fill(c: Canvas, rgb: u32): void { canvases[c].fill(rgb); }
 // draw.ts: the Nish module
 import { Canvas, fill, nowMs } from "./web/host.ts";
 
-export function frame(c: Canvas): f64 {
+export const frame = (c: Canvas): f64 => {
   fill(c, 0x336699);
   return nowMs();
-}
+};
 ```
 
 ```console
@@ -470,7 +471,8 @@ world, a document, a list — declare module storage whose element is a class
 or `null`. Each slot is a *root*: the object in it, and everything that
 object reaches, outlives the call that built it.
 
-```ts nish:ok --target wasm32
+<!-- nish:ok --target wasm32 -->
+```ts
 class Node {
   value: i32
   next: Node | null = null
@@ -603,12 +605,12 @@ A template formats a number the way JavaScript does: `${0.1 + 0.2}` is
 // app.ts
 import { say } from "./web/host.ts";
 
-export function label(n: i32): string {
+export const label = (n: i32): string => {
   return `item ${n}`;
-}
-export function greet(n: i32): void {
+};
+export const greet = (n: i32): void => {
   say(`hello ${n}`);
-}
+};
 ```
 
 ```js
@@ -632,11 +634,11 @@ import { textRead, textWrite, textWriteInt } from "nish/host/text";
 export const INBOX = new Array<u8>(256);
 export const OUTBOX = new Array<u8>(256);
 
-export function echo(n: i32): i32 {
+export const echo = (n: i32): i32 => {
   const text = textRead(INBOX, n);
   if (text === null) return -1;
   return textWriteInt(OUTBOX, textWrite(OUTBOX, 0, text), toI64(n));
-}
+};
 ```
 
 ```js
@@ -872,7 +874,8 @@ A numeric enum crosses as its number. A string enum has no spelling in C or
 in the typings yet, so a function that takes or returns one is refused under
 `--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
 
-```ts nish:err NL4019 --emit-header build/docs-ai/nl4019.h
+<!-- nish:err NL4019 --emit-header build/docs-ai/nl4019.h -->
+```ts
 enum Role {
   Admin = "admin",
   Guest = "guest",
@@ -889,7 +892,8 @@ Give the host the member's text instead, a `string` from `String(r)`, or an
 `declare function` names a C function the program calls but does not define.
 The symbol is the name as written, and the call is an ordinary call:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function abs(n: i32): i32;
 
 export const main = (): i32 => {
@@ -923,7 +927,8 @@ Scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64` and
 the rest), `boolean` and `void`. So does a `string` *parameter*, which C reads
 as a NUL-terminated `const char *`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function puts(s: string): i32;
 declare function strlen(s: string): u64;
 
@@ -960,7 +965,8 @@ like any other string the function makes, in a loop as anywhere else. A C
 function that may answer `NULL` is declared `string | null`, and `NULL` arrives
 as `null`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function strerror(errnum: i32): string;
 declare function getenv(name: string): string | null;
 
@@ -987,7 +993,8 @@ A class other than a `declare class` (below), an interface or an array other
 than the byte buffer below is refused, in either direction, because nothing else the Nish compiler allocated
 may reach code it cannot see:
 
-```ts nish:err NL2551
+<!-- nish:err NL2551 -->
+```ts
 declare function execvp(file: string, argv: string[]): i32;
 
 export const main = (): i32 => {
@@ -999,7 +1006,8 @@ A `u8[]` parameter is a byte buffer C writes into, and a `readonly u8[]` one
 C only reads, as C's `const`. A run of one or more buffers is followed by one
 `u64`, the number of bytes C may touch in each of them:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
 declare function getentropy(buf: u8[], n: u64): i32;
 
@@ -1022,7 +1030,8 @@ and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
 proves the count, so the call carries no check and compiles under
 `--deny-panics`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
 
 export const main = (): i32 => {
@@ -1041,7 +1050,8 @@ The one exception is `CPtr`, an address that C owns. A declared function can
 take or return one, a local can hold one, and nothing else can: no field, no
 array, no arithmetic. A `CPtr | null` from C is narrowed before it goes back:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function calloc(count: u64, size: u64): CPtr | null;
 declare function free(block: CPtr): void;
 
@@ -1060,7 +1070,8 @@ it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
 yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
 how `realpath` is asked to allocate:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { readCString } from "nish:unsafe";
 
 declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
@@ -1093,7 +1104,8 @@ A `NULL` reaches C only where the source spells it. A nullable pointer held in
 a variable is refused, because the path that passes it `NULL` is one nobody
 wrote on purpose:
 
-```ts nish:err NL2539
+<!-- nish:err NL2539 -->
+```ts
 declare function free(p: CPtr | null): void;
 declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;
 
@@ -1114,7 +1126,8 @@ its `[Symbol.dispose]` is exactly the call that closes it. Open one with
 block — falling off its end, an early `return`, `break`, `continue`, or an
 `orReturn()` that propagates:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function fopen(path: string, mode: string): CPtr | null;
 declare function fclose(p: CPtr): i32;
 declare function fgetc(p: CPtr): i32;
@@ -1175,7 +1188,8 @@ them, each at its natural alignment, as a C compiler lays out the same fields.
 `new` takes no arguments and zero-fills it, and a parameter typed with it
 passes C its address:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare class Rlimit {
   cur: u64;
   max: u64;
@@ -1207,7 +1221,8 @@ target's pointer, four bytes under `--profile wasi`. A build a web page loads
 to and refuses a `declare class`. Any other field type is refused, since it has no C
 spelling; that includes `number`, whose width `--number-mode` picks:
 
-```ts nish:err NL2752
+<!-- nish:err NL2752 -->
+```ts
 declare class Flags {
   ok: boolean;
 }
@@ -1231,7 +1246,8 @@ program owns, so a later call that overwrites C's buffer leaves the copy
 alone. The type to copy into comes from the context, an annotation or a
 return type, and the copy is the class's size in bytes:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { readCString, readStruct } from "nish:unsafe";
 
 declare class Lconv {
@@ -1265,7 +1281,8 @@ this thread left, and naming it makes the compiler set errno to 0 just before
 every C call, so a function like `strtol`, which reports an out-of-range number
 only through errno, can be told apart from a success:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { cErrno } from "nish:unsafe";
 
 declare function strtol(s: string, end: CPtr | null, base: i32): i64;

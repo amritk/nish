@@ -23,7 +23,8 @@ the slot's `next()` answers `H1_WS_MESSAGE` (the message in `conn.data`,
 `conn.sendFrame(fin, opcode, buf, off, len)` and end with
 `conn.closeWebSocket(code)`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Http1Connection } from "nish/net/http1-server";
 import { websocketOfferedProtocols } from "nish/net/websocket";
 
@@ -67,7 +68,8 @@ ASCII case. Write each origin as a browser sends it: scheme, host and a port
 that is not the scheme's default, with no path or trailing slash
 (`https://example.com`, `http://localhost:8080`). Refuse the rest with a 403.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Http1Connection } from "nish/net/http1-server";
 import { websocketOriginAllowed } from "nish/net/websocket";
 
@@ -123,7 +125,8 @@ The client's side is six steps over a connection you opened:
 
 Over TLS, with `tlsConnect`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { netAddress } from "nish:net";
 import { HTTP1_HEAD, HTTP1_NEED_MORE } from "nish/net/http1-codec";
 import { HTTP1_INFORMATIONAL, Http1ResponseParser } from "nish/net/http1-client-codec";

@@ -25,7 +25,8 @@ nish run --compat app.ts
 Or say so once in your `package.json`, and every build of the package is a
 compat build with no flag:
 
-```json nish:ok file=package.json
+<!-- nish:ok -->
+```json package.json
 {
   "name": "ported",
   "private": true,
@@ -35,7 +36,8 @@ compat build with no flag:
 }
 ```
 
-```ts nish:ok file=main.ts
+<!-- nish:ok -->
+```ts main.ts
 const half = (n: number): number => n / 2
 
 export const main = (): void => {
@@ -55,7 +57,8 @@ means today. `--compat=<feature>,...` is the array on the command line.
 A name that is no feature is refused, on the command line (exit 2) and in
 `package.json` (`NL3056`), so a typo cannot quietly leave a feature off:
 
-```json nish:ok file=package.json
+<!-- nish:ok -->
+```json package.json
 {
   "name": "ported",
   "private": true,
@@ -65,7 +68,8 @@ A name that is no feature is refused, on the command line (exit 2) and in
 }
 ```
 
-```ts nish:err NL3056 file=main.ts
+<!-- nish:err NL3056 -->
+```ts main.ts
 export const main = (): void => {
   console.log(1)
 }
@@ -83,7 +87,8 @@ errors included. The one you are most likely to meet is `main`'s return type:
 the exit code is a 32-bit integer, so a `main` that returns a bare `number` is
 refused.
 
-```json nish:ok file=package.json
+<!-- nish:ok -->
+```json package.json
 {
   "name": "ported",
   "private": true,
@@ -93,7 +98,8 @@ refused.
 }
 ```
 
-```ts nish:err NL2140 file=main.ts
+<!-- nish:err NL2140 -->
+```ts main.ts
 export const main = (): number => {
   return 0
 }

@@ -17,7 +17,8 @@ the [HTTP client](http-client.md) instead.
 An `Upstream` is a pool of kept-alive connections to one origin, registered on
 the handler's loop. Make it once at start-up, beside the handler:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
 import { Router, RouterLimits } from "nish/net/router";
 import { UPSTREAM_E_NONE, UPSTREAM_E_TIMEOUT, Upstream, UpstreamLimits } from "nish/net/upstream";
@@ -138,7 +139,8 @@ policy checks the host name before the lookup and every address after it.
 The pool connects only to an address the policy passed. A service on a
 private address must be permitted by name or by range:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { OutboundPolicy } from "nish/net/outbound";
 import { UpstreamLimits } from "nish/net/upstream";
 

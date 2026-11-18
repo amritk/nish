@@ -23,7 +23,8 @@ nish app.ts --sandbox          # IR only: the .ll carries the sandbox
 
 Take a program that reads one file and does nothing else:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { readFileSync } from "nish:fs"
 
 export const main = (): number => {

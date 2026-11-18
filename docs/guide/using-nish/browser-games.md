@@ -60,7 +60,8 @@ The game's state lives in module storage: typed arrays declared at the top of
 the module, which keep their values from call to call. This game moves a
 square with the arrow keys and beeps when space is pressed:
 
-```ts nish:ok --target wasm32
+<!-- nish:ok --target wasm32 -->
+```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth, gameWriteSamples } from "nish/host/game"
 import { StepInput } from "nish/input"
 import { RASTER_SOLID, rasterGradient, rasterRect, rasterText } from "nish/raster"
@@ -121,7 +122,8 @@ module storage of a class or `null` is
 the world in it, with every array and object it reaches, lasts from `init`
 through every `step` and `draw` while memory stays bounded:
 
-```ts nish:ok --target wasm32
+<!-- nish:ok --target wasm32 -->
+```ts
 class Ball {
   x: f64 = 0.0
   dx: f64 = 2.0

@@ -187,9 +187,9 @@ spelling; the two compile to identical IR, instruction for instruction
 ### Default and rest parameters
 
 ```ts
-function scale(x: number, by: number = 2): number { return x * by }
-function area(w: number, h: number = w): number { return w * h }
-function total(...xs: i64[]): i64 { let s: i64 = 0; for (const x of xs) { s = s + x } return s }
+const scale = (x: number, by: number = 2): number => { return x * by }
+const area = (w: number, h: number = w): number => { return w * h }
+const total = (...xs: i64[]): i64 => { let s: i64 = 0; for (const x of xs) { s = s + x } return s }
 
 scale(3)        // scale(3, 2)
 area(4)         // area(4, 4)
@@ -2536,15 +2536,15 @@ A failure is the answer's `Result`, `Promise<Result<T, E>>`, read after the
 ```ts
 import { awaitAll, spawn } from "nish:async"
 
-async function double(x: i32): Promise<i32> {
+const double = async (x: i32): Promise<i32> => {
   return x * 2
 }
 
-async function log(x: i32): Promise<void> {
+const log = async (x: i32): Promise<void> => {
   console.log(x)
 }
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   const a = await double(3)
   let b: i32 = 0
   b = await double(a)
@@ -2762,7 +2762,7 @@ ASYNC-4).
 import { readable, sleep, spawn } from "nish:async"
 import { netRead } from "nish:net"
 
-async function echo(fd: i32): Promise<void> {
+const echo = async (fd: i32): Promise<void> => {
   const ready = await readable(fd)
   if (!ready) {
     return
@@ -2771,12 +2771,12 @@ async function echo(fd: i32): Promise<void> {
   console.log(netRead(fd, buf, 0, 4))
 }
 
-async function tick(): Promise<void> {
+const tick = async (): Promise<void> => {
   await sleep(10)
   console.log("tick")
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   spawn(echo(0))
   spawn(tick())
   return 0
@@ -2820,7 +2820,7 @@ its task's end, once the executor reuses the task's slot, cancels nothing
 ```ts
 import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"
 
-async function serveOne(fd: i32): Promise<void> {
+const serveOne = async (fd: i32): Promise<void> => {
   // The whole task gets two seconds; this one read gets half of one.
   cancelAfter(taskId(), 2000)
   const ready = await readableWithin(fd, 500)
@@ -5305,7 +5305,7 @@ import { readCString } from "nish:unsafe";
 declare function strdup(s: string): CPtr | null;
 declare function free(p: CPtr): void;
 
-function owned(s: string): string {
+const owned = (s: string): string => {
   const p = strdup(s);
   if (p === null) {
     return "";
@@ -5313,7 +5313,7 @@ function owned(s: string): string {
   const copy = readCString(p);
   free(p);
   return copy;
-}
+};
 ```
 
 ```llvm

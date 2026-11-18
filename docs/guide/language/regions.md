@@ -16,7 +16,8 @@ a `Region<T>` handle, which is a number, not a pointer. `enter(r, f)` runs
 `f(root)` in the region again and answers what `f` answers. `free(r)` gives
 the memory back:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Region, enter, free, region } from "nish:region";
 
 class Session {
@@ -48,7 +49,8 @@ region captures nothing.
 `f(arg)` and `f(root, arg)`. Numbers that `f` copies out of the region, into an
 array it was given, are yours to keep after `free`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Region, enterWith, free, regionWith } from "nish:region";
 
 class Buffer {
@@ -90,7 +92,8 @@ compiler checks every way a value can cross. A number, a `boolean`, an `enum`
 and a `Region` handle are copied, so they cross freely. An object, an array or
 a string made inside the region may not be kept by memory outside it:
 
-```ts nish:err NL2609
+<!-- nish:err NL2609 -->
+```ts
 import { enterWith, free, region } from "nish:region";
 
 class Box {
@@ -117,7 +120,8 @@ export const main = (): i32 => {
 
 And `enter` may answer only something that is copied, never region memory:
 
-```ts nish:err NL2611
+<!-- nish:err NL2611 -->
+```ts
 import { enter, free, region } from "nish:region";
 
 class Box {
@@ -152,7 +156,8 @@ Inside the `f` an `enter` runs, `child(f)` and `childWith(arg, f)` make a
 that was there before this `enter`, so it can use the parent's strings and
 objects without copying them, and `free` of the parent frees every child too:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Region, childWith, enter, free, region } from "nish:region";
 
 class Name {
@@ -187,7 +192,8 @@ That prints `5`, and after `free(parent)` the handle `kid` is dead as well.
 What the parent's `f` made during this `enter` may not go into the child: a
 scope inside the `enter` could give it back while the child still lives.
 
-```ts nish:err NL2610
+<!-- nish:err NL2610 -->
+```ts
 import { Region, childWith, enter, free, region } from "nish:region";
 
 class Name {
