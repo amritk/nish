@@ -111,6 +111,7 @@ import {
   checkImplements,
   collectStructMembers,
   declaresCompact,
+  declaresWide,
   declareStruct,
   markTemplateImplements,
   noteStructNames,
@@ -233,6 +234,7 @@ export class Checker {
   markCompact(): void {
     for (const info of this.declared) {
       info.compact = info.compact || declaresCompact(this.ctx, info.decl)
+      info.wide = info.wide || declaresWide(this.ctx, info.decl)
       if (info.compact) {
         this.ctx.compactNames.add(info.name)
       }

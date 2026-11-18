@@ -235,8 +235,9 @@ export const isExecutorCall = (canonical: string): boolean =>
  * layout (docs/LANGUAGE.md, "Compact classes"). `class R implements Compact`
  * stores every field typed exactly `R` or `R | null`, in any class, as a 32-bit
  * offset into the reserved range (`computeLayout` in `src/structs.ts`). Both
- * names are types with no fields, so an `implements` of one adds no prefix;
- * `Wide` is accepted and changes nothing until stage 3 gives it a meaning.
+ * names are types with no fields, so an `implements` of one adds no prefix.
+ * `Compact` forces what the compact-class rule (`src/compact-rule.ts`) would
+ * otherwise decide, and `Wide` keeps the rule from picking the class.
  */
 export const COMPACT_SPECIFIER: string = "nish:compact"
 

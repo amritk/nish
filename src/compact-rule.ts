@@ -451,6 +451,9 @@ const collectClasses = (
   }
 }
 
+/** A pointer type no field has, so `narrowedSize` narrows nothing: the size before any class is compact. */
+const NO_TARGET: i32 = -1
+
 /** The class as a diagnostic spells it: `Node`, or an instantiation's `Box<i32>`. */
 const displayName = (table: TypeTable, info: StructInfo): string =>
   info.instance === null ? info.name : table.typeName(info.type)
@@ -509,25 +512,39 @@ const forbidden = (table: TypeTable, info: StructInfo): string => {
   return ""
 }
 
-/** The counts the summary line reads. */
+/** The rule's answer: the report `--explain-layout` prints, its counts, and the classes it picks. */
 export class LayoutReport {
   text: string
   classes: i32
   picked: i32
+  /**
+   * The classes the rule picks that do not write `implements Compact`, which
+   * `Compilation.settleCompactClasses` marks compact; a marked class is
+   * compact already and counts in `picked` only.
+   */
+  compact: StructInfo[]
 
-  constructor(text: string, classes: i32, picked: i32) {
+  constructor(text: string, classes: i32, picked: i32, compact: StructInfo[]) {
     this.text = text
     this.classes = classes
     this.picked = picked
+    this.compact = compact
   }
 }
 
 /**
- * The `--explain-layout` report over `modules`: one line per class, in module
- * order and each module's source order, saying `compact` or the first test
- * that refuses it, with its size now and narrowed, and a summary line.
+ * The rule over `modules`, and the `--explain-layout` report of it: one line
+ * per class, in module order and each module's source order, saying `compact`
+ * or the first test that refuses it, with its size unnarrowed and narrowed,
+ * and a summary line. `pointers` is why this build keeps every link a full
+ * pointer though it is native (a page module, `NISH_ASAN`), or `""`.
  */
-export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutModule[]): LayoutReport => {
+export const explainLayout = (
+  opts: Options,
+  table: TypeTable,
+  modules: LayoutModule[],
+  pointers: string
+): LayoutReport => {
   const wasm = isWasmBuild(opts)
   // Every class in the program, each generic class's instantiations
   // included, for test 2's and test 3's scan of the holders, and the index of
@@ -548,7 +565,8 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
     }
     m = m + 1
   }
-  const native = notNative(opts, programs)
+  const refused = notNative(opts, programs)
+  const native = refused.length > 0 ? refused : pointers
   const graph = buildGraph(modules)
   // Each class's shown name and call-graph key are made once, before the
   // report loop, so no pass of that loop allocates a string it keeps.
@@ -561,6 +579,7 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
   const lines = new StringBuilder()
   let classes = 0
   let picked = 0
+  const compact: StructInfo[] = []
   let k = 0
   while (k < all.length && k < owners.length && k < names.length && k < keys.length) {
     const info = all[k]
@@ -571,10 +590,13 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
     k = k + 1
     {
       classes = classes + 1
+      // Sizes as no class narrowed them, so a class marked `implements
+      // Compact` neither hides its own saving nor lends one to a holder.
+      const before = narrowedSize(table, info, NO_TARGET, wasm)
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
-      let saver = after < info.size ? shownName : ""
-      let saving = after < info.size ? `${info.size} → ${after}` : ""
+      let saver = after < before ? shownName : ""
+      let saving = after < before ? `${before} → ${after}` : ""
       let h = 0
       while (h < all.length && h < names.length) {
         const holder = all[h]
@@ -585,10 +607,11 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
         }
         linked = true
         if (saver.length === 0 && holder !== info) {
+          const held = narrowedSize(table, holder, NO_TARGET, wasm)
           const narrowed = narrowedSize(table, holder, info.type, wasm)
-          if (narrowed < holder.size) {
+          if (narrowed < held) {
             saver = holderName
-            saving = `${holder.size} → ${narrowed}`
+            saving = `${held} → ${narrowed}`
           }
         }
       }
@@ -600,22 +623,35 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
       }
       const forbids = forbidden(table, info)
       let verdict = "compact"
-      if (native.length > 0) {
+      if (!opts.compact) {
+        verdict = "off: --compact off"
+      } else if (native.length > 0) {
         verdict = `1 native: ${native}`
+      } else if (info.compact) {
+        // `implements Compact` stands in for tests 2 to 4; a class test 5
+        // refuses is a compile error, so it never reaches here.
+        verdict = "compact (implements Compact)"
       } else if (!linked) {
         verdict = "2 no link"
       } else if (saver.length === 0) {
         verdict = "3 no saving"
       } else if (!made) {
         verdict = "4 not made in a loop or recursion"
+      } else if (info.wide) {
+        verdict = "5 forbidden: implements Wide"
+      } else if (info.instance !== null) {
+        verdict = "5 forbidden: a generic class"
       } else if (forbids.length > 0) {
         verdict = `5 forbidden: ${forbids}`
       }
-      const shown = !linked || saver.length === 0 ? info.size : after
+      const shown = !linked || saver.length === 0 ? before : after
       const name = info.decl.children[0]
       lines.add(`${source.path}:${source.lineOf(name.start)}:${source.columnOf(name.start)}: layout: `)
-      lines.add(`${shownName}${module.std ? " (std)" : ""}: ${verdict}, ${info.size} → ${shown} bytes`)
+      lines.add(`${shownName}${module.std ? " (std)" : ""}: ${verdict}, ${before} → ${shown} bytes`)
       if (verdict === "compact") {
+        compact.push(info)
+      }
+      if (verdict === "compact" || (info.compact && verdict.startsWith("compact"))) {
         picked = picked + 1
       }
       // When the saving that passed test 3 is a holder's, not `R`'s own, the
@@ -627,5 +663,5 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
     }
   }
   lines.add(`explain-layout: ${picked} of ${classes} classes compact`)
-  return new LayoutReport(lines.toText(), classes, picked)
+  return new LayoutReport(lines.toText(), classes, picked, compact)
 }
