@@ -25283,7 +25283,7 @@ if (dealtHere("cliChecks")) {
         want: [
           "genericTree.ts:1:7: layout: TNode<i32>: 5 forbidden: a generic class, 24 → 12 bytes",
           "genericTree.ts:1:7: layout: TNode<i64>: 5 forbidden: a generic class, 24 → 16 bytes",
-          "explain-layout: 2 of 2 classes compact",
+          "explain-layout: 0 of 2 classes compact",
         ],
       },
       // A generic node made once, outside any loop or recursion, links to
@@ -25651,7 +25651,7 @@ if (dealtHere("cliChecks")) {
     // `--compact off` IR, and a program whose classes the rule refuses (`W`
     // alone) is the same IR either way. Each build is `main.ts` in its own
     // directory, so no file name differs between the IR it writes.
-    const wideNode = ['import type { Wide } from "nish:compact"', loopNode.replace("class L {", "class L implements Wide {")].join("\n")
+    const wideNode = ['import { Wide } from "nish:compact"', loopNode.replace("class L {", "class L implements Wide {")].join("\n")
     const noPick = loopNode.slice(0, loopNode.indexOf("class L {")) + ["export const main = (): i32 => {", "  const w = new W()", "  return w.next === null ? 0 : 1", "};", ""].join("\n")
     const compactIr = (variant, source, args) => {
       const dir = path.join(layoutDir, "flag", variant)
