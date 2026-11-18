@@ -197,15 +197,21 @@ const HAS_PRLIMIT = spawnSync("prlimit", ["--version"], { stdio: "ignore" }).sta
  * `spawnSync(exe, args, options)` for a program a check expects to die of a
  * signal, run with `RLIMIT_CORE` at 1 byte so the kernel writes no core for
  * it. A process that reserved the debug arena or the compact-class range
- * dumps every page of the reservation: a 1 TiB core, 11.8 s of kernel time in
- * a cloud session, and 82 to 209 s on a CI runner whose `core_pattern` pipes
- * the core to a helper. The three such checks were 420 s of shard 5's 850 s
- * Test step in run 44241824047. A limit of 1 is the one the kernel reads as
- * "no core" for a pipe too, where 0 would only stop a core file. Without
- * `prlimit` the program runs as it is.
+ * dumps every page of the reservation: a 1 TiB core, and minutes of kernel
+ * time on a CI runner whose `core_pattern` pipes the core to a helper. A limit
+ * of 1 is the one the kernel reads as "no core" for a pipe too, where 0 would
+ * only stop a core file. Without `prlimit` the program runs as it is, and the
+ * first such run prints one `NOTE` line saying the cores are back.
  */
-const spawnFaulting = (exe, args, options) =>
-  HAS_PRLIMIT ? spawnSync("prlimit", ["--core=1:1", "--", exe, ...args], options) : spawnSync(exe, args, options)
+let warnedNoPrlimit = false
+const spawnFaulting = (exe, args, options) => {
+  if (HAS_PRLIMIT) return spawnSync("prlimit", ["--core=1:1", "--", exe, ...args], options)
+  if (!warnedNoPrlimit) {
+    warnedNoPrlimit = true
+    console.log("NOTE  no `prlimit` on the path: the checks that expect a fault run with this shell's core limit")
+  }
+  return spawnSync(exe, args, options)
+}
 
 /**
  * The C a case is linked against -- `runtime.c`, `runtime-os.c` and the shared

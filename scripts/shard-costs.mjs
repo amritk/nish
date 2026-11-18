@@ -46,8 +46,11 @@
  * line is cut from the log's clock, so whichever piece held it shrinks by it.
  * It is for a cost a change has removed that the runs being measured still
  * paid, such as the core dumps the `debug arena` checks wrote before they ran
- * under `prlimit --core=1:1` (81 to 303 s each). A regex that matches no check
- * in any run is an error, so a stale one does not linger in a command.
+ * under `prlimit --core=1:1`. The gap is all the time since the previous
+ * check, so it also takes whatever that check's code did before printing it:
+ * a `staleBuild` check compiles its program, then runs it, then prints one
+ * line, and dropping it cuts the compile too. A regex that matches no check in
+ * any run is an error, so a stale one does not linger in a command.
  *
  * Anything it cannot find is an error, never a guess: a section with no
  * recognizer, a recognizer that matches nothing in the shard that ran the
