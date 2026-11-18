@@ -39688,7 +39688,7 @@ if (!only || "host-import".includes(only)) {
       fs.writeFileSync(path.join(scratch, `${name}.host.ts`), hostText)
       fs.writeFileSync(
         path.join(scratch, `${name}.ts`),
-        `import { first } from "./${name}.host"\nexport function f(): i32 {\n  return first(1)\n}\n`
+        `import { first } from "./${name}.host"\nexport const f = (): i32 => {\n  return first(1)\n};\n`
       )
       return spawnSync(
         NISH,
@@ -39791,12 +39791,12 @@ if (!only || "host-import".includes(only)) {
       [
         'import type { i32, u16 } from "nish"',
         'import { hI32, hU16 } from "./host"',
-        "export function rI32(x: i32): i32 {",
+        "export const rI32 = (x: i32): i32 => {",
         "  return hI32(x)",
-        "}",
-        "export function rU16(x: u16): u16 {",
+        "};",
+        "export const rU16 = (x: u16): u16 => {",
         "  return hU16(x)",
-        "}",
+        "};",
         "",
       ].join("\n")
     )

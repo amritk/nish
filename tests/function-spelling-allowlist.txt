@@ -32,14 +32,14 @@ tests/fix/port-nofix-div-shadow-function.nofix.ts  # a shadowing function declar
 tests/parser/names-bindings.ts  # exercises the parser's function-declaration bindings
 tests/parser/recovery.ts  # syntax-recovery fixture; its declarations are what recovers
 
-# The codemod cannot parse these (each holds a call named `catch`), or misreads
-# them.
+# The codemod cannot parse these (each names a function after a keyword:
+# `catch`, or a word TypeScript reads as an operator), or misreads them.
 tests/cases/reject_try_catch_call_newline.ts  # `function catch(...)`; arrowify cannot parse it
 tests/cases/reject_try_catch_pattern_call_newline.ts  # `function catch(...)`; arrowify cannot parse it
 tests/parser/names.ts  # a `catch` name; arrowify cannot parse it
 tests/parser/names-catch-array.ts  # a `catch` name; arrowify cannot parse it
 tests/parser/names-catch-object.ts  # a `catch` name; arrowify cannot parse it
-tests/parser/names-operator-calls.ts  # a `catch` name; arrowify cannot parse it
+tests/parser/names-operator-calls.ts  # functions named `typeof`, `delete`, `void`, `instanceof`, `in`, `yield`, `await`, `satisfies`, `as` and `of`; arrowify cannot parse it
 tests/parser/names-declarations.ts  # `function made(): keyof {`: arrowify reads `keyof {` as a type literal and skips the body
 
 # Host modules: src/host-module.ts reads `export function` declarations.
