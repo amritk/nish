@@ -14,7 +14,8 @@ built-in module `nish:compact`. The rules are in the reference under
 Import `Compact` and add it to the class's `implements` clause. Nothing else
 in the program changes:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Compact } from "nish:compact";
 
 class Tree implements Compact {
@@ -76,7 +77,8 @@ their code:
 - A compact class holds no `Secret` (NL2797). Keep the secret in a class of
   its own:
 
-```ts nish:err NL2797
+<!-- nish:err NL2797 -->
+```ts
 import { Compact } from "nish:compact";
 import { Secret, secret, wipe } from "nish:secret";
 

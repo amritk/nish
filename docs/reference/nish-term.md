@@ -131,7 +131,7 @@ Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishterm-termin
 Whether a descriptor is a terminal, `isatty`; under Node `tty.isatty`.
 
 ```ts
-function isTerminal(fd: i32): boolean
+const isTerminal: (fd: i32) => boolean
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -154,11 +154,7 @@ with a zero timeout before it reads. Under `--profile wasi` it waits for
 its bytes instead.
 
 ```ts
-function readStdin(
-  buf: u8[],
-  off: i32,
-  len: i32,
-): i32
+const readStdin: (buf: u8[], off: i32, len: i32) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -198,7 +194,7 @@ SIGKILL aside. A program started in the background is stopped by SIGTTOU
 here until `fg`.
 
 ```ts
-function setRawMode(on: boolean): i32
+const setRawMode: (on: boolean) => i32
 ```
 
 <scalar-field name="on" type="boolean" required>
@@ -225,7 +221,7 @@ mode or not; Ctrl-Z and `setRawMode(false)` write nothing. Set them again
 with each change, last the set that undoes them all.
 
 ```ts
-function setTerminalRestore(bytes: string): i32
+const setTerminalRestore: (bytes: string) => i32
 ```
 
 <scalar-field name="bytes" type="string" required>
@@ -249,7 +245,7 @@ read fresh on each call: read it again each frame to follow a resize.
 Under Node, its `columns` and `rows`.
 
 ```ts
-function terminalSize(): i32[]
+const terminalSize: () => i32[]
 ```
 
 <scalar-field name="returns" type="i32[]">
@@ -270,7 +266,7 @@ what is left of the timeout. Before raw mode Linux goes on and Darwin ends
 the wait. Not `willreturn`.
 
 ```ts
-function waitStdin(timeoutMs: i32): boolean
+const waitStdin: (timeoutMs: i32) => boolean
 ```
 
 <scalar-field name="timeoutMs" type="i32" required>

@@ -12,6 +12,12 @@
 //     api       an API client's POST: a 338-byte head with a 148-byte HS256
 //               Bearer token, and a 61-byte JSON body
 //     short     `GET / HTTP/1.1` and Host, 37 bytes
+//     get       the minimal keep-alive GET /json a JSON API serves: a
+//               350-byte head with Host, User-Agent, Accept and a
+//               221-byte HS256 Bearer token
+//     fields0, fields4, fields10
+//               `GET /json` with Host and 0, 4 or 10 `X-Pad-k` fields the
+//               program never reads: 41, 113 and 221 bytes
 //     pipelined the API POST and the browser GET in one read
 //     split     the browser GET in two reads, cut inside its Cookie line
 //     json1k, json4k, json16k, json40k
@@ -137,6 +143,32 @@ const apiRequest = (): string =>
 /** The shortest request a client sends: 37 bytes. */
 const SHORT: string = "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
 
+/**
+ * The minimal keep-alive GET a JSON API serves most: 350 bytes, its Bearer
+ * token a 221-byte HS256 JWT (a 140-character claims part).
+ */
+const getRequest = (): string =>
+  "GET /json HTTP/1.1\r\n" +
+  "Host: api.example.com\r\n" +
+  "User-Agent: conduit-client/2.4.1\r\n" +
+  "Accept: application/json\r\n" +
+  `Authorization: Bearer ${jwt(140, 17)}\r\n` +
+  "\r\n"
+
+/**
+ * `GET /json` with Host and `n` fields the program never reads, each
+ * `X-Pad-k: value-k`, so the cost of a field nobody looks at is the slope
+ * across n.
+ */
+const fieldsRequest = (n: i32): string => {
+  const parts: string[] = ["GET /json HTTP/1.1\r\nHost: example.com\r\n"]
+  for (let k: i32 = 0; k < n; k += 1) {
+    parts.push(`X-Pad-${k}: value-${k}\r\n`)
+  }
+  parts.push("\r\n")
+  return parts.join("")
+}
+
 /** One case: the reads one iteration feeds, the requests they hold, and the JSON each answer carries. */
 class Case {
   reads: u8[][]
@@ -160,6 +192,18 @@ const caseNamed = (name: string): Case | null => {
   }
   if (name === "short") {
     return new Case([ascii(SHORT)], 1, 0)
+  }
+  if (name === "get") {
+    return new Case([ascii(getRequest())], 1, 0)
+  }
+  if (name === "fields0") {
+    return new Case([ascii(fieldsRequest(0))], 1, 0)
+  }
+  if (name === "fields4") {
+    return new Case([ascii(fieldsRequest(4))], 1, 0)
+  }
+  if (name === "fields10") {
+    return new Case([ascii(fieldsRequest(10))], 1, 0)
   }
   if (name === "pipelined") {
     return new Case([concat(ascii(apiRequest()), ascii(browserHead()))], 2, 0)

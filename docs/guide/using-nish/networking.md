@@ -48,7 +48,8 @@ To wait, make a loop with `pollCreate()`, watch each socket with
 `pollWait(loop, ready, timeoutMs)`. It fills `ready` with pairs, a token and
 its events, and answers how many, `0` when the timeout passed.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollWait, tcpAccept, tcpListen } from "nish:net";
 
 export const main = (): i32 => {
@@ -214,7 +215,8 @@ for [`nish/net/prefork`](#a-server-on-every-core-nishnetprefork), and flag
 A listener without flag `1` cannot open a port a listener with it holds, nor
 the other way round: both answer `-98`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { netClose, netLocalPort, tcpListenFlags } from "nish:net";
 
 export const main = (): i32 => {
@@ -300,7 +302,8 @@ A listener whose rings fail for want of descriptors or memory serves
 descriptors itself, and a later listener asks again.
 On macOS the flag is accepted and does nothing.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_LISTEN_RING, netClose, netRingState, tcpListenFlags } from "nish:net";
 
 export const main = (): i32 => {
@@ -334,7 +337,8 @@ for descriptors, until a connection closes or 100 ms pass, so a full server
 waits rather than spin. `h.resting()` is true while it does, for a server
 that wants to log or count the times it is full:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
 import { Router, RouterLimits } from "nish/net/router";
 import { netClose, netRingState } from "nish:net";
@@ -400,7 +404,8 @@ each response added one system call and one segment per request and served
 response. A server that wants the delayed ACKs from the
 first request sets the option once, as it accepts:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_TCP_QUICKACK, netSetOption, tcpAccept } from "nish:net";
 
 export const acceptOne = (listener: i32, peer: u8[]): i32 => {
@@ -429,7 +434,8 @@ and a `NET_LISTEN_RING` slot handle.
 `-1` is not an error code, so check for a positive answer and fall back to a
 size of your own:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { netMss } from "nish:net";
 
 // Bytes to gather before one write: four full segments, or 4096 when the
@@ -454,7 +460,8 @@ each with its own `SO_REUSEPORT` listener on the same port: that is what
 `nish/net/prefork` does. Call `preforkWorkers(process.argv)` at the top of
 `main`, before you open a listener:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { netClose, tcpListenFlags } from "nish:net";
 import { PREFORK_STOPPED, preforkWorkers } from "nish/net/prefork";
 
@@ -536,7 +543,8 @@ Add `pin = true` and worker `k` also pins itself to CPU `k`
 worker on the CPU that received it, so a connection's packets and the worker
 that answers it share a core's caches:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { PREFORK_STOPPED, PreforkConfig, preforkListener, preforkWith } from "nish/net/prefork";
 
 export const main = (): i32 => {
@@ -584,7 +592,8 @@ a datagram whose destination connection ID starts with byte `k` goes to worker
 the group's size with `preforkUdpCount(process.argv)`, and puts both in its
 `QuicServerConfig`, so every connection ID it hands out starts with `k`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { PREFORK_STOPPED, PreforkConfig, preforkUdpCount, preforkUdpListener, preforkWith } from "nish/net/prefork";
 import { QuicServerConfig } from "nish/net/quic";
 
@@ -733,7 +742,8 @@ never block, so wait for one in the readiness loop alongside the listener.
 Where they are rides in one more argument, `--nish-prefork-channels=`, just
 before the worker's index; `preforkArgs` drops it with the index.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_UNIX_STREAM, netRead } from "nish:net";
 import {
   PREFORK_STOPPED,
@@ -871,7 +881,8 @@ it opens, and answers each lookup with the 18-byte addresses `tcpConnect` and
 tokens it owns and the time; it never waits and never reads the clock itself,
 so a slow lookup costs your other sockets nothing.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { DnsClient } from "nish/net/dns";
 import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";
 import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";

@@ -13,7 +13,8 @@ and [its lane operations](https://github.com/amritk/nish/blob/main/docs/LANGUAGE
 Import the type you need. Its name is also its constructor, which takes one
 value per lane, lane 0 first. `splat…` puts one value in every lane:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { i32x4, splatF64x2, extract } from "nish:simd";
 
 export const main = (): i32 => {
@@ -56,7 +57,8 @@ does for `xs[i]`: under `while (i <= n - 4)`, with `n` the array's length and
 guard one lane short, `i <= n - 3`, proves nothing, so that load keeps its
 check.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { loadU8x16, store } from "nish:simd";
 
 export const main = (): i32 => {
@@ -83,7 +85,8 @@ is `v` with lane `k` set to `x`; `v` itself does not change. The lane number
 has to be a number written in the code, from 0 to one less than the lane
 count, so the compiler can check it:
 
-```ts nish:err NL2580
+<!-- nish:err NL2580 -->
+```ts
 import { i32x4, extract } from "nish:simd";
 
 export const main = (): i32 => {
@@ -100,7 +103,8 @@ field or an array, pass it to a function and return it. It has no operators:
 `+`, `===`, `<` and the others are refused, and so is printing one directly —
 use the functions below, and read the lanes with `extract`.
 
-```ts nish:err NL2231
+<!-- nish:err NL2231 -->
+```ts
 import { i32x4 } from "nish:simd";
 
 export const main = (): i32 => {
@@ -133,7 +137,8 @@ any vector, and `and`, `or`, `xor` and `not` take integer vectors. `sum` adds
 the lanes of a `u8x16`, `u16x8` or float vector; `sumWrapping` adds the lanes
 of an `i32x4` or `u32x4`, wrapping.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { f32x4, i32x4, splatF32x4, mul, add, addWrapping, sum, sumWrapping } from "nish:simd";
 
 export const main = (): i32 => {
@@ -158,7 +163,8 @@ count is a number written in the code and smaller than the lane's width in
 bits (8, 16 or 32), so each is a single instruction. Rotates are what
 ChaCha20, SHA-256 and similar code are made of:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { u32x4, addWrapping, xor, rotl, extract } from "nish:simd";
 
 export const main = (): i32 => {
@@ -173,7 +179,8 @@ export const main = (): i32 => {
 That prints `65537`. A count of 32 or more on a 32-bit lane, or a count held
 in a variable, is refused:
 
-```ts nish:err NL2631
+<!-- nish:err NL2631 -->
+```ts
 import { u32x4, rotl, extract } from "nish:simd";
 
 export const main = (): i32 => {
@@ -190,7 +197,8 @@ and so on. `any(m)` and `all(m)` ask whether some or every lane passed,
 `bitmask(m)` gives an `i32` whose bit `k` is lane `k`, and `select(m, a, b)`
 takes each lane from `a` where the mask is set and from `b` where it is not.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { u8x16, splatU8x16, eq, any, bitmask } from "nish:simd";
 
 export const main = (): i32 => {

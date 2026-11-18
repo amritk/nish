@@ -162,10 +162,10 @@ decoder of capacity 0 may send on its decoder stream, and may also omit.
 A stream ID outside 0 to 2^62 - 1 panics.
 
 ```ts
-function qpackPushStreamCancellation(
+const qpackPushStreamCancellation: (
   out: u8[],
   streamId: i64,
-): void
+) => void
 ```
 
 <scalar-field name="out" type="u8[]" required>

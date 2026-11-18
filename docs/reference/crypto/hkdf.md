@@ -300,7 +300,7 @@ where `hkdfExpandSha256` answers `null`: a `length` negative or past
 HashLen.
 
 ```ts
-function hkdfExpandInto(
+const hkdfExpandInto: (
   s: HkdfScratch,
   hashLength: i32,
   prk: u8[],
@@ -308,7 +308,7 @@ function hkdfExpandInto(
   out: u8[],
   at: i32,
   length: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="s" type="HkdfScratch" required>
@@ -370,7 +370,7 @@ kept plain by design, a record layer's AEAD key and IV, say, which live in
 the arrays the cipher reads. Panics as `hkdfExpandLabelInto` does.
 
 ```ts
-function hkdfExpandLabelHeldInto(
+const hkdfExpandLabelHeldInto: (
   hashLength: i32,
   prk: Secret<u8[]>,
   label: string,
@@ -378,7 +378,7 @@ function hkdfExpandLabelHeldInto(
   out: u8[],
   at: i32,
   length: i32,
-): void
+) => void
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -433,7 +433,7 @@ label empty or past 249 bytes, a context past 255, a secret shorter than
 HashLen — and on a context window outside its array.
 
 ```ts
-function hkdfExpandLabelInto(
+const hkdfExpandLabelInto: (
   s: HkdfScratch,
   hashLength: i32,
   prk: u8[],
@@ -444,7 +444,7 @@ function hkdfExpandLabelInto(
   out: u8[],
   at: i32,
   length: i32,
-): void
+) => void
 ```
 
 <scalar-field name="s" type="HkdfScratch" required>
@@ -515,12 +515,12 @@ HKDF-Expand-Label with HMAC-SHA-256 (RFC 8446 §7.1): `length` bytes from
 range the module docs give, a secret shorter than 32 bytes among them.
 
 ```ts
-function hkdfExpandLabelSha256(
+const hkdfExpandLabelSha256: (
   prk: u8[],
   label: string,
   context: u8[],
   length: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="prk" type="u8[]" required>
@@ -562,12 +562,12 @@ place. `dst` may be `prk` itself, since the output is whole before it is
 copied: that is a ratchet. Panics as `hkdfExpandLabelSha256` does.
 
 ```ts
-function hkdfExpandLabelSha256Held(
+const hkdfExpandLabelSha256Held: (
   dst: Secret<u8[]>,
   prk: Secret<u8[]>,
   label: string,
   context: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
@@ -604,12 +604,12 @@ context are not secret, and the PRK is read only inside it. Panics as
 `hkdfExpandLabelSha256` does.
 
 ```ts
-function hkdfExpandLabelSha256Secret(
+const hkdfExpandLabelSha256Secret: (
   prk: Secret<u8[]>,
   label: string,
   context: u8[],
   length: i32,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
@@ -651,12 +651,12 @@ HKDF-Expand-Label with HMAC-SHA-384 (RFC 8446 §7.1): `length` bytes from
 range the module docs give, a secret shorter than 48 bytes among them.
 
 ```ts
-function hkdfExpandLabelSha384(
+const hkdfExpandLabelSha384: (
   prk: u8[],
   label: string,
   context: u8[],
   length: i32,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="prk" type="u8[]" required>
@@ -696,12 +696,12 @@ A fresh array of `length` bytes, which the caller owns.
 `hkdfExpandLabelSha384` does.
 
 ```ts
-function hkdfExpandLabelSha384Held(
+const hkdfExpandLabelSha384Held: (
   dst: Secret<u8[]>,
   prk: Secret<u8[]>,
   label: string,
   context: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
@@ -736,12 +736,12 @@ The public context, often a transcript hash; at most 255
 `hkdfExpandLabelSha384` does.
 
 ```ts
-function hkdfExpandLabelSha384Secret(
+const hkdfExpandLabelSha384Secret: (
   prk: Secret<u8[]>,
   label: string,
   context: u8[],
   length: i32,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
@@ -784,11 +784,11 @@ or past 255 × 32, when `info` is longer than 2^31 - 1 bytes, or when `prk`
 is shorter than 32 bytes.
 
 ```ts
-function hkdfExpandSha256(
+const hkdfExpandSha256: (
   prk: u8[],
   info: u8[],
   length: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="prk" type="u8[]" required>
@@ -821,11 +821,11 @@ A fresh array of `length` bytes, which the caller owns and wipes, or
 `hkdfExpandSha256` on a PRK held as a `Secret`.
 
 ```ts
-function hkdfExpandSha256Secret(
+const hkdfExpandSha256Secret: (
   prk: Secret<u8[]>,
   info: u8[],
   length: i32,
-): Secret<u8[]> | null
+) => Secret<u8[]> | null
 ```
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
@@ -862,11 +862,11 @@ or past 255 × 48, when `info` is longer than 2^31 - 1 bytes, or when `prk`
 is shorter than 48 bytes.
 
 ```ts
-function hkdfExpandSha384(
+const hkdfExpandSha384: (
   prk: u8[],
   info: u8[],
   length: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="prk" type="u8[]" required>
@@ -899,11 +899,11 @@ A fresh array of `length` bytes, which the caller owns and wipes, or
 `hkdfExpandSha384` on a PRK held as a `Secret`.
 
 ```ts
-function hkdfExpandSha384Secret(
+const hkdfExpandSha384Secret: (
   prk: Secret<u8[]>,
   info: u8[],
   length: i32,
-): Secret<u8[]> | null
+) => Secret<u8[]> | null
 ```
 
 <scalar-field name="prk" type="Secret&lt;u8[]&gt;" required>
@@ -941,14 +941,14 @@ asks for would be. An `ikm` longer than 2^31 - 1 bytes panics, as
 `hmacSha256` does.
 
 ```ts
-function hkdfExtractInto(
+const hkdfExtractInto: (
   s: HkdfScratch,
   hashLength: i32,
   salt: u8[],
   ikm: u8[],
   out: u8[],
   at: i32,
-): void
+) => void
 ```
 
 <scalar-field name="s" type="HkdfScratch" required>
@@ -993,10 +993,7 @@ Where the `hashLength` PRK bytes start in `out`.
 HKDF-Extract with HMAC-SHA-256 (RFC 5869 §2.2): the 32-byte PRK.
 
 ```ts
-function hkdfExtractSha256(
-  salt: u8[],
-  ikm: u8[],
-): u8[]
+const hkdfExtractSha256: (salt: u8[], ikm: u8[]) => u8[]
 ```
 
 <scalar-field name="salt" type="u8[]" required>
@@ -1023,10 +1020,10 @@ A fresh 32-byte PRK, which the caller owns and wipes.
 `hkdfExtractSha256` on input keying material held as a `Secret`.
 
 ```ts
-function hkdfExtractSha256Secret(
+const hkdfExtractSha256Secret: (
   salt: u8[],
   ikm: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="salt" type="u8[]" required>
@@ -1054,10 +1051,7 @@ The 32-byte PRK, held as a `Secret` the caller wipes.
 HKDF-Extract with HMAC-SHA-384 (RFC 5869 §2.2): the 48-byte PRK.
 
 ```ts
-function hkdfExtractSha384(
-  salt: u8[],
-  ikm: u8[],
-): u8[]
+const hkdfExtractSha384: (salt: u8[], ikm: u8[]) => u8[]
 ```
 
 <scalar-field name="salt" type="u8[]" required>
@@ -1084,10 +1078,10 @@ A fresh 48-byte PRK, which the caller owns and wipes.
 `hkdfExtractSha384` on input keying material held as a `Secret`.
 
 ```ts
-function hkdfExtractSha384Secret(
+const hkdfExtractSha384Secret: (
   salt: u8[],
   ikm: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="salt" type="u8[]" required>
@@ -1117,12 +1111,12 @@ the `Secret` input keying material and `info`, held as a `Secret`, or `null`
 where `hkdfExpandSha256` answers `null`. The PRK is wiped before it returns.
 
 ```ts
-function hkdfSha256Secret(
+const hkdfSha256Secret: (
   salt: u8[],
   ikm: Secret<u8[]>,
   info: u8[],
   length: i32,
-): Secret<u8[]> | null
+) => Secret<u8[]> | null
 ```
 
 <scalar-field name="salt" type="u8[]" required>
@@ -1164,12 +1158,12 @@ The `length` bytes, held as a `Secret` the caller wipes, or `null`
 it returns.
 
 ```ts
-function hkdfSha384Secret(
+const hkdfSha384Secret: (
   salt: u8[],
   ikm: Secret<u8[]>,
   info: u8[],
   length: i32,
-): Secret<u8[]> | null
+) => Secret<u8[]> | null
 ```
 
 <scalar-field name="salt" type="u8[]" required>

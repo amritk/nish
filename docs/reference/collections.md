@@ -128,10 +128,10 @@ compiles to. The walk is a `for...of` over `s`, with its rule for elements
 the callback adds or deletes.
 
 ```ts
-function forEachElement<T>(
+const forEachElement: <T>(
   s: Set<T>,
   f: (value: T) => void,
-): void
+) => void
 ```
 
 <scalar-field name="s" type="Set&lt;T&gt;" required>
@@ -156,10 +156,10 @@ adds is visited and one it deletes is not, as `Map.prototype.forEach` does.
 Placed after `storedKey` so that no earlier line moved.
 
 ```ts
-function forEachEntry<K, V>(
+const forEachEntry: <K, V>(
   m: Map<K, V>,
   f: (value: V, key: K) => void,
-): void
+) => void
 ```
 
 <scalar-field name="m" type="Map&lt;K, V&gt;" required>
@@ -181,10 +181,10 @@ Calls `f` with the value of each entry of `m`, in insertion order: what
 `forEachEntry`'s.
 
 ```ts
-function forEachValue<K, V>(
+const forEachValue: <K, V>(
   m: Map<K, V>,
   f: (value: V) => void,
-): void
+) => void
 ```
 
 <scalar-field name="m" type="Map&lt;K, V&gt;" required>

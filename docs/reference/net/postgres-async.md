@@ -38,7 +38,7 @@ import {
   PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
 } from "nish/net/postgres-async"
 
-async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+const title = async (pool: PgAsyncPool, id: i32): Promise<void> => {
   const ticket: i32 = await pgAsyncClaim(pool)
   if (ticket < 0) {
     return  // no live connection, or none came free in time
@@ -52,7 +52,7 @@ async function title(pool: PgAsyncPool, id: i32): Promise<void> {
   }
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const config = new PgConfig()
   config.user = "app"
   const pool = new PgAsyncPool(4)
@@ -330,11 +330,11 @@ with `reusable` false. It only reads the pool, so a spawned task may call
 it.
 
 ```ts
-function pgAsyncAnswer(
+const pgAsyncAnswer: (
   pool: PgAsyncPool,
   ticket: i32,
   turn: i32,
-): Promise<PgAsyncResult>
+) => Promise<PgAsyncResult>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -374,9 +374,7 @@ connection is never taken by a task that would close it at its first wait.
 It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts
-function pgAsyncClaim(
-  pool: PgAsyncPool,
-): Promise<i32>
+const pgAsyncClaim: (pool: PgAsyncPool) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -405,12 +403,12 @@ spawned task: it holds the password. A slot that fails stays unconnected;
 call it again to retry.
 
 ```ts
-function pgAsyncConnect(
+const pgAsyncConnect: (
   pool: PgAsyncPool,
   config: PgConfig,
   password: Secret<u8[]>,
   target: PgTarget,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -456,12 +454,12 @@ is answered. It writes only numbers into the pool, so a spawned task may
 call it.
 
 ```ts
-function pgAsyncDone(
+const pgAsyncDone: (
   pool: PgAsyncPool,
   ticket: i32,
   turn: i32,
   reusable: boolean,
-): void
+) => void
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -497,10 +495,10 @@ on each connection, the first time a task sends it there. Call it from
 start: it grows the pool.
 
 ```ts
-function pgAsyncPrepare(
+const pgAsyncPrepare: (
   pool: PgAsyncPool,
   sql: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -530,12 +528,12 @@ its ReadyForQuery, waiting on the socket while other tasks run. It only
 reads the pool; its buffers and the answer are the calling task's.
 
 ```ts
-function pgAsyncQuery(
+const pgAsyncQuery: (
   pool: PgAsyncPool,
   ticket: i32,
   sql: string,
   params: PgAsyncParams,
-): Promise<PgAsyncResult>
+) => Promise<PgAsyncResult>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -580,11 +578,11 @@ ticket that is not the slot's current claim (a second release, or one after
 may call it.
 
 ```ts
-function pgAsyncRelease(
+const pgAsyncRelease: (
   pool: PgAsyncPool,
   ticket: i32,
   reusable: boolean,
-): void
+) => void
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -622,10 +620,10 @@ only while none waits.
 It writes only numbers into the pool, so a spawned task may call it.
 
 ```ts
-function pgAsyncSeat(
+const pgAsyncSeat: (
   pool: PgAsyncPool,
   statement: i32,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -659,11 +657,11 @@ the socket while other tasks run. It only reads the pool; its buffer is the
 calling task's.
 
 ```ts
-function pgAsyncSend(
+const pgAsyncSend: (
   pool: PgAsyncPool,
   ticket: i32,
   params: PgAsyncParams,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -709,11 +707,11 @@ input. It writes only numbers into the pool, so a spawned task may call it;
 `pgAsyncAnswer` then builds the answer in the task's memory.
 
 ```ts
-function pgAsyncTurn(
+const pgAsyncTurn: (
   pool: PgAsyncPool,
   ticket: i32,
   sent: i32,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="pool" type="PgAsyncPool" required>
@@ -778,7 +776,7 @@ class PgAsyncPool
 
 | Member | |
 | --- | --- |
-| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. A waiting task waits on a wake: one per slot, one for the pool and one per queue lane. Each opens its socket pair the first time a task waits on it; `close()` closes the pairs opened. |
+| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. A waiting task waits on a wake: one per turn lane, one for the pool and one per queue lane. Each opens its socket pair the first time a task waits on it; `close()` closes the pairs opened. |
 | `readonly claimed: u8[]` | Each slot's state: 0 free, 1 claimed by a ticket. |
 | `readonly claims: i32[]` | Each slot's claim count, the high part of its current ticket. |
 | `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. |
@@ -821,7 +819,7 @@ class PgAsyncPool
 | `readonly wakePair: i32[]` | Where `pgAsyncPark` opens a wake's socket pair, so it does not allocate. |
 | `readonly wakePending: u8[]` | Per wake: 1 while a byte is written and not yet read. |
 | `readonly wakeRings: i32[]` | Per wake: how many bytes were written to it, wrapping; a waiter that sees it move was rung. |
-| `readonly wakes: i32[]` | Per slot, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. A pair is opened the first time a task waits on its wake, so a pool nobody waits on holds none. |
+| `readonly wakes: i32[]` | Per turn lane, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. A pair is opened the first time a task waits on its wake, so a pool nobody waits on holds none. |
 | `readonly wakeUnseen: i32[]` | Per wake: the tasks waiting when its byte was written that have not yet woken; it is read back at 0. |
 | `readonly writing: u8[]` | Per slot: 1 while a seated statement has not yet been written whole. |
 | `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not, and closes the wakes. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |

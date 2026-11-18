@@ -67,7 +67,8 @@ browser, and a native build can be called from Node, WebAssembly or C.
 
 ## A first look
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const sumOfSquares = (limit: i32): i32 => {
   let total = 0;
   for (let i = 1; i <= limit; i++) {

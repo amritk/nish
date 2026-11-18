@@ -133,14 +133,14 @@ alone (about 330 KB, allocated and filled): keep a `GzipCompressor` for
 anything repeated.
 
 ```ts
-function gzipCompress(
+const gzipCompress: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   level: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -192,14 +192,14 @@ The index in `out` one past the member's last byte, or
 alone.
 
 ```ts
-function gzipDecompress(
+const gzipDecompress: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   limit: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -250,7 +250,7 @@ The index in `out` one past the data's last byte, or a negative
 The most bytes `GzipFixedCompressor.compress` writes for `n` bytes of input.
 
 ```ts
-function gzipFixedBound(n: i32): i32
+const gzipFixedBound: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>

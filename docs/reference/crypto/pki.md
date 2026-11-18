@@ -180,10 +180,10 @@ name or certificate carries it, so one entry covers a CA's cross-signs and
 reissues. A store distrusts nothing until this is called.
 
 ```ts
-function pkiDistrustSpki(
+const pkiDistrustSpki: (
   store: PkiTrustStore,
   spkiSha256: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="store" type="PkiTrustStore" required>
@@ -215,10 +215,10 @@ subject's common name is never read, so a certificate without a
 subjectAltName names no host. Nothing but the names is checked.
 
 ```ts
-function pkiMatchHostname(
+const pkiMatchHostname: (
   leaf: X509Certificate,
   hostname: string,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="leaf" type="X509Certificate" required>
@@ -245,7 +245,7 @@ The name or address dialled: a DNS name, ASCII, or an IPv4
 A sentence for `code`, for a log or an error message.
 
 ```ts
-function pkiReason(code: i32): string
+const pkiReason: (code: i32) => string
 ```
 
 <scalar-field name="code" type="i32" required>
@@ -267,9 +267,9 @@ given is kept once. Nothing about a root is checked here: its validity and
 extensions are checked when a path reaches it.
 
 ```ts
-function pkiTrustStore(
+const pkiTrustStore: (
   roots: X509Certificate[],
-): PkiTrustStore
+) => PkiTrustStore
 ```
 
 <scalar-field name="roots" type="X509Certificate[]" required>
@@ -308,12 +308,12 @@ of signatures or name comparisons; and last, once a path is found, the
 leaf's profile.
 
 ```ts
-function pkiVerifyServer(
+const pkiVerifyServer: (
   chain: u8[][],
   hostname: string,
   nowMs: i64,
   store: PkiTrustStore,
-): PkiResult
+) => PkiResult
 ```
 
 <scalar-field name="chain" type="u8[][]" required>
@@ -356,10 +356,10 @@ SHA-512 and RSASSA-PSS under a key of `PKI_MIN_RSA_BITS` or more whose
 modulus is a whole number of bytes, and Ed25519. Nothing else about either certificate is checked.
 
 ```ts
-function pkiVerifySignature(
+const pkiVerifySignature: (
   cert: X509Certificate,
   issuer: X509Certificate,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="cert" type="X509Certificate" required>

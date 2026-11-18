@@ -75,7 +75,7 @@ under `--number-mode f64`, `toI32` of a longer length saturates, and the
 answer would be the digest of a prefix.
 
 ```ts
-function sha1(data: u8[]): u8[]
+const sha1: (data: u8[]) => u8[]
 ```
 
 <scalar-field name="data" type="u8[]" required>

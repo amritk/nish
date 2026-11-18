@@ -5043,15 +5043,15 @@ declare module "nish:region" {
  *
  *     import { awaitAll, spawn } from "nish:async";
  *
- *     async function double(x: i32): Promise<i32> {
+ *     const double = async (x: i32): Promise<i32> => {
  *       return x * 2;
  *     }
  *
- *     async function log(x: i32): Promise<void> {
+ *     const log = async (x: i32): Promise<void> => {
  *       console.log(x);
  *     }
  *
- *     async function run(): Promise<void> {
+ *     const run = async (): Promise<void> => {
  *       const [c, d] = await awaitAll(double(1), double(2));
  *       spawn(log(c + d));
  *     }
@@ -5068,7 +5068,7 @@ declare module "nish:region" {
  *
  *     import { readable, sleep } from "nish:async";
  *
- *     async function tick(): Promise<void> {
+ *     const tick = async (): Promise<void> => {
  *       await sleep(10);
  *       console.log("tick");
  *     }

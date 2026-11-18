@@ -315,7 +315,7 @@ The kernel clears the failure as it is read, so a second call answers
 `0`; close the descriptor with `netClose` either way.
 
 ```ts
-function connectResult(fd: i32): i32
+const connectResult: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -338,11 +338,11 @@ Write the address form of a numeric host and a port. No call looks a name
 up; `nish/net/dns` resolves one first.
 
 ```ts
-function netAddress(
+const netAddress: (
   out: u8[],
   host: string,
   port: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -379,7 +379,7 @@ watching it. Not `willreturn`, because a socket the program inherited
 with a linger time can wait.
 
 ```ts
-function netClose(fd: i32): i32
+const netClose: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -400,7 +400,7 @@ The port the socket is bound to, which is how a program that listened on
 port `0` learns the one the kernel chose.
 
 ```ts
-function netLocalPort(fd: i32): i32
+const netLocalPort: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -436,7 +436,7 @@ export const batch = (conn: i32, fallback: i32): i32 => {
 </scalar-code-group>
 
 ```ts
-function netMss(fd: i32): i32
+const netMss: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -462,12 +462,12 @@ The size, or a plain `-1`, never an errno, for anything else: a
 Read at most `len` bytes into `buf[off, off + len)`. The range is checked.
 
 ```ts
-function netRead(
+const netRead: (
   fd: i32,
   buf: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -507,7 +507,7 @@ The count, `0` at the end of the stream, `-11` when nothing is
 Whether `NET_LISTEN_RING` listeners accept into rings.
 
 ```ts
-function netRingState(): i32
+const netRingState: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -525,11 +525,11 @@ level and option number, because that would be an untyped call into the
 kernel. Refused at compile time on wasm, and it throws under Node.
 
 ```ts
-function netSetOption(
+const netSetOption: (
   fd: i32,
   option: i32,
   value: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -566,7 +566,7 @@ Shut one side of a connection, or both. On a connection a
 already written, so the peer reads them and then the end of the stream.
 
 ```ts
-function netShutdown(fd: i32, how: i32): i32
+const netShutdown: (fd: i32, how: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -595,12 +595,12 @@ A peer that has gone is `-32`, never SIGPIPE, so a closed connection
 cannot end the process.
 
 ```ts
-function netWrite(
+const netWrite: (
   fd: i32,
   buf: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -643,7 +643,7 @@ write, as after `netWrite`. Both ranges are checked, `a`'s first, and
 either may be empty. A gone peer is `-32`, never SIGPIPE.
 
 ```ts
-function netWrite2(
+const netWrite2: (
   fd: i32,
   a: readonly u8[],
   aOff: i32,
@@ -651,7 +651,7 @@ function netWrite2(
   b: readonly u8[],
   bOff: i32,
   bLen: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -712,7 +712,7 @@ recorded it when the connection was made (the `connect`, or the
 its uid since, passed the socket on, or closed, still reads as it was.
 
 ```ts
-function peerCredentials(fd: i32, out: i32[]): i32
+const peerCredentials: (fd: i32, out: i32[]) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -743,12 +743,12 @@ A connected Unix socket, refused as `sendFd`'s `sock` is.
 Watch `fd` and report it under `token`.
 
 ```ts
-function pollAdd(
+const pollAdd: (
   loop: i32,
   fd: i32,
   events: i32,
   token: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -792,7 +792,7 @@ level-triggered. Epoll on Linux; kqueue on Darwin, from whose filters the
 runtime builds epoll's answers.
 
 ```ts
-function pollCreate(): i32
+const pollCreate: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -806,12 +806,12 @@ The loop's descriptor, or the failure.
 New events or a new token for a descriptor the loop watches.
 
 ```ts
-function pollModify(
+const pollModify: (
   loop: i32,
   fd: i32,
   events: i32,
   token: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -849,7 +849,7 @@ The token it is reported under from now on.
 Stop watching `fd`. Closing a descriptor stops the watching too.
 
 ```ts
-function pollRemove(loop: i32, fd: i32): i32
+const pollRemove: (loop: i32, fd: i32) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -882,11 +882,11 @@ from then on, for the rest of its life, the wait goes on to its deadline, and `s
 and `ready` is never written past its length.
 
 ```ts
-function pollWait(
+const pollWait: (
   loop: i32,
   ready: i32[],
   timeoutMs: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="loop" type="i32" required>
@@ -928,13 +928,13 @@ sender shares, so set what the program needs before it joins a loop. The
 range is checked.
 
 ```ts
-function recvFd(
+const recvFd: (
   sock: i32,
   buf: u8[],
   off: i32,
   len: i32,
   fd: i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="sock" type="i32" required>
@@ -987,13 +987,13 @@ first bytes, so send the rest with `netWrite`, not `sendFd`, or the
 receiver gets a second copy. The range is checked.
 
 ```ts
-function sendFd(
+const sendFd: (
   sock: i32,
   fd: i32,
   buf: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="sock" type="i32" required>
@@ -1043,7 +1043,7 @@ close-on-exec. Not `willreturn`: on a blocking socket the program
 inherited, it waits.
 
 ```ts
-function tcpAccept(fd: i32, peer: u8[]): i32
+const tcpAccept: (fd: i32, peer: u8[]) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1084,7 +1084,7 @@ Watch the descriptor for writability, then ask `connectResult`. It holds
 not allocate.
 
 ```ts
-function tcpConnect(addr: readonly u8[]): i32
+const tcpConnect: (addr: readonly u8[]) => i32
 ```
 
 <scalar-field name="addr" type="readonly u8[]" required>
@@ -1111,11 +1111,11 @@ restarted server rebinds a port its old connections still hold in
 IPv6 `"::"` is IPv4's `0.0.0.0`.
 
 ```ts
-function tcpListen(
+const tcpListen: (
   host: string,
   port: i32,
   backlog: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="host" type="string" required>
@@ -1179,12 +1179,12 @@ memory serves descriptors itself, and a later listener asks again. Off
 Linux the flag is accepted and does nothing.
 
 ```ts
-function tcpListenFlags(
+const tcpListenFlags: (
   host: string,
   port: i32,
   backlog: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="host" type="string" required>
@@ -1228,11 +1228,7 @@ host and port as `tcpListen`'s is, `"::"` and its IPv4 fallback included.
 The ECN bits of every datagram are always read.
 
 ```ts
-function udpBind(
-  host: string,
-  port: i32,
-  flags: i32,
-): i32
+const udpBind: (host: string, port: i32, flags: i32) => i32
 ```
 
 <scalar-field name="host" type="string" required>
@@ -1270,14 +1266,14 @@ is longer, in one `recvmsg`. The range is checked. An empty datagram is a
 datagram and answers `0`. Not `willreturn`, as `udpSendTo`.
 
 ```ts
-function udpRecvFrom(
+const udpRecvFrom: (
   fd: i32,
   buf: u8[],
   off: i32,
   len: i32,
   from: u8[],
   meta: i32[],
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1336,7 +1332,7 @@ Not `willreturn`: on a blocking socket the program inherited, it waits.
 An IPv4 socket sends to a mapped `::ffff:a.b.c.d` address as IPv4.
 
 ```ts
-function udpSendTo(
+const udpSendTo: (
   fd: i32,
   buf: readonly u8[],
   off: i32,
@@ -1344,7 +1340,7 @@ function udpSendTo(
   to: readonly u8[],
   segment: i32,
   ecn: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1408,7 +1404,7 @@ close-on-exec. No peer address is written: a Unix client is seldom
 bound.
 
 ```ts
-function unixAccept(fd: i32): i32
+const unixAccept: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -1431,7 +1427,7 @@ at `path`. A connect needs write permission on the file and search
 permission on every directory above it.
 
 ```ts
-function unixConnect(path: string): i32
+const unixConnect: (path: string) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1458,11 +1454,11 @@ or let the next start's `NET_UNIX_UNLINK_STALE` clear it. A call that
 fails after its bind closes the socket and unlinks the file it made.
 
 ```ts
-function unixListen(
+const unixListen: (
   path: string,
   backlog: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1502,12 +1498,12 @@ The listener's descriptor or the failure: `-98` when the path
 and the listen, so no connect gets in under a wider one.
 
 ```ts
-function unixListenMode(
+const unixListenMode: (
   path: string,
   backlog: i32,
   flags: i32,
   mode: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -1549,10 +1545,7 @@ close-on-exec: a channel without a name, for a child process or for one
 side of a program.
 
 ```ts
-function unixSocketPair(
-  kind: i32,
-  fds: i32[],
-): i32
+const unixSocketPair: (kind: i32, fds: i32[]) => i32
 ```
 
 <scalar-field name="kind" type="i32" required>

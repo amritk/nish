@@ -227,10 +227,10 @@ sixth is refused even when its bits are zero; otherwise a run of `0x80`
 bytes would be read for as long as the peer cared to send it.
 
 ```ts
-function hpackDecodeInteger(
+const hpackDecodeInteger: (
   c: HpackCursor,
   prefixBits: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="c" type="HpackCursor" required>
@@ -260,11 +260,11 @@ answering `HPACK_OK` or a negative `HPACK_ERR_*` code. The length is checked
 against what the block has left before anything is read.
 
 ```ts
-function hpackDecodeString(
+const hpackDecodeString: (
   h: HpackHuffman,
   c: HpackCursor,
   out: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="h" type="HpackHuffman" required>
@@ -305,12 +305,12 @@ A negative value, or a prefix outside 1 to 8 bits, panics: both are the
 program's choice.
 
 ```ts
-function hpackEncodeInteger(
+const hpackEncodeInteger: (
   out: u8[],
   flags: i32,
   prefixBits: i32,
   value: i32,
-): void
+) => void
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -346,12 +346,12 @@ true, else raw. A caller who wants the shorter of the two compares
 `hpackHuffmanLength` with the raw length.
 
 ```ts
-function hpackEncodeString(
+const hpackEncodeString: (
   h: HpackHuffman,
   out: u8[],
   data: u8[],
   huffman: boolean,
-): void
+) => void
 ```
 
 <scalar-field name="h" type="HpackHuffman" required>
@@ -392,13 +392,13 @@ thirty bits always are. What is left when the input ends is padding, which
 A window outside `src` panics.
 
 ```ts
-function hpackHuffmanDecode(
+const hpackHuffmanDecode: (
   h: HpackHuffman,
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="h" type="HpackHuffman" required>
@@ -450,13 +450,13 @@ code is at most 30, so it never needs more than 37 bits.
 A window outside `src` panics.
 
 ```ts
-function hpackHuffmanEncode(
+const hpackHuffmanEncode: (
   h: HpackHuffman,
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="h" type="HpackHuffman" required>
@@ -495,12 +495,12 @@ The length of `src[off, off + len)` once Huffman-coded, in bytes, padding includ
 `src` panics, as does a coded length past 2^31 - 1 bytes.
 
 ```ts
-function hpackHuffmanLength(
+const hpackHuffmanLength: (
   h: HpackHuffman,
   src: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="h" type="HpackHuffman" required>

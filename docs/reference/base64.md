@@ -91,7 +91,7 @@ importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e).
 would not fit a string.
 
 ```ts
-function base64Encode(bytes: u8[]): string
+const base64Encode: (bytes: u8[]) => string
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -115,13 +115,13 @@ range is not inside `src` or the encoding does not fit in `dst` from `at`;
 both are checked before anything is written.
 
 ```ts
-function base64EncodeInto(
+const base64EncodeInto: (
   src: u8[],
   off: i32,
   len: i32,
   dst: u8[],
   at: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -169,7 +169,7 @@ group counted as a whole one. Panics when `n` is negative or the length
 would pass 2^31 - 1, which `n` above 1,610,612,733 does.
 
 ```ts
-function base64EncodedLength(n: i32): i32
+const base64EncodedLength: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>

@@ -193,7 +193,7 @@ back without a page. It needs no capability and does no I/O.
 The frame's height, as `gameSetSize` set it.
 
 ```ts
-function gameHeight(): i32
+const gameHeight: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -209,7 +209,7 @@ drains after the step. A full queue drops the id, since a sound late by a
 frame is worse than one missed.
 
 ```ts
-function gamePlaySound(id: i32): boolean
+const gamePlaySound: (id: i32) => boolean
 ```
 
 <scalar-field name="id" type="i32" required>
@@ -234,10 +234,7 @@ turned off, and Ctrl-C is an ordinary key (a page's copy), not a quit. A
 trailing part-record is dropped.
 
 ```ts
-function gameReadInput(
-  input: StepInput,
-  nowMs: f64,
-): void
+const gameReadInput: (input: StepInput, nowMs: f64) => void
 ```
 
 <scalar-field name="input" type="StepInput" required>
@@ -259,10 +256,7 @@ to show. Each side is held to `0..GAME_MAX_WIDTH` and `0..GAME_MAX_HEIGHT`.
 The pixels are not touched: the next frame draws over them.
 
 ```ts
-function gameSetSize(
-  width: i32,
-  height: i32,
-): void
+const gameSetSize: (width: i32, height: i32) => void
 ```
 
 <scalar-field name="width" type="i32" required>
@@ -282,7 +276,7 @@ the frame's height in pixels
 The frame's width, as `gameSetSize` set it.
 
 ```ts
-function gameWidth(): i32
+const gameWidth: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -298,10 +292,10 @@ Hand one sound's samples to the page: each is clipped to `-1..1` (NaN is
 many and at what rate. Samples past `GAME_SAMPLE_LIMIT` are cut off.
 
 ```ts
-function gameWriteSamples(
+const gameWriteSamples: (
   samples: f64[],
   sampleRate: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="samples" type="f64[]" required>
