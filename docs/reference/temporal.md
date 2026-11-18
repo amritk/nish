@@ -242,10 +242,7 @@ compares only against a `relativeTo` date; two durations with the same
 fields compare equal whatever they hold.
 
 ```ts
-function durationCompare(
-  a: Duration,
-  b: Duration,
-): i32
+const durationCompare: (a: Duration, b: Duration) => i32
 ```
 
 <scalar-field name="a" type="Duration" required>
@@ -274,7 +271,7 @@ field may have a fraction of up to nine digits (`PT1.5H` is an hour and 30
 minutes). Panics with a `RangeError` on anything else.
 
 ```ts
-function durationFrom(text: string): Duration
+const durationFrom: (text: string) => Duration
 ```
 
 <scalar-field name="text" type="string" required>
@@ -295,9 +292,7 @@ the duration
 refuses. Not part of Temporal.
 
 ```ts
-function durationFromOrNull(
-  text: string,
-): Duration | null
+const durationFromOrNull: (text: string) => Duration | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -318,10 +313,7 @@ the duration, or `null`
 or after `b`.
 
 ```ts
-function instantCompare(
-  a: Instant,
-  b: Instant,
-): i32
+const instantCompare: (a: Instant, b: Instant) => i32
 ```
 
 <scalar-field name="a" type="Instant" required>
@@ -351,7 +343,7 @@ bracketed time zone after it is ignored. Panics with a `RangeError` on
 anything else.
 
 ```ts
-function instantFrom(text: string): Instant
+const instantFrom: (text: string) => Instant
 ```
 
 <scalar-field name="text" type="string" required>
@@ -373,9 +365,7 @@ after 1970-01-01T00:00:00Z. Panics with a `RangeError` when `ms` is not a
 whole number or is outside ±8.64 × 10^15.
 
 ```ts
-function instantFromEpochMilliseconds(
-  ms: f64,
-): Instant
+const instantFromEpochMilliseconds: (ms: f64) => Instant
 ```
 
 <scalar-field name="ms" type="f64" required>
@@ -396,9 +386,7 @@ the instant
 refuses. Not part of Temporal.
 
 ```ts
-function instantFromOrNull(
-  text: string,
-): Instant | null
+const instantFromOrNull: (text: string) => Instant | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -419,7 +407,7 @@ the instant, or `null`
 operating system reports. Capability: clock.
 
 ```ts
-function nowInstant(): Instant
+const nowInstant: () => Instant
 ```
 
 <scalar-field name="returns" type="Instant">
@@ -434,10 +422,7 @@ the current instant
 as, or after `b`, which is the comparator `sort` takes.
 
 ```ts
-function plainDateCompare(
-  a: PlainDate,
-  b: PlainDate,
-): i32
+const plainDateCompare: (a: PlainDate, b: PlainDate) => i32
 ```
 
 <scalar-field name="a" type="PlainDate" required>
@@ -466,7 +451,7 @@ calendar, which must be `iso8601`; a `Z` is refused, as it is in Temporal.
 Panics with a `RangeError` on anything else.
 
 ```ts
-function plainDateFrom(text: string): PlainDate
+const plainDateFrom: (text: string) => PlainDate
 ```
 
 <scalar-field name="text" type="string" required>
@@ -487,9 +472,9 @@ the date
 refuses. Not part of Temporal.
 
 ```ts
-function plainDateFromOrNull(
+const plainDateFromOrNull: (
   text: string,
-): PlainDate | null
+) => PlainDate | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -510,10 +495,10 @@ the date, or `null`
 same as, or after `b`.
 
 ```ts
-function plainDateTimeCompare(
+const plainDateTimeCompare: (
   a: PlainDateTime,
   b: PlainDateTime,
-): i32
+) => i32
 ```
 
 <scalar-field name="a" type="PlainDateTime" required>
@@ -542,9 +527,7 @@ for a calendar, which must be `iso8601`; a `Z` is refused. Panics with a
 `RangeError` on anything else.
 
 ```ts
-function plainDateTimeFrom(
-  text: string,
-): PlainDateTime
+const plainDateTimeFrom: (text: string) => PlainDateTime
 ```
 
 <scalar-field name="text" type="string" required>
@@ -565,9 +548,9 @@ the date-time
 refuses. Not part of Temporal.
 
 ```ts
-function plainDateTimeFromOrNull(
+const plainDateTimeFromOrNull: (
   text: string,
-): PlainDateTime | null
+) => PlainDateTime | null
 ```
 
 <scalar-field name="text" type="string" required>
@@ -588,10 +571,7 @@ the date-time, or `null`
 same as, or later than `b`.
 
 ```ts
-function plainTimeCompare(
-  a: PlainTime,
-  b: PlainTime,
-): i32
+const plainTimeCompare: (a: PlainTime, b: PlainTime) => i32
 ```
 
 <scalar-field name="a" type="PlainTime" required>
@@ -622,7 +602,7 @@ its `T` that would also read as a year and month or a month and day
 `RangeError` on anything else.
 
 ```ts
-function plainTimeFrom(text: string): PlainTime
+const plainTimeFrom: (text: string) => PlainTime
 ```
 
 <scalar-field name="text" type="string" required>
@@ -643,9 +623,9 @@ the time
 refuses. Not part of Temporal.
 
 ```ts
-function plainTimeFromOrNull(
+const plainTimeFromOrNull: (
   text: string,
-): PlainTime | null
+) => PlainTime | null
 ```
 
 <scalar-field name="text" type="string" required>

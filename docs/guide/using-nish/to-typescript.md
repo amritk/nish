@@ -30,7 +30,8 @@ log(toI64(2.9)); // 2
 
 Take this Nish module:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const describe = (name: string): Result<i64, string> => {
   if (name.length === 0) {
     return Err("empty");

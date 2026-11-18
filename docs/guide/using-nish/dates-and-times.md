@@ -26,7 +26,8 @@ Every value is immutable: `add` answers a new date rather than changing the one
 it was called on. The calendar is ISO 8601, the proleptic Gregorian one that
 `toString` writes.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Duration, plainDateFrom, PlainDate } from "nish/temporal";
 
 export const main = (): number => {
@@ -65,7 +66,8 @@ A string that Temporal refuses is a panic whose message starts `RangeError:`.
 To read input you do not trust, use the `...OrNull` twin, which answers `null`
 instead:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { PlainDate, plainDateFromOrNull } from "nish/temporal";
 
 export const main = (): number => {
@@ -96,7 +98,8 @@ Here is what `add` and `subtract` do to each type:
 gives: days for a date or a date-time, hours for a time, and seconds for an
 instant.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { durationFrom, instantFrom, plainDateTimeFrom } from "nish/temporal";
 
 export const main = (): number => {

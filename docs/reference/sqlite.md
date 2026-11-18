@@ -166,10 +166,10 @@ path `:memory:` is a database of its own that lives as long as the
 connection. A failed open leaves nothing open behind it.
 
 ```ts
-function openDatabase(
+const openDatabase: (
   path: string,
   flags: i32,
-): Result<Database, SqliteError>
+) => Result<Database, SqliteError>
 ```
 
 <scalar-field name="path" type="string" required>
@@ -196,7 +196,7 @@ The connection, or a `SqliteError` with SQLite's code and message,
 The version of the SQLite library linked into this program.
 
 ```ts
-function sqliteVersion(): string
+const sqliteVersion: () => string
 ```
 
 <scalar-field name="returns" type="string">

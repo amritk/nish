@@ -285,7 +285,7 @@ Written from RFC 6455, not ported from another implementation.
 5.4): the SHA-1 of the key and `WS_GUID`, in padded standard base64.
 
 ```ts
-function websocketAcceptKey(key: string): string
+const websocketAcceptKey: (key: string) => string
 ```
 
 <scalar-field name="key" type="string" required>
@@ -320,11 +320,11 @@ its `tunnelBytes()` go to `WsDecoder(false, …)`, and every frame the client
 sends is masked with a fresh mask key from `crypto.getRandomValues` (§5.3).
 
 ```ts
-function websocketCheckResponse(
+const websocketCheckResponse: (
   response: Http1ResponseParser,
   key: string,
   offered: string[],
-): WsHandshake
+) => WsHandshake
 ```
 
 <scalar-field name="response" type="Http1ResponseParser" required>
@@ -361,9 +361,7 @@ or can be guessed lets a cache or an intermediary replay an old handshake's
 answer. This module draws no randomness itself.
 
 ```ts
-function websocketClientKey(
-  nonce: u8[],
-): string | null
+const websocketClientKey: (nonce: u8[]) => string | null
 ```
 
 <scalar-field name="nonce" type="u8[]" required>
@@ -386,10 +384,10 @@ them; §7.4), a reason that is not UTF-8, and one longer than 123 bytes,
 which would take the frame past 125.
 
 ```ts
-function websocketClosePayload(
+const websocketClosePayload: (
   code: i32,
   reason: string,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="code" type="i32" required>
@@ -416,14 +414,14 @@ One frame, as `websocketWriteFrame` writes it, in an array of its own; the
 same refusals answer `null`. A window outside `payload` panics.
 
 ```ts
-function websocketFrame(
+const websocketFrame: (
   fin: boolean,
   opcode: i32,
   payload: u8[],
   off: i32,
   len: i32,
   mask: u8[] | null,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="fin" type="boolean" required>
@@ -474,10 +472,7 @@ How many bytes a frame of `len` payload bytes takes, its header included,
 so a caller can size the buffer `websocketWriteFrame` writes into.
 
 ```ts
-function websocketFrameSize(
-  len: i32,
-  masked: boolean,
-): i32
+const websocketFrameSize: (len: i32, masked: boolean) => i32
 ```
 
 <scalar-field name="len" type="i32" required>
@@ -505,11 +500,11 @@ message's payload, or a close frame's reason, must be (§8.1). A window
 outside `buf` panics.
 
 ```ts
-function websocketIsUtf8(
+const websocketIsUtf8: (
   buf: u8[],
   off: i32,
   len: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -543,7 +538,7 @@ standard base64 that decodes to exactly 16 bytes, in its one canonical
 spelling.
 
 ```ts
-function websocketKeyIsValid(key: string): boolean
+const websocketKeyIsValid: (key: string) => boolean
 ```
 
 <scalar-field name="key" type="string" required>
@@ -568,9 +563,9 @@ field, and `null` when an element is not a token: a server picks one of
 these, or none, for `websocketUpgradeResponse`.
 
 ```ts
-function websocketOfferedProtocols(
+const websocketOfferedProtocols: (
   p: Http1Parser,
-): string[] | null
+) => string[] | null
 ```
 
 <scalar-field name="p" type="Http1Parser" required>
@@ -603,10 +598,10 @@ serves clients that are not browsers lets those through itself. Allocates
 nothing.
 
 ```ts
-function websocketOriginAllowed(
+const websocketOriginAllowed: (
   p: Http1Parser,
   allowed: string[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="p" type="Http1Parser" required>
@@ -635,9 +630,7 @@ handshake (§4.2.1), as `websocketRequestKeyField` judges it. Otherwise
 when only the version is wrong, §4.4).
 
 ```ts
-function websocketRequestKey(
-  p: Http1Parser,
-): string | null
+const websocketRequestKey: (p: Http1Parser) => string | null
 ```
 
 <scalar-field name="p" type="Http1Parser" required>
@@ -661,9 +654,7 @@ first `Sec-WebSocket-Key`. Otherwise -1. Nothing is allocated: the key is
 `p.head[p.spans[4 * i + 2] .. p.spans[4 * i + 3])`, for `WsAcceptKey`.
 
 ```ts
-function websocketRequestKeyField(
-  p: Http1Parser,
-): i32
+const websocketRequestKeyField: (p: Http1Parser) => i32
 ```
 
 <scalar-field name="p" type="Http1Parser" required>
@@ -691,12 +682,12 @@ empty host, and everything the request writer refuses (CR, LF or another
 control byte in `host`, a `target` that is not a request target).
 
 ```ts
-function websocketUpgradeRequest(
+const websocketUpgradeRequest: (
   host: string,
   target: string,
   key: string,
   protocols: string[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="host" type="string" required>
@@ -740,10 +731,10 @@ server answering handshake after handshake writes the same bytes with
 nothing.
 
 ```ts
-function websocketUpgradeResponse(
+const websocketUpgradeResponse: (
   key: string,
   protocol: string,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="key" type="string" required>
@@ -781,7 +772,7 @@ checked here, because a fragment may end inside a character;
 `websocketIsUtf8` checks a whole message.
 
 ```ts
-function websocketWriteFrame(
+const websocketWriteFrame: (
   out: u8[],
   at: i32,
   fin: boolean,
@@ -790,7 +781,7 @@ function websocketWriteFrame(
   off: i32,
   len: i32,
   mask: u8[] | null,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -856,12 +847,12 @@ Writes the server's 101 response to an opening handshake (§4.2.2) into
 of `websocketUpgradeResponse`.
 
 ```ts
-function websocketWriteUpgradeResponse(
+const websocketWriteUpgradeResponse: (
   out: u8[],
   at: i32,
   accept: u8[],
   protocol: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>

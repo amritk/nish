@@ -3901,6 +3901,16 @@
                         { "rel": "canonical", "href": "https://nishlang.com/roadmap/wp65-lexer-surface" }
                       ]
                     }
+                  },
+                  "/wp66-c-headers": {
+                    "type": "page",
+                    "title": "WP66: C libraries from their headers",
+                    "filepath": "docs/roadmap/wp66-c-headers.md",
+                    "head": {
+                      "title": "WP66: C libraries from their headers · Nish",
+                      "meta": [{ "property": "og:title", "content": "WP66: C libraries from their headers" }],
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp66-c-headers" }]
+                    }
                   }
                 }
               },

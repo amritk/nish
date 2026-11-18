@@ -441,7 +441,7 @@ TLS: its length, 8, and `PG_SSL_REQUEST_CODE`, both big-endian. The server
 answers one byte, `S` to go on with a TLS handshake or `N` to refuse.
 
 ```ts
-function pgSslRequest(): u8[]
+const pgSslRequest: () => u8[]
 ```
 
 <scalar-field name="returns" type="u8[]">
@@ -460,10 +460,7 @@ a socket path over 107 bytes (an `@` name over 107 after its `@`), never
 cut short.
 
 ```ts
-function pgTarget(
-  host: string,
-  port: i32,
-): PgTarget
+const pgTarget: (host: string, port: i32) => PgTarget
 ```
 
 <scalar-field name="host" type="string" required>
@@ -504,7 +501,7 @@ where libpq would take it as unset. The decoded host is then resolved as
 `pgTarget` resolves one.
 
 ```ts
-function pgTargetUrl(url: string): PgTarget
+const pgTargetUrl: (url: string) => PgTarget
 ```
 
 <scalar-field name="url" type="string" required>

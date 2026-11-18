@@ -2452,7 +2452,7 @@ if (dealtHere("termIo")) {
     fs.mkdirSync(ioDir, { recursive: true })
     const { relay, KITTY_REPLY } = await import("./term-io/relay.mjs")
     const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
-    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/```ts nish:ok\n([\s\S]*?)```/g)]
+    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/^<!-- nish:ok -->\n```ts\n([\s\S]*?)```/gm)]
       .map((m) => m[1])
       .find((block) => block.includes("runTerminal"))
     const build = (name, src) => {
@@ -26506,21 +26506,24 @@ if (dealtHere("releaseChecks")) {
   // exactly the kind of document that rots, and a stale example is worse than no
   // example -- it teaches a rule the compiler no longer has.
   //
-  // So every fenced block the doc marks is compiled here, and the marker says what
-  // must happen:
+  // So every fenced block the doc marks is compiled here. The marker is an HTML
+  // comment on the line just above the fence, which the docs site does not
+  // show (a word after the fence's language it shows as the block's title), and
+  // it says what must happen:
   //
-  //   ```ts nish:ok                 compiles, exit 0
-  //   ```ts nish:ok-body            the same, wrapped in a `main` body
-  //   ```ts nish:err NL2231         must be rejected, with that code among the errors
-  //   ```ts nish:err-body NL2188    the same, wrapped in a `main` body
+  //   <!-- nish:ok -->              compiles, exit 0
+  //   <!-- nish:ok-body -->         the same, wrapped in a `main` body
+  //   <!-- nish:err NL2231 -->      must be rejected, with that code among the errors
+  //   <!-- nish:err-body NL2188 --> the same, wrapped in a `main` body
   //
-  // Anything after the code is passed to the CLI as flags (`--number-mode f64`),
-  // except `file=<path>`, which makes the fence one file of a program of several:
-  // a run of `file=` fences in one section (no heading between them) is written
-  // out as one directory, each at its path (a `json` fence may be one, for a
-  // package's `package.json`), and the last of them is compiled with its marker
-  // and flags. The fences before it are files the program imports, so they are
-  // `nish:ok` with no flags.
+  // Anything after the code is passed to the CLI as flags (`--number-mode f64`).
+  // A marked fence with a path after its language (```ts geometry.ts) is one file
+  // of a program of several, and the site shows the path as its title: a run of
+  // them in one section (no heading between them) is written out as one
+  // directory, each at its path (a `json` fence may be one, for a package's
+  // `package.json`), and the last of them is compiled with its marker and flags.
+  // The fences before it are files the program imports, so they are `nish:ok`
+  // with no flags. A marker in the fence's own line, the old spelling, is refused.
   // A plain ```ts block is prose and is not compiled, which is what lets the doc
   // show a fragment. The expectation is the *code* rather than the message,
   // because that is what the doc tells its reader to key on (`AGENTS.md`,
@@ -26551,15 +26554,22 @@ if (dealtHere("releaseChecks")) {
     fs.rmSync(snippetDir, { recursive: true, force: true })
     fs.mkdirSync(snippetDir, { recursive: true })
 
-    /** Fenced blocks of a doc page that carry a `nish:` marker, with the line they start on. */
+    const MARKER = /^<!-- nish:(ok|err)(-body)?((?:\s+\S+)*?)\s*-->$/
+    const MARKED_FENCE = /^```(ts|json)(?:\s+(\S+))?\s*$/
+
+    /**
+     * Fenced blocks of a doc page that carry a `nish:` marker, with the line the
+     * fence starts on.
+     */
     const markedSnippets = (text) => {
       const found = []
       const lines = text.split("\n")
       let section = 0
       let inFence = false
       for (let i = 0; i < lines.length; i++) {
-        const m = /^```(ts|json)\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i])
-        if (!m) {
+        const m = inFence ? null : MARKER.exec(lines[i])
+        const fence = m ? MARKED_FENCE.exec(lines[i + 1] ?? "") : null
+        if (!fence) {
           // A `#` line inside an unmarked fence, a shell comment, is not a heading.
           if (lines[i].startsWith("```")) {
             inFence = !inFence
@@ -26568,18 +26578,18 @@ if (dealtHere("releaseChecks")) {
           }
           continue
         }
-        const rest = m[4].trim().split(/\s+/).filter(Boolean)
-        const code = m[2] === "err" ? rest.shift() : null
-        const fileArg = rest.findIndex((a) => a.startsWith("file="))
-        const file = fileArg < 0 ? null : rest.splice(fileArg, 1)[0].slice("file=".length)
+        i++
+        const rest = m[3].trim().split(/\s+/).filter(Boolean)
+        const code = m[1] === "err" ? rest.shift() : null
+        const file = fence[2] ?? null
         let end = i + 1
         while (end < lines.length && lines[end] !== "```") {
           end++
         }
         found.push({
-          lang: m[1],
-          kind: m[2],
-          wrap: m[3] === "-body",
+          lang: fence[1],
+          kind: m[1],
+          wrap: m[2] === "-body",
           code,
           args: rest,
           file,
@@ -26590,6 +26600,30 @@ if (dealtHere("releaseChecks")) {
         i = end
       }
       return found
+    }
+
+    /**
+     * The lines of a page whose marker would go unchecked: a fence carrying
+     * `nish:` in its own line, the old spelling, and a marker comment that no
+     * fence follows.
+     */
+    const strayMarkers = (text) => {
+      const lines = text.split("\n")
+      const stray = []
+      let inFence = false
+      for (const [i, line] of lines.entries()) {
+        if (line.startsWith("```")) {
+          if (!inFence && /^```\S*\s+nish:/.test(line)) {
+            stray.push(i + 1)
+          }
+          inFence = !inFence
+        } else if (!inFence && /^<!--\s*nish:/.test(line)) {
+          if (!MARKER.test(line) || !MARKED_FENCE.test(lines[i + 1] ?? "")) {
+            stray.push(i + 1)
+          }
+        }
+      }
+      return stray
     }
 
     /**
@@ -26817,10 +26851,12 @@ if (dealtHere("releaseChecks")) {
     {
       const page = [
         "## A program of two files",
-        "```ts nish:ok file=geometry.ts",
+        "<!-- nish:ok -->",
+        "```ts geometry.ts",
         "const half = (x: i32): i32 => x / 2;",
         "```",
-        "```ts nish:ok file=main.ts",
+        "<!-- nish:ok -->",
+        "```ts main.ts",
         'import { half } from "./geometry";',
         "export const main = (): i32 => half(4);",
         "```",
@@ -26844,9 +26880,10 @@ if (dealtHere("releaseChecks")) {
         fixed.run.status === 0,
         fixed.detail || fixed.run.stderr
       )
-      const headed = page.replace("```ts nish:ok file=main.ts", "## Another\n```ts nish:ok file=main.ts")
+      const mainFence = "<!-- nish:ok -->\n```ts main.ts"
+      const headed = page.replace(mainFence, `## Another\n${mainFence}`)
       const split = programsOf(markedSnippets(headed))
-      const shell = page.replace("```ts nish:ok file=main.ts", "```sh\n# a comment\n```\n$&")
+      const shell = page.replace(mainFence, "```sh\n# a comment\n```\n$&")
       check(
         "docs: a `#` line in an unmarked fence between file= fences is not a heading",
         programsOf(markedSnippets(shell)).length === 1,
@@ -26857,7 +26894,7 @@ if (dealtHere("releaseChecks")) {
         split.length === 2,
         JSON.stringify(split)
       )
-      const errFirst = page.replace("nish:ok file=geometry", "nish:err NL2045 file=geometry")
+      const errFirst = page.replace("<!-- nish:ok -->\n```ts geometry", "<!-- nish:err NL2045 -->\n```ts geometry")
       const misplaced = compileProgram(programsOf(markedSnippets(errFirst))[0], "file_fences_misplaced")
       check(
         "docs: a nish:err before a program's last fence is reported",
@@ -26876,7 +26913,7 @@ if (dealtHere("releaseChecks")) {
         `${stray.run.status} ${JSON.stringify(stray.misplaced)}`
       )
       const escape = compileProgram(
-        programsOf(markedSnippets(page.replace("file=geometry.ts", "file=../geometry.ts")))[0],
+        programsOf(markedSnippets(page.replace("```ts geometry.ts", "```ts ../geometry.ts")))[0],
         "file_fences_escape"
       )
       check(
@@ -26885,16 +26922,40 @@ if (dealtHere("releaseChecks")) {
         JSON.stringify(escape.misplaced)
       )
       const loneJson = compileProgram(
-        programsOf(markedSnippets('## Alone\n```json nish:ok\n{"name": "hash"}\n```'))[0],
+        programsOf(markedSnippets('## Alone\n<!-- nish:ok -->\n```json\n{"name": "hash"}\n```'))[0],
         "file_fences_json"
       )
       check("docs: a json fence without file= fails", loneJson.run.status !== 0, "it passed")
+      const flagged = markedSnippets("<!-- nish:err NL2456 --deny-panics -->\n```ts\nx\n```")
+      check(
+        "docs: a marker's code and flags are read from its comment, and the fence is no file",
+        flagged.length === 1 &&
+          flagged[0].code === "NL2456" &&
+          flagged[0].args.join(" ") === "--deny-panics" &&
+          flagged[0].file === null &&
+          flagged[0].line === 2,
+        JSON.stringify(flagged)
+      )
+      const strayLines = strayMarkers(
+        ["```ts nish:ok", "x", "```", "<!-- nish:ok -->", "text", "<!-- nish:ok -->", "```ts", "y", "```"].join("\n")
+      )
+      check(
+        "docs: a marker in a fence's own line, or one no fence follows, is reported",
+        strayLines.join(",") === "1,4",
+        JSON.stringify(strayLines)
+      )
     }
 
     for (const page of docPages) {
       const rel = path.relative(root, page).split(path.sep).join("/")
       const text = fs.readFileSync(page, "utf8")
       const snippets = markedSnippets(text)
+      const stray = strayMarkers(text)
+      check(
+        `${rel}: every nish: marker is a comment just above its fence`,
+        stray.length === 0,
+        `line ${stray.join(", ")}`
+      )
       if (rel === "docs/AI.md") {
         // A doc whose markers all got renamed would otherwise pass by checking nothing.
         check(
@@ -26903,7 +26964,7 @@ if (dealtHere("releaseChecks")) {
           `${snippets.length} found`
         )
       } else if (!isStub(text) && rel !== "docs/guide/getting-started/installation.md") {
-        check(`${rel} marks an example for compilation`, snippets.length > 0, "no ```ts nish: fence")
+        check(`${rel} marks an example for compilation`, snippets.length > 0, "no fence under a <!-- nish: --> marker")
       }
       const prefix = rel.slice(0, -3).replace(/[/-]/g, "_")
       for (const program of programsOf(snippets)) {

@@ -21,15 +21,16 @@ A call that can fail answers `Promise<Result<T, E>>`. There is no `throw` and
 no rejected promise: read the `Result` after the `await`, as you would any
 other ([Errors and `Result`](errors.md)):
 
-```ts nish:ok
-async function parsePort(s: string): Promise<Result<i32, string>> {
+<!-- nish:ok -->
+```ts
+const parsePort = async (s: string): Promise<Result<i32, string>> => {
   if (s.length === 0) {
     return Err("empty");
   }
   return Ok(8080);
-}
+};
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const port = await parsePort("8080");
   if (port.isErr()) {
     console.log(port.error);
@@ -37,22 +38,23 @@ export async function main(): Promise<i32> {
   }
   console.log(port.value);
   return 0;
-}
+};
 ```
 
 An answer that cannot fail is a plain `Promise<T>`:
 
-```ts nish:ok
-async function double(x: i32): Promise<i32> {
+<!-- nish:ok -->
+```ts
+const double = async (x: i32): Promise<i32> => {
   return x * 2;
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   const a = await double(3);
   let b: i32 = 0;
   b = await double(a);
   console.log(b);
-}
+};
 ```
 
 A top-level `function` or an arrow may be `async`. A method may not, because a
@@ -65,14 +67,15 @@ task never keeps a `this`.
 anything larger — an argument, a condition, an arithmetic operand — it is
 refused, so bind the answer to a name first:
 
-```ts nish:err NL2642
-async function load(id: i32): Promise<i32> {
+<!-- nish:err NL2642 -->
+```ts
+const load = async (id: i32): Promise<i32> => {
   return id;
-}
+};
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   console.log(await load(1));
-}
+};
 
 export const main = (): i32 => 0;
 ```
@@ -85,14 +88,15 @@ A call to an `async` function is awaited where it is made. You cannot keep it
 in a variable to await later, pass it to a function, or chain `.then` on it,
 and `Promise<T>` cannot be the type of a parameter, a field or a local:
 
-```ts nish:err NL2645
-async function load(id: i32): Promise<i32> {
+<!-- nish:err NL2645 -->
+```ts
+const load = async (id: i32): Promise<i32> => {
   return id;
-}
+};
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   load(1);
-}
+};
 
 export const main = (): i32 => 0;
 ```
@@ -114,21 +118,22 @@ available only through the import:
   Nothing reads its answer, so `f` answers `void`, or a `Result` it reports
   itself.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { awaitAll, spawn } from "nish:async";
 
-async function price(id: i32): Promise<i32> {
+const price = async (id: i32): Promise<i32> => {
   return id * 100;
-}
+};
 
-async function report(total: i32): Promise<void> {
+const report = async (total: i32): Promise<void> => {
   console.log(total);
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   const [a, b] = await awaitAll(price(1), price(2));
   spawn(report(a + b));
-}
+};
 ```
 
 ## Waiting on a timer or a socket
@@ -147,20 +152,21 @@ A descriptor is the number `nish:net` hands back for a socket. After
 woken together resume in the order their sockets became ready, then their
 timers, earliest first.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { sleep, spawn } from "nish:async";
 
-async function tick(label: string, ms: i32): Promise<void> {
+const tick = async (label: string, ms: i32): Promise<void> => {
   await sleep(ms);
   console.log(label);
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   spawn(tick("second", 20));
   spawn(tick("first", 5));
   await sleep(40);
   console.log("done");
-}
+};
 ```
 
 It prints `first`, `second`, then `done`. The program exits once `main` has
@@ -178,30 +184,32 @@ answer at once, a loop that awaits must stop when one answers `false` or
 `cancelled()` is true: it would otherwise run without ever giving way to
 another task.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { cancelAfter, cancelled, sleep, spawn, taskId } from "nish:async";
 
-async function nap(): Promise<void> {
+const nap = async (): Promise<void> => {
   cancelAfter(taskId(), 10);
   const slept = await sleep(1000);
   console.log(`slept ${slept}, cancelled ${cancelled()}`);
-}
+};
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   spawn(nap());
   return 0;
-}
+};
 ```
 
 `sleep`, `readable` and `writable` are not values: calling one without
 `await` is refused.
 
-```ts nish:err NL2671
+<!-- nish:err NL2671 -->
+```ts
 import { sleep } from "nish:async";
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   sleep(10);
-}
+};
 
 export const main = (): i32 => 0;
 ```
@@ -214,31 +222,32 @@ copied for the task. An object, an array, a `Map` or a `Set` is shared: the
 task works on the spawner's own, and the spawner keeps it alive for as long
 as any task holds it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { sleep, spawn } from "nish:async";
 
 class Tally {
   hits: i32 = 0;
 }
 
-async function count(tally: Tally, n: i32): Promise<void> {
+const count = async (tally: Tally, n: i32): Promise<void> => {
   await sleep(n);
   tally.hits = tally.hits + n;
   console.log(tally.hits);
-}
+};
 
-async function start(): Promise<Tally> {
+const start = async (): Promise<Tally> => {
   const tally = new Tally();
   spawn(count(tally, 5));
   spawn(count(tally, 10));
   return tally;
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   const tally = await start();
   await sleep(20);
   console.log(tally.hits);
-}
+};
 ```
 
 A task's own memory is given back when it ends, so it may store numbers into
@@ -247,32 +256,34 @@ shared array, `Map` or `Set`. That holds through a call too: a function or
 method handed both a shared object it writes into and a string or object the
 task made is refused, as it may keep the one in the other:
 
-```ts nish:err NL2609
+<!-- nish:err NL2609 -->
+```ts
 import { spawn } from "nish:async";
 
 class Box {
   label: string = "";
 }
 
-async function rename(box: Box, n: i32): Promise<void> {
+const rename = async (box: Box, n: i32): Promise<void> => {
   box.label = `task ${n}`;
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   spawn(rename(new Box(), 1));
-}
+};
 ```
 
-```ts nish:err NL2615
+<!-- nish:err NL2615 -->
+```ts
 import { spawn } from "nish:async";
 
-async function add(xs: i32[], n: i32): Promise<void> {
+const add = async (xs: i32[], n: i32): Promise<void> => {
   xs.push(n);
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   spawn(add([1, 2, 3], 4));
-}
+};
 ```
 
 Nor may the task keep a shared object in memory of its own: putting it into
@@ -280,21 +291,22 @@ a new object, an array, a `Map` or a `Set` the task made is refused (NL2610),
 since the task could then store its own memory into the shared object through
 what it built. Read and update the shared object in place instead:
 
-```ts nish:err NL2610
+<!-- nish:err NL2610 -->
+```ts
 import { spawn } from "nish:async";
 
 class Tally {
   hits: i32 = 0;
 }
 
-async function keep(tally: Tally, n: i32): Promise<void> {
+const keep = async (tally: Tally, n: i32): Promise<void> => {
   const all: Tally[] = [tally];
   all[0].hits = n;
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   spawn(keep(new Tally(), 1));
-}
+};
 ```
 
 A function argument is a top-level function or an arrow written at the call.
@@ -305,19 +317,20 @@ of anything else, such as a `string`, is refused (NL2690): pass it to the task
 as an argument of its own. Any other argument, such as an `Item | null`, is
 refused (NL2673); pass the value itself.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { sleep, spawn } from "nish:async";
 
 class Board {
   hits: i32 = 0;
 }
 
-async function later(handle: (n: i32) => Promise<void>, n: i32): Promise<void> {
+const later = async (handle: (n: i32) => Promise<void>, n: i32): Promise<void> => {
   await sleep(n);
   await handle(n);
-}
+};
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const board = new Board();
   spawn(later(async (n: i32): Promise<void> => {
     board.hits = board.hits + n;
@@ -325,25 +338,26 @@ export async function main(): Promise<i32> {
   await sleep(20);
   console.log(`${board.hits}`); // 5
   return 0;
-}
+};
 ```
 
 An arrow that reads a `string` of its spawner is refused, since the string is
 the spawner's and the task may run after it returns:
 
-```ts nish:err NL2690
+<!-- nish:err NL2690 -->
+```ts
 import { sleep, spawn } from "nish:async";
 
 class Board {
   hits: i32 = 0;
 }
 
-async function later(handle: (n: i32) => void, n: i32): Promise<void> {
+const later = async (handle: (n: i32) => void, n: i32): Promise<void> => {
   await sleep(n);
   handle(n);
-}
+};
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const board = new Board();
   const label = `run ${board.hits}`;
   spawn(later((n: i32): void => {
@@ -351,7 +365,7 @@ export async function main(): Promise<i32> {
   }, 5));
   await sleep(20);
   return 0;
-}
+};
 ```
 
 The arrow runs in the task, so it follows the task's rules for what it
@@ -366,7 +380,8 @@ or a lock, scope, guard or channel of `nish/threads`. The spawn names the
 part it found (NL2691); pass the task the numbers or strings it needs
 instead.
 
-```ts nish:err NL2691
+<!-- nish:err NL2691 -->
+```ts
 import { sleep, spawn } from "nish:async";
 import { Region, region } from "nish:region";
 
@@ -382,13 +397,13 @@ const build = (): i32[] => {
   return xs;
 };
 
-async function later(box: Box): Promise<void> {
+const later = async (box: Box): Promise<void> => {
   await sleep(5);
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   spawn(later(new Box(region(build))));
-}
+};
 ```
 
 Each spawned task has memory of its own, which is given back when the task
@@ -400,12 +415,13 @@ An awaited call's memory sits inside its caller's, so a function that awaits
 itself, directly or through others, would need memory without end. It is
 refused; write it as a loop:
 
-```ts nish:err NL2648
-async function countdown(n: i32): Promise<void> {
+<!-- nish:err NL2648 -->
+```ts
+const countdown = async (n: i32): Promise<void> => {
   if (n > 0) {
     await countdown(n - 1);
   }
-}
+};
 
 export const main = (): i32 => 0;
 ```
@@ -417,17 +433,18 @@ arrow or an `async` function, and the function that receives it awaits each
 call. A plain function cannot go there, and an `async` arrow cannot go where
 the type answers a plain value.
 
-```ts nish:ok
-async function twice(f: (n: i32) => Promise<i32>): Promise<i32> {
+<!-- nish:ok -->
+```ts
+const twice = async (f: (n: i32) => Promise<i32>): Promise<i32> => {
   const a = await f(1);
   const b = await f(2);
   return a + b;
-}
+};
 
-export async function main(): Promise<void> {
+export const main = async (): Promise<void> => {
   const total = await twice(async (n: i32): Promise<i32> => n * 10);
   console.log(total);   // 30
-}
+};
 ```
 
 ## Not on WebAssembly

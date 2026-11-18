@@ -241,9 +241,7 @@ it) as the DER `ECDSA-Sig-Value` a CertificateVerify carries (RFC 8446
 §4.2.3), or `null` when `rs` is not 64 bytes.
 
 ```ts
-function tlsEcdsaDerSignature(
-  rs: u8[],
-): u8[] | null
+const tlsEcdsaDerSignature: (rs: u8[]) => u8[] | null
 ```
 
 <scalar-field name="rs" type="u8[]" required>
@@ -265,7 +263,7 @@ inside a `using arena()` block: the copy dies with the block, and its
 caller `secureZero`s it before the block ends.
 
 ```ts
-function tlsHeldClone(held: u8[]): u8[]
+const tlsHeldClone: (held: u8[]) => u8[]
 ```
 
 <scalar-field name="held" type="u8[]" required>
@@ -286,10 +284,7 @@ Overwrites the bytes a `Secret` holds with `from`'s, for `exposeWith` to run on 
 Only as many bytes as the shorter of the two holds are copied; the rest of `held` is left as it was.
 
 ```ts
-function tlsHeldCopyIn(
-  held: u8[],
-  from: u8[],
-): i32
+const tlsHeldCopyIn: (held: u8[], from: u8[]) => i32
 ```
 
 <scalar-field name="held" type="u8[]" required>
@@ -317,10 +312,7 @@ run on the source with the destination as its argument: no plain copy is
 made on the way. Answers 0.
 
 ```ts
-function tlsHeldCopyOver(
-  from: u8[],
-  to: Secret<u8[]>,
-): i32
+const tlsHeldCopyOver: (from: u8[], to: Secret<u8[]>) => i32
 ```
 
 <scalar-field name="from" type="u8[]" required>
@@ -346,7 +338,7 @@ The destination secret, borrowed; as many bytes as the shorter of the two holds 
 Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`).
 
 ```ts
-function tlsIsZeroSecret(shared: u8[]): boolean
+const tlsIsZeroSecret: (shared: u8[]) => boolean
 ```
 
 <scalar-field name="shared" type="u8[]" required>
@@ -370,10 +362,10 @@ takes. The key is borrowed, as every `Secret` parameter is: the caller made
 it, and wipes it.
 
 ```ts
-function tlsSignEcdsaP256(
+const tlsSignEcdsaP256: (
   priv: Secret<u8[]>,
   content: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="priv" type="Secret&lt;u8[]&gt;" required>
@@ -399,7 +391,7 @@ A fresh array holding the DER signature, or `null` for a malformed key.
 Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`.
 
 ```ts
-function tlsZeroHeld(held: u8[], answer: i32): i32
+const tlsZeroHeld: (held: u8[], answer: i32) => i32
 ```
 
 <scalar-field name="held" type="u8[]" required>

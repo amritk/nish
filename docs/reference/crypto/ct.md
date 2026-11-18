@@ -83,10 +83,7 @@ array longer than that answers `false` too — no `i32` index reaches its end,
 and a compare that cannot read every byte must not say "equal".
 
 ```ts
-function timingSafeEqual(
-  a: u8[],
-  b: u8[],
-): boolean
+const timingSafeEqual: (a: u8[], b: u8[]) => boolean
 ```
 
 <scalar-field name="a" type="u8[]" required>
@@ -120,13 +117,13 @@ verifier handed a truncated record should say "not equal", not take the
 process down, and the bounds are public, so testing them first is safe.
 
 ```ts
-function timingSafeEqualAt(
+const timingSafeEqualAt: (
   a: u8[],
   aOff: i32,
   b: u8[],
   bOff: i32,
   len: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="a" type="u8[]" required>

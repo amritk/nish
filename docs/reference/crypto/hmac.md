@@ -241,10 +241,7 @@ again. It is here rather than beside `Sha256` because the scratch below and
 the TLS transcript are what need it, and HMAC is the module both sit on.
 
 ```ts
-function hmacCopySha256(
-  from: Sha256,
-  to: Sha256,
-): void
+const hmacCopySha256: (from: Sha256, to: Sha256) => void
 ```
 
 <scalar-field name="from" type="Sha256" required>
@@ -264,10 +261,7 @@ The hasher overwritten with `from`'s position.
 `hmacCopySha256` for SHA-384: `to` made the hasher `from` is, in place.
 
 ```ts
-function hmacCopySha384(
-  from: Sha384,
-  to: Sha384,
-): void
+const hmacCopySha384: (from: Sha384, to: Sha384) => void
 ```
 
 <scalar-field name="from" type="Sha384" required>
@@ -290,14 +284,14 @@ anything is read. It runs in an arena block of its own and stores nothing,
 so a tag leaves the arena where it was.
 
 ```ts
-function hmacKeyedInto(
+const hmacKeyedInto: (
   key: HmacKey,
   data: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
-): void
+) => void
 ```
 
 <scalar-field name="key" type="HmacKey" required>
@@ -345,14 +339,14 @@ that does not fit answers `false`; a message window outside its array
 panics. It runs in an arena block of its own and stores nothing.
 
 ```ts
-function hmacKeyedVerify(
+const hmacKeyedVerify: (
   key: HmacKey,
   data: u8[],
   off: i32,
   len: i32,
   tag: u8[],
   tagAt: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="HmacKey" required>
@@ -407,7 +401,7 @@ that verifies every message sharing that prefix is a forgery. A key that
 long panics in the constructor for the same reason.
 
 ```ts
-function hmacSha256(key: u8[], data: u8[]): u8[]
+const hmacSha256: (key: u8[], data: u8[]) => u8[]
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -434,10 +428,10 @@ A fresh 32-byte tag, which the caller owns.
 The tag is public, so it is answered plain; the caller still wipes the key.
 
 ```ts
-function hmacSha256Secret(
+const hmacSha256Secret: (
   key: Secret<u8[]>,
   data: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
@@ -466,11 +460,11 @@ byte compare, since its length is public; one that is is compared in full,
 so the time taken does not say how many leading bytes were right.
 
 ```ts
-function hmacSha256Verify(
+const hmacSha256Verify: (
   key: u8[],
   data: u8[],
   tag: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -503,7 +497,7 @@ The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array.
 `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
 
 ```ts
-function hmacSha384(key: u8[], data: u8[]): u8[]
+const hmacSha384: (key: u8[], data: u8[]) => u8[]
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -529,10 +523,10 @@ A fresh 48-byte tag, which the caller owns.
 `hmacSha384` under a key held as a `Secret`, as `hmacSha256Secret` is.
 
 ```ts
-function hmacSha384Secret(
+const hmacSha384Secret: (
   key: Secret<u8[]>,
   data: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
@@ -559,11 +553,11 @@ Whether `tag` is the HMAC-SHA-384 of `data` under `key`, compared as
 `hmacSha256Verify` does.
 
 ```ts
-function hmacSha384Verify(
+const hmacSha384Verify: (
   key: u8[],
   data: u8[],
   tag: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -596,7 +590,7 @@ The HMAC-SHA-512 of all of `data` under `key`, as a fresh 64-byte array.
 `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
 
 ```ts
-function hmacSha512(key: u8[], data: u8[]): u8[]
+const hmacSha512: (key: u8[], data: u8[]) => u8[]
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -622,10 +616,10 @@ A fresh 64-byte tag, which the caller owns.
 `hmacSha512` under a key held as a `Secret`, as `hmacSha256Secret` is.
 
 ```ts
-function hmacSha512Secret(
+const hmacSha512Secret: (
   key: Secret<u8[]>,
   data: u8[],
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="key" type="Secret&lt;u8[]&gt;" required>
@@ -652,11 +646,11 @@ Whether `tag` is the HMAC-SHA-512 of `data` under `key`, compared as
 `hmacSha256Verify` does.
 
 ```ts
-function hmacSha512Verify(
+const hmacSha512Verify: (
   key: u8[],
   data: u8[],
   tag: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="u8[]" required>
@@ -710,12 +704,12 @@ that takes the count from an untrusted peer (a SCRAM server's `i=`) must cap
 it first: 2^31 - 1 rounds is about 2^32 compressions.
 
 ```ts
-function pbkdf2HmacSha256(
+const pbkdf2HmacSha256: (
   password: Secret<u8[]>,
   salt: u8[],
   iterations: i32,
   length: i32,
-): Secret<u8[]> | null
+) => Secret<u8[]> | null
 ```
 
 <scalar-field name="password" type="Secret&lt;u8[]&gt;" required>

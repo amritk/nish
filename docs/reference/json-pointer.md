@@ -105,7 +105,7 @@ Whether `s` is an RFC 6901 JSON Pointer (the module header's grammar).
 Allocates nothing.
 
 ```ts
-function isJsonPointer(s: string): boolean
+const isJsonPointer: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -128,7 +128,7 @@ leading zero (`0`, `12`, not `01`, `+1` or `-1`), then `#`, or an optional
 empty. Allocates nothing.
 
 ```ts
-function isRelativeJsonPointer(s: string): boolean
+const isRelativeJsonPointer: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -149,7 +149,7 @@ true when `s` is a relative JSON Pointer.
 `~1`, so `"a/b"` is `a~1b`. Everything else is copied whole.
 
 ```ts
-function jsonPointerEscape(token: string): string
+const jsonPointerEscape: (token: string) => string
 ```
 
 <scalar-field name="token" type="string" required>
@@ -170,9 +170,7 @@ The reference tokens of JSON Pointer `p`, decoded: `[]` for `""`,
 `["a/b", "", "~"]` for `/a~1b//~0`. `null` when `p` is not a JSON Pointer.
 
 ```ts
-function jsonPointerParse(
-  p: string,
-): string[] | null
+const jsonPointerParse: (p: string) => string[] | null
 ```
 
 <scalar-field name="p" type="string" required>
@@ -196,11 +194,11 @@ The value JSON Pointer `p` names in `root` of `doc`: `root` itself for
 no value), and `JSON_POINTER_ERR_SYNTAX` when `p` is not a JSON Pointer.
 
 ```ts
-function jsonPointerResolve(
+const jsonPointerResolve: (
   doc: JsonDocument,
   root: i32,
   p: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="doc" type="JsonDocument" required>

@@ -179,7 +179,7 @@ directory's formats: `deflateBound(n)` with room for gzip's 18 bytes of
 header and trailer, which covers zlib's 6.
 
 ```ts
-function compressBound(n: i32): i32
+const compressBound: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>
@@ -203,7 +203,7 @@ every block, and slack for the last partial byte. `n` is at most
 2^31 - 1 less the framing; a negative `n` answers 0.
 
 ```ts
-function deflateBound(n: i32): i32
+const deflateBound: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>
@@ -226,14 +226,14 @@ alone: 330 KB allocated and filled each time, so keep a `Deflater` for
 anything repeated.
 
 ```ts
-function deflateCompress(
+const deflateCompress: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   level: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -284,14 +284,14 @@ The index in `out` one past the stream's last byte, or
 `Inflater.decompress`, building the decompressor for this call alone.
 
 ```ts
-function deflateDecompress(
+const deflateDecompress: (
   src: u8[],
   off: i32,
   len: i32,
   out: u8[],
   at: i32,
   limit: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="src" type="u8[]" required>
@@ -345,7 +345,7 @@ its word-wide bit writer stores past the last whole byte. A negative `n`
 answers the bound of 0.
 
 ```ts
-function fixedDeflateBound(n: i32): i32
+const fixedDeflateBound: (n: i32) => i32
 ```
 
 <scalar-field name="n" type="i32" required>

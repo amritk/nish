@@ -92,6 +92,7 @@ box per stage; the status line at a note's head may lag it.
 | [wp61-json-typed-checks.md](wp61-json-typed-checks.md) | Proposed, design only. Typed JSON, constraints and coercion in one pass: a `constraints` option in the class literal checked straight after each field's read with `JSON_DECODE_CONSTRAINT` at the value, patterns through the non-backtracking `nish/regex`; an opt-in `coerce` mode in which `jsonDecode` always answers `OK` with a correct instance (an exact lossless conversion table, otherwise the class's own defaults; malformed JSON and limits stop reading but do not fail; `reason` and `errorAt` stay readable); a per-field converted/defaulted record whose default is settled by measurement; byte-identical IR for a class without either; three stages ending in the guide page and Bun/Node benchmarks. The schema-to-class generator is WP62. |
 | [wp62-json-schema-classes.md](wp62-json-schema-classes.md) | Proposed, design only. Nish classes from a JSON Schema: `nish schema` reads a draft 2020-12 schema or OpenAPI 3.1 components and writes typed JSON classes, every keyword typed, checked through WP61's `constraints` literal, kept as JSDoc, or refused with its JSON Pointer; defaults as initializers and how they meet `required`, names and `rename`, a deterministic file with a header and `--check`, the round trip and a vendored corpus test, a first stage of two typed JSON prerequisites (constructor-assigned optional defaults, per-class unknown keys), and five stages. |
 | [wp65-lexer-surface.md](wp65-lexer-surface.md) | Proposed, design only. The surface a table-driven lexer port asked for: constant tables, already built, and the docs that point a lexer author to them; `indexOf(x, fromIndex)` on arrays, lowered to `memchr` on byte arrays, with `indexOfByte`, `equalBytes` and `compareBytes` in `std/bytes`; `withCapacity` and `grow` in `std/array`, and a zero fill dropped where a counted loop overwrites it (never an uninitialised `length`); field initializers that are not literals, run before the constructor body; and an open question on `toString()` for numbers. |
+| [wp66-c-headers.md](wp66-c-headers.md) | Proposed, design only. C libraries from their headers: `nish c-import` reads a header through clang and writes `declare function`s, `declare class`es and constants, measured on four real headers; the `zeroext` fix it needs first; and the language stages that would bind the rest (opaque classes, array fields, named buffer counts, callbacks, linking a library). |
 
 Two notes record a stage of WP39 rather than a package of their own:
 
@@ -114,18 +115,22 @@ who write programs in Nish. A page there follows these rules:
   does and how to use it; leave the IR, the checker and the runtime's layout
   to the reference. No internal vocabulary: stage0, the seed, Nish-0 and work
   packages do not appear.
-- **Examples are compiled.** A program is a fence marked for compilation —
-  ` ```ts nish:ok `, `nish:ok-body` (wrapped in a `main` body),
-  `nish:err CODE` or `nish:err-body CODE` (must be rejected with that code) —
-  and `node tests/run.js guide` compiles it. Every page but
-  `installation.md` carries at least one once it is more than a stub (its
-  title and one paragraph). A fragment that cannot compile on its own is a
-  plain ` ```ts ` block, and short. An example of several files tags each
-  fence `file=<path>` (` ```ts nish:ok file=geometry.ts `, or
-  ` ```json nish:ok file=node_modules/hash/package.json ` for a package): the
-  `file=` fences of one section are written out together, each at its path,
-  and the last is compiled with its marker, so only it may be `nish:err`;
-  each other `.ts` fence must also compile alone.
+- **Examples are compiled.** A program is a fence marked for compilation by
+  an HTML comment on the line just above it — `<!-- nish:ok -->`,
+  `<!-- nish:ok-body -->` (wrapped in a `main` body), `<!-- nish:err CODE -->`
+  or `<!-- nish:err-body CODE -->` (must be rejected with that code), with
+  any CLI flags after them — and `node tests/run.js guide` compiles it. The
+  marker is a comment because the site shows a word after a fence's language
+  as the block's title; a marker in the fence's own line is refused. Every
+  page but `installation.md` carries at least one once it is more than a stub
+  (its title and one paragraph). A fragment that cannot compile on its own is
+  a plain ` ```ts ` block, and short. An example of several files puts each
+  file's path after its fence's language, which the site shows as its title
+  (` ```ts geometry.ts `, or ` ```json node_modules/hash/package.json ` for a
+  package), under its own marker: the titled fences of one section are
+  written out together, each at its path, and the last is compiled with its
+  marker, so only it may be `nish:err`; each other `.ts` fence must also
+  compile alone.
 - **The reference is normative.** Each page links the
   [LANGUAGE.md](LANGUAGE.md) section that governs it and describes nothing
   that section does not say; where the two disagree, the guide is wrong.

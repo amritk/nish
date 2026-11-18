@@ -165,13 +165,13 @@ Written from RFC 9112 and RFC 9110, not ported from another implementation.
 there is no room to run out of.
 
 ```ts
-function http1RequestHead(
+const http1RequestHead: (
   method: string,
   target: string,
   names: string[],
   values: string[],
   bodyLength: i64,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="method" type="string" required>
@@ -222,13 +222,13 @@ writes. A response to it is read after `expect(false, false)` and then
 `expectUpgrade()`, so that its 101 answers `HTTP1_UPGRADE`.
 
 ```ts
-function http1UpgradeRequestHead(
+const http1UpgradeRequestHead: (
   method: string,
   target: string,
   names: string[],
   values: string[],
   upgrade: string,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="method" type="string" required>
@@ -290,7 +290,7 @@ Answers `HTTP1_NO_ROOM` when it is well formed but does not fit. Either way
 `out` is untouched.
 
 ```ts
-function http1WriteRequestHead(
+const http1WriteRequestHead: (
   out: u8[],
   at: i32,
   method: string,
@@ -298,7 +298,7 @@ function http1WriteRequestHead(
   names: string[],
   values: string[],
   bodyLength: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>

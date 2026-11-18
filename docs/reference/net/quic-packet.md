@@ -490,12 +490,12 @@ which the caller is to close the connection over. Answers whether the
 payload authenticated. A packet already in error is left as it is.
 
 ```ts
-function quicDecryptPacket(
+const quicDecryptPacket: (
   keys: QuicKeys,
   datagram: u8[],
   header: QuicHeader,
   packet: QuicPacket,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -538,13 +538,13 @@ answers the plaintext frames, or `null` when they did not authenticate
 (or `packet` was already in error). Only numbers are stored into `packet`.
 
 ```ts
-function quicDecryptPayload(
+const quicDecryptPayload: (
   keys: QuicKeys,
   datagram: u8[],
   header: QuicHeader,
   clear: u8[],
   packet: QuicPacket,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -591,9 +591,9 @@ client's and the server's are expanded from it with the labels `client in`
 and `server in`. Answers `null` for a `dcid` over 20 bytes.
 
 ```ts
-function quicInitialSecrets(
+const quicInitialSecrets: (
   dcid: u8[],
-): QuicInitialSecrets | null
+) => QuicInitialSecrets | null
 ```
 
 <scalar-field name="dcid" type="u8[]" required>
@@ -616,14 +616,14 @@ Answers whether it derived: not for an ID over 20 bytes, a window outside
 `buf`, or an output of another length.
 
 ```ts
-function quicInitialSecretsInto(
+const quicInitialSecretsInto: (
   kdf: HkdfScratch,
   buf: u8[],
   at: i32,
   length: i32,
   client: u8[],
   server: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -678,10 +678,10 @@ not change with it (§6), so the new keys are `quicKeysUpdate` of the old
 keys and this. Answers `null` where `quicKeys` would.
 
 ```ts
-function quicKeyUpdateSecret(
+const quicKeyUpdateSecret: (
   aead: i32,
   trafficSecret: Secret<u8[]>,
-): Secret<u8[]> | null
+) => Secret<u8[]> | null
 ```
 
 <scalar-field name="aead" type="i32" required>
@@ -711,10 +711,10 @@ bytes in place, under SHA-384 for a 48-byte secret and SHA-256 for a
 derived: not unless both hold 32 bytes or both 48.
 
 ```ts
-function quicKeyUpdateSecretHeldInto(
+const quicKeyUpdateSecretHeldInto: (
   dst: Secret<u8[]>,
   src: Secret<u8[]>,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="dst" type="Secret&lt;u8[]&gt;" required>
@@ -742,12 +742,12 @@ length and not `secret` itself. Answers whether it derived, which it does
 where `quicKeyUpdateSecret` answers a secret.
 
 ```ts
-function quicKeyUpdateSecretInto(
+const quicKeyUpdateSecretInto: (
   kdf: HkdfScratch,
   aead: i32,
   secret: u8[],
   out: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -801,11 +801,11 @@ caller deriving Initial keys wraps a copy of one in `secret`, or uses
 `quicKeysInto`.
 
 ```ts
-function quicKeys(
+const quicKeys: (
   slot: QuicKeysSlot,
   aead: i32,
   trafficSecret: Secret<u8[]>,
-): QuicKeys | null
+) => QuicKeys | null
 ```
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
@@ -842,11 +842,11 @@ in place inside an arena block. Answers the slot's keys, or `null`,
 deriving nothing, where `quicKeys` answers `null`.
 
 ```ts
-function quicKeysHeldInto(
+const quicKeysHeldInto: (
   slot: QuicKeysSlot,
   aead: i32,
   secret: Secret<u8[]>,
-): QuicKeys | null
+) => QuicKeys | null
 ```
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
@@ -882,12 +882,12 @@ or `null`, deriving nothing, where `quicKeys` answers `null`. The keys
 are the slot's: the next derivation into it overwrites them.
 
 ```ts
-function quicKeysInto(
+const quicKeysInto: (
   kdf: HkdfScratch,
   slot: QuicKeysSlot,
   aead: i32,
   secret: u8[],
-): QuicKeys | null
+) => QuicKeys | null
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -937,11 +937,11 @@ slot's keys, or `null`, deriving nothing, for keys `quicKeys` did not make,
 keys that live in `slot`, or a secret of the wrong length.
 
 ```ts
-function quicKeysUpdate(
+const quicKeysUpdate: (
   slot: QuicKeysSlot,
   keys: QuicKeys,
   nextSecret: Secret<u8[]>,
-): QuicKeys | null
+) => QuicKeys | null
 ```
 
 <scalar-field name="slot" type="QuicKeysSlot" required>
@@ -979,12 +979,12 @@ same arrays as `keys`', not a copy, so wiping either generation zeroes the
 header-protection key both use.
 
 ```ts
-function quicKeysUpdateInto(
+const quicKeysUpdateInto: (
   kdf: HkdfScratch,
   slot: QuicKeysSlot,
   keys: QuicKeys,
   nextSecret: u8[],
-): QuicKeys | null
+) => QuicKeys | null
 ```
 
 <scalar-field name="kdf" type="HkdfScratch" required>
@@ -1028,7 +1028,7 @@ points at now; a slot's arrays of the other lengths are
 `QuicKeysSlot.wipe`'s, which zeroes them all.
 
 ```ts
-function quicKeysWipe(keys: QuicKeys): void
+const quicKeysWipe: (keys: QuicKeys) => void
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -1055,7 +1055,7 @@ is not one, a negative `payloadLength`, or a Length past 16383, the most two
 bytes hold and far more than a datagram carries.
 
 ```ts
-function quicLongHeader(
+const quicLongHeader: (
   type: i32,
   dcid: u8[],
   scid: u8[],
@@ -1063,7 +1063,7 @@ function quicLongHeader(
   packetNumber: i64,
   pnLength: i32,
   payloadLength: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="type" type="i32" required>
@@ -1120,7 +1120,7 @@ The size of the long header `quicPutLongHeader` writes for these
 arguments, or 0 when it would refuse them (see `quicLongHeader`).
 
 ```ts
-function quicLongHeaderSize(
+const quicLongHeaderSize: (
   type: i32,
   dcidLength: i32,
   scidLength: i32,
@@ -1128,7 +1128,7 @@ function quicLongHeaderSize(
   packetNumber: i64,
   pnLength: i32,
   payloadLength: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="type" type="i32" required>
@@ -1189,12 +1189,12 @@ holding the frames, or the `QUIC_ERR_*` of the step that failed — see
 `quicRemoveHeaderProtection` and `quicDecryptPacket`.
 
 ```ts
-function quicOpenPacket(
+const quicOpenPacket: (
   keys: QuicKeys,
   datagram: u8[],
   header: QuicHeader,
   largestPn: i64,
-): QuicPacket
+) => QuicPacket
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -1233,13 +1233,13 @@ Writes `bytes[from .. from + length)` into `buf` at `at`, as one slice copy; the
 The part of the run outside either window is skipped rather than written, so a wrong window cannot panic.
 
 ```ts
-function quicPacketCopy(
+const quicPacketCopy: (
   buf: u8[],
   at: i32,
   bytes: u8[],
   from: i32,
   length: i32,
-): void
+) => void
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1278,10 +1278,7 @@ Appends `count` zero bytes to `out`, which a writer then fills in place
 with the `put` form of what it appends: one encoder serves both.
 
 ```ts
-function quicPacketGrow(
-  out: u8[],
-  count: i32,
-): void
+const quicPacketGrow: (out: u8[], count: i32) => void
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1305,11 +1302,11 @@ that space, or -1 for none (RFC 9000 §17.1, §A.3): the one closest to
 `pnLength` is not 1 to 4 or `truncatedPn` does not fit in it.
 
 ```ts
-function quicPacketNumberDecode(
+const quicPacketNumberDecode: (
   largestPn: i64,
   truncatedPn: i64,
   pnLength: i32,
-): i64
+) => i64
 ```
 
 <scalar-field name="largestPn" type="i64" required>
@@ -1345,10 +1342,10 @@ Answers 0 when no length will do — `fullPn` not above `largestAcked`, not a
 packet number, or more than 2^31 packets unacknowledged.
 
 ```ts
-function quicPacketNumberLength(
+const quicPacketNumberLength: (
   fullPn: i64,
   largestAcked: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="fullPn" type="i64" required>
@@ -1383,11 +1380,11 @@ answer's arrays; `quicParseHeaderInto` reads the same without a copy.
 The answer's `error` says what stopped it; nothing a peer sends panics.
 
 ```ts
-function quicParseHeader(
+const quicParseHeader: (
   datagram: u8[],
   at: i32,
   shortDcidLength: i32,
-): QuicHeader
+) => QuicHeader
 ```
 
 <scalar-field name="datagram" type="u8[]" required>
@@ -1427,13 +1424,13 @@ hold several (a GRO receive); a `limit` past the array reads as its length.
 See `quicParseHeader` for what is read and refused.
 
 ```ts
-function quicParseHeaderInto(
+const quicParseHeaderInto: (
   header: QuicHeader,
   datagram: u8[],
   at: i32,
   limit: i32,
   shortDcidLength: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="header" type="QuicHeader" required>
@@ -1481,7 +1478,7 @@ payload goes. Answers -1, writing nothing, where `quicLongHeader` answers
 `null`, and for a header that does not fit in `buf` from `at`.
 
 ```ts
-function quicPutLongHeader(
+const quicPutLongHeader: (
   buf: u8[],
   at: i32,
   type: i32,
@@ -1493,7 +1490,7 @@ function quicPutLongHeader(
   packetNumber: i64,
   pnLength: i32,
   payloadLength: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1577,7 +1574,7 @@ answers, with the Destination Connection ID the first `dcidLength` bytes of
 `quicShortHeader` answers `null`, and for a header that does not fit.
 
 ```ts
-function quicPutShortHeader(
+const quicPutShortHeader: (
   buf: u8[],
   at: i32,
   dcid: u8[],
@@ -1586,7 +1583,7 @@ function quicPutShortHeader(
   keyPhase: boolean,
   packetNumber: i64,
   pnLength: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1661,12 +1658,12 @@ hands the answer to `quicDecryptPacket` with the generation it names
 did not make, and `QUIC_ERR_SAMPLE` for a packet too short to sample.
 
 ```ts
-function quicRemoveHeaderProtection(
+const quicRemoveHeaderProtection: (
   keys: QuicKeys,
   datagram: u8[],
   header: QuicHeader,
   largestPn: i64,
-): QuicPacket
+) => QuicPacket
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -1708,10 +1705,10 @@ associated data. `odcid` is the Destination Connection ID of the client's
 Initial the Retry answers. Answers `null` for an `odcid` over 20 bytes.
 
 ```ts
-function quicRetryIntegrityTag(
+const quicRetryIntegrityTag: (
   odcid: u8[],
   retryWithoutTag: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="odcid" type="u8[]" required>
@@ -1743,13 +1740,13 @@ over 20 bytes, an empty token (a client discards that Retry, §17.2.5.2) or
 `unused` outside 0 to 15.
 
 ```ts
-function quicRetryPacket(
+const quicRetryPacket: (
   dcid: u8[],
   scid: u8[],
   token: u8[],
   odcid: u8[],
   unused: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="dcid" type="u8[]" required>
@@ -1796,11 +1793,11 @@ is recomputed over the datagram's bytes and compared in constant time.
 Answers `false` for a header that is not a Retry that parsed.
 
 ```ts
-function quicRetryVerify(
+const quicRetryVerify: (
   odcid: u8[],
   datagram: u8[],
   header: QuicHeader,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="odcid" type="u8[]" required>
@@ -1843,14 +1840,14 @@ that does not fit in `buf`. The AEAD's temporaries are released before it
 answers, so sealing allocates nothing that outlives the call.
 
 ```ts
-function quicSealInPlace(
+const quicSealInPlace: (
   keys: QuicKeys,
   buf: u8[],
   start: i32,
   headerLength: i32,
   payloadLength: i32,
   packetNumber: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -1914,12 +1911,12 @@ must be at least 4 bytes; a shorter payload has to be padded first (RFC 9001
 packet-number length, and for keys `quicKeys` did not make.
 
 ```ts
-function quicSealPacket(
+const quicSealPacket: (
   keys: QuicKeys,
   header: u8[],
   packetNumber: i64,
   payload: u8[],
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -1961,13 +1958,13 @@ ID over 20 bytes, a `pnLength` outside 1 to 4 or a packet number that is
 not one.
 
 ```ts
-function quicShortHeader(
+const quicShortHeader: (
   dcid: u8[],
   spin: boolean,
   keyPhase: boolean,
   packetNumber: i64,
   pnLength: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="dcid" type="u8[]" required>
@@ -2018,13 +2015,13 @@ are stored into `packet`, so a connection reuses one for every packet and
 the answer is its own to let go. See `quicRemoveHeaderProtection`.
 
 ```ts
-function quicUnprotectHeader(
+const quicUnprotectHeader: (
   keys: QuicKeys,
   datagram: u8[],
   header: QuicHeader,
   largestPn: i64,
   packet: QuicPacket,
-): u8[]
+) => u8[]
 ```
 
 <scalar-field name="keys" type="QuicKeys" required>
@@ -2070,10 +2067,7 @@ The length of the variable-length integer whose first byte is at
 `at` is outside `bytes`.
 
 ```ts
-function quicVarintLength(
-  bytes: u8[],
-  at: i32,
-): i32
+const quicVarintLength: (bytes: u8[], at: i32) => i32
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -2101,10 +2095,7 @@ Appends `value` to `out` as a variable-length integer in the fewest bytes
 or past 2^62 - 1.
 
 ```ts
-function quicVarintPush(
-  out: u8[],
-  value: i64,
-): boolean
+const quicVarintPush: (out: u8[], value: i64) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -2132,11 +2123,11 @@ bytes, as `quicVarintPut` writes it. Answers `false`, appending nothing,
 when `size` is not 1, 2, 4 or 8 or is too short for `value`.
 
 ```ts
-function quicVarintPushSized(
+const quicVarintPushSized: (
   out: u8[],
   value: i64,
   size: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -2172,12 +2163,12 @@ it). Answers `at + size`, or -1, writing nothing, when `size` is not 1, 2,
 4 or 8, is too short for `value`, or does not fit in `buf` from `at`.
 
 ```ts
-function quicVarintPut(
+const quicVarintPut: (
   buf: u8[],
   at: i32,
   value: i64,
   size: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -2218,11 +2209,11 @@ fit in that window or the window is not inside `bytes`. Advance past it by
 `quicVarintLength(bytes, at)`.
 
 ```ts
-function quicVarintRead(
+const quicVarintRead: (
   bytes: u8[],
   at: i32,
   end: i32,
-): i64
+) => i64
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -2255,7 +2246,7 @@ The bytes a variable-length integer needs (RFC 9000 §16): 1, 2, 4 or 8, or
 0 for a value that has no encoding, below zero or past 2^62 - 1.
 
 ```ts
-function quicVarintSize(value: i64): i32
+const quicVarintSize: (value: i64) => i32
 ```
 
 <scalar-field name="value" type="i64" required>

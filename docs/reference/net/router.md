@@ -146,12 +146,12 @@ The output may hold any byte, NUL and `/` included. Panics on a range
 outside `target`.
 
 ```ts
-function routerDecode(
+const routerDecode: (
   target: u8[],
   start: i32,
   end: i32,
   out: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="target" type="u8[]" required>
