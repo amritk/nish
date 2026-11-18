@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 786 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 790 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15340,4 +15340,135 @@ The message of an error contains:
 
 ```text
 … of constant table `
+```
+
+## NL2795
+
+The message of an error contains:
+
+```text
+…` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker
+```
+
+[`nl2795_compact_declare.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2795_compact_declare.ts):
+
+```ts
+// WP48 rule 2: a `declare class` is a C struct and cannot implement `Compact`.
+import { Compact } from "nish:compact"
+
+declare class Clock implements Compact {
+  t: i64
+}
+
+export const main = (): number => {
+  const c = new Clock()
+  return Number(c.t)
+}
+```
+
+```text
+`Clock` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker
+```
+
+## NL2796
+
+The message of an error contains:
+
+```text
+…`, whose links C would read as pointers; a `declare class` holds no object of a class that implements `Compact`
+```
+
+[`nl2796_compact_declare_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2796_compact_declare_field.ts):
+
+```ts
+// WP48 rule 2: a `declare class` holds no object of a compact class.
+import { Compact } from "nish:compact"
+
+class Cell implements Compact {
+  value: i32 = 0
+  next: Cell | null = null
+}
+
+declare class Holder {
+  cell: Cell | null
+}
+
+export const main = (): number => {
+  const h = new Holder()
+  return h.cell === null ? 0 : 1
+}
+```
+
+```text
+Field `cell` of `declare class` `Holder` holds the compact class `Cell`, whose links C would read as pointers; a `declare class` holds no object of a class that implements `Compact`
+```
+
+## NL2797
+
+The message of an error contains:
+
+```text
+…`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement `Compact`; keep the secret in a class of its own that does not
+```
+
+[`nl2797_compact_secret.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2797_compact_secret.ts):
+
+```ts
+// WP48 rule 3: a compact class holds no `Secret`.
+import { Compact } from "nish:compact"
+import { Secret, secret, wipe } from "nish:secret"
+
+class Holder implements Compact {
+  readonly k: Secret<u8[]>
+  next: Holder | null = null
+  constructor(seed: u8) {
+    this.k = secret([seed, toU8(2)])
+  }
+  wipe(): void {
+    wipe(this.k)
+  }
+}
+
+export const main = (): i32 => {
+  const h = new Holder(toU8(1))
+  h.wipe()
+  return 0
+}
+```
+
+```text
+`Holder` implements `Compact` and holds the `Secret` field `k`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement `Compact`; keep the secret in a class of its own that does not
+```
+
+## NL2798
+
+The message of an error contains:
+
+```text
+…` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+[`nl2798_compact_generic.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2798_compact_generic.ts):
+
+```ts
+// WP48: a generic class cannot implement `Compact` yet (NL2798), since its
+// instantiations keep full-pointer links.
+import { Compact } from "nish:compact"
+
+class Gen<T> implements Compact {
+  val: T
+  next: Gen<T> | null = null
+  constructor(val: T) {
+    this.val = val
+  }
+}
+
+export const main = (): i32 => {
+  const g = new Gen<i32>(1)
+  return g.val - 1
+}
+```
+
+```text
+`Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
 ```

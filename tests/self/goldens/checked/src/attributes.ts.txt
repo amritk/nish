@@ -1138,13 +1138,33 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 -
 function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32 -> @pointerAlign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.stripNull inlineElementStruct
-  pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
-  pointer table: size=160 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.stripNull#0
+  calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull compactStruct inlineElementStruct
+  pointer program: size=912 writesThrough=false captured=false passedTo=compactStruct#0 CheckedProgram.struct#0 inlineElementStruct#0
+  pointer table: size=160 writesThrough=false captured=false passedTo=compactStruct#1 TypeTable.stripNull#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0 inlineElementStruct#1 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  local +0:9 record: StructInfo | null (const)
-  callee +0:18 inlineElementStruct -> @inlineElementStruct
-  callee +0:54 TypeTable.stripNull -> @TypeTable.stripNull
+  local +0:9 compact: StructInfo | null (const)
+  callee +0:19 compactStruct -> @compactStruct
+  callee +0:49 TypeTable.stripNull -> @TypeTable.stripNull
+  local +5:9 bare: i32 (const)
+  callee +5:16 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +6:7 TypeTable.isStruct -> @TypeTable.isStruct
+  local +7:11 view: StructInfo | null (const)
+  callee +7:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +7:33 TypeTable.nameOf -> @TypeTable.nameOf
+  local +12:9 record: StructInfo | null (const)
+  callee +12:18 inlineElementStruct -> @inlineElementStruct
+  callee +12:54 TypeTable.stripNull -> @TypeTable.stripNull
+function compactStruct(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @compactStruct
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf
+  pointer program: size=912 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
+  stackSites=0 stackLocals=0
+  callee +0:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local +3:9 info: StructInfo | null (const)
+  callee +3:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +3:31 TypeTable.nameOf -> @TypeTable.nameOf
 function isPointerParam(table: TypeTable, type: i32): boolean -> @isPointerParam
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

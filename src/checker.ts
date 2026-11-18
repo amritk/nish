@@ -106,8 +106,11 @@ import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
+  checkCompactClass,
+  refuseCompactTemplate,
   checkImplements,
   collectStructMembers,
+  declaresCompact,
   declareStruct,
   markTemplateImplements,
   noteStructNames,
@@ -223,6 +226,20 @@ export class Checker {
   }
 
   /**
+   * WP48: marks this module's compact classes. The compilation runs it for
+   * every module before any module's pass 1, since a class declared above `R`,
+   * or in a module that imports `R`, may hold an `R` link and lays it out then.
+   */
+  markCompact(): void {
+    for (const info of this.declared) {
+      info.compact = info.compact || declaresCompact(this.ctx, info.decl)
+      if (info.compact) {
+        this.ctx.compactNames.add(info.name)
+      }
+    }
+  }
+
+  /**
    * Pass 1, after `declareNames` and `bindTypeImports`: members and
    * signatures, then the layout checks. A struct that fails at any step is left
    * in the registry so annotations still resolve; it is the diagnostics that
@@ -278,6 +295,7 @@ export class Checker {
           if (template !== null && template.decl === stmt) {
             resolveStructTemplateConstraints(template)
             markTemplateImplements(this.program, stmt)
+            refuseCompactTemplate(this.ctx, stmt)
           }
           declareMethodTypeParameters(this.ctx, stmt)
         }
@@ -302,6 +320,7 @@ export class Checker {
       if (info.kind === STRUCT_CLASS && !info.poisoned) {
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
+        checkCompactClass(this.ctx, info)
       }
     }
     // Every instantiation an annotation in this module's signatures asked for

@@ -486,7 +486,7 @@ class EscapeAnalysis {
     } else if (node.kind === NodeKind.New) {
       this.visitNew(node)
     } else if (node.kind === NodeKind.Object) {
-      this.sites.push(new Site(node, true))
+      this.sites.push(new Site(node, !this.compactType(program.nodeTypes[node.id])))
     } else if (node.kind === NodeKind.Array) {
       const type = program.nodeTypes[node.id]
       const stackable =
@@ -531,11 +531,23 @@ class EscapeAnalysis {
     return false
   }
 
+  /**
+   * Whether `type` is a compact class (WP48), which never lives on the stack:
+   * a link to it is an offset into the arena's range, which a stack slot is not in.
+   */
+  compactType(type: i32): boolean {
+    if (type < 0 || !this.table.isStruct(type)) {
+      return false
+    }
+    const info = this.unit.program.struct(this.table.nameOf(type))
+    return info !== null && info.compact
+  }
+
   visitNew(node: Node): void {
     // A `new` checked into a union is recorded as the union; it allocates its class.
     const type = intrinsicType(this.unit.program, node)
     if (type >= 0 && this.table.isStruct(type)) {
-      this.sites.push(new Site(node, true))
+      this.sites.push(new Site(node, !this.compactType(type)))
       return
     }
     if (type < 0 || !this.table.isArray(type)) {

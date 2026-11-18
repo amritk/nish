@@ -82,6 +82,9 @@ export const structFieldPointer = (
 export const loadField = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
+  if (field.link) {
+    return decodeLink(emitter, ty, emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4`))
+  }
   const tbaa = fieldTbaa(emitter, info, field)
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
 }
@@ -95,8 +98,60 @@ export const storeField = (
 ): void => {
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
+  if (field.link) {
+    emitter.fn.emit(`store i32 ${encodeLink(emitter, ty, value)}, i32* ${ptr}, align 4`)
+    return
+  }
   const tbaa = fieldTbaa(emitter, info, field)
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
+}
+
+// WP48 (docs/wp48-ref32-classes.md §4): a link is a 32-bit offset, in 4-byte
+// units, into the arena's reserved range, and 0 is `null`. On Linux the range
+// sits at a fixed address below 16 GiB, so the offset is the address shifted
+// (zero-based) and null needs no test; elsewhere it is relative to
+// `@nish_ref_base`, which the runtime sets once before `main`. The based IR
+// is pinned only by its text (`tests/cases/compact_darwin.ll`): Linux CI cannot
+// run a macOS binary, so no test executes it. The slot gets
+// no TBAA tag until the `ref32` node (stage 2b): untagged, it may alias
+// anything, which is conservative.
+
+/** The `ty` (a `%struct.R*`) that the 32-bit link `slot` holds. */
+const decodeLink = (emitter: Emitter, ty: string, slot: string): string => {
+  const fn = emitter.fn
+  const wide = fn.emitValue(`zext i32 ${slot} to i64`)
+  const bytes = fn.emitValue(`shl nuw nsw i64 ${wide}, 2`)
+  if (emitter.zeroBasedLinks) {
+    return fn.emitValue(`inttoptr i64 ${bytes} to ${ty}`)
+  }
+  const base = loadRefBase(emitter)
+  const at = fn.emitValue(`getelementptr inbounds i8, i8* ${base}, i64 ${bytes}`)
+  const object = fn.emitValue(`bitcast i8* ${at} to ${ty}`)
+  const isNull = fn.emitValue(`icmp eq i32 ${slot}, 0`)
+  return fn.emitValue(`select i1 ${isNull}, ${ty} null, ${ty} ${object}`)
+}
+
+/** The 32-bit link that holds `value`, a `ty` (`%struct.R*`) in the range or null. */
+const encodeLink = (emitter: Emitter, ty: string, value: string): string => {
+  const fn = emitter.fn
+  const address = fn.emitValue(`ptrtoint ${ty} ${value} to i64`)
+  if (emitter.zeroBasedLinks) {
+    const units = fn.emitValue(`lshr i64 ${address}, 2`)
+    return fn.emitValue(`trunc i64 ${units} to i32`)
+  }
+  const base = fn.emitValue(`ptrtoint i8* ${loadRefBase(emitter)} to i64`)
+  const bytes = fn.emitValue(`sub i64 ${address}, ${base}`)
+  const units = fn.emitValue(`lshr i64 ${bytes}, 2`)
+  const offset = fn.emitValue(`trunc i64 ${units} to i32`)
+  const isNull = fn.emitValue(`icmp eq ${ty} ${value}, null`)
+  return fn.emitValue(`select i1 ${isNull}, i32 0, i32 ${offset}`)
+}
+
+/** `@nish_ref_base`, which never changes once `main` runs (`!invariant.load`). */
+const loadRefBase = (emitter: Emitter): string => {
+  emitter.readsRefBase = true
+  const invariant = emitter.metadata("!{}")
+  return emitter.fn.emitValue(`load i8*, i8** @nish_ref_base, align 8, !invariant.load ${invariant}`)
 }
 
 /**
@@ -105,15 +160,27 @@ export const storeField = (
  * attribute stays true), else `info.size` bytes bumped from the arena.
  */
 const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
+  // A compact class is never a stack site (`compactType` in escape.ts): a
+  // link reaches only the arena's range.
   if (emitter.isStackSite(site)) {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8)
   }
   return arenaObject(emitter, info)
 }
 
+/**
+ * Whether an instance of `info` comes from `@nish_alloc_ref` (WP48): a compact
+ * class of alignment 4 in a build that compresses, rounded to 4 rather than 8.
+ * One with an 8-aligned field keeps `@nish_alloc_struct`, whose blocks are
+ * 8-aligned; both are in the arena's range, which is all a link needs.
+ */
+const compactInstance = (emitter: Emitter, info: StructInfo): boolean =>
+  info.compact && info.align < 8 && emitter.opts.compactLinks
+
 /** `info.size` bytes from the arena, as a `%struct.X*`. */
 const arenaObject = (emitter: Emitter, info: StructInfo): string => {
-  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`)
+  const bump = compactInstance(emitter, info) ? "nish_alloc_ref" : "nish_alloc_struct"
+  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime(bump)}(i64 ${info.size})`)
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`)
 }
 
@@ -482,6 +549,11 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
     storeField(emitter, info, receiver, field, value)
     return value
   }
+  // A compact link takes no arithmetic or bitwise operator, so no compound
+  // assignment reaches one; the raw load and store below skip its encoding.
+  if (field.link) {
+    process.exit(internalErrorFor("emitter: a compound assignment to a compact link", emitter.opts.json))
+  }
   // One GEP for both halves of the read-modify-write, so `p.f op= e` addresses
   // the field once however the receiver was spelled.
   const ptr = structFieldPointer(emitter, info, receiver, field)
@@ -618,6 +690,9 @@ const fieldLLVMType = (emitter: Emitter, field: FieldInfo): string => {
   const nested = field.nested
   if (nested !== null) {
     return structTypeName(nested)
+  }
+  if (field.link) {
+    return "i32"
   }
   if (!field.inline()) {
     return emitter.llvm(field.type)

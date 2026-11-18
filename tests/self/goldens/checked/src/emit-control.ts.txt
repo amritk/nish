@@ -284,7 +284,7 @@ function leaveTo(emitter: Emitter, at: i32): void -> @leaveTo
   sharedWrite: via emitScopeJoins
   escaping: at
   calls: Emitter.releasePass IRFunction.emit LoopTarget.scopesPass emitScopeJoins nish_panic_index
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=emitScopeJoins#0 Emitter.releasePass#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=emitScopeJoins#0 Emitter.releasePass#0
   stackSites=0 stackLocals=0
   callee +0:3 emitScopeJoins -> @emitScopeJoins
   local +1:7 i: i32 (let)
@@ -296,7 +296,7 @@ function emitBreak(emitter: Emitter, stmt: Node): void -> @emitBreak [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: branch labelled leaveTo nish_panic_index nish_str_eq
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=labelled#0 leaveTo#0 branch#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=labelled#0 leaveTo#0 branch#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -9:7 at: i32 (let)
@@ -308,7 +308,7 @@ function emitContinue(emitter: Emitter, stmt: Node): void -> @emitContinue [expo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via labelled
   calls: branch internalErrorFor labelled leaveTo nish_exit nish_panic_index nish_str_concat nish_str_eq
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=labelled#0 leaveTo#0 branch#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=labelled#0 leaveTo#0 branch#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)

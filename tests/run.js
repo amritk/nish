@@ -1271,10 +1271,15 @@ const runCase = async (name) => {
     // runtime is now a prebuilt object, the macro is also what picks *which*
     // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : []
+    // WP48: a module with a compact class references `@nish_arena_range_abi`,
+    // which only the range runtime defines (the CLI's `--arena-range`), so the
+    // link fails against the default objects rather than storing offsets from
+    // a range nothing reserved.
+    const range = fs.readFileSync(outLl, "utf8").includes("@nish_arena_range_abi") ? ["-DNISH_ARENA_RANGE=1"] : []
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const line = linkLine(outLl, {
       driver: hasEntry ? null : driver,
-      defines: threads,
+      defines: [...range, ...threads],
       libm: true,
     })
     if (line.error !== null) {
@@ -5680,6 +5685,21 @@ if (dealtHere("performance")) {
         )
       ),
     gap.stderr
+  )
+
+  // WP48: a link of a compact class is a four-byte offset, so the warning
+  // measures it as one. `Spill` packs to 16 only with the link beside the
+  // `i32`; measured as a pointer no order would shrink it and the warning
+  // would say nothing. `Pair` has no gap in any order and stays quiet.
+  const compactPad = compile("perf_padding_compact", "perf_padding_compact_report.ll")
+  const compactPadLines = summaries(compactPad.stderr)
+  check(
+    "performance: the padding warning measures a compact class's link as four bytes, and names the order that packs it",
+    compactPad.status === 0 &&
+      compactPadLines.length === 1 &&
+      positions(compactPadLines) === "14:14" &&
+      compactPadLines[0].endsWith(padSentence("Spill", "weight: f64, next: Spill | null, count: i32")),
+    compactPad.stderr
   )
 
   const str = compile("perf_str_concat_loop", "perf_str.ll")
@@ -13007,12 +13027,17 @@ if (dealtHere("cryptoChecks")) {
   // tests/link/crypto_bcrypt_batch and the widths one to six of
   // tests/link/crypto_bcrypt_width, as `--profile wasi` modules under Node's
   // WASI: all three build for wasm32 and answer every case there as natively.
-  for (const [program, what] of [
-    ["crypto_bcrypt", "the bcrypt vectors"],
-    ["crypto_bcrypt_batch", "the bcrypt batch"],
-    ["crypto_bcrypt_width", "the bcrypt widths"],
+  // WP48: the compact-class programs build for wasm32 too, where a link stays
+  // a full 32-bit pointer (nothing to compress), and print what they print
+  // natively.
+  for (const [program, what, area] of [
+    ["crypto_bcrypt", "the bcrypt vectors", "bcrypt"],
+    ["crypto_bcrypt_batch", "the bcrypt batch", "bcrypt"],
+    ["crypto_bcrypt_width", "the bcrypt widths", "bcrypt"],
+    ["compact_modules", "the compact classes across modules", "compact"],
+    ["compact_json", "the compact JSON round trip", "compact"],
   ]) {
-    if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
+    if (only && ![program, area, "wasi"].some((name) => name.includes(only))) {
       continue
     }
     if (WASI_SYSROOT && has("wasm-ld")) {
@@ -15830,10 +15855,18 @@ if (dealtHere("arrayChecks")) {
         : []
     )
     // `nish_alloc_struct` is not declared but defined, `internal`, in each module
-    // that calls it (`src/runtime.ts`), so `--runtime-decls` has no line for it;
-    // its `define` line is its table entry, read the same way.
-    for (const m of selfSource("runtime.ts").matchAll(/`define internal (.*?@(nish_alloc_struct)\()/g)) {
-      runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+    // that calls it (`src/runtime.ts` writes it from a template), so
+    // `--runtime-decls` has no line for it; its `define` line in a module that
+    // allocates a class is its table entry, read the same way.
+    const allocLl = path.join(buildDir, "alloc_runtime_define.ll")
+    const allocIr = spawnSync(NISH, [path.join(casesDir, "acc_method.ts"), "-o", allocLl], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    if (allocIr.status === 0) {
+      for (const m of fs.readFileSync(allocLl, "utf8").matchAll(/^define internal (.*?@(nish_alloc_struct)\()/gm)) {
+        runtimeByName.set(m[2], { name: m[2], signature: `declare ${m[1]}` })
+      }
     }
     check(
       `--runtime-decls prints the runtime table (${runtimeByName.size} declarations)`,
@@ -17279,6 +17312,99 @@ if (dealtHere("runtimeChecks")) {
         `debug arena with the compact-class range${suffix}: a pointer kept across a release dies of SIGSEGV at the read`,
         debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
         debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
+      )
+    }
+  }
+
+  // ---- A compact class in a host page module (WP48 stage 2a) ----------------------------
+  // An `--emit-dts` compile for the host is a page module: it runs on the wasm
+  // runtime, whose root trace reads each link as a pointer and which reserves
+  // no range. tests/cases/compact_root_page built that way keeps its links as
+  // pointers and names no `@nish_arena_range_abi`.
+  if (!only || "compact page module".includes(only)) {
+    const dir = path.join(buildDir, "compact-page-host")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(
+      NISH,
+      [path.join(casesDir, "compact_root_page.ts"), "-o", `${dir}${path.sep}`, "--emit-dts", path.join(dir, "main.d.ts")],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_root_page.ll"), "utf8") : ""
+    check(
+      "compact: a host `--emit-dts` page module keeps a compact class's links as pointers and reserves no range",
+      c.status === 0 && ll.includes("%struct.Node = type { i32, %struct.Node* }") && !ll.includes("nish_arena_range_abi"),
+      c.status !== 0 ? shown(c) : ll.split("\n").filter((line) => line.startsWith("%struct.Node")).join("\n")
+    )
+  }
+
+  // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
+  // A link is a 32-bit offset in the struct, so `-g` describes the member as
+  // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
+  // debugger would read past the field; the IR verifies.
+  if (!only || "compact debug".includes(only)) {
+    const dir = path.join(buildDir, "compact-debug")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const c = spawnSync(NISH, [path.join(casesDir, "compact_list.ts"), "-g", "-o", `${dir}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_list.ll"), "utf8") : ""
+    const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
+    const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
+    check(
+      "compact: -g describes Cell.next, a link, as a 32-bit unsigned member at offset 32",
+      member !== null &&
+        member[3] === "32" &&
+        member[4] === "32" &&
+        base !== null &&
+        base[1] === '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+      c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
+    )
+    if (has("opt") && c.status === 0) {
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(dir, "compact_list.ll")])
+      check("compact: opt -passes=verify accepts the -g IR of a compact class", v.status === 0, String(v.stderr))
+    }
+  }
+
+  // ---- A compact class under AddressSanitizer (WP48 stage 2a) ----------------------------
+  // The ASAN runtime (-DNISH_ASAN) mallocs every block and reserves no range,
+  // so an offset could not name one. tests/differential/asan.js runs the
+  // compiler with NISH_ASAN set: tests/cases/compact_list built that way keeps
+  // its links as pointers, and where the toolchain has the sanitizer runtimes
+  // the program runs clean under ASan and prints what it prints elsewhere.
+  if (!only || "compact asan".includes(only)) {
+    const dir = path.join(buildDir, "compact-asan")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const src = path.join(casesDir, "compact_list.ts")
+    const want = fs.readFileSync(path.join(casesDir, "compact_list.out"), "utf8")
+    const c = spawnSync(NISH, [src, "-o", `${dir}${path.sep}`], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_ASAN: "1" },
+    })
+    const ll = c.status === 0 ? fs.readFileSync(path.join(dir, "compact_list.ll"), "utf8") : ""
+    const bodies = ll.split("\n").filter((line) => /^%struct\.(Cell|Tree) = /.test(line))
+    check(
+      "compact: with NISH_ASAN set, a compact class's links stay pointers and reserve no range",
+      c.status === 0 &&
+        bodies.includes("%struct.Cell = type { i32, %struct.Cell* }") &&
+        bodies.some((line) => line.startsWith("%struct.Tree = ") && !line.includes("i32, i32")) &&
+        !ll.includes("nish_arena_range_abi"),
+      c.status !== 0 ? shown(c) : bodies.join("\n")
+    )
+    const asan = await import("./differential/asan.js")
+    if (!asan.hasAsanRuntime()) {
+      skip("compact asan: clang has no AddressSanitizer runtime here")
+    } else {
+      const res = asan.runUnderAsan(src, { compiler: { label: NISH, cmd: NISH, prefix: [] }, exe: path.join(dir, "asan") })
+      const ll2 = fs.existsSync(path.join(dir, "asan.modules", "compact_list.ll"))
+        ? fs.readFileSync(path.join(dir, "asan.modules", "compact_list.ll"), "utf8")
+        : ""
+      check(
+        "compact: tests/differential/asan.js builds a compact class with pointer links, and it runs clean under ASan",
+        res.kind === "clean" && res.stdout === want && ll2.includes("%struct.Cell = type { i32, %struct.Cell* }"),
+        JSON.stringify({ kind: res.kind, detail: res.detail, error: res.error, stderr: res.stderr, stdout: res.stdout })
       )
     }
   }
@@ -41378,7 +41504,11 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // fake cell past the arena, or sets an array's len (and cap) to 2^40, then
 // forces a compaction, which must throw a NishPanic and leave the fake's bytes
 // as written. Before the fix the compactor rewrote the fake's field for the
-// first two and walked the len into a bare out-of-bounds trap.
+// first two and walked the len into a bare out-of-bounds trap. A seventh,
+// tests/module-storage/persist/compact-chain.ts, is the chain with a class
+// that implements `Compact` (WP48): wasm32 keeps its links as pointers, and the chain
+// driver's 8 bytes a node fails if the trace or the layout read one as an
+// offset.
 // Each also links under plain `--profile wasm`, where runtime-wasm.c is built
 // without NISH_WASM_HOST. Ahead of the wasm tools: a class field typed as a
 // union is fine in a page build's `.d.ts` but refused once a C header is asked
@@ -41464,14 +41594,16 @@ if (!only || "persist".includes(only)) {
   } else {
     const dir = path.join(buildDir, "persist")
     fs.rmSync(dir, { recursive: true, force: true })
-    for (const [stem, source, steps, says] of [
+    for (const [stem, source, steps, says, drive] of [
       ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
       ["chain", "tests/module-storage/persist/chain.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
+      ["compact", "tests/module-storage/persist/compact-chain.ts", "200000", "traces a compact class's links as pointers through every compaction, packed to 8 bytes a node (WP48)", "chain"],
     ]) {
+      const mode = drive ?? stem
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })
       const compiled = spawnSync(
@@ -41506,13 +41638,13 @@ if (!only || "persist".includes(only)) {
       if (linked.status !== 0) {
         continue
       }
-      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", stem, path.join(out, `${stem}.mjs`), wasm, steps], {
+      const ran = spawnSync(process.execPath, ["tests/persist/drive.mjs", mode, path.join(out, `${stem}.mjs`), wasm, steps], {
         cwd: root,
         encoding: "utf8",
       })
       check(
         `persist: ${stem} ${says}`,
-        ran.status === 0 && ran.stdout.startsWith(`persist ${stem}: ${steps} steps`),
+        ran.status === 0 && ran.stdout.startsWith(`persist ${mode}: ${steps} steps`),
         shown(ran)
       )
     }

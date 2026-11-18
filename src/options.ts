@@ -50,6 +50,15 @@ export class Options {
    */
   threads: boolean
   /**
+   * Whether this program stores its compact classes' links as 32-bit offsets
+   * into the arena's reserved range (WP48, docs/wp48-ref32-classes.md §4): a
+   * module declares one with `implements Compact` on a target that
+   * compresses. Set by `Compilation.emit` once every module is checked, since
+   * every module's inline bump then realigns to 8 and the binary links the
+   * range runtime. Off leaves the IR byte for byte what it was.
+   */
+  compactLinks: boolean
+  /**
    * The WP8 interop sidecars, each the path `--emit-header` / `--emit-dts` /
    * `--emit-napi` was given, or the empty string when it was not passed.
    * `--emit-dts` writes two files: the declarations, and the loader that
@@ -330,6 +339,7 @@ export class Options {
     this.target = ""
     this.debugInfo = false
     this.threads = false
+    this.compactLinks = false
     this.emitHeader = ""
     this.emitDts = ""
     this.hosts = []

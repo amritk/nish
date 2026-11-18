@@ -69,7 +69,7 @@ import { compatFeatureNames, compatHasFeature, compatKnownText } from "./compat"
 import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
-import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
+import { acceptsSidecars, ExternalFunction, externalFunctions, refuseCompactSidecars } from "./interop-abi"
 import { generateDts } from "./interop-dts"
 import { generateHeader } from "./interop-header"
 import { generateNapiShim, napiBridges } from "./interop-napi"
@@ -1590,6 +1590,19 @@ const commandMain = (): number => {
     report(compilation, json)
     return 1
   }
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link.
+  let hostFlag = ""
+  if (opts.emitHeader.length > 0) {
+    hostFlag = "--emit-header"
+  } else if (opts.emitNapi.length > 0) {
+    hostFlag = "--emit-napi"
+  } else if (opts.emitNapiAsync.length > 0) {
+    hostFlag = "--emit-napi-async"
+  }
+  if (hostFlag.length > 0 && !refuseCompactSidecars(compilation, fns, hostFlag)) {
+    report(compilation, json)
+    return 1
+  }
   const emitted = compilation.emit()
   const arenaRange = hasCompactClass(compilation)
   if (runMode && watchStateFile.length > 0) {
@@ -2568,10 +2581,10 @@ const linkProgram = (
  * Whether a program has a compact class, a class whose references are 32-bit
  * offsets into the arena's reserved range (WP48, docs/wp48-ref32-classes.md
  * §3.1), so its binary must link the range runtime (`--arena-range`). Stage 1
- * ships that runtime and no compact class, so no program has one yet; stage 2
- * reads the rule here.
+ * ships that runtime; stage 2's `Compilation.emit` sets `compactLinks` when a module
+ * declares one on a target that compresses (not wasm32, not an ASAN build).
  */
-const hasCompactClass = (_compilation: Compilation): boolean => false
+const hasCompactClass = (compilation: Compilation): boolean => compilation.opts.compactLinks
 
 /**
  * The flags that pick `scripts/build.sh`'s recipe, the same for the link and

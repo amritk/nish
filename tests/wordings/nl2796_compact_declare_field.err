@@ -1,0 +1,1 @@
+Field `cell` of `declare class` `Holder` holds the compact class `Cell`, whose links C would read as pointers; a `declare class` holds no object of a class that implements `Compact`

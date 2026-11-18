@@ -14,7 +14,7 @@ The normative rules: what the compiler accepts and what it means.
 
 <scalar-card title="Builtins" icon="phosphor/regular/cube" href="builtins.md">
 
-The globals and the 10 `nish:` modules that come with the compiler.
+The globals and the 11 `nish:` modules that come with the compiler.
 
 </scalar-card>
 
@@ -98,6 +98,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | --- | --- |
 | [Globals](builtins.md) | Ambient declarations for the Nish global surface. |
 | [`nish:async`](nish-async.md) | Tasks for `async` functions: start one and go on, or await two to eight at once. |
+| [`nish:compact`](nish-compact.md) | The marker interfaces that pick a class's layout (WP48). |
 | [`nish:fs`](nish-fs.md) | Files and directories: read, write, rename, remove and list paths on the host's file system. |
 | [`nish:io`](nish-io.md) | Text and bytes to stdout and stderr with nothing added, and the panic that ends a program on an unmet invariant. |
 | [`nish:net`](nish-net.md) | Non-blocking sockets for a program that owns its loop: TCP, UDP, Unix-domain sockets, and a level-triggered readiness loop to wait on them. |

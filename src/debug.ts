@@ -464,6 +464,12 @@ export class DebugInfo {
         )
         continue
       }
+      if (f.link) {
+        // WP48: a compact class's link is a 32-bit offset, not a pointer;
+        // until stage 2b's pretty-printers, a debugger shows the raw offset.
+        members.push(this.member(f.name, ref, this.typeRef(T_U32), 32, f.offset * 8, file, line))
+        continue
+      }
       const base = this.typeRef(f.type)
       const bits = this.table.isPointerValue(f.type) ? this.pointerBits : bitsOfIn(this.table, f.type)
       members.push(this.member(f.name, ref, base, bits, f.offset * 8, file, line))

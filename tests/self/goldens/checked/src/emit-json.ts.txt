@@ -269,7 +269,7 @@ function jsonDecoderOk(emitter: Emitter, part: JsonPart): string -> @jsonDecoder
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonFail
   calls: Emitter.llvm IRFunction.emitValue StructInfo.field jsonFail loadField nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonFail#0 loadField#0 Emitter.llvm#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonFail#0 loadField#0 Emitter.llvm#0
   pointer part: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 code: FieldInfo | null (const)
@@ -291,13 +291,13 @@ function JsonPlace.constructor(this: JsonPlace, info: StructInfo | null, object:
   escaping: field info object slot type
   pointer this: size=40 writesThrough=true captured=false
   pointer info: size=176 writesThrough=true captured=true
-  pointer field: size=80 writesThrough=true captured=true
+  pointer field: size=88 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function jsonLoad(emitter: Emitter, place: JsonPlace): string -> @jsonLoad
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via loadField
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue loadField nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=loadField#0 Emitter.llvm#0 Emitter.alignSuffix#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=loadField#0 Emitter.llvm#0 Emitter.alignSuffix#0
   pointer place: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
@@ -312,7 +312,7 @@ function jsonStore(emitter: Emitter, place: JsonPlace, value: string): void -> @
   sharedWrite: via storeField
   escaping: value
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit nish_str_concat storeField
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=storeField#0 Emitter.llvm#0 Emitter.alignSuffix#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=storeField#0 Emitter.llvm#0 Emitter.alignSuffix#0
   pointer place: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
@@ -642,7 +642,7 @@ function emitJsonDecodeBody(emitter: Emitter, part: JsonPart): void -> @emitJson
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock JsonDispatch.constructor JsonPlace.constructor emitJsonDecodeValue emitJsonDispatch initializerConstant jsonBranch jsonCallMethod jsonFieldsOf jsonPartInfo nish_array_grow nish_str_concat nish_str_eq storeField
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 emitJsonDispatch#0 jsonBranch#0 emitJsonDecodeValue#0 jsonCallMethod#0 jsonCallMethod#0 storeField#0 jsonBranch#0 storeField#0 initializerConstant#0 jsonBranch#0 jsonCallMethod#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 emitJsonDispatch#0 jsonBranch#0 emitJsonDecodeValue#0 jsonCallMethod#0 jsonCallMethod#0 storeField#0 jsonBranch#0 storeField#0 initializerConstant#0 jsonBranch#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 emitJsonDispatch#1 emitJsonDecodeValue#1
   stackSites=9 stackLocals=3
   local -11:9 fn: IRFunction (const)
@@ -739,7 +739,7 @@ function emitJsonEnumCheck(emitter: Emitter, part: JsonPart, f: JsonField, read:
   sharedWrite: via IRFunction.newBlock
   escaping: failed
   calls: IRFunction.emit IRFunction.newBlock IRFunction.placeBlock jsonBranch jsonDecoderOk jsonEnumValues nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonBranch#0 jsonDecoderOk#0 jsonEnumValues#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonBranch#0 jsonDecoderOk#0 jsonEnumValues#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonDecoderOk#1
   pointer f: size=64 writesThrough=false captured=false passedTo=jsonEnumValues#1
   stackSites=1 stackLocals=1
@@ -770,7 +770,7 @@ function emitJsonEnumRead(emitter: Emitter, part: JsonPart, f: JsonField, member
   sharedWrite: +0:5
   escaping: failed other
   calls: IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock JsonDispatch.constructor TypeTable.enumStrings emitJsonDispatch emitJsonEnumCheck jsonBranch jsonCallMethod nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonCallMethod#0 emitJsonEnumCheck#0 jsonCallMethod#0 jsonBranch#0 emitJsonDispatch#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonCallMethod#0 emitJsonEnumCheck#0 jsonCallMethod#0 jsonBranch#0 emitJsonDispatch#0
   pointer part: size=56 writesThrough=false captured=false passedTo=emitJsonEnumCheck#1 emitJsonDispatch#1
   pointer f: size=64 writesThrough=false captured=false passedTo=emitJsonEnumCheck#2
   pointer member: size=16 writesThrough=true captured=true passedTo=IRFunction.placeBlock#1 IRFunction.placeBlock#1
@@ -804,7 +804,7 @@ function emitJsonDecodeValue(emitter: Emitter, part: JsonPart, f: JsonField, pla
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonStore
   calls: Emitter.llvm Emitter.stringConstant IRFunction.emit IRFunction.newBlock IRFunction.placeBlock emitJsonDecodeInto emitJsonDecodeUnionValue emitJsonEnumRead emitJsonSomething jsonBranch jsonCallMethod jsonDecodeMethod jsonLoad jsonScalarMethod jsonStore jsonWireTag nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonStore#0 jsonCallMethod#0 emitJsonEnumRead#0 jsonStore#0 jsonCallMethod#0 jsonCallMethod#0 Emitter.stringConstant#0 emitJsonDecodeUnionValue#0 jsonLoad#0 jsonCallMethod#0 Emitter.llvm#0 jsonStore#0 emitJsonDecodeInto#0 jsonCallMethod#0 jsonBranch#0 jsonStore#0 emitJsonSomething#0 emitJsonDecodeInto#0 jsonStore#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonStore#0 jsonCallMethod#0 emitJsonEnumRead#0 jsonStore#0 jsonCallMethod#0 jsonCallMethod#0 Emitter.stringConstant#0 emitJsonDecodeUnionValue#0 jsonLoad#0 jsonCallMethod#0 Emitter.llvm#0 jsonStore#0 emitJsonDecodeInto#0 jsonCallMethod#0 jsonBranch#0 jsonStore#0 emitJsonSomething#0 emitJsonDecodeInto#0 jsonStore#0
   pointer part: size=56 writesThrough=false captured=false passedTo=emitJsonEnumRead#1 emitJsonDecodeUnionValue#1 emitJsonDecodeInto#1 emitJsonSomething#1 emitJsonDecodeInto#1
   pointer f: size=64 writesThrough=true captured=true passedTo=emitJsonEnumRead#2 emitJsonDecodeUnionValue#2 jsonDecodeMethod#0 emitJsonDecodeInto#2 emitJsonSomething#2 emitJsonDecodeInto#2
   pointer place: size=40 writesThrough=false captured=false passedTo=jsonStore#1 jsonStore#1 emitJsonDecodeUnionValue#3 jsonLoad#1 jsonStore#1 emitJsonDecodeInto#4 jsonStore#1 emitJsonDecodeInto#4 jsonStore#1
@@ -864,7 +864,7 @@ function emitJsonDecodeUnionValue(emitter: Emitter, part: JsonPart, f: JsonField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitJsonDecodeUnionInto
   calls: IRFunction.emit IRFunction.newBlock IRFunction.placeBlock emitJsonDecodeUnionInto jsonBranch jsonCallMethod jsonStore nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=emitJsonDecodeUnionInto#0 jsonCallMethod#0 jsonBranch#0 jsonStore#0 emitJsonDecodeUnionInto#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=emitJsonDecodeUnionInto#0 jsonCallMethod#0 jsonBranch#0 jsonStore#0 emitJsonDecodeUnionInto#0
   pointer part: size=56 writesThrough=false captured=false passedTo=emitJsonDecodeUnionInto#1 emitJsonDecodeUnionInto#1
   pointer f: size=64 writesThrough=true captured=true passedTo=emitJsonDecodeUnionInto#2 emitJsonDecodeUnionInto#2
   pointer place: size=40 writesThrough=false captured=false passedTo=emitJsonDecodeUnionInto#3 jsonStore#1 emitJsonDecodeUnionInto#3
@@ -891,7 +891,7 @@ function emitJsonDecodeUnionInto(emitter: Emitter, part: JsonPart, f: JsonField,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonRequestPart
   calls: IRFunction.emitValue jsonLoad jsonObjectType jsonRequestPart jsonStore nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonRequestPart#0 jsonLoad#0 jsonStore#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonRequestPart#0 jsonLoad#0 jsonStore#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonRequestPart#4
   pointer f: size=64 writesThrough=true captured=true passedTo=jsonRequestPart#3
   pointer place: size=40 writesThrough=false captured=false passedTo=jsonLoad#1 jsonStore#1
@@ -951,7 +951,7 @@ function emitJsonDecodeInto(emitter: Emitter, part: JsonPart, f: JsonField, targ
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm IRFunction.emit IRFunction.emitValue jsonCallMethod jsonMapValue jsonObjectType jsonRequestPart jsonStore jsonValueClass jsonValueMap nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 jsonStore#0 jsonCallMethod#0 jsonRequestPart#0 jsonValueClass#0 jsonRequestPart#0 jsonValueMap#0 jsonMapValue#0 jsonValueClass#0 jsonRequestPart#0 jsonStore#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 jsonStore#0 jsonCallMethod#0 jsonRequestPart#0 jsonValueClass#0 jsonRequestPart#0 jsonValueMap#0 jsonMapValue#0 jsonValueClass#0 jsonRequestPart#0 jsonStore#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonRequestPart#4 jsonRequestPart#4 jsonRequestPart#4
   pointer f: size=64 writesThrough=true captured=true passedTo=jsonValueClass#1 jsonValueMap#1 jsonMapValue#1 jsonValueClass#1 jsonRequestPart#3
   pointer place: size=40 writesThrough=false captured=false passedTo=jsonStore#1 jsonStore#1
@@ -982,7 +982,7 @@ function emitJsonDecodeArrayBody(emitter: Emitter, part: JsonPart): void -> @emi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonPartValue
   calls: IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitElementAt emitJsonDecodeEnumArrayBody emitJsonDecodeUnionArrayBody emitPushValue jsonBranch jsonCallMethod jsonObjectType jsonPartInfo jsonPartValue jsonRequestPart loadLength nish_str_concat storeHeaderField
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonPartValue#0 emitJsonDecodeUnionArrayBody#0 emitJsonDecodeEnumArrayBody#0 jsonPartInfo#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 loadLength#0 jsonBranch#0 emitElementAt#0 jsonRequestPart#0 emitPushValue#0 jsonRequestPart#0 loadLength#0 jsonBranch#0 storeHeaderField#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartValue#0 emitJsonDecodeUnionArrayBody#0 emitJsonDecodeEnumArrayBody#0 jsonPartInfo#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 loadLength#0 jsonBranch#0 emitElementAt#0 jsonRequestPart#0 emitPushValue#0 jsonRequestPart#0 loadLength#0 jsonBranch#0 storeHeaderField#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartValue#1 emitJsonDecodeUnionArrayBody#1 emitJsonDecodeEnumArrayBody#1 jsonPartInfo#1 jsonRequestPart#4 jsonRequestPart#4
   stackSites=2 stackLocals=0
   local +0:11 f: JsonField (const)
@@ -1252,7 +1252,7 @@ function emitJsonDecodeEnumArrayBody(emitter: Emitter, part: JsonPart, f: JsonFi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: IRFunction.emit IRFunction.newBlock IRFunction.placeBlock emitJsonEnumRead emitPushValue jsonBranch jsonCallMethod nish_str_concat storeHeaderField
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonCallMethod#0 jsonBranch#0 storeHeaderField#0 jsonCallMethod#0 jsonBranch#0 emitJsonEnumRead#0 emitPushValue#0 jsonCallMethod#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonCallMethod#0 jsonBranch#0 storeHeaderField#0 jsonCallMethod#0 jsonBranch#0 emitJsonEnumRead#0 emitPushValue#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=emitJsonEnumRead#1
   pointer f: size=64 writesThrough=false captured=false passedTo=emitJsonEnumRead#2
   stackSites=3 stackLocals=0
@@ -1308,7 +1308,7 @@ function emitJsonDecodeMapBody(emitter: Emitter, part: JsonPart): void -> @emitJ
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonPartInfo
   calls: Emitter.align Emitter.llvm IRFunction.emit IRFunction.emitAlloca IRFunction.newBlock IRFunction.placeBlock JsonPlace.constructor emitJsonDecodeValue emitJsonFresh jsonBranch jsonCallMethod jsonDecoderOk jsonLoad jsonPartInfo jsonPartValue jsonStore nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonPartInfo#0 jsonPartValue#0 Emitter.llvm#0 Emitter.align#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonStore#0 emitJsonFresh#0 emitJsonDecodeValue#0 jsonBranch#0 jsonDecoderOk#0 jsonLoad#0 jsonCallMethod#0 jsonCallMethod#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonPartValue#0 Emitter.llvm#0 Emitter.align#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonStore#0 emitJsonFresh#0 emitJsonDecodeValue#0 jsonBranch#0 jsonDecoderOk#0 jsonLoad#0 jsonCallMethod#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 jsonPartValue#1 emitJsonFresh#1 emitJsonDecodeValue#1 jsonDecoderOk#1
   stackSites=9 stackLocals=1
   local +0:9 fn: IRFunction (const)
@@ -1393,7 +1393,7 @@ function emitJsonEncodeBody(emitter: Emitter, part: JsonPart): void -> @emitJson
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonPartInfo
   calls: Emitter.stringConstant IRFunction.emit emitJsonEncodeValue emitJsonFieldKey emitJsonStopIfFailed jsonCallMethod jsonFieldsOf jsonPartInfo jsonWireTag loadField nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 emitJsonStopIfFailed#0 jsonCallMethod#0 emitJsonFieldKey#0 Emitter.stringConstant#0 jsonCallMethod#0 emitJsonFieldKey#0 emitJsonEncodeValue#0 loadField#0 jsonCallMethod#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 emitJsonStopIfFailed#0 jsonCallMethod#0 emitJsonFieldKey#0 Emitter.stringConstant#0 jsonCallMethod#0 emitJsonFieldKey#0 emitJsonEncodeValue#0 loadField#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 emitJsonStopIfFailed#1 emitJsonFieldKey#1 emitJsonFieldKey#1 emitJsonEncodeValue#1
   stackSites=3 stackLocals=0
   local +0:9 info: StructInfo (const)
@@ -1420,7 +1420,7 @@ function emitJsonStopIfFailed(emitter: Emitter, part: JsonPart): void -> @emitJs
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonFail
   calls: Emitter.llvm IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock StructInfo.field jsonBranch jsonFail loadField nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonFail#0 loadField#0 Emitter.llvm#0 jsonBranch#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonFail#0 loadField#0 Emitter.llvm#0 jsonBranch#0
   pointer part: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -1587,7 +1587,7 @@ function emitJsonEncodeMapBody(emitter: Emitter, part: JsonPart): void -> @emitJ
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonPartInfo
   calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitJsonEncodeValue emitJsonStopIfFailed jsonBranch jsonCallMethod jsonPartInfo jsonPartValue nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=jsonPartInfo#0 jsonPartValue#0 emitJsonStopIfFailed#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 emitJsonEncodeValue#0 jsonCallMethod#0 jsonCallMethod#0 jsonCallMethod#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonPartValue#0 emitJsonStopIfFailed#0 jsonCallMethod#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonCallMethod#0 emitJsonEncodeValue#0 jsonCallMethod#0 jsonCallMethod#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 jsonPartValue#1 emitJsonStopIfFailed#1 emitJsonEncodeValue#1
   stackSites=7 stackLocals=0
   local +0:9 fn: IRFunction (const)
