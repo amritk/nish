@@ -3215,7 +3215,7 @@ At every load the ring process's p99 was below the five's on the same core. Both
 
 The bursts come from the load itself. A closed loop with one fixed think time sends a connection's next request at a fixed interval after its last answer, so the requests a slow moment delays arrive together again one think time later. A server on more cores drains the same burst sooner, which is consistent with the entry's five epoll processes on several cores against one ring process on one. That is an inference: the entry's cores were not measured here. The ring process's own CPU a request, 18 µs against 25 µs, is what decides how near its core it runs at a given rate.
 
-No fix is made in this stage. The loop spends about 0.08 µs a request pumping completions, so bounding it buys nothing. The 64-slot batch is in `std/net/handler.ts`, and making it smaller would only reorder the same queue. What would shorten the tail is a second core, with one ring process for each core, or smaller bursts from the load. Neither is measured here.
+No fix is made in this stage. The loop spends about 0.08 µs a request pumping completions, so bounding it buys nothing. The 64-slot batch is in `std/net/handler.ts`, and making it smaller would only reorder the same queue. What should shorten the tail is a second core, with one ring process for each core, or smaller bursts from the load. Neither is measured here.
 
 **The final code at the box's C.** `bash bench/handler-ring/run.sh --conns 96000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"` at commit `d603893d`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000, at 24,000 req/s:
 

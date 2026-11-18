@@ -681,11 +681,12 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    `run.sh` now reports p50, p99 and p99.9 and takes `--think` for a
    closed-loop load. The entry's 65 ms p99 for one ring process, against
    20 ms for five epoll processes, does not reproduce on one shared core. At
-   every load from 30,000 to 56,000 requests a second at 90,000 connections,
-   the ring process's p99 was below the five's. Its tail is a queue on one
-   core, not a stall: no pass of the loop took more than 4.87 ms, but a burst
-   left 2,927 slots ready with the oldest 36 ms old. No fix is made; a second
-   core is what would shorten it. The final code at 96,000
+   every offered load from 30,000 to 56,000 requests a second at 90,000
+   connections, the ring process's p99 was below the five's. Its tail is a
+   queue on one core, not a stall: in a traced run at 45,000 no pass of the
+   loop took more than 4.87 ms, but a burst left 2,927 slots ready with the
+   oldest 36 ms old. No fix is made; a second core should shorten it, which
+   is not measured. The final code at 96,000
    (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
    request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.
    At 300,000 (`--conns 300000 --think 10 --rounds 3 --designs ring`), one
