@@ -120,9 +120,9 @@ $NISH/scripts/build.sh --arena-range cells.ll $NISH/runtime/runtime.c host.c -o 
 ```
 
 Without `--arena-range` the link fails on `nish_arena_range_abi`, rather than
-running with links that point nowhere. If another program already holds the
-address the range needs, the program stops at start-up with the range
-runtime's panic.
+running with links that point nowhere. On Linux the range sits at a fixed
+address: if something else already holds it, the program stops at start-up
+with the range runtime's panic. On macOS the system places the range.
 
 Linking a header build into a shared library that another process loads is
 not supported: Nish would reserve its range inside a process it does not own.

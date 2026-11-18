@@ -1373,12 +1373,16 @@ export class Emitter {
     }
     if (wantsAlloc) {
       const group = this.module.attrGroupFor(inlineAllocatorAttrs())
+      // WP48: either bump names the range runtime's ABI symbol in a module
+      // whose links are offsets, whichever one its compact classes use.
+      if (wantsRef || this.opts.compactLinks) {
+        this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
+      }
       if (all || this.usedRuntime.has("nish_alloc_struct")) {
         this.module.addRawDefinition(inlineAllocator(group, this.opts.compactLinks))
       }
       // WP48: a compact class's own 4-rounding bump.
       if (wantsRef) {
-        this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
         this.module.addRawDefinition(inlineRefAllocator(group))
       }
     }

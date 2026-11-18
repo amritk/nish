@@ -86,8 +86,9 @@ A class `R` is compact when all of these hold:
    whose C host is the process is not refused: the header keeps every class
    holding a link opaque (§4), the host holds an instance as a `struct X *`
    handle, the runtime is the range runtime (`-DNISH_ARENA_RANGE`), and a
-   runtime built without it lacks `nish_arena_range_abi`, so a module that
-   allocates a 4-aligned compact object fails to link. A busy range address
+   runtime built without it lacks `nish_arena_range_abi`, so a module whose
+   links are offsets fails to link: both inline bumps name the symbol there,
+   so an 8-aligned compact class does too. A busy range address
    is the start-up panic every range build has. The automatic rule
    (`src/compact-rule.ts`, test 1) still leaves a header build alone.
 2. **Something links to `R`**: some class, `R` itself included, has a field
@@ -106,7 +107,8 @@ A class `R` is compact when all of these hold:
    correctness.
 5. **Nothing forbids it**: `R` is not, and is not a field of, a `declare
    class`; `R` does not hold a `Secret`; `R` is not exported in a C or N-API
-   surface.
+   surface. This test is the automatic rule's: an `implements Compact` class
+   may cross `--emit-header` as an opaque handle (rule 1).
 
 Two controls override the rule, both erased under Node and `tsc`:
 
@@ -524,7 +526,10 @@ From a survey of `src/` at `8036aff1`.
 - `src/emit-root.ts:203-217`, `writeTrace` (wasm32 only, nothing compressed)
 - `src/tbaa.ts:110-142`, `src/debug.ts:440-468`
 - `src/attributes.ts:1951`, `:2465`, `:7053-7073`, and `src/emit.ts:~2334`
-- `src/interop-header.ts:200-216`, `src/interop-abi.ts:627`
+- `src/interop-header.ts:200-216`, `src/interop-abi.ts:627` at `8036aff1`;
+  since stage 2c the header's handling is `holdsLink` and the opaque branch
+  of `structDefinitions` (`src/interop-header.ts:199-245`), and the refusals
+  are `refuseCompactSidecars` (`src/interop-abi.ts:1340`)
 
 **Layout is computed in one place**: `computeLayout` (`src/structs.ts:167-189`),
 called from `src/structs.ts:1070`, `:1186` and `src/inline-arrays.ts:895`. A

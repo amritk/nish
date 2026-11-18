@@ -409,8 +409,16 @@ only the suite makes.
 
 *Built: `scripts/build.sh --arena-range`, which the compiler passes when a
 program has a compact class (WP48, [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
-§3.3). No program has one until WP48 stage 2, so no build selects it today. The
-code is runtime.c's "The compact-class range" block, with the realigns in
+§3.3). Since WP48 stage 2c an `--emit-header` build's C host selects it by
+hand: the host compiles the runtime with `-DNISH_ARENA_RANGE=1` or runs
+`scripts/build.sh --arena-range`, as the header's banner and the guide's
+"A compact class in a C host" say. A host that links the default runtime
+instead fails to link: every module whose links are offsets names
+`nish_arena_range_abi`, which only the range runtime defines, from both inline
+bumps (`nish_alloc_struct` and `nish_alloc_ref`), so an 8-aligned compact
+class that never calls `nish_alloc_ref` fails too (`tests/run.js`, "compact
+header:"). A C library another process loads is out of scope: the range would
+be reserved inside a process Nish does not own. The code is runtime.c's "The compact-class range" block, with the realigns in
 `nish_alloc_struct`, `runtime-text.c`'s `nish_text_alloc` and
 `runtime-cross.c`'s `nish_cross_in`, runtime.c's `nish_arena_keep` and the
 carve in `runtime-region.c`'s `nish_region_adopt` (RT-55), the drop in

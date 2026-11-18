@@ -90,7 +90,9 @@ const elementNote = (program: CheckedProgram, table: TypeTable, t: i32): string 
   const elem = table.refOf(t)
   const inline = inlineElementStruct(program, table, elem)
   if (inline !== null) {
-    return `struct ${cStructName(inline.name)} elements, inline`
+    // WP48: a record holding a link is opaque, so its elements are too.
+    const opaque = holdsLink(inline) ? ", opaque: each holds a compact link" : ""
+    return `struct ${cStructName(inline.name)} elements, inline${opaque}`
   }
   const c = cType(table, elem, POS_RETURN, false)
   return c.length > 0 ? `${c} elements` : "nish_array * elements"
@@ -309,10 +311,11 @@ export const generateHeader = (
   if (compilation.opts.compactLinks) {
     lines.push(" * slot. The comment above each prototype says which.")
     lines.push(" *")
-    lines.push(" * This program has compact classes (WP48): compile runtime/runtime.c with")
-    lines.push(" * -DNISH_ARENA_RANGE=1 (scripts/build.sh --arena-range), the runtime that")
-    lines.push(" * reserves the range their 32-bit links count from. A class that holds a")
-    lines.push(" * link is opaque: C holds it and passes it back to an exported function. */")
+    lines.push(" * This program has compact classes (WP48): compile every runtime unit with")
+    lines.push(" * -DNISH_ARENA_RANGE=1, or build the runtime with scripts/build.sh")
+    lines.push(" * --arena-range. That runtime reserves the range their 32-bit links count")
+    lines.push(" * from. A class that holds a link is opaque: C holds it and passes it back")
+    lines.push(" * to an exported function. */")
   } else {
     lines.push(" * slot. The comment above each prototype says which. */")
   }

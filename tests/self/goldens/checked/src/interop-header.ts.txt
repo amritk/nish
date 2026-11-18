@@ -52,7 +52,7 @@ function elementNotes(table: TypeTable, fn: ExternalFunction): string -> @elemen
 function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string -> @elementNote
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t
-  calls: TypeTable.kindOf TypeTable.refOf cStructName cType inlineElementStruct nish_str_concat
+  calls: TypeTable.kindOf TypeTable.refOf cStructName cType holdsLink inlineElementStruct nish_str_concat
   pointer program: size=912 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.refOf#0 inlineElementStruct#1 cType#0
   stackSites=0 stackLocals=0
@@ -61,9 +61,11 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
   callee +3:16 TypeTable.refOf -> @TypeTable.refOf
   local +4:9 inline: StructInfo | null (const)
   callee +4:18 inlineElementStruct -> @inlineElementStruct
-  callee +6:22 cStructName -> @cStructName
-  local +8:9 c: string (const)
-  callee +8:13 cType -> @cType
+  local +7:11 opaque: string (const)
+  callee +7:20 holdsLink -> @holdsLink
+  callee +8:22 cStructName -> @cStructName
+  local +10:9 c: string (const)
+  callee +10:13 cType -> @cType
 function structDefinitions(compilation: Compilation): string[] -> @structDefinitions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.has TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName holdsLink isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf spaceAfter structsHoldingLayouts structsHoldingVectors tsKeyword
@@ -153,16 +155,16 @@ function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFi
   callee +1:43 guardStem -> @guardStem
   local +2:9 lines: string[] (const)
   callee +3:14 banner -> @banner
-  callee +39:3 pushAll -> @pushAll
-  callee +39:18 structDefinitions -> @structDefinitions
-  callee +41:3 pushAll -> @pushAll
-  callee +41:18 resultDefinitions -> @resultDefinitions
-  callee +41:48 structFieldTypes -> @structFieldTypes
-  local +45:7 lastPath: string (let)
-  local +46:7 anyModule: boolean (let)
-  local +47:14 fn: ExternalFunction (const)
-  callee +56:9 tsSignatureLine -> @tsSignatureLine
-  local +65:11 proto: string (const)
-  callee +65:19 cPrototype -> @cPrototype
-  callee +68:9 tsSignatureLine -> @tsSignatureLine
-  callee +72:16 prototypeComment -> @prototypeComment
+  callee +40:3 pushAll -> @pushAll
+  callee +40:18 structDefinitions -> @structDefinitions
+  callee +42:3 pushAll -> @pushAll
+  callee +42:18 resultDefinitions -> @resultDefinitions
+  callee +42:48 structFieldTypes -> @structFieldTypes
+  local +46:7 lastPath: string (let)
+  local +47:7 anyModule: boolean (let)
+  local +48:14 fn: ExternalFunction (const)
+  callee +57:9 tsSignatureLine -> @tsSignatureLine
+  local +66:11 proto: string (const)
+  callee +66:19 cPrototype -> @cPrototype
+  callee +69:9 tsSignatureLine -> @tsSignatureLine
+  callee +73:16 prototypeComment -> @prototypeComment
