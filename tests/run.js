@@ -3485,14 +3485,14 @@ if (!only || only.startsWith("file_") || "file_wasm_stubs".includes(only)) {
     fs.writeFileSync(
       stubsTs,
       [
-        'export function openProbe(): i32 { return fileOpen("missing"); }',
-        "export function readProbe(): i32 {",
+        'export const openProbe = (): i32 => { return fileOpen("missing"); };',
+        "export const readProbe = (): i32 => {",
         "  const buf: u8[] = new Array<u8>(4);",
         "  const pos: i64 = 0;",
         "  return fileReadAt(3, buf, 0, 4, pos);",
-        "}",
-        "export function sizeProbe(): i64 { return fileSize(3); }",
-        "export function closeProbe(): i32 { return fileClose(3); }",
+        "};",
+        "export const sizeProbe = (): i64 => { return fileSize(3); };",
+        "export const closeProbe = (): i32 => { return fileClose(3); };",
         "",
       ].join("\n")
     )
@@ -5084,7 +5084,7 @@ if (dealtHere("diagnostics")) {
   const manySrc = path.join(buildDir, "diag_many.ts")
   fs.writeFileSync(
     manySrc,
-    Array.from({ length: 25 }, (_, i) => `function f${i}(a: number): number { return a + true; }`).join(
+    Array.from({ length: 25 }, (_, i) => `const f${i} = (a: number): number => { return a + true; };`).join(
       "\n"
     ) + "\n"
   )
@@ -5449,7 +5449,7 @@ if (dealtHere("diagnostics")) {
   const dbgSrc = path.join(buildDir, "dbg_main.ts")
   fs.writeFileSync(
     dbgSrc,
-    "function fib(n: number): number {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n\nexport function main(): number {\n  const x = fib(10);\n  return x - 55;\n}\n"
+    "const fib = (n: number): number => {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n};\n\nexport const main = (): number => {\n  const x = fib(10);\n  return x - 55;\n};\n"
   )
   const exe = path.join(buildDir, "dbg_main")
   const link = spawnSync(NISH, [dbgSrc, "-g", "--link", exe, "--profile", "debug"], {
@@ -6415,7 +6415,7 @@ if (dealtHere("performance")) {
   const mixedSrc = path.join(buildDir, "perf_mixed.ts")
   fs.writeFileSync(
     mixedSrc,
-    'export function test(): number {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n}\n'
+    'export const test = (): number => {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n};\n'
   )
   const mixed = spawnSync(NISH, [mixedSrc, "-o", path.join(buildDir, "perf_mixed.ll")], {
     cwd: root,
@@ -6434,7 +6434,7 @@ if (dealtHere("performance")) {
     Array.from(
       { length: 25 },
       (_, i) =>
-        `export function f${i}(): number {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n}`
+        `export const f${i} = (): number => {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n};`
     ).join("\n") + "\n"
   )
   const many = spawnSync(NISH, [manySrc, "-o", path.join(buildDir, "perf_many.ll")], {
@@ -15935,10 +15935,10 @@ if (dealtHere("arrayChecks")) {
           "  console.log(label);",
           "  return readStruct(localeconv());",
           "};",
-          "export function main(): i32 {",
+          "export const main = (): i32 => {",
           '  const lc = probe("x");',
           "  return lc.decimalPoint === lc.thousandsSep ? 1 : 0;",
-          "}",
+          "};",
           "",
         ].join("\n")
         const probeTs = path.join(buildDir, "alloc_probe_readStruct.ts")
@@ -21080,18 +21080,18 @@ if (dealtHere("cliChecks")) {
         "    wipe(this.k);",
         "  }",
         "}",
-        "export function make(n: i32): Keyed {",
+        "export const make = (n: i32): Keyed => {",
         "  return new Keyed(n);",
-        "}",
-        "export function size(h: Keyed): i32 {",
+        "};",
+        "export const size = (h: Keyed): i32 => {",
         "  return expose(h.k, width);",
-        "}",
-        "export function measure(s: Secret<u8[]>): i32 {",
+        "};",
+        "export const measure = (s: Secret<u8[]>): i32 => {",
         "  return expose(s, width);",
-        "}",
-        "export function fresh(n: i32): Secret<u8[]> {",
+        "};",
+        "export const fresh = (n: i32): Secret<u8[]> => {",
         "  return secret(new Array<u8>(n));",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -22276,18 +22276,18 @@ if (dealtHere("cliChecks")) {
         fs.writeFileSync(
           src,
           [
-            "export function half(n: i32): Result<i32, i32> {",
+            "export const half = (n: i32): Result<i32, i32> => {",
             "  if (n % 2 !== 0) { return Err(n); }",
             "  return Ok(n / 2);",
-            "}",
-            "export function checkPort(port: i32): Result<void, i32> {",
+            "};",
+            "export const checkPort = (port: i32): Result<void, i32> => {",
             "  if (port <= 0) { return Err(port); }",
             "  return Ok();",
-            "}",
-            "export function describe(r: Result<i32, i32>): i32 {",
+            "};",
+            "export const describe = (r: Result<i32, i32>): i32 => {",
             "  if (r.isErr()) { return -r.error; }",
             "  return r.value;",
-            "}",
+            "};",
             "",
           ].join("\n")
         )
@@ -22374,14 +22374,14 @@ if (dealtHere("cliChecks")) {
         "  x: number = 0;",
         "}",
         "",
-        "export function move(p: Point, dx: number): Point {",
+        "export const move = (p: Point, dx: number): Point => {",
         "  p.x = p.x + dx;",
         "  return p;",
-        "}",
+        "};",
         "",
-        "export function origin(): Point {",
+        "export const origin = (): Point => {",
         "  return new Point();",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -22521,14 +22521,14 @@ if (dealtHere("cliChecks")) {
     fs.writeFileSync(
       skipSrc,
       [
-        "export function spell(n: i32): string {",
+        "export const spell = (n: i32): string => {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return `${n}`;",
-        "}",
-        "export function names(n: i32): string[] {",
+        "};",
+        "export const names = (n: i32): string[] => {",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         "  return [`${n}`];",
-        "}",
+        "};",
         // WP30's negative half. Adding the unsigned widths to the typed-view
         // table moved the line between an element type that crosses and one that
         // does not, and these two are what must stay on the far side of it: a
@@ -22536,7 +22536,7 @@ if (dealtHere("cliChecks")) {
         // view, and a `string` element is a pointer into the arena. Without this,
         // a future row added to `typedView` by pattern-matching on the others
         // could let either through and nothing would notice.
-        "export function countTrue(flags: boolean[]): i32 {",
+        "export const countTrue = (flags: boolean[]): i32 => {",
         "  let n = 0;",
         "  for (let i = 0; i < flags.length; i++) {",
         "    if (flags[i]) {",
@@ -22544,10 +22544,10 @@ if (dealtHere("cliChecks")) {
         "    }",
         "  }",
         "  return n;",
-        "}",
-        "export function widest(names: string[]): i32 {",
+        "};",
+        "export const widest = (names: string[]): i32 => {",
         "  return names.length;",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
@@ -26654,7 +26654,7 @@ if (dealtHere("releaseChecks")) {
         fs.mkdirSync(work, { recursive: true })
         fs.writeFileSync(
           path.join(work, "hello.ts"),
-          'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n'
+          'export const main = (): number => {\n  console.log("hello from a global install");\n  return 0;\n};\n'
         )
 
         // ---- no platform package: the refusal ----------------------------------------
@@ -26922,9 +26922,9 @@ if (dealtHere("releaseChecks")) {
             fs.writeFileSync(
               path.join(work, "std.ts"),
               'import { trim } from "nish/text";\n' +
-                "export function main(): number {\n" +
+                "export const main = (): number => {\n" +
                 '  console.log(trim("  ok  "));\n' +
-                "  return 0;\n}\n"
+                "  return 0;\n};\n"
             )
             const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" })
             const stdRan =
@@ -28578,7 +28578,7 @@ if (dealtHere("releaseChecks")) {
       fs.writeFileSync(
         path.join(rp, "probe.ts"),
         [
-          "export function main(): number {",
+          "export const main = (): number => {",
           '  const target = realpathSync("target.txt");',
           "  if (target === null) {",
           '    console.log("target: <null>");',
@@ -28593,7 +28593,7 @@ if (dealtHere("releaseChecks")) {
           // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
           '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
           "  return 0;",
-          "}",
+          "};",
           "",
         ].join("\n")
       )
@@ -38333,7 +38333,7 @@ if (!only || "vite".includes(only)) {
     )
     fs.writeFileSync(
       path.join(app, "src", "quad.ts"),
-      'import { twice } from "./page"\nexport function quad(x: f64): f64 {\n  return twice(twice(x)) + 1\n}\n'
+      'import { twice } from "./page"\nexport const quad = (x: f64): f64 => {\n  return twice(twice(x)) + 1\n};\n'
     )
     const hosted = nish({ compiler: NISH, entries: ["src/quad.ts"], host: ["src/page.ts"] })
     hosted.configResolved({ root: app, command: "build", cacheDir: path.join(app, ".cache") })
@@ -38394,11 +38394,11 @@ if (!only || "wasm-math".includes(only)) {
         "export const logOf = (x: f64): f64 => Math.log(x)",
         "export const powOf = (x: f64, y: f64): f64 => Math.pow(x, y)",
         "export const remOf = (x: f64, y: f64): f64 => x % y",
-        "export function remF32(x: f32, y: f32): f32 {",
+        "export const remF32 = (x: f32, y: f32): f32 => {",
         "  let r = x",
         "  r %= y",
         "  return r",
-        "}",
+        "};",
         "",
       ].join("\n")
     )
