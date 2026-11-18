@@ -2671,10 +2671,15 @@ past its `RLIMIT_NOFILE`. Its `peer` is written as zeros.
   `pollWait` reports it, then progress. A slot is in one loop at a time: a
   `pollAdd` to a second loop answers `-17` until the first loop removes it
   or is closed.
+- `netShutdown` shuts a slot down through the ring, behind the bytes already
+  written: the peer reads them and then the end of the stream. After a shut
+  writing side (`how` 1 or 2) `netWrite` answers `-32`; after a shut reading
+  side (`how` 0 or 2) `netRead` answers what is queued and then `0`. A `how`
+  past 2 answers `-22`.
+- `netMss` answers `-1`: the ring has no route to `TCP_MAXSEG`.
 - `netSetOption` answers `-95`: the slot's socket belongs to the ring. Every
-  other call that takes a descriptor (`netShutdown`, `sendFd`, `netMss`,
-  `peerCredentials`, FFI) answers `-9`, and so does every call on a handle
-  after its `netClose`.
+  other call that takes a descriptor (`sendFd`, `peerCredentials`, FFI)
+  answers `-9`, and so does every call on a handle after its `netClose`.
 - `tcpAccept` answers `-23` when every slot its listener may hold is taken:
   up to 64 rings, each of as many slots as the soft descriptor limit, at most
   16,384. A slot freed by `netClose` takes a waiting connection again.

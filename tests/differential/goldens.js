@@ -7,6 +7,8 @@
  *   node tests/differential/goldens.js corpus/i64   only the programs whose name contains that
  *   node tests/differential/goldens.js --fresh      the same (the spelling `tests/run.js` uses)
  *   node tests/differential/goldens.js --update     move what can no longer be frozen into the register
+ *   node tests/differential/goldens.js --rekey-arrowified --rev <ref>
+ *                                                   re-key a record whose only change is the arrow codemod
  *   node tests/differential/goldens.js --verbose
  *
  * **Why this exists.** `tests/differential/` is the only oracle in this
@@ -87,8 +89,26 @@
  * dropped), a record whose program is gone is dropped, and a register line
  * whose program is gone goes with it. Each move is printed, and the diff of
  * the register is the review.
+ *
+ * **The one re-key: the arrow codemod (WP22 stage C).** `scripts/arrowify.mjs`
+ * rewrites a `function` declaration into a `const` bound to an arrow, and the
+ * two spellings rewrite to the same JavaScript (WP22 §8b), yet the rewrite
+ * moves the source's bytes and so its `<src-hash>`. `--update` would register
+ * every rewritten program for good. `--rekey-arrowified --rev <ref>` moves a
+ * stale key instead, and only on proof that nothing but the codemod happened:
+ * the module's source at `<ref>` must hash to the frozen key, and
+ * `arrowify`'s block-bodied `rewrite` of that source must give the
+ * working-tree file byte for byte. Then the key moves and the stored body is
+ * kept. A module failing either check (or on which `arrowify` throws), a
+ * record whose flags moved, and a record missing a body stay stale, are
+ * named, and the exit status is 1; the records that passed are still written,
+ * so a refusal costs only the refused programs. The mode does not itself check
+ * that the kept body is still what the new source rewrites to: that rests on
+ * §8b, and its backstop is every differential run, which compares the native
+ * build of the source against the kept body.
  */
 import crypto from "node:crypto"
+import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -343,11 +363,15 @@ const registerText = (rows) =>
   `${[...REGISTER_HEADER, ...[...rows].map(([name, why]) => (why.length > 0 ? `${name} ${why}` : name))].join("\n")}\n`
 
 const parse = (argv) => {
-  const options = { update: false, verbose: false, only: undefined }
+  const options = { update: false, rekey: false, rev: undefined, verbose: false, only: undefined }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === "--update") {
       options.update = true
+    } else if (arg === "--rekey-arrowified") {
+      options.rekey = true
+    } else if (arg === "--rev") {
+      options.rev = argv[++i]
     }
     // Freshness is the only check left, so `--fresh` asks for what every run
     // does; it stays a flag because `tests/run.js` passes it.
@@ -362,6 +386,15 @@ const parse = (argv) => {
     } else {
       return { error: `unknown option: ${arg}` }
     }
+  }
+  if (options.rekey && (options.rev === undefined || options.rev.length === 0)) {
+    return { error: "--rekey-arrowified needs --rev <ref>: the revision the codemod ran over" }
+  }
+  if (!options.rekey && options.rev !== undefined) {
+    return { error: "--rev only means something with --rekey-arrowified" }
+  }
+  if (options.rekey && options.update) {
+    return { error: "--rekey-arrowified and --update are two different writes; run one" }
   }
   return options
 }
@@ -428,6 +461,111 @@ const update = (programs, store, register) => {
   return 0
 }
 
+/**
+ * Why one module's stale key may not move to its working-tree source, or null
+ * when the source is exactly `arrowify` of the source the key was taken over.
+ */
+const rekeyRefusal = (module, rev, arrowify) => {
+  let old
+  try {
+    old = execFileSync("git", ["show", `${rev}:${module.source}`], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 64 * 1024 * 1024,
+    })
+  } catch {
+    return `${module.source} is not at ${rev}`
+  }
+  if (digest(old) !== module.srcHash) {
+    return `${module.source} at ${rev} hashes to ${digest(old)}, not the frozen ${module.srcHash}`
+  }
+  const text = old.toString("utf8")
+  // The codemod works on text, so bytes that do not survive a UTF-8 round
+  // trip could come back equal while the file underneath differed.
+  if (!Buffer.from(text, "utf8").equals(old)) {
+    return `${module.source} at ${rev} is not UTF-8`
+  }
+  const now = fs.readFileSync(path.join(root, module.source))
+  let rewritten
+  try {
+    rewritten = arrowify(text, module.source).text
+  } catch (error) {
+    return `arrowify threw on ${module.source} at ${rev}: ${error instanceof Error ? error.message : String(error)}`
+  }
+  if (!Buffer.from(rewritten, "utf8").equals(now)) {
+    return `${module.source} is not \`scripts/arrowify.mjs\` of its source at ${rev}: it changed in some other way`
+  }
+  return null
+}
+
+/**
+ * `--rekey-arrowified`: move the key of every stale module whose only change
+ * since `rev` is the block-bodied arrow codemod, keeping its stored body.
+ */
+const rekey = async (programs, store, rev) => {
+  // Imported only here: the codemod pulls in `typescript`, which no other mode needs.
+  const { rewrite } = await import("../../scripts/arrowify.mjs")
+  const arrowify = (source, file) => rewrite(source, file, { concise: false })
+  const byName = new Map(programs.map((p) => [p.name, p]))
+  let moved = 0
+  let rekeyed = 0
+  const refused = []
+  for (const [name, record] of store.programs) {
+    const prog = byName.get(name)
+    if (prog === undefined || staleness(record, prog, store.bodies) === null) {
+      continue
+    }
+    const keys = []
+    let why = null
+    for (const module of record.modules) {
+      const file = path.join(root, module.source)
+      if (fs.existsSync(file) && digest(fs.readFileSync(file)) === module.srcHash) {
+        continue
+      }
+      why = fs.existsSync(file) ? rekeyRefusal(module, rev, arrowify) : `${module.source} is gone`
+      if (why !== null) {
+        break
+      }
+      keys.push([module, digest(fs.readFileSync(file))])
+    }
+    // Every other reason a record is stale (its flags, a missing body) is
+    // checked on the record as it would stand re-keyed, and refuses it whole.
+    if (why === null) {
+      const candidate = {
+        ...record,
+        modules: record.modules.map((m) => {
+          const key = keys.find(([k]) => k === m)
+          return key === undefined ? m : { ...m, srcHash: key[1] }
+        }),
+      }
+      why = staleness(candidate, prog, store.bodies)
+      if (why === null) {
+        store.programs.set(name, candidate)
+        moved += keys.length
+        rekeyed++
+        for (const [m, key] of keys) {
+          process.stdout.write(`  re-keyed ${name}: ${m.source} ${m.srcHash} -> ${key}\n`)
+        }
+        continue
+      }
+    }
+    refused.push(`${name}: ${why}`)
+  }
+  const before = fs.readFileSync(STORE, "utf8")
+  const { text, note } = storeText([...store.programs.values()], store.bodies)
+  if (text !== before) {
+    fs.writeFileSync(STORE, text)
+  }
+  for (const line of refused) {
+    process.stdout.write(`  REFUSED ${line}\n`)
+  }
+  process.stdout.write(
+    `rekey: ${rekeyed} program(s), ${moved} module key(s) moved against ${rev}, ${refused.length} refused; ` +
+      `${note}, ${relative(STORE)} ${text === before ? "unchanged" : "updated"}\n`
+  )
+  return refused.length === 0 ? 0 : 1
+}
+
 const main = async (argv) => {
   const options = parse(argv)
   if (options.error !== undefined) {
@@ -462,6 +600,9 @@ const main = async (argv) => {
   const register = readRegister()
   if (options.update) {
     return update(programs, store, register)
+  }
+  if (options.rekey) {
+    return rekey(programs, store, options.rev)
   }
 
   let failed = 0
@@ -502,7 +643,8 @@ const main = async (argv) => {
       fail(`${prog.name} is stale: ${why}`)
       process.stdout.write(
         "       the frozen rewrite is of a program that no longer exists; " +
-          "`node tests/differential/goldens.js --update` moves it into the register\n"
+          "`node tests/differential/goldens.js --update` moves it into the register " +
+          "(or, if the only change is `scripts/arrowify.mjs`, `--rekey-arrowified --rev <ref>` re-keys it)\n"
       )
       stale++
       continue

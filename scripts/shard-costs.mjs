@@ -4,6 +4,7 @@
  *
  *   node scripts/shard-costs.mjs <run-dir> <run-dir> <run-dir> ...      print the table
  *   node scripts/shard-costs.mjs --write <run-dir> ...                   and write it
+ *   node scripts/shard-costs.mjs --drop <regex> ... <run-dir> ...         without a removed cost
  *
  * A `<run-dir>` is a `ci.yml` run's log archive, unzipped: the "Download log
  * archive" button on the run's page, or
@@ -39,6 +40,17 @@
  *   dealt sections to its summary, plus its job's steps after the suite. A
  *   `pinned` section likewise takes its shard's steps after the suite, since
  *   they are there to read it.
+ *
+ * **`--drop <regex>`** (repeatable) measures the runs as though every check
+ * whose name the regex matches had taken no time: the gap before each such
+ * line is cut from the log's clock, so whichever piece held it shrinks by it.
+ * It is for a cost a change has removed that the runs being measured still
+ * paid, such as the core dumps the `debug arena` checks wrote before they ran
+ * under `prlimit --core=1:1`. The gap is all the time since the previous
+ * check, so it also takes whatever that check's code did before printing it:
+ * a `staleBuild` check compiles its program, then runs it, then prints one
+ * line, and dropping it cuts the compile too. A regex that matches no check in
+ * any run is an error, so a stale one does not linger in a command.
  *
  * Anything it cannot find is an error, never a guess: a section with no
  * recognizer, a recognizer that matches nothing in the shard that ran the
@@ -139,12 +151,23 @@ if (argv[0] === "--check-runner") {
   process.exit(0)
 }
 const write = argv.includes("--write")
-const runs = argv.filter((a) => a !== "--write")
+const drops = []
+const runs = []
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--write") {
+    continue
+  }
+  if (argv[i] === "--drop" && i + 1 < argv.length) {
+    drops.push({ re: new RegExp(argv[++i]), hits: 0 })
+    continue
+  }
+  runs.push(argv[i])
+}
 // A median of fewer than three runs is one runner's luck, not a measurement;
 // and a flag this does not know (`--help`, a typo) is not a run directory.
 if (runs.length < 3 || runs.some((a) => a.startsWith("-"))) {
   console.error(
-    "usage: node scripts/shard-costs.mjs [--write] <unzipped run log dir>... (at least three green runs)"
+    "usage: node scripts/shard-costs.mjs [--write] [--drop <regex>]... <unzipped run log dir>... (at least three green runs)"
   )
   process.exit(2)
 }
@@ -193,6 +216,9 @@ const RECOGNIZERS = {
   performance: /^(performance|mem_loop_scope|perf_bounds_toi32_user)[: ]/,
   memAwfy: /^mem_awfy: /,
   fix: /^fix /,
+  h1Between: /^http1_between: /,
+  unboundedPass: /^nl9018: /,
+  breakWeb: /^break-web: /,
 }
 /**
  * The check after the golden cases' own: a section before the link programs
@@ -243,14 +269,28 @@ const sections = (() => {
   return out.sort((a, b) => a.at - b.at)
 })()
 
-/** One log line: its time in seconds and, for a check, its name. */
-const parse = (log) =>
-  log.split("\n").map((line) => {
+/**
+ * One log line: its time in seconds and, for a check, its name. The time is
+ * the log's clock less every gap `--drop` cut before it.
+ */
+const parse = (log) => {
+  let cut = 0
+  let last = Number.NaN
+  return log.split("\n").map((line) => {
     const m = /^\uFEFF?(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/.exec(line)
-    const t = m ? Date.parse(m[1]) / 1000 : Number.NaN
+    const raw = m ? Date.parse(m[1]) / 1000 : Number.NaN
     const check = m ? /^(?:PASS|SKIP|FAIL) {2}(.*)$/.exec(m[2]) : null
-    return { t, body: m ? m[2] : line, check: check ? check[1] : null }
+    const drop = check ? drops.find((d) => d.re.test(check[1])) : undefined
+    if (drop !== undefined && !Number.isNaN(last)) {
+      drop.hits++
+      cut += raw - last
+    }
+    if (!Number.isNaN(raw)) {
+      last = raw
+    }
+    return { t: raw - cut, body: m ? m[2] : line, check: check ? check[1] : null }
   })
+}
 
 const LINK = /^link\/([^:]+)[: ]/
 
@@ -432,6 +472,11 @@ const median = (xs) => {
 }
 
 const measured = runs.map(measureRun)
+for (const d of drops) {
+  if (d.hits === 0) {
+    fail(`--drop ${d.re} matches no check in any run`)
+  }
+}
 const table = { shardOne: Math.round(median(measured.map((r) => r.shardOne))) }
 for (const s of sections.filter((x) => !x.tail)) {
   table[s.key] = Math.round(median(measured.map((r) => r[s.key])))

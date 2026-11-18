@@ -159,6 +159,32 @@ function computeLayout(ctx: CheckContext, info: StructInfo): i32 -> @computeLayo
   callee +3:14 roundUpTo -> @roundUpTo
   callee +11:15 roundUpTo -> @roundUpTo
   callee +13:10 roundUpTo -> @roundUpTo
+function narrowedSize(table: TypeTable, info: StructInfo, target: i32, wasm: boolean): i32 -> @narrowedSize [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: target
+  calls: fieldAlign fieldWidth isLinkTo nish_panic_overflow roundUpTo
+  pointer table: size=160 writesThrough=false captured=false passedTo=isLinkTo#0 fieldAlign#0 fieldWidth#0
+  pointer info: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 pointer: i32 (const)
+  local +1:7 offset: i32 (let)
+  local +2:7 align: i32 (let)
+  local +3:14 field: FieldInfo (const)
+  local +4:11 link: boolean (const)
+  callee +4:18 isLinkTo -> @isLinkTo
+  local +5:11 need: i32 (const)
+  callee +5:29 fieldAlign -> @fieldAlign
+  callee +6:14 roundUpTo -> @roundUpTo
+  callee +6:52 fieldWidth -> @fieldWidth
+  callee +11:10 roundUpTo -> @roundUpTo
+function isLinkTo(table: TypeTable, field: FieldInfo, target: i32): boolean -> @isLinkTo [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FieldInfo.inline TypeTable.stripNull
+  pointer table: size=160 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
+  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  stackSites=0 stackLocals=0
+  callee +0:45 FieldInfo.inline -> @FieldInfo.inline
+  callee +0:63 TypeTable.stripNull -> @TypeTable.stripNull
 function layoutSize(ctx: CheckContext, fields: FieldInfo[], align: i32): i32 -> @layoutSize
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: align

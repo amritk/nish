@@ -17,6 +17,6 @@ export class Point {
   }
 }
 
-export function area(s: Size): number {
+export const area = (s: Size): number => {
   return s.width * s.height;
-}
+};

@@ -884,6 +884,8 @@ const commandMain = (): number => {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {
       opts.explainMemory = true
+    } else if (value === "--explain-layout") {
+      opts.explainLayout = true
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -1165,10 +1167,10 @@ const commandMain = (): number => {
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
-  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory)) {
+  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory || opts.explainLayout)) {
     let refused = productFlag.length > 0 ? productFlag : irFlag
     if (refused.length === 0) {
-      refused = "--explain-memory"
+      refused = opts.explainMemory ? "--explain-memory" : "--explain-layout"
     }
     console.error(
       `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
@@ -1276,8 +1278,14 @@ const commandMain = (): number => {
   // The retention warnings and the arena placements come from the body checks
   // and the whole-program facts, which `--emit-ast` never reaches, so there
   // would be nothing to deny or to write.
-  if (emitAst && (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory)) {
+  if (
+    emitAst &&
+    (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory || opts.explainLayout)
+  ) {
     let flag = opts.explainMemory ? "--explain-memory" : "--emit-arena"
+    if (opts.explainLayout && !opts.explainMemory) {
+      flag = "--explain-layout"
+    }
     if (opts.denyRetention) {
       flag = "--deny-retention"
     }
@@ -1285,11 +1293,10 @@ const commandMain = (): number => {
     return 2
   }
   // `--json` promises a stderr of diagnostic objects, one per line, and the
-  // memory report is prose.
-  if (json && opts.explainMemory) {
-    console.error(
-      "compile: `--explain-memory` prints a report for people, and --json keeps stderr to diagnostics"
-    )
+  // memory and layout reports are prose.
+  if (json && (opts.explainMemory || opts.explainLayout)) {
+    const flag = opts.explainMemory ? "--explain-memory" : "--explain-layout"
+    console.error(`compile: \`${flag}\` prints a report for people, and --json keeps stderr to diagnostics`)
     return 2
   }
   opts.capabilityReport = capabilitiesFile.length > 0
@@ -1474,6 +1481,9 @@ const commandMain = (): number => {
   // thing before the program's own output.
   if (opts.explainMemory) {
     console.error(compilation.explainMemoryText())
+  }
+  if (opts.explainLayout) {
+    console.error(compilation.explainLayoutText())
   }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last

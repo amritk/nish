@@ -1,7 +1,7 @@
 // WP15 §8, the false-positive guards for the arithmetic warnings. Every line
 // here is either the rewrite one of the warnings names or a shape the compiler
 // cannot call wrong, and none of them may warn.
-export function test(): number {
+export const test = (): number => {
   // The rewrite the widening warning asks for: both operands are widened
   // first, so the multiplication happens in i64 and nothing wraps.
   const a = 70000;
@@ -23,4 +23,4 @@ export function test(): number {
   const signBit = 1 << 31;
 
   return toI32(wide / 100000000) + n + (fits - 2147483646) + (shifted - signBit);
-}
+};

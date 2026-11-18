@@ -12,7 +12,7 @@ export class Bag {
 }
 
 /** A fresh array of `n` elements counting up from `seed`. */
-export function count(n: i32, seed: i32): i32[] {
+export const count = (n: i32, seed: i32): i32[] => {
   const xs = new Array<i32>(n)
   let i = 0
   while (i < xs.length) {
@@ -20,10 +20,10 @@ export function count(n: i32, seed: i32): i32[] {
     i = i + 1
   }
   return xs
-}
+};
 
 /** How many elements of `xs` are not `seed + i`: 0 for an untouched array. */
-export function wrong(xs: i32[], seed: i32): i32 {
+export const wrong = (xs: i32[], seed: i32): i32 => {
   let bad = 0
   let i = 0
   while (i < xs.length) {
@@ -33,7 +33,7 @@ export function wrong(xs: i32[], seed: i32): i32 {
     i = i + 1
   }
   return bad
-}
+};
 
 /** A string built across two waits, from an array held across both. */
 export async function text(n: i32, ms: i32): Promise<string> {

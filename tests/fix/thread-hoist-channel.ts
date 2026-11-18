@@ -8,7 +8,7 @@ const receive = (ch: Channel<i32>): i32 => {
   return sum
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const out = new Array<i32>(1)
   const ch = new Channel<i32>()
   {

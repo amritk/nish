@@ -83,17 +83,17 @@ async function fill(conn: Conn): Promise<boolean> {
 }
 
 /** Where `\r\n\r\n` ends in the unread bytes, or -1. */
-function headEnd(conn: Conn): i32 {
+const headEnd = (conn: Conn): i32 => {
   for (let i: i32 = conn.start; i + 3 < conn.end; i++) {
     if (conn.buf[i] === toU8(13) && conn.buf[i + 1] === toU8(10) && conn.buf[i + 2] === toU8(13) && conn.buf[i + 3] === toU8(10)) {
       return i + 4
     }
   }
   return -1
-}
+};
 
 /** The value of header `name` (lowercase) in a head, or "". */
-export function headerOf(head: string, name: string): string {
+export const headerOf = (head: string, name: string): string => {
   const n: i32 = toI32(name.length)
   let at: i32 = toI32(head.indexOf("\r\n")) + 2
   while (at > 1 && at < toI32(head.length)) {
@@ -119,7 +119,7 @@ export function headerOf(head: string, name: string): string {
     at = lineEnd + 2
   }
   return ""
-}
+};
 
 /** One whole response as `status body`, or "closed" when the peer closed first. */
 export async function readResponse(conn: Conn): Promise<string> {
@@ -151,12 +151,12 @@ export async function readResponse(conn: Conn): Promise<string> {
 }
 
 /** Closes the connection. */
-export function hangUp(conn: Conn): void {
+export const hangUp = (conn: Conn): void => {
   if (conn.fd >= 0) {
     netClose(conn.fd)
     conn.fd = -1
   }
-}
+};
 
 /**
  * One whole response as its bytes, or "closed" when the peer closed first:

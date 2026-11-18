@@ -11,6 +11,6 @@ async function alsoNever(x: i32): Promise<i32> {
   return y + 1
 }
 
-export function test(): i32 {
+export const test = (): i32 => {
   return 42
-}
+};

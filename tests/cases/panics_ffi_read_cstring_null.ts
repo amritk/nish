@@ -8,12 +8,12 @@ import { readCString } from "nish:unsafe";
 declare function textPtr(): CPtr
 declare function nullPtr(): CPtr
 
-export function present(): i32 {
+export const present = (): i32 => {
   const s: string = readCString(textPtr());
   return s.length;
-}
+};
 
-export function absent(): i32 {
+export const absent = (): i32 => {
   const s: string = readCString(nullPtr());
   return s.length;
-}
+};

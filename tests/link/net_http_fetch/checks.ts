@@ -913,7 +913,7 @@ const parsePort = (s: string): i32 => {
   return v;
 };
 
-export function httpFetchChecks(): i32 {
+export const httpFetchChecks = (): i32 => {
   const argv: string[] = process.argv;
   if (toI32(argv.length) >= 4 && argv[1] === "client") {
     return runClient(parsePort(argv[2]), parsePort(argv[3]));
@@ -925,4 +925,4 @@ export function httpFetchChecks(): i32 {
     return 1;
   }
   return server.serve(pid);
-}
+};

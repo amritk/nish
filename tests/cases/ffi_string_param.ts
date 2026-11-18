@@ -14,11 +14,11 @@ declare function unsetenv(name: string): i32;
 declare function puts(s: string): i32;
 declare function strcmp(a: string, b: string | null): i32;
 
-function digits(n: i32): string {
+const digits = (n: i32): string => {
   return `${n * 7}`;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(`${strlen("hello, world")}`);
   const built: string = "ab" + digits(6);
   console.log(`${strlen(built)}`);
@@ -39,4 +39,4 @@ export function main(): i32 {
   puts("hello from puts");
   puts(built);
   return 0;
-}
+};

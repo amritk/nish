@@ -5,7 +5,7 @@
 // computed in i32 whatever `a` and `b` hold, so the conversion that follows it
 // can never recover an overflow that has already happened. Small values keep
 // the case runnable while still tripping it.
-export function test(): number {
+export const test = (): number => {
   const a = 3;
   const b = 4;
   const widened = toI64(a * b);
@@ -13,4 +13,4 @@ export function test(): number {
   // this shifts by nothing at all.
   const shifted = 1 << 32;
   return toI32(widened) + shifted;
-}
+};

@@ -222,6 +222,13 @@ export class Options {
    */
   explainMemory: boolean
   /**
+   * `--explain-layout`: print, for every class, whether the compact-class rule
+   * of docs/wp48-ref32-classes.md §3.1 picks it, or the first of its tests that
+   * refuses it, with the size it has and would have
+   * (`Compilation.explainLayoutText`). It changes no byte of the IR.
+   */
+  explainLayout: boolean
+  /**
    * The root package's `"nish".noPanic` named at least one module, which puts
    * those modules in the scope `--deny-panics` puts all of them in. Set by
    * `Compilation` once it has read the manifest, before anything records.
@@ -353,6 +360,7 @@ export class Options {
     this.denyRetention = false
     this.emitArena = ""
     this.explainMemory = false
+    this.explainLayout = false
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

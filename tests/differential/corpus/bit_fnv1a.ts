@@ -3,21 +3,21 @@
 // and the i32 wrap have to agree with JavaScript byte for byte.
 import { wrappingMul } from "nish:unsafe";
 
-function fnv1a(bytes: number[]): number {
+const fnv1a = (bytes: number[]): number => {
   let hash = -2128831035; // the 2166136261 offset basis, read as a signed i32
   for (const b of bytes) {
     hash ^= b;
     hash = wrappingMul(hash, 16777619);
   }
   return hash;
-}
+};
 
 /** The bucket a hash lands in, which is what the `&` is really for. */
-function bucket(bytes: number[], size: number): number {
+const bucket = (bytes: number[], size: number): number => {
   return fnv1a(bytes) & (size - 1);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const hello = [104, 101, 108, 108, 111];
   const world = [119, 111, 114, 108, 100];
   const empty: number[] = [];
@@ -33,4 +33,4 @@ export function main(): number {
     console.log(`${fnv1a(bytes)} ${fnv1a(bytes) >>> 24} ${bucket(bytes, 4096)}`);
   }
   return 0;
-}
+};

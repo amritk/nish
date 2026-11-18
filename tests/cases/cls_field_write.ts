@@ -9,22 +9,22 @@ class Counter {
 }
 
 // Writes through `c`: no `readonly` on the parameter.
-function bump(c: Counter): void {
+const bump = (c: Counter): void => {
   c.count = c.count + c.step;
-}
+};
 
 // Only reads through `c`, but passes it to `bump`, which writes: no `readonly` either.
-function bumpTwice(c: Counter): number {
+const bumpTwice = (c: Counter): number => {
   bump(c);
   bump(c);
   return c.count;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const c = new Counter(5);
   c.step = 7;
   console.log(bumpTwice(c));
   c.count = 100;
   console.log(c.count);
   return 0;
-}
+};

@@ -1,7 +1,7 @@
-export function f(): number {
+export const f = (): number => {
   return 2;
-}
+};
 
-export function g(): number {
+export const g = (): number => {
   return f();
-}
+};

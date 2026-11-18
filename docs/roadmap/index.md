@@ -45,7 +45,7 @@ specified.
 | Work package | State | Done |
 | --- | --- | --- |
 | [WP21: Packages](wp21-packages.md) | In progress | 5 of 7 |
-| [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 3 of 5 |
+| [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 4 of 5 |
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | In progress | 5 of 13 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 5 of 9 |

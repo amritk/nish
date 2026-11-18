@@ -8,7 +8,7 @@ declare function getentropy(buf: u8[], n: u64): i32;
 declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): i32;
 declare function abs(n: i32): i32;
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(`${abs(-3)}`);
   return 0;
-}
+};

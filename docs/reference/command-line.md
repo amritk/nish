@@ -202,6 +202,12 @@ why loops and functions keep their memory
 
 </scalar-field>
 
+<scalar-field name="--explain-layout">
+
+which classes the compact-class rule picks
+
+</scalar-field>
+
 <scalar-field name="--capabilities">
 
 print what the program can reach, on stderr

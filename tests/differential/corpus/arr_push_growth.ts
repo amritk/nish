@@ -1,5 +1,5 @@
 // push growth across many capacity doublings, arrays of every scalar kind, and length checkpoints.
-export function main(): number {
+export const main = (): number => {
   const xs: number[] = [];
   let checkpoints = "";
   for (let i = 0; i < 5000; i++) {
@@ -51,4 +51,4 @@ export function main(): number {
   console.log(literal.push(4) + literal.push(5));
   console.log(literal.length);
   return 0;
-}
+};

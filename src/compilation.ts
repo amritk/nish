@@ -49,6 +49,7 @@
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
 import { REGION_STD_SPECIFIER } from "./region"
+import { explainLayout, LayoutModule } from "./compact-rule"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
@@ -4210,6 +4211,22 @@ export class Compilation {
         `${report.functionsKept} of ${report.functions} allocating functions with a scalar result keep what they allocate past the call`
     )
     return lines.toText()
+  }
+
+  /**
+   * The `--explain-layout` report (`src/compact-rule.ts`): one line per class
+   * of every module, the standard library's marked, saying whether the
+   * compact-class rule picks it. It reads the checked programs and the laid-out
+   * structs and changes no byte of the IR.
+   */
+  explainLayoutText(): string {
+    const modules: LayoutModule[] = []
+    for (const unit of this.modules) {
+      modules.push(
+        new LayoutModule(unit.checker.program, isStdModule(this.libraryRoot(), unit.name, unit.path))
+      )
+    }
+    return explainLayout(this.opts, this.table, modules).text
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */

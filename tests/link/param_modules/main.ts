@@ -1,11 +1,11 @@
 import { Color, Style, first, join, paint, shout } from "./lib"
 
-function ratio(a: number, b: number = 5): number {
+const ratio = (a: number, b: number = 5): number => {
   return a * b
-}
-function pick<T>(xs: T[], at: number = 0): T {
+};
+const pick = <T>(xs: T[], at: number = 0): T => {
   return xs[at]
-}
+};
 class Counter {
   count: number
   step: number
@@ -24,7 +24,7 @@ class Counter {
     return this.count
   }
 }
-export function main(): void {
+export const main = (): void => {
   console.log(paint("a"))
   console.log(paint("b", Color.Red))
   console.log(paint("c", Color.Red, true))
@@ -48,4 +48,4 @@ export function main(): void {
   console.log(shout("h"))
   console.log(shout("h", new Style()))
   console.log(shout("h", null, "?"))
-}
+};

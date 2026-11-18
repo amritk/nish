@@ -38,11 +38,11 @@ async function handle(req: Request, answered: i32, sends: i64): Promise<Response
 }
 
 /** The two numbers `/stats` answered: what the server had answered and how many sends it had made. */
-function statAt(r: string, k: i32): i32 {
+const statAt = (r: string, k: i32): i32 => {
   const text: string = r.substring(toI32(r.indexOf("] ")) + 2, toI32(r.length))
   const space: i32 = toI32(text.indexOf(" "))
   return toI32(parseInt(k === 0 ? text.substring(0, space) : text.substring(space + 1, toI32(text.length))))
-}
+};
 
 /** Asks `/stats` on `c`: what the server had answered (`k` 0) or how many sends it had made (`k` 1). */
 async function askStats(c: Conn, k: i32): Promise<i32> {
