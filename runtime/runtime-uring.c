@@ -629,8 +629,11 @@ static void ur_free_ring(struct ur_ring *r) {
 
 /* Restrict a ring made with R_DISABLED to what the layer submits (WP63 §6.2):
  * the six opcodes and NOP, the three flags the layer sets, and no register
- * opcode at all once it is enabled. SHUTDOWN only ever names a fixed file of
- * the ring's own table, as SEND does (NURING-39). */
+ * opcode at all once it is enabled. The flags entry allows bits and requires
+ * none, so it is the layer, which always sets FIXED_FILE, that confines
+ * SHUTDOWN to the ring's own table: an SQE written into the ring by other
+ * means could name an ordinary descriptor, as it already could for SEND
+ * (NURING-39). */
 static int ur_restrict(int fd) {
   static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_RECV,  UR_OP_SEND,    UR_OP_CLOSE,
                                 UR_OP_ASYNC_CANCEL, UR_OP_NOP, UR_OP_SHUTDOWN};

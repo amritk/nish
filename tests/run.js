@@ -32764,8 +32764,8 @@ if (!only || "net_ring".includes(only)) {
     // NURING-39: netShutdown queues a SHUTDOWN behind the slot's sends, so
     // Http1Server's refusal lingers rather than closing with the client's
     // bytes unread. Its client decides: exit 0 when it read the whole 400
-    // and then the end of the stream while it was still sending, with no
-    // reset; 2 when rings are refused. Before the slot path the client got
+    // and then the end of the stream while it was still sending, and the
+    // server took the sends after it with no reset; 2 when rings are refused. Before the slot path the client got
     // ECONNRESET; under --sandbox, with SHUTDOWN left out of the premade
     // rings' restriction, no end of the stream came within its 100 sends.
     for (const [mode, flags, suffix] of [

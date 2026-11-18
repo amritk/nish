@@ -7,8 +7,9 @@
 // the client ends its own side the slot closes and the program exits.
 // Before netShutdown had a slot path it answered -9 here, Http1Server closed
 // at once with the client's bytes unread, and the client got a reset.
-// The program also checks the slot answers: netMss -1, and netShutdown -9 on
-// the handle once closed. Exit 0 is a pass, 2 says the kernel refused rings,
+// The program also checks the slot answers: netMss -1, netShutdown -22 for a
+// `how` past 2, netWrite -32 once the write side is shut, and netShutdown -9
+// on the handle once closed. Exit 0 is a pass, 2 says the kernel refused rings,
 // 1 is a failure, with its line.
 import {
   NET_LISTEN_RING,
@@ -16,6 +17,7 @@ import {
   netMss,
   netRingState,
   netShutdown,
+  netWrite,
   pollAdd,
   pollCreate,
   pollModify,
@@ -35,6 +37,8 @@ import {
 
 /** The listener's token; a connection's token is its slot. */
 const LISTENER: i32 = -1
+/** One byte for the write a shut write side refuses. */
+const BYTE: readonly u8[] = [0x61]
 
 export const main = (): i32 => {
   const listener: i32 = tcpListenFlags("127.0.0.1", 0, 16, NET_LISTEN_RING)
@@ -71,6 +75,11 @@ export const main = (): i32 => {
               console.log(`netMss answered ${mss} for a slot`)
               return 1
             }
+            const bad: i32 = netShutdown(handle, 3)
+            if (bad !== -22) {
+              console.log(`netShutdown(handle, 3) on a slot answered ${bad}`)
+              return 1
+            }
             pollAdd(loop, handle, H1_WANT_READ, next)
           }
           next = server.accept()
@@ -83,6 +92,11 @@ export const main = (): i32 => {
         }
         wants = server.flush(slot)
         if ((wants & H1_DONE) !== 0) {
+          const late: i32 = netWrite(handle, BYTE, 0, 1)
+          if (late !== -32) {
+            console.log(`netWrite after the write side was shut answered ${late}`)
+            return 1
+          }
           server.close(slot)
           const after: i32 = netShutdown(handle, 1)
           if (after !== -9) {
