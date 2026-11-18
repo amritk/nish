@@ -108,6 +108,7 @@ import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   checkImplements,
   collectStructMembers,
+  declaresCompact,
   declareStruct,
   markTemplateImplements,
   noteStructNames,
@@ -229,6 +230,11 @@ export class Checker {
    * stop the compilation, not a missing entry.
    */
   collectSignatures(): void {
+    // WP48: every compact class is marked before any layout is computed, since
+    // a class declared above `R` may hold an `R` link.
+    for (const info of this.declared) {
+      info.compact = info.compact || declaresCompact(this.ctx, info.decl)
+    }
     for (const stmt of this.program.file.children) {
       // Per declaration: stage0 wraps each of these in `sink.recover`, so one
       // rejected class or constant costs its own diagnostic and no more

@@ -24,6 +24,7 @@ import {
   markAtomicClass,
 } from "./parallel"
 import { CheckContext } from "./context"
+import { COMPACT_SPECIFIER, isCompactExport } from "./nish-modules"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectStoredMask } from "./simd"
 import { deferExportedLayout, rejectForeignPointer, resolveType } from "./annotations"
@@ -1098,6 +1099,34 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
  * none of the 926 programs of the corpus (`docs/wp19-stage0-retirement.md` §5a,
  * item 6), so no gate but the case above would notice it.
  */
+/**
+ * Whether `iface`, one entry of a class's `implements` list, names a
+ * `nish:compact` marker through this module's import (an `as` rename too).
+ */
+export const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
+  if (iface.kind !== NodeKind.TypeRef || (iface.children.length > 0 && iface.children[0].children.length > 0)) {
+    return false
+  }
+  const imported = ctx.program.importNamed(iface.text)
+  return imported !== null && imported.specifier === COMPACT_SPECIFIER && isCompactExport(imported.importedName)
+}
+
+/** Whether the class `decl` writes `implements Compact` (WP48). `Wide` marks nothing yet. */
+export const declaresCompact = (ctx: CheckContext, decl: Node): boolean => {
+  if (decl.kind !== NodeKind.Class) {
+    return false
+  }
+  for (const iface of decl.children[2].children) {
+    if (namesCompactMarker(ctx, iface)) {
+      const imported = ctx.program.importNamed(iface.text)
+      if (imported !== null && imported.importedName === "Compact") {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {
     return
@@ -1140,6 +1169,11 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         // an identifier and says this, so stage1 says it where its own grammar
         // puts the same mistake.
         ctx.error(iface, "`implements` must name a declared interface")
+        continue
+      }
+      // A `nish:compact` marker has no fields to check as a prefix: it picks
+      // the class's layout, marked before pass 1b (`declaresCompact`).
+      if (namesCompactMarker(ctx, iface)) {
         continue
       }
       const template = ctx.program.structTemplate(iface.text)

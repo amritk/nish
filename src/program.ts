@@ -1187,11 +1187,19 @@ export class StructInfo {
   layout: boolean
   /** Pass 1b is collecting this layout's fields, so a nesting cycle is caught. */
   laying: boolean
+  /**
+   * WP48: the class writes `implements Compact` (`nish:compact`), so a field
+   * typed exactly this class or this class `| null`, in any class, is a 32-bit
+   * offset into the reserved range where the target compresses
+   * (`computeLayout`, docs/wp48-ref32-classes.md §3.2).
+   */
+  compact: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
     this.layout = false
     this.laying = false
+    this.compact = false
     this.kind = kind
     this.origin = origin
     this.type = type

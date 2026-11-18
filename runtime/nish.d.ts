@@ -3753,6 +3753,39 @@ declare module "nish:unsafe" {
 }
 
 /**
+ * `nish:compact`: the marker interfaces that pick a class's layout (WP48).
+ * `class R implements Compact` stores every field typed exactly `R` or
+ * `R | null`, in any class, as a 32-bit offset into one reserved address range,
+ * so a tree or list node of an `i32` and two links is 12 bytes, not 24. Locals,
+ * parameters, returns, arrays, maps and other unions stay full pointers.
+ *
+ * The compiler refuses a compact class where C or Node would see its layout:
+ * a build with `--emit-header`, `--emit-napi` or `--emit-napi-async`, a
+ * `declare class`, a class holding a `Secret`, and a class a C or N-API surface
+ * exports. wasm32 and an ASAN build compile it uncompressed, since a pointer
+ * there is already 4 bytes or the range cannot hold the sanitizer's blocks.
+ *
+ * **Under Node.** `runtime/nish.mjs` answers the import with
+ * `runtime/core.mjs`, where both names are empty values: a reference is the
+ * engine's own and the marker changes nothing a program prints.
+ *
+ * Rules: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#compact-classes
+ */
+declare module "nish:compact" {
+  /**
+   * The marker a class implements to store its links as 32-bit offsets. It
+   * has no members, so `implements Compact` adds no field.
+   */
+  export interface Compact {}
+
+  /**
+   * Reserved for WP48 stage 3, which lets a class refuse a layout the
+   * compiler picks. Accepted today and changes nothing.
+   */
+  export interface Wide {}
+}
+
+/**
  * Sixteen-byte vectors of one lane type, and the lane-wise operations on them,
  * each lowered to target-independent LLVM vector IR.
  *
