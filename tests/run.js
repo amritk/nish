@@ -33180,6 +33180,7 @@ if (!only || "sandbox".includes(only)) {
       ["26:0", "SEND"],
       ["19:0", "CLOSE"],
       ["14:0", "ASYNC_CANCEL"],
+      ["34:0", "SHUTDOWN"],
       ["27:1", "RECV with FIXED_FILE"],
       ["27:32", "RECV with BUFFER_SELECT"],
       ["27:64", "RECV with CQE_SKIP_SUCCESS"],
