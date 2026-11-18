@@ -59,7 +59,7 @@ specified.
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP66: C libraries from their headers](wp66-c-headers.md) | Proposed | 0 of 7 |
-| [WP68: Shared libraries, layered like atomic design](wp68-shared-libraries.md) | Proposed | 0 of 7 |
+| [WP68: Shared libraries, layered like atomic design](wp68-shared-libraries.md) | Proposed | 1 of 9 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
