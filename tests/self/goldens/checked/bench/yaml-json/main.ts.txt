@@ -7981,17 +7981,22 @@ function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   stackSites=0 stackLocals=0
 function splitLines(text: string): string[] -> @nish.splitLines [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.ctlz.i32 nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_str_new
-  stackSites=0 stackLocals=0
+  calls: llvm.ctlz.i32 nish_array_grow nish_panic_index nish_str_new
+  stackSites=1 stackLocals=1
   local +0:9 length: i32 (const)
   local +1:9 lines: string[] (const)
-  local +6:9 flags: u8[] (const)
-  local +7:12 k: i32 (let)
-  local +10:9 one: u8x16 (const)
-  local +11:7 start: i32 (let)
-  local +12:7 i: i32 (let)
-  local +15:9 bits: i32 (let)
-  local +17:13 at: i32 (const)
+  local +7:9 flags: u8[] (const)
+  local +8:9 one: u8x16 (const)
+  local +9:7 start: i32 (let)
+  local +10:7 base: i32 (let)
+  local +15:9 n: i32 (let)
+  local +16:9 end: i32 (let)
+  local +22:9 i: i32 (let)
+  local +28:11 bits: i32 (let)
+  local +33:15 zeros: i32 (const)
+  local +34:15 lane: i32 (const)
+  local +35:15 at: i32 (const)
+  local +52:15 at: i32 (const)
 function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.isTextBlankByte nish_array_grow nish_str_new
