@@ -543,9 +543,9 @@ export class LayoutReport {
 /**
  * The smallest class test 3 narrows, in bytes. A 16-byte cell already packs
  * four to a cache line, and narrowed it measured slower, not faster: the
- * `bench/awfy` List cells by about a fifth and the `bench/goose/bintrees`
- * nodes by an eighth at depth 19, while every 24- and 32-byte node held even
- * or gained (docs/wp48-ref32-classes.md §5.5).
+ * `bench/awfy` List cells by a median 27% and the `bench/goose/bintrees`
+ * nodes by 19% at depth 19, while every 24- and 32-byte node held within
+ * its noise band or gained (docs/wp48-ref32-classes.md §5.5).
  */
 const PAYING_SIZE: i32 = 24
 
