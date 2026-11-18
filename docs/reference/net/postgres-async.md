@@ -776,7 +776,7 @@ class PgAsyncPool
 
 | Member | |
 | --- | --- |
-| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. A waiting task waits on a wake: one per slot, one for the pool and one per queue lane. Each opens its socket pair the first time a task waits on it; `close()` closes the pairs opened. |
+| `new PgAsyncPool(size: i32)` | A pool of `size` slots, none connected yet. A waiting task waits on a wake: one per turn lane, one for the pool and one per queue lane. Each opens its socket pair the first time a task waits on it; `close()` closes the pairs opened. |
 | `readonly claimed: u8[]` | Each slot's state: 0 free, 1 claimed by a ticket. |
 | `readonly claims: i32[]` | Each slot's claim count, the high part of its current ticket. |
 | `claimWaitMs: i32` | The most milliseconds `pgAsyncClaim` or `pgAsyncSeat` waits for a free connection before it answers `PG_CARRIER_FULL`. |
@@ -819,7 +819,7 @@ class PgAsyncPool
 | `readonly wakePair: i32[]` | Where `pgAsyncPark` opens a wake's socket pair, so it does not allocate. |
 | `readonly wakePending: u8[]` | Per wake: 1 while a byte is written and not yet read. |
 | `readonly wakeRings: i32[]` | Per wake: how many bytes were written to it, wrapping; a waiter that sees it move was rung. |
-| `readonly wakes: i32[]` | Per slot, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. A pair is opened the first time a task waits on its wake, so a pool nobody waits on holds none. |
+| `readonly wakes: i32[]` | Per turn lane, then one for the pool, then one per queue lane: a socket pair whose read end a waiting task waits on, or -1. A pair is opened the first time a task waits on its wake, so a pool nobody waits on holds none. |
 | `readonly wakeUnseen: i32[]` | Per wake: the tasks waiting when its byte was written that have not yet woken; it is read back at 0. |
 | `readonly writing: u8[]` | Per slot: 1 while a seated statement has not yet been written whole. |
 | `close(): void` | Ends every connection: a Terminate is offered to each socket, which is then closed, claimed or not, and closes the wakes. Call it once the tasks that hold tickets are done; a ticket used afterwards panics. |
