@@ -8832,6 +8832,7 @@ if (dealtHere("selfHosting")) {
   // (build/test/simd/) or its kernels' lines run in the shard the group is
   // pinned to, or they read a file no step there wrote.
   const simdShard = DEALT_SECTIONS.simd.pinned
+  const testJobText = ciJob(ciYmlText, "test")
   const simdSteps = testJobText
     .split(/\n(?= {6}- name: )/)
     .filter((step) => /build\/test\/simd\/|(aes|sha256|chacha20|crc32|adler32) kernel: /.test(step))
