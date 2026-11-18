@@ -39813,7 +39813,7 @@ if (!only || "host-import".includes(only)) {
       [
         "examples/arrays.ts",
         "9e21b3dc744ca821ec9862c91041dfa03a9b542c733773560b18007c22349de0",
-        "91ce0443911068f9c1bd57103d51a102f733d808c555db8b586336a4bb77aa0c",
+        "723718bb017e52f311feaab651f9ad32c4cbe2647f03bc641e630c4f7f8f03e9",
       ],
     ]) {
       const stem = path.basename(src, ".ts")
@@ -40898,9 +40898,10 @@ if (!only || "wasm-host-page".includes(only) || "module-storage".includes(only))
 // 100,000 steps; the driver checks the answers and that linear memory and the
 // kept heap stay flat after warm-up; the director also runs its first 40,000
 // steps beside an instance whose keep does nothing and must match it frame for
-// frame. A third, tests/cases/root_storage_page.ts, grows one list a node a
-// call to 200,000 nodes, which every compaction traces end to end: a trace
-// that recursed would run out of stack. A fourth, tests/module-storage/persist/graph.ts, keeps
+// frame. A third, tests/module-storage/persist/chain.ts, grows one list a node
+// a call to 200,000 nodes, which every compaction traces end to end: a trace
+// that recursed would run out of stack. Each call also drops a scratch node,
+// so every compaction has half the region to pack away. A fourth, tests/module-storage/persist/graph.ts, keeps
 // cycles, one object two root storages and two slots share, arrays of arrays
 // and empty arrays and strings through a compaction at least every third call
 // (it fails under 6,667 in 20,000), checking each identity after each. A fifth, tests/module-storage/persist/shapes.ts, keeps the
@@ -41002,7 +41003,7 @@ if (!only || "persist".includes(only)) {
     for (const [stem, source, steps, says] of [
       ["world", "tests/module-storage/persist/world.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat"],
       ["director", "tests/module-storage/persist/director.ts", "100000", "answers right for 100,000 steps with memory and the kept heap flat, the first 40,000 frame for frame as a run that never compacts"],
-      ["chain", "tests/cases/root_storage_page.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
+      ["chain", "tests/module-storage/persist/chain.ts", "200000", "keeps a 200,000-node list through every compaction, packed to 8 bytes a node, memory under 10x live"],
       ["graph", "tests/module-storage/persist/graph.ts", "20000", "keeps cycles, shared objects and nested and empty arrays exact through a compaction at least every third step"],
       ["shapes", "tests/module-storage/persist/shapes.ts", "20000", "keeps in-place record arrays, union and nullable-union fields, (C | null)[] and u8/f64/i64 arrays exact through compactions"],
       ["forge", "tests/module-storage/persist/forge.ts", "1", "refuses a forged root slot, pointer field, array len and len with cap with a NishPanic, reading and writing nothing outside the arena (WH-10)"],
