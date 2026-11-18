@@ -276,7 +276,9 @@ jobs:
       # stops building against wasi-libc, as runtime-os.c did when it called a
       # `realpath` wasi-libc does not have (#396). libclang-rt-18-dev is the
       # native sanitizer and libFuzzer runtimes the `runtime_sanitize` and
-      # `fuzz` sections link; without it they are counted skips. gdb and
+      # `fuzz` sections link; without it they are counted skips. Under
+      # `--delegate-sanitizers` those rows are `fuzz-smoke`'s, but a target
+      # with no corpus is still replayed here. gdb and
       # lldb-18 are the debuggers the `fnref` section asks what `-g` says of a
       # function reference; without them those checks are counted skips.
       - name: Install LLVM 18 + lld (Ubuntu)
@@ -326,11 +328,10 @@ jobs:
           node --version
           npm --version
 
+      # `npm run check` is the `lint` job's, once per push: the typecheck reads
+      # the same sources in every shard.
       - name: Install dependencies
         run: npm ci --ignore-scripts
-
-      - name: Typecheck
-        run: npm run check
 
       # The seed: the last release's compiler for this runner's platform,
       # unpacked into build/seed by `scripts/fetch-seed.sh` (install.sh's
@@ -380,6 +381,14 @@ jobs:
       # check there fails if this step asks for it while `bootstrap` has
       # stopped running `scripts/bootstrap.sh --verify`.
       #
+      # `--delegate-sanitizers` likewise: the `fuzz-smoke` job builds every
+      # fuzz target and replays it over its corpus and regressions
+      # (`scripts/fuzz.sh --smoke`), then runs `node tests/run.js
+      # runtime_sanitize`, so the suite counts its `runtime_sanitize` and
+      # `fuzz:` replay checks as delegated to that job instead of building and
+      # running them a second time. A check in tests/run.js fails if this step
+      # asks for it while `fuzz-smoke` has stopped running either.
+      #
       # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
@@ -391,7 +400,7 @@ jobs:
         # The log is kept for the steps below that require a line of it.
         run: |
           set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -466,20 +475,6 @@ jobs:
           set -o pipefail
           build/test/simd/chacha20 | grep -E '^chacha20: [0-9]+ cases agree across avx2;'
           grep -E '^PASS  chacha20 kernel: chacha20_hw_agree with NISH_CHACHA20 unset calls the kernel, whose vectors this CPU has' "$RUNNER_TEMP/test.log"
-
-      - name: SHA-256 throughput on each path
-        if: matrix.shard == 2
-        run: |
-          calls=build/test/simd/sha256-calls.speed
-          # Each path is named by the resolver's own answer. The bench compiles
-          # with build/nish-test, the compiler tests/run.js linked above.
-          for pin in unset soft; do
-            if [ "$pin" = unset ]; then run="env -u NISH_SHA256"; else run="env NISH_SHA256=$pin"; fi
-            said="$($run "$calls")"
-            if [ -z "$said" ]; then echo "::error::$calls printed nothing under NISH_SHA256 $pin"; exit 1; fi
-            echo "NISH_SHA256 $pin: ${said%%$'\n'*}"
-            $run node bench/sha256/run.mjs --compiler build/nish-test
-          done
 
       # WP38's CRC-32: runtime/runtime-checksum.c's `simd` driver passes with
       # the byte tail alone on a CPU without PCLMULQDQ and SSE4.1, and the `crc32
@@ -1137,18 +1132,26 @@ jobs:
 
   # The golden cases again, through the harness written in the language rather
   # than through the one written in Node (`tests/nish/run.ts`, `npm run
-  # test:nish`). `npm test` builds that runner and runs it over five cases, which
-  # proves it compiles and works; only the full pass proves it still *agrees*,
-  # and a harness nobody runs is a harness that rots.
+  # test:nish`). `npm test` builds that runner and runs it over five cases on
+  # every push (its `nishRunner` section), which proves it compiles and works;
+  # only the full pass proves it still *agrees*.
   #
-  # It is not a duplicate of the `test` job, and what it adds is worth stating: a
-  # compiler regression fails in both, but a regression in the runner itself --
-  # or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`, which nothing else
-  # exercises together on a real workload -- fails only here. It runs in parallel
-  # with `test`, so it costs a runner rather than wall-clock time, and it spawns a
-  # compiler per case, which is why `npm test` does not pay for it.
+  # The full pass runs per release, not per push: on the Release PR
+  # (`release/next`) and in the run release.yml makes of this workflow at the
+  # `v*` tag, whose `release` job needs it. The Release PR's run shows a broken
+  # runner before the tag is cut only once someone approves it: release-pr.yml
+  # pushes with GITHUB_TOKEN unless a RELEASE_PR_TOKEN secret is set, and those
+  # runs wait as `action_required`. Unapproved, the first run is at the tag. Every assertion it makes about a compiler is one the `test`
+  # job makes too, so per push it was about 36 runner-minutes spent proving the
+  # same corpus twice (run 44224030613). What it alone catches -- a regression in
+  # the runner itself, or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`
+  # on a real workload -- is caught before a release ships rather than at the
+  # push that made it. On any other run the job is skipped, which a required
+  # check reads as passed. tests/run.js checks that this `if:` is still exactly
+  # that expression and that release.yml still calls this workflow.
   runner:
     name: the golden cases, in Nish (shard ${{ matrix.shard }}/3)
+    if: github.ref_type == 'tag' || github.head_ref == 'release/next'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The runner walks the corpus one program at a time; `--shard` deals the
@@ -1846,6 +1849,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      # The typecheck, once per push. It used to run in each of the `test`
+      # job's eight shards, over the same sources every time.
+      - name: Typecheck
+        run: npm run check
 
       # package-lock.json agrees with package.json, read from the two files
       # alone: `npm ls --package-lock-only` never asks the registry, where
