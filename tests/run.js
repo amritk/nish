@@ -17341,9 +17341,9 @@ if (dealtHere("runtimeChecks")) {
   // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
   // A link is a 32-bit offset in the struct, so `-g` describes the member as
   // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
-  // debugger would read past the field. Its type is named `ref32 <Class>`
-  // (stage 2b), which is what `tools/gdb` and `tools/lldb` key their printers
-  // on; the IR verifies.
+  // debugger would read past the field. Its type is a typedef of `unsigned
+  // int` named `ref32 <Class>` (stage 2b), which is what `tools/gdb` and
+  // `tools/lldb` key their printers on; the IR verifies.
   if (!only || "compact debug".includes(only)) {
     const dir = path.join(buildDir, "compact-debug")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -17355,18 +17355,153 @@ if (dealtHere("runtimeChecks")) {
     const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
     const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
     check(
-      "compact: -g describes Cell.next, a link, as a 32-bit unsigned `ref32 Cell` member at offset 32",
+      "compact: -g describes Cell.next, a link, as a 32-bit `ref32 Cell` typedef member at offset 32",
       member !== null &&
         member[3] === "32" &&
         member[4] === "32" &&
         base !== null &&
-        base[1] === '!DIBasicType(name: "ref32 Cell", size: 32, encoding: DW_ATE_unsigned)',
+        /^!DIDerivedType\(tag: DW_TAG_typedef, name: "ref32 Cell", file: ![0-9]+, baseType: ![0-9]+\)$/.test(base[1]),
       c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
     )
     if (has("opt") && c.status === 0) {
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(dir, "compact_list.ll")])
       check("compact: opt -passes=verify accepts the -g IR of a compact class", v.status === 0, String(v.stderr))
     }
+  }
+
+  // ---- A compact link's TBAA node (WP48 stage 2b) ---------------------------------------
+  // A link's load and store hang off `ref32`, a sibling of `i32` under the
+  // root, so `opt -O2` may forward `a.value = 1` across `b.next = c` to the
+  // `return a.value` in tests/cases/compact_tbaa: the optimised `relink`
+  // keeps no `i32` load. Under `--plain` neither access is
+  // tagged, the two may alias, and the reload stays -- which is what shows
+  // the first half is the tag's doing.
+  if (has("opt") && (!only || "compact tbaa".includes(only))) {
+    const dir = path.join(buildDir, "compact-tbaa")
+    fs.rmSync(dir, { recursive: true, force: true })
+    /** `relink`'s optimised body under `flags`, or the failure that stopped it. */
+    const relinkBody = (flags, sub) => {
+      const out = path.join(dir, sub) + path.sep
+      const c = spawnSync(NISH, [path.join(casesDir, "compact_tbaa.ts"), ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+      if (c.status !== 0) {
+        return { ok: false, text: shown(c) }
+      }
+      const o = spawnSync("opt", ["-O2", "-S", path.join(out, "compact_tbaa.ll")], { encoding: "utf8", maxBuffer: 1 << 26 })
+      if (o.status !== 0) {
+        return { ok: false, text: shown(o) }
+      }
+      const body = /^define [^\n]*@[^\n(]*relink[^\n(]*\([^\n]*\{\n(?:[^\n]*\n)*?\}$/m.exec(o.stdout)
+      return { ok: body !== null, text: body === null ? "no relink define" : body[0] }
+    }
+    const tagged = relinkBody([], "tagged")
+    check(
+      "compact: opt -O2 forwards an i32 field store across a link store through another object",
+      tagged.ok && !/= load i32,/.test(tagged.text) && /\bret i32 1\b/.test(tagged.text),
+      tagged.text
+    )
+    const untagged = relinkBody(["--plain"], "untagged")
+    check(
+      "compact: without TBAA the i32 field is reloaded after the link store",
+      untagged.ok && /= load i32,/.test(untagged.text),
+      untagged.text
+    )
+  }
+
+  // ---- A compact link in gdb and lldb (WP48 stage 2b) ----------------------------------
+  // tools/gdb/ref32.py and tools/lldb/ref32.py show a `ref32 <Class>` link as
+  // the object it names. At tests/cases/compact_list.ts:56 `head` is the
+  // five-cell list 4, 3, 2, 1, 0, so following `next` four times from it
+  // through the decoded pointers must read exactly those values and end in a
+  // link the printer calls `null`. The scripts below decide that inside the
+  // debugger and exit with its status (`quit 1` in gdb, `os._exit` in lldb):
+  // the verdict is the exit status, never the debugger's text. This build is
+  // `*-linux-gnu`, so it proves the zero-based decode only.
+  if (!only || "compact debugger".includes(only)) {
+    const dir = path.join(buildDir, "compact-debugger")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "compact_list")
+    const linked = spawnSync(NISH, [path.join(casesDir, "compact_list.ts"), "-g", "--profile", "debug", "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("compact: the -g debug build of compact_list links", linked.status === 0, shown(linked))
+    if (linked.status === 0 && has("gdb")) {
+      const script = path.join(dir, "check-gdb.py")
+      fs.writeFileSync(
+        script,
+        [
+          "import gdb",
+          'gdb.execute("break compact_list.ts:56")',
+          'gdb.execute("run")',
+          "ok = True",
+          'path = "head"',
+          "cell = gdb.parse_and_eval(path)",
+          "for want in (4, 3, 2, 1, 0):",
+          '    ok = ok and int(cell["value"]) == want',
+          '    shown = str(cell["next"])',
+          '    print("value %d next %s" % (int(cell["value"]), shown))',
+          "    if want == 0:",
+          '        ok = ok and shown == "null"',
+          "    else:",
+          '        path = "$ref32(%s->next)" % path',
+          "        cell = gdb.parse_and_eval(path)",
+          '        ok = ok and shown == "(struct Cell *) 0x%x" % int(cell)',
+          'gdb.execute("kill")',
+          'gdb.execute("quit %d" % (0 if ok else 1))',
+          "",
+        ].join("\n")
+      )
+      const g = spawnSync(
+        "gdb",
+        ["-batch", "-nx", "-x", path.join(root, "tools", "gdb", "ref32.py"), "-x", script, exe],
+        { encoding: "utf8", timeout: 60000 }
+      )
+      check("compact: gdb with tools/gdb/ref32.py follows a link chain to null", g.status === 0, shown(g))
+    } else if (linked.status === 0) skip("compact debugger: gdb is not installed")
+    if (linked.status === 0 && has("lldb")) {
+      const script = path.join(dir, "check_lldb.py")
+      fs.writeFileSync(
+        script,
+        [
+          "import os",
+          "import sys",
+          "import lldb",
+          "import ref32",
+          "",
+          "def __lldb_init_module(debugger, _internal):",
+          "    target = debugger.GetSelectedTarget()",
+          '    target.BreakpointCreateByLocation("compact_list.ts", 56)',
+          "    process = target.LaunchSimple(None, None, os.getcwd())",
+          "    ok = process.GetState() == lldb.eStateStopped",
+          '    cell = process.GetSelectedThread().GetFrameAtIndex(0).FindVariable("head")',
+          "    for want in (4, 3, 2, 1, 0):",
+          "        cell = cell.Dereference() if cell is not None else None",
+          "        if cell is None:",
+          "            ok = False",
+          "            break",
+          '        ok = ok and cell.GetChildMemberWithName("value").GetValueAsSigned(-1) == want',
+          '        link = cell.GetChildMemberWithName("next")',
+          "        shown = link.GetSummary() or ''",
+          '        print("value %d next %s" % (want, shown))',
+          "        if want == 0:",
+          '            ok = ok and shown == "null"',
+          "        else:",
+          '            ok = ok and shown.startswith("(Cell *) 0x")',
+          "            cell = ref32.pointer(link.GetNonSyntheticValue())",
+          "    process.Kill()",
+          "    sys.stdout.flush()",
+          "    os._exit(0 if ok else 1)",
+          "",
+        ].join("\n")
+      )
+      const l = spawnSync(
+        "lldb",
+        ["--batch", "--no-lldbinit", "-o", `command script import ${path.join(root, "tools", "lldb", "ref32.py")}`, "-o", `command script import ${script}`, exe],
+        { cwd: dir, encoding: "utf8", timeout: 60000 }
+      )
+      check("compact: lldb with tools/lldb/ref32.py follows a link chain to null", l.status === 0, shown(l))
+    } else if (linked.status === 0) skip("compact debugger: lldb is not installed")
   }
 
   // ---- A compact class under AddressSanitizer (WP48 stage 2a) ----------------------------

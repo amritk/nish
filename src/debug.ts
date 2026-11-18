@@ -482,10 +482,12 @@ export class DebugInfo {
 
   /**
    * A compact class's link (WP48) as DWARF sees it: the 32-bit offset it is,
-   * an unsigned base type named `ref32 <Class>`, one per class the link
+   * a typedef of `unsigned int` named `ref32 <Class>`, one per class the link
    * names, so a debugger without the printers shows the raw offset and
-   * `tools/gdb/nish_ref32.py` and `tools/lldb/nish_ref32.py` find the class
-   * to decode it to by name. Keyed under a prefix no mangled type has.
+   * `tools/gdb/ref32.py` and `tools/lldb/ref32.py` find the class to decode it
+   * to by name. A typedef rather than a base type of that name, because lldb
+   * answers a base type with the builtin its encoding and size match and
+   * drops the name. Keyed under a prefix no mangled type has.
    */
   linkType(type: i32): string {
     const target = this.table.stripNull(type)
@@ -494,8 +496,11 @@ export class DebugInfo {
     if (known >= 0) {
       return this.typeRefs[known]
     }
+    const base = this.typeRef(T_U32)
     const name = quote(`ref32 ${this.table.typeName(target)}`)
-    const ref = this.module.addMetadata(`!DIBasicType(name: ${name}, size: 32, encoding: DW_ATE_unsigned)`)
+    const ref = this.module.addMetadata(
+      `!DIDerivedType(tag: DW_TAG_typedef, name: ${name}, file: ${this.file}, baseType: ${base})`
+    )
     this.setTypeRef(key, ref)
     return ref
   }
