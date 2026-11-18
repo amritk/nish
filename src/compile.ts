@@ -522,12 +522,14 @@ const startsWithMagic = (bytes: u8[], magic: readonly i32[]): boolean => {
  * `compile: ` prefix, or `""`. The flags shape the link, so they need one;
  * only the speed and size recipes optimise, so only they take a profile; and
  * a profile is trained on this machine, so the target is the host. A
- * `--pgo-use` file must be an indexed profile, not a raw `.profraw`.
+ * `--pgo-use` file must be a regular file holding an indexed profile, not a
+ * raw `.profraw`. `real` is `use` resolved once by the caller, or null.
  */
 const pgoProblem = (
   flag: string,
   generate: boolean,
   use: string,
+  real: string | null,
   link: string,
   profile: string,
   target: string
@@ -551,12 +553,17 @@ const pgoProblem = (
     return ""
   }
   const merge = "write one with `llvm-profdata merge -o <file>.profdata <runs>.profraw`"
-  const real = realpathSync(use)
   if (real === null) {
     return `--pgo-use: no profile at \`${use}\`; ${merge}`
   }
-  if (isDirectorySync(real)) {
+  // One `lstat` of the resolved path, before anything opens it: a FIFO would
+  // block the read below with no writer, and a device never ends.
+  const mode = lstatOwnerModeSync(real)
+  if (mode >= 0 && (mode & 0xf000) === 0x4000) {
     return `--pgo-use: \`${use}\` is a directory, not a profile; ${merge}`
+  }
+  if (mode < 0 || (mode & 0xf000) !== 0x8000) {
+    return `--pgo-use: \`${use}\` is not a regular file, so not a profile; ${merge}`
   }
   const bytes = readFileBytesSync(real)
   if (bytes !== null && startsWithMagic(bytes, RAW_PROFILE_MAGIC)) {
@@ -889,7 +896,9 @@ const commandMain = (): number => {
     } else if (value === "--pgo-use") {
       notForRun = notForRun.length === 0 ? value : notForRun
       arg = arg + 1
-      if (arg >= process.argv.length) {
+      // An empty value, an unset `$VAR`, is refused here: every later check
+      // keys on a non-empty `pgoUse`, so it would be a plain link.
+      if (arg >= process.argv.length || process.argv[arg].length === 0) {
         console.error(
           "compile: --pgo-use needs a profile, the .profdata `llvm-profdata merge` writes from the runs of a --pgo-generate binary"
         )
@@ -1265,8 +1274,9 @@ const commandMain = (): number => {
   // lets the last `--pgo-*` win and drops them under debug and wasi; a flag
   // that does nothing is refused here instead.
   const pgoFlag = pgoUse.length > 0 ? "--pgo-use" : "--pgo-generate"
+  const pgoReal: string | null = pgoUse.length > 0 ? realpathSync(pgoUse) : null
   if (pgoGenerate || pgoUse.length > 0) {
-    const problem = pgoProblem(pgoFlag, pgoGenerate, pgoUse, link, profile, opts.target)
+    const problem = pgoProblem(pgoFlag, pgoGenerate, pgoUse, pgoReal, link, profile, opts.target)
     if (problem.length > 0) {
       console.error(`compile: ${problem}`)
       return 2
@@ -1275,9 +1285,8 @@ const commandMain = (): number => {
   const pgoFlags: string[] = []
   if (pgoGenerate) {
     pgoFlags.push("--pgo-generate")
-  } else if (pgoUse.length > 0) {
-    const real = realpathSync(pgoUse)
-    pgoUse = real === null ? pgoUse : real
+  } else if (pgoReal !== null) {
+    pgoUse = pgoReal
     pgoFlags.push("--pgo-use")
     pgoFlags.push(pgoUse)
   }
@@ -2715,10 +2724,11 @@ const linkProgram = (
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
     // An instrumented link needs compiler-rt's profile runtime, which
-    // Ubuntu packages apart from clang.
+    // Ubuntu packages apart from clang; the failure may be another one, so
+    // the hint is conditional.
     const hint =
       pgo.length > 0 && pgo[0] === "--pgo-generate"
-        ? "; an instrumented link needs compiler-rt's profile runtime (libclang_rt.profile), which Ubuntu installs with libclang-rt-18-dev"
+        ? "; if the error names libclang_rt.profile, the instrumented link needs compiler-rt's profile runtime, which Ubuntu installs with libclang-rt-18-dev"
         : ""
     reportToolchainFailure(
       `--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}${hint}`,

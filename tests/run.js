@@ -43232,12 +43232,20 @@ if (!only || "pgo".includes(only)) {
   // what llvm-profdata reads.
   const indexedMagic = path.join(pgoDir, "magic.profdata")
   fs.writeFileSync(indexedMagic, Buffer.from([0xff, 0x6c, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x81, 0, 0, 0, 0]))
+  // Special files: a FIFO with no writer would block a read, /dev/null is a
+  // device. Each is refused by its type before anything opens it.
+  const fifo = path.join(pgoDir, "fifo.profdata")
+  const madeFifo = spawnSync("mkfifo", [fifo]).status === 0
   const refused = path.join(pgoDir, "refused")
   const refusals = [
     ["--pgo-generate without --link", ["--pgo-generate"], "--pgo-generate needs --link"],
     ["--pgo-use without --link", ["--pgo-use", junk], "--pgo-use needs --link"],
     ["both flags", ["--link", refused, "--pgo-generate", "--pgo-use", junk], "cannot be used together"],
     ["--pgo-use with no file", ["--link", refused, "--pgo-use"], "--pgo-use needs a profile"],
+    ["--pgo-use with an empty file name", ["--link", refused, "--pgo-use", ""], "--pgo-use needs a profile"],
+    ["--pgo-use with an empty file name and no --link", ["--pgo-use", ""], "--pgo-use needs a profile"],
+    ["a character device", ["--link", refused, "--pgo-use", "/dev/null"], "is not a regular file"],
+    ...(madeFifo ? [["a FIFO", ["--link", refused, "--pgo-use", fifo], "is not a regular file"]] : []),
     ["a missing profile", ["--link", refused, "--pgo-use", path.join(pgoDir, "none.profdata")], "no profile at"],
     ["a directory", ["--link", refused, "--pgo-use", pgoDir], "is a directory, not a profile"],
     ["a raw .profraw", ["--link", refused, "--pgo-use", stray], "merge it first"],
@@ -43258,8 +43266,16 @@ if (!only || "pgo".includes(only)) {
       "the target is wasm32-unknown-unknown",
     ],
   ]
+  if (!madeFifo) {
+    skip("pgo: mkfifo failed, so the FIFO refusal is not checked")
+  }
   for (const [what, flags, says] of refusals) {
-    const r = nish([hello, "-o", path.join(pgoDir, "refused.ll"), ...flags])
+    // A timeout, so a refusal that reads a FIFO fails here rather than hanging.
+    const r = spawnSync(NISH, [hello, "-o", path.join(pgoDir, "refused.ll"), ...flags], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 60000,
+    })
     check(
       `pgo: ${what} is refused with exit 2 and one line, before anything is written`,
       r.status === 2 &&
@@ -43308,8 +43324,17 @@ if (!only || "pgo".includes(only)) {
       )
     }
   }
+  // compiler-rt's profile runtime, which Ubuntu packages apart from clang: a
+  // bare name back means clang has none, and an instrumented link fails.
+  const profileRuntime =
+    HAS_CLANG &&
+    spawnSync("clang", [`-print-file-name=libclang_rt.profile-${os.arch() === "arm64" ? "aarch64" : "x86_64"}.a`], {
+      encoding: "utf8",
+    }).stdout.includes("/")
   if (!HAS_CLANG || profdata === undefined) {
     skip("pgo: no clang or no llvm-profdata, so no profile can be trained or used")
+  } else if (!profileRuntime) {
+    skip("pgo: clang has no libclang_rt.profile (libclang-rt-<ver>-dev), so no instrumented binary links")
   } else {
     const ccLog = path.join(pgoDir, "cc.log")
     fs.writeFileSync(path.join(tools, "cc-args"), `#!/bin/sh\necho "$*" >> '${ccLog}'\nexec clang "$@"\n`, {
@@ -43327,7 +43352,9 @@ if (!only || "pgo".includes(only)) {
       return fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []
     }
     // A stripped binary keeps its section names: the counters live in
-    // __llvm_prf_cnts, which only an instrumented binary has.
+    // __llvm_prf_cnts, which only an instrumented binary has. The speed recipe
+    // strips, so llvm-nm finds no __llvm_profile_ symbol in either kind and
+    // its silence would prove nothing; the section is the witness.
     const instrumented = (exe) => fs.existsSync(exe) && fs.readFileSync(exe).includes("__llvm_prf_cnts")
     // Under LTO the runtime's sources go on the link line itself, so a unit is
     // counted wherever it is named.
@@ -43368,6 +43395,7 @@ if (!only || "pgo".includes(only)) {
     )
     const runs = path.join(pgoDir, "runs")
     fs.mkdirSync(runs, { recursive: true })
+    const ranPlain = spawnSync(plainSqlite, [], { encoding: "utf8" })
     const ranInstr = spawnSync(instr, [], {
       cwd: runs,
       encoding: "utf8",
@@ -43386,13 +43414,15 @@ if (!only || "pgo".includes(only)) {
     check(
       "pgo: the instrumented binary prints what the plain one does and its profile covers SQLite and the runtime",
       plain.status === 0 &&
+        ranPlain.status === 0 &&
+        ranPlain.stdout === expected &&
         ranInstr.status === 0 &&
-        ranInstr.stdout === expected &&
+        ranInstr.stdout === ranPlain.stdout &&
         raws.length === 1 &&
         merged.status === 0 &&
         /^\s+sqlite3_\w+:$/m.test(shown.stdout) &&
         /^\s+nish_str_\w+:$/m.test(shown.stdout),
-      `${ranInstr.status} ${JSON.stringify(ranInstr.stdout)} ${raws.join(",")} ${merged.stderr} ${shown.stderr}`
+      `${ranPlain.status} ${JSON.stringify(ranPlain.stdout)} ${ranInstr.status} ${JSON.stringify(ranInstr.stdout)} ${raws.join(",")} ${merged.stderr} ${shown.stderr}`
     )
     // Relative to a working directory that is neither the checkout nor
     // runtime/sqlite/, which build.sh compiles SQLite from inside.
@@ -43413,7 +43443,7 @@ if (!only || "pgo".includes(only)) {
         usedLines.some(sqliteC) &&
         usedLines.every((l) => l.includes(`-fprofile-use=${fs.realpathSync(profile)}`)) &&
         ranPgo.status === 0 &&
-        ranPgo.stdout === expected &&
+        ranPgo.stdout === ranPlain.stdout &&
         !instrumented(optimised),
       used.stderr + usedLines.join("\n") + ranPgo.stderr
     )
