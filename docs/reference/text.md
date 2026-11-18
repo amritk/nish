@@ -659,6 +659,10 @@ the end. A `\r\n` line ending keeps its `\r`: stripping it would make this
 function guess at the file's provenance, and a caller that needs it gone can
 `trimEnd` each line.
 
+Each call allocates a `length`-byte flag buffer and makes one extra scalar
+pass over `text` to fill it, before the sixteen-at-a-time scan reads it: a
+string has no lane-wise load of its own.
+
 ```ts
 function splitLines(text: string): string[]
 ```
