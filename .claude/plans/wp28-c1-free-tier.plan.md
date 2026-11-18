@@ -166,9 +166,18 @@ updates from `main` before it starts editing.
 
 ### c1-nullish
 
-**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/validator.ts`, `src/expressions.ts`, `src/members.ts`, `src/emit-util.ts`, `src/emit-map.ts`, `src/emit-ts-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_optional_*`, `tests/cases/reject_nullish*`, `tests/cases/nullish_*`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`
+**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/compilation.ts`, `src/emit.ts`, `src/bounds.ts`, `src/checker.ts`, `src/arrays.ts`, `src/validator.ts`, `src/expressions.ts`, `src/members.ts`, `src/emit-util.ts`, `src/emit-map.ts`, `src/emit-ts-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_optional_*`, `tests/cases/reject_nullish*`, `tests/cases/nullish_*`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`
 
 **Depends on:** none.
+
+**Amended 2026-11-18, after the first worker stopped on scope (#1770):** the
+checker never sees `opts`, so the compat flags are wired into `CheckContext` in
+`src/compilation.ts` (beside `deterministic`). Optional chaining also needs
+these files. `src/emit.ts` routes a statement-position chain to a skip block.
+`src/bounds.ts` and `src/checker.ts` treat a statement chain as one that may
+stop at any link. `src/arrays.ts` handles a non-final `?.[i]`. A value use of
+`a?.b` (Node gives `undefined`, and nish has none) and a final `?.[i]` past
+the end both stay refused, each with a diagnostic that says why.
 
 ### c1-strings
 
