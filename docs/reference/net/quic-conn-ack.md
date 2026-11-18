@@ -43,14 +43,23 @@ and loses only very late packets.
 
 That is the connection's choice; this module records
 whether something ack-eliciting arrived since the last ACK it wrote
-(`ackPending`). ACK frames carry an ACK Delay the caller supplies, and no
-ECN counts.
+(`ackPending`). ACK frames carry an ACK Delay the caller supplies.
+
+</scalar-detail>
+
+<scalar-detail title="ECN counts">
+
+`countEcn` adds a packet's ECN codepoint to the space's
+ECT(0), ECT(1) or ECN-CE count (RFC 9000 §13.4.1); the caller counts a
+packet only once `record` has accepted it, so a duplicate is not counted.
+Once any count is above zero every ACK written is an ACK_ECN (type 0x03)
+carrying all three, and before that a plain ACK (type 0x02).
 
 </scalar-detail>
 
 <scalar-detail title="Provenance">
 
-Written from RFC 9000 §12.3, §13.2 and §19.3, not ported from another
+Written from RFC 9000 §12.3, §13.2, §13.4.1 and §19.3, not ported from another
 implementation. Private names carry the `quicAck` prefix
 (`docs/wp26-stdlib.md` §3e).
 
@@ -72,14 +81,19 @@ class QuicAckRanges
 | --- | --- |
 | `new QuicAckRanges()` | Makes an empty set, nothing received yet, with room for `QUIC_ACK_MAX_RANGES` ranges. |
 | `ackPending: boolean` | Whether an ack-eliciting packet arrived since the last `pushAck`. |
+| `ce: i64` | Packets of this space that arrived marked ECN-CE (codepoint 3). |
 | `count: i32` | How many disjoint ranges are held, at most `QUIC_ACK_MAX_RANGES`. |
+| `ect0: i64` | Packets of this space that arrived marked ECT(0) (codepoint 2). |
+| `ect1: i64` | Packets of this space that arrived marked ECT(1) (codepoint 1). |
 | `floor: i64` | Every packet number at or below this is answered as already received; -1 until a range is dropped. |
 | `largest: i64` | The largest packet number received, or -1. |
-| `clear(): void` | Forgets every packet number, for a connection slot reused for another peer. |
+| `clear(): void` | Forgets every packet number and ECN count, for a connection slot reused for another peer. |
 | `contains(pn: i64): boolean` | Whether `pn` was received, or is at or below the floor and so cannot be told apart from one that was. |
+| `countEcn(codepoint: i32): void` | Counts one packet's ECN codepoint, the low two bits of the IP header's traffic class, in this space (RFC 9000 §13.4.1). The caller counts a packet once, after `record` accepted it; Not-ECT (0) counts nothing. |
+| `hasEcn(): boolean` | Whether an ACK written now carries ECN counts. |
 | `high(k: i32): i64` | The largest packet number of range `k`. |
 | `low(k: i32): i64` | The smallest packet number of range `k`, which the caller keeps below `count`. |
-| `pushAck(out: u8[], ackDelay: i64): boolean` | Appends an ACK frame for every range kept, with `ackDelay` (already scaled by this endpoint's ACK delay exponent), and clears `ackPending`. Answers `false`, appending nothing, when nothing has been received. |
+| `pushAck(out: u8[], ackDelay: i64): boolean` | Appends an ACK frame for every range kept, with `ackDelay` (already scaled by this endpoint's ACK delay exponent), and clears `ackPending`. The frame is an ACK_ECN carrying the three counts once `hasEcn` holds. Answers `false`, appending nothing, when nothing has been received. |
 | `putAck(buf: u8[], at: i32, end: i32, ackDelay: i64): i32` | Writes the ACK frame `pushAck` appends into `buf` at `at`, before `end`, and clears `ackPending`. Answers the offset past it, or -1, writing nothing and leaving `ackPending` as it was, when nothing has been received or the frame does not fit. |
 | `record(pn: i64, ackEliciting: boolean): boolean` | Records `pn` as received, `ackEliciting` saying whether its frames ask for an acknowledgement. Answers `false`, changing nothing, for a packet number already received (or at or below the floor), or one that is not a packet number at all. |
 | `set(k: i32, low: i64, high: i64): void` | Sets range `k` to `[low, high]`. An index outside the storage changes nothing, and `count` is not moved: the caller keeps the ranges ordered and disjoint. |

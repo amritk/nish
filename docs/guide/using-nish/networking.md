@@ -254,9 +254,16 @@ it as they take a descriptor, with the same answers: `-11` until `pollWait`
 reports the handle ready, then progress, and `0` at the end of the stream. A
 loop written for descriptors runs unchanged. What differs:
 
+- `netShutdown` queues the shutdown behind the bytes already written, so the
+  peer reads them and then the end of the stream. After the write side is
+  shut, `netWrite` answers `-32`; after the read side is, `netRead` answers
+  what is queued and then `0`. `Http1Server`'s lingering close works on a
+  slot as on a descriptor.
+- `netMss` answers `-1`: the ring cannot ask the socket for its segment
+  size, so take your fallback.
 - `netSetOption` answers `-95`, and every call that needs a real descriptor
-  (`sendFd`, `netMss`, `netShutdown`, `peerCredentials`) answers `-9`, as
-  does any call on a handle after its `netClose`.
+  (`sendFd`, `peerCredentials`) answers `-9`, as does any call on a handle
+  after its `netClose`.
 - `tcpAccept` writes the peer's address as zeros.
 - A slot handle is in one poll loop at a time: `pollAdd` to a second loop
   answers `-17` until the first removes it or is closed.
@@ -417,7 +424,8 @@ error; write the id where you call `netSetOption`.
 socket carries, the maximum segment size the kernel is sending with now. A
 program that batches writes can size each batch to whole segments. It
 answers `-1` when there is no MSS to read: a socket that is not connected yet,
-a listener, a UDP socket, a closed descriptor or one that is not a socket.
+a listener, a UDP socket, a closed descriptor or one that is not a socket,
+and a `NET_LISTEN_RING` slot handle.
 `-1` is not an error code, so check for a positive answer and fall back to a
 size of your own:
 
@@ -640,6 +648,30 @@ CUBIC regrows the window faster after a loss on a long, lossy path, and on a
 transfer of one bandwidth-delay product the two finish level. The
 measurement is in
 [the QUIC security record](https://github.com/amritk/nish/blob/main/docs/security/quic.md#congestion-control).
+
+### QUIC and ECN: `arrivalEcn`
+
+`Http3Server` uses Explicit Congestion Notification (ECN) in both
+directions without any setup. It marks its packets ECT(0) wherever the
+platform sends the ECN bits, and halves its window when the client reports
+congestion (CE). Its ACKs also report the bits each client packet arrived
+with: from the first marked packet on, the ACKs of that packet-number space
+are ACK_ECN frames, with ECT(0), ECT(1) and CE counts for the space (RFC 9000
+§13.4.1). A client that validates its own path needs those counts, or it
+stops marking.
+
+A program that drives `QuicListener` itself reads the arrival bits from
+`udpRecvFrom`'s `meta[1]` and sets them on the connection before it hands
+the datagram over:
+
+```ts
+conn.arrivalEcn = meta[1] & 3;
+quicListenerReceiveSegments(conn, buf, 0, n, segment, now);
+```
+
+If `arrivalEcn` stays `0`, which means Not-ECT, the connection counts
+nothing and its ACKs stay plain. That is always the case on macOS, where
+`meta[1]` is always `0`. A packet delivered twice is counted once.
 
 ### Workers that are not restarted
 

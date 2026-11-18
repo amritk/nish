@@ -1,3 +1,3 @@
-function f(): void {
+const f = (): void => {
   const x = console.log("a");
-}
+};

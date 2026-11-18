@@ -1,1 +1,3 @@
-function f(): boolean { return /x/.test("x"); }
+const f = (): boolean => {
+  return /x/.test("x");
+};

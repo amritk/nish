@@ -9,13 +9,13 @@ enum Kind {
 
 const array = (): Kind.Array => Kind.Array;
 const scalar = (): Kind.Scalar => Kind.Scalar;
-function take(x: Kind.Array): Kind.Array {
+const take = (x: Kind.Array): Kind.Array => {
   return x;
-}
+};
 
-function apply<T>(f: (x: T) => T, x: T): T {
+const apply = <T>(f: (x: T) => T, x: T): T => {
   return f(x);
-}
+};
 
 export const test = (c: boolean, k: Kind): number => {
   const a: Kind.Array = array();

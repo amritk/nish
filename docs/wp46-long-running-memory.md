@@ -898,7 +898,8 @@ and no handle check, and its cap is the configuration's. The records that are
 still open, H1-3 (58 bytes per WebSocket accept) and H2-1 (664 bytes per HPACK
 block), could later close with a region per connection, freed when the slot is
 reset. *2026-11-08:* H2-1 closed another way, with the decoder's fields in
-storage it owns (#473); H1-3 is still open.
+storage it owns (#473). *2026-11-17:* H1-3 closed the same way, with the
+accept key and the 101 written into storage the slot keeps.
 
 **`scope()` and pass scopes.** A pass scope inside `f` marks and releases in
 the region (§2.1). A `scope()` inside `f` is refused (NL2559): its tasks would
@@ -1171,5 +1172,5 @@ than the same sessions packed in one arena.
 - `Rc<T>` on top of regions, for a value with several owners.
 - Zeroing a region's chunks on `free` when its root holds a `Secret` (§3).
 - Moving `std/net`'s slot pools to regions; they stay slots (§3).
-- H1-3, whose fix is a region per connection now that stage 2 has landed. H2-1
-  was fixed by #473 without one.
+- A region per connection for H1-3 or H2-1: both were fixed without one,
+  H2-1 by #473 and H1-3 by writing the accept key into storage the slot keeps.

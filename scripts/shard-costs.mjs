@@ -158,7 +158,9 @@ const RECOGNIZERS = {
   emitTs: /^emit-ts: /,
   selfHosting: /^src\/ has at least one module/,
   cryptoBench: /^crypto-bench:/,
-  sanitizers: /^runtime_sanitize:/,
+  // Under `--delegate-sanitizers` the `runtime_sanitize` rows are delegations,
+  // and the section's first check is the `fuzz:` one that reads scripts/fuzz.sh.
+  sanitizers: /^(runtime_sanitize|fuzz):/,
   nishRunner: /^tests\/nish\/run\.ts /,
   bench: /^bench: /,
   runtimeCache: /^runtime cache:/,

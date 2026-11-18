@@ -39,6 +39,7 @@ import {
   WS_PING,
   WS_PONG,
   WS_REFUSED,
+  WsAcceptKey,
   WsDecoder,
   WsHandshake,
   websocketAcceptKey,
@@ -52,9 +53,11 @@ import {
   websocketOfferedProtocols,
   websocketOriginAllowed,
   websocketRequestKey,
+  websocketRequestKeyField,
   websocketUpgradeRequest,
   websocketUpgradeResponse,
   websocketWriteFrame,
+  websocketWriteUpgradeResponse,
 } from "nish/net/websocket";
 ```
 
@@ -140,7 +143,13 @@ Whether the request's `Origin` is one of `allowed`: the check a server makes bef
 
 <scalar-card title="websocket​Request​Key" icon="phosphor/regular/function" href="#websocketrequestkey">
 
-The client's key when the head `p` has just read is a valid opening handshake (§4.2.1): a GET in HTTP/1.1, asking to upgrade to `websocket` (alone, in any case), at version 13, with a valid key.
+The client's key when the head `p` has just read is a valid opening handshake (§4.2.1), as `websocketRequestKeyField` judges it.
+
+</scalar-card>
+
+<scalar-card title="websocket​Request​Key​Field" icon="phosphor/regular/function" href="#websocketrequestkeyfield">
+
+Which field of the head `p` has just read holds the client's key, when that head is a valid opening handshake (§4.2.1): a GET in HTTP/1.1, asking to upgrade to `websocket` (alone, in any case), at version 13, with a valid first `Sec-WebSocket-Key`.
 
 </scalar-card>
 
@@ -159,6 +168,18 @@ The server's 101 response to an opening handshake (§4.2.2): `Upgrade`, `Connect
 <scalar-card title="websocket​Write​Frame" icon="phosphor/regular/function" href="#websocketwriteframe">
 
 Writes one frame (§5.2) into `out` at `at`: FIN, the opcode, the payload `payload[off .. off + len)` and, when `mask` is not null, masked with that 4-byte key.
+
+</scalar-card>
+
+<scalar-card title="websocket​Write​Upgrade​Response" icon="phosphor/regular/function" href="#websocketwriteupgraderesponse">
+
+Writes the server's 101 response to an opening handshake (§4.2.2) into `out` from `at`, allocating nothing: `Upgrade`, `Connection`, `Sec-WebSocket-Accept` with the 28 bytes `accept` holds, and `Sec-WebSocket-Protocol` when `protocol` is not empty.
+
+</scalar-card>
+
+<scalar-card title="Ws​Accept​Key" icon="phosphor/regular/cube" href="#wsacceptkey">
+
+The accept key of one handshake after another, in storage the caller keeps: a server builds one per connection and computes every handshake's `Sec-WebSocket-Accept` into it, allocating nothing after it is built (the fix for H1-3 in `docs/security/http1-codec.md`).
 
 </scalar-card>
 
@@ -185,7 +206,11 @@ the subprotocols it offers, and `websocketUpgradeResponse(key, protocol)`
 writes the 101 that accepts it, with `Sec-WebSocket-Accept` from
 `websocketAcceptKey` (§4.2.2): the base64 of the SHA-1 of the key and a
 fixed GUID. `websocketOriginAllowed(parser, allowed)` is the opt-in check
-of `Origin` a server makes first, against a page on another site. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
+of `Origin` a server makes first, against a page on another site. A server
+that accepts handshake after handshake keeps a `WsAcceptKey` and writes the
+101 into its output with `websocketRequestKeyField` and
+`websocketWriteUpgradeResponse`, allocating nothing per handshake, as
+`Http1Connection.acceptWebSocket` does. What `HTTP1_UPGRADE`'s `upgradeBytes()` answers is the first
 input for the decoder.
 
 </scalar-detail>
@@ -605,10 +630,9 @@ true when exactly one `Origin` field is present and its value is one of `allowed
 ### websocketRequestKey
 
 The client's key when the head `p` has just read is a valid opening
-handshake (§4.2.1): a GET in HTTP/1.1, asking to upgrade to `websocket`
-(alone, in any case), at version 13, with a valid key. Otherwise `null`, and
-the server answers 400 (or 426 with `Sec-WebSocket-Version: 13` when only the
-version is wrong, §4.4).
+handshake (§4.2.1), as `websocketRequestKeyField` judges it. Otherwise
+`null`, and the server answers 400 (or 426 with `Sec-WebSocket-Version: 13`
+when only the version is wrong, §4.4).
 
 ```ts
 function websocketRequestKey(
@@ -625,6 +649,32 @@ The server's parser, at the `HTTP1_HEAD` of the request.
 <scalar-field name="returns" type="string | null">
 
 The `Sec-WebSocket-Key` to pass to `websocketUpgradeResponse`, or null when the request is not a valid handshake.
+
+</scalar-field>
+
+### websocketRequestKeyField
+
+Which field of the head `p` has just read holds the client's key, when that
+head is a valid opening handshake (§4.2.1): a GET in HTTP/1.1, asking to
+upgrade to `websocket` (alone, in any case), at version 13, with a valid
+first `Sec-WebSocket-Key`. Otherwise -1. Nothing is allocated: the key is
+`p.head[p.spans[4 * i + 2] .. p.spans[4 * i + 3])`, for `WsAcceptKey`.
+
+```ts
+function websocketRequestKeyField(
+  p: Http1Parser,
+): i32
+```
+
+<scalar-field name="p" type="Http1Parser" required>
+
+The server's parser, at the `HTTP1_HEAD` of the request.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The key's field index, or -1 when the request is not a valid handshake.
 
 </scalar-field>
 
@@ -684,7 +734,10 @@ The whole request head, ending in the empty line, or null when refused.
 The server's 101 response to an opening handshake (§4.2.2): `Upgrade`,
 `Connection`, `Sec-WebSocket-Accept`, and `Sec-WebSocket-Protocol` when
 `protocol` is not empty (the caller picks it from the client's list).
-Answers `null` for an invalid key or a protocol that is not a token.
+Answers `null` for an invalid key or a protocol that is not a token. A
+server answering handshake after handshake writes the same bytes with
+`WsAcceptKey` and `websocketWriteUpgradeResponse` instead, allocating
+nothing.
 
 ```ts
 function websocketUpgradeResponse(
@@ -794,7 +847,85 @@ The index in `out` just past the frame, or `WS_NO_ROOM` or `WS_REFUSED`.
 
 </scalar-field>
 
+### websocketWriteUpgradeResponse
+
+Writes the server's 101 response to an opening handshake (§4.2.2) into
+`out` from `at`, allocating nothing: `Upgrade`, `Connection`,
+`Sec-WebSocket-Accept` with the 28 bytes `accept` holds, and
+`Sec-WebSocket-Protocol` when `protocol` is not empty. The bytes are those
+of `websocketUpgradeResponse`.
+
+```ts
+function websocketWriteUpgradeResponse(
+  out: u8[],
+  at: i32,
+  accept: u8[],
+  protocol: string,
+): i32
+```
+
+<scalar-field name="out" type="u8[]" required>
+
+The buffer the head is written into.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+Where in `out` it starts.
+
+</scalar-field>
+
+<scalar-field name="accept" type="u8[]" required>
+
+The accept value, its 28 characters one a byte: a `WsAcceptKey`'s `value`.
+
+</scalar-field>
+
+<scalar-field name="protocol" type="string" required>
+
+The subprotocol the server chose from `websocketOfferedProtocols`, or "" for none.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The index just past the head, `HTTP1_REFUSED` when `protocol` is not a token or `accept` is not 28 bytes, or `HTTP1_NO_ROOM` when the head does not fit, `out` unchanged either way.
+
+</scalar-field>
+
 ## Classes
+
+### WsAcceptKey
+
+The accept key of one handshake after another, in storage the caller keeps:
+a server builds one per connection and computes every handshake's
+`Sec-WebSocket-Accept` into it, allocating nothing after it is built (the
+fix for H1-3 in `docs/security/http1-codec.md`).
+
+<scalar-code-group>
+
+```ts example.ts
+const accept = new WsAcceptKey();
+if (accept.compute(p.head, start, end)) {
+  // accept.value[0 .. 28) is the field's value
+}
+```
+
+</scalar-code-group>
+
+```ts
+class WsAcceptKey
+```
+
+| Member | |
+| --- | --- |
+| `new WsAcceptKey()` | Storage for one accept value, its hasher and buffers allocated. |
+| `digest: u8[]` | The SHA-1 of `input`. |
+| `hasher: Sha1` | The hasher, its state kept from one handshake to the next. |
+| `input: u8[]` | The key followed by `WS_GUID`: what is hashed (§4.2.2 item 5.4). |
+| `value: u8[]` | The accept value's 28 characters, one a byte, once `compute` answers true. |
+| `compute(text: u8[], start: i32, end: i32): boolean` | Computes into `value` the accept value of the key in `text[start .. end)` (§4.2.2 item 5.4), when that is a valid key. |
 
 ### WsDecoder
 

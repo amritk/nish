@@ -5,12 +5,12 @@ import { scope } from "nish/threads";
 
 declare function read(fd: i32, buf: u8[], n: u64): i64;
 
-function fill(bufs: u8[][], i: i32): i64 {
+const fill = (bufs: u8[][], i: i32): i64 => {
   const b = bufs[i];
   return read(0, b, toU64(b.length));
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const bufs: u8[][] = [new Array<u8>(8), new Array<u8>(8)];
   let seen = 0;
   {
@@ -21,4 +21,4 @@ export function main(): i32 {
     seen = toI32(bufs[1][0]);
   }
   return seen;
-}
+};

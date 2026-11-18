@@ -23,8 +23,8 @@ class File {
   }
 }
 
-function keep(m: Map<string, File>, f: File): void {
+const keep = (m: Map<string, File>, f: File): void => {
   m.set("k", f)
-}
+};
 
 export const main = (): i32 => 0

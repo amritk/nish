@@ -2125,6 +2125,223 @@ export const emitAppendRange = (emitter: Emitter, stmt: Node, end: IRBlock): boo
   return true
 }
 
+// ---- The loop-guarded additions ----------------------------------------------------------
+
+/** Whether `node` is the identifier `name` or holds it. */
+const holdsName = (node: Node, name: string): boolean => {
+  if (isIdentNamed(node, name)) {
+    return true
+  }
+  for (const child of node.children) {
+    if (holdsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether anything in `node` declares `name`: a declarator or a parameter whose binding holds it. */
+const redeclaresName = (node: Node, name: string): boolean => {
+  if ((node.kind === NodeKind.VarDecl || node.kind === NodeKind.Param) && holdsName(node.children[0], name)) {
+    return true
+  }
+  for (const child of node.children) {
+    if (redeclaresName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether anything in `node` assigns or steps a variable named `name`, by
+ * name or through a destructuring target. A write to an element or a field
+ * writes no variable.
+ */
+const writesVariableNamed = (node: Node, name: string): boolean => {
+  let target: Node | null = null
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
+    target = unwrapParens(node.children[0])
+  } else if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
+    target = unwrapParens(node.children[0])
+  }
+  if (
+    target !== null &&
+    target.kind !== NodeKind.Member &&
+    target.kind !== NodeKind.Index &&
+    holdsName(target, name)
+  ) {
+    return true
+  }
+  for (const child of node.children) {
+    if (writesVariableNamed(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * `node` has one value for the whole of the loop `stmt`: a literal, or a
+ * local, parameter or constant typed `type` that nothing in `stmt` writes or
+ * declares again. A closure cannot assign what it captures (NL2586), so a
+ * call in the loop cannot move it either.
+ */
+const holdsAcrossLoop = (emitter: Emitter, node: Node, stmt: Node, type: i32): boolean => {
+  if (emitter.typeOf(node) !== type) {
+    return false
+  }
+  if (node.kind === NodeKind.Number) {
+    return true
+  }
+  if (node.kind !== NodeKind.Ident) {
+    return false
+  }
+  const program = emitter.program
+  if (program.nodeLocals[node.id] === null && program.nodeConstants[node.id] === null) {
+    return false
+  }
+  return !writesVariableNamed(stmt, node.text) && !redeclaresName(stmt, node.text)
+}
+
+/** A checked `x + i` in a counted loop's body and its loop-invariant operand `x`. */
+class GuardedAdd {
+  node: Node
+  operand: Node
+
+  constructor(node: Node, operand: Node) {
+    this.node = node
+    this.operand = operand
+  }
+}
+
+/**
+ * Every signed `x + i` and `i + x` in `node`, typed `type`, that the bounds
+ * walk left checked and whose `x` holds across `stmt`. A function or class
+ * inside the loop is emitted as a function of its own, so it is passed over.
+ */
+const collectGuardedAdds = (
+  emitter: Emitter,
+  node: Node,
+  stmt: Node,
+  counter: string,
+  type: i32,
+  out: GuardedAdd[]
+): void => {
+  if (node.kind === NodeKind.Arrow || node.kind === NodeKind.FunctionDecl || node.kind === NodeKind.Class) {
+    return
+  }
+  if (
+    node.kind === NodeKind.Binary &&
+    node.text === "+" &&
+    emitter.typeOf(node) === type &&
+    !emitter.program.nodeProvenNoOverflow[node.id]
+  ) {
+    const left = unwrapParens(node.children[0])
+    const right = unwrapParens(node.children[1])
+    if (isIdentNamed(right, counter) && holdsAcrossLoop(emitter, left, stmt, type)) {
+      out.push(new GuardedAdd(node, left))
+    } else if (isIdentNamed(left, counter) && holdsAcrossLoop(emitter, right, stmt, type)) {
+      out.push(new GuardedAdd(node, right))
+    }
+  }
+  for (const child of node.children) {
+    collectGuardedAdds(emitter, child, stmt, counter, type, out)
+  }
+}
+
+/**
+ * The checked additions of `for (let i = J; i < B; i++) body` that one test
+ * before the loop can vouch for: each `x + i` in the body whose `x` and `B`
+ * hold across the loop, where `i` is the loop's own signed 32- or 64-bit
+ * `let`, stepped by one and written nowhere else. In the body `i` runs over
+ * `J ..= B - 1` and `x + i` is monotone in `i`, so `x + J` and `x + B - 1`
+ * fitting means every `x + i` the loop computes fits.
+ *
+ * The test is emitted here, after the initializer: an `i1` that is set when
+ * any `x + J` or `x + (B - 1)` overflows. Each addition then branches on it
+ * (`emitSignedArith`): clear, it is `add nsw`; set, it is the checked
+ * addition as before, which panics at the iteration and the operator where it
+ * always did — nothing is checked earlier (docs/LANGUAGE.md: an overflow
+ * panics where the operation runs). The test is the same on every iteration,
+ * so LLVM's loop unswitching splits the loop on it, and the copy that runs
+ * when it is clear has `nsw` additions, which the loop passes widen into the
+ * induction variable: a byte comparison `s[a + i] !== s[b + i]` loses two
+ * overflow branches and two sign extensions per byte.
+ *
+ * `B - 1` is a plain `sub`: when it wraps, `B` is the minimum, the loop never
+ * runs and nothing reads the test. Answers how many guards were registered
+ * before, for `releaseAddGuards` once the loop is emitted.
+ */
+export const emitAddGuards = (emitter: Emitter, stmt: Node): i32 => {
+  const mark = emitter.addGuardNodes.length
+  const init = stmt.children[0]
+  const cond = stmt.children[1]
+  if (init.kind !== NodeKind.Var || init.children[0].children.length !== 1 || cond.kind !== NodeKind.Binary) {
+    return mark
+  }
+  const declared = init.children[0].children[0].children[0]
+  if (
+    declared.kind !== NodeKind.Ident ||
+    cond.text !== "<" ||
+    !isIdentNamed(cond.children[0], declared.text)
+  ) {
+    return mark
+  }
+  const name = declared.text
+  const counter = cond.children[0]
+  const type = emitter.typeOf(counter)
+  const body = stmt.children[3]
+  if (
+    (type !== T_I32 && type !== T_I64) ||
+    !isUnitStep(stmt.children[2], name) ||
+    writesVariableNamed(cond, name) ||
+    writesVariableNamed(body, name) ||
+    redeclaresName(body, name) ||
+    !holdsAcrossLoop(emitter, cond.children[1], stmt, type)
+  ) {
+    return mark
+  }
+  const adds: GuardedAdd[] = []
+  collectGuardedAdds(emitter, body, stmt, name, type, adds)
+  if (adds.length === 0) {
+    return mark
+  }
+  const fn = emitter.fn
+  const ty = emitter.llvm(type)
+  const bound = emitter.emitExpression(cond.children[1])
+  const first = emitter.emitExpression(counter)
+  const last = fn.emitValue(`sub ${ty} ${bound}, 1`)
+  const seen: string[] = []
+  let may = ""
+  for (const add of adds) {
+    if (seen.indexOf(add.operand.text) >= 0) {
+      continue
+    }
+    seen.push(add.operand.text)
+    const x = emitter.emitExpression(add.operand)
+    const lo = addWithOverflow(emitter, ty, x, first)
+    const hi = addWithOverflow(emitter, ty, x, last)
+    const either = fn.emitValue(`or i1 ${lo[1]}, ${hi[1]}`)
+    may = may === "" ? either : fn.emitValue(`or i1 ${may}, ${either}`)
+  }
+  for (const add of adds) {
+    emitter.addGuardNodes.push(add.node.id)
+    emitter.addGuardFlags.push(may)
+    emitter.addGuardFns.push(fn)
+  }
+  return mark
+}
+
+/** Drop the guards `emitAddGuards` registered after `mark`, once their loop is emitted. */
+export const releaseAddGuards = (emitter: Emitter, mark: i32): void => {
+  while (emitter.addGuardNodes.length > mark) {
+    emitter.addGuardNodes.pop()
+    emitter.addGuardFlags.pop()
+    emitter.addGuardFns.pop()
+  }
+}
+
 // ---- WP34 N2: the bulk writes -------------------------------------------------------------
 
 /** The address of element `idx` of `arr` as the `i8*` a byte intrinsic takes. */

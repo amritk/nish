@@ -1,5 +1,5 @@
 // A `continue` names a loop to run again; a labelled block is not one.
-export function test(): number {
+export const test = (): number => {
   let n = 0;
   for (let i = 0; i < 3; i++) {
     body: {
@@ -8,4 +8,4 @@ export function test(): number {
     }
   }
   return n;
-}
+};

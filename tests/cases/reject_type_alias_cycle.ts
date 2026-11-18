@@ -3,7 +3,7 @@
 type Feet = Metres;
 type Metres = Feet;
 
-export function test(): number {
+export const test = (): number => {
   const d: Feet = 1;
   return d;
-}
+};

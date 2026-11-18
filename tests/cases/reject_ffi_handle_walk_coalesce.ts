@@ -22,9 +22,9 @@ class File {
   }
 }
 
-function count(f: File, g: File): i32 {
+const count = (f: File, g: File): i32 => {
   const h = f ?? g
   return h.read()
-}
+};
 
 export const main = (): i32 => 0

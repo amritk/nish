@@ -1,4 +1,4 @@
-export function test(): number {
+export const test = (): number => {
   const p = { first: 1, second: 2 };
   return p.first;
-}
+};

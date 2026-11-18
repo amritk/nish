@@ -7,7 +7,7 @@ class Point {
   }
 }
 
-export function test(): number {
+export const test = (): number => {
   const p = new Point(1, 2);
   return p.z;
-}
+};

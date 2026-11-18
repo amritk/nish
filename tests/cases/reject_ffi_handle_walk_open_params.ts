@@ -29,20 +29,20 @@ class Generic<T> {
     return 0
   }
 }
-function generic<T>(f: File, t: T): i32 {
+const generic = <T>(f: File, t: T): i32 => {
   return 0
-}
+};
 class Methods {
   n: i32 = 0
   take<T>(f: File, t: T): i32 {
     return 0
   }
 }
-function maybe(f: File | null): i32 {
+const maybe = (f: File | null): i32 => {
   return 0
-}
-function lend(f: File): i32 {
+};
+const lend = (f: File): i32 => {
   return maybe(f)
-}
+};
 
 export const main = (): i32 => 0

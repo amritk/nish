@@ -1,1 +1,3 @@
-function f(b: bigint): number { return 1; }
+const f = (b: bigint): number => {
+  return 1;
+};
