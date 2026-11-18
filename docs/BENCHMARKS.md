@@ -3081,7 +3081,7 @@ ns per request, median (min–max) and ratio of medians to `old`. `idle` shows n
 What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
-<!-- http1-get:begin -->
+<!-- http-lean-get:begin -->
 ## A minimal GET on Http1Server
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. This section breaks down one keep-alive `GET` answered with a 200 and a small JSON body: where its instructions go, its wall-clock time, the bytes a connection holds, and the server CPU and memory at 18,000 keep-alive connections. It then bounds what a lean request path could save (#1760). `std/`, `src/` and `runtime/` are `main` at 4d0faa4b throughout. The bench code that produced each table is named with it.
@@ -3233,7 +3233,7 @@ The sum is 180.3 + 7.5 + 268.7 = 456.5 ns. This is under 0.5 µs, and it is 9.0%
 At the band edges, the sum is still under 0.5 µs. `get` 4.8% higher and `fields0` 6.1% lower would make the first term 220.2 ns, and the sum 496.4 ns.
 
 Verdict: STOP — a lean request path could save at most about 0.46 µs a request (456.5 ns), under the 0.5 µs bar and about 9% of the 5.1 µs no-database 404.
-<!-- http1-get:end -->
+<!-- http-lean-get:end -->
 
 <!-- sha-block:begin -->
 ## SHA-256's block function
