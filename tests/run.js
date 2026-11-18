@@ -40756,6 +40756,166 @@ if (!only || "game-page".includes(only)) {
   )
 }
 
+// ---- WP48 stage 6: a class's layout on wasm32 is LLVM's -----------------------------
+// computeLayout lays a pointer field (a class, nullable or not, a string, an
+// array) in the target's pointer width: four bytes under wasm32's `p:32:32`,
+// eight natively. The program below compiles with `--target wasm32`, and
+// `--emit-checked` prints the size, alignment and every field offset the
+// compiler recorded. For each class the test then asks LLVM: it appends to the
+// emitted module's types a function per number, `ptrtoint` of a `getelementptr` from
+// null (one past the struct for its size, into `{ i1, %T }` for its alignment,
+// to each field's index for its offset), and `opt -passes=instcombine` folds
+// each under the module's own data layout. The two must agree, the size must
+// be what `nish_alloc_struct` is asked for, and the linked node is pinned at 8
+// bytes on wasm32 and 16 natively, so a pointer slot back at 8 bytes fails.
+if (!only || "wasm32-layout".includes(only)) {
+  if (!has("opt")) {
+    skip("wasm32-layout: opt not installed: the data layout cannot fold the probes")
+  } else {
+    const dir = path.join(buildDir, "wasm32-layout")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const entry = path.join(dir, "classes.ts")
+    fs.writeFileSync(
+      entry,
+      `class Node {
+  next: Node | null
+  value: i32
+  constructor(next: Node | null, value: i32) {
+    this.next = next
+    this.value = value
+  }
+}
+
+class Mixed {
+  a: f64
+  link: Node | null
+  n: i32
+  b: i64
+  name: string
+  constructor(a: f64, link: Node | null, n: i32, b: i64, name: string) {
+    this.a = a
+    this.link = link
+    this.n = n
+    this.b = b
+    this.name = name
+  }
+}
+
+class Links {
+  head: Node
+  tail: Node | null
+  mixed: Mixed | null
+  count: i32
+  items: i32[]
+  done: boolean
+  constructor(head: Node, tail: Node | null, mixed: Mixed | null, count: i32, items: i32[], done: boolean) {
+    this.head = head
+    this.tail = tail
+    this.mixed = mixed
+    this.count = count
+    this.items = items
+    this.done = done
+  }
+}
+
+export const main = (): i32 => {
+  const a = new Node(null, 1)
+  const b = new Node(a, 2)
+  const m = new Mixed(1.5, b, 3, 4, "m")
+  const l = new Links(a, b, m, 2, [1, 2, 3], true)
+  return l.count + l.head.value + m.n + l.items.length
+}
+`
+    )
+    const names = ["Node", "Mixed", "Links"]
+    // `struct T (class) size=S align=A`, then `  field f: T index=I offset=O`.
+    const layouts = (args) => {
+      const r = spawnSync(NISH, [entry, "--emit-checked", ...args], { cwd: root, encoding: "utf8" })
+      const found = new Map()
+      let current = null
+      for (const line of r.status === 0 ? r.stdout.split("\n") : []) {
+        const struct = /^struct (\w+) \(class\) size=(\d+) align=(\d+)/.exec(line)
+        if (struct !== null) {
+          current = { size: Number(struct[2]), align: Number(struct[3]), fields: [] }
+          found.set(struct[1], current)
+          continue
+        }
+        const field = /^ {2}field (\w+): .* index=(\d+) offset=(\d+)/.exec(line)
+        if (field !== null && current !== null) {
+          current.fields.push({ name: field[1], index: Number(field[2]), offset: Number(field[3]) })
+        }
+      }
+      return { r, found }
+    }
+    const wasm = layouts(["--target", "wasm32"])
+    const native = layouts([])
+    const ll = path.join(dir, "classes.ll")
+    const emitted = spawnSync(NISH, [entry, "--target", "wasm32", "-o", ll], { cwd: root, encoding: "utf8" })
+    if (
+      check(
+        "wasm32-layout: the program compiles for wasm32 and both targets print every class's layout",
+        wasm.r.status === 0 && native.r.status === 0 && emitted.status === 0 && names.every((n) => wasm.found.has(n)),
+        `${shown(wasm.r)}\n${shown(emitted)}`
+      )
+    ) {
+      // One probe per number, each `add`ed to 0 so instcombine folds it.
+      const probe = (label, type, gep) =>
+        `define i64 @probe.${label}() {\n  %v = add i64 ptrtoint (${type}* getelementptr ${gep} to i64), 0\n  ret i64 %v\n}\n`
+      const probes = []
+      for (const name of names) {
+        const t = `%struct.${name}`
+        const info = wasm.found.get(name)
+        probes.push(probe(`${name}.size`, t, `(${t}, ${t}* null, i32 1)`))
+        probes.push(probe(`${name}.align`, t, `({ i1, ${t} }, { i1, ${t} }* null, i32 0, i32 1)`))
+        for (const f of info.fields) {
+          probes.push(probe(`${name}.${f.name}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${f.index})`))
+        }
+      }
+      // The probes run in a module of their own: the emitted one's data layout
+      // and type definitions, and nothing for instcombine to rewrite but them.
+      const kept = fs
+        .readFileSync(ll, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("target datalayout") || /^%[\w.]+ = type /.test(line))
+      const probed = path.join(dir, "probed.ll")
+      fs.writeFileSync(probed, `${kept.join("\n")}\n\n${probes.join("\n")}`)
+      const folded = spawnSync("opt", ["-S", "-passes=instcombine", probed], { encoding: "utf8", maxBuffer: 1 << 28 })
+      const llvm = new Map()
+      for (const m of folded.stdout.matchAll(/define i64 @"?probe\.([\w.]+)"?\(\)[^{]*\{\n\s*ret i64 (\d+)/g)) {
+        llvm.set(m[1], Number(m[2]))
+      }
+      const text = fs.readFileSync(ll, "utf8")
+      for (const name of names) {
+        const info = wasm.found.get(name)
+        const mine = [`size=${info.size}`, `align=${info.align}`, ...info.fields.map((f) => `${f.name}=${f.offset}`)]
+        const theirs = [
+          `size=${llvm.get(`${name}.size`)}`,
+          `align=${llvm.get(`${name}.align`)}`,
+          ...info.fields.map((f) => `${f.name}=${llvm.get(`${name}.${f.name}`)}`),
+        ]
+        check(
+          `wasm32-layout: ${name}'s size, alignment and field offsets are what LLVM's wasm32 DataLayout gives %struct.${name}`,
+          folded.status === 0 && mine.join(" ") === theirs.join(" "),
+          `compiler: ${mine.join(" ")}\nLLVM:     ${theirs.join(" ")}\n${folded.stderr}`
+        )
+        check(
+          `wasm32-layout: a new ${name} asks nish_alloc_struct for its ${info.size} bytes`,
+          text.includes(`call i8* @nish_alloc_struct(i64 ${info.size})`),
+          text.split("\n").filter((l) => l.includes("nish_alloc_struct(i64")).join("\n")
+        )
+      }
+      const node = wasm.found.get("Node")
+      const nativeNode = native.found.get("Node")
+      check(
+        "wasm32-layout: `next: Node | null; value: i32` is 8 bytes, 4-aligned, on wasm32 and 16, 8-aligned, natively",
+        node.size === 8 && node.align === 4 && nativeNode !== undefined && nativeNode.size === 16 && nativeNode.align === 8,
+        `wasm32 ${JSON.stringify(node)}\nnative ${JSON.stringify(nativeNode)}`
+      )
+    }
+  }
+}
+
 // ---- WP50 stage 6: examples/wasm-arena, the acceptance example -------------------
 //
 // docs/wp50-wasm-host.md §10. examples/wasm-arena/build.mjs links client.ts for

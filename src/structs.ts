@@ -91,7 +91,8 @@ import {
 const pointerBytes = (ctx: CheckContext): i32 => (ctx.wasm ? 4 : 8)
 
 /** The alignment of a value stored in a struct field, on the target being checked for. */
-const alignOfField = (ctx: CheckContext, type: i32): i32 => ctx.table.alignWithPointer(type, pointerBytes(ctx))
+const alignOfField = (ctx: CheckContext, type: i32): i32 =>
+  ctx.table.alignWithPointer(type, pointerBytes(ctx))
 
 /**
  * Size in bytes of a value stored in a struct field. `bool` is one byte

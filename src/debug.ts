@@ -408,7 +408,9 @@ export class DebugInfo {
   }
 
   pointerTo(base: string): string {
-    return this.module.addMetadata(`!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: ${this.pointerBits})`)
+    return this.module.addMetadata(
+      `!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: ${this.pointerBits})`
+    )
   }
 
   /** One `DW_TAG_member`; an empty `file` is a member with no declaration to point at. */
