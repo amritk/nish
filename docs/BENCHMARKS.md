@@ -3213,7 +3213,7 @@ The object counts are 41 and 40 bytes under these RSS figures, 3–4%: 1,008 aga
 
 `bench/http.mjs` drives `bench/http1-server.ts` with `wrk`, which is not installed on this box, so it was not used. Both runs below use `bench/handler-ring/run.sh --nodb` (this PR's bench code, `bench/handler-ring/`) and its load generator, which offers 30,000 requests a second over 18,000 keep-alive connections, with a 3 s warm-up and a 10 s window. The server runs on CPU 0 and the load generator on CPUs 1–3, under a hard `RLIMIT_NOFILE` of 20,000. All 18,000 connections were held in every round and none was lost. User and sys are the server's own CPU per request; box µs is the box's non-idle CPU per request from `/proc/stat`, the load generator's included. Each row is the median of 5 interleaved rounds (min–max), from the per-round `srv_us`, `srv_user_us`, `srv_sys_us`, `softirq_us`, `srv_rss_mb` and `srv_pss_mb` lines.
 
-The real server: the `h1` design builds `bench/http1-server.ts`, which serves on `Http1Server`, and the load generator asks it for `GET /plaintext`, a 129-byte response. `h1-copy` is a byte-identical copy of its build, which gives the noise band; `epoll1` is `bench/handler-ring/server.ts` on epoll in one process, serving the same route with no SQLite query.
+The real server: the `h1` design builds `bench/http1-server.ts`, which serves through `nish/net/handler`'s `HttpHandler` and a `Router` table on top of `Http1Server`, so `h1`'s CPU includes those layers; the load generator asks it for `GET /plaintext`, a 129-byte response. `h1-copy` is a byte-identical copy of its build, which gives the noise band; `epoll1` is `bench/handler-ring/server.ts` on epoll in one process, serving the same route with no SQLite query.
 
 | design | server µs a request | user | sys | softirq µs | box µs | RSS MB | PSS MB | p50 ms | p99 ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -3241,17 +3241,17 @@ The `epoll` against `epoll-copy` band is 1.7%. Against `epoll`'s five processes,
 
 ### What a lean path could save
 
-The bound adds three things a lean path might remove, each taken at the edge of its noise band:
+The bound adds three things a lean path might remove, each a median widened to the edge of its noise band. A band here is a median's gap to its byte-identical copy's; the min–max spreads in the same tables are 25–50%, so this is not a maximum:
 
 - **Spans of unread fields: 220.2 ns.** This is `get` less `fields0` by wall clock, with `get` 4.8% higher and `fields0` 6.1% lower, the edges of their bands: 466.9 × 1.048 − 286.6 × 0.939 = 489.3 − 269.1. At the medians it is 180.3 ns. It also includes the line scan of the three unread fields and `get`'s longer Host, which a lean path still pays, so it overstates. Taking only the span work by instructions (field lines, head copy and `memcpy`, `get` less `fields0`: 1,077 + 228 + 79 = 1,384 Ir) at the highest ns per Ir above, 0.102, gives about 141 ns.
-- **The per-request state reset: 7.7 ns.** That is 75 Ir at 0.1017 ns an Ir, the highest ns per Ir of either column (`fields4`'s copy, 530.8 ns over 5,219 Ir).
+- **The per-request state reset: 7.6 ns.** That is 75 Ir at 0.1017 ns an Ir, the highest ns per Ir of either column (`fields4`'s copy, 530.8 ns over 5,219 Ir).
 - **Cache misses: 218.3 ns.** This is the highest `idle-dram` median of the three columns, 735.4, less the lowest `idle` median at one connection, 534.2, scaled down by 0.968 for the drift between the two runs (the lowest `hot` median of the first, 375.8, over the highest of the second, 388.2): 735.4 − 517.1. Within one column the difference is 192.5 in `old`, 191.6 in `old′` and 201.2 in `new`. It is measured from `idle` and not `hot` because `idle-dram` alternates the GET with a POST of about 550 bytes and reads through the scratch buffer: `idle` less `hot` at one connection is about 150 ns of that extra work and no miss, so `idle-dram` less `hot`, 735.4 − 375.8 = 359.6 ns, would count it as misses and give a sum of 587.5 ns. The term holds every miss of the request, those on state needed between requests included, and the clock reads around each timed request, so it bounds the misses of state a lean path could drop from above. `cold` less `hot`, 448.5 − 375.8 = 72.7 ns at the edges, is the GET's L3 cost on 18,000 connections; `idle-dram` evicts every line, so its misses are within this term and not added to it. `misses.sh` was not run, so the term is not split by object.
 
 Date is not counted: a lean path keeps it (RFC 9110 §6.6.1). It is 15 Ir a request, plus up to about 28 ns where a readable event carries one request, and its 29-byte copy happens only when the head is rewritten.
 
-The sum is 220.2 + 7.7 + 218.3 = 446.2 ns, under 0.5 µs by 53.8 ns. At the medians it is 180.3 + 7.5 + 192.5 = 380.3 ns. 446.2 ns is 8.7% of the 5.1 µs a no-database 404 costs in the nish-std-amritk challenge entry, about 3 µs of which is in the kernel. Against the real server above, it is 3.7% of `h1`'s 12.07 µs of server CPU a request and about 24% of its 1.83 µs of user time.
+The sum is 220.2 + 7.6 + 218.3 = 446.1 ns, under 0.5 µs by 53.9 ns. At the medians, unscaled (the miss term taken within `old`'s column, without the 0.968 drift factor), it is 180.3 + 7.5 + 192.5 = 380.3 ns. 446.1 ns is 8.7% of the 5.1 µs a no-database 404 costs in the nish-std-amritk challenge entry, about 3 µs of which is in the kernel; those two figures are the entry owner's measurement, not measured here. Against the real server above, it is 3.7% of `h1`'s 12.07 µs of server CPU a request and about 24% of its 1.83 µs of user time.
 
-Verdict: STOP — a lean request path could save at most about 0.45 µs a request (446.2 ns, every term at its band edge), under the 0.5 µs bar and about 9% of the 5.1 µs no-database 404.
+Verdict: STOP — on medians widened to every term's band edge, a lean request path could save about 0.45 µs a request (446.1 ns), under the 0.5 µs bar and about 9% of the 5.1 µs no-database 404 (the entry owner's figure, not measured here).
 <!-- http-lean-get:end -->
 
 <!-- sha-block:begin -->
