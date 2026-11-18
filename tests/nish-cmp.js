@@ -8787,6 +8787,30 @@ const DECLARED = [
       "tests/link/thread_scope_exit_paths/main.ts": ["main.ll"],
     }
   ),
+  // WP48 stage 6: on wasm32 a class's pointer field takes 4 bytes, so the
+  // wasm32 programs' allocation sizes, field offsets, TBAA offsets,
+  // `dereferenceable` widths and pointer-slot alignments move; no scalar
+  // access and no native program does.
+  ...byFinding("lay out a class pointer field in 4 bytes on wasm32")(
+    "a wasm32 class lays a pointer field out in 4 bytes, as LLVM's p:32:32 does, so its size, offsets and pointer-slot alignment move",
+    {
+      "tests/link/break_core_wasm/main.ts": [
+        "base64.ll",
+        "break-director.ll",
+        "break-game.ll",
+        "break-gfx.ll",
+        "break-intro.ll",
+        "break-levels.ll",
+        "break-menu.ll",
+        "input.ll",
+        "main.ll",
+        "term-pixels.ll",
+        "term-rate.ll",
+        "testing.ll",
+      ],
+      "tests/link/std_host_game/main.ts": ["game.ll", "input.ll", "main.ll", "testing.ll"],
+    }
+  ),
 ]
 
 /**
