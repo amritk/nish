@@ -11553,6 +11553,78 @@ if (dealtHere("sqliteLink")) {
       vendored.join(", ")
     )
 
+    // The cursors call SQLite's internal allocator, decoder and B-tree, which
+    // expect the connection's mutex held as SQLite's own API holds it. A
+    // SQLITE_DEBUG, THREADSAFE=1 build asserts that on every such call, so a
+    // helper that walks a table, reads a column into a buffer, builds an
+    // index key and seeks on it exits 0 only if every entry point takes it.
+    {
+      const helper = path.join(sqDir, "mutex-held.c")
+      const exe = path.join(sqDir, "mutex-held")
+      fs.writeFileSync(
+        helper,
+        `#include <stdint.h>
+int32_t nishsqlite_open(const char *, int32_t);
+int32_t nishsqlite_exec(int32_t, const char *);
+int32_t nishsqlite_close(int32_t);
+int32_t nishsqlite_begin_read(int32_t);
+int32_t nishsqlite_end_read(int32_t);
+int32_t nishsqlite_cursor_open(int32_t, const char *, const char *);
+int32_t nishsqlite_cursor_first(int32_t);
+int32_t nishsqlite_cursor_next(int32_t);
+int32_t nishsqlite_cursor_close(int32_t);
+int64_t nishsqlite_cursor_column_i64(int32_t, int32_t);
+int32_t nishsqlite_cursor_column_into(int32_t, int32_t, uint8_t *, uint64_t, int32_t);
+int32_t nishsqlite_key_reset(int32_t);
+int32_t nishsqlite_key_text(int32_t, const char *);
+int32_t nishsqlite_cursor_seek(int32_t, int32_t);
+int main(void) {
+  uint8_t buf[512];
+  int64_t sum = 0;
+  int32_t db = nishsqlite_open(":memory:", 6);
+  if (db <= 0 || nishsqlite_exec(db, "CREATE TABLE t (a INTEGER, b TEXT); CREATE INDEX ti ON t (b);"
+      " WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 500)"
+      " INSERT INTO t SELECT x, printf('%0300d', x) FROM c") != 0) return 2;
+  if (nishsqlite_begin_read(db) != 0) return 3;
+  int32_t c = nishsqlite_cursor_open(db, "t", "a,b");
+  for (int32_t r = nishsqlite_cursor_first(c); r == 1; r = nishsqlite_cursor_next(c)) {
+    sum += nishsqlite_cursor_column_i64(c, 0);
+    if (nishsqlite_cursor_column_into(c, 1, buf, sizeof buf, 0) != 300) return 4;
+  }
+  if (sum != 125250) return 5;
+  int32_t i = nishsqlite_cursor_open(db, "ti", "b,rowid");
+  if (nishsqlite_key_reset(i) != 0 || nishsqlite_key_text(i, "0") != 0 || nishsqlite_cursor_seek(i, 1) != 1) return 6;
+  if (nishsqlite_cursor_close(c) != 0 || nishsqlite_end_read(db) != 0) return 7;
+  return nishsqlite_close(db) == 0 ? 0 : 8;
+}
+`
+      )
+      const built = spawnSync(
+        "clang",
+        [
+          "-O0",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_DEBUG",
+          "-DSQLITE_THREADSAFE=1",
+          path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+          helper,
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: under SQLITE_DEBUG and THREADSAFE=1 every cursor call holds its connection's mutex (SQLite's asserts pass)",
+        ran !== null && ran.status === 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stderr}` : "")
+      )
+    }
+
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
     // of release.yml's presence gates names every shipped file.

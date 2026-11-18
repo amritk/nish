@@ -1,13 +1,13 @@
 // A cursor left open across every route that ends or writes its read
 // transaction: `exec("COMMIT")`, `exec("ROLLBACK")`, `commit()`,
 // `rollback()`, an INSERT through `exec` and through a prepared statement, a
-// ROLLBACK through a prepared statement, `endRead` and `close`. Each route
-// opens a table cursor and an index cursor, leaves them on a row partway
-// through, and then checks that every call on both answers `SQLITE_MISUSE`
-// (0 from `rowid` and `columnI64`) and that a new read sees what the route
-// left. tests/run.js links this program again with `-DSQLITE_DEBUG`, so a
-// route that let SQLite reach a cursor the adapter had not closed fails an
-// assertion there.
+// ROLLBACK through a prepared statement, `endRead`, a SELECT on a pragma
+// table-valued function, and `close`. Each route leaves its cursors on a row
+// partway through, and then checks that every call on them answers
+// `SQLITE_MISUSE` (0 from `rowid` and `columnI64`); most also check that a
+// new read sees what the route left. tests/run.js links this program again
+// with `-DSQLITE_DEBUG`, so a route that let SQLite reach a cursor the
+// adapter had not closed fails an assertion there.
 import { Suite } from "nish/testing";
 import {
   OPEN_CREATE,
@@ -125,6 +125,18 @@ export const main = (): i32 => {
   );
   across(t, db, "endRead", (d: Database): boolean => d.endRead().isOk(), 51);
   const buf = new Array<u8>(8);
+  // A SELECT on a pragma table-valued function authorizes SQLITE_PRAGMA, so
+  // stepping it invalidates though the read transaction stays open.
+  t.ok("pragma SELECT: beginRead", db.beginRead().isOk());
+  const pc = db.openCursor("t", "id,name").expect("open t");
+  const pragmaRow = pc.seekRowid(toI64(5));
+  t.ok("pragma SELECT: the table cursor is on row 5", pragmaRow.isOk() && pragmaRow.value);
+  const pq = db.prepare("SELECT count(*) FROM pragma_table_info('t')").expect("prepare");
+  const ps = pq.step();
+  t.ok("pragma SELECT: answers t's 2 columns", ps.isOk() && ps.value && pq.columnI64(0) === toI64(2));
+  t.ok("pragma SELECT: finalize", pq.finalize().isOk());
+  t.ok("pragma SELECT: leaves the cursor dead", dead(pc, buf));
+  t.ok("pragma SELECT: inside a read that endRead still ends", db.endRead().isOk());
   t.ok("close: beginRead", db.beginRead().isOk());
   const c = db.openCursor("t", "id,name").expect("open t");
   const ix = db.openCursor("t_name", "name,rowid").expect("open t_name");
