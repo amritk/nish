@@ -107,9 +107,9 @@ seconds, whatever runner its rows would otherwise take.
 | --- | --- | --- |
 | `nish_cmp` | `nish-cmp` | the compiler (`src/`, `std/`, `runtime/`, `scripts/`, `bin/`, `nish-capabilities.lock.json`) or the corpus (`tests/cases`, `examples`, `docs/cookbook`, `bench`, `tests/parser`, `tests/differential`, `tests/link`, `tests/self`, `tests/nish-cmp.js`, `tests/pool.js`, `tests/driver.c`, `CHANGELOG.md`, `changelog/`) |
 | `elision` | `nish-cmp-elision` | the same as `nish_cmp` |
-| `bootstrap` | `bootstrap` | the compiler, `tests/nish/`, `tests/self/` |
+| `bootstrap` | `bootstrap` | the compiler, `tests/nish/`, `tests/self/`, and `tests/cases/` and `tests/link/` (the built `nish-cli` compiles fixtures from both) |
 | `simd`, `sha256_macos`, `fuzz` | `simd-arm64`, `sha256-macos`, `fuzz-smoke` | the compiler, any file directly in `tests/`, `tests/{cases,differential,fix,fuzz,link,nish,self,simd,wipes}/`, `bench/`, `examples/` |
-| `postgres` | `postgres-live` | the compiler, `tests/postgres/`, `bench/techempower/` |
+| `postgres` | `postgres-live` | the compiler, `tests/self/` (the compiler-cache action), `tests/postgres/`, `bench/techempower/` |
 
 The rule fails closed. A lane is off only when **every** changed path is on that
 lane's allowlist of paths it does not read (`docs/`, `web/`, `skills/`,
@@ -118,10 +118,12 @@ the read set wins over the allowlist. A path on neither list turns every lane
 on. Each list was checked against an `strace -f` of the files the lane's
 commands open. Every lane runs on:
 
-- any event but `pull_request`: a push to `main`, `merge_group`,
-  `workflow_call` (the release) and `workflow_dispatch`;
-- the `ci:full` label, or the `NISH_CI_SCOPE` repository variable set to
-  `full` (the kill switch for every pull request at once);
+- any event other than `pull_request`: a push to `main`, `merge_group` and
+  `workflow_call` (the release);
+- the `ci:full` label (add it, then re-run the workflow: `scope` reads the
+  labels again from the API), or the `NISH_CI_SCOPE` repository variable set
+  to `full` (the kill switch for every pull request at once). Both match
+  without regard to case;
 - a changed-file list that is empty, truncated or cannot be read, a deleted
   file, an unknown status, or a rename that moves a file into or out of a
   lane's read set;

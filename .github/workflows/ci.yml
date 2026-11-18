@@ -148,8 +148,8 @@ jobs:
   # step but the one that says why. Every lane job compares with `!= 'false'`,
   # so a missing output runs the lane; if this job fails, GitHub skips the jobs
   # that need it, and `ci-gate` fails on both. A pull
-  # request is the only event that can turn a lane off; a push to main, the
-  # merge queue, workflow_call and workflow_dispatch run everything, as do the
+  # request is the only event that can turn a lane off; any other event (a
+  # push to main, the merge queue, workflow_call) runs everything, as do the
   # `ci:full` label and the NISH_CI_SCOPE repository variable set to `full`.
   # The test shards and lint are never lanes and do not wait on this job.
   scope:
@@ -826,7 +826,7 @@ jobs:
         run: |
           echo "### Not selected: the bootstrap lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the bootstrap lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the bootstrap lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.bootstrap != 'false'
 
@@ -1014,7 +1014,7 @@ jobs:
         run: |
           echo "### Not selected: the nish_cmp lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the nish_cmp lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the nish_cmp lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.nish_cmp != 'false'
 
@@ -1154,7 +1154,7 @@ jobs:
         run: |
           echo "### Not selected: the elision lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the elision lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the elision lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.elision != 'false'
 
@@ -1381,7 +1381,7 @@ jobs:
         run: |
           echo "### Not selected: the simd lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the simd lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the simd lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.simd != 'false'
 
@@ -1716,7 +1716,7 @@ jobs:
         run: |
           echo "### Not selected: the sha256_macos lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the sha256_macos lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the sha256_macos lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.sha256_macos != 'false'
 
@@ -1817,7 +1817,7 @@ jobs:
         run: |
           echo "### Not selected: the fuzz lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the fuzz lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the fuzz lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.fuzz != 'false'
 
@@ -1949,7 +1949,7 @@ jobs:
         run: |
           echo "### Not selected: the postgres lane" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "scripts/ci-scope.mjs found no changed path the postgres lane reads ($WHY), so every step below was skipped. Add the ci:full label, or set the NISH_CI_SCOPE repository variable to full, to run it." >> "$GITHUB_STEP_SUMMARY"
+          echo "scripts/ci-scope.mjs found no changed path the postgres lane reads ($WHY), so every step below was skipped. To run it, add the ci:full label and re-run the workflow, or set the NISH_CI_SCOPE repository variable to full." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: needs.scope.outputs.postgres != 'false'
 

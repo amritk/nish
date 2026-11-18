@@ -32846,6 +32846,8 @@ if (selects("ci-scope", "ci.yml")) {
     ["no event", ciScope.decide({ files: docs })],
     ["the ci:full label", on(["docs/x.md"], { labels: ["ci:full"] })],
     ["NISH_CI_SCOPE=full", on(["docs/x.md"], { mode: "full" })],
+    ["NISH_CI_SCOPE=FULL", on(["docs/x.md"], { mode: " FULL " })],
+    ["a CI:Full label", on(["docs/x.md"], { labels: ["CI:Full"] })],
     ["an empty file list", on([])],
     ["an unknown file list", ciScope.decide({ event: "pull_request" })],
     ["a truncated file list", on(["docs/x.md"], { truncated: true })],
@@ -32855,6 +32857,9 @@ if (selects("ci-scope", "ci.yml")) {
     ["a rename with no old path", on([{ path: "docs/x.md", status: "renamed" }])],
     ["a rename out of src/", on([{ path: "docs/x.ts", status: "renamed", previous: "src/x.ts" }])],
     ["a rename into std/", on([{ path: "std/x.ts", status: "renamed", previous: "docs/x.ts" }])],
+    // tests/postgres/ is read by the postgres lane alone: a rename out of it
+    // into docs/ is on every other lane's allowlist at both ends.
+    ["a rename out of one lane's read set", on([{ path: "docs/x.ts", status: "renamed", previous: "tests/postgres/x.ts" }])],
     ["a change to ci.yml", on(["docs/x.md", ".github/workflows/ci.yml"])],
     ["a change to an action", on([".github/actions/ci-scope/action.yml"])],
     ["a change to package.json", on(["package.json"])],
@@ -32924,13 +32929,105 @@ if (selects("ci-scope", "ci.yml")) {
     `outputs: ${outputs.join(" ")}\nread: ${read.join(" ")}\njobs not in ci-gate's needs: ${ungated.join(" ")}`
   )
 
+  // The backtest charges a failed job to the lane whose ci.yml `name:` it
+  // matches exactly, so each lane's `names` must be its jobs' templates.
+  const yamlName = (id) => {
+    const job = ciJob(ciYmlText, id)
+    return /^ {4}name: (.*)$/m.exec(job)?.[1] ?? (job === "" ? null : id)
+  }
+  const nameDrift = ciScope.LANES.filter(
+    (l) => l.names.length !== l.jobs.length || l.jobs.some((id, i) => yamlName(id) !== l.names[i])
+  ).map((l) => `${l.name}: ${l.names.join(", ")} vs ${l.jobs.map(yamlName).join(", ")}`)
+  const asRun = (name) => name.replace(/\$\{\{.*?\}\}/g, "x86_64-linux")
+  const misMapped = [
+    ...ciScope.LANES.flatMap((l) => l.names.map((n) => [asRun(n), l.name])),
+    ["nish-cmp elision (aarch64-linux)", "elision"],
+    ["nish-cmp (aarch64-linux)", "nish_cmp"],
+    ["the NEON path agrees (aarch64-linux)", "simd"],
+    ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
+    ["test (ubuntu-latest, shard 1/8)", null],
+    ["lint", null],
+    ["the golden cases, in Nish (shard 1/3)", null],
+    ["nish-cmp", null],
+  ].filter(([display, lane]) => (ciScope.laneOf(display)?.name ?? null) !== lane)
+  check(
+    "ci-scope: every lane's names are its jobs' ci.yml name: templates, and a job's display name maps to its lane alone",
+    nameDrift.length === 0 && misMapped.length === 0,
+    `names that differ from ci.yml: ${nameDrift.join("; ") || "none"}\nmis-mapped: ${JSON.stringify(misMapped)}`
+  )
+
+  // The file list: a short page ends it; a 30th full page means the API cut
+  // it off, which runs everything.
+  const pages = (sizes) => {
+    const asked = []
+    const get = async (url) => {
+      const page = Number(new URL(url).searchParams.get("page"))
+      asked.push(page)
+      const n = sizes[page - 1] ?? 0
+      return { ok: true, json: async () => Array.from({ length: n }, (_, i) => ({ filename: `docs/${page}-${i}.md`, status: "modified" })) }
+    }
+    return ciScope.fetchFiles("o/r", "1", "t", get).then((r) => ({ ...r, asked }))
+  }
+  const [thirty, short, failed] = await Promise.all([
+    pages(Array(30).fill(100)),
+    pages([100, 100, 7]),
+    ciScope.fetchFiles("o/r", "1", "t", async () => ({ ok: false, status: 502 })).then(() => "resolved", (e) => e.message),
+  ])
+  check(
+    "ci-scope: 30 full pages of changed files is a truncated list, a short page ends it, and an HTTP error throws",
+    thirty.truncated === true &&
+      thirty.asked.length === 30 &&
+      everything(on(thirty.files.map((f) => f.path), { truncated: thirty.truncated })) &&
+      short.truncated === false &&
+      short.files.length === 207 &&
+      short.asked.join() === "1,2,3" &&
+      /502/.test(failed),
+    JSON.stringify({ thirty: [thirty.truncated, thirty.asked.length], short: [short.truncated, short.files.length], failed })
+  )
+
+  // The command line: labels it cannot parse count as `ci:full`, and the
+  // reason written to GITHUB_OUTPUT stays on one line whatever a path holds.
+  const scopeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ci-scope-"))
+  const runScope = (files, env) => {
+    const list = path.join(scopeDir, "files.txt")
+    const output = path.join(scopeDir, "output.txt")
+    fs.writeFileSync(list, files.join("\n"))
+    fs.writeFileSync(output, "")
+    const ran = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--files", list], {
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", NISH_CI_SCOPE: "", GITHUB_STEP_SUMMARY: "", ...env, GITHUB_OUTPUT: output },
+    })
+    return { ran, lines: fs.readFileSync(output, "utf8").split("\n").filter(Boolean) }
+  }
+  const badLabels = runScope(["docs/x.md"], { PR_LABELS: "[not json" })
+  const goodLabels = runScope(["docs/x.md"], { PR_LABELS: "[]" })
+  const carriage = runScope([".github/a\rb.yml"], { PR_LABELS: "[]" })
+  const laneLines = (lines) => lines.filter((l) => !l.startsWith("why="))
+  check(
+    "ci-scope: unparseable PR_LABELS runs every lane, and the why= output is one line even for a path with a carriage return",
+    badLabels.ran.status === 0 &&
+      laneLines(badLabels.lines).length === lanes.length &&
+      laneLines(badLabels.lines).every((l) => l.endsWith("=true")) &&
+      goodLabels.ran.status === 0 &&
+      laneLines(goodLabels.lines).every((l) => l.endsWith("=false")) &&
+      carriage.ran.status === 0 &&
+      carriage.lines.length === lanes.length + 1 &&
+      carriage.lines.every((l) => !l.includes("\r")) &&
+      carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
+    JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
+  )
+  fs.rmSync(scopeDir, { recursive: true, force: true })
+
+  // The replay passes with no miss and excuses exactly the flakes the data
+  // names: a new excuse is a change to this list, reviewed like a miss.
   const replay = spawnSync(process.execPath, [path.join(root, "scripts", "ci-scope.mjs"), "--backtest"], {
     encoding: "utf8",
   })
+  const excusedFlakes = [...replay.stdout.matchAll(/^ {2}excused flake (#\d+ \S+)/gm)].map((m) => m[1])
   check(
-    "ci-scope: the backtest replays at least 40 merged pull requests with no miss",
-    replay.status === 0 && /^misses: 0$/m.test(replay.stdout),
-    `${replay.stdout}${replay.stderr}`
+    "ci-scope: the backtest replays at least 40 merged pull requests with no miss, excusing only #1666's fuzz-smoke",
+    replay.status === 0 && /^misses: 0$/m.test(replay.stdout) && excusedFlakes.join() === "#1666 fuzz-smoke",
+    `excused: ${excusedFlakes.join(", ") || "none"}\n${replay.stdout}${replay.stderr}`
   )
 }
 
@@ -32990,6 +33087,128 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     /^ {4}needs: (scope|\[[^\]]*\bscope\b[^\]]*\])$/m.test(job) &&
     !/^ {4}continue-on-error:/m.test(job) &&
     [...job.matchAll(/^ {4}if: (.*)$/gm)].every((m) => m[1] === jobIf)
+
+  // Every command each lane's job runs, with files it opens: its entry
+  // script, what that imports, and the fixtures it compiles (the composite
+  // compiler-cache action counts as a command of every lane that uses it).
+  // Re-derived from each step's `run:` after #1746's review found the
+  // bootstrap lane missing the fixtures tests/nish/cli.ts compiles and the
+  // postgres lane missing tests/self/. A lane whose read set drops one of
+  // these skips the command's only run on a pull request that changes it.
+  const compilerCache = [
+    "tests/self/compiler-cache.js",
+    "tests/self/seed.js",
+    "scripts/fetch-seed.sh",
+    "scripts/build.sh",
+    "src/compile.ts",
+    "std/fs.ts",
+    "runtime/nish.d.ts",
+    "package.json",
+  ]
+  const laneCommands = {
+    bootstrap: {
+      "bash scripts/bootstrap.sh --verify": [
+        "scripts/bootstrap.sh",
+        "scripts/build.sh",
+        "tests/self/bootstrap.js",
+        "nish-capabilities.lock.json",
+        "src/compile.ts",
+        "runtime/nish.d.ts",
+      ],
+      "node scripts/check-hardening.mjs": ["scripts/check-hardening.mjs"],
+      "build/nish tests/nish/cli.ts, then build/nish-cli build/nish": [
+        "tests/nish/cli.ts",
+        "tests/cases/caps_pure.ts",
+        "tests/cases/caps_generic.ts",
+        "tests/cases/caps_generic.caps.json",
+        "tests/cases/sandbox_hello.ts",
+        "tests/link/caps_lock_growth/main.ts",
+      ],
+    },
+    nish_cmp: {
+      "node tests/nish-cmp.js": [
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+        "tests/self/seed.js",
+        "tests/cases/caps_pure.ts",
+        "tests/driver.c",
+        "CHANGELOG.md",
+      ],
+      "node tests/differential/fuzz.js --stage1 / --emit-ts": [
+        "tests/differential/fuzz.js",
+        "tests/self/seed.js",
+        "tests/pool.js",
+      ],
+    },
+    elision: {
+      "compiler-cache": compilerCache,
+      "node tests/differential/soundness.js": [
+        "tests/differential/soundness.js",
+        "tests/cases/caps_pure.ts",
+        "tests/differential/corpus/argv_words.ts",
+        "tests/driver.c",
+        "tests/nish-cmp.js",
+        "tests/pool.js",
+      ],
+    },
+    simd: {
+      "compiler-cache": compilerCache,
+      "node tests/run.js simd / float-corpus / the kernels": [
+        ...importsOf("tests/run.js"),
+        "tests/simd/sha256.c",
+        "tests/link/sha256_hw_vectors/main.ts",
+        "tests/cases/caps_pure.ts",
+      ],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+      "node bench/crc32.mjs, adler32.mjs, chacha20.mjs": [
+        "bench/crc32.mjs",
+        "bench/adler32.mjs",
+        "bench/chacha20.mjs",
+      ],
+    },
+    sha256_macos: {
+      "compiler-cache": compilerCache,
+      "clang tests/simd/sha256.c, sha256-calls.c": [
+        "tests/simd/sha256.c",
+        "tests/simd/sha256-calls.c",
+        "runtime/runtime-sha256.c",
+      ],
+      "node tests/run.js sha256_hw": [...importsOf("tests/run.js"), "tests/link/sha256_hw_vectors/main.ts"],
+      "node bench/sha256/run.mjs": ["bench/sha256/run.mjs"],
+    },
+    fuzz: {
+      "compiler-cache": compilerCache,
+      "bash scripts/fuzz.sh --smoke": ["scripts/fuzz.sh", "tests/fuzz/harness.c"],
+      "node tests/run.js runtime_sanitize": [...importsOf("tests/run.js")],
+    },
+    postgres: {
+      "compiler-cache": compilerCache,
+      "bash tests/postgres/live/tls-certs.sh": ["tests/postgres/live/tls-certs.sh"],
+      "node tests/postgres/live/run.mjs": [
+        "tests/postgres/live/run.mjs",
+        "tests/postgres/live/live.ts",
+        "tests/postgres/live/tls.ts",
+        "tests/postgres/carrier.ts",
+        "tests/postgres/serve-pool.ts",
+        "bench/techempower/db-main.ts",
+        "bench/techempower/async-db-main.ts",
+      ],
+    },
+  }
+  const commandGaps = Object.entries(laneCommands).flatMap(([lane, commands]) => [
+    ...(ciScope.LANES.some((l) => l.name === lane) ? [] : [`${lane}: not a lane`]),
+    ...Object.entries(commands).flatMap(([command, files]) => [
+      ...(files.length === 0 ? [`${lane}: ${command}: no file`] : []),
+      ...files.filter((f) => !fs.existsSync(path.join(root, f))).map((f) => `${lane}: ${command}: ${f} does not exist`),
+      ...unread(lane, files).map((f) => `${lane}: ${command}: ${f} would not turn it on`),
+    ]),
+  ])
+  const uncoveredLanes = ciScope.LANES.map((l) => l.name).filter((l) => !(l in laneCommands))
+  check(
+    "ci-scope: a change to a file any lane command opens turns that lane on, for every command of all seven lanes",
+    commandGaps.length === 0 && uncoveredLanes.length === 0,
+    `${commandGaps.join("\n") || "no gap"}\nlanes with no command listed: ${uncoveredLanes.join(", ") || "none"}`
+  )
 
   // `--delegate-fixed-point`: `bootstrap` rebuilds src/ with the seed, then
   // with itself, and compares (scripts/bootstrap.sh --verify).
