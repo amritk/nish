@@ -110,7 +110,9 @@ export const storeField = (
 // units, into the arena's reserved range, and 0 is `null`. On Linux the range
 // sits at a fixed address below 16 GiB, so the offset is the address shifted
 // (zero-based) and null needs no test; elsewhere it is relative to
-// `@nish_ref_base`, which the runtime sets once before `main`. The slot gets
+// `@nish_ref_base`, which the runtime sets once before `main`. The based IR
+// is pinned only by its text (`tests/cases/compact_darwin.ll`): Linux CI cannot
+// run a macOS binary, so no test executes it. The slot gets
 // no TBAA tag until the `ref32` node (stage 2b): untagged, it may alias
 // anything, which is conservative.
 

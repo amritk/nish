@@ -1,7 +1,7 @@
-// WP48: a compact class reached from root storage in a page module. A page
-// module runs on the wasm runtime, whose root trace reads each link as a
-// pointer, so the class keeps full-pointer links there and the descriptor is
-// the one an unmarked class gets.
+// WP48: a compact class reached from root storage in a wasm32 build (the
+// `.args` pass `--target wasm32`). The wasm runtime's root trace reads each
+// link as a pointer, so the class keeps full-pointer links there and the
+// descriptor is the one an unmarked class gets.
 
 import { Compact } from "nish:compact"
 

@@ -10484,11 +10484,15 @@ class Cell implements Compact {
   with `--emit-dts` (it runs on the wasm runtime, whose root trace reads each
   link as a pointer: `compact_root_page`), and under `NISH_ASAN`, the marker
   compiles to the IR the class has without it.
-- **The marker changes nothing under Node.** It is an interface with no
-  members, which type stripping erases from the `implements` clause, so the
-  program runs unmodified there.
-- **A compact class is refused where C or Node would read its layout**, each
-  with its own code: in a build with `--emit-header`, `--emit-napi` or
+- **The marker changes nothing under Node.** Type stripping removes the
+  `implements Compact` clause, and the `nish:compact` import resolves to the
+  frozen values `runtime/core.mjs` exports, so the program runs unmodified
+  there.
+- **A generic field instantiated as exactly a compact class is narrowed.**
+  `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
+  interface view of the field and its implementer agree on the layout.
+- **A compact class is refused where C, Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
   `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
   export whose signature holds one (NL4020, `compact_reject_export`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,

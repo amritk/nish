@@ -936,7 +936,9 @@ export class Compilation {
     checker.ctx.pageModule = buildsPageModule(this.opts)
     // WP48: a page module runs on the wasm runtime, whose root traces read
     // each link as a pointer and which reserves no range, so its links stay
-    // full pointers, as on wasm32.
+    // full pointers, as on wasm32. `NISH_ASAN` is read from the environment,
+    // so setting it switches compression off for every compile in the process,
+    // matching the uncompressed runtime ASAN builds link.
     checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
     checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
