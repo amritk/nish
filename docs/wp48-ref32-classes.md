@@ -187,9 +187,11 @@ in one, because an exact chunk holds one allocation and nothing is bumped
 into it after.
 
 Marks are still addresses, release still walks chunks, and `keep`, regions
-and `nish_cross_adopt` link chunks just as they do today. Only `nish_arena_grow`
-(where a chunk comes from) and `nish_free_until` (where it goes back) change,
-plus runtime-region.c:383's `free(head)`.
+and `nish_cross_adopt` link chunks just as they do today. What changes is
+where a chunk comes from (`nish_arena_grow`) and where it goes back
+(`nish_free_until`, and the drop in runtime-region.c's `nish_region_adopt`);
+the as-built list below gives the rest: the reservation, the five realigns,
+the RT-58 guard in `nish_array_grow_here` and the `--debug-arena` changes.
 
 An instance must be 4-aligned and is rounded to 4. Every other allocation
 must stay 8-aligned. Today every bump assumes `off` is 8-aligned and rounds
@@ -254,7 +256,7 @@ range"; the record is `docs/security/runtime.md`, "The compact-class range"):
   `nish_ref_base` stays null, and the ABI symbol is still defined.
 - The 4 KiB class floor costs memory where many regions each hold one small
   first chunk. `region_sessions_soak` (1000 live regions) holds about
-  4.5 MB of anonymous memory with the range, against about 762 KB (761,856 bytes) without it,
+  4.6 MB of anonymous memory with the range, against about 762 KB (761,856 bytes) without it,
   and prints the same output. A program with a compact class makes that class
   over and over, so its chunks are not that small. The cost grows with live
   regions, though: each region's first chunk, and each recycled async task's
@@ -279,7 +281,7 @@ does with each.
 | **wasm32** | no-op | no-op. A wasm32 pointer is already 4 bytes, so a compact class compiles to exactly today's IR there: no range, no decode. Found on the way: `computeLayout` (`src/structs.ts:171`) gives a class's pointer field 8 bytes on wasm32 where LLVM's `p:32:32` lays out 4 (only a `declare class` is special-cased), so `info.size` over-allocates on wasm32 today. Stage 4 fixes that separately. |
 | **Debug info** | a member gdb cannot follow | the same, but only for compact classes: the member is a `DW_TAG_base_type` `u32` named for what it is (`ref32 TNode`), and a debugger pretty-printer (gdb Python, an lldb formatter) in `tools/` decodes it. Decoded locals are ordinary pointers, so stepping through code that holds them shows them as today. `src/debug.ts:440-468`. |
 | **Pointer hashing** | must hash the decoded pointer | a `Map` key or a `Set` element is never a compressed field (§3.2), so every `ptrtoint` in `src/emit-map.ts` and `src/emit-parallel.ts` already sees a full pointer. Nothing to change. A test pins a compact class as a `Map` key. |
-| **Size limit** | 32 GiB, whole program | 15 GiB of small-chunk arena, only in programs that opt in. |
+| **Size limit** | 32 GiB, whole program | 15 GiB of arena for chunks of 2 MiB or less, only in programs the compiler gives a compact class (§7, decision 2). |
 | **AddressSanitizer** | — | the ASAN runtime (`-DNISH_ASAN`) mallocs every block, which a range cannot hold. Compression is a layout change with the same behaviour, so the ASAN build compiles compact classes uncompressed. The differential ASAN run tests the program's behaviour, not its layout. |
 | **Persistent roots (WP55)** | — | WP55's root slots exist on wasm32 only, where nothing is compressed. On a native target a root slot is a full pointer, not a class field. |
 | **JSON, `structuredClone`, copies** | — | the JSON encoders and decoders go through `loadField`/`storeField`. A whole-struct copy (`emitStructCopy`, `src/emit-arrays.ts:1050`'s record memcpy) copies the encoded bytes, which stay valid because the offset is absolute within the range, not relative to the object. |
@@ -382,8 +384,9 @@ allocation and release, and the decode is lost in the band.
 
 - **The range's cost is inside the band.** `ptr-range` is within the band of
   `ptr` at every size, which bounds its cost at the band, not at zero; §5.4's
-  runs of the stage-1 runtime put it at −2.8% and +1.0% on `sibling.ts` and
-  +2.5% on `tree.ts`. Step one of §4.4 costs nothing this run can tell apart
+  `sibling.ts` runs, of the runtime before #1697 merged in (39064a03), put it at
+  −2.8% and +1.0%, and the `tree.ts` run at this stage's head, the gate
+  evidence for the runtime as merged, at +2.5%. Step one of §4.4 costs nothing this run can tell apart
   from noise.
 - **Memory is the win, and it is the whole of the arithmetic.** Sibling's node
   drops from 32 to 20 bytes: 0.63x RSS. `tree.ts`'s node drops from 24 to
@@ -413,20 +416,25 @@ allocation and `Wide` can refuse it.
 
 The runtime of §3.3 as built, not the prototype's patch:
 [`bench/wp48-refs/range.mjs`](../bench/wp48-refs/range.mjs) compiles
-`sibling.ts` once with the 0.41.0 seed and links that one module three ways at
+`sibling.ts` once with the seed in `build/seed` (nish 0.41.0 for every run
+below; main has since released 0.42.0) and links that one module three ways at
 `--profile speed`: `ptr` on the default runtime, `ptr-copy` a copy of it, and
 `ptr-range` with `scripts/build.sh --arena-range`. All three print the same
 checksum. The variants run shuffled in every round, each in a fresh process
 under `bench/rss.c`, on one virtual 4-core machine, 2026-11-17. These
-`sibling.ts` runs predate the merge of the in-place array growth (#1697);
-`bench/goose/tree.ts`, below, was run after it.
+`sibling.ts` runs are of the pre-merge head's runtime (39064a03, unchanged
+since 79493153, which recorded them), before the in-place
+array growth (#1697) and RT-58's guard; `bench/goose/tree.ts`, below, was run
+after them, and it is the gate evidence at this stage's head.
 
 The protocol was fixed before the run: 21 rounds at both sizes; "wall" is
 build + visit + climb, the program's own timers, not the process's lifetime;
 a figure is the median over the rounds; the band is the widest per-round gap
 between `ptr` and `ptr-copy`, the same binary, over all 21 rounds; the verdict
-is whether `ptr-range`'s median wall lies within that band of `ptr`'s. The
-command, from the repository root, at this stage's head:
+is whether `ptr-range`'s median wall lies within that band of `ptr`'s. In the tables,
+"wall vs ptr" is the median of a variant's per-round totals over `ptr`'s; each
+component column is a median of its own, so the components need not sum to
+it. The command, from the repository root, at the pre-merge head:
 
 ```sh
 NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --rounds 21 --sizes 400000,4000000
@@ -461,7 +469,9 @@ cost at no more than that band, not at zero. These two runs predate the
 median band `range.mjs` now prints beside the widest, and their per-round
 gaps were not kept, so they have no median-band verdict; the `tree.ts` run
 below has both. An earlier run with a median
-band and unequal rounds is superseded by this one. That is stage 1's gate.
+band and unequal rounds is superseded by this one. That was stage 1's gate before the merge; at this stage's head the gate is
+the `tree.ts` run: +2.5%, inside its widest band (16.8%) and its median band
+(3.5%).
 
 `bench/goose/tree.ts`, after #1697 merged and with RT-58's guard, at the
 stage's head, under the same protocol: 21 rounds at depth 24 (33,554,431
