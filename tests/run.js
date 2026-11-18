@@ -32760,6 +32760,32 @@ if (!only || "net_ring".includes(only)) {
         return sent !== null && got !== null && sent[1] === got[1]
       }
     )
+    {
+      // NURING-39: netShutdown queues a SHUTDOWN behind the slot's sends, so
+      // Http1Server's refusal lingers rather than closing with the client's
+      // bytes unread. Its client decides: exit 0 when it read the whole 400
+      // and then the end of the stream with no reset, 2 when rings are
+      // refused. Before the slot path the client got ECONNRESET.
+      const name =
+        "net_ring: Http1Server's lingering close on a ring listener sends the whole refusal and then the end of the stream, not a reset (NURING-39)"
+      const b = build("net_ring_linger", "linger.ts")
+      const r =
+        b.exe === null
+          ? null
+          : spawnSync(process.execPath, [path.join(linkDir, "net_ring_linger", "client.mjs"), b.exe], {
+              encoding: "utf8",
+              timeout: 60000,
+            })
+      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+        skip(`${name}: this kernel refuses io_uring`)
+      } else {
+        check(
+          name,
+          r !== null && r.status === 0,
+          r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+        )
+      }
+    }
     ring(
       "net_ring: a slot whose peer reset it answers netWrite with an errno",
       "net_ring_reset",

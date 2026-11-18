@@ -204,6 +204,7 @@ void nish_uring_destroy(struct nish_uring_set *s);
 #define UR_OP_CLOSE 19
 #define UR_OP_SEND 26
 #define UR_OP_RECV 27
+#define UR_OP_SHUTDOWN 34
 #define UR_RECV_MULTISHOT (1u << 1)
 #define UR_CANCEL_ALL (1u << 0)
 #define UR_CANCEL_FD (1u << 1)
@@ -332,12 +333,14 @@ enum { UR_ACCEPT = 1, UR_RECV = 2, UR_SEND = 3, UR_CLOSE = 4, UR_CANCEL = 5 };
 /* One send's bytes, owned by the set until the kernel has taken all of them.
  * `next` queues it behind the slot's earlier sends; `prev_all`/`next_all`
  * keep every record on one list so `nish_uring_destroy` can free those the
- * kernel still held. */
+ * kernel still held. `how` is -1 for bytes, or a shutdown's 0 to 2: that
+ * record carries none and goes to the kernel as a SHUTDOWN once the sends
+ * queued before it are done, so the peer reads them before the FIN. */
 struct ur_send {
   struct ur_send *next, *prev_all, *next_all;
   uint32_t slot, gen;
   uint32_t off, len;
-  int in_flight;
+  int in_flight, how;
   uint8_t data[];
 };
 
@@ -439,7 +442,7 @@ static int32_t ur_ops_ok(int fd) {
   memset(&pr, 0, sizeof pr);
   int e = ur_register(fd, UR_REGISTER_PROBE, &pr, 64);
   if (e < 0) return e == -EINVAL ? -EOPNOTSUPP : e;
-  static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_ASYNC_CANCEL, UR_OP_CLOSE, UR_OP_SEND, UR_OP_RECV};
+  static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_ASYNC_CANCEL, UR_OP_CLOSE, UR_OP_SEND, UR_OP_RECV, UR_OP_SHUTDOWN};
   for (size_t i = 0; i < sizeof ops; i++) {
     uint8_t op = ops[i];
     if (op > pr.last_op || op >= pr.ops_len || !(pr.ops[op].flags & UR_OP_SUPPORTED)) return -EOPNOTSUPP;
@@ -625,10 +628,12 @@ static void ur_free_ring(struct ur_ring *r) {
 }
 
 /* Restrict a ring made with R_DISABLED to what the layer submits (WP63 §6.2):
- * the five opcodes and NOP, the three flags the layer sets, and no register
- * opcode at all once it is enabled. */
+ * the six opcodes and NOP, the three flags the layer sets, and no register
+ * opcode at all once it is enabled. SHUTDOWN only ever names a fixed file of
+ * the ring's own table, as SEND does (NURING-39). */
 static int ur_restrict(int fd) {
-  static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_RECV, UR_OP_SEND, UR_OP_CLOSE, UR_OP_ASYNC_CANCEL, UR_OP_NOP};
+  static const uint8_t ops[] = {UR_OP_ACCEPT, UR_OP_RECV,  UR_OP_SEND,    UR_OP_CLOSE,
+                                UR_OP_ASYNC_CANCEL, UR_OP_NOP, UR_OP_SHUTDOWN};
   struct ur_restriction res[sizeof ops + 1];
   memset(res, 0, sizeof res);
   for (size_t i = 0; i < sizeof ops; i++) {
@@ -961,7 +966,8 @@ static void ur_top_up(struct nish_uring_set *s) {
   if (rings > s->stats.max_accepting_rings) s->stats.max_accepting_rings = rings;
 }
 
-/* Submit the slot's first queued send, from where the kernel left off. */
+/* Submit the slot's first queued send, from where the kernel left off, or
+ * its shutdown. */
 static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set *s) {
   struct ur_send *q = r->sq_first[slot];
   if (!q || q->in_flight) return;
@@ -970,12 +976,17 @@ static void ur_send_head(struct ur_ring *r, uint32_t slot, struct nish_uring_set
     s->stalled_sends++;
     return;
   }
-  e->opcode = UR_OP_SEND;
   e->fd = (int32_t)slot;
   e->flags = UR_SQE_FIXED_FILE;
-  e->addr = (uint64_t)(uintptr_t)(q->data + q->off);
-  e->len = q->len - q->off;
-  e->op_flags = MSG_NOSIGNAL;
+  if (q->how >= 0) {
+    e->opcode = UR_OP_SHUTDOWN;
+    e->len = (uint32_t)q->how;
+  } else {
+    e->opcode = UR_OP_SEND;
+    e->addr = (uint64_t)(uintptr_t)(q->data + q->off);
+    e->len = q->len - q->off;
+    e->op_flags = MSG_NOSIGNAL;
+  }
   e->user_data = (uint64_t)(uintptr_t)q | UR_SEND;
   q->in_flight = 1;
 }
@@ -1032,6 +1043,11 @@ static int ur_complete(struct nish_uring_set *s, int ri, const struct ur_cqe *c,
     if ((r->st[slot] & ST_OPEN) == 0 || ST_GEN(r->st[slot]) != q->gen || r->sq_first[slot] != q) {
       ur_unlink_all(s, q);
       return 0;
+    }
+    if (q->how >= 0) {
+      /* A shutdown's answer is not a send's failure: -ENOTCONN from a peer
+       * already gone says nothing a recv will not, so it is not reported. */
+      res = 0;
     }
     if (res > 0) r->qbytes[slot] -= (uint32_t)res < r->qbytes[slot] ? (uint32_t)res : r->qbytes[slot];
     if (res > 0 && q->off + (uint32_t)res < q->len) {
@@ -1388,6 +1404,23 @@ static struct ur_ring *ur_open_slot(struct nish_uring_set *s, int32_t ring, int3
   return (r->st[slot] & ST_OPEN) ? r : NULL;
 }
 
+/* Put `q` on the set's list of records and behind the slot's queue, and
+ * submit it if it is now the head. */
+static void ur_enqueue(struct nish_uring_set *s, struct ur_ring *r, uint32_t slot, struct ur_send *q) {
+  q->next = NULL;
+  q->prev_all = NULL;
+  q->next_all = s->all;
+  if (s->all) s->all->prev_all = q;
+  s->all = q;
+  if (r->sq_last[slot]) {
+    r->sq_last[slot]->next = q;
+  } else {
+    r->sq_first[slot] = q;
+  }
+  r->sq_last[slot] = q;
+  ur_send_head(r, slot, s);
+}
+
 /* Queue `n` bytes for (ring, slot). They are copied, so the caller's buffer
  * is free on return; a failure comes back later as a SEND_FAILED event. */
 int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, const uint8_t *p, int32_t n) {
@@ -1398,25 +1431,34 @@ int32_t nish_uring_send(struct nish_uring_set *s, int32_t ring, int32_t slot, co
   struct ur_send *q = malloc(sizeof *q + (size_t)n);
   if (!q) return -ENOMEM;
   memcpy(q->data, p, (size_t)n);
-  q->next = NULL;
-  q->prev_all = NULL;
-  q->next_all = s->all;
-  if (s->all) s->all->prev_all = q;
-  s->all = q;
   q->slot = (uint32_t)slot;
   q->gen = ST_GEN(r->st[slot]);
   q->off = 0;
   q->len = (uint32_t)n;
   q->in_flight = 0;
+  q->how = -1;
   r->qbytes[slot] += (uint32_t)n;
-  if (r->sq_last[slot]) {
-    r->sq_last[slot]->next = q;
-  } else {
-    r->sq_first[slot] = q;
-  }
-  r->sq_last[slot] = q;
-  ur_send_head(r, (uint32_t)slot, s);
+  ur_enqueue(s, r, (uint32_t)slot, q);
   return n;
+}
+
+/* Queue a shutdown of (ring, slot)'s `how` side (0 read, 1 write, 2 both)
+ * behind the bytes already queued for it, so they reach the peer first. Its
+ * answer is not reported: a shutdown that fails, as on a peer already gone,
+ * leaves a connection whose next read or write says so. */
+int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t how) {
+  struct ur_ring *r = ur_open_slot(s, ring, slot);
+  if (!r) return -EBADF;
+  if ((uint32_t)how > 2) return -EINVAL;
+  struct ur_send *q = malloc(sizeof *q);
+  if (!q) return -ENOMEM;
+  q->slot = (uint32_t)slot;
+  q->gen = ST_GEN(r->st[slot]);
+  q->off = q->len = 0;
+  q->in_flight = 0;
+  q->how = how;
+  ur_enqueue(s, r, (uint32_t)slot, q);
+  return 0;
 }
 
 /* Cancel the slot's recv, close the slot, and move its generation on, so
@@ -1564,6 +1606,13 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   (void)s;
   (void)ring;
   (void)slot;
+  return -38;
+}
+int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t how) {
+  (void)s;
+  (void)ring;
+  (void)slot;
+  (void)how;
   return -38;
 }
 int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot) {
