@@ -1,6 +1,6 @@
 import { base } from "./common";
 import { mainConstant } from "./main";
 
-export function rightValue(): number {
+export const rightValue = (): number => {
   return base() * 3 + mainConstant();
-}
+};

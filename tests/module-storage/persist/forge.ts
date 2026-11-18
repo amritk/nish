@@ -20,7 +20,7 @@ const cells = new Array<Cell | null>(1)
 const trash = new Array<Cell | null>(1)
 
 /** The cell the page looks for, holding four names and a second cell. */
-export function init(): void {
+export const init = (): void => {
   // Garbage first, so the cell's address is not also the arena's base, a
   // word the page's search for the root slot would find too.
   const pad = new Cell(0)
@@ -31,14 +31,14 @@ export function init(): void {
   }
   c.next = new Cell(1592615544)
   cells[0] = c
-}
+};
 
 /**
  * Garbage past the keep's 64 KiB of slack, so the keep after this call
  * compacts. It passes through storage first: a call whose allocations reach
  * no root gives its arena back on return and leaves the keep nothing to do.
  */
-export function churn(): i32 {
+export const churn = (): i32 => {
   const junk = new Cell(0)
   for (let i = 0; i < 40000; i++) {
     junk.names.push("x")
@@ -46,13 +46,13 @@ export function churn(): i32 {
   trash[0] = junk
   trash[0] = null
   return junk.names.length
-}
+};
 
 /** How many names the cell holds, and the first's length: 4 and 2 untouched. */
-export function names(): i32 {
+export const names = (): i32 => {
   const c = cells[0]
   if (c === null) {
     return -1
   }
   return c.names.length * 10 + c.names[0].length
-}
+};

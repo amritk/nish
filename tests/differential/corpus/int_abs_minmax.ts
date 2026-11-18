@@ -1,9 +1,9 @@
 // Math.abs wraps at INT_MIN (llvm.abs with poison off); min/max are signed compares.
-function clamp(x: number, lo: number, hi: number): number {
+const clamp = (x: number, lo: number, hi: number): number => {
   return Math.min(Math.max(x, lo), hi);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const min = -2147483647 - 1;
   console.log(Math.abs(min));
   console.log(Math.abs(min + 1));
@@ -30,4 +30,4 @@ export function main(): number {
   console.log(worst);
   console.log(Math.abs(best - worst));
   return 0;
-}
+};

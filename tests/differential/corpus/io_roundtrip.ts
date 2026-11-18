@@ -1,13 +1,13 @@
 // writeFileSync truncates, appendFileSync appends, readFileSync reads the whole file.
-function lines(n: number): string {
+const lines = (n: number): string => {
   let s = "";
   for (let i = 0; i < n; i++) {
     s = `${s}line ${i}\n`;
   }
   return s;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const path = "build/test/differential/io_roundtrip.txt";
   writeFileSync(path, "hello\n");
   appendFileSync(path, "wörld\n");
@@ -30,4 +30,4 @@ export function main(): number {
   console.log(utf.length);
   console.log(utf + "!");
   return 0;
-}
+};

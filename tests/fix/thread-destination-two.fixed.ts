@@ -2,7 +2,7 @@ import { scope } from "nish/threads"
 
 const square = (n: i32): i32 => n * n
 
-export function main(): i32 {
+export const main = (): i32 => {
   {
     const answer = new Array<i32>(1)
     const answer2 = new Array<i32>(1)
@@ -12,4 +12,4 @@ export function main(): i32 {
   }
   console.log("joined")
   return 0
-}
+};

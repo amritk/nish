@@ -3,28 +3,28 @@
 // The `double*` functions write through it; `sumF64` only reads.
 import type { f32, f64, i32, u8, u16, u32 } from "nish"
 
-export function doubleU8(xs: u8[], at: u32, n: u32): void {
+export const doubleU8 = (xs: u8[], at: u32, n: u32): void => {
   for (let i = at; i < at + n; i++) xs[i] *= 2
-}
+};
 
-export function doubleU16(xs: Uint16Array, at: u32, n: u32): void {
+export const doubleU16 = (xs: Uint16Array, at: u32, n: u32): void => {
   for (let i = at; i < at + n; i++) xs[i] *= 2
-}
+};
 
-export function doubleU32(xs: u32[], at: u32, n: u32): void {
+export const doubleU32 = (xs: u32[], at: u32, n: u32): void => {
   for (let i = at; i < at + n; i++) xs[i] *= 2
-}
+};
 
-export function doubleI32(xs: i32[], at: u32, n: u32): void {
+export const doubleI32 = (xs: i32[], at: u32, n: u32): void => {
   for (let i = at; i < at + n; i++) xs[i] *= 2
-}
+};
 
-export function doubleF32(xs: Float32Array, at: u32, n: u32): void {
+export const doubleF32 = (xs: Float32Array, at: u32, n: u32): void => {
   for (let i = at; i < at + n; i++) xs[i] *= 2
-}
+};
 
-export function sumF64(xs: readonly f64[], at: u32, n: u32): f64 {
+export const sumF64 = (xs: readonly f64[], at: u32, n: u32): f64 => {
   let s = 0
   for (let i = at; i < at + n; i++) s += xs[i]
   return s
-}
+};

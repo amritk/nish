@@ -3,11 +3,11 @@
 // every argument as the page's own JS string.
 import type { i32 } from "nish"
 
-export function say(s: string): void {
+export const say = (s: string): void => {
   console.log(`say ${JSON.stringify(s)}`)
-}
+};
 
-export function measure(s: string, tag: i32): i32 {
+export const measure = (s: string, tag: i32): i32 => {
   console.log(`measure ${tag} ${JSON.stringify(s)}`)
   return s.length
-}
+};

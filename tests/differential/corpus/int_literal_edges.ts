@@ -1,7 +1,7 @@
 // Literal edge values and the expressions that reach past them.
 import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
-export function main(): number {
+export const main = (): number => {
   console.log(2147483647);
   console.log(-2147483647);
   console.log(-2147483647 - 1);
@@ -25,4 +25,4 @@ export function main(): number {
   console.log(2 * 3 + 4 * 5 - 6 / 2 % 4);
   console.log((2 + 3) * (4 - 5) / (6 % 4));
   return 0;
-}
+};

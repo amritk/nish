@@ -16,7 +16,7 @@ async function settle(ms: number): Promise<number> {
   return tally.count
 }
 
-export function bump(by: i32): i32 {
+export const bump = (by: i32): i32 => {
   const step = (n: number): number => tally.add(n)
   if (typeof document !== "undefined") {
     const label = document.querySelector<HTMLElement>("#tally")
@@ -26,4 +26,4 @@ export function bump(by: i32): i32 {
   }
   void settle(0).then((n) => n)
   return step(by)
-}
+};

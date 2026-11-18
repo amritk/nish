@@ -1,13 +1,13 @@
 // Signed division truncates toward zero; the remainder takes the dividend's sign.
-function div(a: number, b: number): number {
+const div = (a: number, b: number): number => {
   return a / b;
-}
+};
 
-function mod(a: number, b: number): number {
+const mod = (a: number, b: number): number => {
   return a % b;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const min = -2147483647 - 1;
   console.log(div(7, 2));
   console.log(div(-7, 2));
@@ -43,4 +43,4 @@ export function main(): number {
     }
   }
   return 0;
-}
+};
