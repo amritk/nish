@@ -211,11 +211,11 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
-  1. The `simd` group's six (the AVX2, AES-NI, SHA-NI, ChaCha20 and CRC-32
-  paths, the lowered AES kernels) run in shard 2, where
+  1. The `simd` group's seven (the AVX2, AES-NI, SHA-NI, ChaCha20, CRC-32
+  and SSSE3 Adler-32 paths, the lowered AES kernels) run in shard 2, where
   `DEALT_SECTIONS.simd.pinned` keeps that group, 173 s with the seven steps
-  there were then; a check in `tests/run.js` holds their `if:` to it. The
-  seventh, SHA-256 throughput, printed figures and asserted only that the
+  there were then; a check in `tests/run.js` holds their `if:` to it. One
+  of those seven, SHA-256 throughput, printed figures and asserted only that the
   driver printed something, which the `simd` section's `sha256-calls` check
   already holds, so it was removed; `simd-arm64` and `sha256-macos` keep
   their platforms' figures.

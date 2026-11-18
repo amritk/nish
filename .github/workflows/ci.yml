@@ -1,6 +1,6 @@
 # Nish continuous integration.
 #
-# test: typecheck + the full golden/native test suite on Linux with LLVM 18
+# test: the full golden/native test suite on Linux with LLVM 18
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), every case compiled by a
 #       stage1 the last released nish builds, then a binary size table in the
 #       job summary, and the IR cookbook staleness check. The matrix is
@@ -38,8 +38,10 @@
 #       Disabled (`if: false`).
 # sha256-macos: runtime/runtime-sha256.c's Apple detection, on its ARMv8
 #       kernel, natively on a macOS runner, under both NISH_SHA256 pins.
-# lint: package-lock.json against package.json with no registry involved,
-#       `npm run lint` when package.json defines it (no-op otherwise),
+# lint: the typecheck (`npm run check`, once per push rather than once per
+#       shard), package-lock.json against package.json with no registry
+#       involved, `npm run lint` when package.json defines it (no-op
+#       otherwise), `npm run lint:dead`, shellcheck over the shell scripts,
 #       docs/check-links.mjs over every Markdown file, then
 #       `scripts/gen-reference.mjs --check` (docs/reference/ is not stale).
 #
