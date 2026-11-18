@@ -10450,7 +10450,7 @@ function and works wherever the program's IR does. Key material belongs in a
 
 ### Compact classes
 
-`class R implements Compact` (`import type { Compact } from "nish:compact"`)
+`class R implements Compact` (`import { Compact } from "nish:compact"`)
 stores every field typed exactly `R` or `R | null` — a *link*, in `R` itself
 or in any other class — as a 32-bit offset into the one address range the
 arena reserves, where a plain class stores a 64-bit pointer. A list or tree
@@ -10458,7 +10458,7 @@ node of an `i32` and two links is 12 bytes instead of 24, so twice as many fit
 in a cache line.
 
 ```ts
-import type { Compact } from "nish:compact"
+import { Compact } from "nish:compact"
 
 class Cell implements Compact {
   value: i32
@@ -10481,9 +10481,9 @@ class Cell implements Compact {
   in the range and never on the stack.
 - **Where a pointer is already 4 bytes, nothing moves.** On `wasm32-wasi` and
   under `NISH_ASAN` the marker compiles to the IR the class has without it.
-- **The marker is erased under Node.** It is an interface with no members,
-  and `import type` is gone after type stripping, so the program runs
-  unmodified there.
+- **The marker changes nothing under Node.** It is an interface with no
+  members, which type stripping erases from the `implements` clause, so the
+  program runs unmodified there.
 - **A compact class is refused where C or Node would read its layout**, each
   with its own code: in a build with `--emit-header`, `--emit-napi` or
   `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an

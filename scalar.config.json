@@ -232,6 +232,16 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/language/regions" }]
                 }
               },
+              "/compact-classes": {
+                "type": "page",
+                "title": "Compact classes",
+                "filepath": "docs/guide/language/compact-classes.md",
+                "head": {
+                  "title": "Compact classes · Nish",
+                  "meta": [{ "property": "og:title", "content": "Compact classes" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/language/compact-classes" }]
+                }
+              },
               "/simd": {
                 "type": "page",
                 "title": "Vectors (SIMD)",

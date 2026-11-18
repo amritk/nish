@@ -1,0 +1,1 @@
+main.ts:4:32: error: `Clock` is a `declare class`, which C lays out with a pointer-wide slot per link

@@ -1247,10 +1247,15 @@ const runCase = async (name) => {
     // runtime is now a prebuilt object, the macro is also what picks *which*
     // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : []
+    // WP48: a module with a compact class references `@nish_arena_range_abi`,
+    // which only the range runtime defines (the CLI's `--arena-range`), so the
+    // link fails against the default objects rather than storing offsets from
+    // a range nothing reserved.
+    const range = fs.readFileSync(outLl, "utf8").includes("@nish_arena_range_abi") ? ["-DNISH_ARENA_RANGE=1"] : []
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const line = linkLine(outLl, {
       driver: hasEntry ? null : driver,
-      defines: threads,
+      defines: [...range, ...threads],
       libm: true,
     })
     if (line.error !== null) {
