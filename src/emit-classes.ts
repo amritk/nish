@@ -158,19 +158,22 @@ const loadRefBase = (emitter: Emitter): string => {
  * attribute stays true), else `info.size` bytes bumped from the arena.
  */
 const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
-  // A compact instance must be in the range for its links to reach it (WP48).
-  if (emitter.isStackSite(site) && !compactInstance(emitter, info)) {
+  // A compact class is never a stack site (`compactType` in escape.ts): a
+  // link reaches only the arena's range.
+  if (emitter.isStackSite(site)) {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8)
   }
   return arenaObject(emitter, info)
 }
 
 /**
- * Whether an instance of `info` is a compact one (WP48): 4-aligned, rounded
- * to 4 by `@nish_alloc_ref`, and always in the arena's range.
+ * Whether an instance of `info` comes from `@nish_alloc_ref` (WP48): a compact
+ * class of alignment 4 in a build that compresses, rounded to 4 rather than 8.
+ * One with an 8-aligned field keeps `@nish_alloc_struct`, whose blocks are
+ * 8-aligned; both are in the arena's range, which is all a link needs.
  */
-export const compactInstance = (emitter: Emitter, info: StructInfo): boolean =>
-  info.compact && emitter.opts.compactLinks
+const compactInstance = (emitter: Emitter, info: StructInfo): boolean =>
+  info.compact && info.align < 8 && emitter.opts.compactLinks
 
 /** `info.size` bytes from the arena, as a `%struct.X*`. */
 const arenaObject = (emitter: Emitter, info: StructInfo): string => {
