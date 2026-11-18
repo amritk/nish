@@ -1,7 +1,7 @@
 // The shape of create-vite's template-vanilla-ts/src/counter.ts: the page
 // alone calls `setupCounter`, whose element no wasm import carries, so the
 // build, which imports `first` alone, never reads it.
-export const setupCounter = (element: HTMLElement): void => {
+export function setupCounter(element: HTMLElement): void {
   let counter = 0
   const setCounter = (count: number) => {
     counter = count
@@ -11,6 +11,6 @@ export const setupCounter = (element: HTMLElement): void => {
   setCounter(0)
 }
 
-export const first = (x: i32): i32 => {
+export function first(x: i32): i32 {
   return x + 1
 }
