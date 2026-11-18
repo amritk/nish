@@ -123,6 +123,13 @@ function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
 function isLinkType(ctx: CheckContext, type: i32): boolean -> @isLinkType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
+  calls: compactClassOf
+  pointer ctx: size=344 writesThrough=false captured=false passedTo=compactClassOf#0
+  stackSites=0 stackLocals=0
+  callee +0:24 compactClassOf -> @compactClassOf
+function compactClassOf(ctx: CheckContext, type: i32): StructInfo | null -> @compactClassOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
   pointer ctx: size=344 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -526,34 +533,30 @@ function layoutClass(program: CheckedProgram, table: TypeTable, type: i32): Stru
 function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectLayoutField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error CheckedProgram.struct FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull TypeTable.typeName collectStructMembers compactLayoutFieldMessage isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat resolveType
-  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 collectStructMembers#0 CheckContext.error#0 CheckContext.error#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.stripNull TypeTable.typeName collectStructMembers compactClassOf compactLayoutFieldMessage isLayoutScalar layoutClass nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat resolveType
+  pointer ctx: size=344 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 collectStructMembers#0 compactClassOf#0 CheckContext.error#0 CheckContext.error#0
   pointer owner: size=176 writesThrough=false captured=false passedTo=StructInfo.hasMember#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -64:9 name: string (const)
-  local -63:9 what: string (const)
-  callee -62:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -61:5 CheckContext.error -> @CheckContext.error
-  callee -57:5 CheckContext.error -> @CheckContext.error
-  callee -50:5 CheckContext.error -> @CheckContext.error
-  local -44:9 annotation: Node (const)
-  local -43:9 before: i32 (const)
-  local -42:9 type: i32 (const)
-  callee -42:16 resolveType -> @resolveType
-  callee -37:5 CheckContext.error -> @CheckContext.error
-  local -29:9 nested: StructInfo | null (const)
-  callee -29:18 layoutClass -> @layoutClass
-  callee -26:7 CheckContext.error -> @CheckContext.error
-  callee -20:5 collectStructMembers -> @collectStructMembers
-  callee -19:15 isLayoutScalar -> @isLayoutScalar
-  callee -19:39 TypeTable.stripNull -> @TypeTable.stripNull
-  local -18:11 inner: i32 (const)
-  callee -18:19 TypeTable.stripNull -> @TypeTable.stripNull
-  local -17:11 target: StructInfo | null (const)
-  callee -17:39 TypeTable.isStruct -> @TypeTable.isStruct
-  callee -16:9 CheckedProgram.struct -> @CheckedProgram.struct
-  callee -16:28 TypeTable.nameOf -> @TypeTable.nameOf
+  local -61:9 name: string (const)
+  local -60:9 what: string (const)
+  callee -59:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -58:5 CheckContext.error -> @CheckContext.error
+  callee -54:5 CheckContext.error -> @CheckContext.error
+  callee -47:5 CheckContext.error -> @CheckContext.error
+  local -41:9 annotation: Node (const)
+  local -40:9 before: i32 (const)
+  local -39:9 type: i32 (const)
+  callee -39:16 resolveType -> @resolveType
+  callee -34:5 CheckContext.error -> @CheckContext.error
+  local -26:9 nested: StructInfo | null (const)
+  callee -26:18 layoutClass -> @layoutClass
+  callee -23:7 CheckContext.error -> @CheckContext.error
+  callee -17:5 collectStructMembers -> @collectStructMembers
+  callee -16:15 isLayoutScalar -> @isLayoutScalar
+  callee -16:39 TypeTable.stripNull -> @TypeTable.stripNull
+  local -15:11 target: StructInfo | null (const)
+  callee -15:20 compactClassOf -> @compactClassOf
   callee -13:7 CheckContext.error -> @CheckContext.error
   callee -13:35 compactLayoutFieldMessage -> @compactLayoutFieldMessage
   callee -10:5 CheckContext.error -> @CheckContext.error
