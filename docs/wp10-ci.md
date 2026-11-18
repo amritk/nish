@@ -39,9 +39,9 @@ them for review.
 | `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
-| `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
-| `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
-| `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp` |
+| `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
+| `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs and `--emit-ts` holds them to the TypeScript round trip. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
+| `nish-cmp elision (<asset>)` | the row's `runner` | `tests/differential/soundness.js`: the same candidate, linked by the same seed, builds the corpus and 600 generated programs with and without every proof-backed elision, and both must print and exit alike (the generated ones under ASan too). It ran after the byte compare in `nish-cmp` until that job was among the last to finish (330 s of compare and 221 s of elision); beside it, each is about half. Same rows and gating as `nish-cmp`. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
 | `runner (shard <i>/3)` | Ubuntu, LLVM 18 | **only on the release**: on the Release PR (`release/next`) and on the `v*` tag, where `release.yml`'s `ci` job calls this workflow and `release` needs it. It took about 36 runner-minutes a push ([run 44224030613](https://github.com/amritk/nish/actions/runs/44224030613)) for assertions the `test` job makes too; on a push the harness itself is held by the `nishRunner` section's `pop` run. It builds the compiler from the seed and runs a third of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, one process per core (`build/nish-runner --shard <i>/3`, whose `--jobs` defaults to the core count up to 8: four on a hosted runner), linking each `tests/link` program under the profile `tests/run.js` gives it (`tests/speed-link.txt`). A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here: on the Release PR's run, before the tag is cut, once that run is approved (`release-pr.yml` pushes with `GITHUB_TOKEN` unless a `RELEASE_PR_TOKEN` secret is set, so the run waits as `action_required`), and otherwise first at the tag |
 | `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3 --delegate-ir-checks` ([shards](#shards-and-time-limits)), which links and runs each program and delegates the checks of its compile (goldens, `llvm-as`, `opt`, declares, `--emit-panics`, rejections) to `test`, which makes them on Linux. Each run's summary line and every skip, with its reason, go to the job summary |
 | `scope` | Ubuntu | `node scripts/ci-scope.mjs`: decides which [scoped lanes](#scoped-lanes) this run needs and writes one `<lane>=true\|false` output per lane |
@@ -84,8 +84,9 @@ corpus is still replayed by the suite, since `fuzz.sh` accepts one with only
 regressions, and the `fuzz.sh links the runtime units` check always runs. A
 check fails if `test` asks for the delegation while `fuzz-smoke` stops running
 either command, or while the `fuzz` lane would skip a pull request that changes
-`src/`, `std/`, `runtime/`, `tests/fuzz/`, `scripts/fuzz.sh`, `tests/run.js` or
-a module it imports. Another check holds the `runtime_sanitize` step to
+`src/`, `std/`, `runtime/`, `scripts/fuzz.sh` or any file under `tests/` but
+`tests/ci-scope/` (`runtime_sanitize` compiles `tests/runtime/range-test.c`, a
+file the hand-picked list this replaced missed). Another check holds the `runtime_sanitize` step to
 `set -o pipefail`, a non-zero `passed, 0 failed` line and no `SKIP` line, with
 no `|| true` or `continue-on-error` (#1724).
 
@@ -108,7 +109,7 @@ seconds, whatever runner its rows would otherwise take.
 | `nish_cmp` | `nish-cmp` | the compiler (`src/`, `std/`, `runtime/`, `scripts/`, `bin/`, `nish-capabilities.lock.json`) or the corpus (`tests/cases`, `examples`, `docs/cookbook`, `bench`, `tests/parser`, `tests/differential`, `tests/link`, `tests/self`, `tests/nish-cmp.js`, `tests/pool.js`, `tests/driver.c`, `CHANGELOG.md`, `changelog/`) |
 | `elision` | `nish-cmp-elision` | the same as `nish_cmp` |
 | `bootstrap` | `bootstrap` | the compiler, `tests/nish/`, `tests/self/`, and `tests/cases/` and `tests/link/` (the built `nish-cli` compiles fixtures from both) |
-| `sha256_macos`, `fuzz` | `sha256-macos`, `fuzz-smoke` | the compiler, any file directly in `tests/`, `tests/{cases,differential,fix,fuzz,link,nish,self,simd,wipes}/`, `bench/`, `examples/` |
+| `sha256_macos`, `fuzz` | `sha256-macos`, `fuzz-smoke` | the compiler, any file under `tests/` but `tests/ci-scope/` (a `tests/run.js` section can open any fixture there), `bench/`, `examples/` |
 | `simd` | `simd-arm64` | the same as `sha256_macos`, and `docs/LANGUAGE.md` (the `crc32 kernel` section gzips it) |
 | `postgres` | `postgres-live` | the compiler, `tests/self/` (the compiler-cache action), `tests/postgres/`, `bench/techempower/` |
 
@@ -120,17 +121,24 @@ on. Each list was read from the code of every command the lane runs, composite
 actions included (`node tests/run.js ci-scope` pins a file per command, 19
 commands across the seven lanes). Some were also traced with `strace -f` on
 x86_64 Linux: the compiler-cache key, the `nish-cli` build and run,
-`soundness.js`, the `simd`, `float-corpus`, `sha256_hw`, `runtime_sanitize` and
-five kernel sections of `tests/run.js`, and the four `bench/` checks;
-`fuzz.js --stage1` and `scripts/fuzz.sh --smoke` only up to the build they need.
+`soundness.js`, the `simd`, `float-corpus`, `sha256_hw` and five kernel
+sections of `tests/run.js`, and the four `bench/` checks; `fuzz.js --stage1`
+and `scripts/fuzz.sh --smoke` only up to the build they need. The
+`runtime_sanitize` trace ran on a host with no sanitizer runtime, so its five
+ASan and UBSan checks were skipped and the files they compile, such as
+`tests/runtime/range-test.c`, were never opened: that trace shows nothing about
+them. The lanes that run `tests/run.js` therefore read all of `tests/` rather
+than a traced list, and `node tests/run.js ci-scope` fails if one of them would
+skip any file there but `tests/ci-scope/`.
 `bootstrap.sh --verify`, `tests/nish-cmp.js`, `fuzz.js --emit-ts` and the
 postgres scripts were not traced, and no command was traced on AArch64 or
 macOS. Every lane runs on:
 
 - any event other than `pull_request`: a push to `main`, `merge_group` and
   `workflow_call` (the release);
-- the `ci:full` label (add it, then re-run the workflow: `scope` reads the
-  labels again from the API), or the `NISH_CI_SCOPE` repository variable set
+- the `ci:full` label (add it, then use **Re-run all jobs**: `scope` reads the
+  labels again from the API, and re-running only the failed jobs does not
+  repeat `scope`), or the `NISH_CI_SCOPE` repository variable set
   to `full` (the kill switch for every pull request at once). Both match
   without regard to case;
 - a changed-file list that is empty, truncated or cannot be read, a deleted
@@ -153,8 +161,8 @@ from `pr-title.yml`. Branch protection is not changed by this workflow.
 `tests/ci-scope/backtest-prs.json` (60 of them, each with the jobs that failed
 on its runs) and fails on a **miss**: a lane it would have skipped whose job
 failed on that pull request. A failure recorded as an infrastructure flake, with
-its log line, is printed as excused. On those 60 it skips 17.9 of the lanes'
-41.6 runner-minutes per pull request run (15.0% of a ~119-minute run), with no
+its log line, is printed as excused. On those 60 it skips 17.5 of the lanes'
+41.6 runner-minutes per pull request run (14.7% of a ~119-minute run), with no
 miss and one excused flake (#1666's `fuzz-smoke`). That no-miss result is
 evidence only for `nish_cmp`, `fuzz` and the jobs that always run: the 60 hold
 no failure of `bootstrap`, `nish-cmp-elision`, `simd-arm64`, `sha256-macos` or

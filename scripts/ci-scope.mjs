@@ -80,23 +80,15 @@ const CORPUS = [
 ]
 
 /**
- * What `tests/run.js` opens for the simd, sha256_hw, float-corpus, kernel and
- * runtime_sanitize sections (each traced with `strace -f` on x86_64 Linux),
- * plus `scripts/fuzz.sh`'s tests/fuzz. Its top level reads every file directly
- * in tests/.
+ * What a lane whose job runs `tests/run.js` reads: all of tests/, because a
+ * section can open any fixture there and the lists picked file by file missed
+ * one (`runtime_sanitize` compiles tests/runtime/range-test.c). Only
+ * tests/ci-scope, which no lane's job opens, is taken back out (`unread`).
  */
-const RUN_JS = [
-  "tests/*",
-  "tests/cases/**",
-  "tests/differential/**",
-  "tests/fix/**",
-  "tests/fuzz/**",
-  "tests/link/**",
-  "tests/nish/**",
-  "tests/self/**",
-  "tests/simd/**",
-  "tests/wipes/**",
-]
+const RUN_JS = ["tests/**"]
+
+/** What a `tests/run.js` lane provably skips inside its read set. */
+const RUN_JS_UNREAD = ["tests/ci-scope/**"]
 
 /** What every lane that builds a compiler from `src/` reads. */
 const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nish-capabilities.lock.json"]
@@ -105,7 +97,8 @@ const COMPILER = ["src/**", "std/**", "runtime/**", "scripts/**", "bin/**", "nis
  * The lanes. `jobs` are ci.yml job ids and `names` their `name:` templates,
  * verbatim (tests/run.js pins both against ci.yml); `minutes` is the runner time the
  * lane's rows took on run 44273081341 (the saving a skip buys); `reads` is
- * the lane's read set, which wins over `inert`.
+ * the lane's read set, which wins over `inert`; `unread` (optional) is what the
+ * lane provably skips inside `reads`, and wins over both.
  */
 export const LANES = [
   {
@@ -149,7 +142,8 @@ export const LANES = [
     // tests/run.js's simd, float-corpus and kernel sections, bench/*.mjs and build/test/simd/*.
     // The `crc32 kernel` section's std_compress_gzip_files gzips docs/LANGUAGE.md.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**", "docs/LANGUAGE.md"],
-    inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
+    unread: RUN_JS_UNREAD,
+    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "sha256_macos",
@@ -158,7 +152,8 @@ export const LANES = [
     minutes: 2.1,
     // tests/simd/sha256*.c, tests/run.js sha256_hw and bench/sha256/run.mjs.
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
-    inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
+    unread: RUN_JS_UNREAD,
+    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "fuzz",
@@ -168,7 +163,8 @@ export const LANES = [
     // scripts/fuzz.sh --smoke (tests/fuzz/**) and tests/run.js runtime_sanitize,
     // which the `test` job delegates here (tests/run.js pins it).
     reads: [...COMPILER, ...RUN_JS, "bench/**", "examples/**"],
-    inert: [...INERT, "tests/**", "CHANGELOG.md", "changelog/**"],
+    unread: RUN_JS_UNREAD,
+    inert: [...INERT, "CHANGELOG.md", "changelog/**"],
   },
   {
     name: "postgres",
@@ -231,13 +227,15 @@ const globRe = (glob) => {
 export const matches = (file, globs) => globs.some((g) => globRe(g).test(file))
 
 /**
- * Whether a lane can skip a change to this path: on its allowlist, off its read set.
+ * Whether a lane can skip a change to this path: on its `unread` list, or on
+ * its allowlist and off its read set.
  *
  * @param {(typeof LANES)[number]} lane the lane
  * @param {string} file a repository-relative path
  * @returns {boolean} true when the lane provably does not read it
  */
-export const inertFor = (lane, file) => matches(file, lane.inert) && !matches(file, lane.reads)
+export const inertFor = (lane, file) =>
+  matches(file, lane.unread ?? []) || (matches(file, lane.inert) && !matches(file, lane.reads))
 
 /**
  * Decides every lane for one change.
