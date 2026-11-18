@@ -33,7 +33,7 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 12 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 18 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 5 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16, RT-18 and RT-51 to RT-53 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`, `structs.ts`, `emit-classes.ts`, `annotations.ts`, `interop-abi.ts`, `interop-header.ts`) | 0 / 3 / 21 / 17 ⁴ | 0 / 0 / 0 / 2 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16, RT-18 and RT-51 to RT-53 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`, `structs.ts`, `emit-classes.ts`, `annotations.ts`, `interop-abi.ts`, `interop-header.ts`) | 0 / 3 / 24 / 21 ⁴ | 0 / 0 / 0 / 2 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
 | TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 6 ⁹ | 0 / 0 / 0 / 2 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 11 ¹¹ | 0 / 0 / 0 / 0 |
@@ -77,7 +77,7 @@ the record that found it. The notes below the table name each such finding.
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 5 ²⁸ | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
-| **Total** ⁸ | | | **3 / 18 / 98 / 211** | **0 / 0 / 3 / 42** |
+| **Total** ⁸ | | | **3 / 18 / 101 / 215** | **0 / 0 / 3 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -157,6 +157,16 @@ the record that found it. The notes below the table name each such finding.
 
    RT-53 (Low), the `cErrno` slot and the errno capture around a C call
    (WP27 S5), was reviewed with nothing to fix and is not counted.
+
+   RT-55 and RT-58 (Medium), the 8-byte realign of a compact-class offset
+   and the range chunk kept from `realloc`, and RT-56 and RT-57 (Low), the
+   refused reservation's message and the debug fault window, were found and
+   fixed by the stage that added the compact-class range (WP48 stage 1) and
+   are counted as fixed. RT-17, RT-19, RT-23 and RT-54 are decisions and are
+   not counted. With them the row was recounted from the record's table:
+   fixed 0 / 3 / 24 / 21, open 0 / 0 / 0 / 2 (RT-34, RT-38). The row it
+   replaced, 0 / 3 / 21 / 17, had missed one fixed Medium and two fixed
+   Lows; the Total moves by the row's change, fixed +3 Medium and +4 Low.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache

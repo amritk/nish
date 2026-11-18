@@ -442,8 +442,10 @@ over 2 MiB, or a block `runtime-cross.c` copied with `malloc` and adopted. A
 chunk's class is read from its `cap` with the carved bit masked, and a carved
 chunk is never dropped, as without the range. A chunk of the range is never
 passed to `realloc`: an array growing out of one it fills is copied to a
-fresh chunk instead (RT-58), so a range chunk's `cap` stays its class. Only a
-malloc'd chunk past 2 MiB is reallocated in place. One spin lock covers every list
+fresh chunk instead (RT-58), so a range chunk's `cap` stays its class. Any
+chunk `nish_range_owns` does not claim may still be reallocated in place: a
+malloc'd chunk past 2 MiB, or a malloc'd block of 2 MiB or less that
+`nish_cross_link` adopted. One spin lock covers every list
 and the mark, for every thread. A chunk on a list keeps its pages: the range
 never shrinks. A chunk taken again holds whatever its last owner wrote, the
 same as a chunk `malloc` hands back. The arena never promised zeroed memory.
@@ -471,9 +473,14 @@ prints the same output. The figures are the "anonymous resident" the program
 prints for its regions phase after warm-up (4,591,616 and 761,856 bytes on
 this record's run), built as `tests/run.js` builds it: `nish main.ts
 --threads`, then `scripts/build.sh *.ll runtime/runtime.c -pthread --threads`,
-with and without `--arena-range`. That is a cost, not a bound broken:
-with the range the whole arena is capped at 15 GiB, and without it the arena
-has no cap of its own.
+with and without `--arena-range`. That is a cost, not a bound broken: with
+the range, the chunks cut from it (2 MiB or less) are capped at 15 GiB in
+all; a larger chunk is malloc'd and has no cap of its own, as without the
+range. The cost scales with live regions: each region's first chunk, and each
+recycled async task's (`runtime-async.c` sets `nish_region_chunk = 8`), takes
+a whole 4 KiB class under the range, where before it was a `malloc` of about
+the request, so 100,000 small live regions would commit hundreds of MB. Not
+measured here; stage 2, which first selects the range, weighs it.
 
 **The tests**, all in `tests/run.js` (`node tests/run.js arena-range`; the
 sanitizer rows under `runtime_sanitize`). Each is named by its `check(...)`
@@ -522,7 +529,7 @@ signals and stdout, never a panic's words.
 
 | ID | Severity | Location | Finding | Status |
 | --- | --- | --- | --- | --- |
-| RT-55 | Medium | `runtime/runtime.c` (`nish_arena_keep`); `runtime/runtime-region.c` (`nish_region_adopt`) | A compact class bumps the arena by a multiple of 4, so its offset may sit 4 past an 8-byte boundary. `keep` copied its block to the mark unrounded, and adopt carved its chunk header at the caller's offset unrounded, so either could hand out a block 4 bytes off the alignment every other allocation keeps | **Fixed.** Under `NISH_ARENA_RANGE` both round the offset up to 8 first, as `nish_alloc_struct`, `nish_text_alloc` and `nish_cross_in` already did. `nish_array_grow_here`'s in-place bump needs no realign: it hands out no new block, only lengthens the one that ends at the offset by an 8-byte multiple, and every bump after it realigns; the `misaligned` mode runs it and its copy fallback from a skewed offset. The other 9 runtime sites that set or bump an offset set it to 0, a chunk's size or its `cap`, or a mark captured earlier (`nish_arena_release`), or add 8-byte multiples only. Before: the `misaligned` mode built against the runtime before the fix stops at a kept block at `0x4000005c` and at a misaligned adopted chunk; after: "the compact-class range: from an offset 4 past an 8-byte boundary, the struct and text bumps, an array grow in place and by a copy, nish_cross_in, keep and region adopt each hand out an 8-aligned block" passes, plain and with `-DNISH_THREADS` |
+| RT-55 | Medium | `runtime/runtime.c` (`nish_arena_keep`); `runtime/runtime-region.c` (`nish_region_adopt`) | A compact class bumps the arena by a multiple of 4, so its offset may sit 4 past an 8-byte boundary. `keep` copied its block to the mark unrounded, and adopt carved its chunk header at the caller's offset unrounded, so either could hand out a block 4 bytes off the alignment every other allocation keeps | **Fixed.** Under `NISH_ARENA_RANGE` both round the offset up to 8 first, as `nish_alloc_struct`, `nish_text_alloc` and `nish_cross_in` already did. `nish_array_grow_here`'s in-place bump needs no realign: it hands out no new block, only lengthens the one that ends at the offset by an 8-byte multiple, and every block the runtime places after it comes from a site that realigns; the `misaligned` mode runs it and its copy fallback from a skewed offset. The runtime's other offset writes start a chunk at 0 (`nish_arena_grow`, `nish_cross_link`), rewind to 0 or to a mark captured earlier (`nish_reset_arena`, `nish_arena_release`), swap in a whole saved arena (`nish_region_swap`), or add 8-byte multiples only (`nish_cross_keep`'s transfer blocks). Before: the `misaligned` mode built against the runtime before the fix stops at a kept block at `0x4000005c` and at a misaligned adopted chunk; after: "the compact-class range: from an offset 4 past an 8-byte boundary, the struct and text bumps, an array grow in place and by a copy, nish_cross_in, keep and region adopt each hand out an 8-aligned block" passes, plain and with `-DNISH_THREADS` |
 | RT-56 | Low | `runtime/runtime.c` (`nish_range_map`) | A fixed reservation that failed for any reason panicked "the address is in use", which misleads an operator who hit an address-space limit | **Fixed.** A failure whose `errno` is not `EEXIST` names the system's refusal. Not provoked by a test: the limit that provokes it would also stop the test's own start-up |
 | RT-57 | Low | `runtime/runtime.c` (`nish_debug_on_fault`) | With the range, the debug reservation starts at the range's base, so a null-ish dereference within its first page was reported as a stale arena read | **Fixed.** The handler's window starts one debug page in. Not provoked by a test: a fault in the first page and a stale read both die of `SIGSEGV`, so only the handler's message would tell them apart, and the checks read exit statuses and signals only. "debug arena with the compact-class range: a pointer kept across a release dies of SIGSEGV at the read" still passes, so a stale read past the first page is still named |
 | RT-58 | Medium | `runtime/runtime.c` (`nish_array_grow_here`) | Growing an array in place `realloc`s the exact chunk a block over 64 KB fills. With the range, a chunk of 2 MiB or less is cut from the reservation, not malloc'd, and a power-of-two block of 128 KiB to 2 MiB fills its class chunk exactly, so a push past it passed a range address to `realloc`: glibc aborts, another allocator may corrupt its heap | **Fixed.** Under `NISH_ARENA_RANGE` a chunk `nish_range_owns` takes the copy instead, and keeps its class's `cap`. Before: with the guard deleted, the range unit test dies of `SIGABRT` (exit 134) at the 128 KiB to 256 KiB grow; after: "the compact-class range: chunks of 2 MiB or less are power-of-two classes in the range past its first 64 bytes, a freed chunk is reused, larger ones are malloc's, and regions, keep and the cross copies work, and an array past 64 KB grows without reallocating a range chunk" passes, plain and with `-DNISH_THREADS` |

@@ -129,7 +129,7 @@ program that does not write the marker is unchanged.
 that is the first note's Design A, measured and declined. Three costs stay
 with any class narrowed: the decode on every link load (up to a quarter more
 time on a pointer-chasing loop in cache, §5.1), the range's 15 GiB cap on
-everything allocated beside the class (§3.3), and a fixed address a host
+the chunks of 2 MiB or less everything beside the class takes (§3.3), and a fixed address a host
 process may already hold. Each rule above drops a class that pays those for
 no saving: one with no link, one rounding gives the bytes back, one made a
 handful of times, one C or a `Secret` must see whole. What no rule can see is
@@ -200,8 +200,8 @@ runtime-text.c:73's `nish_text_alloc`, runtime.c:610's in-place array
 growth, runtime-cross.c:221 and :240, and runtime-wasm.c. A compact instance
 gets its own inline bump (`@nish_alloc_ref`) that rounds to 4.
 
-The range is 15 GiB of arena: all threads, all regions, everything but big
-exact chunks. Running out is a panic that names the limit. The limit is why
+The range is 15 GiB of arena: all threads, all regions, every chunk but one
+past 2 MiB, which stays on `malloc`. Running out is a panic that names the limit. The limit is why
 the rule asks for a class made over and over and not every class.
 
 **As built in stage 1** (`-DNISH_ARENA_RANGE`, runtime.c's "The compact-class
@@ -214,10 +214,13 @@ range"; the record is `docs/security/runtime.md`, "The compact-class range"):
   `nish_arena_range_abi`, so IR that needs the range fails to link against a
   runtime without it.
 - On Linux the range is `mmap(0x40000000, 15 GiB, MAP_FIXED_NOREPLACE |
-  MAP_NORESERVE)`, once, from a constructor. Any other result, including a
-  kernel that maps elsewhere because it treats the address as a hint, is
-  unmapped and is the panic "cannot reserve its 15 GiB range at 0x40000000
-  (1 GiB to 16 GiB): the address is in use", before `main`. `MAP_FIXED` is
+  MAP_NORESERVE)`, once, from a constructor. `EEXIST`, or a kernel that
+  maps elsewhere because it treats the address as a hint (that mapping is
+  unmapped), is the panic "cannot reserve its 15 GiB range at 0x40000000
+  (1 GiB to 16 GiB): the address is in use"; any other error (`ENOMEM`: an
+  address-space or mapping limit) is the same panic ending "the system
+  refused the mapping (an address-space or mapping limit)". Both come before
+  `main`. `MAP_FIXED` is
   never used. Elsewhere (macOS) the system places it. `nish_ref_base` holds
   the base wherever the range is reserved; under `NISH_ASAN` nothing is
   reserved and it stays null. The first 64 bytes are never handed out.
@@ -230,12 +233,18 @@ range"; the record is `docs/security/runtime.md`, "The compact-class range"):
   arena's 15 GiB range is used up".
 - The realign is in runtime.c's `nish_alloc_struct` and `nish_arena_keep`,
   runtime-text.c's `nish_text_alloc`, runtime-cross.c's `nish_cross_in` and
-  the carve in runtime-region.c's `nish_region_adopt`: of the 14 runtime sites
-  that set or bump an arena offset, these 5 can start from one 4 past an
-  8-byte boundary.
+  the carve in runtime-region.c's `nish_region_adopt`: these place a new
+  block at an offset compiled code may have left 4 past an 8-byte boundary,
+  and each rounds it up to 8 first. The other sites that set an offset start
+  a chunk (`nish_arena_grow`, `nish_cross_link`), rewind to a chunk's start
+  or a mark (`nish_reset_arena`, `nish_arena_release`), or swap a whole
+  arena (`nish_region_swap`); a block the runtime places after any of them
+  comes from one of the five, which realign.
   `nish_cross_keep` bumps only its own transfer blocks, in 8-byte multiples,
-  and needs none. The in-place array growth is unchanged until PR #1697's
-  rewrite of it lands. runtime-wasm.c is unchanged and never gets the
+  and needs none. The in-place array growth of PR #1697
+  (`nish_array_grow_here`), now on main, hands out no new block: its bump
+  lengthens the array that ends at the offset by an 8-byte multiple, and its
+  `realloc` never touches a chunk the range owns (RT-58). runtime-wasm.c is unchanged and never gets the
   define. The inline bump in `src/runtime.ts` is unchanged: stage 2 adds
   `@nish_alloc_ref` and the realign together.
 - `--debug-arena` with the range makes the debug reservation the range
@@ -244,10 +253,15 @@ range"; the record is `docs/security/runtime.md`, "The compact-class range"):
   15 GiB limit. `NISH_ASAN` wins over both: it reserves nothing,
   `nish_ref_base` stays null, and the ABI symbol is still defined.
 - The 4 KiB class floor costs memory where many regions each hold one small
-  first chunk. `region_sessions_soak` (1000 live regions) peaks at about
-  4.5 MB of anonymous memory with the range, against about 757 KB without it,
+  first chunk. `region_sessions_soak` (1000 live regions) holds about
+  4.5 MB of anonymous memory with the range, against about 762 KB (761,856 bytes) without it,
   and prints the same output. A program with a compact class makes that class
-  over and over, so its chunks are not that small.
+  over and over, so its chunks are not that small. The cost grows with live
+  regions, though: each region's first chunk, and each recycled async task's
+  (runtime-async.c sets `nish_region_chunk = 8`), takes a whole 4 KiB class
+  where it was a `malloc` of about the request, so 100,000 small live
+  regions would commit hundreds of MB. Not measured; stage 2, which first
+  selects the range, weighs it.
 
 ## 4. The invariants, one by one
 
@@ -366,8 +380,11 @@ allocation and release, and the decode is lost in the band.
 
 ### 5.3 What the numbers say
 
-- **The range costs nothing.** `ptr-range` is within the band of `ptr` at
-  every size. Step one of §4.4 is free on its own.
+- **The range's cost is inside the band.** `ptr-range` is within the band of
+  `ptr` at every size, which bounds its cost at the band, not at zero; §5.4's
+  runs of the stage-1 runtime put it at −2.8% and +1.0% on `sibling.ts` and
+  +2.5% on `tree.ts`. Step one of §4.4 costs nothing this run can tell apart
+  from noise.
 - **Memory is the win, and it is the whole of the arithmetic.** Sibling's node
   drops from 32 to 20 bytes: 0.63x RSS. `tree.ts`'s node drops from 24 to
   12 bytes: 0.50x RSS, 385.5 MB, which is under Goose's 395 MB in the README.
@@ -440,7 +457,10 @@ wall +1.0% against `ptr`, within the band.
 The gate passes at both sizes: the range's cost is not told apart from the
 noise of running one binary twice, and peak RSS moves by 0.2 MB at most. The
 band is wide (one virtual machine, a round's worst gap), so the run bounds the
-cost at no more than that band, not at zero. An earlier run with a median
+cost at no more than that band, not at zero. These two runs predate the
+median band `range.mjs` now prints beside the widest, and their per-round
+gaps were not kept, so they have no median-band verdict; the `tree.ts` run
+below has both. An earlier run with a median
 band and unequal rounds is superseded by this one. That is stage 1's gate.
 
 `bench/goose/tree.ts`, after #1697 merged and with RT-58's guard, at the
