@@ -170,7 +170,7 @@ Tests:
   backward walk over overflow rows that leave SQLite's memory in use and its
   high-water mark where the first pass left them.
 - `tests/link/std_sqlite_cursor_schema`: each refused object, and a column
-  column whose name holds a comma or ends in ` DESC`. It runs again
+  whose name holds a comma or ends in ` DESC`. It runs again
   with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
 - `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
   equal byte for byte to SQL's.

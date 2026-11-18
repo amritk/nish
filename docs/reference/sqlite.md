@@ -159,10 +159,10 @@ Inside a read transaction
 the list the program names, and the `Cursor` then walks SQLite's B-tree
 directly: `first`, `next`, `seekRowid`, and for an index a seek key built
 with `keyI64` and `keyText` and moved to with `seek`. Its column reads
-answer what the row stores and, like a statement's, allocate nothing. Any
-statement on the connection that writes, or that ends the transaction,
-closes every cursor first, so a cursor never reads a page that changed
-under it; its calls then answer `SQLITE_MISUSE`.
+answer what the row stores and, like a statement's, allocate nothing. Every
+`exec`, `commit`, `rollback` and `endRead`, and every stepped statement but
+a plain read (a `pragma_*` SELECT included), closes every cursor first, so
+a cursor never reads a page that changed; its calls answer `SQLITE_MISUSE`.
 
 <scalar-code-group>
 
@@ -299,7 +299,7 @@ class Database
 | `error(code: i32): SqliteError` | The error for `code`, which this connection's last call answered. Ask before the next call, since the next call replaces the connection's message. Allocates the `SqliteError`. |
 | `exec(sql: string): Result<void, i32>` | Runs every statement of `sql` in turn, discarding any rows. It stops at the first statement that fails, so the ones before it have run. |
 | `lastInsertRowid(): i64` | The rowid of the last row an INSERT on this connection made. |
-| `openCursor(name: string, columns: string): Result<Cursor, SqliteError>` | Opens a cursor on `name`, a table or index of the main database, inside a read transaction (`beginRead`). `columns` is the schema the program reads, checked at open: a table's columns, or an index's key columns, each with ` DESC` where the index has it, and then `rowid`, in order, joined by `,` with no space. A table that is `WITHOUT ROWID`, a view or virtual table, one with a generated column, an index on an expression or with a collation other than `BINARY`, and a database that is not UTF-8 are refused. The cursor is closed by `close`, `endRead`, closing the connection, and any statement that writes or ends the transaction. |
+| `openCursor(name: string, columns: string): Result<Cursor, SqliteError>` | Opens a cursor on `name`, a table or index of the main database, inside a read transaction (`beginRead`). `columns` is the schema the program reads, checked at open: a table's columns, or an index's key columns, each with ` DESC` where the index has it, and then `rowid`, in order, joined by `,` with no space. A table that is `WITHOUT ROWID`, a view or virtual table, one with a generated column, an index on an expression or with a collation other than `BINARY`, and a database that is not UTF-8 are refused. `close`, `endRead`, closing the connection, any `exec`, and any stepped statement but a plain read (`pragma_*` SELECTs too) close it. |
 | `prepare(sql: string): Result<Statement, SqliteError>` | Compiles the first statement of `sql`, to be bound, stepped and reset as often as wanted; text after it is ignored. Text with no statement in it is `SQLITE_MISUSE`. The statement belongs to this connection, and `close` finalizes it. |
 | `rollback(): Result<void, i32>` | Undoes the open transaction: `exec("ROLLBACK")`. |
 

@@ -49,10 +49,10 @@
  * the list the program names, and the `Cursor` then walks SQLite's B-tree
  * directly: `first`, `next`, `seekRowid`, and for an index a seek key built
  * with `keyI64` and `keyText` and moved to with `seek`. Its column reads
- * answer what the row stores and, like a statement's, allocate nothing. Any
- * statement on the connection that writes, or that ends the transaction,
- * closes every cursor first, so a cursor never reads a page that changed
- * under it; its calls then answer `SQLITE_MISUSE`.
+ * answer what the row stores and, like a statement's, allocate nothing. Every
+ * `exec`, `commit`, `rollback` and `endRead`, and every stepped statement but
+ * a plain read (a `pragma_*` SELECT included), closes every cursor first, so
+ * a cursor never reads a page that changed; its calls answer `SQLITE_MISUSE`.
  *
  *     db.beginRead().expect("begin")
  *     const ix = db.openCursor("t_name", "name,rowid").expect("cursor")
@@ -378,8 +378,8 @@ export class Database {
    * with no space. A table that is `WITHOUT ROWID`, a view or virtual table,
    * one with a generated column, an index on an expression or with a
    * collation other than `BINARY`, and a database that is not UTF-8 are
-   * refused. The cursor is closed by `close`, `endRead`, closing the
-   * connection, and any statement that writes or ends the transaction.
+   * refused. `close`, `endRead`, closing the connection, any `exec`, and any
+   * stepped statement but a plain read (`pragma_*` SELECTs too) close it.
    *
    * @param name The table or index, as the schema names it.
    * @param columns The columns, such as `"id,name,score"` for a table or
@@ -871,8 +871,8 @@ export class Cursor {
    * @param c The column's index, from 0, in `openCursor`'s order.
    * @returns One of `SQLITE_INTEGER` to `SQLITE_NULL`, or `Err` with
    *   `SQLITE_MISUSE` when the cursor has no row, `SQLITE_RANGE` for a column
-   *   that is not there, or `SQLITE_SCHEMA` for a row written before
-   *   `ALTER TABLE` added the column.
+   *   that is not there, `SQLITE_SCHEMA` for a row written before `ALTER TABLE`
+   *   added the column, or `SQLITE_ABORT` when the cursor's row has moved.
    */
   columnType(c: i32): Result<i32, i32> {
     const t: i32 = nishsqlite_cursor_column_type(this.handle, c)

@@ -75,8 +75,10 @@ A cursor reads one snapshot, so it lives inside a read transaction:
 - `db.beginRead()` runs `BEGIN` and then a read of `sqlite_schema`, so the main
   database's read transaction is current (`sqlite3_txn_state(db, "main")` is
   `SQLITE_TXN_READ`) and the snapshot and schema it reads are fixed.
-- `db.openCursor` outside a transaction (`sqlite3_get_autocommit(db) != 0`)
-  answers `MISUSE`.
+- `db.openCursor` answers `MISUSE` unless the main database is in a read
+  transaction: autocommit off (`sqlite3_get_autocommit(db) == 0`) and
+  `sqlite3_txn_state(db, "main") >= SQLITE_TXN_READ`. A deferred `BEGIN` that
+  has not read yet is therefore refused too.
 - `db.endRead()` closes every cursor on the connection, then runs `COMMIT`.
 - `beginRead` does not make the transaction read-only. A write run inside it
   invalidates the cursors like any other write, and `endRead`'s `COMMIT`
@@ -110,7 +112,8 @@ anything other than a plain read runs:
 - **An end the adapter did not see is caught.** If SQLite rolls the transaction
   back by itself (an I/O error or out-of-memory during a read), it trips every
   cursor on the B-tree, ours included. Every cursor call also checks
-  `sqlite3_get_autocommit(db)` and invalidates when the transaction is gone.
+  `sqlite3_get_autocommit(db)` and `sqlite3BtreeTxnState` (against
+  `SQLITE_TXN_NONE`), and invalidates when either shows the transaction gone.
 
 The adapter's own statements (the schema check, `beginRead`'s `BEGIN` and
 read) run with the callback told they are internal, so they do not invalidate
@@ -257,9 +260,11 @@ Before is `4d0faa4b` (SQLite compiled as its own unit); after is `3765b270`
 | speed | 27.6 | 0.28–0.29 | 28.0 | 0.31–0.34 |
 
 A cold link is one sample per profile; an earlier after-run at the same code
-took 2.72 s (debug) and 26.73 s (speed), so the cold difference is inside the
-spread of single runs. A cached link reuses the cache entry and is under 0.35 s
-in both.
+took 2.72 s (debug) and 26.73 s (speed). For speed, the cold difference is
+inside the spread of single runs. For debug it is not: the before sample is
+below both after samples, so the cold debug link measured about 0.1 s slower.
+The cached ranges do not overlap either: a cached link measured about 0.03
+to 0.05 s slower in both profiles, and is under 0.35 s in both.
 
 `bench/sqlite/run.mjs` before (`4d0faa4b`) and after (`3765b270`), median
 ns per call over 12 rounds. The bench reads only through the VDBE (prepared

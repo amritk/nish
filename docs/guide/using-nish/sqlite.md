@@ -12,6 +12,7 @@ of it.
 | one statement run many times | [`prepare`, then bind, `step` and `reset`](#prepare-once-run-many-times) |
 | the rows a query returns | [`step` and the `column*` calls](#reading-rows) |
 | several changes that land together | [`begin`, `commit`, `rollback`](#transactions) |
+| hot reads of a table or index without SQL | [`beginRead`, `openCursor`](#reading-through-a-cursor) |
 | what went wrong | [`SqliteError`](#errors) |
 
 The reference is
