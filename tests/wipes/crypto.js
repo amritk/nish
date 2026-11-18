@@ -15,6 +15,9 @@ const ED25519_MODULES = /^define [^\n]*@nish\.(Ed25519|ed25519)/m
 /** The modules that define HMAC, HKDF, SHA-2, the TLS schedule and record layer, or QUIC packet protection. */
 const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|Tls|tls|quic)/m
 
+/** The modules that define SCRAM, HMAC or SHA-2. */
+const SCRAM_MODULES = /^define [^\n]*@nish\.(scram|Hmac|hmac|pbkdf2|Sha|sha)/m
+
 /** The module that defines bcrypt. */
 const BCRYPT_MODULES = /^define [^\n]*@nish\.bcrypt/m
 
@@ -86,6 +89,23 @@ export const wipeChecks = [
     roots: [
       ["nish.pbkdf2Finish", 2],
       ["nish.pbkdf2HmacSha256", 21],
+    ],
+  },
+  // `nish/crypto/scram`, which `std_scram` imports alone. A one-shot
+  // `hmacSha256` reaches 13 (its constructor's 6 and its digest's 7). The
+  // roots: the proof 32 (two HMACs, the StoredKey hasher's state, block and
+  // schedule, which `opt` inlines from `scramSha256Wiped`, and ClientKey,
+  // StoredKey and ClientSignature), the signature 27 (two HMACs and
+  // ServerKey), and SaltedPassword 21 (`pbkdf2HmacSha256`'s). Turning the
+  // hasher's `wipe(h.state)` into `fill(0)` took the proof to 31.
+  {
+    name: "crypto_scram: the wipes survive opt -O2 (SCRAM's ClientKey, StoredKey, ClientSignature, ServerKey and the StoredKey hasher)",
+    program: "tests/link/std_scram/main.ts",
+    modules: SCRAM_MODULES,
+    roots: [
+      ["nish.scramClientProofExposed", 32],
+      ["nish.scramServerSignatureExposed", 27],
+      ["nish.scramSha256SaltedPassword", 21],
     ],
   },
   // `nish/crypto/aes` and `nish/crypto/chacha20poly1305` (#430).

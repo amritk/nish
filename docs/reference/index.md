@@ -68,7 +68,7 @@ DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 55 modules.
 
 <scalar-card title="Cryptography" icon="phosphor/regular/lock-key" href="#cryptography">
 
-Hashes, ciphers, signatures, certificates and passwords: 21 modules.
+Hashes, ciphers, signatures, certificates and passwords: 22 modules.
 
 </scalar-card>
 
@@ -272,6 +272,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/crypto/pki-roots`](crypto/pki-roots.md) | The root certificates a program should trust, read from where OpenSSL and Go look for them: the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, or else the system's bundle. |
 | [`nish/crypto/pki`](crypto/pki.md) | Whether the certificate chain a TLS server sent leads to a root the program trusts and names the host it dialled: RFC 5280 §6 path validation and RFC 6125 §6 hostname matching, at the instant the caller gives. |
 | [`nish/crypto/rsa`](crypto/rsa.md) | RSA signature verification: RSASSA-PKCS1-v1_5 and RSASSA-PSS over SHA-256, SHA-384 and SHA-512, under a public key read from its DER. |
+| [`nish/crypto/scram`](crypto/scram.md) | The arithmetic of a SCRAM-SHA-256 client, as RFC 5802 §3 defines it with SHA-256 for `H` and `HMAC` (RFC 7677 §3): |
 | [`nish/crypto/sha1`](crypto/sha1.md) | SHA-1 as FIPS 180-4 §6.1 defines it, in pure Nish. |
 | [`nish/crypto/sha256`](crypto/sha256.md) | SHA-256 as FIPS 180-4 §6.2 defines it, in pure Nish. |
 | [`nish/crypto/sha512`](crypto/sha512.md) | SHA-512 and SHA-384, written from FIPS 180-4. |
