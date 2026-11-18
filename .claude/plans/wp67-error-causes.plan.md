@@ -4,7 +4,7 @@ overview: Nish errors are Result values, and today a function that converts one 
 stages:
   - id: s0-proposal
     title: S0 — the WP67 proposal (docs only)
-    goal: docs/wp67-error-causes.md and docs/roadmap/wp67-error-causes.md exist, every claim checked against main, the std conversion-site inventory recorded, owner decisions D1 to D6 recorded (D4 and D5 still open).
+    goal: docs/wp67-error-causes.md and docs/roadmap/wp67-error-causes.md exist, every claim checked against main, the std conversion-site inventory recorded, owner decisions D1 to D6 recorded (D5 still open).
     verification: npm run lint && node docs/check-links.mjs && node scripts/gen-reference.mjs --check
     todos:
       - id: inventory-sites
@@ -165,7 +165,7 @@ This stage is one PR and changes docs only, the way WP62 and WP66 began. It writ
   - D1, decided: the field is named `cause`, matching ES2022 and `--emit-ts`.
   - D2, decided: the guard is an error, not a warning. It has no opt-out: the only way past it is to keep the cause.
   - D3, decided: changing `expect`'s stderr is not treated as a breaking change for now.
-  - D4, open: how the chain walk ends when a chain loops back on itself (`a.cause = b; b.cause = a`), and how long a chain may be before printing stops. The proposal is to stop at a link already seen, or after 64 links, and to print `(cause chain truncated)`.
+  - D4, decided: the chain walk stops at a link it has already visited (a chain that loops back, `a.cause = b; b.cause = a`) or after 64 links, and prints `(cause chain truncated)`.
   - D5, open: whether a cause of any error type (`Dyn<Failure>`) waits for WP60 stage 3. The recommendation is not to wait: ship concrete typed causes now and add `Dyn` as one more cause type when WP60 lands.
   - D6, decided: `src/` adopts causes for its own errors once the rolling freeze allows it (S6).
 
