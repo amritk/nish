@@ -25681,6 +25681,13 @@ if (dealtHere("cliChecks")) {
       wideIr.ir !== null && offIr.ir !== null && wideIr.ir === offIr.ir,
       `${shown(wideIr.r)}\n${shown(offIr.r)}`
     )
+    const markedNode = ['import { Compact } from "nish:compact"', loopNode.replace("class L {", "class L implements Compact {")].join("\n")
+    const markedOffIr = compactIr("marked-off", markedNode, ["--compact", "off"])
+    check(
+      "explain layout: --compact off gives an implements Compact class the unmarked --compact off IR",
+      markedOffIr.ir !== null && offIr.ir !== null && markedOffIr.ir === offIr.ir,
+      `${shown(markedOffIr.r)}\n${shown(offIr.r)}`
+    )
     const noPickOn = compactIr("nopick-on", noPick, [])
     const noPickOff = compactIr("nopick-off", noPick, ["--compact", "off"])
     check(

@@ -70,7 +70,8 @@ builds pick nothing.
 
 ## Keeping a class wide
 
-To keep one class's links full pointers, write `implements Wide`:
+To keep one class's links full pointers, write `implements Wide`. Without
+the marker, this 24-byte `Peer` would be picked and narrowed to 12:
 
 <!-- nish:ok -->
 ```ts
@@ -78,6 +79,7 @@ import { Wide } from "nish:compact";
 
 class Peer implements Wide {
   next: Peer | null = null;
+  prev: Peer | null = null;
   id: i32;
   constructor(id: i32) {
     this.id = id;

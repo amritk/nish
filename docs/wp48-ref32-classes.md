@@ -129,10 +129,11 @@ line per class: `compact` with its size before and after, `off` under
 (`5 forbidden: implements Wide` for the marker), so the decision can be seen
 and checked. Stage 3 ships both controls and the flag (§5.5).
 
-Against the measured programs: `tree.ts`'s and `bintrees.ts`'s `TNode` are
-made in a recursive build and shrink from 24 to 12 and 16 to 8 bytes, and
-`sibling.ts`'s node is made in the build loop and shrinks from 32 to 20. The
-rule picks all three with no source change.
+Against the measured programs: `tree.ts`'s `TNode` is made in a recursive
+build and shrinks from 24 to 12 bytes, and `sibling.ts`'s node is made in the
+build loop and shrinks from 32 to 20. The rule picks both with no source
+change. `bintrees.ts`'s 16-byte `TNode` would shrink to 8, but test 3 refuses
+it for being under 24 bytes (§5.5).
 
 The rule lands after the mechanism (§8): stage 2 builds compact classes with
 `implements Compact` as the only way in, and stage 3 turns the rule on, gated
@@ -552,11 +553,11 @@ round, and `bintrees` at depth 19 in every round. Both are 16-byte cells,
 four to a cache line already: List's lists are short enough to stay in L1,
 so the widening on each hop is all cost, and `bintrees` frees each tree
 before the next, so halving its nodes saves little traffic. Every 24- and
-32-byte node held even or gained. Test 3 therefore asks that `R` be at least
+32-byte node held within its noise band or gained. Test 3 therefore asks that `R` be at least
 24 bytes; the programs it refuses now build the same IR as `--compact off`,
 and of the three it keeps, `sibling`'s 1M run sits inside its band (which
-crosses zero) and its 4M run is even, while `tree` and `treesum` gain a
-quarter to two fifths and halve their peak RSS. A holder-only saving is not
+crosses zero) and its 4M run is even, while `treesum` gains 24% and `tree`
+43%, and both halve their peak RSS. A holder-only saving is not
 counted (§3.1): the one the corpus has, `Deflater`'s link in the 256-byte
 `ZlibCompressor`, is 8 bytes of one object per stream. The self-build,
 unchanged by either rule, ran 2.740 s with `--compact off` and 2.673 s with
