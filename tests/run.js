@@ -24938,7 +24938,7 @@ if (dealtHere("cliChecks")) {
         args,
         want: [
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
-          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 16 bytes`,
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 8 bytes`,
           "explain-layout: 0 of 2 classes compact",
         ],
       })
