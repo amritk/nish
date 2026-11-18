@@ -381,9 +381,9 @@ function Database.openCursor(this: Database, name: string, columns: string): Res
   stackSites=0 stackLocals=0
   local +0:11 h: i32 (const)
   callee +0:20 nishsqlite_cursor_open -> @nishsqlite_cursor_open
-  callee +3:20 new SqliteError -> @nish.SqliteError.constructor
-  callee +5:18 Database.error -> @nish.Database.error
-  callee +7:15 new Cursor -> @nish.Cursor.constructor
+  callee +4:11 new SqliteError -> @nish.SqliteError.constructor
+  callee +7:18 Database.error -> @nish.Database.error
+  callee +9:15 new Cursor -> @nish.Cursor.constructor
 function Database.prepare(this: Database, sql: string): Result<Statement, SqliteError> -> @nish.Database.prepare [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via nishsqlite_prepare
