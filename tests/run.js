@@ -10112,7 +10112,8 @@ if (dealtHere("sanitizers") && (!only || "fuzz".includes(only))) {
 // runner spawns a compiler per case, so a full pass costs about four and a half
 // minutes, and paying that on every `npm test` would double the suite to prove
 // what a handful of cases already prove — one golden, one native round trip and
-// three rejections. `npm run test:nish` is the full pass.
+// three rejections. `npm run test:nish` is the full pass, and CI's `runner` job
+// runs it on the Release PR and the release tag (`.claude/testing.md`).
 if (dealtHere("nishRunner")) {
   const irDir = path.join(buildDir, "nish-runner.ir") + path.sep
   const runnerExe = path.join(buildDir, "nish-runner")

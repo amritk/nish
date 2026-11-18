@@ -276,7 +276,9 @@ jobs:
       # stops building against wasi-libc, as runtime-os.c did when it called a
       # `realpath` wasi-libc does not have (#396). libclang-rt-18-dev is the
       # native sanitizer and libFuzzer runtimes the `runtime_sanitize` and
-      # `fuzz` sections link; without it they are counted skips. gdb and
+      # `fuzz` sections link; without it they are counted skips. Under
+      # `--delegate-sanitizers` those rows are `fuzz-smoke`'s, but a target
+      # with no corpus is still replayed here. gdb and
       # lldb-18 are the debuggers the `fnref` section asks what `-g` says of a
       # function reference; without them those checks are counted skips.
       - name: Install LLVM 18 + lld (Ubuntu)
