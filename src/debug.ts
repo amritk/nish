@@ -342,7 +342,7 @@ export class DebugInfo {
       // `p *r` shows `ok`, `value` and `error` rather than an opaque pointer.
       // Only the arm the discriminant selects is meaningful; the other is
       // whatever the construction left there (WP16 does not zero it).
-      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
+      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type, this.pointerBits / 8)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
     } else if (this.table.isNullable(type)) {
@@ -585,7 +585,8 @@ export class DebugInfo {
     let i = 0
     while (i < names.length) {
       const base = this.typeRef(types[i])
-      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0))
+      const bits = this.table.isPointerValue(types[i]) ? this.pointerBits : bitsOfIn(this.table, types[i])
+      members.push(this.member(names[i], ref, base, bits, offsets[i] * 8, "", 0))
       i = i + 1
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
@@ -628,7 +629,7 @@ export class DebugInfo {
     if (known >= 0) {
       return this.typeRefs[known]
     }
-    const layout = resultLayout(this.table, type)
+    const layout = resultLayout(this.table, type, this.pointerBits / 8)
     const ref = this.module.reserveMetadata()
     const union = this.module.reserveMetadata()
     const armNames: string[] = []
