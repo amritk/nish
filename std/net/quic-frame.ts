@@ -836,8 +836,8 @@ export const quicAckSize = (ranges: i64[], rangeCount: i32, ackDelay: i64): i32 
  * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
  * @param rangeCount How many pairs to read from the front of `ranges`.
  * @param ackDelay The ACK Delay field, already scaled: microseconds shifted right by the exponent.
- * @returns The offset past the frame, or -1 with nothing written. The frame is always type 0x02, without ECN
- *   counts.
+ * @returns The offset past the frame, or -1 with nothing written. The frame is type 0x02, without ECN
+ *   counts; `quicPutAckEcn` writes the 0x03 frame that carries them.
  */
 export const quicPutAck = (
   buf: u8[],
@@ -888,6 +888,108 @@ export const quicPushAck = (out: u8[], ranges: i64[], rangeCount: i32, ackDelay:
   }
   const at: i32 = quicFrameGrow(out, size)
   return quicPutAck(out, at, at + size, ranges, rangeCount, ackDelay) >= 0
+}
+
+/**
+ * The size of the ACK_ECN frame `quicPutAckEcn` writes: the ACK frame
+ * `quicAckSize` sizes, then the three ECN counts. Answers 0 where
+ * `quicAckSize` does, or when a count is negative or above 2^62-1.
+ *
+ * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+ * @param rangeCount How many pairs to read from the front of `ranges`.
+ * @param ackDelay The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+ * @param ect0 The ECT(0) count: packets received in this space marked ECT(0).
+ * @param ect1 The ECT(1) count: packets received in this space marked ECT(1).
+ * @param ce The ECN-CE count: packets received in this space marked CE.
+ * @returns The frame's size in bytes, or 0 when `quicPutAckEcn` would refuse these arguments.
+ */
+export const quicAckEcnSize = (
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64,
+  ect0: i64,
+  ect1: i64,
+  ce: i64
+): i32 => {
+  const base: i32 = quicAckSize(ranges, rangeCount, ackDelay)
+  const a: i32 = quicVarintSize(ect0)
+  const b: i32 = quicVarintSize(ect1)
+  const c: i32 = quicVarintSize(ce)
+  if (base === 0 || a === 0 || b === 0 || c === 0) {
+    return 0
+  }
+  return base + a + b + c
+}
+
+/**
+ * Writes an ACK_ECN frame (type 0x03, RFC 9000 §19.3.2): the ranges and
+ * ACK Delay `quicPutAck` writes, then the ECT(0), ECT(1) and ECN-CE counts a
+ * receiver keeps for the space (§13.4.1). Answers -1, writing nothing, where
+ * `quicAckEcnSize` answers 0 or the frame does not fit.
+ *
+ * @param buf The buffer to write into.
+ * @param at The offset of the frame's first byte.
+ * @param end One past the last byte the frame may use.
+ * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+ * @param rangeCount How many pairs to read from the front of `ranges`.
+ * @param ackDelay The ACK Delay field, already scaled: microseconds shifted right by the exponent.
+ * @param ect0 The ECT(0) count.
+ * @param ect1 The ECT(1) count.
+ * @param ce The ECN-CE count.
+ * @returns The offset past the frame, or -1 with nothing written.
+ */
+export const quicPutAckEcn = (
+  buf: u8[],
+  at: i32,
+  end: i32,
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64,
+  ect0: i64,
+  ect1: i64,
+  ce: i64
+): i32 => {
+  const size: i32 = quicAckEcnSize(ranges, rangeCount, ackDelay, ect0, ect1, ce)
+  if (!quicFrameRoom(buf, at, end, size)) {
+    return -1
+  }
+  let cursor: i32 = quicPutAck(buf, at, end, ranges, rangeCount, ackDelay)
+  if (cursor < 0) {
+    return -1
+  }
+  quicFramePutByte(buf, at, QUIC_FRAME_ACK_ECN)
+  cursor = quicFramePutVarint(buf, cursor, ect0)
+  cursor = quicFramePutVarint(buf, cursor, ect1)
+  return quicFramePutVarint(buf, cursor, ce)
+}
+
+/**
+ * Appends the ACK_ECN frame `quicPutAckEcn` writes. Answers `false`, appending nothing, where it refuses.
+ *
+ * @param out The bytes to append the frame to.
+ * @param ranges Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+ * @param rangeCount How many pairs to read from the front of `ranges`.
+ * @param ackDelay The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+ * @param ect0 The ECT(0) count.
+ * @param ect1 The ECT(1) count.
+ * @param ce The ECN-CE count.
+ * @returns True when the frame was appended.
+ */
+export const quicPushAckEcn = (
+  out: u8[],
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64,
+  ect0: i64,
+  ect1: i64,
+  ce: i64
+): boolean => {
+  const size: i32 = quicAckEcnSize(ranges, rangeCount, ackDelay, ect0, ect1, ce)
+  if (size === 0) {
+    return false
+  }
+  const at: i32 = quicFrameGrow(out, size)
+  return quicPutAckEcn(out, at, at + size, ranges, rangeCount, ackDelay, ect0, ect1, ce) >= 0
 }
 
 /**

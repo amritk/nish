@@ -31,6 +31,8 @@
       "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
     }
   },
+  "nishPortableProof": "aes128gcm-seal@16384",
+  "nishPortableProofFlags": ["aes", "pclmulqdq"],
   "portableProof": "aes128gcm-seal@16384",
   "portableProofFlags": ["aes", "pclmulqdq"],
   "notes": [

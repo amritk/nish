@@ -102,6 +102,12 @@
  * `takeDatagramInto` or `quicListenerTakePaced`, `flight.ecn` for a flight.
  * One send carries one codepoint, so a flight ends before a datagram the
  * connection would mark otherwise. The listener's own answers go unmarked.
+ * On the receiving side, a carrier whose platform reports the bits a datagram
+ * arrived with (`udpRecvFrom`'s `meta[1]`) sets `conn.arrivalEcn` to them
+ * before handing the datagram over, `quicListenerReceiveSegments` included:
+ * one receive is one codepoint for all its segments. The connection then
+ * counts them per packet number space and its ACKs carry the counts as an
+ * ACK_ECN (§13.4.1).
  *
  *     const flight = new QuicFlight();
  *     const n: i32 = quicListenerTakeFlight(conn, now, buf, 0, toI32(buf.length), flight);
@@ -1102,8 +1108,9 @@ export const quicListenerTakeFlight = (
 /**
  * Hands `conn` the datagrams of one receive, `buf[off .. off + len)`, at
  * `now`: one datagram when `segment` is 0, else a GRO receive cut every
- * `segment` bytes (the last may be shorter). Each is read in place. Answers
- * how many it handed over.
+ * `segment` bytes (the last may be shorter). Each is read in place, with the
+ * ECN bits the caller set in `conn.arrivalEcn`. Answers how many it handed
+ * over.
  *
  * @param conn The connection the datagrams belong to.
  * @param buf The receive buffer; read, not kept.

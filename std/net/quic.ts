@@ -1712,6 +1712,17 @@ export class QuicConnection {
   datagramEcn: i32 = 0
   /** Whether the carrier sends with the ECN bits of `datagramEcn`; the carrier sets it, and `reset` keeps it. */
   ecnMarking: boolean = false
+  /**
+   * The ECN bits the next datagram handed to `receive`, `receiveWindow` or
+   * `receiveWindowFrom` arrived with (the IP header's two low traffic-class
+   * bits: 0 Not-ECT, 1 ECT(1), 2 ECT(0), 3 CE), which the carrier sets before
+   * the call and keeps for every coalesced packet of that datagram. Each
+   * packet that opens and is not a duplicate adds them to its packet number
+   * space's counts (RFC 9000 §13.4.1), which the space's ACKs then carry as
+   * an ACK_ECN. A carrier that cannot read the bits leaves it 0, and its
+   * ACKs stay plain. `reset` clears it.
+   */
+  arrivalEcn: i32 = 0
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
@@ -1953,6 +1964,7 @@ export class QuicConnection {
     this.sealedUnderKey = 0
     this.authFailures = 0
     this.datagramEcn = 0
+    this.arrivalEcn = 0
     this.nextSkip = -1
     quicConnForgetSkips(this.skipped)
     this.skipsDrawn = 0
@@ -2549,7 +2561,10 @@ export class QuicConnection {
     if (eliciting && type === QUIC_PACKET_HANDSHAKE) {
       this.resendLevel = TLS_LEVEL_HANDSHAKE
     }
-    space.received.record(pn, eliciting)
+    // §13.4.1: a packet processed, not a duplicate, counts its datagram's ECN bits in its space.
+    if (space.received.record(pn, eliciting)) {
+      space.received.countEcn(this.arrivalEcn)
+    }
     // §10.1: a packet received and processed restarts the idle timer.
     this.idleSince = this.now
     this.elicitingSent = false

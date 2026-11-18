@@ -213,8 +213,9 @@ depend on the size, and holds at most `size` connections once the peak has
 come; `Http1TlsServer` does the same for a slot's connection and, through
 `TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or
 grown to its cap on first use and kept, so a warmed slot serves request after
-request with `Arena.used()` flat. Accepting a WebSocket allocates (the accept
-key), once a connection.
+request with `Arena.used()` flat. Accepting a WebSocket computes the accept
+key and writes the 101 into storage the slot keeps, built on its first
+accept, so later handshakes leave the arena flat too.
 
 </scalar-callout>
 

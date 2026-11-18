@@ -23,15 +23,20 @@
  *
  * **When to acknowledge.** That is the connection's choice; this module records
  * whether something ack-eliciting arrived since the last ACK it wrote
- * (`ackPending`). ACK frames carry an ACK Delay the caller supplies, and no
- * ECN counts.
+ * (`ackPending`). ACK frames carry an ACK Delay the caller supplies.
  *
- * **Provenance.** Written from RFC 9000 §12.3, §13.2 and §19.3, not ported from another
+ * **ECN counts.** `countEcn` adds a packet's ECN codepoint to the space's
+ * ECT(0), ECT(1) or ECN-CE count (RFC 9000 §13.4.1); the caller counts a
+ * packet only once `record` has accepted it, so a duplicate is not counted.
+ * Once any count is above zero every ACK written is an ACK_ECN (type 0x03)
+ * carrying all three, and before that a plain ACK (type 0x02).
+ *
+ * **Provenance.** Written from RFC 9000 §12.3, §13.2, §13.4.1 and §19.3, not ported from another
  * implementation. Private names carry the `quicAck` prefix
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { QUIC_MAX_VARINT } from "nish/net/quic-packet"
-import { quicPushAck, quicPutAck } from "nish/net/quic-frame"
+import { quicPushAck, quicPushAckEcn, quicPutAck, quicPutAckEcn } from "nish/net/quic-frame"
 
 /** The most disjoint ranges a `QuicAckRanges` keeps, and so the most an ACK frame it writes lists. */
 export const QUIC_ACK_MAX_RANGES: i32 = 32
@@ -51,6 +56,12 @@ export class QuicAckRanges {
   count: i32 = 0
   /** Whether an ack-eliciting packet arrived since the last `pushAck`. */
   ackPending: boolean = false
+  /** Packets of this space that arrived marked ECT(0) (codepoint 2). */
+  ect0: i64 = 0
+  /** Packets of this space that arrived marked ECT(1) (codepoint 1). */
+  ect1: i64 = 0
+  /** Packets of this space that arrived marked ECN-CE (codepoint 3). */
+  ce: i64 = 0
 
   /**
    * Makes an empty set, nothing received yet, with room for
@@ -173,6 +184,33 @@ export class QuicAckRanges {
     return true
   }
 
+  /**
+   * Counts one packet's ECN codepoint, the low two bits of the IP header's
+   * traffic class, in this space (RFC 9000 §13.4.1). The caller counts a
+   * packet once, after `record` accepted it; Not-ECT (0) counts nothing.
+   *
+   * @param codepoint The datagram's ECN bits: 0 Not-ECT, 1 ECT(1), 2 ECT(0), 3 CE; higher bits are ignored.
+   */
+  countEcn(codepoint: i32): void {
+    const bits: i32 = codepoint & 3
+    if (bits === 2) {
+      this.ect0 = this.ect0 + 1
+    } else if (bits === 1) {
+      this.ect1 = this.ect1 + 1
+    } else if (bits === 3) {
+      this.ce = this.ce + 1
+    }
+  }
+
+  /**
+   * Whether an ACK written now carries ECN counts.
+   *
+   * @returns True once any of `ect0`, `ect1` and `ce` is above zero.
+   */
+  hasEcn(): boolean {
+    return this.ect0 > 0 || this.ect1 > 0 || this.ce > 0
+  }
+
   /** Removes range `k`, moving the lower ones up. */
   private remove(k: i32): void {
     for (let j: i32 = k; j + 1 < this.count; j += 1) {
@@ -205,6 +243,7 @@ export class QuicAckRanges {
   /**
    * Appends an ACK frame for every range kept, with `ackDelay` (already
    * scaled by this endpoint's ACK delay exponent), and clears `ackPending`.
+   * The frame is an ACK_ECN carrying the three counts once `hasEcn` holds.
    * Answers `false`, appending nothing, when nothing has been received.
    *
    * @param out The packet payload being built; the frame is appended to its end.
@@ -213,7 +252,13 @@ export class QuicAckRanges {
    * @returns True when the frame was appended; false, leaving `out` and `ackPending` alone, otherwise.
    */
   pushAck(out: u8[], ackDelay: i64): boolean {
-    if (this.count === 0 || !quicPushAck(out, this.ranges, this.count, ackDelay)) {
+    if (this.count === 0) {
+      return false
+    }
+    const pushed: boolean = this.hasEcn()
+      ? quicPushAckEcn(out, this.ranges, this.count, ackDelay, this.ect0, this.ect1, this.ce)
+      : quicPushAck(out, this.ranges, this.count, ackDelay)
+    if (!pushed) {
       return false
     }
     this.ackPending = false
@@ -237,18 +282,23 @@ export class QuicAckRanges {
     if (this.count === 0) {
       return -1
     }
-    const next: i32 = quicPutAck(buf, at, end, this.ranges, this.count, ackDelay)
+    const next: i32 = this.hasEcn()
+      ? quicPutAckEcn(buf, at, end, this.ranges, this.count, ackDelay, this.ect0, this.ect1, this.ce)
+      : quicPutAck(buf, at, end, this.ranges, this.count, ackDelay)
     if (next >= 0) {
       this.ackPending = false
     }
     return next
   }
 
-  /** Forgets every packet number, for a connection slot reused for another peer. */
+  /** Forgets every packet number and ECN count, for a connection slot reused for another peer. */
   clear(): void {
     this.largest = -1
     this.floor = -1
     this.count = 0
     this.ackPending = false
+    this.ect0 = 0
+    this.ect1 = 0
+    this.ce = 0
   }
 }

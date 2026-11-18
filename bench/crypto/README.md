@@ -62,8 +62,8 @@ and then accounts for each of them in every family it checks, after the
 family's `<family>: N of N kernel size(s) match expected.txt` line:
 
 ```
-crypto: columns nish, openssl, openssl-portable, go, go-purego, rust, rust-soft, node
-hash: ran nish, openssl, openssl-portable, rust, rust-soft, node
+crypto: columns nish, nish-portable, openssl, openssl-portable, go, go-purego, rust, rust-soft, node
+hash: ran nish, nish-portable, openssl, openssl-portable, rust, rust-soft, node
 hash did not run go: Go 1.21.0 is older than the go 1.24 its go.mod asks for
 hash did not run go-purego: Go 1.21.0 is older than the go 1.24 its go.mod asks for
 ```
@@ -191,6 +191,8 @@ cannot fall back to a default.
 | `portableProofFlags` | array of `/proc/cpuinfo` flags; required with `portableProof` and an `OPENSSL_ia32cap` mask | The extensions whose loss slows the proof kernel under OpenSSL, each one the mask clears. OpenSSL's proof is held only on a CPU that has one of them. |
 | `portableMinRatio` | number above 1, or an object, optional | How much slower a portable column must be than its default one at `portableProof`; the default is 1.2. An object sets it per twin (`openssl`, `go` and `rust`; a twin it leaves out keeps 1.2). A twin's value of `null` measures and reports the ratio without gating on it. Only valid with `portableProof`. |
 | `portableRounds` | array of twins, optional | The twins (`openssl`, `go`, `rust`) whose proof, short of `portableMinRatio`, is settled by the paired rounds instead (see `portableProof` below). Each one's `portableMinRatio` must be a number. Only valid with `portableProof`. |
+| `nishPortableProof` | `"<kernel>@<size>"`, optional | The case `--validate` times to prove the Nish portable column is portable: a Nish kernel and one of its sizes at which the pinned runtime is measurably slower (see "The Nish portable column" below). |
+| `nishPortableProofFlags` | array of `/proc/cpuinfo` flags; required with `nishPortableProof` | The extensions the runtime kernels behind the proof case use. The proof is held only on a CPU that has one of them. |
 | `notes` | array of strings, optional | Footnotes printed under the family's table after the generated ones, for anything about its columns a reader needs and no other field says. |
 | `needs` | array, optional | `["loopback"]` when the programs listen on and connect to `127.0.0.1`, as a handshake does. On a machine that refuses a loopback socket, the family is noted and left out, rather than failing; `--validate` prints `<family>: skipped (needs loopback)`. |
 
@@ -317,9 +319,11 @@ portable build to give up:
 
 On GitHub Actions on x86-64 Linux, `tests/run.js`'s `crypto-bench` check
 also requires every family to be validated, no `did not run` line, and the
-OpenSSL and Go proofs of every family with a `portableProof` to be proved
-lines, not `unproved`: the runner has the toolchains and the extensions, so a
-column left out there means the gate failed open.
+OpenSSL and Go proofs of every family with a `portableProof`, and the Nish
+portable proof of every family with a `nishPortableProof`, to be proved lines,
+not `unproved`: the runner has the toolchains and the extensions, so a column
+left out there means the gate failed open. The one exception is a Nish proof on
+a runner CPU with none of its flags (not every runner has SHA-NI).
 
 Neither run inherits an `OPENSSL_ia32cap` or `OPENSSL_armcap` from the caller's
 environment: the default column runs unmasked, and the portable one under the
@@ -332,6 +336,26 @@ cannot take `null`: its portable column is the same binary, so there is no
 bytes check, and only the time proves its mask did anything. The hash family does
 this for Rust, whose SHA-512 AVX2 path is about 10% faster than its soft path
 on a CPU without SHA extensions.
+
+### The Nish portable column
+
+`nish-portable` is the Nish binary itself, run under `NISH_AES=soft`,
+`NISH_CHACHA20=soft` and `NISH_SHA256=soft`. Each variable is read by its
+runtime kernel on its first call (`runtime/runtime-aes.c`,
+`runtime/runtime-chacha20.c`, `runtime/runtime-sha256.c`), and `soft` runs the
+portable code whatever the CPU has: bitsliced AES and carry-less multiply,
+scalar ChaCha20, scalar SHA-256. No other Nish code dispatches on the CPU, so a
+family that calls none of the three (the curves, X.509 parsing) runs the same
+code in both Nish columns. Neither Nish column inherits the three variables
+from the caller's environment.
+
+The proof is the twins' step 2 at `nishPortableProof`, with the default
+minimum of 1.2x: the pinned run must be that much slower than the default one
+at their fastest rounds, measured once more with 11 rounds when short. A
+column it cannot reach prints `portable <family> nish-portable: unproved
+(<why>)`: a CPU with none of the `nishPortableProofFlags`, or no Nish binary.
+The aead family proves it at `aes128gcm-seal@16384` (`aes`, `pclmulqdq`) and
+the hash family at `sha256@1048576` (`sha_ni`).
 
 ## The table
 
@@ -351,12 +375,13 @@ Each case (a kernel and a size) works in three steps:
 A run that takes longer than 120 s, in the table or in `--validate`, counts as
 a failed one.
 
-The two verdict columns divide Nish's median time by the fastest column in a
-group:
+The two verdict columns divide a Nish column's median time by the fastest
+column in a group:
 
-- **Nish / best portable:** OpenSSL portable, Go purego and Rust soft.
-- **Nish / best assembly:** OpenSSL, Go, Rust and Node, each in its default
-  build.
+- **Nish / best portable:** Nish portable's time over the fastest of
+  OpenSSL portable, Go purego and Rust soft.
+- **Nish / best assembly:** Nish's time over the fastest of OpenSSL, Go, Rust
+  and Node, each in its default build.
 
 Each quotient is read against that row's noise band, `|nish / nish-copy − 1|`,
 by `bench/par-reading.mjs`'s `sideOf`. The band is Nish's gap alone, not

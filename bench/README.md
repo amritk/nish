@@ -438,17 +438,17 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the twenty-two programs: the
-first eight above (`treesum` is not counted), the four map layout prototypes, the three `Map` measurements and
-the seven AWFY ports. `npm test`
+`bench/instructions.json` holds one count for each of the thirty-one programs: the
+first eight above (`treesum` is not counted), the four map layout prototypes, the three `Map` measurements,
+the seven AWFY ports and nine crypto kernels. `npm test`
 fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all twenty-two and print them against the baseline
+node bench/run.mjs --instructions            # count all thirty-one and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
-node bench/run.mjs --instructions --only Queens,fib   # a subset (`awfy` names the seven ports, `maps` the four prototypes)
+node bench/run.mjs --instructions --only Queens,fib   # a subset (`awfy` names the seven ports, `maps` the four prototypes, `crypto` the nine kernels)
 ```
 
 Each program is built as the timing mode builds it: `--profile speed`, the
@@ -468,7 +468,8 @@ glibc's debug symbols to tell its code apart from the program's. CI's runner has
 neither. So the start-up stays in the count, and whatever about it could vary
 from one host to the next is pinned instead:
 
-- **The environment.** The child's environment holds `GLIBC_TUNABLES` and
+- **The environment.** The child's environment holds the pins below
+  (`GLIBC_TUNABLES`, the runtime's kernel choices and `LD_PRELOAD`) and
   nothing else. The loader scans every variable, and each one costs about 500
   instructions. This container's inherited 7.6 KB environment added 97,461 to
   fib, and a 64 KB variable adds 551.
@@ -487,6 +488,11 @@ from one host to the next is pinned instead:
   (0.0008%).
   The program's own code is the same on every host already: `--profile speed`
   does not pass `-march`.
+- **The runtime's kernels.** `NISH_SIMD=base` sends the search kernels of
+  `runtime/runtime-simd.c` to their SSE2 path, and `NISH_AES`, `NISH_CHACHA20`
+  and `NISH_SHA256` set to `soft` send the crypto kernels to their portable
+  code (`PINNED_SIMD` and `PINNED_CRYPTO` in `bench/run.mjs`), whatever AES,
+  AVX2 or SHA instructions the host has.
 - **The hash key.** A string-keyed `Map` or `Set` seeds its SipHash key from
   `getentropy` before `main`, and each key lays the same strings out
   differently. Unpinned, map-presize counted from 70,038,447 to 70,286,417
@@ -494,7 +500,8 @@ from one host to the next is pinned instead:
   map-presize and map-vs-stringmap spread by 168,476, 121,100 and 669,844.
   Each counted run preloads `bench/fixed-key.c`, a `getentropy` that returns
   fixed bytes, as `./fixed-key.so` from the program's directory. All
-  twenty-two then count with a spread of 0. Loading it costs about 13
+  twenty-two programs counted before the crypto kernels joined then count
+  with a spread of 0. Loading it costs about 13
   thousand instructions a run. Only this harness builds or names it: a
   shipped binary still seeds from the system.
 
@@ -523,7 +530,7 @@ If one does not, it exits 2 and names the count it misread.
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
 version and the commit, and leaves the sizes and the tolerance alone. The
 file-level `commit` and `valgrind` describe every count, so only an update of
-all twenty-two restamps them. `--update --only Queens` stamps a `commit` and
+all thirty-one restamps them. `--update --only Queens` stamps a `commit` and
 `valgrind` on the Queens entry alone, and the next full update clears them. Those two
 are edited by hand. A pull request that runs `--update` shows the table it
 printed, the old count against the new one for every benchmark it moves, and

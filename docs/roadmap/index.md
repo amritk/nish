@@ -31,7 +31,6 @@ specified.
 - M4: when to declare 1.0.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
 - [WP57: Module-scoped names](wp57-module-scoped-names.md): whether two exported functions of one package may share a name, and what that does to the C surface (S2).
-- [WP48: 32-bit references for linked classes](wp48-ref32-classes.md): whether to build it, whether the compiler picks the classes by default (and the markers' spelling), zero-based or based decoding per platform, and whether `R[]` elements are narrowed later.
 - [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md): how module storage crosses into the hidden memory, how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` (S3).
 - [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md): whether to build `Dyn<I>`; the design note measures it against the hand-written dispatch and recommends shipping interface method signatures (stage 1) now, with `Dyn<I>` in registers and in stored places each gated on its own build's timing.
 - [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md): the shape of the `constraints` option, whether to record which keyword failed, whether encode checks constraints in a `-g` build, and whether a coerce class may reach a strict one.
@@ -52,10 +51,10 @@ specified.
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 5 of 9 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 22 of 29 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
+| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 2 of 7 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
-| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | Proposed | 1 of 7 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |

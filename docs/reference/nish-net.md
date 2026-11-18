@@ -450,8 +450,9 @@ A connected TCP socket.
 The size, or a plain `-1`, never an errno, for anything else: a
   descriptor that is not open, a socket with no peer (a listener, or one
   never connected, though the kernel answers its default `536` for
-  those), a socket that is not TCP, and every call on wasm, where it
-  compiles to the constant with the descriptor still evaluated. It throws
+  those), a socket that is not TCP, a connection a `NET_LISTEN_RING`
+  listener accepted, whose ring cannot ask for it, and every call on
+  wasm, where it compiles to the constant with the descriptor still evaluated. It throws
   under Node.
 
 </scalar-field>
@@ -560,7 +561,9 @@ One of the `NET_*` option ids.
 
 ### netShutdown
 
-Shut one side of a connection, or both.
+Shut one side of a connection, or both. On a connection a
+`NET_LISTEN_RING` listener accepted, the shutdown goes behind the bytes
+already written, so the peer reads them and then the end of the stream.
 
 ```ts
 function netShutdown(fd: i32, how: i32): i32
@@ -580,7 +583,8 @@ A connected socket.
 
 <scalar-field name="returns" type="i32">
 
-`0`, `-22` for any other `how`, or the failure.
+`0`, `-22` for any other `how`, `-9` for a closed ring
+  connection, or the failure.
 
 </scalar-field>
 

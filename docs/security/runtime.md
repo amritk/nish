@@ -8,15 +8,15 @@ answer. Line numbers in the findings table refer to `main` at `bc6ad66`.
 
 | File | What was read |
 | --- | --- |
-| `runtime/runtime.c` | the arena (`nish_arena_grow`, `nish_alloc_struct`, marks, `nish_arena_keep`), `nish_parse_number`, `Math.random`, `nish_alloc_array`, `nish_argv_init`, `nish_array_grow`, the panics, the `cErrno` slot and `nish_errno_ptr` (RT-51) |
-| `runtime/runtime-text.c` | every string function (`nish_str_*`), the integer and Zmij (`nish_f64_format`) formatters and their buffers, and `nish_json_put_f64` (its bounds against the caller's array). It moved out of `runtime.c` in WP50 stage 4, unchanged except for the freestanding wasm32 build: compiler builtins for the memory calls, a portable 64×64→128 multiply, and an out-of-memory panic that asks `runtime-wasm.c`'s allocator for a size no arena holds. That build's own code is in scope too: `nish_text_cmp` (the byte compare that stands in for `memcmp`), and the hand-written first-byte scans that stand in for `memchr` in the searches. The native speed build (not freestanding, not ASan, not `-Os`/`-Oz`) has code of its own in scope: `nish_text_alloc`, the inline arena bump, against the `struct nish_arena` copy its `_Static_assert`s hold to `nish.h`'s layout; every other build, wasm32's included, defines `nish_text_alloc` as `nish_alloc_struct` |
+| `runtime/runtime.c` | the arena (`nish_arena_grow`, `nish_alloc_struct`, marks, `nish_arena_keep`), the compact-class range (`-DNISH_ARENA_RANGE`: the reservation, the class free lists, the exhaustion panic; "The compact-class range" below), `nish_parse_number`, `Math.random`, `nish_alloc_array`, `nish_argv_init`, `nish_array_grow`, the panics, the `cErrno` slot and `nish_errno_ptr` (RT-51) |
+| `runtime/runtime-text.c` | every string function (`nish_str_*`), the integer and Zmij (`nish_f64_format`) formatters and their buffers, and `nish_json_put_f64` (its bounds against the caller's array). It moved out of `runtime.c` in WP50 stage 4, unchanged except for the freestanding wasm32 build: compiler builtins for the memory calls, a portable 64×64→128 multiply, and an out-of-memory panic that asks `runtime-wasm.c`'s allocator for a size no arena holds. That build's own code is in scope too: `nish_text_cmp` (the byte compare that stands in for `memcmp`), and the hand-written first-byte scans that stand in for `memchr` in the searches. The native speed build (not freestanding, not ASan, not `-Os`/`-Oz`) has code of its own in scope: `nish_text_alloc`, the inline arena bump, against the `struct nish_arena` copy its `_Static_assert`s hold to `nish.h`'s layout; every other build, wasm32's included, defines `nish_text_alloc` as `nish_alloc_struct`. Under `-DNISH_ARENA_RANGE`, that inline bump's realign of `off` up to 8 ("The compact-class range" below) |
 | `runtime/nish.h` | every prototype and layout against its definition, and every contract comment against what the code does |
 | `runtime/runtime-os.c` | the file reads and writes, `writeFileBytesSync` (`O_NOFOLLOW` as `writeFileSync`, and a `close` that fails answers its errno rather than the full length), `writeBytes` (`nish_write_bytes`, after the emitter's range check), the shared write loop `nish_put_all`, `renameSync` and `unlinkSync` (a NUL in a path answers `-EINVAL` before the call; neither follows a link, and `unlinkSync` never falls back to `rmdir`), `isDirectorySync`, `mkdirSync`, `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (RT-24 to RT-26), `readdirSync` and its sort, both spawns, `spawnPiped` (`nish_spawn_piped`, `nish_pipe`: its pipes' descriptors, the `poll` loop, the output cap, the SIGPIPE mask), `spawnPipedWithin` (`nish_spawn_piped_within`, which `spawnPiped` calls with no deadline: the deadline, the bounded final wait, the kill, RT-49), `spawnWithFds` (`nish_spawn_with_fds`: its limit, the scratch duplicates and their close, RT-40), `getenv`, `realpathSync`, `setCpuAffinity` (`nish_set_cpu_affinity`: the range check, the read of the current mask, the narrow-only set), and the file-window reads (`nish_file_open`, `nish_file_read_at`, `nish_file_size`, `nish_file_close`, `nish_fs_err`: the path refusal, the open flags, the regular-file test, the position checks, the retry and the errno table, RT-50) |
 | `runtime/runtime-host.c` | `Date.now`, `crypto.getRandomValues` (short reads, `EINTR`, the limit), `statMtimeSync`, the signal pipe and its handler |
 | `runtime/runtime-net.c` | every address, length and control-message buffer, descriptor flags and leaks on each error path, the readiness loop's output bounds, the socket-option whitelist, `netMss`'s reading of a kernel-sized `tcp_info`, and the Unix-domain calls: the `sun_path` copy, the abstract name, the stale-file probe and its unlink, the mode set between bind and listen, and every error path after a bind; `sendFd`, `recvFd` and `peerCredentials` (`nish_unix_only`, the `SCM_RIGHTS` control buffer and its count, the descriptors closed, close-on-exec per platform, the credential read per platform, RT-37 to RT-39); `tcpListenFlags` flag 4 (the classic BPF program attached with `SO_ATTACH_REUSEPORT_CBPF`, its flag checks, and the close on a failed attach); `netWrite2` (`nish_net_write2`: its two iovecs, `MSG_NOSIGNAL`, and the clamp that keeps the sum within `i32`); the soft `RLIMIT_NOFILE` raise (`nish_net_raise_nofile`, RT-54) |
 | `runtime/runtime-parallel.c` | the partition arithmetic, the scope task list, thread-local state, thread-creation failure |
 | `runtime/runtime-wasm.c` | the linear-memory arena, `nish_alloc_array`, `nish_array_grow`, and `nish_arena_keep`, the identity function: it is runtime.c's refusal, so it touches no memory and cannot move or release a block |
-| `runtime/runtime-region.c` | the region table (its pages, free list, lock and published page pointers), the handle's index and generation, every check `nish_region_enter`, `_leave` and `_free` make before touching a slot (zero, stale, forged, another thread's, entered), the arena and chunk-size swap, the free through `nish_free_arena`, the 2^24-slot cap and the 2^40 generation retirement (RT-41 to RT-47), the parent and child links `nish_region_child_new` makes and `_free` walks, and `_adopt`'s refusal of a region in a tree (RT-48); with `nish_arena_grow`'s read of `nish_region_chunk` in `runtime.c` |
+| `runtime/runtime-region.c` | the region table (its pages, free list, lock and published page pointers), the handle's index and generation, every check `nish_region_enter`, `_leave` and `_free` make before touching a slot (zero, stale, forged, another thread's, entered), the arena and chunk-size swap, the free through `nish_free_arena`, the 2^24-slot cap and the 2^40 generation retirement (RT-41 to RT-47), the parent and child links `nish_region_child_new` makes and `_free` walks, and `_adopt`'s refusal of a region in a tree (RT-48); under `-DNISH_ARENA_RANGE`, `_adopt`'s carve realign (RT-55) and its drop of an emptied chunk through `nish_range_drop`; with `nish_arena_grow`'s read of `nish_region_chunk` in `runtime.c` |
 | `runtime/runtime-term.c` | its signal handlers' flags, read here for the `waitpid` property; the rest of the file is audited in [`term.md`](term.md) |
 
 Read beside them, without owning them: `src/runtime.ts` (the declarations and
@@ -404,6 +404,135 @@ the other eight, six (`mem_loop_scope`, `mem_loop_scope_threads`,
 `mem_return_array_scope`) print the arena's growth, which the mode changes by
 design. The other two (`file_open_errors`, `file_size_large`) need fixtures that
 only the suite makes.
+
+## The compact-class range
+
+*Built: `scripts/build.sh --arena-range`, which the compiler passes when a
+program has a compact class (WP48, [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
+§3.3). No program has one until WP48 stage 2, so no build selects it today. The
+code is runtime.c's "The compact-class range" block, with the realigns in
+`nish_alloc_struct`, `runtime-text.c`'s `nish_text_alloc` and
+`runtime-cross.c`'s `nish_cross_in`, runtime.c's `nish_arena_keep` and the
+carve in `runtime-region.c`'s `nish_region_adopt` (RT-55), the drop in
+`nish_region_adopt`, and the range guard in `nish_array_grow_here` (RT-58). The default runtime's objects are unchanged: their
+disassembly matches `main`'s, with and without `-DNISH_THREADS`.*
+
+**The reservation.** A constructor reserves 15 GiB read-write with
+`MAP_NORESERVE`, before `main`, once: a compare-and-swap state, and a thread
+that loses it waits for the winner. On Linux the address is fixed at
+`0x40000000` and asked for with `MAP_FIXED_NOREPLACE`, which never replaces a
+mapping something else holds. `MAP_FIXED`, which would, is never used. A
+kernel older than `MAP_FIXED_NOREPLACE` takes the address as a hint: a mapping
+anywhere else is unmapped and treated as busy. Busy is a panic, "the
+compact-class arena cannot reserve its 15 GiB range at 0x40000000 (1 GiB to
+16 GiB): the address is in use", and never a fallback, because compiled code
+will treat the base as a constant. Elsewhere the system places the range and
+`nish_ref_base` holds its base. A failed reservation there is the same panic
+without an address. A fixed reservation the system refuses for any other
+reason (an address-space or mapping limit, `ENOMEM`) panics with "the system
+refused the mapping" instead of "the address is in use" (RT-56). The first 64 bytes of the range are never handed out, so
+no block is at offset 0.
+
+**The free lists.** A chunk of 2 MiB or less is cut from the range at a
+power-of-two size from 4 KiB to 2 MiB (its class), with its 16-byte header in
+front. A take pops its class's list, or else moves the high-water mark. A
+release (`nish_free_until`) and a region's adopt push a chunk onto its class's
+list when its address is in the range, and `free` any other chunk: a chunk
+over 2 MiB, or a block `runtime-cross.c` copied with `malloc` and adopted. A
+chunk's class is read from its `cap` with the carved bit masked, and a carved
+chunk is never dropped, as without the range. A chunk of the range is never
+passed to `realloc`: an array growing out of one it fills is copied to a
+fresh chunk instead (RT-58), so a range chunk's `cap` stays its class. Any
+chunk `nish_range_owns` does not claim may still be reallocated in place: a
+malloc'd chunk past 2 MiB, or a malloc'd block of 2 MiB or less that
+`nish_cross_link` adopted. One spin lock covers every list
+and the mark, for every thread. A chunk on a list keeps its pages: the range
+never shrinks. A chunk taken again holds whatever its last owner wrote, the
+same as a chunk `malloc` hands back. The arena never promised zeroed memory.
+
+**Exhaustion.** A take that would move the mark past the range's end
+releases the lock and panics, "nish: the compact-class arena's 15 GiB range is
+used up". The check is `span > size || top > size - span` on unsigned values, so it
+cannot wrap at any size, including the 1 MiB a test build reserves; at the
+production 15 GiB the first test folds away.
+
+**With the other modes.** Under `--debug-arena` the debug reservation is the
+range itself, `PROT_NONE` and opened page by page, so its never-reuse rule and
+its fault on a stale read hold. Its exhaustion panic names the 15 GiB limit.
+Its fault handler names a fault as a stale arena read only past the range's
+first page, which is never opened, so a fault there is not blamed on the arena
+(RT-57).
+`NISH_ASAN` wins over both: nothing is reserved, `nish_ref_base` stays null,
+every allocation is ASan's, and `nish_arena_range_abi` is still defined, so
+the build links.
+
+**Memory.** The 4 KiB class floor rounds a small region's first chunk up.
+`tests/link/region_sessions_soak` (1000 live regions) holds about 4.6 MB
+of anonymous memory with the range, against about 762 KB without it, and
+prints the same output. The figures are the "anonymous resident" the program
+prints for its regions phase after warm-up (4,591,616 and 761,856 bytes on
+this record's run), built as `tests/run.js` builds it: `nish main.ts
+--threads`, then `scripts/build.sh *.ll runtime/runtime.c -pthread --threads`,
+with and without `--arena-range`. That is a cost, not a bound broken: with
+the range, the chunks cut from it (2 MiB or less) are capped at 15 GiB in
+all; a larger chunk is malloc'd and has no cap of its own, as without the
+range. The cost scales with live regions: each region's first chunk, and each
+recycled async task's (`runtime-async.c` sets `nish_region_chunk = 8`), takes
+a whole 4 KiB class under the range, where before it was a `malloc` of about
+the request, so 100,000 small live regions would commit hundreds of MB. Not
+measured here; stage 2, which first selects the range, weighs it.
+
+**The tests**, all in `tests/run.js` (`node tests/run.js arena-range`; the
+sanitizer rows under `runtime_sanitize`). Each is named by its `check(...)`
+string; `<range>` is `the compact-class range` and, for the threaded build,
+`the compact-class range, -DNISH_THREADS`. The verdicts are exit statuses,
+signals and stdout, never a panic's words.
+
+- `tests/runtime/range-test.c`, linked with the whole runtime, plain and with
+  `-DNISH_THREADS`: "`<range>`: chunks of 2 MiB or less are power-of-two
+  classes in the range past its first 64 bytes, a freed chunk is reused,
+  larger ones are malloc's, and regions, keep and the cross copies work, and
+  an array past 64 KB grows without reallocating a range chunk". It must exit
+  0 and print `range ok`. The array grows in place in a region chunk with
+  room, is copied from 128 KiB to 4 MiB out of chunks it fills, each range
+  chunk keeping its class's `cap`, and is reallocated only from 4 MiB to
+  8 MiB, as the head chunk.
+- The same file in `misaligned` mode: "`<range>`: from an offset 4 past an
+  8-byte boundary, the struct and text bumps, an array grow in place and by a
+  copy, nish_cross_in, keep and region adopt each hand out an 8-aligned
+  block". It must print `misaligned ok`.
+- In `busy` mode, on Linux: "`<range>`: a busy fixed address exits 1 before
+  main runs" (a constructor that runs first maps `0x40000000`), and "`<range>`:
+  without the address taken first, the same mode reaches main".
+- Built with a 1 MiB range in `exhaust` mode: "the compact-class range: a
+  used-up range exits 1 rather than handing out a chunk past its end", and
+  with `-DNISH_ARENA_DEBUG`, "the debug arena with the compact-class range: a
+  used-up range exits 1 rather than handing out a chunk past its end".
+- "runtime_sanitize: the range unit test (`<range>`) runs clean under ASan
+  and UBSan", built with the based shape because the sanitizers' shadow
+  memory lies where the fixed range would be, and "runtime_sanitize: the range
+  unit test (the compact-class range with -DNISH_ASAN, which reserves nothing)
+  runs clean under ASan and UBSan", in `unreserved` mode: the ABI symbol is
+  found, the base is null and the arena works.
+- "scripts/build.sh `<flags>`: a module naming @nish_arena_range_abi links and
+  reads 1", for `--arena-range`, `--arena-range --debug-arena` and
+  `--arena-range --threads`; "scripts/build.sh without --arena-range: the same
+  module does not link against the default runtime, and links once
+  @nish_arena_range_abi alone is supplied"; and "scripts/build.sh --arena-range
+  --profile wasm: refused with exit 2". The wasm-host, wasi and napi profiles
+  refuse the flag in `scripts/build.sh` too, but no check runs them.
+- "scripts/build.sh --threads --arena-range: tests/link/`<program>` prints what
+  the default build prints", for `region_sessions_soak` and `par_map_reclaim`.
+- "debug arena with the compact-class range: a pointer kept across a release
+  dies of SIGSEGV at the read", and the same with `, -DNISH_THREADS` after
+  `range`.
+
+| ID | Severity | Location | Finding | Status |
+| --- | --- | --- | --- | --- |
+| RT-55 | Medium | `runtime/runtime.c` (`nish_arena_keep`); `runtime/runtime-region.c` (`nish_region_adopt`) | A compact class bumps the arena by a multiple of 4, so its offset may sit 4 past an 8-byte boundary. `keep` copied its block to the mark unrounded, and adopt carved its chunk header at the caller's offset unrounded, so either could hand out a block 4 bytes off the alignment every other allocation keeps | **Fixed.** Under `NISH_ARENA_RANGE` both round the offset up to 8 first, as `nish_alloc_struct`, `nish_text_alloc` and `nish_cross_in` already did. `nish_array_grow_here`'s in-place bump needs no realign: it hands out no new block, only lengthens the one that ends at the offset by an 8-byte multiple, and every block the runtime places after it comes from a site that realigns; the `misaligned` mode runs it and its copy fallback from a skewed offset. The runtime's other offset writes start a chunk at 0 (`nish_arena_grow`, `nish_cross_link`), rewind to 0 or to a mark captured earlier (`nish_reset_arena`, `nish_arena_release`), swap in a whole saved arena (`nish_region_swap`), or add 8-byte multiples only (`nish_cross_keep`'s transfer blocks). Before: the `misaligned` mode built against the runtime before the fix stops at a kept block at `0x4000005c` and at a misaligned adopted chunk; after: "the compact-class range: from an offset 4 past an 8-byte boundary, the struct and text bumps, an array grow in place and by a copy, nish_cross_in, keep and region adopt each hand out an 8-aligned block" passes, plain and with `-DNISH_THREADS` |
+| RT-56 | Low | `runtime/runtime.c` (`nish_range_map`) | A fixed reservation that failed for any reason panicked "the address is in use", which misleads an operator who hit an address-space limit | **Fixed.** A failure whose `errno` is not `EEXIST` names the system's refusal. Not provoked by a test: the limit that provokes it would also stop the test's own start-up |
+| RT-57 | Low | `runtime/runtime.c` (`nish_debug_on_fault`) | With the range, the debug reservation starts at the range's base, so a null-ish dereference within its first page was reported as a stale arena read | **Fixed.** The handler's window starts one debug page in. Not provoked by a test: a fault in the first page and a stale read both die of `SIGSEGV`, so only the handler's message would tell them apart, and the checks read exit statuses and signals only. "debug arena with the compact-class range: a pointer kept across a release dies of SIGSEGV at the read" still passes, so a stale read past the first page is still named |
+| RT-58 | Medium | `runtime/runtime.c` (`nish_array_grow_here`) | Growing an array in place `realloc`s the exact chunk a block over 64 KB fills. With the range, a chunk of 2 MiB or less is cut from the reservation, not malloc'd, and a power-of-two block of 128 KiB to 2 MiB fills its class chunk exactly, so a push past it passed a range address to `realloc`: glibc aborts, another allocator may corrupt its heap | **Fixed.** Under `NISH_ARENA_RANGE` a chunk `nish_range_owns` takes the copy instead, and keeps its class's `cap`. Before: with the guard deleted, the range unit test dies of `SIGABRT` (exit 134) at the 128 KiB to 256 KiB grow; after: "the compact-class range: chunks of 2 MiB or less are power-of-two classes in the range past its first 64 bytes, a freed chunk is reused, larger ones are malloc's, and regions, keep and the cross copies work, and an array past 64 KB grows without reallocating a range chunk" passes, plain and with `-DNISH_THREADS` |
 
 ## Doc corrections for the security-policy stage
 

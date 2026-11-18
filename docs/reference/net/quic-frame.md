@@ -54,6 +54,7 @@ import {
   QUIC_PATH_DATA_SIZE,
   QUIC_RESET_TOKEN_SIZE,
   QuicFrame,
+  quicAckEcnSize,
   quicAckSize,
   quicCryptoOverhead,
   quicDatagramSize,
@@ -61,6 +62,7 @@ import {
   quicFrameAllowed,
   quicParseFrame,
   quicPushAck,
+  quicPushAckEcn,
   quicPushConnectionClose,
   quicPushCrypto,
   quicPushNewConnectionId,
@@ -73,6 +75,7 @@ import {
   quicPushTypeOnly,
   quicPushValue,
   quicPutAck,
+  quicPutAckEcn,
   quicPutConnectionClose,
   quicPutCrypto,
   quicPutDatagram,
@@ -106,6 +109,12 @@ while (at < toI32(payload.length)) {
 </scalar-code-group>
 
 <scalar-grid cols="2">
+
+<scalar-card title="quic​Ack​Ecn​Size" icon="phosphor/regular/function" href="#quicackecnsize">
+
+The size of the ACK_ECN frame `quicPutAckEcn` writes: the ACK frame `quicAckSize` sizes, then the three ECN counts.
+
+</scalar-card>
 
 <scalar-card title="quic​Ack​Size" icon="phosphor/regular/function" href="#quicacksize">
 
@@ -146,6 +155,12 @@ Reads the frame starting at `payload[at]`, inside `payload[at .. end)`, into `fr
 <scalar-card title="quic​Push​Ack" icon="phosphor/regular/function" href="#quicpushack">
 
 Appends the ACK frame `quicPutAck` writes.
+
+</scalar-card>
+
+<scalar-card title="quic​Push​Ack​Ecn" icon="phosphor/regular/function" href="#quicpushackecn">
+
+Appends the ACK_ECN frame `quicPutAckEcn` writes.
 
 </scalar-card>
 
@@ -218,6 +233,12 @@ Appends the frame `quicPutValue` writes.
 <scalar-card title="quic​Put​Ack" icon="phosphor/regular/function" href="#quicputack">
 
 Writes an ACK frame (§19.3) for the `rangeCount` pairs of `ranges`, each `[smallest, largest]`, from the highest down and not touching (each pair's largest at least two below the smallest of the pair before it), with `ackDelay` already scaled by this endpoint's exponent.
+
+</scalar-card>
+
+<scalar-card title="quic​Put​Ack​Ecn" icon="phosphor/regular/function" href="#quicputackecn">
+
+Writes an ACK_ECN frame (type 0x03, RFC 9000 §19.3.2): the ranges and ACK Delay `quicPutAck` writes, then the ECT(0), ECT(1) and ECN-CE counts a receiver keeps for the space (§13.4.1).
 
 </scalar-card>
 
@@ -353,6 +374,65 @@ nothing here is ported from another implementation. Private names carry the
 importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e).
 
 ## Functions
+
+### quicAckEcnSize
+
+The size of the ACK_ECN frame `quicPutAckEcn` writes: the ACK frame
+`quicAckSize` sizes, then the three ECN counts. Answers 0 where
+`quicAckSize` does, or when a count is negative or above 2^62-1.
+
+```ts
+function quicAckEcnSize(
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64,
+  ect0: i64,
+  ect1: i64,
+  ce: i64,
+): i32
+```
+
+<scalar-field name="ranges" type="i64[]" required>
+
+Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+
+</scalar-field>
+
+<scalar-field name="rangeCount" type="i32" required>
+
+How many pairs to read from the front of `ranges`.
+
+</scalar-field>
+
+<scalar-field name="ackDelay" type="i64" required>
+
+The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+
+</scalar-field>
+
+<scalar-field name="ect0" type="i64" required>
+
+The ECT(0) count: packets received in this space marked ECT(0).
+
+</scalar-field>
+
+<scalar-field name="ect1" type="i64" required>
+
+The ECT(1) count: packets received in this space marked ECT(1).
+
+</scalar-field>
+
+<scalar-field name="ce" type="i64" required>
+
+The ECN-CE count: packets received in this space marked CE.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The frame's size in bytes, or 0 when `quicPutAckEcn` would refuse these arguments.
+
+</scalar-field>
 
 ### quicAckSize
 
@@ -589,6 +669,70 @@ How many pairs to read from the front of `ranges`.
 <scalar-field name="ackDelay" type="i64" required>
 
 The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+
+</scalar-field>
+
+<scalar-field name="returns" type="boolean">
+
+True when the frame was appended.
+
+</scalar-field>
+
+### quicPushAckEcn
+
+Appends the ACK_ECN frame `quicPutAckEcn` writes. Answers `false`, appending nothing, where it refuses.
+
+```ts
+function quicPushAckEcn(
+  out: u8[],
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64,
+  ect0: i64,
+  ect1: i64,
+  ce: i64,
+): boolean
+```
+
+<scalar-field name="out" type="u8[]" required>
+
+The bytes to append the frame to.
+
+</scalar-field>
+
+<scalar-field name="ranges" type="i64[]" required>
+
+Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+
+</scalar-field>
+
+<scalar-field name="rangeCount" type="i32" required>
+
+How many pairs to read from the front of `ranges`.
+
+</scalar-field>
+
+<scalar-field name="ackDelay" type="i64" required>
+
+The ACK Delay field, already scaled by this endpoint's `ack_delay_exponent`.
+
+</scalar-field>
+
+<scalar-field name="ect0" type="i64" required>
+
+The ECT(0) count.
+
+</scalar-field>
+
+<scalar-field name="ect1" type="i64" required>
+
+The ECT(1) count.
+
+</scalar-field>
+
+<scalar-field name="ce" type="i64" required>
+
+The ECN-CE count.
 
 </scalar-field>
 
@@ -1122,8 +1266,89 @@ The ACK Delay field, already scaled: microseconds shifted right by the exponent.
 
 <scalar-field name="returns" type="i32">
 
-The offset past the frame, or -1 with nothing written. The frame is always type 0x02, without ECN
-  counts.
+The offset past the frame, or -1 with nothing written. The frame is type 0x02, without ECN
+  counts; `quicPutAckEcn` writes the 0x03 frame that carries them.
+
+</scalar-field>
+
+### quicPutAckEcn
+
+Writes an ACK_ECN frame (type 0x03, RFC 9000 §19.3.2): the ranges and
+ACK Delay `quicPutAck` writes, then the ECT(0), ECT(1) and ECN-CE counts a
+receiver keeps for the space (§13.4.1). Answers -1, writing nothing, where
+`quicAckEcnSize` answers 0 or the frame does not fit.
+
+```ts
+function quicPutAckEcn(
+  buf: u8[],
+  at: i32,
+  end: i32,
+  ranges: i64[],
+  rangeCount: i32,
+  ackDelay: i64,
+  ect0: i64,
+  ect1: i64,
+  ce: i64,
+): i32
+```
+
+<scalar-field name="buf" type="u8[]" required>
+
+The buffer to write into.
+
+</scalar-field>
+
+<scalar-field name="at" type="i32" required>
+
+The offset of the frame's first byte.
+
+</scalar-field>
+
+<scalar-field name="end" type="i32" required>
+
+One past the last byte the frame may use.
+
+</scalar-field>
+
+<scalar-field name="ranges" type="i64[]" required>
+
+Packet number pairs laid out flat, `[smallest, largest]` for each range, highest range first.
+
+</scalar-field>
+
+<scalar-field name="rangeCount" type="i32" required>
+
+How many pairs to read from the front of `ranges`.
+
+</scalar-field>
+
+<scalar-field name="ackDelay" type="i64" required>
+
+The ACK Delay field, already scaled: microseconds shifted right by the exponent.
+
+</scalar-field>
+
+<scalar-field name="ect0" type="i64" required>
+
+The ECT(0) count.
+
+</scalar-field>
+
+<scalar-field name="ect1" type="i64" required>
+
+The ECT(1) count.
+
+</scalar-field>
+
+<scalar-field name="ce" type="i64" required>
+
+The ECN-CE count.
+
+</scalar-field>
+
+<scalar-field name="returns" type="i32">
+
+The offset past the frame, or -1 with nothing written.
 
 </scalar-field>
 

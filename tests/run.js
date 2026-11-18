@@ -3939,8 +3939,11 @@ if (dealtHere("fnref")) {
   // set. `fnref_place_set` and the half of `fnref_escape_join` that calls
   // through the set that keeps nothing must peak alike; the half that calls
   // `slot.use`, whose set keeps `p`, grows the arena as a direct call of
-  // `keepIt` does, so it is pinned to that direct call instead. The tolerance
-  // is under one arena chunk (128 KB), the smallest step a leak can take.
+  // `keepIt` does, so it is pinned to that direct call instead. Each check
+  // bounds growth only: the second peak may not exceed the first by one arena
+  // chunk (128 KB), the smallest step a leak can take. A leak only raises the
+  // second peak, so a second peak lower than the first is measurement noise
+  // and passes.
   const rssExe = path.join(fnrefDir, "rss")
   const rssBuilt = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
   const peakOf = (label, source) => {
@@ -3958,7 +3961,7 @@ if (dealtHere("fnref")) {
   const flat = (label, few, many) =>
     check(
       label,
-      rssBuilt.status === 0 && few.kb > 0 && many.kb > 0 && Math.abs(many.kb - few.kb) < 128,
+      rssBuilt.status === 0 && few.kb > 0 && many.kb > 0 && many.kb - few.kb < 128,
       `peak ${few.kb} KB and ${many.kb} KB\n${rssBuilt.stderr}${few.detail}\n${many.detail}`
     )
   flat(
@@ -9680,6 +9683,13 @@ if (dealtHere("cryptoBench")) {
         JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
           .portableProof !== undefined
     )
+    // The families whose Nish portable column (the runtime's kernels pinned to
+    // `soft`) has a proof of its own.
+    const nishProved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .nishPortableProof !== undefined
+    )
     const v = spawnSync(
       "node",
       [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
@@ -9703,7 +9713,8 @@ if (dealtHere("cryptoBench")) {
     // GitHub's x86-64 Linux runner has every twin's toolchain and the
     // extensions their portable builds give up, so there a column this machine
     // did not run, or an `unproved` line, means a gate failed open: every twin
-    // must run and the OpenSSL and Go proofs must be measured ones.
+    // must run and the OpenSSL, Go and Nish portable proofs must be measured
+    // ones (the Nish one unless the CPU lacks every extension it pins off).
     const strict =
       process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
     const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
@@ -9724,13 +9735,22 @@ if (dealtHere("cryptoBench")) {
             new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
           )
         ) &&
+        nishProved.length > 0 &&
+        nishProved.every((f) => new RegExp(`^portable ${f} nish-portable: `, "m").test(v.stdout)) &&
         (!strict ||
           (validated.length === families.length &&
             !/ did not run /.test(v.stdout) &&
             proved.every((f) =>
               ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ) &&
+            // Not every runner CPU has SHA-NI, so a CPU without the family's
+            // flags is the one reason the Nish proof may go unmeasured there.
+            nishProved.every(
+              (f) =>
+                provedLine(f, "nish-portable").test(v.stdout) ||
+                new RegExp(`^portable ${f} nish-portable: unproved \\(this CPU has none of `, "m").test(v.stdout)
             ))),
-      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL, Go and Nish portable proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
     )
     for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
       if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
@@ -9960,27 +9980,48 @@ const sanitizerProbe = (flags) => {
 if (dealtHere("sanitizers") && (!only || "runtime_sanitize".includes(only))) {
   const flags = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
   const probe = sanitizerProbe(flags)
-  for (const [label, defines] of [
-    ["single-threaded", []],
-    ["-DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"]],
+  // The range unit test (tests/runtime/range-test.c) builds the range runtime
+  // without -DNISH_ASAN, so its chunks are carved; ASan's shadow lies where the
+  // fixed range would be, so it takes the based shape, as on macOS.
+  const range = ["-DNISH_ARENA_RANGE=1", "-DNISH_RANGE_TEST_BASED=1"]
+  // The last row adds -DNISH_ASAN, the differential ASan build's runtime:
+  // with the range on it reserves nothing (`unreserved`).
+  for (const [label, defines, test, exeName, args] of [
+    ["single-threaded", [], "tests/runtime-test.c", "runtime_test_sanitize", []],
+    ["-DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"], "tests/runtime-test.c", "runtime_test_sanitize_threads", []],
+    ["the compact-class range", range, "tests/runtime/range-test.c", "range_test_sanitize", []],
+    [
+      "the compact-class range, -DNISH_THREADS",
+      [...range, "-DNISH_THREADS=1", "-pthread"],
+      "tests/runtime/range-test.c",
+      "range_test_sanitize_threads",
+      [],
+    ],
+    [
+      "the compact-class range with -DNISH_ASAN, which reserves nothing",
+      ["-DNISH_ARENA_RANGE=1", "-DNISH_ASAN"],
+      "tests/runtime/range-test.c",
+      "range_test_sanitize_asan",
+      ["unreserved"],
+    ],
   ]) {
-    const name = `runtime_sanitize: the runtime unit test (${label}) runs clean under ASan and UBSan`
+    const name = `runtime_sanitize: the ${test === "tests/runtime-test.c" ? "runtime" : "range"} unit test (${label}) runs clean under ASan and UBSan`
     if (probe?.skip !== undefined) {
       skip(`${name} (${probe.skip})`)
       continue
     }
-    const exe = path.join(buildDir, `runtime_test_sanitize${defines.length > 0 ? "_threads" : ""}`)
+    const exe = path.join(buildDir, exeName)
     const cc =
       probe === null
         ? spawnSync(
             "clang",
-            ["-std=c11", "-g", "-O1", ...flags, ...defines, ...RUNTIME_C, "tests/runtime-test.c", "-o", exe],
+            ["-std=c11", "-g", "-O1", ...flags, ...defines, ...RUNTIME_C, test, "-o", exe],
             { cwd: root, encoding: "utf8" }
           )
         : { status: 1, stderr: probe.error }
     const run =
       cc.status === 0
-        ? spawnSync(exe, [], {
+        ? spawnSync(exe, args, {
             encoding: "utf8",
             env: { ...envWithThreads(null), ASAN_OPTIONS: "detect_leaks=1:abort_on_error=0", UBSAN_OPTIONS: "print_stacktrace=1" },
             timeout: 120_000,
@@ -10745,10 +10786,10 @@ if (dealtHere("bench") && (!only || "yaml-compare".includes(only) || "bench".inc
 
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
-// noise is bigger than that. An instruction count is exact, so the twenty-one
-// benchmark programs (bench/*.ts, the four WP32 map layout prototypes, the three
-// `Map` measurements and the seven AWFY ports) are built as the timing
-// mode builds them and run once each under cachegrind, and a count above
+// noise is bigger than that. An instruction count is exact, so every program
+// bench/instructions.json lists (bench/*.ts, the four WP32 map layout prototypes,
+// the three `Map` measurements, the seven AWFY ports and the crypto kernels of
+// bench/crypto/) is built as the timing mode builds it and run once under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
 // bench/README.md ("Instruction counts") has the determinism measurements and
@@ -10774,7 +10815,8 @@ if (dealtHere("bench") && (!only || "instructions".includes(only))) {
     )
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 22 within /m.test(counted.stdout),
+      counted.status === 0 &&
+        new RegExp(`^instructions: all ${Object.keys(counts.programs).length} within `, "m").test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     )
   }
@@ -16954,6 +16996,203 @@ if (dealtHere("runtimeChecks")) {
     )
   }
 
+  // ---- The compact-class range (WP48 stage 1): runtime.c -DNISH_ARENA_RANGE -------------
+  // tests/runtime/range-test.c, linked with the whole runtime and the range in
+  // the default build and with -DNISH_THREADS: with no argument it checks the
+  // classes, reuse, the 64-byte hole, chunks past 2 MiB outside the range,
+  // regions, keep, the cross copies and a worker's chunks, and prints "range
+  // ok". `exhaust`, built with a 1 MiB range, must exit 1 before it prints
+  // "reached"; `busy` maps the fixed address first and must exit 1 before main
+  // prints anything. The verdicts are exit statuses and stdout, never the
+  // panic's words. Then programs from tests/link built through
+  // `scripts/build.sh --arena-range` print what the default build prints, the
+  // debug arena with the range still faults on a stale reference, and a module
+  // that names @nish_arena_range_abi links against the range runtime and not
+  // the default one. The sanitizer and NISH_ASAN builds are runtime_sanitize's.
+  if (!only || "arena-range".includes(only)) {
+    const rangeBuild = (name, flags) => {
+      const exe = path.join(buildDir, name)
+      const cc = spawnSync(
+        "clang",
+        [
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-O2",
+          "-DNISH_ARENA_RANGE=1",
+          ...flags,
+          ...RUNTIME_C,
+          "tests/runtime/range-test.c",
+          "-lm",
+          "-o",
+          exe,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      return { exe, ok: cc.status === 0, stderr: cc.stderr }
+    }
+    const shown = (built, run) => built.stderr + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}` : "")
+    for (const [name, flags] of [
+      ["range_test", []],
+      ["range_test_threads", ["-DNISH_THREADS=1", "-pthread"]],
+    ]) {
+      const built = rangeBuild(name, flags)
+      const label = flags.length > 0 ? "the compact-class range, -DNISH_THREADS" : "the compact-class range"
+      const run = built.ok ? spawnSync(built.exe, [], { encoding: "utf8" }) : null
+      check(
+        `${label}: chunks of 2 MiB or less are power-of-two classes in the range past its first 64 bytes, a freed chunk is reused, larger ones are malloc's, and regions, keep and the cross copies work, and an array past 64 KB grows without reallocating a range chunk`,
+        run !== null && run.status === 0 && run.stdout === "range ok\n",
+        shown(built, run)
+      )
+      const skewed = built.ok ? spawnSync(built.exe, ["misaligned"], { encoding: "utf8" }) : null
+      check(
+        `${label}: from an offset 4 past an 8-byte boundary, the struct and text bumps, an array grow in place and by a copy, nish_cross_in, keep and region adopt each hand out an 8-aligned block`,
+        skewed !== null && skewed.status === 0 && skewed.stdout === "misaligned ok\n",
+        shown(built, skewed)
+      )
+      if (process.platform === "linux") {
+        const busy = built.ok
+          ? spawnSync(built.exe, ["busy"], { encoding: "utf8", env: { ...process.env, NISH_RANGE_TEST_BUSY: "1" } })
+          : null
+        check(
+          `${label}: a busy fixed address exits 1 before main runs`,
+          busy !== null && busy.status === 1 && busy.stdout === "",
+          shown(built, busy)
+        )
+        const free = built.ok ? spawnSync(built.exe, ["busy"], { encoding: "utf8" }) : null
+        check(
+          `${label}: without the address taken first, the same mode reaches main`,
+          free !== null && free.status === 0 && free.stdout === "reached\n",
+          shown(built, free)
+        )
+      }
+    }
+    const small = rangeBuild("range_test_exhaust", ["-DNISH_RANGE_TEST_SIZE=1048576"])
+    const exhausted = small.ok ? spawnSync(small.exe, ["exhaust"], { encoding: "utf8" }) : null
+    check(
+      "the compact-class range: a used-up range exits 1 rather than handing out a chunk past its end",
+      exhausted !== null && exhausted.status === 1 && !exhausted.stdout.includes("reached"),
+      shown(small, exhausted)
+    )
+    const smallDebug = rangeBuild("range_test_exhaust_debug", ["-DNISH_RANGE_TEST_SIZE=1048576", "-DNISH_ARENA_DEBUG=1"])
+    const exhaustedDebug = smallDebug.ok ? spawnSync(smallDebug.exe, ["exhaust"], { encoding: "utf8" }) : null
+    check(
+      "the debug arena with the compact-class range: a used-up range exits 1 rather than handing out a chunk past its end",
+      exhaustedDebug !== null && exhaustedDebug.status === 1 && !exhaustedDebug.stdout.includes("reached"),
+      shown(smallDebug, exhaustedDebug)
+    )
+
+    const rangeDir = path.join(buildDir, "arena-range")
+    fs.mkdirSync(rangeDir, { recursive: true })
+    const abiLl = path.join(rangeDir, "abi.ll")
+    fs.writeFileSync(
+      abiLl,
+      "@nish_arena_range_abi = external constant i32\n" +
+        "define i32 @main() {\n" +
+        "  %v = load i32, ptr @nish_arena_range_abi\n" +
+        "  %r = sub i32 %v, 1\n" +
+        "  ret i32 %r\n" +
+        "}\n"
+    )
+    const buildSh = (args) => spawnSync("bash", ["scripts/build.sh", ...args], { cwd: root, encoding: "utf8" })
+    for (const [label, extra] of [
+      ["--arena-range", ["--arena-range"]],
+      ["--arena-range --debug-arena", ["--arena-range", "--debug-arena"]],
+      ["--arena-range --threads", ["--arena-range", "--threads"]],
+    ]) {
+      const exe = path.join(rangeDir, `abi${extra.join("")}`)
+      const linked = buildSh([abiLl, "runtime/runtime.c", "-o", exe, "--profile", "debug", ...extra])
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        `scripts/build.sh ${label}: a module naming @nish_arena_range_abi links and reads 1`,
+        run !== null && run.status === 0,
+        `exit ${linked.status}\n${linked.stderr}` + (run ? `run: exit ${run.status} ${run.signal ?? ""}` : "")
+      )
+    }
+    const unlinked = buildSh([abiLl, "runtime/runtime.c", "-o", path.join(rangeDir, "abi_default"), "--profile", "debug"])
+    // The same link with only @nish_arena_range_abi supplied succeeds, so that
+    // symbol is the one the default runtime lacks.
+    const stubLl = path.join(rangeDir, "abi_stub.ll")
+    fs.writeFileSync(stubLl, "@nish_arena_range_abi = constant i32 1\n")
+    const stubbed = buildSh([abiLl, stubLl, "runtime/runtime.c", "-o", path.join(rangeDir, "abi_stubbed"), "--profile", "debug"])
+    const stubRun = stubbed.status === 0 ? spawnSync(path.join(rangeDir, "abi_stubbed"), [], { encoding: "utf8" }) : null
+    check(
+      "scripts/build.sh without --arena-range: the same module does not link against the default runtime, and links once @nish_arena_range_abi alone is supplied",
+      unlinked.status !== 0 && unlinked.status !== null && stubRun !== null && stubRun.status === 0,
+      `exit ${unlinked.status}\n${unlinked.stderr}\nstubbed: exit ${stubbed.status}\n${stubbed.stderr}`
+    )
+    const refused = buildSh([abiLl, "-o", path.join(rangeDir, "abi.wasm"), "--profile", "wasm", "--arena-range"])
+    check(
+      "scripts/build.sh --arena-range --profile wasm: refused with exit 2",
+      refused.status === 2,
+      `exit ${refused.status}\n${refused.stderr}`
+    )
+
+    // A threaded program whose sessions each live in a region, and a parallel
+    // map that reclaims its workers' arenas: the range build prints the same.
+    for (const program of ["region_sessions_soak", "par_map_reclaim"]) {
+      const dir = path.join(rangeDir, program)
+      fs.mkdirSync(dir, { recursive: true })
+      const compiled = spawnSync(NISH, [path.join("tests", "link", program, "main.ts"), "--threads", "-o", `${dir}${path.sep}`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lls = compiled.status === 0 ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).map((f) => path.join(dir, f)) : []
+      const outs = []
+      for (const extra of [[], ["--arena-range"]]) {
+        const exe = path.join(dir, extra.length > 0 ? "range" : "plain")
+        const b = compiled.status === 0 ? buildSh([...lls, "runtime/runtime.c", "-pthread", "-o", exe, "--threads", ...extra]) : null
+        const run = b?.status === 0 ? spawnSync(exe, [], { encoding: "utf8", timeout: 120_000 }) : null
+        outs.push({ b, run })
+      }
+      const expected = fs.readFileSync(path.join("tests", "link", program, "expected.out"), "utf8")
+      const [plain, range] = outs
+      check(
+        `scripts/build.sh --threads --arena-range: tests/link/${program} prints what the default build prints`,
+        plain.run?.status === 0 && range.run?.status === 0 && range.run.stdout === plain.run.stdout && plain.run.stdout === expected,
+        compiled.stderr +
+          outs
+            .map(({ b, run }) => (b ? b.stderr : "") + (run ? `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}` : ""))
+            .join("\n---\n")
+      )
+    }
+
+    // The debug arena's reservation is the range when both are on: a pointer
+    // kept across a release still faults at the read.
+    for (const [suffix, flags] of [
+      ["", []],
+      [", -DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"]],
+    ]) {
+      const debugExe = path.join(rangeDir, `debug_arena_range${flags.length > 0 ? "_threads" : ""}`)
+      const debugCc = spawnSync(
+        "clang",
+        [
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-O2",
+          "-DNISH_ARENA_DEBUG=1",
+          "-DNISH_ARENA_RANGE=1",
+          ...flags,
+          ...RUNTIME_C,
+          "tests/runtime/debug-arena-test.c",
+          "-lm",
+          "-o",
+          debugExe,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const debugRun = debugCc.status === 0 ? spawnSync(debugExe, [], { encoding: "utf8" }) : null
+      check(
+        `debug arena with the compact-class range${suffix}: a pointer kept across a release dies of SIGSEGV at the read`,
+        debugRun !== null && debugRun.signal === "SIGSEGV" && debugRun.stdout === "kept 1, next 7\n",
+        debugCc.stderr + (debugRun ? `exit ${debugRun.status} ${debugRun.signal ?? ""}\n${debugRun.stdout}${debugRun.stderr}` : "")
+      )
+    }
+  }
+
   // ---- The io_uring ring layer (WP63 S1): runtime-uring.c from C -------------------------
   // tests/runtime/uring-test.c includes the layer and runs one mode a check:
   // an echo server forked over a listener holds the parent's clients in a set
@@ -16979,6 +17218,7 @@ if (dealtHere("runtimeChecks")) {
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
+        ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
@@ -32702,6 +32942,24 @@ if (!only || "net_ring".includes(only)) {
       "echo",
       "served 3000 connections with fewer than 64 descriptors\n"
     )
+    // NURING-38: a slot that read its request to -11 holds no receive queue.
+    // Under a limit of 4,096 the 3,000 slots share one ring, whose 2 MiB of
+    // provided buffers and the slots' table entries come to about 800 bytes
+    // a connection of the program's anonymous resident set. Before the fix
+    // each idle slot also kept its 4,096-byte queue, 4,894 bytes in all; a
+    // kept 1,024-byte queue would be about 1,850.
+    ring(
+      "net_ring: an idle keep-alive slot holds no receive queue: under 1,536 bytes a connection at 3,000 (NURING-38)",
+      "net_ring_idle",
+      "idle.ts",
+      4096,
+      3000,
+      "idle",
+      (out) => {
+        const m = /^idle: (-?\d+) bytes per connection$/m.exec(out)
+        return m !== null && Number(m[1]) < 1536
+      }
+    )
     const fullRan = ring(
       "net_ring: a full set answers -23, a closed handle -9, and the freed slot is taken again",
       "net_ring_full",
@@ -32769,6 +33027,36 @@ if (!only || "net_ring".includes(only)) {
         return sent !== null && got !== null && sent[1] === got[1]
       }
     )
+    // NURING-39: netShutdown queues a SHUTDOWN behind the slot's sends, so
+    // Http1Server's refusal lingers rather than closing with the client's
+    // bytes unread. Its client decides: exit 0 when it read the whole 400
+    // and then the end of the stream while it was still sending, and the
+    // server took the sends after it with no reset; 2 when rings are refused. Before the slot path the client got
+    // ECONNRESET; under --sandbox, with SHUTDOWN left out of the premade
+    // rings' restriction, no end of the stream came within its 100 sends.
+    for (const [mode, flags, suffix] of [
+      ["", [], ""],
+      [" under --sandbox", ["--sandbox"], "-sandbox"],
+    ]) {
+      const name = `net_ring: Http1Server's lingering close on a ring listener${mode} sends the whole refusal and then the end of the stream while the client still sends, not a reset (NURING-39)`
+      const b = build("net_ring_linger", "linger.ts", flags, suffix)
+      const r =
+        b.exe === null
+          ? null
+          : spawnSync(process.execPath, [path.join(linkDir, "net_ring_linger", "client.mjs"), b.exe], {
+              encoding: "utf8",
+              timeout: 60000,
+            })
+      if (r !== null && r.status === 2 && r.stdout.includes("rings refused: ")) {
+        skip(`${name}: this kernel refuses io_uring`)
+      } else {
+        check(
+          name,
+          r !== null && r.status === 0,
+          r === null ? `does not compile and link\n${shown(b.c)}` : `signal ${r.signal}\n${shown(r)}`
+        )
+      }
+    }
     ring(
       "net_ring: a slot whose peer reset it answers netWrite with an errno",
       "net_ring_reset",
@@ -33158,6 +33446,7 @@ if (!only || "sandbox".includes(only)) {
       ["26:0", "SEND"],
       ["19:0", "CLOSE"],
       ["14:0", "ASYNC_CANCEL"],
+      ["34:0", "SHUTDOWN"],
       ["27:1", "RECV with FIXED_FILE"],
       ["27:32", "RECV with BUFFER_SELECT"],
       ["27:64", "RECV with CQE_SKIP_SUCCESS"],
@@ -40828,7 +41117,9 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       const { src, budget, constant, flags } = entry
       const name = path.basename(src)
       const label = budgetLabel(entry)
-      const stem = `${name.replace(/\.c$/, "")}${flags.length > 0 ? "_threads" : ""}`
+      // One object per configuration: `-DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` is `_arena_range_threads`.
+      const suffix = flags.map((flag) => `_${flag.replace(/^-DNISH_|=1$/g, "").toLowerCase()}`).join("")
+      const stem = `${name.replace(/\.c$/, "")}${suffix}`
       const obj = path.join(buildDir, `${stem}_budget.o`)
       const cc = spawnSync("clang", ["-Oz", ...flags, "-c", src, "-o", obj], { cwd: root })
       const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null

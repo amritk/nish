@@ -1,0 +1,425 @@
+/* The compact-class range (runtime.c, `-DNISH_ARENA_RANGE`), driven from C:
+ * `node tests/run.js arena-range` links the whole runtime with the define, in the
+ * default build and with -DNISH_THREADS, and runs it once per mode. The
+ * sanitizer reruns (`node tests/run.js runtime_sanitize`) build it with
+ * `-DNISH_RANGE_TEST_BASED` as well: their shadow memory lies where the fixed
+ * range would be, so they take the shape macOS has.
+ *
+ * With no argument it runs the positive checks, prints "range ok" and exits
+ * 0: every chunk of 2 MiB or less lies in the range, past its first 64 bytes,
+ * with a power-of-two `cap` from 4 KiB to 2 MiB; a chunk a release frees is
+ * the next one its class hands out; a larger chunk lies outside the range; a
+ * region's and a worker thread's chunks lie in it; keep and the cross-thread
+ * copies still work, a copied block adopted as a chunk is freed by malloc and
+ * not put on a class list; an array past 64 KB grows in place in a range
+ * chunk with room, is copied out of a range chunk it fills rather than
+ * `realloc`ed (which would abort, the chunk being no malloc's), and only a
+ * malloc'd chunk past 2 MiB is reallocated. The plain Linux build checks the
+ * range starts at 1 GiB.
+ *
+ * `exhaust` (built with a small `-DNISH_RANGE_TEST_SIZE`) takes chunks until
+ * the range is used up: it must exit 1 and never print "reached". `busy`
+ * (with NISH_RANGE_TEST_BUSY=1 in the environment) maps the fixed address in
+ * a constructor that runs before the runtime's: the reservation must exit 1
+ * before main prints anything. `unreserved` (built with -DNISH_ASAN as well,
+ * by `node tests/run.js runtime_sanitize`) checks that build reserves nothing:
+ * the ABI symbol is there, the base is null, and the arena and a region still
+ * work. `misaligned` leaves the arena's offset 4 past an 8-byte boundary, as
+ * compiled code's bump of a compact class does, before each runtime site that
+ * bumps or moves a block in the current chunk (the struct and text bumps,
+ * `nish_array_grow` in place and by a copy, `nish_cross_in`,
+ * `nish_arena_keep`, `nish_region_adopt`'s carve), and checks
+ * each block it hands out is 8-aligned: "misaligned ok", exit 0. */
+
+#define _GNU_SOURCE
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#ifdef NISH_THREADS
+#include <pthread.h>
+#endif
+
+#include "../../runtime/nish.h"
+
+extern char *nish_ref_base;
+extern const int nish_arena_range_abi;
+
+#ifndef NISH_RANGE_TEST_SIZE
+#define RANGE_SIZE ((uint64_t)15 << 30)
+#else
+#define RANGE_SIZE ((uint64_t)(NISH_RANGE_TEST_SIZE))
+#endif
+
+/* runtime.c's chunk header. */
+struct chunk {
+  struct chunk *next;
+  uint64_t cap;
+};
+
+static int failures;
+#define CHECK(cond, ...)                                    \
+  do {                                                      \
+    if (!(cond)) {                                          \
+      failures++;                                           \
+      fprintf(stderr, "FAIL %s:%d: ", __FILE__, __LINE__); \
+      fprintf(stderr, __VA_ARGS__);                         \
+      fputc('\n', stderr);                                  \
+    }                                                       \
+  } while (0)
+
+/* Maps the fixed address first, so the runtime's reservation finds it busy. */
+__attribute__((constructor(101))) static void busy_first(void) {
+  const char *e = getenv("NISH_RANGE_TEST_BUSY");
+  if (!e || strcmp(e, "1") != 0) return;
+#ifndef MAP_FIXED_NOREPLACE
+  /* Linux's value, as runtime.c defines it for an older libc; the mode runs
+     only on Linux. */
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
+  void *p = mmap((void *)((uintptr_t)1 << 30), 4096, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
+  if (p != (void *)((uintptr_t)1 << 30)) {
+    fputs("busy: could not map 0x40000000 first\n", stderr);
+    exit(3);
+  }
+}
+
+static int in_range(const void *p) {
+  uintptr_t a = (uintptr_t)p, base = (uintptr_t)nish_ref_base;
+  return a >= base + 64 && a - base < RANGE_SIZE;
+}
+
+static int is_class(uint64_t cap) {
+  return cap >= 4096 && cap <= ((uint64_t)1 << 21) && (cap & (cap - 1)) == 0;
+}
+
+/* The arena's newest chunk is in the range, of a class, and holds `p`. */
+static void check_chunk(const char *what, const void *p) {
+  struct chunk *c = (struct chunk *)nish_arena.chunks;
+  CHECK(c != 0, "%s: no chunk", what);
+  if (!c) return;
+  CHECK(in_range(c), "%s: chunk %p outside the range at %p", what, (void *)c, (void *)nish_ref_base);
+  CHECK(is_class(c->cap), "%s: cap %llu is not a class", what, (unsigned long long)c->cap);
+  CHECK((const char *)p >= (const char *)(c + 1) && (const char *)p < (const char *)(c + 1) + c->cap,
+        "%s: block %p not in its chunk", what, p);
+}
+
+#ifdef NISH_THREADS
+static void *worker(void *out) {
+  void *p = nish_alloc_struct(100000);
+  memset(p, 1, 100000);
+  *(void **)out = (void *)nish_arena.chunks;
+  nish_free_arena();
+  return 0;
+}
+#endif
+
+static nish_str *make_str(uint64_t len, char fill) {
+  nish_str *s = nish_alloc_struct(8 + len + 1);
+  s->len = (int64_t)len;
+  memset(s->data, fill, (size_t)len);
+  s->data[len] = 0;
+  return s;
+}
+
+static void fill(nish_array *a) {
+  for (uint64_t i = a->len; i < a->cap; i++) ((int64_t *)a->data)[i] = (int64_t)i * 3 + 1;
+  a->len = a->cap;
+}
+static int intact(const nish_array *a) {
+  for (uint64_t i = 0; i < a->len; i++)
+    if (((int64_t *)a->data)[i] != (int64_t)i * 3 + 1) return 0;
+  return 1;
+}
+
+/* `nish_array_grow` past 64 KB: in place by a bump in a range chunk with
+   room, by a copy (never `realloc`) from a range chunk the array fills, and
+   by `realloc` only of a malloc'd chunk past 2 MiB. */
+static void grow(void) {
+  /* A region's 2 MiB chunk with room: a 128 KiB block at its end grows to
+     256 KiB where it is. */
+  uint64_t r = nish_region_new();
+  nish_region_enter(r);
+  memset(nish_alloc_struct(((uint64_t)1 << 20) + 8), 5, 64);
+  nish_array a = { 0, 16384, nish_alloc_struct(16384 * 8) };
+  fill(&a);
+  char *was = a.data;
+  nish_array_grow(&a, 8);
+  CHECK(a.data == was && a.cap == 32768, "a 128 KiB block with room did not grow in place");
+  CHECK(intact(&a), "the in-place grow corrupted the array");
+  fill(&a);
+  check_chunk("in-place grow", a.data);
+  CHECK(intact(&a), "the grown bytes were not the array's");
+  nish_region_leave(r, a.data);
+  nish_region_free(r);
+
+  /* A block that fills a class chunk exactly: each doubling from 128 KiB to
+     2 MiB copies into a chunk of the next class and leaves every chunk's
+     `cap` its class. Past 2 MiB the block is malloc's, and growing that one
+     reallocates it as the head chunk. */
+  nish_free_arena();
+  uint64_t mark = nish_arena_mark();
+  nish_array b = { 0, 16384, nish_alloc_struct(16384 * 8) };
+  CHECK(((struct chunk *)nish_arena.chunks)->cap == 131072 && (char *)nish_arena.chunks + 16 == b.data,
+        "the 128 KiB block is not alone in a 128 KiB chunk");
+  fill(&b);
+  while (b.cap * 8 <= ((uint64_t)1 << 21)) {
+    nish_array_grow(&b, 8);
+    CHECK(intact(&b), "growing to %llu elements corrupted the array", (unsigned long long)b.cap);
+    fill(&b);
+    if (b.cap * 8 <= ((uint64_t)1 << 21)) check_chunk("class-filling grow", b.data);
+  }
+  CHECK(!in_range(b.data), "a 4 MiB array is in the range");
+  for (struct chunk *c = (struct chunk *)nish_arena.chunks; c; c = c->next)
+    if (in_range(c)) CHECK(is_class(c->cap), "a range chunk's cap became %llu", (unsigned long long)c->cap);
+  nish_array_grow(&b, 8);
+  CHECK(b.cap == ((uint64_t)1 << 20) && (char *)nish_arena.chunks + 16 == b.data && !in_range(b.data),
+        "the 8 MiB grow is not the reallocated head chunk");
+  CHECK(intact(&b), "the reallocating grow corrupted the array");
+  fill(&b);
+  nish_arena_release(mark);
+  nish_free_arena();
+}
+
+static int positive(void) {
+  CHECK(nish_arena_range_abi == 1, "the ABI symbol is %d", nish_arena_range_abi);
+  CHECK(nish_ref_base != 0, "no range reserved before main");
+#if defined __linux__ && !defined NISH_RANGE_TEST_BASED
+  CHECK(nish_ref_base == (char *)((uintptr_t)1 << 30), "the fixed range is at %p, not 0x40000000", (void *)nish_ref_base);
+#endif
+
+  /* The first chunk, and every class from 4 KiB to 2 MiB in a region (whose
+     chunks start at the first allocation's size). */
+  void *p = nish_alloc_struct(24);
+  check_chunk("first", p);
+  CHECK((char *)nish_arena.chunks >= nish_ref_base + 64, "the first 64 bytes were handed out");
+  CHECK(nish_arena.chunks != 0 && ((struct chunk *)nish_arena.chunks)->cap == 65536, "the first chunk is not 64 KiB");
+
+  for (uint64_t want = 4096; want <= ((uint64_t)1 << 21); want *= 2) {
+    /* A fresh region's first chunk is its first allocation's size, so a
+       request of exactly a class takes a chunk of that class; one byte less
+       than half the next class rounds up to it. */
+    uint64_t r = nish_region_new();
+    nish_region_enter(r);
+    void *q = nish_alloc_struct(want);
+    memset(q, 2, (size_t)want);
+    struct chunk *c = (struct chunk *)nish_arena.chunks;
+    CHECK(c && c->cap == want, "a %llu-byte request took cap %llu", (unsigned long long)want,
+          c ? (unsigned long long)c->cap : 0ull);
+    check_chunk("class", q);
+    nish_region_leave(r, q);
+    nish_region_free(r);
+    r = nish_region_new();
+    nish_region_enter(r);
+    q = nish_alloc_struct(want / 2 + 8);
+    c = (struct chunk *)nish_arena.chunks;
+    CHECK(c && c->cap == (want / 2 + 8 <= 4096 ? 4096 : want), "a %llu-byte request took cap %llu",
+          (unsigned long long)(want / 2 + 8), c ? (unsigned long long)c->cap : 0ull);
+    check_chunk("rounded class", q);
+    nish_region_leave(r, q);
+    nish_region_free(r);
+  }
+
+  /* A released chunk is the next one its class hands out. */
+  {
+    uint64_t mark = nish_arena_mark();
+    nish_alloc_struct(300000);
+    struct chunk *first = (struct chunk *)nish_arena.chunks;
+    nish_arena_release(mark);
+    nish_alloc_struct(300000);
+    CHECK((struct chunk *)nish_arena.chunks == first, "the released 512 KiB chunk %p was not reused (got %p)",
+          (void *)first, nish_arena.chunks);
+    nish_arena_release(mark);
+  }
+
+  /* Past 2 MiB a chunk is malloc's, outside the range, and freed by malloc. */
+  {
+    uint64_t mark = nish_arena_mark();
+    void *big = nish_alloc_struct(((uint64_t)1 << 21) + 64);
+    memset(big, 3, 64);
+    CHECK(!in_range(nish_arena.chunks), "a chunk over 2 MiB is in the range");
+    nish_arena_release(mark);
+  }
+
+  /* `keep` copies a block past its release. */
+  {
+    uint64_t mark = nish_arena_mark();
+    nish_alloc_struct(70000);
+    int64_t *v = nish_alloc_struct(16);
+    v[0] = 41;
+    v[1] = 42;
+    int64_t *kept = nish_arena_keep(mark, v);
+    CHECK(kept[0] == 41 && kept[1] == 42, "keep lost the block");
+    check_chunk("keep", kept);
+  }
+
+  /* A region's chunks come from the range, and freeing it gives them back. */
+  {
+    uint64_t r = nish_region_new();
+    nish_region_enter(r);
+    void *q = nish_alloc_struct(5000);
+    memset(q, 4, 5000);
+    check_chunk("region", q);
+    void *q2 = nish_alloc_struct(200000);
+    check_chunk("region's second", q2);
+    nish_region_leave(r, q);
+    nish_region_free(r);
+    uint64_t again = nish_region_new();
+    nish_region_enter(again);
+    void *q3 = nish_alloc_struct(5000);
+    check_chunk("region after a free", q3);
+    nish_region_leave(again, q3);
+    nish_region_free(again);
+  }
+
+  /* The cross-thread copies: a small value comes back into the arena, a large
+     one becomes a chunk of it (malloc's), which a release frees by malloc. */
+  {
+    uint64_t mark = nish_arena_mark();
+    nish_str *s = make_str(10, 'a');
+    void *out = nish_cross_out(s, 0, 0);
+    nish_str *back = nish_cross_in(out, 0);
+    CHECK(back->len == 10 && back->data[9] == 'a', "a small copy came back wrong");
+    check_chunk("cross_in small", back);
+    nish_str *b = make_str(100000, 'b');
+    nish_str *bback = nish_cross_in(nish_cross_out(b, 0, 0), 0);
+    CHECK(bback->len == 100000 && bback->data[99999] == 'b', "a large copy came back wrong");
+    CHECK(!in_range(nish_arena.chunks), "an adopted copy block is in the range");
+    nish_arena_release(mark);
+    void *after = nish_alloc_struct(64);
+    check_chunk("after a release past an adopted block", after);
+    nish_arena_release(mark);
+  }
+
+  grow();
+
+#ifdef NISH_THREADS
+  {
+    pthread_t t;
+    void *chunk = 0;
+    CHECK(pthread_create(&t, 0, worker, &chunk) == 0, "pthread_create");
+    pthread_join(t, 0);
+    CHECK(chunk && in_range(chunk), "a worker's chunk %p is outside the range", chunk);
+  }
+#endif
+
+  nish_free_arena();
+  if (failures) return 1;
+  puts("range ok");
+  return 0;
+}
+
+/* Leaves the arena's `off` 4 past an 8-byte boundary, as compiled code's bump
+   of a compact class's 4-byte multiple does, with a fresh 4 KiB or larger
+   chunk's room after it. */
+static void skew(void) {
+  nish_free_arena();
+  nish_alloc_struct(8);
+  CHECK(nish_arena.off + 4 + 1024 <= nish_arena.cap, "skew: no room in the first chunk");
+  nish_arena.off += 4;
+  CHECK(nish_arena.off % 8 == 4, "skew: off %llu", (unsigned long long)nish_arena.off);
+}
+
+static int aligned(const void *p) { return ((uintptr_t)p & 7) == 0; }
+
+/* Every runtime site that bumps or relocates within the current chunk, run
+   from an `off` 4 past an 8-byte boundary: each block it hands out is
+   8-aligned. */
+static int misaligned(void) {
+  skew();
+  void *s = nish_alloc_struct(24);
+  CHECK(aligned(s), "nish_alloc_struct: %p", s);
+
+  skew();
+  nish_str *t = nish_str_new("abcdef", 6);
+  CHECK(aligned(t) && nish_str_len(t) == 6, "nish_str_new (the text bump): %p", (void *)t);
+
+  /* An array grow from a skewed `off`: the block ending at `off` grows by
+     the in-place bump, and once compiled code's 4 bytes follow it, by a copy
+     to a block `nish_alloc_struct` realigns. */
+  skew();
+  nish_array arr = { 4, 4, nish_alloc_struct(32) };
+  memset(arr.data, 6, 32);
+  char *here = arr.data;
+  nish_array_grow(&arr, 8);
+  CHECK(arr.data == here && aligned(arr.data) && aligned(nish_arena.buf + nish_arena.off),
+        "nish_array_grow in place: %p, off %llu", (void *)arr.data, (unsigned long long)nish_arena.off);
+  nish_arena.off += 4;
+  nish_array_grow(&arr, 8);
+  CHECK(arr.data != here && aligned(arr.data) && arr.cap == 16 && arr.data[31] == 6, "nish_array_grow by a copy: %p",
+        (void *)arr.data);
+  void *after_grow = nish_alloc_struct(8);
+  CHECK(aligned(after_grow), "after nish_array_grow: %p", after_grow);
+
+  skew();
+  nish_str *b = nish_str_new("xyz", 3);
+  void *out = nish_cross_out(b, 0, 0);
+  skew();
+  nish_str *back = nish_cross_in(out, 0);
+  CHECK(aligned(back) && nish_str_len(back) == 3, "nish_cross_in: %p", (void *)back);
+
+  skew();
+  uint64_t mark = nish_arena_mark();
+  CHECK(mark % 8 == 4, "keep: the mark %llx is not skewed", (unsigned long long)mark);
+  nish_alloc_struct(40);
+  nish_str *k = nish_str_new("kept!", 5);
+  nish_str *kept = nish_arena_keep(mark, k);
+  CHECK(aligned(kept) && nish_str_len(kept) == 5 && memcmp(kept->data, "kept!", 5) == 0,
+        "nish_arena_keep: %p", (void *)kept);
+  void *after = nish_alloc_struct(16);
+  CHECK(aligned(after), "after keep: %p", after);
+
+  skew();
+  uint64_t r = nish_region_new();
+  nish_region_enter(r);
+  void *in_region = nish_alloc_struct(5000);
+  memset(in_region, 3, 5000);
+  nish_region_leave(r, in_region);
+  nish_region_adopt(r);
+  CHECK(aligned(nish_arena.chunks) && aligned(nish_arena.buf), "nish_region_adopt: carved chunk %p, buf %p",
+        nish_arena.chunks, (void *)nish_arena.buf);
+  void *carved = nish_alloc_struct(24);
+  CHECK(aligned(carved), "after nish_region_adopt: %p", carved);
+  memset(carved, 4, 24);
+
+  nish_free_arena();
+  if (failures) return 1;
+  puts("misaligned ok");
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  if (argc < 2) return positive();
+  if (strcmp(argv[1], "exhaust") == 0) {
+    for (int i = 0; i < 1 << 20; i++) nish_alloc_struct(65536);
+    puts("reached");
+    return 0;
+  }
+  if (strcmp(argv[1], "unreserved") == 0) {
+    /* Built with -DNISH_ASAN: the range is on, and nothing is reserved. */
+    CHECK(nish_arena_range_abi == 1, "the ABI symbol is %d", nish_arena_range_abi);
+    CHECK(nish_ref_base == 0, "the ASan build reserved a range at %p", (void *)nish_ref_base);
+    uint64_t mark = nish_arena_mark();
+    memset(nish_alloc_struct(24), 1, 24);
+    memset(nish_alloc_struct(300000), 2, 300000);
+    nish_arena_release(mark);
+    uint64_t r = nish_region_new();
+    nish_region_enter(r);
+    void *q = nish_alloc_struct(5000);
+    memset(q, 3, 5000);
+    nish_region_leave(r, q);
+    nish_region_free(r);
+    nish_free_arena();
+    if (failures) return 1;
+    puts("unreserved ok");
+    return 0;
+  }
+  if (strcmp(argv[1], "misaligned") == 0) return misaligned();
+  if (strcmp(argv[1], "busy") == 0) {
+    puts("reached");
+    return 0;
+  }
+  fprintf(stderr, "unknown mode %s\n", argv[1]);
+  return 2;
+}

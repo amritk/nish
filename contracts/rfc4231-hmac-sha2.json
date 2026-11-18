@@ -62,8 +62,7 @@
       "id": "R-TRUNC",
       "section": "4.6",
       "level": "DEFINITION",
-      "quote": "Test with a truncation of output to 128 bits.",
-      "note": "the functions return the whole tag, so test case 5 (Section 4.6 of [RFC4231]: a key of 20 bytes of 0x0c, the data \"Test With Truncation\") is written as a slice of it, its first 16 bytes. This is a limit of vector: a vector row holds a function's whole return value, so a truncated tag can only be a property."
+      "quote": "Test with a truncation of output to 128 bits."
     },
     {
       "id": "R-KEY-128",
@@ -466,6 +465,93 @@
       "expect": {
         "hex": "b0ba465637458c6990e5a8c5f61d4af7e576d97ff94b872de76f8050361ee3dba91ca5c11aa25eb4d679275cc5788063a5f19741120c4f2de2adebeb10a298dd",
         "label": "HMAC-SHA-512"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "TC5-256",
+      "title": "RFC 4231 test case 5, HMAC-SHA-256 truncated to 128 bits",
+      "covers": ["R-HMAC-SHA256", "R-TRUNC"],
+      "source": {
+        "cite": {
+          "section": "4.6"
+        }
+      },
+      "call": "hmacSha256",
+      "args": [
+        {
+          "hex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "label": "Key"
+        },
+        {
+          "hex": "546573742057697468205472756e636174696f6e",
+          "label": "Data"
+        }
+      ],
+      "expect": {
+        "hex": "a3b6167473100ee06e0c796c2955552b",
+        "label": "HMAC-SHA-256"
+      },
+      "truncate": {
+        "bits": 128
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "TC5-384",
+      "title": "RFC 4231 test case 5, HMAC-SHA-384 truncated to 128 bits",
+      "covers": ["R-HMAC-SHA384", "R-TRUNC"],
+      "source": {
+        "cite": {
+          "section": "4.6"
+        }
+      },
+      "call": "hmacSha384",
+      "args": [
+        {
+          "hex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "label": "Key"
+        },
+        {
+          "hex": "546573742057697468205472756e636174696f6e",
+          "label": "Data"
+        }
+      ],
+      "expect": {
+        "hex": "3abf34c3503b2a23a46efc619baef897",
+        "label": "HMAC-SHA-384"
+      },
+      "truncate": {
+        "bits": 128
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "TC5-512",
+      "title": "RFC 4231 test case 5, HMAC-SHA-512 truncated to 128 bits",
+      "covers": ["R-HMAC-SHA512", "R-TRUNC"],
+      "source": {
+        "cite": {
+          "section": "4.6"
+        }
+      },
+      "call": "hmacSha512",
+      "args": [
+        {
+          "hex": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "label": "Key"
+        },
+        {
+          "hex": "546573742057697468205472756e636174696f6e",
+          "label": "Data"
+        }
+      ],
+      "expect": {
+        "hex": "415fad6271580a531d4179bc891d87a6",
+        "label": "HMAC-SHA-512"
+      },
+      "truncate": {
+        "bits": 128
       }
     },
     {
@@ -1326,177 +1412,6 @@
                 "int": 64
               }
             ]
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-TRUNC-256",
-      "title": "RFC 4231 test case 5: the first 128 bits of HMAC-SHA-256 are a3b6167473100ee06e0c796c2955552b",
-      "covers": ["R-TRUNC", "R-HMAC-SHA256"],
-      "forall": [
-        {
-          "name": "n",
-          "type": "i32",
-          "min": 16,
-          "max": 16
-        }
-      ],
-      "assert": {
-        "op": "==",
-        "args": [
-          {
-            "op": "slice",
-            "args": [
-              {
-                "call": "hmacSha256",
-                "args": [
-                  {
-                    "op": "fill",
-                    "args": [
-                      {
-                        "int": 12
-                      },
-                      {
-                        "int": 20
-                      }
-                    ]
-                  },
-                  {
-                    "op": "utf8",
-                    "args": [
-                      {
-                        "str": "Test With Truncation"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "int": 0
-              },
-              {
-                "var": "n"
-              }
-            ]
-          },
-          {
-            "hex": "a3b6167473100ee06e0c796c2955552b"
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-TRUNC-384",
-      "title": "RFC 4231 test case 5: the first 128 bits of HMAC-SHA-384 are 3abf34c3503b2a23a46efc619baef897",
-      "covers": ["R-TRUNC", "R-HMAC-SHA384"],
-      "forall": [
-        {
-          "name": "n",
-          "type": "i32",
-          "min": 16,
-          "max": 16
-        }
-      ],
-      "assert": {
-        "op": "==",
-        "args": [
-          {
-            "op": "slice",
-            "args": [
-              {
-                "call": "hmacSha384",
-                "args": [
-                  {
-                    "op": "fill",
-                    "args": [
-                      {
-                        "int": 12
-                      },
-                      {
-                        "int": 20
-                      }
-                    ]
-                  },
-                  {
-                    "op": "utf8",
-                    "args": [
-                      {
-                        "str": "Test With Truncation"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "int": 0
-              },
-              {
-                "var": "n"
-              }
-            ]
-          },
-          {
-            "hex": "3abf34c3503b2a23a46efc619baef897"
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-TRUNC-512",
-      "title": "RFC 4231 test case 5: the first 128 bits of HMAC-SHA-512 are 415fad6271580a531d4179bc891d87a6",
-      "covers": ["R-TRUNC", "R-HMAC-SHA512"],
-      "forall": [
-        {
-          "name": "n",
-          "type": "i32",
-          "min": 16,
-          "max": 16
-        }
-      ],
-      "assert": {
-        "op": "==",
-        "args": [
-          {
-            "op": "slice",
-            "args": [
-              {
-                "call": "hmacSha512",
-                "args": [
-                  {
-                    "op": "fill",
-                    "args": [
-                      {
-                        "int": 12
-                      },
-                      {
-                        "int": 20
-                      }
-                    ]
-                  },
-                  {
-                    "op": "utf8",
-                    "args": [
-                      {
-                        "str": "Test With Truncation"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "int": 0
-              },
-              {
-                "var": "n"
-              }
-            ]
-          },
-          {
-            "hex": "415fad6271580a531d4179bc891d87a6"
           }
         ]
       }

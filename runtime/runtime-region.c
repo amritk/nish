@@ -92,6 +92,10 @@ extern NISH_TLS uint64_t nish_region_chunk;
 #ifdef NISH_ARENA_DEBUG
 /* runtime.c's: retire a debug arena chunk, or free one C code malloc'd. */
 void nish_debug_drop(void *c);
+#elif defined NISH_ARENA_RANGE && !defined NISH_ASAN
+/* runtime.c's: put a compact-range chunk on its class's free list, or free
+   one malloc made. */
+void nish_range_drop(void *c);
 #endif
 
 #define NISH_REGION_SLOT_BITS 24
@@ -386,6 +390,8 @@ void nish_region_adopt(uint64_t r) {
     nish_chunk_link *next = head->next;
 #ifdef NISH_ARENA_DEBUG
     if (!(head->cap & NISH_CHUNK_CARVED)) nish_debug_drop(head);
+#elif defined NISH_ARENA_RANGE && !defined NISH_ASAN
+    if (!(head->cap & NISH_CHUNK_CARVED)) nish_range_drop(head);
 #else
     if (!(head->cap & NISH_CHUNK_CARVED)) free(head);
 #endif
@@ -397,6 +403,13 @@ void nish_region_adopt(uint64_t r) {
     nish_chunk_link *last = head;
     while (last->next) last = last->next;
     struct nish_arena caller = nish_arena;
+#ifdef NISH_ARENA_RANGE
+    /* A compact class's 4-byte bump may leave `off` 4 past an 8-byte
+       boundary (runtime.c's `nish_alloc_struct`): the carved chunk's header,
+       and every block bumped from it, start at the next one. */
+    caller.off = (caller.off + 7) & ~(uint64_t)7;
+    if (caller.off > caller.cap) caller.off = caller.cap;
+#endif
     uint64_t left = caller.buf ? caller.cap - caller.off : 0;
     last->next = caller.chunks;
     nish_arena = s->arena;

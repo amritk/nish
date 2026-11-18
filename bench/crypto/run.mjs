@@ -26,8 +26,10 @@
 //     --families <dir>  read the families from <dir> rather than bench/crypto/:
 //                       tests/run.js validates altered copies this way
 //
-// Columns: nish, nish-copy (a byte-identical copy of the Nish binary, timed in
-// the same rounds: the noise band), openssl and openssl-portable (one binary,
+// Columns: nish, nish-portable (the same binary with the runtime's AES-NI,
+// ChaCha20 vector and SHA-NI kernels pinned off: NISH_AES, NISH_CHACHA20 and
+// NISH_SHA256 set to `soft`), nish-copy (a byte-identical copy of the Nish
+// binary, timed in the same rounds: the noise band), openssl and openssl-portable (one binary,
 // the second run under the family's OPENSSL_ia32cap mask), go and go-purego
 // (`-tags purego`), rust and rust-soft (the family's rustflags, in a target
 // directory of its own), node. A missing toolchain is a note and a column of
@@ -85,6 +87,13 @@ const PORTABLE_MIN_RATIO = 1.2
 const TWINS = ["openssl", "go", "rust", "node"]
 const TWIN_LABELS = { openssl: "OpenSSL", go: "Go", rust: "Rust", node: "Node" }
 const PORTABLE_IDS = { openssl: "openssl-portable", go: "go-purego", rust: "rust-soft" }
+/**
+ * The runtime's own switches, each read on a kernel's first call: `soft` runs
+ * the portable code (bitsliced AES and carry-less multiply, scalar ChaCha20,
+ * scalar SHA-256) whatever the CPU has. The nish-portable column is the Nish
+ * binary under these.
+ */
+const NISH_PORTABLE_ENV = { NISH_AES: "soft", NISH_CHACHA20: "soft", NISH_SHA256: "soft" }
 
 /**
  * The /proc/cpuinfo flag each OPENSSL_ia32cap bit stands for, per word. The
@@ -130,6 +139,7 @@ const ia32capCleared = (value) => {
 }
 const COLUMNS = [
   ["nish", "Nish"],
+  ["nish-portable", "Nish portable"],
   ["openssl", "OpenSSL"],
   ["openssl-portable", "OpenSSL portable"],
   ["go", "Go"],
@@ -238,6 +248,8 @@ const loadFamily = (name) => {
     "portableMinRatio",
     "portableProofFlags",
     "portableRounds",
+    "nishPortableProof",
+    "nishPortableProofFlags",
     "needs",
     "notes",
   ])
@@ -426,6 +438,26 @@ const loadFamily = (name) => {
   } else if (proofFlags !== undefined) {
     fail(`${where}: \`portableProofFlags\` without a \`portableProof\` and an OPENSSL_ia32cap mask`)
   }
+  // The Nish portable column's proof: one case at which the pinned runtime
+  // must be measurably slower than the default one, held on a CPU with one of
+  // the flags whose kernels the pins turn off.
+  let nishProof = null
+  if (spec.nishPortableProof !== undefined || spec.nishPortableProofFlags !== undefined) {
+    const m = /^([a-z0-9-]+)@(\d+)$/.exec(String(spec.nishPortableProof))
+    const k = m === null ? undefined : kernels.find((x) => x.name === m[1])
+    if (k === undefined || k.nish !== true || !k.sizes.includes(Number(m[2]))) {
+      fail(
+        `${where}: \`nishPortableProof\` must be "<kernel>@<size>" naming one of its Nish kernels and sizes`
+      )
+    }
+    const flags = spec.nishPortableProofFlags
+    if (!(isStringList(flags) && flags.length > 0)) {
+      fail(
+        `${where}: \`nishPortableProofFlags\` lists the /proc/cpuinfo flags whose kernels the pins turn off`
+      )
+    }
+    nishProof = { kernel: m[1], size: Number(m[2]), flags }
+  }
   const needs = spec.needs ?? []
   if (!(isStringList(needs) && needs.every((n) => n === "loopback"))) {
     fail(`${where}: \`needs\` is an array whose only allowed entry is "loopback"`)
@@ -445,6 +477,7 @@ const loadFamily = (name) => {
     twins,
     proof,
     proofFlags: proofFlags ?? [],
+    nishProof,
     minRatio,
     rounds: new Set(rounds),
     needs,
@@ -671,7 +704,7 @@ const copyTree = (from, to, rename = {}) => {
 }
 
 /** The CPU-capability masks a portable env may set; the caller's own never reach a default column. */
-const CAP_MASKS = ["OPENSSL_ia32cap", "OPENSSL_armcap"]
+const CAP_MASKS = ["OPENSSL_ia32cap", "OPENSSL_armcap", ...Object.keys(NISH_PORTABLE_ENV)]
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !CAP_MASKS.includes(k)))
 
 /**
@@ -681,7 +714,7 @@ const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !
  */
 const declaredAbsent = (family, id) => {
   const kernels = family.kernels.filter((k) => wanted(family, k))
-  if (id === "nish") {
+  if (id === "nish" || id === "nish-portable") {
     return kernels.some((k) => k.nish === true) ? null : "no kernel run has a Nish column"
   }
   const twin = TWINS.find((name) => name === id || PORTABLE_IDS[name] === id)
@@ -749,6 +782,7 @@ const buildFamily = (family) => {
     // The noise band: the same bytes under another name, timed in the same rounds.
     fs.copyFileSync(exe, `${exe}-copy`)
     add("nish", null, false, exe, [])
+    add("nish-portable", null, true, exe, [], NISH_PORTABLE_ENV)
     add("nish-copy", null, false, `${exe}-copy`, [])
   }
   const twinUsable = (twin) => {
@@ -973,6 +1007,8 @@ const interleave = (variants, kernel, size, iterations, rounds) => {
 // ---- --validate ------------------------------------------------------------------
 
 if (opts.validate) {
+  /** Each validated family's variants, for the Nish portable proof after the loop. */
+  const proofBuilds = new Map()
   let mismatches = 0
   let kernelCount = 0
   const seen = new Set()
@@ -990,6 +1026,7 @@ if (opts.validate) {
       continue
     }
     const variants = buildFamily(family)
+    proofBuilds.set(family.name, variants)
     const ranHere = new Set()
     const expected = readExpected(family)
     // --write-expected replaces the lines it ran and keeps the rest, so
@@ -1207,6 +1244,49 @@ if (opts.validate) {
       }
     }
   }
+  // The Nish portable proof, as a twin's: the pinned run of the same binary
+  // must be measurably slower at the family's case, so the pins reached the
+  // runtime. Measured on a CPU with one of the flags the pinned kernels use.
+  for (const family of families) {
+    const p = family.nishProof
+    if (p === null || (opts.only && !opts.only.has(family.name)) || !notBuilt.has(family.name)) {
+      continue
+    }
+    const proofVariants = proofBuilds.get(family.name) ?? []
+    const fast = proofVariants.find((v) => v.id === "nish")
+    const slow = proofVariants.find((v) => v.id === "nish-portable")
+    let why = null
+    if (fast === undefined || slow === undefined) {
+      why = "this machine built no Nish binary"
+    } else if (cpuFlags.size === 0) {
+      why = "no /proc/cpuinfo flags to hold the pins against"
+    } else if (!p.flags.some((f) => cpuFlags.has(f))) {
+      why = `this CPU has none of ${p.flags.join(", ")}, the extensions the pinned kernels use`
+    }
+    if (why !== null) {
+      console.log(`portable ${family.name} nish-portable: unproved (${why})`)
+      continue
+    }
+    const iterations = calibrate(fast, p.kernel, p.size, TARGET_NS / 2)
+    const measure = (rounds) => {
+      const { times } = interleave([fast, slow], p.kernel, p.size, iterations, rounds)
+      return Math.min(...times.get(slow.id)) / Math.min(...times.get(fast.id))
+    }
+    let ratio = measure(5)
+    if (ratio < PORTABLE_MIN_RATIO) {
+      console.log(
+        `retry ${family.name} nish-portable: ${times3(ratio)} at ${p.kernel}@${p.size} on the first measurement`
+      )
+      ratio = measure(11)
+    }
+    const ok = ratio >= PORTABLE_MIN_RATIO
+    console.log(
+      `${ok ? "portable" : "NOT PORTABLE"} ${family.name} nish-portable: ${times3(ratio)} the time of nish at ${p.kernel}@${p.size} (needs ${times3(PORTABLE_MIN_RATIO)})`
+    )
+    if (!ok) {
+      mismatches++
+    }
+  }
   if (mismatches > 0) {
     console.log(`crypto: ${mismatches} mismatch(es); nothing is timed`)
     process.exit(1)
@@ -1296,14 +1376,17 @@ const bandOf = (row) => Math.abs(row.medians.get("nish") / row.medians.get("nish
 /** A row's band for its column: `±1.2%`, or — without the copy. */
 const bandCell = (row) => (row.medians.has("nish-copy") ? `±${(bandOf(row) * 100).toFixed(1)}%` : "—")
 
-/** A quotient read against the noise band: `1.23x slower (rust-soft)`, or the band's word when within it. */
-const verdict = (row, ids) => {
+/**
+ * `nish`'s quotient over the fastest of `ids`, read against the noise band:
+ * `1.23x slower (rust-soft)`, or the band's word when within it.
+ */
+const verdict = (row, nish, ids) => {
   const have = ids.filter((id) => row.medians.has(id))
-  if (!row.medians.has("nish") || have.length === 0) {
+  if (!row.medians.has(nish) || have.length === 0) {
     return "—"
   }
   const best = have.reduce((a, b) => (row.medians.get(b) < row.medians.get(a) ? b : a))
-  const quotient = row.medians.get("nish") / row.medians.get(best)
+  const quotient = row.medians.get(nish) / row.medians.get(best)
   const side = sideOf(quotient, bandOf(row))
   return `${times3(quotient)} ${side === "within" ? "within the band" : side} (${best})`
 }
@@ -1315,7 +1398,7 @@ const lines = [
   "",
   "Written by `node bench/crypto/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The programs, the inputs and the measurement rules are in [bench/crypto/README.md](https://github.com/amritk/nish/blob/main/bench/crypto/README.md).",
   "",
-  "Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round and reversed on every other block. The last two columns divide Nish's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend) and by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. The Band column is the row's noise band, the gap between Nish and a byte-identical copy of its binary, and each quotient beside it is read against it: within the band is no difference.",
+  "Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round and reversed on every other block. The last two columns divide Nish portable's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend), and Nish's by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. Nish portable is the Nish binary with its runtime's AES-NI and PCLMULQDQ, ChaCha20 vector and SHA-NI kernels pinned off (`NISH_AES`, `NISH_CHACHA20` and `NISH_SHA256` set to `soft`); a family that calls none of them runs the same code in both columns. Every cell more than 1.5x behind the best portable twin is analysed in [docs/crypto-performance.md](crypto-performance.md). The Band column is the row's noise band, the gap between Nish and a byte-identical copy of its binary, and each quotient beside it is read against it: within the band is no difference.",
   "",
   `Machine: ${machine()}.`,
   "",
@@ -1335,7 +1418,7 @@ for (const { family, variants, rows } of sections) {
       return ns === undefined ? "—" : fmtRate(rateOf(row.kernel.unit, row.size, row.iterations, ns))
     }
     lines.push(
-      `| ${row.kernel.name} | ${fmtSize(row.size)} | ${row.kernel.unit} | ${COLUMNS.map(([id]) => cell(id)).join(" | ")} | ${bandCell(row)} | ${verdict(row, PORTABLE_COLUMN_IDS)} | ${verdict(row, TWINS)} |`
+      `| ${row.kernel.name} | ${fmtSize(row.size)} | ${row.kernel.unit} | ${COLUMNS.map(([id]) => cell(id)).join(" | ")} | ${bandCell(row)} | ${verdict(row, "nish-portable", PORTABLE_COLUMN_IDS)} | ${verdict(row, "nish", TWINS)} |`
     )
   }
   lines.push("")
