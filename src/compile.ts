@@ -69,7 +69,7 @@ import { compatFeatureNames, compatHasFeature, compatKnownText } from "./compat"
 import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
-import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
+import { acceptsSidecars, ExternalFunction, externalFunctions, refuseCompactSidecars } from "./interop-abi"
 import { generateDts } from "./interop-dts"
 import { generateHeader } from "./interop-header"
 import { generateNapiShim, napiBridges } from "./interop-napi"
@@ -1577,6 +1577,19 @@ const commandMain = (): number => {
     opts.emitNapiAsync.length > 0
   const fns: ExternalFunction[] = anySidecar ? externalFunctions(compilation) : []
   if (anySidecar && !acceptsSidecars(compilation, fns, cDeclared(compilation, fns))) {
+    report(compilation, json)
+    return 1
+  }
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link.
+  let hostFlag = ""
+  if (opts.emitHeader.length > 0) {
+    hostFlag = "--emit-header"
+  } else if (opts.emitNapi.length > 0) {
+    hostFlag = "--emit-napi"
+  } else if (opts.emitNapiAsync.length > 0) {
+    hostFlag = "--emit-napi-async"
+  }
+  if (hostFlag.length > 0 && !refuseCompactSidecars(compilation, fns, hostFlag)) {
     report(compilation, json)
     return 1
   }

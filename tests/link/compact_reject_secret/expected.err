@@ -1,0 +1,1 @@
+main.ts:6:15: error: `Holder` implements `Compact` and holds the `Secret` field `k`

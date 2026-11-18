@@ -106,6 +106,7 @@ import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
+  checkCompactClass,
   checkImplements,
   collectStructMembers,
   declaresCompact,
@@ -308,6 +309,7 @@ export class Checker {
       if (info.kind === STRUCT_CLASS && !info.poisoned) {
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
+        checkCompactClass(this.ctx, info)
       }
     }
     // Every instantiation an annotation in this module's signatures asked for

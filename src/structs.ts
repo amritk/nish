@@ -15,7 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
-import { admitsSecretField, checkHolderReleaser, secretFieldMessage } from "./secret"
+import { admitsSecretField, checkHolderReleaser, secretFieldMessage, secretFieldOf } from "./secret"
 import {
   DISPOSE_METHOD,
   disposeElsewhereMessage,
@@ -1039,6 +1039,12 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     }
     collectStructMembers(ctx, nested)
   } else if (!isLayoutScalar(type) && ctx.table.stripNull(type) !== T_CPTR) {
+    const inner = ctx.table.stripNull(type)
+    const target: StructInfo | null = ctx.table.isStruct(inner) ? ctx.program.struct(ctx.table.nameOf(inner)) : null
+    if (target !== null && target.compact) {
+      ctx.error(decl.children[1], compactLayoutFieldMessage(owner.name, name, target.name))
+      return
+    }
     ctx.error(
       decl.children[1],
       `${what} has type \`${ctx.table.typeName(type)}\`, which has no C layout: a field of a \`declare class\` is i32, i64, u8, u16, u32, u64, f32, f64, \`CPtr\`, \`CPtr | null\` or another \`declare class\``
@@ -1065,7 +1071,9 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
     const clause = decl.children[1].kind !== NodeKind.Empty ? decl.children[1] : decl.children[2].children[0]
     ctx.error(
       clause,
-      `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
+      namesCompact(ctx, clause)
+        ? compactLayoutMessage(info.name)
+        : `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
     )
     info.poisoned = true
   }
@@ -1136,15 +1144,46 @@ export const declaresCompact = (ctx: CheckContext, decl: Node): boolean => {
     return false
   }
   for (const iface of decl.children[2].children) {
-    if (namesCompactMarker(ctx, iface)) {
-      const imported = ctx.program.importNamed(iface.text)
-      if (imported !== null && imported.importedName === "Compact") {
-        return true
-      }
+    if (namesCompact(ctx, iface)) {
+      return true
     }
   }
   return false
 }
+
+/** Whether the heritage entry `iface` names `Compact` itself, not `Wide`. */
+const namesCompact = (ctx: CheckContext, iface: Node): boolean => {
+  if (!namesCompactMarker(ctx, iface)) {
+    return false
+  }
+  const imported = ctx.program.importNamed(iface.text)
+  return imported !== null && imported.importedName === "Compact"
+}
+
+/**
+ * WP48: a compact class holds no `Secret`, whose wipe reads the payload
+ * through the pointer the field holds (`src/emit-secret.ts`). The two
+ * `declare class` refusals sit in `collectLayoutMembers` and
+ * `collectLayoutField`, where the C-layout checks would otherwise answer first.
+ */
+export const checkCompactClass = (ctx: CheckContext, info: StructInfo): void => {
+  if (!info.compact) {
+    return
+  }
+  const secret = secretFieldOf(ctx.table, info)
+  if (secret !== null) {
+    ctx.error(secret.decl.children[1], compactSecretMessage(info.name, secret.name))
+  }
+}
+
+const compactLayoutMessage = (name: string): string =>
+  `\`${name}\` is a \`declare class\`, which C lays out with a pointer-wide slot per link, so it cannot implement \`Compact\`; drop the marker`
+
+const compactLayoutFieldMessage = (owner: string, field: string, target: string): string =>
+  `Field \`${field}\` of \`declare class\` \`${owner}\` holds the compact class \`${target}\`, whose links C would read as pointers; a \`declare class\` holds no object of a class that implements \`Compact\``
+
+const compactSecretMessage = (owner: string, field: string): string =>
+  `\`${owner}\` implements \`Compact\` and holds the \`Secret\` field \`${field}\`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement \`Compact\`; keep the secret in a class of its own that does not`
 
 export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void => {
   if (info.collected) {

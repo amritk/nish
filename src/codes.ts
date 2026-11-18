@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 962
+export const RULE_COUNT: i32 = 967
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -349,6 +349,8 @@ const diagnosticRules = (): string[] => [
   "NL2523",
   "` is not supported: a promise is never a value — `await` each call where it is made, or `awaitAll(f(x), g(y))` from `nish:async` to wait on several together",
   "NL2649",
+  "`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement `Compact`; keep the secret in a class of its own that does not",
+  "NL2797",
   " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`",
   "NL2373",
   "` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for",
@@ -475,6 +477,8 @@ const diagnosticRules = (): string[] => [
   "NL2522",
   "` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that",
   "NL2558",
+  "`, which implements `Compact`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object",
+  "NL4020",
   "Only a top-level function or an arrow may be `async`: a method, a field or a constructor cannot, because a task never keeps a `this`",
   "NL1063",
   "` cannot be handed a `Secret`: a builtin reaches the outside world or reads the bytes, and a `Secret` is read only through `expose`",
@@ -515,6 +519,8 @@ const diagnosticRules = (): string[] => [
   "NL2457",
   "` cannot have a default or be a rest parameter: a call names the function it passes, and that is what instantiates the callee",
   "NL2604",
+  "` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker",
+  "NL2795",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
   "NL2442",
   "` names no directory: a grant's directory is resolved from the root package's directory and exists when the program is built",
@@ -585,6 +591,8 @@ const diagnosticRules = (): string[] => [
   "NL2285",
   "; a class or interface name must be unique across the program, and an instantiation is named after its template",
   "NL3013",
+  "`, whose links C would read as pointers; a `declare class` holds no object of a class that implements `Compact`",
+  "NL2796",
   "`: each member of a string enum has its own string, because the string is how JSON and `String` name the member",
   "NL2786",
   ": the block releases what it allocated before the function returns, so the caller would be handed freed memory",
@@ -685,6 +693,8 @@ const diagnosticRules = (): string[] => [
   "NL2538",
   "): compare lane by lane with `eq`, `lt` and the rest, which answer a mask, and ask it `all` or `any`",
   "NL2581",
+  "` describes the program to C or Node, which would read its 32-bit links as pointers; build without `",
+  "NL4021",
   "` is a `declare class` embedded in its object, which a spread cannot copy, so set each field by name",
   "NL2754",
   "` is both allowed and denied in the root package's capability policy; a policy says one or the other",
