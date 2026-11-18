@@ -579,9 +579,9 @@ The message of an error contains:
 
 ```ts
 import { digits } from "./host/regex"
-export function f(): i32 {
+export const f = (): i32 => {
   return digits()
-}
+};
 ```
 
 ```text
@@ -600,9 +600,9 @@ The message of an error contains:
 
 ```ts
 import { twice } from "./host/plain"
-export function main(): i32 {
+export const main = (): i32 => {
   return twice(2)
-}
+};
 ```
 
 ```text
@@ -614,9 +614,9 @@ export function main(): i32 {
 ```ts
 // NL3050 under WASI: a WASI program links C, so it imports no host module.
 import { twice } from "./host/plain"
-export function main(): i32 {
+export const main = (): i32 => {
   return twice(2)
-}
+};
 ```
 
 ```text

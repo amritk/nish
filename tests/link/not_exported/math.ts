@@ -1,7 +1,7 @@
-function secret(): number {
+const secret = (): number => {
   return 7;
-}
+};
 
-export function openFile(): number {
+export const openFile = (): number => {
   return secret();
-}
+};

@@ -15,14 +15,14 @@ class Box {
   }
 }
 
-function u0(p: Point, b: Box): i32 {
+const u0 = (p: Point, b: Box): i32 => {
   return p.x;
-}
+};
 
-function u3(p: Point, b: Box): i32 {
+const u3 = (p: Point, b: Box): i32 => {
   b.last = p;
   return p.x;
-}
+};
 
 export const main = (): i32 => {
   let h = u0;
