@@ -220,9 +220,14 @@ export class CheckContext {
    */
   deterministic: boolean
   /**
-   * WP28: the compatibility features this build allows, empty for the strict
-   * dialect. Set from `opts.compatFeatures` when `opts.compat` is on, with
-   * `wasm`; nothing reads it but `compatAllows`.
+   * WP28: the build is in the compatibility dialect (`opts.compat`), which
+   * `errorFeature` names when it refuses a construct. Set with `wasm`.
+   */
+  compat: boolean
+  /**
+   * WP28: the compatibility features this build allows
+   * (`opts.compatFeatures`), empty for the strict dialect. Set with `compat`;
+   * a site asks through `compatAllows`, never reads it.
    */
   compatFeatures: string[]
   /** Function source name -> index into `program.functions`, for clash checks. */
@@ -412,6 +417,7 @@ export class CheckContext {
     this.wasmFreestanding = false
     this.pageModule = false
     this.deterministic = false
+    this.compat = false
     this.compatFeatures = []
     this.sigs = new StringMap()
     this.entryHasMain = false
@@ -464,6 +470,25 @@ export class CheckContext {
       }
     }
     return false
+  }
+
+  /**
+   * `error`, for a construct compatibility feature `feature` accepts and this
+   * build's dialect does not allow: the message, then a note naming the
+   * feature, after one naming the dialect when the build is in the
+   * compatibility one (WP28 §5.2). The same once-per-statement guard.
+   */
+  errorFeature(node: Node, message: string, feature: string): void {
+    if (this.errored) {
+      return
+    }
+    const diagnostic = new Diagnostic(this.source, node.start, node.end, "error", message)
+    if (this.compat) {
+      diagnostic.notes.push(`this program's dialect is \`compat=${this.compatFeatures.join(",")}\``)
+    }
+    diagnostic.notes.push(`add \`${feature}\` to \`nish.compat\` in package.json to accept it`)
+    this.sink.add(diagnostic)
+    this.errored = true
   }
 
   /**
