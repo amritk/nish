@@ -254,9 +254,16 @@ it as they take a descriptor, with the same answers: `-11` until `pollWait`
 reports the handle ready, then progress, and `0` at the end of the stream. A
 loop written for descriptors runs unchanged. What differs:
 
+- `netShutdown` queues the shutdown behind the bytes already written, so the
+  peer reads them and then the end of the stream. After the write side is
+  shut, `netWrite` answers `-32`; after the read side is, `netRead` answers
+  what is queued and then `0`. `Http1Server`'s lingering close works on a
+  slot as on a descriptor.
+- `netMss` answers `-1`: the ring cannot ask the socket for its segment
+  size, so take your fallback.
 - `netSetOption` answers `-95`, and every call that needs a real descriptor
-  (`sendFd`, `netMss`, `netShutdown`, `peerCredentials`) answers `-9`, as
-  does any call on a handle after its `netClose`.
+  (`sendFd`, `peerCredentials`) answers `-9`, as does any call on a handle
+  after its `netClose`.
 - `tcpAccept` writes the peer's address as zeros.
 - A slot handle is in one poll loop at a time: `pollAdd` to a second loop
   answers `-17` until the first removes it or is closed.
@@ -417,7 +424,8 @@ error; write the id where you call `netSetOption`.
 socket carries, the maximum segment size the kernel is sending with now. A
 program that batches writes can size each batch to whole segments. It
 answers `-1` when there is no MSS to read: a socket that is not connected yet,
-a listener, a UDP socket, a closed descriptor or one that is not a socket.
+a listener, a UDP socket, a closed descriptor or one that is not a socket,
+and a `NET_LISTEN_RING` slot handle.
 `-1` is not an error code, so check for a positive answer and fall back to a
 size of your own:
 

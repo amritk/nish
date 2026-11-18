@@ -1737,9 +1737,14 @@ declare function netWrite2(
  * Shut one or both directions of a connection. Not callable in a `scope()` task or a parallel body.
  * Refused at compile time on wasm32 and the WASI profile (NL2404). Capability: net.
  *
+ * On a connection a `NET_LISTEN_RING` listener accepted, the shutdown goes behind the
+ * bytes already written, so the peer reads them and then the end of the stream; a later
+ * `netWrite` answers -32 once the write side is shut, and `netRead` answers what is queued
+ * and then 0 once the read side is.
+ *
  * @param fd the socket.
  * @param how the read side (0), the write side (1) or both (2).
- * @returns 0, or a negative errno; -22 for any other `how`.
+ * @returns 0, or a negative errno; -22 for any other `how`, -9 for a closed ring connection.
  */
 declare function netShutdown(fd: i32, how: i32): i32;
 /**
@@ -2006,7 +2011,8 @@ declare function netSetOption(fd: i32, option: i32, value: i32): i32;
  * @param fd the socket.
  * @returns the MSS; -1, never an errno, for anything else (a descriptor that is not open, a
  *   socket with no peer such as a listener or one never connected, though the kernel answers
- *   its default `536` for those, a socket that is not TCP), and always on wasm.
+ *   its default `536` for those, a socket that is not TCP, a connection a `NET_LISTEN_RING`
+ *   listener accepted, whose ring cannot ask for it), and always on wasm.
  */
 declare function netMss(fd: i32): i32;
 /**
@@ -3246,11 +3252,14 @@ declare module "nish:net" {
     bLen: i32
   ): i32;
   /**
-   * Shut one side of a connection, or both.
+   * Shut one side of a connection, or both. On a connection a
+   * `NET_LISTEN_RING` listener accepted, the shutdown goes behind the bytes
+   * already written, so the peer reads them and then the end of the stream.
    *
    * @param fd A connected socket.
    * @param how `0` the read side, `1` the write side, `2` both.
-   * @returns `0`, `-22` for any other `how`, or the failure.
+   * @returns `0`, `-22` for any other `how`, `-9` for a closed ring
+   *   connection, or the failure.
    */
   export function netShutdown(fd: i32, how: i32): i32;
   /**
@@ -3445,8 +3454,9 @@ declare module "nish:net" {
    * @returns The size, or a plain `-1`, never an errno, for anything else: a
    *   descriptor that is not open, a socket with no peer (a listener, or one
    *   never connected, though the kernel answers its default `536` for
-   *   those), a socket that is not TCP, and every call on wasm, where it
-   *   compiles to the constant with the descriptor still evaluated. It throws
+   *   those), a socket that is not TCP, a connection a `NET_LISTEN_RING`
+   *   listener accepted, whose ring cannot ask for it, and every call on
+   *   wasm, where it compiles to the constant with the descriptor still evaluated. It throws
    *   under Node.
    */
   export function netMss(fd: i32): i32;

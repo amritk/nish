@@ -540,8 +540,14 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * from whichever file holds it, and the speed build's full LTO optimises across the
  * units either way. The split would add a sixth budget and a cross-unit interface for
  * no smaller program and no faster one.
+ * **11,190 bytes** on 2026-11-18 once WP63 ring gaps gave `netShutdown` and `netMss` a
+ * slot path (11,008 to 11,264; main measured 10,994): `nish_net_shutdown`'s slot branch,
+ * which decodes the handle and queues the shutdown behind the slot's sends (+169),
+ * `nr_send`'s refusal after a write shut (+11), and `nish_net_mss`'s explicit `-1` on a
+ * slot (+16), NURING-39. It stays here for the reason above. The budget is the next
+ * 256-byte boundary, leaving 74.
  */
-const NET_TEXT_BUDGET = 11008
+const NET_TEXT_BUDGET = 11264
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-simd.c`
  * -- the byte searches that read a vector at a time (WP38 S1): `nish_str_index_of_any`
