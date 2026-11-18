@@ -218,13 +218,18 @@ awk '
     us[k, v["label"]] = v["srv_us"]
     if (!(k in seen)) { seen[k] = 1; order[++n] = k }
   }
+  function fmt(x) { return x == "" ? "-" : sprintf("%.2f", x) }
   END {
     printf "%-8s %5s %8s %8s %10s %8s %8s\n", "C", "round", "ring", "epoll", "epoll-copy", "saving", "band"
     for (i = 1; i <= n; i++) {
       k = order[i]; split(k, cr, SUBSEP)
       e = us[k, "epoll"]; ec = us[k, "epoll-copy"]; u = us[k, "ring"]
-      s = e > 0 ? (e - u) / e * 100 : 0; b = e > 0 ? (ec - e) / e * 100 : 0
-      printf "%-8s %5s %8.2f %8.2f %10.2f %7.1f%% %7.1f%%\n", cr[1], cr[2], u, e, ec, s, (b < 0 ? -b : b)
+      # A design --designs left out prints as "-", and so does a ratio it
+      # would need, rather than as a zero that reads like a measurement.
+      s = (e > 0 && u > 0) ? sprintf("%.1f%%", (e - u) / e * 100) : "-"
+      b = (e > 0 && ec > 0) ? (ec - e) / e * 100 : ""
+      b = b == "" ? "-" : sprintf("%.1f%%", b < 0 ? -b : b)
+      printf "%-8s %5s %8s %8s %10s %8s %8s\n", cr[1], cr[2], fmt(u), fmt(e), fmt(ec), s, b
     }
   }
 ' "$results"

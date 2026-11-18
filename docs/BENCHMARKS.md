@@ -3232,6 +3232,16 @@ No fix is made in this stage. The loop spends about 0.08 µs a request pumping c
 | 96,000 | epoll copy | 5 | 96,000 | 96,040 | 31.42 (31.20–31.78) | 41.53 | 23,996 | 129.2 | 1,327 | 0.24 | 3.87 (2.21–17.66) | 19.71 |
 
 Medians of 3 (min to max), and `box MB` from the last round of each design, as above. The ring process is 33.1% cheaper than the five at the medians, against a 0.8% band, and its p99 is lower in every round. Its PSS, 141.8 MB, is the 141.4 to 141.7 MB NURING-38 measured. The verdict still holds.
+
+**300,000 connections, one ring process.** `bash bench/handler-ring/run.sh --conns 300000 --think 10 --rounds 3 --warmup 15 --seconds 15 --designs ring` at commit `02230cc8`, on the same 2.30GHz box, at 30,000 req/s. There is no epoll row. Under this limit five epoll processes hold 96,000 connections between them, so 300,000 would need sixteen.
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 300,000 | ring | 1 | 300,000 | 47 | 23.73 (23.67–24.16) | 36.80 | 29,998 | 436.3 | 3,075 | 0.12 | 0.90 (0.87–2.59) | 8.83 |
+
+Medians of 3 (min to max). One process held 300,000 connections in every round, under a limit of 20,000, with 47 descriptors. Its PSS was 435.9 to 436.3 MB, about 1.5 KB a connection, the same as at 96,000. A request cost 23.73 µs against 20.86 at 96,000, though at a different rate, so the two are not a like-for-like comparison.
+
+Opening the connections took 90.6 to 123.7 s. The first run, at `d603893d`, answered no requests at all: past the handler's 60-second default `idleTimeout` the server closed the first connections before the window opened, and the load generator does not reopen a closed connection. `bench/handler-ring/server.ts` now sets `limits.http.idleTimeout` to ten minutes. That is a setting of the bench, not of the ring.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->

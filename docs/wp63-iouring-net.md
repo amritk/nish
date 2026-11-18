@@ -688,6 +688,9 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    core is what would shorten it. The final code at 96,000
    (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
    request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.
+   At 300,000 (`--conns 300000 --think 10 --rounds 3 --designs ring`), one
+   ring process held every connection with 47 descriptors, at 23.73 µs a
+   request, 436 MB PSS and a p99 of 0.90 ms.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
    not depend on S1 to S4 and can land first. *Measured in S5*
    ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5)):
