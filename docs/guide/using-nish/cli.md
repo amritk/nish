@@ -768,10 +768,14 @@ leaves the IR unchanged.
   that refuses it, with its size in bytes now and with its links narrowed
   to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
   Nothing uses the verdict yet, and the flag changes no byte of the build.
-  Only a native build can pick a class: a wasm32 target, `--emit-ts`,
-  `--emit-header`, `--emit-napi`, `--emit-napi-async` and `--emit-dts` refuse
-  every class at the first test. The report is printed once the program
-  checks cleanly, so a program with errors prints none.
+  Only a native executable can pick a class: a build with `--link`, or
+  `nish run`. Every other build refuses every class at the first test: IR
+  alone (`-o` with no `--link`), which a host may link; a wasm32 target;
+  `--emit-ts`, `--emit-header`, `--emit-napi`, `--emit-napi-async` and
+  `--emit-dts`; and a program that declares a C function. The report is
+  printed once the program checks cleanly and passes the build's own
+  refusals, so a program with errors prints none, and nor does one with no
+  `main` under `--link`, `--emit-ts`, `--sandbox` or `nish run`.
   `nish run` takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.

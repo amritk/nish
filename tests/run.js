@@ -24743,7 +24743,8 @@ if (dealtHere("cliChecks")) {
         .split(`${root}/`)
         .join("")
     // The three design figures (§3.1): each bench file's linked node class is
-    // picked, at the size the design states.
+    // picked, at the size the design states. Test 1 passes only for a build that
+    // writes the executable itself (`--link`, or `nish run`), so each is linked.
     const benchWant = {
       "bench/goose/tree.ts": [
         "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
@@ -24763,8 +24764,12 @@ if (dealtHere("cliChecks")) {
       const base = path.basename(file, ".ts")
       const plainLl = path.join(layoutDir, `${base}.ll`)
       const explainedLl = path.join(layoutDir, `${base}.layout.ll`)
-      const plain = spawnSync(NISH, [file, "-o", plainLl], { cwd: root, encoding: "utf8" })
-      const explained = spawnSync(NISH, [file, "-o", explainedLl, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      const exe = path.join(layoutDir, base)
+      const plain = spawnSync(NISH, [file, "-o", plainLl, "--link", exe], { cwd: root, encoding: "utf8" })
+      const explained = spawnSync(NISH, [file, "-o", explainedLl, "--link", exe, "--explain-layout"], {
+        cwd: root,
+        encoding: "utf8",
+      })
       check(
         `explain layout: ${file} matches the golden report`,
         explained.status === 0 && layoutOf(explained.stderr) === want.join("\n"),
@@ -24947,6 +24952,32 @@ if (dealtHere("cliChecks")) {
         args: [],
         want: ["genericRecursion.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
       },
+      // Its pair: the same generic function with no call to itself makes one `L`
+      // per call from a straight-line `main`, so test 4 still refuses it.
+      {
+        name: "test 4, a generic function that does not reach itself",
+        file: "genericOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function build<T>(n: i32, x: T): L {",
+          "  const l = new L()",
+          "  l.v = n",
+          "  return l",
+          "}",
+          "export function main(): i32 {",
+          "  return build(3, 1).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
       // The same through `this.m(...)` in a generic class's method: the method
       // is `Box<i32>.make`, the call `this.make`.
       {
@@ -24978,6 +25009,40 @@ if (dealtHere("cliChecks")) {
         args: [],
         want: ["genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
       },
+      // Its pair: a generic method that calls another method, not itself.
+      {
+        name: "test 4, a generic class's method that does not reach itself",
+        file: "genericMethodOnce.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "class Box<T> {",
+          "  v: T",
+          "  constructor(v: T) {",
+          "    this.v = v",
+          "  }",
+          "  make(n: i32): L {",
+          "    const l = new L()",
+          "    l.v = this.size(n)",
+          "    return l",
+          "  }",
+          "  size(n: i32): i32 {",
+          "    return n",
+          "  }",
+          "}",
+          "export function main(): i32 {",
+          "  return new Box<i32>(1).make(3).v",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
       // A parameter named like its function shadows it: `walk(n)` calls the
       // value passed in, which is no edge, so `walk` does not reach itself.
       {
@@ -25003,12 +25068,43 @@ if (dealtHere("cliChecks")) {
           "explain-layout: 0 of 1 classes compact",
         ],
       },
+      // So does a local: `walk(n)` calls the `const walk` reference to `same`.
+      {
+        name: "test 4, a local shadows the function's name",
+        file: "shadowedLocal.ts",
+        source: [
+          "class L {",
+          "  next: L | null = null",
+          "  v: i32 = 0",
+          "}",
+          "function same(m: i32): i32 {",
+          "  return m",
+          "}",
+          "function walk(n: i32): i32 {",
+          "  const l = new L()",
+          "  const walk = same",
+          "  return walk(n) + l.v",
+          "}",
+          "export function main(): i32 {",
+          "  return walk(3)",
+          "}",
+          "",
+        ].join("\n"),
+        args: [],
+        want: [
+          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "explain-layout: 0 of 1 classes compact",
+        ],
+      },
     ]
-    // Test 1: every output that is not a plain native build refuses every class.
-    // `--emit-dts` is refused on its own: a native compile still writes the
-    // `.d.ts`, though the loader beside it is for a wasm build.
+    // Test 1: every build but a closed native link (`src/visibility.ts`) refuses
+    // every class. `--emit-dts` is refused on its own: a native compile still
+    // writes the `.d.ts`, though the loader beside it is for a wasm build. The
+    // wasm32 case writes IR only, as a wasm link needs a WASI sysroot; its
+    // reason is asked before the missing `--link`.
     for (const [reason, args] of [
       ["wasm32", ["--target", "wasm32-wasi"]],
+      ["no --link, so a host may link the IR", []],
       ["--emit-header", ["--emit-header", path.join(layoutDir, "lib.h")]],
       ["--emit-napi", ["--emit-napi", path.join(layoutDir, "napi.c")]],
       ["--emit-napi-async", ["--threads", "--emit-napi-async", path.join(layoutDir, "napi-async.c")]],
@@ -25019,6 +25115,7 @@ if (dealtHere("cliChecks")) {
         file: "notNative.ts",
         source: loopNode,
         args,
+        noLink: true,
         want: [
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
           `notNative.ts:11:7: layout: L: 1 native: ${reason}, 16 → 8 bytes`,
@@ -25026,6 +25123,20 @@ if (dealtHere("cliChecks")) {
         ],
       })
     }
+    // A `declare function` puts a C library in the link, which may be handed a
+    // class, so even a linked build is not closed. `labs` is libc's, so the
+    // link finds it.
+    layoutCases.push({
+      name: "test 1, a declare function under --link",
+      file: "declared.ts",
+      source: ["declare function labs(n: i64): i64", loopNode].join("\n"),
+      args: [],
+      want: [
+        "declared.ts:2:7: layout: W: 1 native: a declare function, so a C library is in the link, 24 → 24 bytes",
+        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 16 → 8 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
     // `--emit-ts` writes TypeScript and no IR, so it is not native either. Its
     // program holds no `i64`, which TypeScript would round.
     layoutCases.push({
@@ -25047,26 +25158,44 @@ if (dealtHere("cliChecks")) {
       ].join("\n"),
       args: ["--emit-ts", path.join(layoutDir, "ts")],
       noIr: true,
+      noLink: true,
       want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
     })
+    // Each case is built twice, with and without the flag, and its IR compared:
+    // the report changes no byte of it in any test-1 mode.
     for (const c of layoutCases) {
       const file = path.join(layoutDir, c.file)
       fs.writeFileSync(file, c.source)
-      const r = spawnSync(
-        NISH,
-        [
-          file,
-          ...(c.noIr ? [] : ["-o", path.join(layoutDir, `${path.basename(c.file, ".ts")}.ll`)]),
-          ...c.args,
-          "--explain-layout",
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
+      const base = path.basename(c.file, ".ts")
+      const build = (ll, extra) =>
+        spawnSync(
+          NISH,
+          [
+            file,
+            ...(c.noIr ? [] : ["-o", ll]),
+            ...(c.noLink ? [] : ["--link", path.join(layoutDir, base)]),
+            ...c.args,
+            ...extra,
+          ],
+          { cwd: root, encoding: "utf8" }
+        )
+      const r = build(path.join(layoutDir, `${base}.layout.ll`), ["--explain-layout"])
       check(
         `explain layout: ${c.name}`,
         r.status === 0 && layoutOf(r.stderr) === c.want.join("\n"),
         `--- expected\n${c.want.join("\n")}\n--- actual\n${layoutOf(r.stderr)}\n${shown(r)}`
       )
+      if (!c.noIr) {
+        const plain = build(path.join(layoutDir, `${base}.ll`), [])
+        check(
+          `explain layout: --explain-layout changes no byte of the IR, ${c.name}`,
+          plain.status === 0 &&
+            r.status === 0 &&
+            fs.readFileSync(path.join(layoutDir, `${base}.ll`), "utf8") ===
+              fs.readFileSync(path.join(layoutDir, `${base}.layout.ll`), "utf8"),
+          `${shown(plain)}\n${shown(r)}`
+        )
+      }
     }
     // The usage errors are `--explain-memory`'s: no checked program under
     // `--emit-ast`, no IR under `--fix`, and diagnostics only under `--json`.
@@ -25080,6 +25209,23 @@ if (dealtHere("cliChecks")) {
       const refused = spawnSync(NISH, [refusedSource, flag, "--explain-layout"], { cwd: root, encoding: "utf8" })
       check(
         `explain layout: --explain-layout with ${flag} is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
+        shown(refused)
+      )
+    }
+    // `nish run` refuses the same three, before it builds anything: it takes
+    // neither `--emit-ast` nor `--fix` at all.
+    for (const [flag, refusal] of [
+      ["--emit-ast", "`--emit-ast` cannot be used with `nish run`"],
+      ["--fix", "`--fix` cannot be used with `nish run`"],
+      ["--json", "`--explain-layout` prints a report for people, and --json keeps stderr to diagnostics"],
+    ]) {
+      const refused = spawnSync(NISH, ["run", flag, "--explain-layout", refusedSource], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      check(
+        `explain layout: \`nish run --explain-layout\` with ${flag} is a usage error, exit 2`,
         refused.status === 2 && refused.stdout === "" && refused.stderr.includes(refusal),
         shown(refused)
       )

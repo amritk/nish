@@ -248,8 +248,10 @@ A class that links to its own kind, as `Node` does, is what a later release
 will lay out in less memory by itself: its links in 4 bytes rather than 8,
 when the program is a native executable and makes the class in a loop or a
 recursive function. To see which of your classes that rule would pick, and
-the first test that refuses each of the others, compile with
-`--explain-layout`. For the program above it prints:
+the first test that refuses each of the others, build it with `--link` (or
+`nish run` it) and add `--explain-layout`. IR alone (`-o` with no `--link`)
+is refused at the first test, since a host may link it. For the program
+above it prints:
 
 ```
 app.ts:1:7: layout: Node: 4 not made in a loop or recursion, 32 → 16 bytes

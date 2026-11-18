@@ -7,9 +7,11 @@
 // A class `R` is compact when five tests hold, asked in order, and the first
 // that fails is the reason it is not:
 //
-//   1. the output is native: no wasm32 target, no `--emit-ts` (which writes
-//      TypeScript and no IR), and no sidecar a host reads the layouts through
-//      (`--emit-header`, `--emit-napi`, `--emit-napi-async`, `--emit-dts`);
+//   1. the output is a native executable: a closed-world build
+//      (`buildModeOf` in `src/visibility.ts`), which `--link` and `nish run`
+//      make unless a wasm target, a sidecar (`--emit-header`, `--emit-napi`,
+//      `--emit-napi-async`, `--emit-dts`) or a `declare function` opens it;
+//      `--emit-ts` writes TypeScript and no IR, so it is refused as well;
 //   2. some class, `R` included, has a field typed exactly `R` or `R | null`;
 //   3. narrowing those fields to four bytes (`narrowedSize`) shrinks `R` or a
 //      class holding the link, after rounding;
@@ -17,17 +19,19 @@
 //      reaches itself through direct calls by name;
 //   5. nothing forbids it: `R` is not a `declare class` and holds no `Secret`.
 //
-// Test 1 counts the IR (`-o x.ll`), an object and an executable alike as
-// native: each is the input or the output of the same native link, and no
-// build mode makes a C library a host links against without a sidecar.
+// Test 1 refuses a bare `-o x.ll` build: a host may link that IR, and its
+// exports are then the host's to call with any object. A `declare function` is
+// the "C library" case: the link takes a library this compiler did not build,
+// which may be handed a class. A refusal names the first flag that opens the
+// build, and `no --link` or `a declare function` when no flag does.
 // `--emit-dts` is refused on its own though the loader it writes is for a wasm
 // build (`rejectRootInWasiLoader`): a native compile still accepts the flag
 // and writes the `.d.ts`, whose reads follow the layouts.
 //
 // Test 5's third clause, "not exported in a C or N-API surface", has no case of
 // its own: a native build hands C a class's layout only through
-// `--emit-header` or an N-API shim, which test 1 already refuses, and a
-// `declare function` may take no class but a `declare class`. Being "a field
+// `--emit-header`, an N-API shim or a `declare function`, which test 1
+// already refuses. Being "a field
 // of a `declare class`" is the same case as being one, since a `declare class`
 // holds no other class.
 //
@@ -43,7 +47,10 @@
 // no case to cover.
 //
 // A generic class is not reported and makes no class a holder: only a
-// class's own declaration (`info.instance === null`) is asked about. Test 5
+// class's own declaration (`info.instance === null`) is asked about. Nor is
+// `new Box<i32>(...)` a made-site or a constructor edge (`madeClass` reads a
+// bare class name), so recursion through a generic class's constructor is a
+// miss; §3.1 allows a miss, since a missed class only stays as it is. Test 5
 // reads a field's own type (`holdsSecret`): a `Secret<T>`, or an array,
 // nullable or `Result` of one; a field holding a class that holds a `Secret`
 // is not looked into.
@@ -56,7 +63,7 @@ import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructInfo } from "./program
 import { StringBuilder } from "./strings"
 import { isLinkTo, narrowedSize } from "./structs"
 import { TypeTable } from "./types"
-import { isWasmBuild } from "./visibility"
+import { buildModeOf, isWasmBuild } from "./visibility"
 
 /** One module the report covers, and whether it is a standard-library one. */
 export class LayoutModule {
@@ -380,7 +387,7 @@ const collectClasses = (program: CheckedProgram, into: StructInfo[]): void => {
 }
 
 /** Test 1's refusal, the flag or target that makes the build not a native executable, or `""`. */
-const notNative = (opts: Options): string => {
+const notNative = (opts: Options, programs: CheckedProgram[]): string => {
   if (isWasmBuild(opts)) {
     return "wasm32"
   }
@@ -399,7 +406,15 @@ const notNative = (opts: Options): string => {
   if (opts.emitDts.length > 0) {
     return "--emit-dts"
   }
-  return ""
+  if (buildModeOf(opts, programs).closedWorld) {
+    return ""
+  }
+  // With every other refusal of a closed build ruled out above, what is left
+  // is the link itself: none was asked for, or a C library is in it.
+  if (opts.link.length === 0) {
+    return "no --link, so a host may link the IR"
+  }
+  return "a declare function, so a C library is in the link"
 }
 
 /** Whether any field of `info` links to the class whose pointer type is `target`. */
@@ -445,19 +460,22 @@ export class LayoutReport {
  */
 export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutModule[]): LayoutReport => {
   const wasm = isWasmBuild(opts)
-  const native = notNative(opts)
   // Every class in the program, for test 2's and test 3's scan of the
   // holders, and the index of the module each one is declared in.
   const all: StructInfo[] = []
   const owners: i32[] = []
+  const programs: CheckedProgram[] = []
   let m = 0
   while (m < modules.length) {
-    collectClasses(modules[m].program, all)
+    const program = modules[m].program
+    programs.push(program)
+    collectClasses(program, all)
     while (owners.length < all.length) {
       owners.push(m)
     }
     m = m + 1
   }
+  const native = notNative(opts, programs)
   const graph = buildGraph(modules)
   const lines = new StringBuilder()
   let classes = 0
