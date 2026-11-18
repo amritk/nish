@@ -774,6 +774,75 @@ static int move(void) {
   return 0;
 }
 
+/* A SHUTDOWN runs on io-wq, which looks the slot's file up only when it runs,
+ * so a close must not free the slot while one is in flight (NURING-39). A
+ * one-slot set accepts client A while client B waits in the backlog, queues
+ * A's shutdown and at once closes A, which frees the slot to B. The close
+ * answers -EAGAIN until the shutdown has completed; then A reads its byte and
+ * the end of the stream, and B, accepted into the same slot, reads nothing:
+ * no shutdown reached it. */
+static int shutclose(void) {
+  int p = nish_uring_probe();
+  if (probe_skips(p)) return SKIP;
+  if (p < 0) return 1;
+  alarm(60);
+  int l = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in a = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
+  socklen_t al = sizeof a;
+  if (l < 0 || bind(l, (struct sockaddr *)&a, sizeof a) != 0 || listen(l, 64) != 0 ||
+      getsockname(l, (struct sockaddr *)&a, &al) != 0)
+    return fail("listener");
+  struct nish_uring_set *s;
+  struct nish_uring_opts o = {1, 1, 0, 0, 0, 0};
+  int rc = nish_uring_open(&s, l, &o);
+  if (rc < 0) {
+    fprintf(stderr, "uring-test: open answered %d\n", rc);
+    return 1;
+  }
+  int fa, ra, sa;
+  if (move_accept(s, 0, &a, &fa, &ra, &sa) != 0) return 1;
+  int fb = socket(AF_INET, SOCK_STREAM, 0);
+  if (fb < 0 || connect(fb, (const struct sockaddr *)&a, sizeof a) != 0) return fail("client B connect");
+  if (nish_uring_send(s, ra, sa, (const uint8_t *)"x", 1) != 1) return fail("the send was refused");
+  if (nish_uring_shutdown(s, ra, sa, 1) != 0) return fail("the shutdown was refused");
+  /* Wait for the send, so the shutdown is the slot's head and in flight. */
+  long long deadline = now_ms() + 5000;
+  struct ur_send *q;
+  while ((q = s->rings[ra]->sq_first[sa]) != NULL && q->how < 0) {
+    if (now_ms() > deadline) return fail("the send did not complete");
+    struct nish_uring_event ev[EVENTS_MAX];
+    if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
+  }
+  int refused = 0;
+  while ((rc = nish_uring_close(s, ra, sa)) == -EAGAIN) {
+    refused = 1;
+    if (now_ms() > deadline) return fail("the close was refused past the shutdown");
+    struct nish_uring_event ev[EVENTS_MAX];
+    if (nish_uring_wait(s, 0, ev, EVENTS_MAX) < 0) return fail("wait");
+  }
+  if (rc != 0) return fail("the close answered an error");
+  if (q != NULL && !refused) return fail("a close with the shutdown in flight was not refused");
+  int rb = -1, sb = -1;
+  while (rb < 0) {
+    if (now_ms() > deadline) return fail("client B was not accepted");
+    struct pollfd pq = {nish_uring_fd(s), POLLIN, 0};
+    if (poll(&pq, 1, nish_uring_sleep_ms(s, -1)) < 0) return fail("poll on the set's descriptor");
+    if (move_wait(s, &rb, &sb) < 0) return 1;
+  }
+  if (rb != ra || sb != sa) return fail("client B was not accepted into A's slot");
+  uint8_t got[2];
+  if (read_all(fa, got, 1) != 0 || got[0] != 'x' || read(fa, got, 1) != 0)
+    return fail("client A did not read its byte and the end of the stream");
+  struct pollfd bq = {fb, POLLIN, 0};
+  int ready = poll(&bq, 1, 300);
+  if (ready != 0) return fail("client B read the end of the stream: A's shutdown reached the slot's next connection");
+  nish_uring_destroy(s);
+  close(fa);
+  close(fb);
+  close(l);
+  return 0;
+}
+
 /* A ring whose eventfd says nothing: a client that connects while a wait of
  * -1 sleeps must still be accepted, by the wait's own bound. Without it the
  * wait would sleep until the alarm. */
@@ -1030,6 +1099,7 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "nowake") == 0) return nowake();
   if (strcmp(argv[1], "hupheld") == 0) return hupheld();
   if (strcmp(argv[1], "nomem") == 0) return nomem();
+  if (strcmp(argv[1], "shutclose") == 0) return shutclose();
   static const struct mode modes[] = {
       {"beyond", {0, 8, 0, 0, 0, 0}, 3000, 1024, 0, 64, 0, 0, 0},
       {"bound", {8, 1, 0, 0, 0, 0}, 50, 0, 1, 64, 0, 0, 0},

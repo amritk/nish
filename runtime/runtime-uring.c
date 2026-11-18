@@ -1463,11 +1463,17 @@ int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot
 
 /* Cancel the slot's recv, close the slot, and move its generation on, so
  * every completion still on its way for it is stale. The freed slot goes to
- * the accepting job. -EAGAIN when the SQ has no room for both entries, with
- * nothing changed. */
+ * the accepting job. -EAGAIN, with nothing changed, when the SQ has no room
+ * for both entries or while the slot's shutdown is in flight: a SHUTDOWN runs
+ * on io-wq, which looks the slot's file up only when it runs, and the cancel
+ * below cannot match a request that has no file yet, so a slot freed before
+ * it ran could take a new connection that the shutdown then reaches
+ * (NURING-39). */
 int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot) {
   struct ur_ring *r = ur_open_slot(s, ring, slot);
   if (!r) return -EBADF;
+  const struct ur_send *h = r->sq_first[slot];
+  if (h && h->in_flight && h->how >= 0) return -EAGAIN;
   uint32_t head = __atomic_load_n(r->sq_head, __ATOMIC_ACQUIRE);
   if (r->sq_local_tail - head + 2 > r->sq_entries) {
     (void)ur_flush(r);

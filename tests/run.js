@@ -16952,6 +16952,7 @@ if (dealtHere("runtimeChecks")) {
         ["move", "an accept or a close that moves the accepting job to a ring the wait passed leaves nothing queued in user space when the wait returns"],
         ["nowake", "a client that connects while a wait of -1 sleeps on a ring whose eventfd is gone is accepted by the sleep's bound (NURING-8)"],
         ["hupheld", "a slot whose recv a reset ended, held and let go, arms nothing and reports no second hangup (NURING-27)"],
+        ["shutclose", "a close waits for its slot's shutdown, which io-wq resolves late, so the slot's next connection reads no end of the stream (NURING-39)"],
         ["nomem", "an accept that answers -ENOMEM pauses accepting and backs off, and the set accepts again after it (NURING-28)"],
         ["bound", "a full one-ring set of 8 slots serves 50 clients and drops none (the accept bound)"],
         ["taskrun", "a burst of 100 queued on one ring is taken by one wait, entering again while IORING_SQ_TASKRUN is up"],
