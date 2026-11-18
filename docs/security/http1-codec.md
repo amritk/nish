@@ -553,7 +553,7 @@ The slots are the pool's size. An `Http1Server` lends a connection to a slot
 only while the slot is busy, and builds one only when a slot that reads finds
 none spare, so it never holds more than `size` connections, each within the
 caps above, and holds no more than were busy at once: a pool of 16,384 takes
-16,904 bytes before its first connection (`HTTP1_SERVER_START_BYTES`,
+16,928 bytes before its first connection (`HTTP1_SERVER_START_BYTES`,
 "net_http1_server: a 16,384-slot Http1Server takes at most
 HTTP1_SERVER_START_BYTES before its first connection"), and the connection past
 `size` busy slots is shed with `H1_POOL_FULL` without one being built. A slot

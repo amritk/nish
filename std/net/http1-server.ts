@@ -104,11 +104,12 @@
  * a whole request head (`headTimeout`, against slowloris); the slots are the
  * pool's size.
  *
- *  `Http1Server` builds a slot's connection on the first accept into it and
- *  keeps it, so a pool sized for its peak costs at start-up only what does not
- *  depend on the size, and holds at most `size` connections once the peak has
- *  come; `Http1TlsServer` does the same for a slot's connection and, through
- *  `TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or
+ *  `Http1Server` lends a connection to a slot only while it is busy and builds
+ *  one only when none is spare, so a pool sized for its peak costs at start-up
+ *  only what does not depend on the size, and holds as many connections as were
+ *  busy at once; `Http1TlsServer` builds a slot's connection on its first
+ *  accept and keeps it, with its TLS state through
+ *  `TlsTcpServer`. Every buffer is allocated with its slot or
  *  grown to its cap on first use and kept, so a warmed slot serves request after
  *  request with `Arena.used()` flat. Accepting a WebSocket computes the accept
  *  key and writes the 101 into storage the slot keeps, built on its first
@@ -1287,6 +1288,17 @@ export class Http1Connection {
     }
   }
 
+  /**
+   * Whether the connection holds nothing a resting keep-alive slot must keep:
+   * speaking HTTP with no request open, no head clock started, no output
+   * borrowed or unsent, no write held or pong owed, the peer's stream not
+   * ended, no close asked for or lingering, no program-set `mss`, and its
+   * parser at rest. `Http1Server` then gives the connection back for another
+   * busy slot.
+   *
+   * @returns true when the connection may be lent to another slot.
+   * @internal Called by `Http1Server` in this module at `flush`.
+   */
   rests(): boolean {
     return (
       this.state === H1_S_HTTP &&
@@ -2981,7 +2993,11 @@ export class Http1Server {
     let n: i32 = 0
     const idle: i64 = toI64(this.config.idleTimeout) * toI64(1000000)
     const head: i64 = now + toI64(this.config.headTimeout) * toI64(1000000)
-    for (let k: i32 = 0; k < toI32(this.fds.length) && k < toI32(this.at.length) && k < toI32(this.rested.length); k++) {
+    for (
+      let k: i32 = 0;
+      k < toI32(this.fds.length) && k < toI32(this.at.length) && k < toI32(this.rested.length);
+      k++
+    ) {
       if (this.fds[k] >= 0) {
         const j: i32 = this.at[k]
         if (j < 0) {

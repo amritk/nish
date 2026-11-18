@@ -945,10 +945,10 @@ const RUNTIME_SQLITE_TEXT_BUDGET = 2048
  * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http1_server/startup.ts`,
  * which builds that pool on the default `Http1Config` and prints the bytes.
  *
- * Measured **16,904 bytes** on 2026-11-18 with clang 18 on linux-x64: the 16,384-byte
+ * Measured **16,928 bytes** on 2026-11-18 with clang 18 on linux-x64: the 16,384-byte
  * read scratch every server keeps, and the pool's own bookkeeping, with no connection
- * built (16,688 before a slot rested without one: the four slot arrays that lend a
- * connection to a busy slot add 216). A connection is built only when a busy slot
+ * built (16,688 before a slot rested without one: the five slot arrays that lend a
+ * connection to a busy slot add 240). A connection is built only when a busy slot
  * finds none spare, 752 bytes on the same defaults (2026-11-13). Built eagerly, as every slot was before, a
  * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
  * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the

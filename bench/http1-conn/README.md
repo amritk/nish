@@ -86,6 +86,14 @@ LIFO is one each however many connections there are; `run.mjs` fails the run
 if it is not.
 The rss shape prints its peak in KiB where the others print nanoseconds.
 
+## idle.sh: an idle connection through a real server
+
+`main.ts` builds its own pool of `Http1Connection`s. `bash bench/http1-conn/idle.sh` instead measures `Http1Server` itself, behind sockets. It serves `bench/http1-server.ts` (bench/handler-ring's `h1` design) on descriptors and with `BENCH_RING=1` on `NET_LISTEN_RING` slots. `bench/fd-limit/loadgen.c` holds `--conns` keep-alive connections (default 18,000), sends `GET /plaintext` at `--rate` for `--seconds`, then sends nothing for `--idle` seconds. Its `-i` reads the server's RSS and PSS, and the box's `Slab` and TCP buffer pages, then and before the first connect.
+
+Each line is one run. It prints those differences over the connections, in bytes a connection, beside the server CPU a request during the load. A run that closed a connection or failed a send prints -1 for the CPU. Each `--binary [name=]<path>` adds another build of `bench/http1-server.ts` as a column, run in the same interleaved rounds. That column is the before build of a change to `std/net`. Slab and TCP pages are the box's, so they count the client's end of each loopback connection too.
+
+The script needs gcc, and a hard `RLIMIT_NOFILE` above the connections plus 64 for descriptors. Its 2026-11-18 run is `docs/BENCHMARKS.md` → "What an idle keep-alive connection costs Http1Server".
+
 ## Measured: a hot-first parser layout (2026-11-06)
 
 `std/net/http1-codec.ts`'s `Http1Parser` puts the fields a request reads

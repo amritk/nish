@@ -207,11 +207,12 @@ the output buffer, a WebSocket message, the idle timeout and the deadline for
 a whole request head (`headTimeout`, against slowloris); the slots are the
 pool's size.
 
-`Http1Server` builds a slot's connection on the first accept into it and
-keeps it, so a pool sized for its peak costs at start-up only what does not
-depend on the size, and holds at most `size` connections once the peak has
-come; `Http1TlsServer` does the same for a slot's connection and, through
-`TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or
+`Http1Server` lends a connection to a slot only while it is busy and builds
+one only when none is spare, so a pool sized for its peak costs at start-up
+only what does not depend on the size, and holds as many connections as were
+busy at once; `Http1TlsServer` builds a slot's connection on its first
+accept and keeps it, with its TLS state through
+`TlsTcpServer`. Every buffer is allocated with its slot or
 grown to its cap on first use and kept, so a warmed slot serves request after
 request with `Arena.used()` flat. Accepting a WebSocket computes the accept
 key and writes the 101 into storage the slot keeps, built on its first
@@ -360,14 +361,24 @@ A pool of HTTP/1.1 connections over plain TCP on one listening socket.
 `slot`s are the indices `accept` answers; a slot is the program's from
 `accept` until it calls `close`, and its descriptor is `fd(slot)`.
 
+A slot holds an `Http1Connection` only while it has something to keep: a
+request read or answered, bytes fed and unread, output to send, or a
+WebSocket. One that rests between requests (`Http1Connection.rests`) gives
+its connection back at `flush` and keeps only its descriptor, its
+interest, its `lastActive` and its socket's MSS; the next slot that reads
+takes a resting connection, keeping its response head only if it was kept
+for that slot's own peer (H1-7). So the pool builds
+as many connections as are busy at once, not one per open slot, and an
+idle keep-alive costs its slot a few words.
+
 ```ts
 class Http1Server
 ```
 
 | Member | |
 | --- | --- |
-| `new Http1Server(config: Http1Config, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving `config` on `listener`. No slot is built here: a slot's connection and its buffers are allocated by the first `accept` into it and kept, so a pool sized for a peak costs at start-up only the read scratch, the shared `Date` and the output pool, and at most `size` connections once the peak has come. |
-| `connections: Http1Connection[]` | The connections built so far, slot `k`'s at `k`: one per slot ever accepted into, and slot 0's once `connection` has asked for it. |
+| `new Http1Server(config: Http1Config, listener: i32, size: i32)` | A pool of `size` slots, at least one, serving `config` on `listener`. No slot is built here: a connection is built the first time a slot reads and none rests spare, and kept, so a pool sized for a peak costs at start-up only the read scratch, the shared `Date` and the output pool, and at most as many connections as were ever busy at once. |
+| `connections: Http1Connection[]` | The connections built so far, as many as were ever busy at once: each is a slot's (`at`) or spare. |
 | `date: HttpDate` | The `Date` every slot's responses carry, formatted once a second for all of them and read from the clock once per serve call: `readable` and `writable` hold a reading and `flush` lets it go. `date.pin` fixes its clock. |
 | `expireScans: i32` | How many calls of `expire` walked every slot, for a program measuring its cost. |
 | `fds: i32[]` | Each slot's descriptor, or -1 while it is free, for the slots accepted into so far: its length is the high-water mark, and a slot past it has never been used. |
@@ -377,16 +388,18 @@ class Http1Server
 | `outputs: Http1OutputPool` | The output buffers the slots borrow while they write. |
 | `accept(): i32` | Accepts the next waiting connection into a free slot and answers the slot, which the program adds to its loop with `H1_WANT_READ`; -11 when none is waiting, `H1_POOL_FULL` when every slot is busy (the connection is closed), or `tcpAccept`'s own failure. |
 | `busy(): i32` | How many slots hold a connection. |
-| `close(slot: i32): void` | Closes `slot`'s socket, whatever is left unsent, and frees the slot. |
-| `connection(slot: i32): Http1Connection` | The connection of `slot`. A slot never accepted into, or out of range, names slot 0's connection, which this builds when no slot has been yet (the first `accept` then takes it, restarted). |
+| `close(slot: i32): void` | Closes `slot`'s socket, whatever is left unsent, and frees the slot. Its connection, when it holds one, is aborted and restarted, and is spare. |
+| `connection(slot: i32): Http1Connection` | The connection of `slot`. A resting slot is given one here, a spare or a new one, which it keeps until it rests again at a `flush`: so a program holds the answer only within a serve call, and asks again in the next. A free slot, or one out of range, names the first connection built, which this builds when none has been; it is another slot's or spare, so read nothing from it. |
 | `expire(now: i64): i32` | Closes every slot that has been idle past `idleTimeout`, or reading one head for longer than `headTimeout`, or lingering past `lingerTimeout`, at `now` (`monotonicNanos`); answers how many. |
 | `fd(slot: i32): i32` | The descriptor of `slot`, for `pollAdd`; -1 for a free or unknown one. |
-| `flush(slot: i32): i32` | Sends what `slot`'s connection holds until the socket would block, and answers the interest: `H1_DONE` once the connection is over and sent, otherwise read while it has room and write while it holds bytes or a write is held back (its `H1_WRITE` comes from `next` once the socket is writable, even when this send emptied the output). It ends the serve call, so a response written after it reads the clock anew. Once a refusal (`H1_ERROR`) is sent the slot lingers: its write side is shut and what the client still sends is drained, answering `H1_WANT_READ` until the client's end of stream, `lingerBytes`, or `expire` past `lingerTimeout`; `next` answers `H1_NEED_MORE` meanwhile. |
+| `flush(slot: i32): i32` | Sends what `slot`'s connection holds until the socket would block, and answers the interest: `H1_DONE` once the connection is over and sent, otherwise read while it has room and write while it holds bytes or a write is held back (its `H1_WRITE` comes from `next` once the socket is writable, even when this send emptied the output). It ends the serve call, so a response written after it reads the clock anew. Once a refusal (`H1_ERROR`) is sent the slot lingers: its write side is shut and what the client still sends is drained, answering `H1_WANT_READ` until the client's end of stream, `lingerBytes`, or `expire` past `lingerTimeout`; `next` answers `H1_NEED_MORE` meanwhile. A slot whose connection then rests gives it back (see the class comment). |
 | `holds(slot: i32): boolean` | Whether `slot` is a slot of this pool that holds a connection. |
 | `next(slot: i32): i32` | `slot`'s connection's next event; `H1_ERROR` for a free slot. While a write is held back the output is sent first, so that the room it waits for is made here and `H1_WRITE` comes in the same pass; otherwise what the program writes in answer to one event and the next goes out together at `flush`, as one segment rather than several. |
 | `readable(slot: i32): i32` | The socket of `slot` is readable: reads it while the connection has room and the socket has more, then sends. Answers the interest. It begins a serve call, which the program's `flush` of the slot ends: the responses written in between carry one clock reading as their `Date`. |
 | `rearm(slot: i32, wants: i32): boolean` | Whether the program must `pollModify` `slot`'s descriptor to `wants`, the interest `readable`, `writable` or `flush` answered, and records it as armed when it must. A keep-alive connection answers the same interest request after request, and each `pollModify` is a system call (`epoll_ctl`) that changes nothing. |
+| `resting(slot: i32): boolean` | Whether `slot` holds a connection that rests between requests and has given its `Http1Connection` back: nothing is open, unread or unsent on it, so closing it loses nothing. It does not give the slot a connection, as `connection` does. |
 | `size(): i32` | How many slots the pool has, built or not. |
+| `spares(): i32` | How many connections no slot holds now, of the `connections` built. |
 | `writable(slot: i32): i32` | The socket of `slot` is writable: sends, and begins a serve call as `readable` does. Answers the interest. |
 
 ### Http1TlsServer
