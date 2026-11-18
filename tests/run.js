@@ -42702,7 +42702,9 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
 // shrinks. A file the codemod cannot parse counts as holding one: the check
 // fails closed. The forms the codemod refuses by design (`declare function`,
 // `async`, `function*`, `export default`, a bodiless signature) are not
-// definitions here, the same as `node scripts/arrowify.mjs --check`.
+// definitions here, the same as `node scripts/arrowify.mjs --check`; but a
+// "bodiless" signature whose line does not end in `;` counts, because that is
+// the codemod misreading a body (`function made(): keyof {`).
 if (selects("arrow-corpus")) {
   const allowlistName = "tests/function-spelling-allowlist.txt"
   // Every problem with `files` (paths relative to `base`) against the allowlist
@@ -42725,7 +42727,12 @@ if (selects("arrow-corpus")) {
       const text = fs.readFileSync(path.join(base, file), "utf8")
       if (!/\bfunction\b/.test(text)) return false
       try {
-        return arrowify(text, file).changed > 0
+        const { changed, skipped } = arrowify(text, file)
+        const lines = text.split("\n")
+        return (
+          changed > 0 ||
+          skipped.some((s) => s.reason.startsWith("no body") && !/;\s*$/.test(lines[s.line - 1] ?? ""))
+        )
       } catch {
         return true
       }
@@ -42769,7 +42776,8 @@ if (selects("arrow-corpus")) {
 
   // The negative proof, on a scratch tree: the check passes, fails on an
   // unlisted definition and names it, passes again once it is gone, fails on
-  // a stale listing, and counts a file the codemod cannot parse as a holder.
+  // a stale listing, and counts a file the codemod cannot parse, or reads as a
+  // bodiless signature though the line opens a body, as a holder.
   const scratch = fs.mkdtempSync(path.join(buildDir, "arrow-corpus-"))
   try {
     const put = (file, text) => {
@@ -42778,7 +42786,10 @@ if (selects("arrow-corpus")) {
     }
     put("tests/cases/kept.ts", "function kept(): number {\n  return 1\n}\n")
     put("tests/cases/arrow.ts", "const arrow = (): number => {\n  return 1\n};\n")
-    put("tests/cases/declared.ts", 'declare function puts(s: string): number\nasync function later(): Promise<void> {}\n')
+    put(
+      "tests/cases/declared.ts",
+      "declare function puts(s: string): number\nasync function later(): Promise<void> {}\nfunction sig(): number;\n"
+    )
     const list = "tests/cases/kept.ts  # the subject\n"
     const base = ["tests/cases/kept.ts", "tests/cases/arrow.ts", "tests/cases/declared.ts"]
     const clean = arrowCorpusProblems(scratch, base, list)
@@ -42790,6 +42801,8 @@ if (selects("arrow-corpus")) {
     const stale = arrowCorpusProblems(scratch, base, list)
     put("tests/cases/unparsed.ts", "function catch(x: number): number {\n  return x\n}\n")
     const unparsed = arrowCorpusProblems(scratch, [...base, "tests/cases/unparsed.ts"], list)
+    put("tests/cases/misread.ts", "function made(): keyof {\n  return new keyof()\n}\n")
+    const misread = arrowCorpusProblems(scratch, [...base, "tests/cases/misread.ts"], list)
     const noReason = arrowCorpusProblems(scratch, base, "tests/cases/kept.ts\n")
     check(
       "WP22 arrow-corpus: an unlisted definition fails and names its file and the codemod; removing it passes",
@@ -42801,18 +42814,20 @@ if (selects("arrow-corpus")) {
       JSON.stringify({ clean, added, removed }, null, 2)
     )
     check(
-      "WP22 arrow-corpus: a stale listing, a reasonless listing and an unparsable file each fail",
+      "WP22 arrow-corpus: a stale listing, a reasonless listing, an unparsable file and a misread body each fail",
       stale.length === 1 &&
         stale[0].includes("no longer holds") &&
         unparsed.some((p) => p.startsWith("tests/cases/unparsed.ts ")) &&
+        misread.some((p) => p.startsWith("tests/cases/misread.ts ")) &&
         noReason.some((p) => p.includes("no `#` reason")),
-      JSON.stringify({ stale, unparsed, noReason }, null, 2)
+      JSON.stringify({ stale, unparsed, misread, noReason }, null, 2)
     )
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true })
   }
 
-  // The re-key's refusal path, on a scratch copy of the differential store:
+  // The re-key's refusal path and its positive control, on a scratch copy of
+  // the differential store:
   // `--rekey-arrowified` re-keys a frozen program only when its source is the
   // codemod's rewrite of the source at `--rev`. A hand edit is refused, the
   // program stays stale and the store keeps its bytes; no `--rev` is a usage
@@ -42871,6 +42886,47 @@ if (selects("arrow-corpus")) {
       "WP22 arrow-corpus: `--rekey-arrowified` without `--rev` is a usage error (exit 2)",
       noRev.status === 2,
       `exit ${noRev.status}\n${noRev.stdout}${noRev.stderr}`
+    )
+
+    // The positive control, so a mode that refused everything would fail: commit
+    // arr_2d in its `function` spelling, keyed in the store, then put back the
+    // codemod's rewrite of it. The re-key accepts that, moves the key and leaves
+    // the program fresh.
+    const programFile = path.join(copy, "tests/differential/corpus/arr_2d.ts")
+    const arrows = fs.readFileSync(path.join(root, "tests/differential/corpus/arr_2d.ts"), "utf8")
+    const functions = arrows
+      .replace(/^(export )?const (\w+) = \((.*)\): (.+) => \{$/gm, "$1function $2($3): $4 {")
+      .replace(/^\};$/gm, "}")
+    const key = (text) => crypto.createHash("sha256").update(text).digest("hex").slice(0, 16)
+    const roundTrips = functions !== arrows && arrowify(functions, "arr_2d.ts", { concise: false }).text === arrows
+    fs.writeFileSync(programFile, functions)
+    fs.writeFileSync(
+      store,
+      fs
+        .readFileSync(store, "utf8")
+        .replace(
+          `module ${key(arrows)} tests/differential/corpus/arr_2d.ts `,
+          `module ${key(functions)} tests/differential/corpus/arr_2d.ts `
+        )
+    )
+    const recommitted = git("commit", "-q", "-a", "-m", "function spelling")
+    const freshFunctions = goldens("corpus/arr_2d")
+    fs.writeFileSync(programFile, arrows)
+    const keyedBefore = fs.readFileSync(store)
+    const accepted = goldens("--rekey-arrowified", "--rev", "HEAD", "corpus/arr_2d")
+    const freshArrows = goldens("corpus/arr_2d")
+    check(
+      "WP22 arrow-corpus: the re-key accepts the codemod's rewrite of a frozen source, moves its key and leaves it fresh",
+      roundTrips &&
+        recommitted.status === 0 &&
+        freshFunctions.status === 0 &&
+        accepted.status === 0 &&
+        freshArrows.status === 0 &&
+        !fs.readFileSync(store).equals(keyedBefore) &&
+        fs.readFileSync(store, "utf8").includes(`module ${key(arrows)} tests/differential/corpus/arr_2d.ts `),
+      [`round trip ${roundTrips}`, ...[recommitted, freshFunctions, accepted, freshArrows].map(
+        (r) => `exit ${r.status}\n${r.stdout}${r.stderr}`
+      )].join("\n---\n")
     )
   } finally {
     fs.rmSync(copy, { recursive: true, force: true })

@@ -118,20 +118,29 @@ the codemod refuses; the third column counts the definitions without it:
 | `bench/` | 39 | 0 | all `async` |
 | `examples/` | 2 | 2 | `wasm-arena/host.ts`, a host module: `src/host-module.ts` reads `export function` |
 | `docs/cookbook/` | 2 | 2 | `fn-add-function.ts`, which exists *to be* the `function` spelling and is excluded from the plugin in `biome.json` (§9a), and the host module `host/scale.ts` |
-| `tests/cases/` | 221 | 24 | 197 `async`; the rest are on the allowlist (§8) |
+| `tests/cases/` | 221 | 24 | 197 `async`; 18 on the allowlist, 6 refused forms (`export default`, `function*`, a bodiless signature) |
 | `tests/link/` | 154 | 0 | all `async` |
 | `tests/emit-ts/`, `tests/postgres/` | 40, 1 | 0 | all `async` |
 | `tests/parser/` | 21 | 21 | parser fixtures: `function` parsing and recovery, and `catch` names the codemod cannot parse |
-| `tests/wordings/` | 25 | 16 | host-module wordings, and 9 `async` |
+| `tests/wordings/` | 25 | 16 | 14 host-module wordings, 2 refused forms (NL2203, NL2204), and 9 `async` |
 | `tests/host-import/`, `tests/host-window/`, `tests/panic/` | 22, 6, 2 | 21, 6, 2 | host modules, and one `async` |
 | `tests/fix/` | 4 | 4 | `nish --fix` fixtures whose declaration kind is the subject |
 | `tests/differential/arrow-parity/` | 3 | 3 | `declared.ts` |
 
 That is **542** definitions in all, against 1,034 when this table was first
 counted and 1,664 when stage C's docs half was finished. Only **101** are not
-`async`, and every one of them under `tests/` is on
-`tests/function-spelling-allowlist.txt` with its reason. §10 argues stage D
-from these numbers.
+`async`. Four are the `examples/` and `docs/cookbook/` rows above. Of the 97
+under `tests/`, 8 are forms the codemod refuses by design, each the subject of
+its rejection case or wording (4 `export default`, 2 `function*`, 2 bodiless
+signatures), and the other 89 are on `tests/function-spelling-allowlist.txt`
+with their reasons. Of those 89, **14** (in
+6 files: `dbg_enum`, `dbg_locals`, `dbg_result`, `opt_target_triple`,
+`dump_ast`, `reject_type_mismatch`) are plain programs whose spelling is not
+the subject but whose rewrite would move a position something else pins: a
+`-g` golden's DILocation columns, an AST-dump golden, or a line:col the docs
+quote. The allowlist groups them as pinned positions; one leaves it only
+together with the regenerated golden or the doc edit. §10 argues stage D from
+these numbers.
 
 ## 8. The order, and why it is forced
 
@@ -290,8 +299,9 @@ refusal. It must not fire for a `declare function`. That ordering gives the
 first two rows above for free. `reject_fn_nested` is untouched, because a
 nested declaration is refused as a statement before it reaches either check.
 So stage D is one flag, one refusal, the `reject_function_declaration` case and
-its wording, and the 101 definitions §7 still counts, each a subject, a host
-module or a fixture the allowlist names.
+its wording, and the 101 definitions §7 still counts: a subject, a host
+module, a fixture or a pinned position the allowlist names, or a refused form
+that is its rejection case's subject.
 
 **The two entry-point wordings §10 names are `NL2149` and `NL2229`**:
 `` `process.argv` requires a `main` entry point (this program has no `export
@@ -313,8 +323,9 @@ makes the spelling they name wrong.
 - **Whether stage D happens at all.** A, B and C are done. New code outside
   the test corpus cannot use `function` (the Biome plugin), and a new test
   cannot either (the `arrow-corpus` check). What is left is 101 non-`async`
-  definitions, each kept for a reason the allowlist records, and the `async`
-  ones, which have no arrow spelling to move to (§7).
+  definitions, each a refused form under test or kept for a reason the
+  allowlist records, and the `async` ones, which have no arrow spelling to
+  move to (§7).
   The alternative is to leave D undone. D withdraws an accepted
   construct. On 0.x that is a breaking minor, and after 1.0 it would need a
   major ([LANGUAGE.md](LANGUAGE.md)'s head), so it is cheaper while the project
