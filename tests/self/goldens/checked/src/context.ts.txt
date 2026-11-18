@@ -76,47 +76,48 @@ struct CheckContext (class) size=344 align=8 exported
   field numberSpellings: i32 index=5 offset=36
   field strictExports: boolean index=6 offset=40
   field wasm: boolean index=7 offset=41
-  field wasmFreestanding: boolean index=8 offset=42
-  field pageModule: boolean index=9 offset=43
-  field deterministic: boolean index=10 offset=44
-  field sigs: StringMap index=11 offset=48
-  field entryHasMain: boolean index=12 offset=56
-  field peers: CheckContext[] index=13 offset=64
-  field current: FunctionSig | null index=14 offset=72
-  field typeBindings: StringMap index=15 offset=80
-  field functionBindings: FunctionBindings index=16 offset=88
-  field arrowOuterScopes: Scope[] index=17 offset=96
-  field arrowOuterFunctions: FunctionBindings[] index=18 offset=104
-  field pathLocals: Local[] index=19 offset=112
-  field pathRoots: Local[] index=20 offset=120
-  field pathKeys: string[] index=21 offset=128
-  field pathNodes: Node[] index=22 offset=136
-  field thisRoot: Local index=23 offset=144
-  field pathIndexCount: i32 index=24 offset=152
-  field awaitedCall: i32 index=25 offset=156
-  field embeddedRead: i32 index=26 offset=160
-  field arrowFns: FunctionSig[] index=27 offset=168
-  field arrowScopes: Scope[] index=28 offset=176
-  field arrowModes: i32[] index=29 offset=184
-  field currentInstance: Instantiation | null index=30 offset=192
-  field currentStructInstance: StructInstantiation | null index=31 offset=200
-  field constraintsDeferred: boolean index=32 offset=208
-  field deferredConstraints: DeferredConstraint[] index=33 offset=216
-  field reportedOnce: StringSet index=34 offset=224
-  field hygiene: Diagnostic[] index=35 offset=232
-  field pending: Instantiation[] index=36 offset=240
-  field pendingFinish: StructInfo[] index=37 offset=248
-  field exportedLayoutUses: ExportedLayoutUse[] index=38 offset=256
-  field loopKinds: i32[] index=39 offset=264
-  field loopBreaks: boolean[] index=40 offset=272
-  field loopLabels: string[] index=41 offset=280
-  field loopFrames: i32[] index=42 offset=288
-  field switchFrames: SwitchFrame[] index=43 offset=296
-  field flowFrames: LoopFlow[] index=44 offset=304
-  field statementExpression: Node | null index=45 offset=312
-  field awaitStatement: Node | null index=46 offset=320
-  field forOfWalk: Node | null index=47 offset=328
-  field errored: boolean index=48 offset=336
+  field compressLinks: boolean index=8 offset=42
+  field wasmFreestanding: boolean index=9 offset=43
+  field pageModule: boolean index=10 offset=44
+  field deterministic: boolean index=11 offset=45
+  field sigs: StringMap index=12 offset=48
+  field entryHasMain: boolean index=13 offset=56
+  field peers: CheckContext[] index=14 offset=64
+  field current: FunctionSig | null index=15 offset=72
+  field typeBindings: StringMap index=16 offset=80
+  field functionBindings: FunctionBindings index=17 offset=88
+  field arrowOuterScopes: Scope[] index=18 offset=96
+  field arrowOuterFunctions: FunctionBindings[] index=19 offset=104
+  field pathLocals: Local[] index=20 offset=112
+  field pathRoots: Local[] index=21 offset=120
+  field pathKeys: string[] index=22 offset=128
+  field pathNodes: Node[] index=23 offset=136
+  field thisRoot: Local index=24 offset=144
+  field pathIndexCount: i32 index=25 offset=152
+  field awaitedCall: i32 index=26 offset=156
+  field embeddedRead: i32 index=27 offset=160
+  field arrowFns: FunctionSig[] index=28 offset=168
+  field arrowScopes: Scope[] index=29 offset=176
+  field arrowModes: i32[] index=30 offset=184
+  field currentInstance: Instantiation | null index=31 offset=192
+  field currentStructInstance: StructInstantiation | null index=32 offset=200
+  field constraintsDeferred: boolean index=33 offset=208
+  field deferredConstraints: DeferredConstraint[] index=34 offset=216
+  field reportedOnce: StringSet index=35 offset=224
+  field hygiene: Diagnostic[] index=36 offset=232
+  field pending: Instantiation[] index=37 offset=240
+  field pendingFinish: StructInfo[] index=38 offset=248
+  field exportedLayoutUses: ExportedLayoutUse[] index=39 offset=256
+  field loopKinds: i32[] index=40 offset=264
+  field loopBreaks: boolean[] index=41 offset=272
+  field loopLabels: string[] index=42 offset=280
+  field loopFrames: i32[] index=43 offset=288
+  field switchFrames: SwitchFrame[] index=44 offset=296
+  field flowFrames: LoopFlow[] index=45 offset=304
+  field statementExpression: Node | null index=46 offset=312
+  field awaitStatement: Node | null index=47 offset=320
+  field forOfWalk: Node | null index=48 offset=328
+  field errored: boolean index=49 offset=336
   constructor -> @CheckContext.constructor
   method error -> @CheckContext.error
   method errorAtSpan -> @CheckContext.errorAtSpan

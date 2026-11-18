@@ -3270,6 +3270,7 @@ import checkedText from "./dump" -> function @checkedText
 import acceptsSidecars from "./interop-abi" -> function @acceptsSidecars
 import ExternalFunction from "./interop-abi" -> struct ExternalFunction
 import externalFunctions from "./interop-abi" -> function @externalFunctions
+import refuseCompactSidecars from "./interop-abi" -> function @refuseCompactSidecars
 import generateDts from "./interop-dts" -> function @generateDts
 import generateHeader from "./interop-header" -> function @generateHeader
 import generateNapiShim from "./interop-napi" -> function @generateNapiShim
@@ -3662,7 +3663,7 @@ function main(): i32 -> @nish_main [exported entry]
 function commandMain(): i32 -> @commandMain
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.explainMemoryText Compilation.panicsText EmittedProgram.constructor Options.constructor PackageSearch.wasRefused PackageSearch.where WarningStyle.constructor acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared cachedBinary capabilityListMask capabilityNames capabilityScopes capabilitySummary checkedText compatFeatureNames compatHasFeature compatKnownText emitTypeScript externalFunctions findPackage fixProgram hasCompactClass helpHint internalErrorFor isCheckout isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nearMiss nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_slice nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new nish_write nish_write_file planOutputs playBreak report reportDeprecations reportLoadFailure reportPerformance reportPortability reportRootFailure reportToolchainFailure resolveTarget runProgram runWatch simulatedInternalError simulatedStatelessInstance simulatedUnlabelledBuiltin splitByte supportedTargets upgrade usageText watchState writeCapabilityReport writeSidecars
+  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.explainMemoryText Compilation.panicsText EmittedProgram.constructor Options.constructor PackageSearch.wasRefused PackageSearch.where WarningStyle.constructor acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared cachedBinary capabilityListMask capabilityNames capabilityScopes capabilitySummary checkedText compatFeatureNames compatHasFeature compatKnownText emitTypeScript externalFunctions findPackage fixProgram hasCompactClass helpHint internalErrorFor isCheckout isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nearMiss nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_slice nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new nish_write nish_write_file planOutputs playBreak refuseCompactSidecars report reportDeprecations reportLoadFailure reportPerformance reportPortability reportRootFailure reportToolchainFailure resolveTarget runProgram runWatch simulatedInternalError simulatedStatelessInstance simulatedUnlabelledBuiltin splitByte supportedTargets upgrade usageText watchState writeCapabilityReport writeSidecars
   stackSites=11 stackLocals=7
   callee +0:19 usageText -> @usageText
   callee +9:12 playBreak -> @playBreak
@@ -3808,28 +3809,31 @@ function commandMain(): i32 -> @commandMain
   callee +910:22 acceptsSidecars -> @acceptsSidecars
   callee +910:56 cDeclared -> @cDeclared
   callee +911:5 report -> @report
-  local +914:9 emitted: EmittedModule[] (const)
-  callee +914:19 Compilation.emit -> @Compilation.emit
-  local +915:9 arenaRange: boolean (const)
-  callee +915:22 hasCompactClass -> @hasCompactClass
-  local +917:11 cached: CachedBinary (const)
-  callee +917:20 cachedBinary -> @cachedBinary
-  callee +920:7 basenameWithout -> @basenameWithout
-  callee +930:37 watchState -> @watchState
-  callee +930:76 isCheckout -> @isCheckout
-  callee +935:12 runProgram -> @runProgram
-  callee +938:7 basenameWithout -> @basenameWithout
-  local +949:9 stems: string[] (const)
-  local +950:9 paths: string[] (const)
-  local +953:14 module: EmittedModule (const)
-  local +957:9 outputs: string[] (const)
-  callee +957:19 planOutputs -> @planOutputs
-  local +962:7 i: i32 (let)
-  local +964:11 file: string (const)
-  callee +965:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +974:22 writeSidecars -> @writeSidecars
-  callee +980:10 linkProgram -> @linkProgram
-  callee +991:5 anyCallsSqlite -> @anyCallsSqlite
+  local +915:7 hostFlag: string (let)
+  callee +923:31 refuseCompactSidecars -> @refuseCompactSidecars
+  callee +924:5 report -> @report
+  local +927:9 emitted: EmittedModule[] (const)
+  callee +927:19 Compilation.emit -> @Compilation.emit
+  local +928:9 arenaRange: boolean (const)
+  callee +928:22 hasCompactClass -> @hasCompactClass
+  local +930:11 cached: CachedBinary (const)
+  callee +930:20 cachedBinary -> @cachedBinary
+  callee +933:7 basenameWithout -> @basenameWithout
+  callee +943:37 watchState -> @watchState
+  callee +943:76 isCheckout -> @isCheckout
+  callee +948:12 runProgram -> @runProgram
+  callee +951:7 basenameWithout -> @basenameWithout
+  local +962:9 stems: string[] (const)
+  local +963:9 paths: string[] (const)
+  local +966:14 module: EmittedModule (const)
+  local +970:9 outputs: string[] (const)
+  callee +970:19 planOutputs -> @planOutputs
+  local +975:7 i: i32 (let)
+  local +977:11 file: string (const)
+  callee +978:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +987:22 writeSidecars -> @writeSidecars
+  callee +993:10 linkProgram -> @linkProgram
+  callee +1004:5 anyCallsSqlite -> @anyCallsSqlite
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -4089,9 +4093,9 @@ function linkProgram(outputs: string[], irs: string[], pkg: PackageSearch, link:
   callee +68:5 reportToolchainFailure -> @reportToolchainFailure
   callee +72:5 keepModules -> @keepModules
   local +77:9 binary: string | null (const)
-function hasCompactClass(_compilation: Compilation): boolean -> @hasCompactClass
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer _compilation: size=216 writesThrough=false captured=false
+function hasCompactClass(compilation: Compilation): boolean -> @hasCompactClass
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer compilation: size=216 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function pushRecipeFlags(argv: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean): void -> @pushRecipeFlags
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true

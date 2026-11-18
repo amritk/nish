@@ -476,7 +476,7 @@ function taskFinish(emitter: Emitter, name: string, store: FunctionSig | null, p
   callee +11:3 IRFunction.emit -> @IRFunction.emit
   callee +12:3 IRFunction.emit -> @IRFunction.emit
 function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -> @lockWord
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=80
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=88
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
@@ -490,7 +490,7 @@ function emitLockBody(emitter: Emitter, sig: FunctionSig): void -> @emitLockBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock internalErrorFor loadField lockWord nish_exit nish_str_concat structFieldPointer structInfoOf
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=lockWord#0 structInfoOf#0 loadField#0 structFieldPointer#0 lockWord#0 Emitter.useRuntime#0 Emitter.llvm#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=lockWord#0 structInfoOf#0 loadField#0 structFieldPointer#0 lockWord#0 Emitter.useRuntime#0 Emitter.llvm#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 mutex: StructInfo | null (const)
@@ -525,7 +525,7 @@ function emitAtomicBody(emitter: Emitter, sig: FunctionSig): void -> @emitAtomic
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvm FieldInfo.inline IRFunction.emit IRFunction.emitValue StructInfo.field TypeTable.refOf atomicRmwOperation checkedFieldElement internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat nish_str_eq paramValue structFieldPointer
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 loadField#0 checkedFieldElement#0 lockWord#0 Emitter.llvm#0 structFieldPointer#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 loadField#0 checkedFieldElement#0 lockWord#0 Emitter.llvm#0 structFieldPointer#0
   pointer sig: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
@@ -627,7 +627,7 @@ function closeHandle(emitter: Emitter, info: StructInfo, object: string): void -
   sharedWrite: via nish_exit
   escaping: object
   calls: Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitDropped internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=lockWord#0 loadField#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 emitDropped#0 Emitter.llvm#0 emitDropped#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=lockWord#0 loadField#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 emitDropped#0 Emitter.llvm#0 emitDropped#0
   pointer info: size=176 writesThrough=true captured=true passedTo=lockWord#1 loadField#1
   stackSites=0 stackLocals=0
   local +0:9 close: FunctionSig | null (const)
@@ -659,7 +659,7 @@ function closeScope(emitter: Emitter, i: i32): void -> @closeScope
   sharedWrite: via closeHandle
   escaping: i
   calls: Emitter.useRuntime IRFunction.emit closeHandle nish_panic_index nish_str_concat
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=closeHandle#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=closeHandle#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   local +0:9 handle: StructInfo | null (const)
   callee +2:5 closeHandle -> @closeHandle
@@ -675,7 +675,7 @@ function emitScopeJoins(emitter: Emitter, minLoops: i32, arenas: boolean): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via closeScope
   calls: closeScope nish_panic_index
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=closeScope#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=closeScope#0
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 later: boolean (const)
@@ -684,7 +684,7 @@ function closeBlockScopes(emitter: Emitter, count: i32): void -> @closeBlockScop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: IRBlock.terminated IRFunction.currentBlock closeScope nish_panic_index nish_panic_overflow
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=closeScope#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=closeScope#0
   stackSites=0 stackLocals=0
   callee -8:8 IRBlock.terminated -> @IRBlock.terminated
   callee -8:8 IRFunction.currentBlock -> @IRFunction.currentBlock
@@ -694,7 +694,7 @@ function emitHeldReleases(emitter: Emitter): void -> @emitHeldReleases [exported
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via closeScope
   calls: closeScope nish_panic_index
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=closeScope#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=closeScope#0
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   callee +3:7 closeScope -> @closeScope

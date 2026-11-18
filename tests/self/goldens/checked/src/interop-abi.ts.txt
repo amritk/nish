@@ -678,6 +678,49 @@ function reportUninstantiated(compilation: Compilation, unit: ModuleUnit, name: 
   stackSites=0 stackLocals=0
   local +0:9 at: Node (const)
   callee +1:3 DiagnosticSink.report -> @DiagnosticSink.report
+function refuseCompactSidecars(compilation: Compilation, fns: ExternalFunction[], flag: string): boolean -> @refuseCompactSidecars [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.report
+  calls: DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has StringSet.size TypeTable.typeName compactHeld nish_panic_index nish_str_concat sigNameNode
+  pointer compilation: size=216 writesThrough=false captured=false
+  pointer fns: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 table: TypeTable (const)
+  local +1:9 reported: StringSet (const)
+  callee +1:20 new StringSet -> @StringSet.constructor
+  local +2:14 fn: ExternalFunction (const)
+  local +3:11 sig: FunctionSig (const)
+  local +4:9 held: StructInfo | null (let)
+  callee +4:16 compactHeld -> @compactHeld
+  local +5:9 i: i32 (let)
+  callee +7:14 compactHeld -> @compactHeld
+  local +11:13 at: Node (const)
+  callee +11:18 sigNameNode -> @sigNameNode
+  callee +12:7 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +16:85 TypeTable.typeName -> @TypeTable.typeName
+  callee +18:7 StringSet.add -> @StringSet.add
+  local +21:14 unit: ModuleUnit (const)
+  local +22:16 info: StructInfo (const)
+  callee +23:28 StringSet.has -> @StringSet.has
+  callee +26:7 StringSet.add -> @StringSet.add
+  local +27:13 at: Node (const)
+  callee +28:7 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +36:10 StringSet.size -> @StringSet.size
+function compactHeld(unit: ModuleUnit, type: i32): StructInfo | null -> @compactHeld
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: CheckedProgram.struct TypeTable.isArray TypeTable.isNullable TypeTable.isStruct TypeTable.nameOf TypeTable.refOf
+  pointer unit: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 table: TypeTable (const)
+  local +1:7 inner: i32 (let)
+  callee +2:25 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +2:52 TypeTable.isArray -> @TypeTable.isArray
+  callee +3:13 TypeTable.refOf -> @TypeTable.refOf
+  callee +5:21 TypeTable.isStruct -> @TypeTable.isStruct
+  local +8:9 info: StructInfo | null (const)
+  callee +8:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +8:44 TypeTable.nameOf -> @TypeTable.nameOf
 function sigNameNode(sig: FunctionSig): Node -> @sigNameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
