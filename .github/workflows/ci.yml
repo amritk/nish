@@ -352,7 +352,8 @@ jobs:
       # every shard, and the same binary as the last run whose src/, std/, seed
       # and toolchain were these: tests/self/compiler-cache.js keys it on all
       # of them, and the Test step below copies it rather than linking again.
-      # Shard 1 alone saves a miss, since the eight build the same bytes.
+      # Shard 1 alone saves a miss, since the eight build the same bytes;
+      # `fuzz-smoke` and `postgres-live` read the same key and save nothing.
       - name: The compiler under test
         uses: ./.github/actions/compiler-cache
         with:
@@ -1102,13 +1103,15 @@ jobs:
           echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
 
       # The candidate nish-cmp builds (`buildCandidate` in tests/nish-cmp.js):
-      # src/ linked by this row's seed into build/self/compile.
+      # src/ linked by this row's seed into build/self/compile -- the same
+      # `--link` the cache action makes, so it comes through the cache, keyed
+      # on this row's seed. Where that seed is the one the `test` job fetches,
+      # the key is the `test` job's and the binary is the one its shard 1 saved.
       - name: Build the candidate
-        env:
-          SEED: ${{ steps.download.outputs.path }}
-        run: |
-          "$SEED" --version
-          "$SEED" src/compile.ts --link build/self/compile
+        uses: ./.github/actions/compiler-cache
+        with:
+          seed: ${{ steps.download.outputs.path }}
+          out: build/self/compile
 
       # The soundness differential: the same candidate compiles every runnable
       # case, the fuzz corpus and 600 fixed-seed programs from proofgen.js (built
@@ -1694,10 +1697,19 @@ jobs:
         run: bash scripts/fetch-seed.sh
 
       # build/nish: a target must be compiled with this checkout's std, which
-      # a compiler finds beside itself.
-      - name: Build the compiler
+      # a compiler finds beside itself. It is the `test` job's stage1, through
+      # the same cache and under the same key, so on a hit it is a copy rather
+      # than `npm run build`'s two links (stage1, then stage2 from it), and the
+      # runtime_sanitize run below copies it from build/cache rather than
+      # linking one of its own. stage2 is not needed: the
+      # `bootstrap (x86_64-linux)` row asserts IR(stage1) == IR(stage2).
+      # The `test` job's shard 1 saves a miss; this job only reads.
+      - name: The compiler under test
         timeout-minutes: 10
-        run: npm run build
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: "false"
 
       # Every target at 30 seconds, as many at once as the runner has cores
       # (FUZZ_JOBS, scripts/fuzz.sh). One at a time, 18 targets took 595 to
@@ -1715,12 +1727,15 @@ jobs:
 
       # The step needs checks that passed and no SKIP line: a runner image
       # without the sanitizer runtimes fails it rather than leaving it green.
+      # `--seed` because without it the suite takes build/nish as its seed,
+      # which would link a stage1 of its own under another key; with the
+      # release seed it copies the one the step above put in build/cache.
       - name: The runtime unit test under ASan and UBSan
         if: ${{ !cancelled() }}
         timeout-minutes: 10
         run: |
           set -o pipefail
-          node tests/run.js runtime_sanitize | tee "$RUNNER_TEMP/runtime-sanitize.log"
+          node tests/run.js runtime_sanitize --seed build/seed/bin/nish | tee "$RUNNER_TEMP/runtime-sanitize.log"
           grep -E '^[1-9][0-9]* passed, 0 failed' "$RUNNER_TEMP/runtime-sanitize.log"
           if grep -E '^SKIP  ' "$RUNNER_TEMP/runtime-sanitize.log"; then exit 1; fi
 
@@ -1796,9 +1811,15 @@ jobs:
           NISH_REQUIRE_ATTESTATION: "1"
         run: bash scripts/fetch-seed.sh
 
-      - name: Build the compiler
+      # build/nish, which tests/postgres/live/run.mjs compiles the suite
+      # with: the `test` job's stage1 through the same cache and key, as in
+      # `fuzz-smoke` above, rather than `npm run build`'s two links.
+      - name: The compiler under test
         timeout-minutes: 10
-        run: npm run build
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: "false"
 
       # A throwaway root and a leaf for 127.0.0.1 under it, copied into the
       # service, which turns `ssl` on at a reload: the image takes no

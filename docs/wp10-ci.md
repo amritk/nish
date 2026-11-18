@@ -472,7 +472,17 @@ linked binary under a hash of everything the link reads, and the
 a run whose compiler sources (the modules the seed's front end names: `src/`
 and the nine `std/` modules it imports), seed and toolchain match an earlier
 one copies stage1 instead of linking it, and a job that runs the suite more than once
-links it at most once. The golden cases are dealt too: a shard compiles
+links it at most once. A shard that still spends 70-80 s on the step is a
+miss, not a broken cache: in
+[run 44241824047](https://github.com/amritk/nish/actions/runs/44241824047),
+a push to `main` whose `src/` change made a new key, every row linked and
+saved, and the next push, which changed tests only, restored it in 4-6 s a
+shard. `fuzz-smoke` and `postgres-live` spent 96-159 s each on
+`npm run build`, which links stage1 and then stage2 from it; they now take
+the `test` job's stage1 through the same action under the same key (stage2
+is the same compiler, which `bootstrap (x86_64-linux)` asserts), and
+`nish-cmp elision`'s candidate, the same `--link` with its row's seed, comes
+through it too. The golden cases are dealt too: a shard compiles
 all of them and does the other work of its eighth only, which took section A
 from 59 s to 30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
