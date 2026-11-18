@@ -75,7 +75,7 @@ column is against OpenSSL's scalar assembly. Two things in
 - Poly1305 is five 26-bit limbs in `u64`, twenty-five products a block. A
   130-bit accumulator in 64-bit limbs needs a 64 × 64 → 128-bit product, which
   Nish does not have. Poly1305 stays in Nish under the kernel too
-  ([wp38-simd.md](wp38-simd.md) §3.1 timed a C copy and found it within the
+  ([wp38-simd.md](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md) §3.1 timed a C copy and found it within the
   noise), so it is a floor under both columns.
 
 *Not built:* key the keystream into a buffer kept by the caller, XOR it a
@@ -139,7 +139,7 @@ Both rows are sums of the rows above:
   2.326x.
 - **tls13** (1.645x) is a server handshake: an X25519, a P-256 signature, the
   key schedule's HKDF and HMAC calls, and AES-GCM records. X25519 is the
-  largest module of a handshake ([wp34](wp34-network-stack.md) K5), and HKDF's
+  largest module of a handshake ([wp34](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md) K5), and HKDF's
   one-shot calls are 2.2x behind (below).
 
 ## SHA-512, and the small inputs of SHA-256, HMAC and HKDF
