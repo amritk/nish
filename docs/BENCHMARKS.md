@@ -3081,6 +3081,160 @@ ns per request, median (min–max) and ratio of medians to `old`. `idle` shows n
 What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
+<!-- http1-get:begin -->
+## A minimal GET on Http1Server
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. This section breaks down one keep-alive `GET` answered with a 200 and a small JSON body: where its instructions go, its wall-clock time, the bytes a connection holds, and the server CPU and memory at 18,000 keep-alive connections. It then bounds what a lean request path could save (#1760). `std/`, `src/` and `runtime/` are `main` at 4d0faa4b throughout. The bench code that produced each table is named with it.
+
+| | |
+| --- | --- |
+| Date | 2026-11-18 |
+| nish | `main` at 4d0faa4b, `--profile speed`, built `--cpu x86-64` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores (L1d 48 KiB and L2 2 MiB a core, L3 260 MiB), 15.7 GiB |
+| Runs | callgrind and cachegrind with `NISH_SIMD=base` and glibc's string functions pinned by `GLIBC_TUNABLES`, 1,000 iterations less 500, over 500; wall clock in 12 interleaved rounds against a byte-identical copy (`bench/http1-request`) and 7 rounds against `old` and `old′` (`bench/http1-conn`); `bench/handler-ring` in 5 interleaved rounds |
+| Command | `node bench/http1-request/breakdown.mjs`; `node bench/http1-request/run.mjs --instructions`; `node bench/http1-request/run.mjs --case get --case short --case fields0 --case fields4 --case fields10`; `node bench/http1-conn/run.mjs --shape cold,idle-dram,direct-dram,stages --connections 18000 --rounds 7 --base origin/main` (origin/main at 4d0faa4b); `build/nish bench/http1-conn/bytes.ts --link build/bench/http1-conn/bytes && build/bench/http1-conn/bytes`; `bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "ring epoll1 epoll epoll-copy" --server-cpus 0` |
+
+The request shapes are cases of `bench/http1-request` (bench code b3dd63f7):
+
+- `get` is 350 bytes: `GET /json` with `Host: api.example.com`, `User-Agent`, `Accept: application/json`, and a 221-byte HS256 Bearer `Authorization`. The program reads none of the last three.
+- `short` is 37 bytes: `GET / HTTP/1.1` and `Host: example.com`.
+- `fields0`, `fields4` and `fields10` are `GET /json` with `Host: example.com` and 0, 4 or 10 `X-Pad-k: value-k` fields. They are 41, 113 and 221 bytes, and give the cost of each unread field.
+
+Each case is answered `200` with `Content-Type: application/json` and a JSON body written by the handler. Every request has the same status and fields as the one before, so the response head takes the kept-head path.
+
+### Instructions a request, by component
+
+Every instruction is given to the source function its debug line sits in, not the function callgrind names, because the optimiser inlines most of `std/net` into its callers. `breakdown.mjs` (788567f3) does this over `main.ts` at b3dd63f7. The totals are of the `-g` build under callgrind. Under cachegrind, `run.mjs --instructions` counts a build without debug info at 6,116, 3,490, 3,512, 5,309 and 8,094, within 1.8% of the totals below.
+
+| component | `get` | `short` | `fields0` | `fields4` | `fields10` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| head parse: request line, `next`, end of head (the rest of `http1-codec`) | 1,303.5 | 842.6 | 864.7 | 1,065.9 | 1,389.3 |
+| head parse: line scan (`http1Section` less line 1880) | 952 | 260 | 260 | 692 | 1,363 |
+| header spans: field lines (`http1FieldLine`, `http1LowerName`, `http1NonTokenLanes`, `http1SpanSet`, `http1FramingField`, `http1HeadIs`, `http1HeadIsVector`, `headerIndex`) | 1,423 | 346 | 346 | 1,418 | 3,026 |
+| header spans: head copy (`http1Section` line 1880) | 252 | 24 | 24 | 72 | 156 |
+| `memcpy` | 136 | 57 | 57 | 65 | 112 |
+| Host check (`std/net/url.ts`) | 448 | 361 | 361 | 361 | 361 |
+| Date (`HttpDate.current` 14, `HttpDate.formats` 1) | 15 | 15 | 15 | 15 | 15 |
+| response head, kept path | 451 | 451 | 451 | 451 | 451 |
+| sendBody: `write` and `end` | 86 | 86 | 86 | 86 | 86 |
+| connection, the rest | 323 | 323 | 323 | 323 | 323 |
+| JSON writer (the handler) | 494 | 494 | 494 | 494 | 494 |
+| bench harness | 176 | 176 | 176 | 176 | 176 |
+| total | 6,059.6 | 3,435.6 | 3,457.8 | 5,219.0 | 7,952.3 |
+
+Instructions a request (Ir), callgrind; bench code `main.ts` at b3dd63f7, `breakdown.mjs` at 788567f3.
+
+- **Header spans.** On `get`, the field lines are `http1FieldLine` 540, `http1HeadIs` 353, `http1NonTokenLanes` 194, `http1LowerName` (the lowercasing) 176, `headerIndex` 71, `http1SpanSet` (the span stores) 40, `http1FramingField` 29 and `http1HeadIsVector` 20.
+- **Unread fields.** From `fields0` to `fields10`, each unread field costs 449.5 Ir. That is 268 Ir of field lines (`http1FieldLine` 133, `http1LowerName` 44, `http1NonTokenLanes` 39, `headerIndex` 17, `http1SpanSet` 10, `http1HeadIsVector` 10, `http1FramingField` 8, `http1HeadIs` 7), 110 of line scan, 13 of head copy, 5.5 of `memcpy` and 52 in the rest of the codec. Cachegrind's slope is 458.2.
+- **Response head, kept path.** Its 451 Ir are `http1ServerKept` 99, `sameHead` 70, `http1ServerSame8` 64, `respond` 110, `copyBytes` 49, `bodyRoom` 28, `http1ServerCopy` 20 and `begin` 11. `sameHead` compares the kept head, its Date included, and on a match `copyBytes` copies the kept head whole. `http1WriteResponseHead` is not in the steady-state profile: it runs only when the status, the fields or the Date change.
+- **Connection, the rest.** This is `inputRoom` 64, `nextRequest` 53, `next` 27, `room` 26, `acquire` 28, `OutputPool.take` 27, `release` 16, and 82 Ir of smaller rows. The per-request state reset is `http1StartRequest` 22 plus `Http1Connection.nextRequest` 53, 75 Ir.
+- **Date.** Date costs 15 Ir a request and is not counted toward the saving below. `HttpDate.current` returns the pinned time, or else the time held by `hold()`, or else reads the clock. `Http1Server` holds once per readable event (`std/net/http1-server.ts`, lines 2574 and 2621), so the clock is read once a batch, not once a request. `bench/http1-request` and `bench/http1-conn` both pin the date, so neither times a clock read inside `HttpDate`. The 29-byte Date copy happens only in `http1WriteResponseHead`, so the kept-head path does not make it. The `clock read` row in the stages table below is the bench's own `monotonicNanos` calibration, not `HttpDate`.
+
+### Wall clock
+
+`node bench/http1-request/run.mjs` (bench code b3dd63f7), 12 rounds of 2 columns a case. Each figure is ns a request, median (min–max). The band is the byte-identical copy's median against its build's.
+
+| case | ns | copy | band | ns per Ir |
+| --- | ---: | ---: | ---: | ---: |
+| `short` | 302.2 (262.1–409.9) | 299.5 (273.0–390.5) | ±0.9% | 0.088 |
+| `get` | 466.9 (447.9–655.0) | 489.3 (449.9–602.9) | ±4.8% | 0.077 |
+| `fields0` | 286.6 (271.4–436.9) | 304.1 (264.9–364.6) | ±6.1% | 0.083 |
+| `fields4` | 501.2 (392.6–738.7) | 530.8 (389.5–629.9) | ±5.9% | 0.096 |
+| `fields10` | 628.6 (599.3–843.1) | 687.3 (601.6–840.8) | ±9.3% | 0.079 |
+
+The ns-per-Ir column divides the median by the callgrind total above. The per-field slope by wall clock is noisy: 34.2 ns a field from `fields0` to `fields10`, and 53.7 from `fields0` to `fields4`. `get` less `fields0` is 180.3 ns.
+
+`node bench/http1-conn/run.mjs` (bench code 4d0faa4b) times `Http1Connection` without a socket on the GET of about 350 bytes. It runs 7 rounds, each the fastest of 5 batches of 200,000 requests, pinned to core 1. The `-dram` shapes run 20,000 a batch and sweep a 1 GiB eviction ring between requests. 18,000 connections hold about 21 MB by the byte counts below, which fits in this box's 260 MiB L3 but not its 2 MiB L2, so `cold` can reach L3 but not DRAM; `idle-dram` and `direct-dram` evict every line first. `old` is `main`'s `std/` and `old′` a byte-identical copy of its build. `new` is the working tree, whose `std/` is the same 4d0faa4b, so all three columns are one code and their spread is noise.
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| cold, 18,000 connections | 518.7 (437.6–629.8) | 543.4 (457.0–671.1) 1.048 | 503.0 (467.4–629.5) 0.970 |
+| idle-dram | 787.4 (751.5–821.0) | 773.4 (694.0–794.6) 0.982 | 769.2 (702.3–815.7) 0.977 |
+| direct-dram | 735.7 (687.8–846.1) | 708.8 (677.0–771.6) 0.963 | 702.2 (673.3–763.4) 0.954 |
+
+ns per request, median (min–max) and ratio of medians to `old`.
+
+| stage | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| recv | 57.8 (56.2–60.8) | 59.1 (54.3–68.3) | 59.0 (56.2–62.2) |
+| parse | 353.2 (345.8–370.6) | 364.8 (343.9–409.2) | 353.3 (345.0–366.3) |
+| dispatch | 33.5 (30.9–40.2) | 35.1 (29.9–40.4) | 33.2 (32.3–34.6) |
+| respond | 54.3 (50.7–89.0) | 58.7 (49.5–63.4) | 52.6 (50.2–56.2) |
+| sendBody | 62.4 (19.4–70.1) | 72.3 (39.7–149.7) | 50.2 (19.4–78.4) |
+| park | 15.7 (14.9–16.5) | 15.7 (14.6–22.6) | 15.6 (15.4–16.5) |
+| total | 567.0 (529.5–636.9) | 613.8 (535.8–751.7) | 551.4 (528.4–611.8) |
+| clock read | 28.3 (28.2–28.6) | 28.3 (28.2–28.5) | 28.2 (28.1–28.3) |
+| sendmsg | 543.6 (530.8–588.1) | 540.8 (523.8–556.9) | 547.1 (533.1–583.3) |
+
+Stages on 18,000 connections, ns per request, with the clock read and `sendmsg` taken out of each stage. `respond` is the kept-head path; `sendBody` is the body write and `end`.
+
+### Bytes per connection
+
+`bytes.ts` (bench code 62477ab3) reads `Arena.used()` around each allocation on the default `Http1Config`. The arena bump-allocates in 8-byte steps with no per-object header, so these counts include the rounding and there is no allocator header to add. An array is a 24-byte header plus its storage.
+
+| object | bytes | needed |
+| --- | ---: | --- |
+| an empty array | 24 | |
+| `HttpDate` | 112 | one a server, not a connection |
+| `Http1Parser` built alone | 368 | |
+| `Http1Connection` built: the connection 288, its parser 232, the parser's 5 array headers 120, its tally 16, the connection's 3 array headers 72 (`noOutput`, `noFields`, `headLengths`) | 728 | between requests |
+| after request 1: + the spans, `Array<i32>(64)`, 256 + 24 | 1,008 | per request only, but held |
+| after request 2: + the kept head, 128 + 24, and its field lengths, 8 + 24 (split inferred from the sizes) | 1,192 | between requests: the kept-head path compares against it |
+| after requests 3 and 4 | 1,192 | |
+| lent from the server's pools while a request is served: input 1,024, head 256, output 65,536 | 0 when idle | per request only |
+
+The peak RSS of an idle connection, from `bench/http1-conn/run.mjs` (bench code 4d0faa4b) at 18,000 connections less 0, median (min–max) of 5 runs, is:
+
+| | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| `idleInput`, 1 request | 1049 (1048–1050) | 1048 (1048–1048) | 1049 (1048–1050) |
+| `idleInput`, 4 requests | 1233 (1232–1234) | 1232 (1232–1232) | 1232 (1232–1234) |
+| `idleInput` off, 1 request | 2917 (2917–2919) | 2917 (2917–2917) | 2917 (2917–2919) |
+| `idleInput` off, 4 requests | 3102 (3102–3103) | 3101 (3101–3101) | 3102 (3101–3103) |
+
+The object counts are 41 and 40 bytes under these RSS figures, about 4%: 1,008 against 1,049 after one request, and 1,192 against 1,232 after four. `bytes.ts` serves a different GET from `run.mjs` (Host `bench.example.com:8080`, User-Agent, Accept and Accept-Encoding, a 66-byte body), which does not change what is held. A separate `--shape rss` run of 15 rounds gave the same figures within 1 byte. Of the 1,192 bytes an idle connection holds, the 280 of spans are needed only while a request is served.
+
+### Server CPU and idle memory at 18,000 connections
+
+`bench/http1-server.ts` as `bench/http.mjs` runs it needs `wrk`, which is not installed on this box, so it was not run. In its place, `bench/handler-ring/run.sh --nodb` (bench code 62477ab3) serves `/plaintext`, 129 bytes, with no SQLite query. Its load generator offers 30,000 requests a second over 18,000 keep-alive connections, with a 3 s warm-up and a 10 s window. The server runs on CPU 0 and the load generator on CPUs 1–3, under a hard `RLIMIT_NOFILE` of 20,000. All 18,000 connections were held in every round and none was lost.
+
+The four designs are:
+
+- `ring`: one process on `NET_LISTEN_RING`.
+- `epoll1`: one process on epoll.
+- `epoll`: five `SO_REUSEPORT` processes on epoll.
+- `epoll-copy`: a byte-identical copy of `epoll`'s build, which gives the noise band.
+
+The rounds are interleaved.
+
+| design | server µs a request | user | sys | box µs | softirq µs | RSS MB | p50 ms | p99 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `epoll1` | 11.07 (10.60–11.80) | 1.80 (1.43–2.07) | 9.40 (9.17–9.87) | 24.40 | 12.10 | 25.1 | 0.14 | 0.82 |
+| `epoll` | 15.03 (14.23–15.37) | 2.77 (2.23–2.83) | 12.27 (11.60–12.53) | 29.80 | 14.70 | 39.7 | 0.07 | 0.89 |
+| `epoll-copy` | 14.77 (14.37–15.47) | 2.87 (2.57–3.07) | 12.03 (11.47–12.60) | 30.10 | 14.73 | 39.7 | 0.07 | 0.87 |
+| `ring` | 16.93 (16.57–17.20) | 2.83 (2.60–3.03) | 13.93 (13.53–14.50) | 30.24 | 15.60 | 31.7 | 0.04 | 0.60 |
+
+Each row is the median of 5 rounds (min–max), from the per-round `srv_user_us`, `srv_sys_us`, `softirq_us` and `srv_rss_mb` lines. User and sys are the server's own CPU per request; box µs is the box's non-idle CPU per request from `/proc/stat`, the load generator's included. The `epoll` against `epoll-copy` band is 1.7%. The ring costs 12.6% more server CPU than five processes on descriptors, and the script's advisory verdict is no-go.
+
+Of `epoll1`'s 11.07 µs a request, 1.80 µs is user time and 9.40 µs is sys. `epoll1`'s PSS was 23.8 MB in every round, under 1.4 KB per held connection with the process's own base included. These connections were held while the server answered 30,000 requests a second, so they were not strictly idle.
+
+### What a lean path could save
+
+The bound adds three things a lean path might remove:
+
+- **Spans of unread fields: 180.3 ns.** This is `get` less `fields0` by wall clock. It also includes the line scan of the three unread fields and `get`'s longer Host, which a lean path still pays, so it overstates. Taking only the span work by instructions (field lines, head copy and `memcpy`, `get` less `fields0`: 1,077 + 228 + 79 = 1,384 Ir) at the highest ns per Ir above, 0.096, gives about 133 ns.
+- **The per-request state reset: 7.5 ns.** That is 75 Ir at 0.1 ns an Ir, above the highest ns per Ir measured.
+- **DRAM misses: 268.7 ns.** This is `idle-dram` less `cold` in one column, which is 268.7 in `old`, 230.0 in `old′` and 266.2 in `new`, and the largest is taken. It holds every DRAM miss of the request, including those of state needed between requests. It also holds the idle shape's extra work, since that shape alternates the GET with a POST of about 550 bytes. So it bounds the misses of state not needed between requests from above. `misses.sh` was not run, so the term is not split by object.
+
+Date is not counted. It is 15 Ir a request, its clock read is once per readable event, and its 29-byte copy happens only when the head is rewritten.
+
+The sum is 180.3 + 7.5 + 268.7 = 456.5 ns. This is under 0.5 µs, and it is 9.0% of the 5.1 µs a no-database 404 costs in the nish-std-amritk challenge entry, about 3 µs of which is in the kernel.
+
+At the band edges, the sum is still under 0.5 µs. `get` 4.8% higher and `fields0` 6.1% lower would make the first term 220.2 ns, and the sum 496.4 ns.
+
+Verdict: STOP — a lean request path could save at most about 0.46 µs a request (456.5 ns), under the 0.5 µs bar and about 9% of the 5.1 µs no-database 404.
+<!-- http1-get:end -->
+
 <!-- sha-block:begin -->
 ## SHA-256's block function
 
