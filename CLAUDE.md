@@ -118,6 +118,14 @@ new positive `tests/cases/*` is registered with
 `.github/workflows/ci.yml` pins; another minor flipped a verdict
 (`str_surrogate_pair`) and turned CI red.
 
+**A CI lane reads what its commands read.** Before `scripts/ci-scope.mjs`
+lets a side job skip, trace every step of that job, composite actions
+included, to the files it opens; a job that runs `node tests/run.js` reads
+all of `tests/`. The backtest only evidences lanes whose jobs failed in its
+sample, so a narrowed read set needs a per-command test in
+`node tests/run.js ci-scope`, not a replay (`docs/wp10-ci.md`, "Scoped
+lanes").
+
 **Moving where a fact lives moves every pointer to it in the same PR.** Grep
 the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
 A builtin whose answer changes greps its old answer across
