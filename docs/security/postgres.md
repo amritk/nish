@@ -528,10 +528,10 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
   eight apart share theirs. A pair is opened the first time a task waits on
   its wake and kept until `close()`. A pool nobody waits on holds none, and
   one whose waits stay within a few lanes holds a few. Under a long queue,
-  with every seat waiting its turn, it holds them all: 514 descriptors for a
-  pool of 8 or more, 290 for a pool of 1. When
-  no pair can be opened (out of descriptors), a waiter sleeps 1 ms and looks
-  again instead of failing.
+  with every seat waiting its turn, it holds every pair its seats can pick:
+  514 descriptors for a pool of 8 or more at `depth` 16, 290 for a pool of 1.
+  When no pair can be opened (out of descriptors), a waiter sleeps 1 ms and
+  looks again instead of failing.
 - **A pipelined connection is only as fast as its slowest statement
   (PG-39).** Statements seated on one connection are answered in the order
   they were sent, so a slow one delays up to `depth` - 1 behind it, and a

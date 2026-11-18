@@ -1187,8 +1187,7 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     if (skipped) {
       continue
     }
-    const w: i32 =
-      queued >= 0 ? PG_ASYNC_POOL_WAKE + 1 + (queued % PG_ASYNC_LANES) : PG_ASYNC_POOL_WAKE
+    const w: i32 = queued >= 0 ? PG_ASYNC_POOL_WAKE + 1 + (queued % PG_ASYNC_LANES) : PG_ASYNC_POOL_WAKE
     pool.waits += 1
     await pgAsyncPark(pool, w, left)
     pgAsyncDrain(pool, w)
