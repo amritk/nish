@@ -48,11 +48,12 @@ export const main = (): i32 => {
 
 A native build (`--link`, or `nish run`) compacts a class without the marker
 when doing so pays: something links to the class, narrowing those links takes
-at least a quarter off the size of the class itself or of a class holding the
-link, and the program makes the class in a loop or a recursive function. The
-`Tree` above qualifies with the marker removed: its two links take it from 24
-bytes to 12. A saving smaller than a quarter is left alone, because every read
-of a compact link pays a widening back to a pointer.
+at least a quarter off the size of the class itself, and the program makes
+the class in a loop or a recursive function. The `Tree` above qualifies with
+the marker removed: its two links take it from 24 bytes to 12. A saving
+smaller than a quarter is left alone, because every read of a compact link
+pays a widening back to a pointer, and so is a saving only in some other
+class that holds the link: write `implements Compact` if you want that one.
 
 To see what was picked, and why each other class was not, add
 `--explain-layout`:

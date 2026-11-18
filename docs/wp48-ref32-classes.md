@@ -85,9 +85,15 @@ A class `R` is compact when all of these hold:
 2. **Something links to `R`**: some class, `R` itself included, has a field
    typed exactly `R` or `R | null`.
 3. **Narrowing saves memory on every instance**: `computeLayout` run both
-   ways gives `R`, or the class holding the link, a smaller size after
-   rounding. A class with one link among wide fields that rounding gives back
-   is left alone, because it would pay the decode for nothing.
+   ways takes at least a quarter off `R`'s own size after rounding. A class
+   with one link among wide fields that rounding gives back is left alone,
+   because it would pay the decode for nothing, and so is a smaller saving:
+   it pays the decode on every link read for a few percent of one class.
+   Stage 3 first also counted a quarter off a class holding the link, when
+   that holder is made in a loop; on the corpus and the compiler itself that
+   picked only 8-byte savings in 16- to 40-byte holders, which measured
+   inside the noise band (§5.5), so only `R`'s own size counts. The refusal
+   still names the holder that would have saved.
 4. **`R` is made in a loop or in a recursive function**: some `new R(...)`
    is lexically inside a loop, or inside a function that can reach itself in
    the call graph. A class made once or a few times per run is left alone.

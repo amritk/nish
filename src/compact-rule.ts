@@ -17,10 +17,12 @@
 //      `--emit-ts` writes TypeScript and no IR, so it is refused as well;
 //   2. some class, `R` included, has a field typed exactly `R` or `R | null`;
 //   3. narrowing those fields to four bytes (`narrowedSize`) takes at least a
-//      quarter off, after rounding, `R` itself or a class holding the link
-//      that test 4 passes for (`pays`): a smaller saving on one holder pays
-//      the decode on every link read and the 4-byte heap rounding for a few
-//      percent of one class (docs/wp48-ref32-classes.md §3.1);
+//      quarter off `R` itself, after rounding (`pays`): a smaller saving pays
+//      the decode on every link read for a few percent of one class, and a
+//      saving only in a class holding the link (an 8-byte link in a 40-byte
+//      holder) measured inside the noise band of the self-build
+//      (docs/wp48-ref32-classes.md §3.1, §5.5), so it is named in the
+//      refusal but does not pass;
 //   4. some `new R(...)` is lexically inside a loop, or inside a function that
 //      reaches itself through direct calls by name;
 //   5. nothing forbids it: `R` is not a `declare class`, holds no `Secret`, is
@@ -622,15 +624,13 @@ export const explainLayout = (
       const before = narrowedSize(table, info, NO_TARGET, wasm)
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
-      let saver = ""
-      let saving = ""
+      let saves = false
       // The best saving refused, named when nothing pays, so the line says
       // why a class that does save bytes was not picked.
       let unpaid = ""
       if (after < before) {
         if (pays(before, after)) {
-          saver = shownName
-          saving = `${before} → ${after}`
+          saves = true
         } else {
           unpaid = `${shownName} saves ${before} → ${after}, under a quarter`
         }
@@ -639,24 +639,18 @@ export const explainLayout = (
       while (h < all.length && h < names.length && h < keys.length) {
         const holder = all[h]
         const holderName = names[h]
-        const holderKey = keys[h]
         h = h + 1
         if (!linksTo(table, holder, info.type)) {
           continue
         }
         linked = true
-        if (saver.length === 0 && holder !== info) {
+        // A holder's saving alone does not pass test 3 (§3.1): it is named
+        // only to say why a class that saves bytes somewhere was refused.
+        if (!saves && unpaid.length === 0 && holder !== info) {
           const held = narrowedSize(table, holder, NO_TARGET, wasm)
           const narrowed = narrowedSize(table, holder, info.type, wasm)
           if (narrowed < held) {
-            if (pays(held, narrowed) && madeInLoop(graph, holderKey)) {
-              saver = holderName
-              saving = `${held} → ${narrowed}`
-            } else if (unpaid.length === 0) {
-              unpaid = pays(held, narrowed)
-                ? `${holderName} saves ${held} → ${narrowed}, but is not made in a loop or recursion`
-                : `${holderName} saves ${held} → ${narrowed}, under a quarter`
-            }
+            unpaid = `${holderName} saves ${held} → ${narrowed}, not ${shownName} itself`
           }
         }
       }
@@ -673,7 +667,7 @@ export const explainLayout = (
         verdict = "compact (implements Compact)"
       } else if (!linked) {
         verdict = "2 no link"
-      } else if (saver.length === 0) {
+      } else if (!saves) {
         verdict = unpaid.length > 0 ? `3 no saving that pays: ${unpaid}` : "3 no saving"
       } else if (!made) {
         verdict = "4 not made in a loop or recursion"
@@ -684,7 +678,7 @@ export const explainLayout = (
       } else if (forbids.length > 0) {
         verdict = `5 forbidden: ${forbids}`
       }
-      const shown = !linked || saver.length === 0 ? before : after
+      const shown = linked && saves ? after : before
       const name = info.decl.children[0]
       lines.add(`${source.path}:${source.lineOf(name.start)}:${source.columnOf(name.start)}: layout: `)
       lines.add(`${shownName}${module.std ? " (std)" : ""}: ${verdict}, ${before} → ${shown} bytes`)
@@ -693,11 +687,6 @@ export const explainLayout = (
       }
       if (verdict === "compact" || (info.compact && verdict.startsWith("compact"))) {
         picked = picked + 1
-      }
-      // When the saving that passed test 3 is a holder's, not `R`'s own, the
-      // line names that holder.
-      if (linked && saver.length > 0 && saver !== shownName) {
-        lines.add(`; ${saver} saves ${saving}`)
       }
       lines.add("\n")
     }

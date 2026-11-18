@@ -10520,8 +10520,8 @@ class Cell implements Compact {
 `docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
 makes a class `R` compact with no marker when five tests hold, asked in
 order: the build is a closed-world native one; some class has a link to `R`;
-narrowing the links takes at least a quarter off, after rounding, `R` itself
-or a class holding the link that is made in a loop or recursion; some
+narrowing the links takes at least a quarter off `R` itself, after rounding
+(a saving only in a class holding the link does not count); some
 `new R(...)` is inside a loop or a recursive function; and nothing forbids it
 (a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
 A smaller saving is left alone: it pays a widening on every link read and the
