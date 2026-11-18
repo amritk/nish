@@ -290,7 +290,8 @@ awk -v limit="$limit" '
         delete a; delete b; delete q; delete l50; delete l99; delete l999
         for (i = 1; i <= n[k]; i++) { a[i] = us[k, i]; b[i] = box[k, i]; q[i] = rps[k, i]; l50[i] = p50[k, i]; l99[i] = p99[k, i]; l999[i] = p999[k, i] }
         m[k] = med(a, n[k]); mb = med(b, n[k]); mq = med(q, n[k])
-        # A round with no answer in its window has no percentile: n/a.
+        # If any round of a design at this C had no answer in its window, its
+        # percentiles print n/a for every round: a median would mix in zeros.
         if (k in nolat) { s50 = "n/a"; s99 = "n/a"; s999 = "n/a" }
         else { s50 = sprintf("%.2f", med(l50, n[k])); s99 = sprintf("%.2f (%.2f-%.2f)", med(l99, n[k]), p99lo[k], p99hi[k]); s999 = sprintf("%.2f", med(l999, n[k])) }
         printf "%-8s %-10s %5s %8s %6s %7.2f (%.2f-%.2f) %8.2f %8.0f %8s %8s %7s %20s %8s %6d\n", c, ds[di], procs[k], up[k], fds[k], m[k], lo[k], hi[k], mb, mq, pss[k], mem[k], s50, s99, s999, lost[k]

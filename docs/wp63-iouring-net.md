@@ -682,23 +682,26 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
    closed-loop load. The entry's 65 ms p99 for one ring process, against
    20 ms for five epoll processes, does not reproduce on one shared core. In
    every round at every offered load from 30,000 to 56,250 requests a second
-   at 90,000 connections, the ring process's p99 was below the five's, though
+   at 90,000 connections (at `d603893d`), the ring process's p99 was below the five's, though
    from 45,000 up the five were saturated and their p99 is a backlog. One epoll
    process, which the box's hard limit of 20,000 descriptors caps at 19,936
    connections, is the control at 18,000 and the same rates: at 45,000 a
-   second its p99 was 27 to 40 ms against the ring's 7.1 to 12.7, and at
-   36,000 it was 4.7 to 4.9 against the ring's 5.6 to 8.1, so one process on
+   second (at `877c503e`) its p99 was 27 to 40 ms against the ring's 7.1 to
+   12.7, and at 36,000 (at `c1b8967f`) it was 4.7 to 4.9 against the ring's
+   5.6 to 8.1, lower than the ring's, so one process on
    one core tails whatever it waits with. The tail is a queue,
    not a stall: in a traced run at 45,000 (`bench/handler-ring/trace.sh`,
-   which applies `trace.patch` for one build) no pass of the loop took more
-   than 8.60 ms inside the load window, but a burst left at least 1,910
-   slots ready with the oldest up to 26 ms old. The p99 is noisy: one design
+   which applies `trace.patch` for one build; `runtime/` at `0c6cdaa7`,
+   `bench/` at `1b3a92ee`) no pass of the loop took more than 8.60 ms inside
+   the load window, but in one second a burst left at least 1,910 slots
+   ready, with the oldest that second at most 26 ms old (an upper bound). The p99 is noisy: one design
    at one load moved by as much as 11.8x between rounds (epoll at 96,000;
    7.2x in the 90,000 sweep). No fix is made; a second core should
    shorten it, which is not measured. The final code at 96,000
-   (`--conns 96000 --think 4 --rounds 3`) read 20.86 against 31.17 µs a
+   (`--conns 96000 --think 4 --rounds 3`, at `d603893d`) read 20.86 against 31.17 µs a
    request (33.1% less, band 0.8%), with a p99 of 1.74 against 8.83 ms.
-   At 300,000 (`--conns 300000 --think 10 --rounds 3 --designs ring`), one
+   At 300,000 (`--conns 300000 --think 10 --rounds 3 --designs ring`, at
+   `02230cc8`), one
    ring process held every connection with 47 descriptors, at 23.73 µs a
    request, 436 MB PSS and a p99 of 0.90 ms.
 5. **S5: the cheaper wins** (§9), measured on the entry on their own. They do
@@ -732,7 +735,10 @@ Each stage is one PR. Each is gated by the tests §8 names for it.
   18,000 and a low C are not re-measured. The tail does not stand against a
   default either: at a matched load on one core the ring process's p99 was
   the lower one, at 18,000 (re-measured for its tail only: 1.65 to 1.78 ms
-  against 2.08 to 3.17) and at 96,000. What does stand is that one ring
+  against 2.08 to 3.17) and at 96,000. One epoll process, the control for
+  one ring process, is not beaten: at 18,000 and 22,500 a second it read
+  1.49 to 1.84 ms, overlapping the ring's 1.65 to 1.78, and at 36,000 it read
+  4.7 to 4.9 ms against the ring's 5.6 to 8.1. What does stand is that one ring
   process has one core while five epoll processes can use five, so a default
   would want a ring process per core, which is not measured.*
 - **D2: how many rings under `--sandbox`, and how the runtime knows.** The

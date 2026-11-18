@@ -18,7 +18,10 @@
  * the box's non-idle CPU (/proc/stat), over a window after a warm-up, and
  * prints one `key=value` line. The same window gives the latency
  * percentiles: every request sent inside it is timed from its send to the
- * last byte of its response, into a log-linear histogram (32 buckets an
+ * last byte of its response as this process sees them, so the time includes
+ * the client's own scheduling (P children on the load CPUs) and one clock
+ * read per epoll_wait batch of up to 1,024 events; it goes into a
+ * log-linear histogram (32 buckets an
  * octave, so a percentile reads within about 3%), and the run waits up to
  * 2 s past the window for the window's last answers. `lat_lost` counts the
  * window's requests still unanswered then (the window closes before the
@@ -27,8 +30,10 @@
  * at all they print n/a. win_lo and win_hi bound the window, CLOCK_MONOTONIC
  * seconds. `send_failed` counts sends that
  * failed or went short and `closed` the connections that closed or failed
- * after the load began: either connection sends nothing more, so a nonzero
- * count means the run offered less than C / think. With -t, -w must be at
+ * after the load began. A closed connection sends nothing more. With -t a
+ * connection whose send failed sends nothing more either, so a nonzero count
+ * means the run offered less than C / think; without -t it stays idle and is
+ * picked again, and a short send leaves a partial request on it. With -t, -w must be at
  * least the think time, so the window opens after the spread first requests.
  * The connect burst is outside the window: it starts after every connection
  * is up and the warm-up has run.

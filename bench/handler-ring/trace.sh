@@ -42,7 +42,7 @@ for f in loadgen feed.db; do
     exit 2
   fi
 done
-if ! git -C "$root" diff --quiet -- runtime/runtime-net.c; then
+if ! git -C "$root" diff --quiet HEAD -- runtime/runtime-net.c; then
   echo "trace.sh: runtime/runtime-net.c has local changes; the patch is applied to a clean file" >&2
   exit 2
 fi
@@ -76,6 +76,15 @@ line=$(taskset -c "$load_cpus" "$out/loadgen" -c "$c" -t "$think" -p "$port" -w 
 echo "$line"
 lo=$(sed -n 's/.* win_lo=\([0-9.]*\).*/\1/p' <<<"$line")
 hi=$(sed -n 's/.* win_hi=\([0-9.]*\).*/\1/p' <<<"$line")
+if [ -z "$lo" ] || [ -z "$hi" ]; then
+  echo "trace.sh: loadgen's line has no win_lo or win_hi" >&2
+  exit 1
+fi
 awk -v lo="$lo" -v hi="$hi" '{ split($2, kv, "="); if (kv[1] == "t" && kv[2] > lo + 1 && kv[2] <= hi) print }' \
   "$out/trace.err" >"$out/trace-window.err"
-echo "trace.sh: $(grep -c '^trace ' "$out/trace-window.err") window seconds in $out/trace-window.err"
+secs=$(grep -c '^trace ' "$out/trace-window.err" || true)
+if [ "$secs" -eq 0 ]; then
+  echo "trace.sh: no trace second lies inside the window; is NR_TRACE output in $out/trace.err?" >&2
+  exit 1
+fi
+echo "trace.sh: $secs window seconds in $out/trace-window.err"

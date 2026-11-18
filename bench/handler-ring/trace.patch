@@ -22,8 +22,10 @@ pump), max_npend (sends queued at a pump's end). h(>1,2,5,10,20,50,100):
 passes longer than each bound, ms.
 
 `tr2` line, per second: ages, the ready-list entries the handler took;
-max_age, the longest any waited from listing to collection, ms; ah(...),
-entries older than each bound, ms; max_list, the longest the list was, read
+max_age, the longest any waited from listing to collection, ms, an upper
+bound: nr_collect re-appends every entry it reports and stamps it then, so an
+entry's age can start before the event it is next collected for; ah(...),
+entries older than each bound, ms, with the same caveat; max_list, the longest the list was, read
 every 64th collection; and the ring set's taskrun, overflow, nobufs and
 requeues over the second and its live count (nish_uring_stats).
 
