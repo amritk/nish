@@ -153,6 +153,9 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (!field.inline()) {
     return table.alignWithPointer(field.type, pointer)
   }
+  // Only a native build gets here: `layoutInlineArrays` inlines nothing in a
+  // build that shares layouts, wasm among them, so `pointer` is 8 and the
+  // stride is `elementStride`'s, which sizes the slots' memset and memcpy.
   const align = fieldAlign(table, field, pointer)
   const stride = table.alignWithPointer(table.refOf(field.type), pointer)
   const slots = roundUpTo(INLINE_HEADER_BYTES, align)

@@ -7660,9 +7660,15 @@ const runLinkProgram = async (name) => {
       if (as.status !== 0) {
         rejected.push(`${f}: ${as.stderr}`)
       }
+      // The verifier reads what llvm-as does not: a load's alignment against
+      // the wasm32 datalayout the module declares.
+      const v = HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(wasmDir, f)], { encoding: "utf8" }) : null
+      if (v !== null && v.status !== 0) {
+        rejected.push(`${f}: ${v.stderr}`)
+      }
     }
     expect(
-      `link/${name}: its wasm32 compile succeeds and llvm-as accepts its ${wasmModules.length} module(s)`,
+      `link/${name}: its wasm32 compile succeeds and llvm-as and opt -passes=verify accept its ${wasmModules.length} module(s)`,
       w.status === 0 && wasmModules.length > 0 && rejected.length === 0,
       w.status === 0 ? rejected.join("\n") : w.stderr
     )
@@ -40848,16 +40854,57 @@ class Links {
   }
 }
 
+enum Kind {
+  Round,
+  Flat,
+}
+
+class Round {
+  readonly kind: Kind.Round = Kind.Round
+  r: f64
+  constructor(r: f64) {
+    this.r = r
+  }
+}
+
+class Flat {
+  readonly kind: Kind.Flat = Kind.Flat
+  w: i32
+  constructor(w: i32) {
+    this.w = w
+  }
+}
+
+const parse = (n: i32): Result<i32, string> => (n > 0 ? Ok(n) : Err("neg"))
+
+class Wide {
+  flag: boolean
+  shape: Round | Flat
+  tags: string[]
+  nodes: Node[]
+  outcome: Result<i32, string>
+  last: u16
+  constructor(flag: boolean, shape: Round | Flat, tags: string[], nodes: Node[], outcome: Result<i32, string>, last: u16) {
+    this.flag = flag
+    this.shape = shape
+    this.tags = tags
+    this.nodes = nodes
+    this.outcome = outcome
+    this.last = last
+  }
+}
+
 export const main = (): i32 => {
   const a = new Node(null, 1)
   const b = new Node(a, 2)
   const m = new Mixed(1.5, b, 3, 4, "m")
   const l = new Links(a, b, m, 2, [1, 2, 3], true)
-  return l.count + l.head.value + m.n + l.items.length
+  const w = new Wide(true, new Flat(2), ["x", "y"], [a, b], parse(3), 4)
+  return l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
 }
 `
     )
-    const names = ["Node", "Mixed", "Links"]
+    const names = ["Node", "Mixed", "Links", "Wide"]
     // `struct T (class) size=S align=A`, then `  field f: T index=I offset=O`.
     const layouts = (args) => {
       const r = spawnSync(NISH, [entry, "--emit-checked", ...args], { cwd: root, encoding: "utf8" })
@@ -40940,6 +40987,15 @@ export const main = (): i32 => {
         "wasm32-layout: `next: Node | null; value: i32` is 8 bytes, 4-aligned, on wasm32 and 16, 8-aligned, natively",
         node.size === 8 && node.align === 4 && nativeNode !== undefined && nativeNode.size === 16 && nativeNode.align === 8,
         `wasm32 ${JSON.stringify(node)}\nnative ${JSON.stringify(nativeNode)}`
+      )
+      // A wasm build inlines no array field (`BuildMode.layoutsShared`), so an
+      // array of pointers stays one pointer to its header: the inline slots'
+      // stride is only ever a native one.
+      const wide = text.split("\n").find((line) => line.startsWith("%struct.Wide = type ")) ?? ""
+      check(
+        "wasm32-layout: `tags: string[]` and `nodes: Node[]` stay pointers to an array on wasm32, with no inline slots",
+        wide === "%struct.Wide = type { i1, %union.tagged*, %struct.nish_array*, %struct.nish_array*, %struct.nish_result.i32.str*, i16 }",
+        wide
       )
     }
   }

@@ -112,14 +112,14 @@ function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   local +0:9 nested: StructInfo | null (const)
   callee +7:8 FieldInfo.inline -> @FieldInfo.inline
   callee +8:12 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
-  local +10:9 align: i32 (const)
-  callee +10:17 fieldAlign -> @fieldAlign
-  local +11:9 stride: i32 (const)
-  callee +11:18 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
-  callee +11:41 TypeTable.refOf -> @TypeTable.refOf
-  local +12:9 slots: i32 (const)
-  callee +12:17 roundUpTo -> @roundUpTo
-  callee +13:10 roundUpTo -> @roundUpTo
+  local +13:9 align: i32 (const)
+  callee +13:17 fieldAlign -> @fieldAlign
+  local +14:9 stride: i32 (const)
+  callee +14:18 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
+  callee +14:41 TypeTable.refOf -> @TypeTable.refOf
+  local +15:9 slots: i32 (const)
+  callee +15:17 roundUpTo -> @roundUpTo
+  callee +16:10 roundUpTo -> @roundUpTo
 function computeLayout(ctx: CheckContext, info: StructInfo): i32 -> @computeLayout [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
