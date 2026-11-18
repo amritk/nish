@@ -474,9 +474,10 @@ int32_t nishsqlite_column_into(int32_t h, int32_t c, uint8_t *buf, uint64_t n, i
 #define NISH_SQLITE_SEEK_LE 3
 #define NISH_SQLITE_SEEK_LT 4
 
-/* Bytes past a copied record that are kept zeroed: the decoder can read a
- * varint or a number up to 9 bytes past a corrupt record's end. */
-#define NISH_SQLITE_SLACK 16
+/* Bytes past a copied record that are kept zeroed: on a corrupt record the
+ * decoder can read a varint and an 8-byte value past its end. 18 is the
+ * padding `sqlite3BtreeIndexMoveto` gives the copy it decodes (`nOverrun`). */
+#define NISH_SQLITE_SLACK 18
 
 typedef struct nishsqlite_cursor {
   nishsqlite_conn *conn;
