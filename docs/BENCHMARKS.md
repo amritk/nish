@@ -3183,6 +3183,42 @@ A second run of 15 rounds at one connection: `idle` does the work of `idle-dram`
 
 Stages on 18,000 connections, 7 rounds, ns per request, with the clock read and `sendmsg` taken out of each stage. `respond` is the kept-head path; `sendBody` is the body write and `end`.
 
+#### Wall clock by component
+
+The stages above time parse as one row and Date not at all, since the date is pinned. A second run splits them, `node bench/http1-conn/run.mjs --shape stages --connections 18000 --rounds 9 --base origin/main --rss 0 --variants nospans,nodate,live`. Its bench code is round 2's: the files the PR that fixes #1780 adds or changes under `bench/`. `std/` is `main` at b18d1bf1 for `old`, `old′`, `new` and the variants. From 4d0faa4b to b18d1bf1, the modules this path runs changed only in doc comments. Each variant is the working tree's `std/` built again with one part patched out (`bench/http1-conn/run.mjs`, `variantPatches`):
+
+- `nospans` scans the header section for line ends and control bytes as before. It copies, lowers, classes and stores no field line. It finds the one Host by name in the read bytes and checks it there, so the answer is the same.
+- `nodate` writes no `Date`, so its heads are 37 bytes shorter.
+- `live` does not pin the date. `readable` reads the wall clock once a call, and the head is written afresh when the second turns, as a server does.
+
+| stage | old | old′ | new | nospans | nodate | live |
+| --- | --- | --- | --- | --- | --- | --- |
+| recv | 58.7 (54.1–69.6) | 56.9 (55.0–61.3) 0.970 | 56.2 (55.0–64.6) 0.959 | 53.2 (52.0–58.9) 0.907 | 58.1 (55.9–62.9) 0.990 | 88.3 (86.4–89.9) 1.505 |
+| parse | 348.5 (340.6–362.6) | 344.5 (337.3–356.2) 0.988 | 342.5 (339.0–392.4) 0.983 | 262.9 (261.2–286.6) 0.754 | 344.3 (339.3–369.9) 0.988 | 348.1 (340.4–356.0) 0.999 |
+| dispatch | 32.7 (30.0–40.0) | 33.0 (30.7–36.1) 1.009 | 32.6 (30.6–37.3) 0.997 | 30.4 (29.7–34.7) 0.930 | 35.2 (34.4–37.5) 1.074 | 33.4 (31.1–33.9) 1.022 |
+| respond | 52.2 (49.5–56.3) | 52.3 (49.3–70.6) 1.002 | 51.1 (49.6–63.3) 0.978 | 55.7 (54.1–59.3) 1.067 | 54.4 (52.9–69.3) 1.042 | 57.2 (55.0–76.3) 1.095 |
+| sendBody | 63.1 (52.4–95.5) | 63.8 (48.9–69.3) 1.010 | 63.3 (57.4–94.8) 1.003 | 61.8 (36.7–90.2) 0.979 | 82.2 (21.1–94.2) 1.302 | 59.5 (42.5–75.4) 0.943 |
+| park | 15.6 (14.8–21.2) | 15.3 (14.8–16.7) 0.980 | 15.8 (14.7–16.7) 1.017 | 15.0 (14.5–17.4) 0.962 | 14.8 (13.9–15.3) 0.950 | 14.9 (14.5–15.8) 0.957 |
+| total | 571.6 (551.0–625.8) | 573.9 (554.0–596.1) 1.004 | 559.4 (546.6–650.8) 0.979 | 479.7 (450.4–547.2) 0.839 | 591.1 (541.4–609.8) 1.034 | 596.8 (579.3–626.7) 1.044 |
+| clock read | 28.2 (27.5–28.5) | 28.1 (27.7–28.1) 0.997 | 28.0 (27.0–28.1) 0.993 | 28.1 (27.2–28.2) 0.998 | 28.2 (27.6–28.7) 1.000 | 28.1 (27.5–28.2) 0.997 |
+| sendmsg | 540.8 (521.6–580.1) | 534.6 (508.1–545.0) 0.988 | 537.5 (521.7–575.5) 0.994 | 530.7 (520.9–568.1) 0.981 | 531.9 (520.2–582.6) 0.984 | 527.4 (520.8–547.5) 0.975 |
+
+Stages on 18,000 connections, 9 rounds, ns per request with the clock read and `sendmsg` taken out, median (min–max) and ratio of medians to `old`.
+
+Each component is a difference of medians. The band of a stage is `old′`'s median against `old`'s: recv 3.1%, parse 1.2%, respond 0.2% and sendBody 1.1%. The "edges" column widens every term by its stage's band, in the direction that makes the component larger:
+
+| component | from | ns at the medians | ns at the band edges |
+| --- | --- | ---: | ---: |
+| head parse apart from header spans | parse in `nospans` | 262.9 | 265.9 |
+| header spans | parse in `old` less parse in `nospans` | 85.6 | 92.6 |
+| Date with its clock read | recv and respond in `live` less recv and respond in `nodate` | 33.0 | 37.7 |
+| response head without Date, kept path | respond in `nodate` | 54.4 | 54.5 |
+| sendBody | sendBody in `old` | 63.1 | 63.8 |
+
+- **The band understates the noise between builds.** `nodate`'s respond is 2.2 ns above `old`'s, although it does less, and its dispatch is 2.5 ns above. The stage band is 0.2% for respond and 1.1% for dispatch, so moving code between builds shifts a stage by more than a byte-identical copy does. sendBody's min–max is 52.4–95.5 ns in `old` and 21.1–94.2 in `nodate`, so its 19.1 ns gap between those medians is not a cost of Date.
+- **Date.** Almost all of the 33.0 ns is recv: `live`'s recv is 29.6 ns above `nodate`'s. That is the clock read in `readable`, close to the bench's own 28.2 ns `clock read`. The other 2.8 ns is respond, which writes the head afresh when the second turns. Round 1 put Date at 15 Ir plus up to about 28 ns for the clock read; this measures it as 33.0 ns, or 37.7 at the band edges.
+- **Header spans.** `nospans` saves 85.6 ns of parse, 92.6 at the band edges. It keeps the Host check, which a lean path also keeps. On this bench's GET (Host, User-Agent, Accept, Accept-Encoding and a `Token` Authorization) it saves the span work of all five fields, Host included, so it overstates what a lean path that kept Host's span would save.
+
 ### Bytes per connection
 
 `bench/http1-conn/bytes.ts` (this PR's bench code) reads `Arena.used()` around each allocation on the default `Http1Config`. The arena bump-allocates in 8-byte steps with no per-object header, so these counts include the rounding and there is no allocator header to add. An array is a 24-byte header plus its storage.

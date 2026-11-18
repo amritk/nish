@@ -76,6 +76,22 @@ says whether it was) and reports the fastest of `--batches` batches (default
 rounds, and the ratio of medians to `old`; `old′` against `old` is the noise
 band. A checksum that differs between the binaries fails the run.
 
+`--variants nospans,nodate,live` (any of them, a comma list) adds a column
+per variant: the working tree's `std/` built again with one part of the GET
+path patched out, in a package directory of its own as `old` is, so a part's
+cost is the difference of two rows timed in the same interleaved rounds.
+`nospans` scans the header section as before but copies, lowers and stores
+no field line, finding and checking the one Host in the read bytes; `nodate`
+writes no `Date`, so its checksum is held to its own rounds; `live` drops
+`main.ts`'s date pin, so `readable` reads the wall clock once a call and the
+head is rewritten when the second turns. Each patch must match exactly once,
+or the run fails, so a `std/` that has moved past one is not timed as if it
+held. The comment above `variantPatches` in `run.mjs` has the patches.
+
+`bytes.ts` also counts the per-slot arrays around a connection over 256
+slots: `HttpHandler`'s five fixed arrays as its constructor sizes them, and
+`Http1Server`'s three arrays that `accept` pushes onto one entry at a time.
+
 `main.ts` alone takes `hot|cold|idle|direct|rss [requests] [connections]
 [batches] [evict-MiB]` and prints `shape ns requests checksum` for its fastest
 batch. The checksum adds the body bytes, which of the two routes each request
