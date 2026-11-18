@@ -3,13 +3,17 @@
 // cursors alone, as a program would hand-plan it: walk the
 // (created_at DESC, id DESC) index from its first entry, look each post and
 // its author up by rowid, and count its likes by seeking the likes index on
-// the post's id and stepping while the key matches. The schema is the shape
-// of a small social app's (users, posts, likes keyed by user and post),
-// written for this test. Twelve posts share each timestamp, so the order
-// within a stamp comes from the id; every third post has no likes and the rest one to seven; names and
-// bodies hold non-ASCII text, and the bodies are read into a 16-byte buffer
-// first, so most need the buffer grown and read again. Both renderings are
-// printed, and must be the same bytes.
+// the post's id and stepping while the key matches. The schema is the
+// twelve-dollar server challenge's, read at run time from
+// bench/sqlite/schema.sql (MIT; see bench/sqlite/LICENSE.md) and executed
+// unchanged, so `openCursor` checks the real tables: their DEFAULTs, CHECK and
+// three indexes. Timestamps are in its wire format (YYYY-MM-DDTHH:MM:SS.mmmZ),
+// and users take the DEFAULT one. Twelve posts share each timestamp, so the
+// order within a stamp comes from the id; every third post has no likes and
+// the rest one to seven; names and bodies hold non-ASCII text, and the bodies
+// are read into a 16-byte buffer first, so most need the buffer grown and read
+// again. Both renderings are printed, and must be the same bytes.
+import { readFileSyncOrNull } from "nish:fs";
 import { Suite } from "nish/testing";
 import {
   OPEN_CREATE,
@@ -117,27 +121,29 @@ export const main = (): i32 => {
     return t.done();
   }
   const db = opened.value;
-  const schema =
-    "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, created_at TEXT);" +
-    "CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users (id)," +
-    " body TEXT NOT NULL, created_at TEXT NOT NULL);" +
-    "CREATE TABLE likes (user_id INTEGER NOT NULL, post_id INTEGER NOT NULL, created_at TEXT," +
-    " PRIMARY KEY (user_id, post_id));" +
-    "CREATE INDEX posts_created_at_id_idx ON posts (created_at DESC, id DESC);" +
-    "CREATE INDEX posts_user_id_idx ON posts (user_id);" +
-    "CREATE INDEX likes_post_id_idx ON likes (post_id);" +
+  // The tests run from the repository root.
+  const schema = readFileSyncOrNull("bench/sqlite/schema.sql");
+  if (schema === null) {
+    t.fail("read", "bench/sqlite/schema.sql");
+    return t.done();
+  }
+  if (db.exec(schema).isErr()) {
+    t.fail("schema", db.error(SQLITE_ERROR).message);
+    return t.done();
+  }
+  const rows =
     "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 25)" +
-    " INSERT INTO users SELECT x, CASE x % 3 WHEN 0 THEN 'zoë_' WHEN 1 THEN '名前_' ELSE 'user_' END || x," +
-    " '2025-12-01' FROM c;" +
+    " INSERT INTO users (id, username) SELECT x, CASE x % 3 WHEN 0 THEN 'zoë_' WHEN 1 THEN '名前_' ELSE 'user_' END || x" +
+    " FROM c;" +
     "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 300)" +
     " INSERT INTO posts SELECT x, 1 + (x * 7) % 25," +
     " 'post ' || x || ': ' || substr(replace(hex(zeroblob(200)), '0', 'ab ü '), 1, 1 + (x * 13) % 60)," +
-    " '2026-01-' || printf('%02d', 1 + x / 12) || 'T09:00:00Z' FROM c;" +
+    " '2026-01-' || printf('%02d', 1 + x / 12) || 'T09:00:00.000Z' FROM c;" +
     "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 3000)" +
-    " INSERT INTO likes SELECT 1 + x / 300, 1 + (x * 37) % 300, '2026-02-01' FROM c" +
+    " INSERT INTO likes SELECT 1 + x / 300, 1 + (x * 37) % 300, '2026-02-01T00:00:00.000Z' FROM c" +
     " WHERE (1 + (x * 37) % 300) % 3 <> 0 AND x / 300 <= (1 + (x * 37) % 300) % 7";
-  if (db.exec(schema).isErr()) {
-    t.fail("exec", db.error(SQLITE_ERROR).message);
+  if (db.exec(rows).isErr()) {
+    t.fail("rows", db.error(SQLITE_ERROR).message);
     return t.done();
   }
   const s = new Scratch();

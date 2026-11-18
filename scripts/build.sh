@@ -680,6 +680,8 @@ sqlite_defs+=(${sqlite_extra[@]+"${sqlite_extra[@]}"})
 # which nish-sqlite.c compiles by including it. SQLite's B-tree and record
 # functions are static there, and the cursor adapter calls them, so the two
 # must be one translation unit (docs/sqlite-cursor.md, "The build decision").
+# One name a line; callers read them with `while read`, so a name is never
+# split on spaces.
 sqlite_unit_names() {
   local unit
   for unit in "$sqlite_dir"/*.c; do
@@ -700,14 +702,14 @@ sqlite_units() {
   local to=$1 unit flag
   local -a flags
   shift
-  for unit in $(sqlite_unit_names); do
+  while IFS= read -r unit; do
     flags=()
     for flag in "$@"; do
       case "$flag" in -flto) ;; *) flags+=("$flag") ;; esac
     done
     (cd -- "$sqlite_dir" && exec "$CC" "${flags[@]}" "${sqlite_defs[@]}" -I. -c "$unit" -o "$to/${unit%.c}.o") &
     pids+=("$!")
-  done
+  done < <(sqlite_unit_names)
   join_jobs || { echo "error: runtime/sqlite/ did not compile" >&2; exit 1; }
 }
 # Adds the objects of runtime/sqlite/ to this link, in the order of the units.
@@ -723,10 +725,10 @@ sqlite_objects() {
     mkdir -p -- "$from"
     sqlite_units "$from" "$@"
   fi
-  for unit in $(sqlite_unit_names); do
+  while IFS= read -r unit; do
     [ -f "$from/${unit%.c}.o" ] || { echo "error: --sqlite-from: $from/${unit%.c}.o is missing" >&2; exit 2; }
     inputs+=("$from/${unit%.c}.o")
-  done
+  done < <(sqlite_unit_names)
 }
 
 if [ -n "$sqlite_to" ]; then

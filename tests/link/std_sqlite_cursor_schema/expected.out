@@ -32,9 +32,27 @@ PASS    is not in main
 PASS    nor is temp.tt
 PASS  endRead
 PASS  without rtree, CREATE VIRTUAL TABLE fails
+PASS  short record: ADD COLUMN with a DEFAULT and without
+PASS  short record: beginRead
+PASS  short record: the old row
+PASS    reads its own column
+PASS    the DEFAULT column answers SQLITE_SCHEMA
+PASS    and columnI64 0 there, not the DEFAULT
+PASS    the column without a DEFAULT answers SQLITE_SCHEMA
+PASS    and columnInto there SQLITE_SCHEMA
+PASS  short record: the row written after the ALTER
+PASS    reads the DEFAULT column's own value
+PASS    reads the other new column
+PASS  short record: endRead
+PASS  names: a comma and a trailing DESC
+PASS  names: beginRead
+PASS    a column name with a comma is SQLITE_SCHEMA
+PASS    an index on a column named ... DESC is SQLITE_SCHEMA
+PASS    a descending index on a plain name opens
+PASS  names: endRead
 PASS  close
 PASS  a UTF-16 database
 PASS    beginRead
 PASS    is refused
 PASS    close
-std_sqlite_cursor_schema: 39 passed, 0 failed, 0 skipped
+std_sqlite_cursor_schema: 57 passed, 0 failed, 0 skipped

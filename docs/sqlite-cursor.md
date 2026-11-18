@@ -154,6 +154,8 @@ The open is refused with `SqliteError` and `SQLITE_SCHEMA` when:
   `desc`, and the last name is `rowid`;
 - a table has a generated column (`hidden` 2 or 3), or an index has an
   expression column (`cid` -2) or a collation other than `BINARY`;
+- a schema name holds a comma or ends in ` DESC`, which the joined list could
+  not tell apart from a separator or a sort flag;
 - the database's encoding is not UTF-8.
 
 A column of a table is the rowid's alias when the table's primary key is that
@@ -245,16 +247,41 @@ The consequence: the adapter's wrappers (`nishsqlite_step`,
 SQLite's own `sqlite3_column_*` and `sqlite3_step` now inline into them.
 
 Link cost of `tests/link/sqlite_link/main.ts` (`--link`, a cold SQLite cache
-entry and then two cached links; seconds, wall clock, 4-core cloud container),
-before at `4d0faa4b`:
+entry and then two cached links; seconds, wall clock, 4-core cloud container).
+Before is `4d0faa4b` (SQLite compiled as its own unit); after is `3765b270`
+(SQLite compiled inside the adapter, cursors included):
 
-| Profile | First link | Cached link |
-| --- | --- | --- |
-| debug, before | 2.64 | 0.21–0.23 |
-| speed, before | 27.6 | 0.28–0.29 |
+| Profile | Before, cold | Before, cached | After, cold | After, cached |
+| --- | --- | --- | --- | --- |
+| debug | 2.64 | 0.21–0.23 | 2.81 | 0.24–0.27 |
+| speed | 27.6 | 0.28–0.29 | 28.0 | 0.31–0.34 |
 
-The after figures and `bench/sqlite/run.mjs` before and after are recorded
-with the commit that measured them in the pull request that lands this note.
+A cold link is one sample per profile; an earlier after-run at the same code
+took 2.72 s (debug) and 26.73 s (speed), so the cold difference is inside the
+spread of single runs. A cached link reuses the cache entry and is under 0.35 s
+in both.
+
+`bench/sqlite/run.mjs` before (`4d0faa4b`) and after (`3765b270`), median
+ns per call over 12 rounds. The bench reads only through the VDBE (prepared
+statements); it is here to check that compiling SQLite inside the adapter did
+not move that path. Each run's checksums match. "Band" is the run's own noise
+band (the build timed against a copy of itself, median):
+
+| Workload | Nish | C | Nish − C | Band | Nish, after | C, after | Nish − C, after | Band, after |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| lookup | 6631 | 6529 | +1.6% | 0.7% | 7187 | 7435 | −3.3% | 0.8% |
+| feed | 22246 | 22966 | −3.1% | 0.8% | 22490 | 21990 | +2.3% | 20.5% |
+| insert | 21149 | 22899 | −7.6% | 3.2% | 23320 | 23269 | +0.2% | 1.1% |
+| insert-txn | 6987 | 6526 | +7.1% | 6.3% | 7053 | 7232 | −2.5% | 0.5% |
+
+Absolute figures move between the two runs on this container by more than
+either run's band: the C program, which this change does not touch, is 14%
+slower in the after run on lookup and 4% faster on feed (it builds
+`sqlite3.c` and `twin.c` itself, not through the adapter). So the comparison
+is Nish against C within one run. That gap moved by −4.9, +5.4, +7.8 and −9.6
+points, in both directions, and on lookup, insert and insert-txn by more than
+either run's band. The check finds no consistent slowdown of the VDBE path; it does not
+bound a change smaller than the run-to-run spread.
 
 ## Out of scope
 

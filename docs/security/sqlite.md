@@ -153,12 +153,24 @@ Tests:
 - `tests/link/std_sqlite_cursor_stale`: a cursor open across `COMMIT`,
   `ROLLBACK`, `commit()`, `rollback()`, a write through `exec` and through a
   prepared statement, a prepared `ROLLBACK`, `endRead`, a `SELECT` on a
-  `pragma_*` function and `close` answers `SQLITE_MISUSE`. It runs again with
-  `-DSQLITE_DEBUG`, so SQLite's assertions check the same sequences.
+  `pragma_*` function and `close` answers `SQLITE_MISUSE`; so does one open
+  inside a read across a prepared `UPDATE`, an `exec` `DELETE`, DDL through
+  `exec` and a prepared statement, `SAVEPOINT` then `RELEASE` and a
+  `PRAGMA x = y`, and a closed cursor's handle once a new cursor takes its
+  slot. It runs again with `-DSQLITE_DEBUG`, so SQLite's assertions check the
+  same sequences.
+- `tests/link/std_sqlite_cursor_sql`: every walk of a table and an index in
+  both directions, and each seek, checked row by row against the `SELECT`
+  that answers the same question, with index keys and records on overflow
+  pages and `NULL` keys.
 - `tests/run.js` (`sqlite-link`): the adapter built with `-DSQLITE_DEBUG` and
-  `THREADSAFE=1` under a C helper that walks, reads and seeks, so SQLite's
-  assertions check that every cursor call holds the connection's mutex.
-- `tests/link/std_sqlite_cursor_schema`: each refused object. It runs again
+  `THREADSAFE=1` under a C helper that calls every exported cursor and key
+  function, so SQLite's assertions check that each holds the connection's
+  mutex; and, with memory statistics on, two passes of index seeks and a
+  backward walk over overflow rows that leave SQLite's memory in use and its
+  high-water mark where the first pass left them.
+- `tests/link/std_sqlite_cursor_schema`: each refused object, and a column
+  column whose name holds a comma or ends in ` DESC`. It runs again
   with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
 - `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
   equal byte for byte to SQL's.

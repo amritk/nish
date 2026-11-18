@@ -463,9 +463,11 @@ int32_t nishsqlite_column_into(int32_t h, int32_t c, uint8_t *buf, uint64_t n, i
  * inside a read transaction `nishsqlite_begin_read` opened. Nothing here reads
  * the file format or writes a field of SQLite's structures that its functions
  * do not take: the cursor, the KeyInfo, the decoded row and the seek key are
- * all made and changed by SQLite's functions, and the only fields set by hand
- * are the ones of the UnpackedRecord a seek passes in, which is how SQLite's
- * own VDBE builds one (docs/sqlite-cursor.md, "What the adapter writes").
+ * all made by SQLite's functions. The fields set by hand are the ones of the
+ * UnpackedRecord a seek passes in, which is how SQLite's own VDBE builds one,
+ * and a KeyInfo's `aSortFlags` entry for a DESC key column, which is how
+ * SQLite's own `sqlite3KeyInfoOfIndex` fills it (docs/sqlite-cursor.md, "What
+ * the adapter calls").
  *
  * A cursor belongs to its connection (the slot's owner) and lives until the
  * program closes it, `nishsqlite_end_read`, or anything that could change what
@@ -602,16 +604,25 @@ int32_t nishsqlite_end_read(int32_t h) {
   return internal_exec(c, "COMMIT");
 }
 
-/* Appends `name` to the expected column list, after a comma unless first. */
-static void columns_add(sqlite3_str *want, const char *name, int first) {
+/* Appends `name` to the expected column list, after a comma unless first.
+ * The list joins names unescaped, so a name it could not spell apart is
+ * SQLITE_SCHEMA: one holding a comma, or ending in " DESC" (which reads as a
+ * descending key column). */
+static int columns_add(sqlite3_str *want, const char *name, int first) {
+  if (name == NULL) return SQLITE_SCHEMA;
+  size_t len = 0;
+  for (; name[len] != 0; len++)
+    if (name[len] == ',') return SQLITE_SCHEMA;
+  if (len >= 5 && strcmp(name + len - 5, " DESC") == 0) return SQLITE_SCHEMA;
   if (!first) sqlite3_str_appendchar(want, 1, ',');
   sqlite3_str_appendall(want, name);
+  return SQLITE_OK;
 }
 
 /* Reads what `cursor_open` checks of a table: its columns as the list the
  * program must name, the INTEGER PRIMARY KEY column, and the column count.
  * SQLITE_SCHEMA for a table this adapter cannot read: a hidden or generated
- * column. */
+ * column, or a column name the list cannot spell (`columns_add`). */
 static int table_shape(nishsqlite_conn *c, const char *table, sqlite3_str *want, int32_t *ncol,
                        int32_t *alias) {
   sqlite3_stmt *st = NULL;
@@ -621,9 +632,8 @@ static int table_shape(nishsqlite_conn *c, const char *table, sqlite3_str *want,
     if (sqlite3_column_int(st, 1) != 0) rc = SQLITE_SCHEMA;
     else {
       if (sqlite3_column_int(st, 2) != 0) npk++, pk = n;
-      columns_add(want, (const char *)sqlite3_column_text(st, 0), n == 0);
+      rc = columns_add(want, (const char *)sqlite3_column_text(st, 0), n == 0);
       n++;
-      rc = SQLITE_OK;
     }
   }
   sqlite3_finalize(st);
@@ -648,7 +658,8 @@ static int table_shape(nishsqlite_conn *c, const char *table, sqlite3_str *want,
 /* Reads what `cursor_open` checks of an index: its key columns, each with
  * " DESC" when descending, then "rowid", and the key's width. SQLITE_SCHEMA
  * for an index this adapter cannot read: one on an expression, with a
- * collation that is not BINARY, or whose record is not the key and a rowid. */
+ * collation that is not BINARY, on a column name the list cannot spell, or
+ * whose record is not the key and a rowid. */
 static int index_shape(nishsqlite_conn *c, const char *index, sqlite3_str *want, int32_t *nkey,
                        KeyInfo *ki) {
   sqlite3_stmt *st = NULL;
@@ -672,7 +683,7 @@ static int index_shape(nishsqlite_conn *c, const char *index, sqlite3_str *want,
         }
         if (sqlite3_column_int(st, 2) != 0) ki->aSortFlags[n] = KEYINFO_ORDER_DESC;
       }
-      columns_add(want, name, n == 0);
+      if ((rc = columns_add(want, name, n == 0)) != SQLITE_OK) break;
       if (sqlite3_column_int(st, 2) != 0) sqlite3_str_appendall(want, " DESC");
       n++;
     } else if (cid != -1 || naux++ != 0) {
@@ -683,7 +694,7 @@ static int index_shape(nishsqlite_conn *c, const char *index, sqlite3_str *want,
   sqlite3_finalize(st);
   if (rc != SQLITE_DONE) return rc == SQLITE_OK || rc == SQLITE_ROW ? SQLITE_SCHEMA : rc;
   if (n == 0 || naux != 1) return SQLITE_SCHEMA;
-  columns_add(want, "rowid", 0);
+  (void)columns_add(want, "rowid", 0);
   *nkey = n;
   return SQLITE_OK;
 }
@@ -825,10 +836,7 @@ static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *co
 static int32_t unlocked_cursor_open(int32_t h, const char *name, const char *columns) {
   nishsqlite_conn *c = conn_of(h);
   if (c == NULL || !main_in_read(c->db)) return -SQLITE_MISUSE;
-  c->internal = 1;
-  int32_t r = cursor_build(c, name, columns);
-  c->internal = 0;
-  return r;
+  return cursor_build(c, name, columns);
 }
 
 static int32_t unlocked_cursor_close(int32_t h) {
@@ -897,8 +905,6 @@ static int32_t unlocked_cursor_seek_rowid(int32_t h, int64_t rowid) {
 
 /* ---- Seek keys ---------------------------------------------------------- */
 
-/* The seek key's next value. More values than the index has key columns is
- * SQLITE_RANGE; a table cursor has no key. */
 /* The index cursor `h` with room for one more key part, or NULL with `*rc`
  * saying why. The caller sets `cur->key[cur->nkeyparts]` and counts it only
  * when the set succeeds, so a failed part leaves the key as it was. */
@@ -1049,7 +1055,7 @@ static int32_t unlocked_cursor_column_type(int32_t h, int32_t n) {
   nishsqlite_cursor *cur;
   int alias, rc;
   Mem *m = column_mem(h, n, &cur, &alias, &rc);
-  if (alias) return SQLITE_INTEGER;
+  if (alias) return sqlite3BtreeCursorHasMoved(cur->bt) ? -SQLITE_ABORT : SQLITE_INTEGER;
   return m ? sqlite3_value_type((sqlite3_value *)m) : -rc;
 }
 
@@ -1059,7 +1065,7 @@ static int64_t unlocked_cursor_column_i64(int32_t h, int32_t n) {
   nishsqlite_cursor *cur;
   int alias, rc;
   Mem *m = column_mem(h, n, &cur, &alias, &rc);
-  if (alias) return sqlite3BtreeIntegerKey(cur->bt);
+  if (alias) return sqlite3BtreeCursorHasMoved(cur->bt) ? 0 : sqlite3BtreeIntegerKey(cur->bt);
   return m ? sqlite3_value_int64((sqlite3_value *)m) : 0;
 }
 
@@ -1089,7 +1095,7 @@ static int32_t unlocked_cursor_column_into(int32_t h, int32_t c, uint8_t *buf, u
 static int64_t unlocked_cursor_rowid(int32_t h) {
   nishsqlite_cursor *cur = cursor_of(h);
   if (cur == NULL || !cur->has_row) return 0;
-  if (!cur->is_index) return sqlite3BtreeIntegerKey(cur->bt);
+  if (!cur->is_index) return sqlite3BtreeCursorHasMoved(cur->bt) ? 0 : sqlite3BtreeIntegerKey(cur->bt);
   if (row_of(cur) != SQLITE_OK || cur->nfields < cur->ncol) return 0;
   return sqlite3_value_int64((sqlite3_value *)&cur->row->aMem[cur->ncol - 1]);
 }

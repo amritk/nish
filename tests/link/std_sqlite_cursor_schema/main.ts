@@ -5,7 +5,9 @@
 // so it refuses at open rather than answer something else: a column list in
 // the wrong order, short or long, a WITHOUT ROWID table or an index on one, a
 // view, a virtual table, a generated column, an index on an expression or
-// with another collation, and a UTF-16 database.
+// with another collation, and a UTF-16 database. Last, a row shorter than its
+// table (written before ALTER TABLE ADD COLUMN) answers SQLITE_SCHEMA for the
+// columns it lacks.
 import { Suite } from "nish/testing";
 import { OPEN_CREATE, OPEN_READWRITE, SQLITE_ERROR, Database, openDatabase } from "nish/sqlite";
 
@@ -94,6 +96,58 @@ export const main = (): i32 => {
   } else {
     t.eqStr("without rtree, CREATE VIRTUAL TABLE fails", db.error(vt.error).message, "no such module: rtree");
   }
+  // A row written before ALTER TABLE ADD COLUMN is shorter than the table:
+  // SQL reads the new column as its DEFAULT, which a cursor does not apply,
+  // so the column past the end of that record answers SQLITE_SCHEMA (and
+  // columnI64 0) rather than a value SQL would not give. A row written after
+  // the ALTER reads normally.
+  t.ok(
+    "short record: ADD COLUMN with a DEFAULT and without",
+    db
+      .exec(
+        "CREATE TABLE old (id INTEGER PRIMARY KEY, a INT); INSERT INTO old (a) VALUES (7);" +
+          " ALTER TABLE old ADD COLUMN d INT DEFAULT 5; ALTER TABLE old ADD COLUMN n TEXT;" +
+          " INSERT INTO old (a, d, n) VALUES (8, 9, 'new')"
+      )
+      .isOk()
+  );
+  t.ok("short record: beginRead", db.beginRead().isOk());
+  const old = db.openCursor("old", "id,a,d,n").expect("open old");
+  const buf = new Array<u8>(8);
+  const first = old.first();
+  t.ok("short record: the old row", first.isOk() && first.value);
+  t.ok("  reads its own column", old.columnI64(1) === toI64(7));
+  const dType = old.columnType(2);
+  t.ok("  the DEFAULT column answers SQLITE_SCHEMA", dType.isErr() && dType.error === SCHEMA);
+  t.ok("  and columnI64 0 there, not the DEFAULT", old.columnI64(2) === toI64(0));
+  const nType = old.columnType(3);
+  t.ok("  the column without a DEFAULT answers SQLITE_SCHEMA", nType.isErr() && nType.error === SCHEMA);
+  const nInto = old.columnInto(3, buf, 0);
+  t.ok("  and columnInto there SQLITE_SCHEMA", nInto.isErr() && nInto.error === SCHEMA);
+  const second = old.next();
+  t.ok("short record: the row written after the ALTER", second.isOk() && second.value);
+  t.ok("  reads the DEFAULT column's own value", old.columnI64(2) === toI64(9));
+  const n = old.columnInto(3, buf, 0);
+  t.ok("  reads the other new column", n.isOk() && n.value === 3 && String.fromBytes(buf, 0, 3) === "new");
+  t.ok("short record: endRead", db.endRead().isOk());
+
+  // The column list joins names unescaped, so a name it could not spell apart
+  // is refused: a comma would read as two columns, and " DESC" at the end as a
+  // descending key column.
+  t.ok(
+    "names: a comma and a trailing DESC",
+    db
+      .exec(
+        'CREATE TABLE odd (id INTEGER PRIMARY KEY, "a,b" INT, "c DESC" INT, e INT);' +
+          ' CREATE INDEX odd_e ON odd (e DESC); CREATE INDEX odd_c ON odd ("c DESC")'
+      )
+      .isOk()
+  );
+  t.ok("names: beginRead", db.beginRead().isOk());
+  t.ok("  a column name with a comma is SQLITE_SCHEMA", refused(db, "odd", "id,a,b,c DESC,e"));
+  t.ok("  an index on a column named ... DESC is SQLITE_SCHEMA", refused(db, "odd_c", "c DESC,rowid"));
+  t.ok("  a descending index on a plain name opens", opens(db, "odd_e", "e DESC,rowid"));
+  t.ok("names: endRead", db.endRead().isOk());
   t.ok("close", db.close().isOk());
 
   const wide = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open a second");

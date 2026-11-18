@@ -11556,8 +11556,9 @@ if (dealtHere("sqliteLink")) {
     // The cursors call SQLite's internal allocator, decoder and B-tree, which
     // expect the connection's mutex held as SQLite's own API holds it. A
     // SQLITE_DEBUG, THREADSAFE=1 build asserts that on every such call, so a
-    // helper that walks a table, reads a column into a buffer, builds an
-    // index key and seeks on it exits 0 only if every entry point takes it.
+    // helper that calls every exported cursor and key function (walks a table
+    // both ways, seeks a rowid, reads each kind of column, builds integer,
+    // text and byte keys and seeks on them) exits 0 only if each takes it.
     {
       const helper = path.join(sqDir, "mutex-held.c")
       const exe = path.join(sqDir, "mutex-held")
@@ -11578,11 +11579,19 @@ int32_t nishsqlite_cursor_column_into(int32_t, int32_t, uint8_t *, uint64_t, int
 int32_t nishsqlite_key_reset(int32_t);
 int32_t nishsqlite_key_text(int32_t, const char *);
 int32_t nishsqlite_cursor_seek(int32_t, int32_t);
+int32_t nishsqlite_cursor_last(int32_t);
+int32_t nishsqlite_cursor_previous(int32_t);
+int32_t nishsqlite_cursor_seek_rowid(int32_t, int64_t);
+int32_t nishsqlite_key_i64(int32_t, int64_t);
+int32_t nishsqlite_key_bytes(int32_t, const uint8_t *, uint64_t, int32_t, int32_t);
+int32_t nishsqlite_cursor_column_type(int32_t, int32_t);
+int64_t nishsqlite_cursor_rowid(int32_t);
 int main(void) {
   uint8_t buf[512];
   int64_t sum = 0;
   int32_t db = nishsqlite_open(":memory:", 6);
   if (db <= 0 || nishsqlite_exec(db, "CREATE TABLE t (a INTEGER, b TEXT); CREATE INDEX ti ON t (b);"
+      " CREATE INDEX ta ON t (a);"
       " WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 500)"
       " INSERT INTO t SELECT x, printf('%0300d', x) FROM c") != 0) return 2;
   if (nishsqlite_begin_read(db) != 0) return 3;
@@ -11594,6 +11603,16 @@ int main(void) {
   if (sum != 125250) return 5;
   int32_t i = nishsqlite_cursor_open(db, "ti", "b,rowid");
   if (nishsqlite_key_reset(i) != 0 || nishsqlite_key_text(i, "0") != 0 || nishsqlite_cursor_seek(i, 1) != 1) return 6;
+  if (nishsqlite_cursor_last(c) != 1 || nishsqlite_cursor_rowid(c) != 500) return 9;
+  if (nishsqlite_cursor_previous(c) != 1 || nishsqlite_cursor_rowid(c) != 499) return 10;
+  if (nishsqlite_cursor_column_type(c, 0) != 1 || nishsqlite_cursor_column_type(c, 1) != 3) return 11;
+  if (nishsqlite_cursor_seek_rowid(c, 250) != 1 || nishsqlite_cursor_column_i64(c, 0) != 250) return 12;
+  int32_t a = nishsqlite_cursor_open(db, "ta", "a,rowid");
+  if (nishsqlite_key_reset(a) != 0 || nishsqlite_key_i64(a, 250) != 0 || nishsqlite_cursor_seek(a, 1) != 1 ||
+      nishsqlite_cursor_rowid(a) != 250) return 13;
+  for (int32_t k = 0; k < 300; k++) buf[k] = k == 299 ? '7' : '0';
+  if (nishsqlite_key_reset(i) != 0 || nishsqlite_key_bytes(i, buf, sizeof buf, 0, 300) != 0 ||
+      nishsqlite_cursor_seek(i, 1) != 1 || nishsqlite_cursor_rowid(i) != 7) return 14;
   if (nishsqlite_cursor_close(c) != 0 || nishsqlite_end_read(db) != 0) return 7;
   return nishsqlite_close(db) == 0 ? 0 : 8;
 }
@@ -11984,15 +12003,35 @@ int main(void) {
     )
     // A scan holds its memory flat: after the first row, stepping a cursor over
     // 10,000 rows and reading their columns allocates nothing SQLite's own
-    // counters see (SQLITE_DEFAULT_MEMSTATUS=1 turns them on).
+    // counters see (SQLITE_DEFAULT_MEMSTATUS=1 turns them on). The second line
+    // is the other routes: integer-key seeks on an index, then a table walked
+    // backwards from last() reading 5,000-byte text that spills past a 4 KiB
+    // page onto overflow pages. The first such read grows the cursor's record
+    // buffer and SQLite's overflow-page cache once, so this run measures two
+    // passes after a first full one, and checks the first pass did grow.
     const memTs = path.join(sqDir, "cursor-memory.ts")
     fs.writeFileSync(
       memTs,
       [
-        'import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";',
+        'import { Cursor, OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";',
         "",
         "declare function sqlite3_memory_used(): i64;",
         "declare function sqlite3_memory_highwater(reset: i32): i64;",
+        "",
+        "const pass = (idx: Cursor, tab: Cursor, buf: u8[]): i64 => {",
+        "  let got = toI64(0);",
+        "  for (let k = 0; k < 1000; k = k + 7) {",
+        '    idx.keyReset().expect("keyReset");',
+        '    idx.keyI64(toI64(k)).expect("keyI64");',
+        '    if (idx.seek(SEEK_GE).expect("seek")) got = got + idx.rowid();',
+        "  }",
+        '  let more = tab.last().expect("last");',
+        "  while (more) {",
+        '    got = got + toI64(tab.columnInto(2, buf, 0).expect("big"));',
+        '    more = tab.previous().expect("previous");',
+        "  }",
+        "  return got;",
+        "};",
         "",
         "export const main = (): i32 => {",
         '  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");',
@@ -12003,7 +12042,7 @@ int main(void) {
         '  ).expect("fill");',
         '  db.beginRead().expect("beginRead");',
         '  const cur = db.openCursor("t", "id,a,b").expect("openCursor");',
-        "  const buf = new Array<u8>(16);",
+        "  const buf = new Array<u8>(8192);",
         '  let r = cur.first().expect("first");',
         '  cur.columnInto(2, buf, 0).expect("columnInto");',
         "  const used = sqlite3_memory_used();",
@@ -12021,6 +12060,25 @@ int main(void) {
         "  console.log(`${rows} ${sum} ${used} ${peak} ${after}`);",
         '  cur.close().expect("close");',
         '  db.endRead().expect("endRead");',
+        "  db.exec(",
+        '    "CREATE TABLE w (id INTEGER PRIMARY KEY, a INTEGER, big TEXT); CREATE INDEX wa ON w (a);" +',
+        '      "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 500)" +',
+        "      \" INSERT INTO w SELECT x, x * 2, printf('%05000d', x) FROM c\"",
+        '  ).expect("fill w");',
+        '  db.beginRead().expect("beginRead w");',
+        '  const idx = db.openCursor("wa", "a,rowid").expect("open wa");',
+        '  const tab = db.openCursor("w", "id,a,big").expect("open w");',
+        "  const before = sqlite3_memory_used();",
+        "  const once = pass(idx, tab, buf);",
+        "  const used2 = sqlite3_memory_used();",
+        "  sqlite3_memory_highwater(1);",
+        "  const twice = pass(idx, tab, buf) + pass(idx, tab, buf);",
+        "  const peak2 = sqlite3_memory_highwater(0);",
+        "  const after2 = sqlite3_memory_used();",
+        "  console.log(`${once} ${twice} ${before} ${used2} ${peak2} ${after2}`);",
+        '  idx.close().expect("close wa");',
+        '  tab.close().expect("close w");',
+        '  db.endRead().expect("endRead w");',
         '  db.close().expect("close the database");',
         "  return 0;",
         "};",
@@ -12029,7 +12087,9 @@ int main(void) {
     )
     const mem = link(memTs, "cursor-memory", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1" })
     const memRun = mem.status === 0 ? runOut("cursor-memory") : null
-    const [memRows, memSum, memUsed, memPeak, memAfter] = memRun ? memRun.stdout.trim().split(" ") : []
+    const memLines = memRun ? memRun.stdout.trim().split("\n") : []
+    const [memRows, memSum, memUsed, memPeak, memAfter] = (memLines[0] ?? "").split(" ")
+    const [seekOnce, seekTwice, seekBefore, seekUsed, seekPeak, seekAfter] = (memLines[1] ?? "").split(" ")
     check(
       "sqlite-link: a cursor scan of 10,000 rows with column reads keeps SQLite's memory at what it held after the first row",
       memRun !== null &&
@@ -12039,6 +12099,23 @@ int main(void) {
         Number(memUsed) > 0 &&
         memPeak === memUsed &&
         memAfter === memUsed,
+      mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
+    )
+    // Rowids 1..500 sit at a = 2..1000; a seek for k from 0 by 7 finds the
+    // first a >= k, rowid max(1, ceil(k / 2)), and each row's text is 5,000
+    // bytes.
+    let seekWant = 0
+    for (let k = 0; k < 1000; k += 7) seekWant += Math.max(1, Math.ceil(k / 2))
+    seekWant += 500 * 5000
+    check(
+      "sqlite-link: after a first pass grows the overflow buffers once, two more passes of index seeks and a backward walk over overflow rows keep SQLite's memory flat",
+      memRun !== null &&
+        memRun.status === 0 &&
+        seekOnce === String(seekWant) &&
+        seekTwice === String(2 * seekWant) &&
+        Number(seekUsed) > Number(seekBefore) &&
+        seekPeak === seekUsed &&
+        seekAfter === seekUsed,
       mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
     )
 

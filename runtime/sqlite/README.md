@@ -45,6 +45,14 @@ for the units and the files the cache key fingerprints (`sqliteUnits`,
 3. Update the table above, the two file hashes included (`openssl dgst
    -sha3-256 sqlite3.c sqlite3.h`), the version in `THIRD_PARTY_NOTICES.md`, and the
    numbers in `tests/link/sqlite_link*/expected.out`.
-4. Run `node tests/run.js link`, `node tests/run.js sqlite-link`,
+4. Re-check every internal SQLite function the cursor adapter in
+   `nish-sqlite.c` calls, the list in
+   [`docs/sqlite-cursor.md`](../../docs/sqlite-cursor.md#what-the-adapter-calls):
+   these are `SQLITE_PRIVATE`, not SQLite's API, and a release may change one
+   without notice. Diff each one's declaration and body against the old
+   `sqlite3.c`, including what it asserts about the mutex and the cursor's
+   state, and the `KeyInfo` fields the adapter fills by hand against
+   `sqlite3KeyInfoOfIndex`. Update the adapter and that list for any change.
+5. Run `node tests/run.js link`, `node tests/run.js sqlite-link`,
    `WASI_SYSROOT=/usr node tests/run.js wasi` and the third-party-licence
    section.

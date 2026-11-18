@@ -242,8 +242,9 @@ export const main = (): i32 => {
   `beginRead()` closes the open cursors, and `endRead()` commits it.
 - **Some objects cannot be read this way.** Views, virtual tables,
   `WITHOUT ROWID` tables, generated columns, expression indexes, indexes with
-  a collation other than `BINARY`, and databases whose encoding is not UTF-8
-  are refused with `SQLITE_SCHEMA`.
+  a collation other than `BINARY`, columns whose name holds a comma or ends
+  in ` DESC`, and databases whose encoding is not UTF-8 are refused with
+  `SQLITE_SCHEMA`.
 
 How it works, and the rules the adapter keeps, are in
 [Reading SQLite through B-tree cursors](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md).
