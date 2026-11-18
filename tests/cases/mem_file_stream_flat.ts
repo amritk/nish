@@ -3,7 +3,7 @@
 // it is handed, so streaming a file through one 64-byte window 10,000 times
 // leaves `Arena.used()` where it started. Under Node `Arena.used()` is 0
 // throughout, so the case prints the same lines there.
-export function main(): number {
+export const main = (): number => {
   const path = "build/test/mem_file_stream_flat.bin";
   const bytes: u8[] = [];
   for (let i = 0; i < 256; i++) {
@@ -27,4 +27,4 @@ export function main(): number {
   console.log(grown === toI64(0) ? "flat" : `grows: ${grown}`);
   console.log(`closed: ${fileClose(fd)}`);
   return 0;
-}
+};

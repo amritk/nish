@@ -4,7 +4,7 @@
 // the C does. A read after `fileClose` answers -9 (`EBADF`), and so does a
 // second close. A negative descriptor is -9 to each of the three, as the
 // kernel answers it, under Node too, where `fs` throws a range error for one.
-export function main(): number {
+export const main = (): number => {
   const path = "build/test/file_read_at_pos.bin";
   const bytes: u8[] = [9, 8, 7];
   writeFileBytesSync(path, bytes);
@@ -30,4 +30,4 @@ export function main(): number {
   console.log(`size of -1: ${fileSize(bad)}`);
   console.log(`close -1: ${fileClose(bad)}`);
   return 0;
-}
+};

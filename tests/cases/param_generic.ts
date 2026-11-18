@@ -1,16 +1,16 @@
 // A generic function takes a rest of its type parameter, and a default on a
 // parameter whose type is concrete.
-function first<T>(fallback: T, ...xs: T[]): T {
+const first = <T>(fallback: T, ...xs: T[]): T => {
   return xs.length > 0 ? xs[0] : fallback
-}
+};
 
-function pick<T>(xs: T[], at: number = 0): T {
+const pick = <T>(xs: T[], at: number = 0): T => {
   return xs[at]
-}
+};
 
 export const twice = (n: number = 21): number => n * 2
 
-export function main(): void {
+export const main = (): void => {
   console.log(first(7))
   console.log(first(7, 8, 9))
   console.log(first("none"))
@@ -19,4 +19,4 @@ export function main(): void {
   console.log(pick(["p", "q"], 1))
   console.log(twice())
   console.log(twice(4))
-}
+};

@@ -19,16 +19,16 @@ class Holder {
   }
 }
 
-function labels(): readonly string[] {
+const labels = (): readonly string[] => {
   const out: string[] = ["a", "b"];
   return out;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const xs: readonly number[] = [4, 5, 6];
   const h = new Holder(xs);
   console.log(h.total());
   console.log(labels().length);
   console.log(xs[2]);
   return 0;
-}
+};

@@ -6,9 +6,9 @@ const AREA: i32 = WIDTH * HEIGHT;
 const HALF: i32 = AREA / 2;
 const WIDE: boolean = WIDTH > HEIGHT;
 
-export function test(): number {
+export const test = (): number => {
   if (WIDE) {
     return HALF;
   }
   return 0;
-}
+};

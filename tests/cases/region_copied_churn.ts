@@ -68,13 +68,13 @@ const hOf = (room: Room): f32 => room.h
 const bigOf = (room: Room): i64 => room.big
 const bOf = (room: Room): u8 => room.b
 
-function churn(): i32 {
+const churn = (): i32 => {
   const t: string[] = []
   for (let i = 0; i < 4000; i++) {
     t.push(`${i}`)
   }
   return t.join("").length
-}
+};
 
 export const main = (): i32 => {
   const out = new Out()

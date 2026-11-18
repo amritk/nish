@@ -1,4 +1,4 @@
-function total(xs: number[]): number {
+const total = (xs: number[]): number => {
   let sum = 0;
   for (const x of xs) {
     if (x < 0) {
@@ -10,13 +10,13 @@ function total(xs: number[]): number {
     sum += x;
   }
   return sum;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(total([1, -2, 3, 500, 4]));
   for (let word of ["a", "b"]) {
     word = `<${word}>`;
     console.log(word);
   }
   return 0;
-}
+};

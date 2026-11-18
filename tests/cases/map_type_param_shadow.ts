@@ -4,9 +4,9 @@
 // and the IR is what the compiler wrote before `Map` and `Set` existed.
 const id = <Map>(x: Map): Map => x;
 
-function pick<Set, T>(a: Set, b: T): Set {
+const pick = <Set, T>(a: Set, b: T): Set => {
   return a;
-}
+};
 
 class Box<Map> {
   v: Map;

@@ -2,7 +2,7 @@
 // concatenation here is linear, so the compiler must say nothing at all: a
 // warning with no faster form to name is what trains people to ignore the
 // class.
-export function test(): number {
+export const test = (): number => {
   const parts = ["a", "bb", "ccc"];
 
   // The result does not include the target, so each pass allocates one bounded
@@ -35,4 +35,4 @@ export function test(): number {
   }
 
   return line.length + lines.length + total + head.length + seen;
-}
+};

@@ -33,7 +33,7 @@ class Account {
   }
 }
 
-export function main(): number {
+export const main = (): number => {
   const a = new Account(100, 1);
   console.log(a.withdraw(30));
   console.log(a.balance);
@@ -41,4 +41,4 @@ export function main(): number {
   console.log(a.same(a));
   console.log(a.same(new Account(1, 1)));
   return 0;
-}
+};

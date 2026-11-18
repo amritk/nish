@@ -20,7 +20,7 @@ class Mixed {
   }
 }
 
-export function main(): number {
+export const main = (): number => {
   const d = new Defaults();
   console.log(d.n + d.neg);
   console.log(d.flag);
@@ -31,4 +31,4 @@ export function main(): number {
   console.log(m.label);
   console.log(new Mixed(1).label);
   return 0;
-}
+};

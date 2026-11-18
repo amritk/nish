@@ -1,11 +1,11 @@
 // `indexOf` scans with `nish_str_at` (no runtime search function, so
 // `runtime.c` stays inside its budget); `startsWith` / `endsWith` are one
 // `nish_str_at` each.
-function find(s: string, needle: string): number {
+const find = (s: string, needle: string): number => {
   return s.indexOf(needle);
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   const s = "one,two";
   let flags = 0;
   if (s.startsWith("one")) flags += 1;
@@ -13,4 +13,4 @@ export function test(): number {
   if (s.endsWith("one,two,three")) flags += 4;
   if (String.fromCharCode(44) === ",") flags += 8;
   return find(s, ",") * 1000 + find(s, "zzz") + flags;
-}
+};
