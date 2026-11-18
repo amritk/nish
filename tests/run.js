@@ -43220,8 +43220,10 @@ if (!only || "pgo".includes(only)) {
   const pgoDir = path.join(buildDir, "pgo")
   fs.rmSync(pgoDir, { recursive: true, force: true })
   fs.mkdirSync(pgoDir, { recursive: true })
+  // Every spawn here has a timeout, so a hung link or binary fails its check
+  // instead of stalling the shard.
   const nish = (args, env = {}, cwd = root) =>
-    spawnSync(NISH, args, { cwd, encoding: "utf8", env: { ...process.env, ...env } })
+    spawnSync(NISH, args, { cwd, encoding: "utf8", env: { ...process.env, ...env }, timeout: 600000 })
   const oneLine = (r) => r.stderr.split("\n").filter((l) => l.length > 0).length === 1
   const hello = path.join(root, "examples", "hello.ts")
   const stray = path.join(pgoDir, "stray.profraw")
@@ -43235,7 +43237,13 @@ if (!only || "pgo".includes(only)) {
   // Special files: a FIFO with no writer would block a read, /dev/null is a
   // device. Each is refused by its type before anything opens it.
   const fifo = path.join(pgoDir, "fifo.profdata")
-  const madeFifo = spawnSync("mkfifo", [fifo]).status === 0
+  const madeFifo = spawnSync("sh", ["-c", 'mkfifo "$1"', "sh", fifo]).status === 0
+  // A regular file the compiler cannot open: mode 000. Root reads it anyway,
+  // so the row runs only for another user.
+  const unreadable = path.join(pgoDir, "unreadable.profdata")
+  fs.writeFileSync(unreadable, Buffer.from([0xff, 0x6c, 0x70, 0x72, 0x6f, 0x66, 0x69, 0x81, 0, 0, 0, 0]))
+  fs.chmodSync(unreadable, 0o000)
+  const asRoot = process.getuid?.() === 0
   const refused = path.join(pgoDir, "refused")
   const refusals = [
     ["--pgo-generate without --link", ["--pgo-generate"], "--pgo-generate needs --link"],
@@ -43250,6 +43258,7 @@ if (!only || "pgo".includes(only)) {
     ["a directory", ["--link", refused, "--pgo-use", pgoDir], "is a directory, not a profile"],
     ["a raw .profraw", ["--link", refused, "--pgo-use", stray], "merge it first"],
     ["a file that is not a profile", ["--link", refused, "--pgo-use", junk], "is not a profile"],
+    ...(asRoot ? [] : [["an unreadable profile", ["--link", refused, "--pgo-use", unreadable], "cannot be read"]]),
     [
       "--profile debug",
       ["--link", refused, "--pgo-generate", "--profile", "debug"],
@@ -43268,6 +43277,9 @@ if (!only || "pgo".includes(only)) {
   ]
   if (!madeFifo) {
     skip("pgo: mkfifo failed, so the FIFO refusal is not checked")
+  }
+  if (asRoot) {
+    skip("pgo: running as root, which reads a mode-000 file, so the unreadable-profile refusal is not checked")
   }
   for (const [what, flags, says] of refusals) {
     // A timeout, so a refusal that reads a FIFO fails here rather than hanging.
@@ -43395,10 +43407,11 @@ if (!only || "pgo".includes(only)) {
     )
     const runs = path.join(pgoDir, "runs")
     fs.mkdirSync(runs, { recursive: true })
-    const ranPlain = spawnSync(plainSqlite, [], { encoding: "utf8" })
+    const ranPlain = spawnSync(plainSqlite, [], { encoding: "utf8", timeout: 120000 })
     const ranInstr = spawnSync(instr, [], {
       cwd: runs,
       encoding: "utf8",
+      timeout: 120000,
       env: { ...process.env, LLVM_PROFILE_FILE: path.join(runs, "app-%p.profraw") },
     })
     const raws = fs.readdirSync(runs).filter((f) => f.endsWith(".profraw"))
@@ -43406,10 +43419,11 @@ if (!only || "pgo".includes(only)) {
     const merged = spawnSync(
       path.join(tools, "llvm-profdata"),
       ["merge", "-o", profile, ...raws.map((f) => path.join(runs, f))],
-      { encoding: "utf8" }
+      { encoding: "utf8", timeout: 120000 }
     )
     const shown = spawnSync(path.join(tools, "llvm-profdata"), ["show", "--all-functions", profile], {
       encoding: "utf8",
+      timeout: 120000,
     })
     check(
       "pgo: the instrumented binary prints what the plain one does and its profile covers SQLite and the runtime",
@@ -43435,7 +43449,7 @@ if (!only || "pgo".includes(only)) {
       useDir
     )
     const usedLines = ccLines()
-    const ranPgo = spawnSync(optimised, [], { encoding: "utf8" })
+    const ranPgo = spawnSync(optimised, [], { encoding: "utf8", timeout: 120000 })
     check(
       "pgo: --pgo-use with a relative profile puts its real path on every unit and the link, and the binary prints the same",
       used.status === 0 &&
