@@ -125,11 +125,13 @@
 # passes it through.
 #
 # SQLite: an input .ll that declares an `sqlite3_*` or `nishsqlite_*` function
-# also compiles and links every runtime/sqlite/*.c, the vendored amalgamation
-# (runtime/sqlite/README.md). Any other program compiles none of it. sqlite3.c
-# is compiled to native code at the profile's level, even where the profile
-# compiles to LTO bitcode. The options are most of SQLite's recommended set
-# (see the defaults below), with THREADSAFE=0 (=2 under --threads).
+# also compiles and links runtime/sqlite/nish-sqlite.c, the adapter, which
+# includes sqlite3.c, the vendored amalgamation (runtime/sqlite/README.md), so
+# it can call SQLite's internal B-tree functions (docs/sqlite-cursor.md): every
+# *.c there but sqlite3.c is a unit. Any other program compiles none of it.
+# The unit is compiled to native code at the profile's level, even where the
+# profile compiles to LTO bitcode. The options are most of SQLite's recommended
+# set (see the defaults below), with THREADSAFE=0 (=2 under --threads).
 # NISH_SQLITE_CFLAGS is appended to them: its first line, split on whitespace
 # with no quoting, and a relative -I in it names a directory below
 # runtime/sqlite/, where each unit is compiled. A -D or -U in it for one of
@@ -150,7 +152,7 @@
 #                            runtime.c input, after compiling every other input
 #                            with its own $CC -c, all at once. The link line is
 #                            the one the profile always uses.
-#   --sqlite-objects <dir>   compile runtime/sqlite/*.c alone, into
+#   --sqlite-objects <dir>   compile runtime/sqlite/'s units alone, into
 #                            <dir>/<unit>.o, as a link of a program that calls
 #                            SQLite would, and link nothing. Takes no inputs and
 #                            no -o, and prints nothing on success.
@@ -337,8 +339,8 @@ done
 
 # SQLite (runtime/sqlite/) is an optional unit, and the IR selects it. A module
 # that declares a function of SQLite's C API (`sqlite3_*`) or of the adapter
-# beside it (`nishsqlite_*`) gets every runtime/sqlite/*.c compiled and
-# linked. Any other program compiles none of it, so its link line and binary
+# beside it (`nishsqlite_*`) gets runtime/sqlite/'s units (`sqlite_units`)
+# compiled and linked. Any other program compiles none of it, so its link line and binary
 # stay as they were. The test reads `declare` lines, and only before the first
 # `"` on one, rather than any `@sqlite3_` in the file, because a string
 # constant or a quoted name may hold one. It is one rule with `callsSqlite` in
@@ -674,25 +676,34 @@ for d in -DSQLITE_DQS=0 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHR
 done
 sqlite_defs+=(${sqlite_extra[@]+"${sqlite_extra[@]}"})
 
-# Compiles every runtime/sqlite/*.c with the flags given, all at once, into
-# $1/<unit>.o. Each unit is compiled from inside runtime/sqlite/ by its bare
-# name, as the runtime is, so -g's DWARF names no directory the link was
-# started in. sqlite3.c, the 9.6 MB amalgamation, is compiled to native code
-# even where the profile compiles to LTO bitcode. As bitcode, every link of a
-# program that uses it would generate its code again: measured on a program
-# that opens a database and runs a query, that is 10.6 s a link at -O3,
-# against 0.04 s for the native object. The adapter beside it stays LTO, and
-# it is what inlines into the program. So `-flto` comes off for that one unit
-# alone.
+# The units of runtime/sqlite/: every *.c but sqlite3.c, the amalgamation,
+# which nish-sqlite.c compiles by including it. SQLite's B-tree and record
+# functions are static there, and the cursor adapter calls them, so the two
+# must be one translation unit (docs/sqlite-cursor.md, "The build decision").
+sqlite_unit_names() {
+  local unit
+  for unit in "$sqlite_dir"/*.c; do
+    unit=${unit##*/}
+    [ "$unit" = sqlite3.c ] || printf '%s\n' "$unit"
+  done
+}
+# Compiles every unit of runtime/sqlite/ with the flags given, all at once,
+# into $1/<unit>.o. Each unit is compiled from inside runtime/sqlite/ by its
+# bare name, as the runtime is, so -g's DWARF names no directory the link was
+# started in. Each is compiled to native code even where the profile compiles
+# to LTO bitcode, because nish-sqlite.c holds the 9.6 MB amalgamation. As
+# bitcode, every link of a program that uses it would generate its code
+# again: measured on a program that opens a database and runs a query, that
+# is 10.6 s a link at -O3, against 0.04 s for the native object. So `-flto`
+# comes off.
 sqlite_units() {
   local to=$1 unit flag
   local -a flags
   shift
-  for unit in "$sqlite_dir"/*.c; do
-    unit=${unit##*/}
+  for unit in $(sqlite_unit_names); do
     flags=()
     for flag in "$@"; do
-      case "$unit:$flag" in sqlite3.c:-flto) ;; *) flags+=("$flag") ;; esac
+      case "$flag" in -flto) ;; *) flags+=("$flag") ;; esac
     done
     (cd -- "$sqlite_dir" && exec "$CC" "${flags[@]}" "${sqlite_defs[@]}" -I. -c "$unit" -o "$to/${unit%.c}.o") &
     pids+=("$!")
@@ -712,8 +723,7 @@ sqlite_objects() {
     mkdir -p -- "$from"
     sqlite_units "$from" "$@"
   fi
-  for unit in "$sqlite_dir"/*.c; do
-    unit=${unit##*/}
+  for unit in $(sqlite_unit_names); do
     [ -f "$from/${unit%.c}.o" ] || { echo "error: --sqlite-from: $from/${unit%.c}.o is missing" >&2; exit 2; }
     inputs+=("$from/${unit%.c}.o")
   done

@@ -23,8 +23,12 @@
  * connection per thread. A thread's tables are not freed when it exits.
  *
  * Nothing here allocates except a table growing (`slot_take`) and SQLite
- * itself. Each adapter is a table load and the SQLite call, compiled to LTO
- * bitcode (scripts/build.sh, `sqlite_units`), so it inlines into the program.
+ * itself. Each adapter is a table load and the SQLite call. This file
+ * includes the amalgamation, sqlite3.c, and is the one unit of
+ * runtime/sqlite/ (scripts/build.sh, `sqlite_units`): the cursor adapter
+ * below calls SQLite's B-tree and record functions, which are static there
+ * (docs/sqlite-cursor.md). The unit is native code, so the adapters do not
+ * inline into the program, but SQLite's own calls inline into them.
  *
  * Results follow SQLite: an `int32_t` result code, extended, because every
  * connection is opened with SQLITE_OPEN_EXRESCODE. Two adapters answer a
@@ -33,12 +37,13 @@
  * the program lends its bytes for the length of one call
  * (docs/LANGUAGE.md, "Calling C"). */
 
+#include "sqlite3.c"
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "../nish.h"
-#include "sqlite3.h"
 
 typedef struct nishsqlite_slot {
   void *p;        /* the sqlite3 * or sqlite3_stmt *, NULL while free */

@@ -118,14 +118,16 @@ const sqliteFiles = (root: string): string[] => {
 }
 
 /**
- * The translation units of `runtime/sqlite/` (`sqliteFiles`, the `.c` ones),
- * which `scripts/build.sh` compiles and links only for a program whose IR
- * calls SQLite (`callsSqlite`): the objects a SQLite entry holds.
+ * The translation units of `runtime/sqlite/` (`sqliteFiles`, the `.c` ones but
+ * `sqlite3.c`, which `nish-sqlite.c` includes), which `scripts/build.sh`
+ * compiles and links only for a program whose IR calls SQLite (`callsSqlite`,
+ * the script's `sqlite_unit_names`): the objects a SQLite entry holds. The
+ * amalgamation is still one of `sqliteFiles`, so it still keys the entry.
  */
 export const sqliteUnits = (root: string): string[] => {
   const units: string[] = []
   for (const name of sqliteFiles(root)) {
-    if (name.endsWith(".c")) {
+    if (name.endsWith(".c") && name !== "sqlite3.c") {
       units.push(name)
     }
   }
