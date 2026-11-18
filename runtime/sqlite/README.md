@@ -20,8 +20,13 @@ them.
 
 ## How it is linked
 
-`scripts/build.sh` compiles every `*.c` here for a link whose IR declares an
-`sqlite3_*` or `nishsqlite_*` function, and for no other link. The options are
+`nish-sqlite.c` starts with `#include "sqlite3.c"`, so SQLite and the
+`nish/sqlite` adapter are one unit: the cursors call SQLite's internal
+functions, which are `static` in the amalgamation
+([docs/sqlite-cursor.md](../../docs/sqlite-cursor.md#the-build-decision)).
+`scripts/build.sh` compiles every `*.c` here except `sqlite3.c` for a link
+whose IR declares an `sqlite3_*` or `nishsqlite_*` function, and for no other
+link. The options are
 in `build.sh`, under "SQLite's compile-time options". `NISH_SQLITE_CFLAGS` adds
 to them (`docs/guide/using-nish/cli.md`). `nish --link` and `nish run` compile
 these units once per recipe into an entry of the runtime cache of their own

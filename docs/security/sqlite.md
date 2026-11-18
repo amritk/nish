@@ -21,8 +21,8 @@ fixed, one is open ([Findings](#findings)).
 | --- | --- |
 | `runtime/sqlite/sqlite3.c` | The amalgamation, upstream 3.54.1, unchanged |
 | `runtime/sqlite/sqlite3.h` | Its public header, upstream 3.54.1, unchanged |
-| `runtime/sqlite/nish-sqlite.c` | The `nishsqlite_*` adapters `nish/sqlite` calls: handles, and the bounds of a buffer SQLite reads or writes |
-| `std/sqlite.ts` | `nish/sqlite`, the module over the adapters |
+| `runtime/sqlite/nish-sqlite.c` | The `nishsqlite_*` adapters `nish/sqlite` calls: handles, and the bounds of a buffer SQLite reads or writes; the B-tree cursors (`nishsqlite_cursor_*`, `nishsqlite_key_*`, `nishsqlite_begin_read`, `nishsqlite_end_read`) and the authorizer that invalidates them; the `#include "sqlite3.c"` that makes it SQLite's one unit |
+| `std/sqlite.ts` | `nish/sqlite`, the module over the adapters, `Cursor` and `Database.beginRead`, `endRead`, `openCursor` among them |
 
 Out of scope: the program's own SQL.
 
@@ -75,6 +75,94 @@ answering the length it needs and writing nothing. Text and blobs are bound
 `SQLITE_TRANSIENT`, so SQLite copies them and no Nish array is read after the
 call returns. Tests: `tests/link/std_sqlite` (stale and forged handles, windows
 out of range, a buffer too small).
+
+### Cursors
+
+A `Cursor` reads one table or index of `main` through SQLite's own B-tree
+cursor and record decoder, called from the same unit
+([docs/sqlite-cursor.md](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md)). The adapter has no reader of
+its own for the file format or the record format, and writes no field of
+`BtCursor`, `Btree`, `BtShared`, `Mem` or `sqlite3`.
+
+A cursor is an `i32` handle in its own slot table, with the generation scheme
+above, and the slot records the connection that owns it. A closed, forged or
+invalidated handle is `SQLITE_MISUSE`. `nishsqlite_close` frees a
+connection's cursors before its statements and its `sqlite3`, so no handle
+outlives the B-tree it reads.
+
+A raw B-tree cursor is outside SQLite's statement bookkeeping, so the
+transaction could end, or pages move, under it. The adapter frees every
+cursor of a connection before that can happen:
+
+- at `endRead`, before its `COMMIT`;
+- in `nishsqlite_exec`, before it runs anything;
+- in `nishsqlite_step`, before it steps a statement that is not a plain read.
+  The authorizer `nishsqlite_open` installs classifies each statement at
+  prepare: a plain read authorized `SQLITE_SELECT` and nothing but
+  `SQLITE_SELECT`, `SQLITE_READ`, `SQLITE_FUNCTION` and `SQLITE_RECURSIVE`;
+- in the authorizer itself, when an action off that list is authorized
+  outside a prepare it classifies (a re-prepare inside `sqlite3_step`);
+- in every cursor call (`cursor_of`), when `sqlite3_get_autocommit` is set or
+  the `main` B-tree's transaction state is `SQLITE_TXN_NONE`: a rollback
+  SQLite made by itself.
+
+The authorizer never refuses an action; it only watches. A statement it
+cannot classify as a plain read is treated as one that invalidates.
+
+`openCursor` takes the root page from `sqlite_schema` on the same
+connection, never from the caller. It refuses with `SQLITE_SCHEMA` an object
+it cannot read as a plain rowid B-tree of known shape: a view, a trigger, a
+virtual table and its shadow tables, a `WITHOUT ROWID` table or an index on
+one, a generated column, an expression or non-`BINARY` index column, a
+declared column list that differs from the schema's, and a database whose
+encoding is not UTF-8.
+
+Column reads are bounded twice. A column number outside the declared list is
+`SQLITE_RANGE`, and one past the fields the row's record holds is
+`SQLITE_SCHEMA`. `columnInto` and `keyTextBytes` bound the caller's buffer as
+`columnInto` and `bindTextBytes` do: an `at` past the buffer, or a window
+outside it, is `SQLITE_MISUSE`, and a value is copied only when it fits.
+
+A record's length is read with `sqlite3BtreePayloadSize`. Over
+`SQLITE_MAX_LENGTH` it is `SQLITE_CORRUPT`, which keeps the decoder's `u32`
+offsets from wrapping. `sqlite3VdbeRecordUnpack` checks each field's start
+against the record's length and sets the field that runs past the end to
+NULL, so no value a read answers reaches past the record. On a corrupt
+record it can still read a header varint and an 8-byte value past the end.
+
+Where the decoded bytes lie:
+
+- A record wholly on its page is decoded where it lies. That is the read
+  SQLite's own VDBE and `sqlite3BtreeIndexMoveto` make, into the overrun area
+  the page cache keeps after each page buffer.
+- A record that spills onto overflow pages is copied whole with
+  `sqlite3BtreePayload` into the cursor's buffer. 18 zeroed bytes are kept
+  after it: the padding `sqlite3BtreeIndexMoveto` gives the copy it decodes.
+
+A seek key is built only with `sqlite3VdbeMemSetInt64` and
+`sqlite3VdbeMemSetStr` (text copied, `SQLITE_TRANSIENT`), and no more key
+parts than the index has key columns: one more is `SQLITE_RANGE`.
+
+Tests:
+
+- `tests/link/std_sqlite_cursor`: the moves, the seeks and the column reads,
+  checked against SQL, with 142 records spilling onto overflow pages; a
+  closed cursor, a column out of range, an `at` past the buffer, a
+  `keyTextBytes` window outside it, one key part too many, and a buffer too
+  small.
+- `tests/link/std_sqlite_cursor_stale`: a cursor open across each route
+  above answers `SQLITE_MISUSE`. It runs again with `-DSQLITE_DEBUG`, so
+  SQLite's assertions check the same sequences.
+- `tests/link/std_sqlite_cursor_schema`: each refused object. It runs again
+  with `-DSQLITE_ENABLE_RTREE`, for an rtree table and its shadow table.
+- `tests/link/std_sqlite_cursor_feed`: a feed read through four cursors,
+  equal byte for byte to SQL's.
+
+The route that frees a cursor because a row moved under it
+(`sqlite3BtreeCursorHasMoved`, `SQLITE_ABORT`) has no test, and neither has
+`SQLITE_CORRUPT` for an oversized record or the `SQLITE_NOMEM` paths. Each
+needs a corrupt file or a failing allocator, which the suite has no harness
+for.
 
 ## Findings
 
@@ -158,6 +246,8 @@ into `runtime/sqlite/`, so it does not yet require these files to be named
 here. Widening its surface is a `scripts/` change for a later pull request.
 
 ## Tests
+
+Besides the cursor tests under [Cursors](#cursors):
 
 `tests/link/sqlite_busy_backoff` pins the lock-wait backoff above
 ("link/sqlite_busy_backoff: exits with 0 and stdout matches expected.out").

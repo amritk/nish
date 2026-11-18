@@ -182,6 +182,68 @@ export const main = (): i32 => {
 };
 ```
 
+## Reading through a cursor
+
+For a hot read, a `Cursor` walks one table or index directly, through
+SQLite's own B-tree, without preparing or stepping a statement. A cursor
+lives inside a read transaction: `beginRead()` starts one and `endRead()`
+ends it, closing every cursor still open.
+
+`openCursor(name, columns)` names the table or index and the columns you
+read, comma-separated, in the order the schema has them. For a table, that is
+every column. For an index, it is the key columns, each with `DESC` where the
+index has it, and then `rowid`. Column `n` is the `n`th name. If the list
+does not match the schema, the open fails with `SQLITE_SCHEMA`, so a
+changed schema cannot be misread.
+
+```ts nish:ok
+import { OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";
+
+export const main = (): i32 => {
+  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
+  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT); CREATE INDEX t_name ON t (name)").expect("create");
+  db.exec("INSERT INTO t (name) VALUES ('ada'), ('bo'), ('cy')").expect("insert");
+  db.beginRead().expect("begin");
+  const ix = db.openCursor("t_name", "name,rowid").expect("cursor");
+  ix.keyReset().expect("reset");
+  ix.keyText("b").expect("key");
+  let r = ix.seek(SEEK_GE);
+  while (r.isOk() && r.value) {
+    console.log(`${ix.rowid()}`);
+    r = ix.next();
+  }
+  db.endRead().expect("end");
+  db.close().expect("close");
+  return 0;
+};
+```
+
+- **Moves answer whether there is a row.** `first`, `last`, `next`,
+  `previous`, `seekRowid` (a table) and `seek` (an index) answer `Ok(true)` on
+  a row and `Ok(false)` when there is none.
+- **A seek compares a key prefix.** Build it with `keyReset` and then
+  `keyI64`, `keyText` or `keyTextBytes`, one per key column, in order.
+  `seek(SEEK_GE)`, `SEEK_GT`, `SEEK_LE` or `SEEK_LT` then lands on the first
+  entry at or past it, or the last at or before it.
+- **Reads take the stored value.** `columnI64` reads an integer.
+  `columnInto` copies text or blob bytes into a buffer, the way
+  `Statement.columnInto` does; for a number it answers
+  `Err(SQLITE_MISMATCH)`. `columnType` answers what the row stores. A row
+  written before `ALTER TABLE ADD COLUMN` added the column answers
+  `Err(SQLITE_SCHEMA)` there, not the column's default.
+- **Anything that could change what a cursor reads closes it.** That includes
+  `exec`, `commit`, `rollback`, stepping a statement that writes, and
+  `endRead`. A closed cursor answers `Err(SQLITE_MISUSE)`, and `rowid` and
+  `columnI64` answer 0. Plain `SELECT` statements can run beside open
+  cursors.
+- **Some objects cannot be read this way.** Views, virtual tables,
+  `WITHOUT ROWID` tables, generated columns, expression indexes, indexes with
+  a collation other than `BINARY`, and databases whose encoding is not UTF-8
+  are refused with `SQLITE_SCHEMA`.
+
+How it works, and the rules the adapter keeps, are in
+[Reading SQLite through B-tree cursors](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md).
+
 ## Errors
 
 Every call that can fail answers a `Result`. `openDatabase` and `prepare`

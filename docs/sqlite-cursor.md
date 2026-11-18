@@ -21,8 +21,8 @@ answers a bare scalar or a `Result` whose payloads are `i32`s, which a Nish
 function returns in registers, so a row loop allocates nothing.
 
 ```ts
-db.beginRead(): Result<i32, i32>      // BEGIN, then start the main database's read transaction
-db.endRead(): Result<i32, i32>        // close every cursor on the connection, then COMMIT
+db.beginRead(): Result<void, i32>     // BEGIN, then start the main database's read transaction
+db.endRead(): Result<void, i32>       // close every cursor on the connection, then COMMIT
 db.openCursor(name: string, columns: string): Result<Cursor, SqliteError>
 //   db.openCursor("posts", "id,user_id,body,created_at")
 //   db.openCursor("posts_created_at_id_idx", "created_at DESC,id DESC,rowid")
@@ -33,16 +33,16 @@ class Cursor {
   next(): Result<boolean, i32>        // Ok(false) past the end
   previous(): Result<boolean, i32>    // Ok(false) before the start
   seekRowid(rowid: i64): Result<boolean, i32>   // table cursor: Ok(true) when the row exists
-  keyReset(): void                    // index cursor: start a new key prefix
-  keyI64(v: i64): Result<i32, i32>    // append an integer to the prefix
-  keyText(s: string): Result<i32, i32>
-  keyTextBytes(buf: readonly u8[], off: i32, len: i32): Result<i32, i32>
+  keyReset(): Result<void, i32>       // index cursor: start a new key prefix
+  keyI64(v: i64): Result<void, i32>   // append an integer to the prefix
+  keyText(s: string): Result<void, i32>
+  keyTextBytes(buf: readonly u8[], off: i32, len: i32): Result<void, i32>
   seek(op: i32): Result<boolean, i32> // SEEK_GE | SEEK_GT | SEEK_LE | SEEK_LT on the prefix
   rowid(): i64
   columnType(n: i32): Result<i32, i32>
   columnI64(n: i32): i64
   columnInto(n: i32, buf: u8[], at: i32): Result<i32, i32>
-  close(): Result<i32, i32>
+  close(): Result<void, i32>
 }
 ```
 
