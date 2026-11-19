@@ -435,7 +435,7 @@ const diagnosticRules = (): string[] => [
   "NL2389",
   "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",
   "NL2682",
-  "`: an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one",
+  ": an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one",
   "NL2805",
   "` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array",
   "NL2762",
