@@ -41,7 +41,13 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { cArrayField, isAssignmentOperator, isOptionalChain, isUncheckedAccess, unwrapParens } from "./emit-util"
+import {
+  cArrayField,
+  isAssignmentOperator,
+  isOptionalChain,
+  isUncheckedAccess,
+  unwrapParens,
+} from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
@@ -835,7 +841,10 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
   if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === NodeKind.Index && cArrayField(emitter.program, emitter.table, node.children[0]) !== null) {
+  if (
+    node.kind === NodeKind.Index &&
+    cArrayField(emitter.program, emitter.table, node.children[0]) !== null
+  ) {
     // A fixed-length array field has no header to hoist: its length is the
     // constant `N` and its elements sit inside the object.
   } else if (node.kind === NodeKind.Index) {

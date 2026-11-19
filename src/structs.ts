@@ -1075,11 +1075,7 @@ const cArrayLength = (ctx: CheckContext, what: string, keyNode: Node): i32 => {
   if (key === T_ERROR) {
     return -1
   }
-  if (
-    ctx.table.isRanged(key) &&
-    ctx.table.rangeLo(key) === 0 &&
-    ctx.table.rangeHi(key) < C_ARRAY_MAX
-  ) {
+  if (ctx.table.isRanged(key) && ctx.table.rangeLo(key) === 0 && ctx.table.rangeHi(key) < C_ARRAY_MAX) {
     return ctx.table.rangeHi(key) + 1
   }
   ctx.error(
