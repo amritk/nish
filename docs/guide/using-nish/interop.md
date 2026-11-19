@@ -1236,9 +1236,10 @@ export const main = (): i32 => {
 
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
-`declare function` cannot return one (unless it has no fields, below), and it
-cannot be an array element or built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
-for `null`, under the same rule as a `CPtr | null`. The rules are in
+`declare function` cannot return one (unless it has no fields, below), and
+it cannot be an array element or built from an object literal. A parameter
+typed `Rlimit | null` passes `NULL` for `null`, under the same rule as a
+`CPtr | null`. The rules are in
 [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A C function that answers a pointer to a struct it owns, such as `localeconv`
@@ -1318,6 +1319,11 @@ export const main = (): i32 => {
   return fclose(new FILE());
 };
 ```
+
+This is new in WP66 S3. Before it, `declare class FILE {}` was an empty
+struct your program built with `new FILE()` and lent to C. A program that
+did that now gets the error above: declare the C function that makes the
+value, or give the class the fields C lays out.
 
 The rules are in
 [An opaque `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type).
