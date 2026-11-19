@@ -38,6 +38,7 @@ import ImportBinding from "./program" -> struct ImportBinding
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
 import checkLiteralInitializer from "./structs" -> function @checkLiteralInitializer
 import layoutClass from "./structs" -> function @layoutClass
+import rejectOpaque from "./structs" -> function @rejectOpaque
 import isForeignBuffer from "./types" -> function @isForeignBuffer
 import isHostWindow from "./types" -> function @isHostWindow
 import isForeignType from "./types" -> function @isForeignType
@@ -58,8 +59,8 @@ function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: owner
-  calls: CheckContext.error collectOptional collectParamForm deferExportedLayout followsDefaultMessage functionParameterFormMessage functionTypeHereMessage isCompatOptional isFunctionParameter isThreadsSource nameLiftedFeature nish_array_grow nish_panic_index nish_str_concat nish_str_eq refuseMixedForms rejectForeignPointer rejectStoredMask resolveType
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0 rejectStoredMask#0 deferExportedLayout#0 isCompatOptional#0 collectOptional#0 collectParamForm#0 nameLiftedFeature#0 refuseMixedForms#0
+  calls: CheckContext.error collectOptional collectParamForm deferExportedLayout followsDefaultMessage functionParameterFormMessage functionTypeHereMessage isCompatOptional isFunctionParameter isThreadsSource nameLiftedFeature nish_array_grow nish_panic_index nish_str_concat nish_str_eq refuseMixedForms rejectForeignPointer rejectOpaque rejectStoredMask resolveType
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 rejectForeignPointer#0 rejectOpaque#0 rejectStoredMask#0 deferExportedLayout#0 isCompatOptional#0 collectOptional#0 collectParamForm#0 nameLiftedFeature#0 refuseMixedForms#0
   pointer sig: size=208 writesThrough=true captured=true passedTo=collectOptional#1 collectParamForm#1 refuseMixedForms#1
   pointer list: size=40 writesThrough=false captured=false passedTo=collectParamForm#4 refuseMixedForms#2
   stackSites=0 stackLocals=0
@@ -82,16 +83,17 @@ function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, owner: i
   local +43:16 seen: string (const)
   callee +49:7 CheckContext.error -> @CheckContext.error
   callee +53:7 rejectForeignPointer -> @rejectForeignPointer
-  local +57:13 where: string (const)
-  callee +58:7 rejectStoredMask -> @rejectStoredMask
-  local +61:13 where: string (const)
-  callee +63:7 deferExportedLayout -> @deferExportedLayout
-  callee +65:9 isCompatOptional -> @isCompatOptional
-  callee +66:7 collectOptional -> @collectOptional
-  local +72:13 before: i32 (const)
-  callee +73:7 collectParamForm -> @collectParamForm
-  callee +74:7 nameLiftedFeature -> @nameLiftedFeature
-  callee +77:3 refuseMixedForms -> @refuseMixedForms
+  callee +54:7 rejectOpaque -> @rejectOpaque
+  local +58:13 where: string (const)
+  callee +59:7 rejectStoredMask -> @rejectStoredMask
+  local +62:13 where: string (const)
+  callee +64:7 deferExportedLayout -> @deferExportedLayout
+  callee +66:9 isCompatOptional -> @isCompatOptional
+  callee +67:7 collectOptional -> @collectOptional
+  local +73:13 before: i32 (const)
+  callee +74:7 collectParamForm -> @collectParamForm
+  callee +75:7 nameLiftedFeature -> @nameLiftedFeature
+  callee +78:3 refuseMixedForms -> @refuseMixedForms
 function collectParamForm(ctx: CheckContext, sig: FunctionSig, param: Node, type: i32, list: Node): void -> @collectParamForm
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -294,8 +296,8 @@ function parameterFormHereMessage(rest: boolean): string -> @parameterFormHereMe
 function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig -> @collectFunctionSignature [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=208
   sharedWrite: via CheckContext.error
-  calls: CheckContext.error FunctionSig.constructor FunctionSig.foreign FunctionSig.isAsync annotationSpelling checkForeignSignature checkHostSignature collectParams deferExportedLayout isExported nish_alloc_struct nish_panic_index nish_str_at nish_str_concat promiseArgument rejectForeignPointer rejectStoredMask resolveType
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 collectParams#0 CheckContext.error#0 resolveType#1 annotationSpelling#0 resolveType#1 annotationSpelling#0 checkHostSignature#0 CheckContext.error#0 checkForeignSignature#0 rejectForeignPointer#0 rejectStoredMask#0 deferExportedLayout#0
+  calls: CheckContext.error FunctionSig.constructor FunctionSig.foreign FunctionSig.isAsync annotationSpelling checkForeignSignature checkHostSignature collectParams deferExportedLayout isExported nish_alloc_struct nish_panic_index nish_str_at nish_str_concat promiseArgument rejectForeignPointer rejectOpaque rejectStoredMask resolveType
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 collectParams#0 CheckContext.error#0 resolveType#1 annotationSpelling#0 resolveType#1 annotationSpelling#0 checkHostSignature#0 CheckContext.error#0 checkForeignSignature#0 rejectForeignPointer#0 rejectOpaque#0 rejectStoredMask#0 deferExportedLayout#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=FunctionSig.constructor#3 isExported#0 checkHostSignature#2 checkForeignSignature#2
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -319,8 +321,9 @@ function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig ->
   callee +34:5 CheckContext.error -> @CheckContext.error
   callee +39:5 checkForeignSignature -> @checkForeignSignature
   callee +47:5 rejectForeignPointer -> @rejectForeignPointer
-  callee +54:7 rejectStoredMask -> @rejectStoredMask
-  callee +55:7 deferExportedLayout -> @deferExportedLayout
+  callee +53:5 rejectOpaque -> @rejectOpaque
+  callee +55:7 rejectStoredMask -> @rejectStoredMask
+  callee +56:7 deferExportedLayout -> @deferExportedLayout
 function checkHostSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void -> @checkHostSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseHostParameter
@@ -355,7 +358,7 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: name
-  calls: CheckContext.error FunctionSig.body TypeTable.isRanged TypeTable.kindOf TypeTable.stripNull TypeTable.typeName isForeignBuffer isForeignType layoutClass nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange
+  calls: CheckContext.error FunctionSig.body TypeTable.isOpaque TypeTable.isRanged TypeTable.kindOf TypeTable.stripNull TypeTable.typeName isForeignBuffer isForeignType layoutClass nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq refuseForeignRange
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 refuseForeignRange#0 CheckContext.error#0
   pointer sig: size=208 writesThrough=false captured=false passedTo=FunctionSig.body#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 refuseForeignRange#1 CheckContext.error#1 CheckContext.error#1
@@ -381,18 +384,20 @@ function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, 
   callee +71:82 TypeTable.typeName -> @TypeTable.typeName
   callee +77:5 CheckContext.error -> @CheckContext.error
   callee +82:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +89:7 layoutClass -> @layoutClass
-  callee +89:43 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +92:5 CheckContext.error -> @CheckContext.error
-  callee +94:69 TypeTable.typeName -> @TypeTable.typeName
-  callee +94:162 TypeTable.typeName -> @TypeTable.typeName
-  callee +94:181 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +96:14 TypeTable.isRanged -> @TypeTable.isRanged
-  callee +97:5 refuseForeignRange -> @refuseForeignRange
-  callee +98:15 isForeignType -> @isForeignType
-  local +99:11 spelled: string (const)
-  callee +99:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +100:5 CheckContext.error -> @CheckContext.error
+  callee +89:7 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +89:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +94:7 layoutClass -> @layoutClass
+  callee +94:43 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +97:5 CheckContext.error -> @CheckContext.error
+  callee +99:69 TypeTable.typeName -> @TypeTable.typeName
+  callee +99:162 TypeTable.typeName -> @TypeTable.typeName
+  callee +99:181 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +101:14 TypeTable.isRanged -> @TypeTable.isRanged
+  callee +102:5 refuseForeignRange -> @refuseForeignRange
+  callee +103:15 isForeignType -> @isForeignType
+  local +104:11 spelled: string (const)
+  callee +104:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +105:5 CheckContext.error -> @CheckContext.error
 function refuseForeignRange(ctx: CheckContext, at: Node, name: string, what: string, type: i32): void -> @refuseForeignRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

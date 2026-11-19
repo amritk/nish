@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 796 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 800 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15519,4 +15519,36 @@ The message of an error contains:
 
 ```text
 …which has no `null` to stand for an omitted argument
+```
+
+## NL2805
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one
+```
+
+## NL2806
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` has no layout to build, so only a `declare function` that returns one can make it
+```
+
+## NL2807
+
+The message of an error contains:
+
+```text
+`: C keeps its fields, and only a `declare function` can read or change them
+```
+
+## NL2808
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` has no fields, so the `CPtr` is the value; declare the C function to return the class itself
 ```

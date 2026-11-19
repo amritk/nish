@@ -7403,7 +7403,8 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_nested_nish_arg`), and replacing it is
   `` a `declare class` embedded in its object is written field by field ``
   (NL2745, `reject_ffi_struct_nested_assign`).
-- **It is not a return type or an array element.** C returning a struct by
+- **It is not a return type or an array element**, unless it is
+  [opaque](#an-opaque-declare-class-a-c-pointer-type). C returning a struct by
   value, or a pointer into memory it owns, leaves the copy with no owner on
   this side: `` a C struct is only lent to C by pointer: take a `Point`
   parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); a struct
@@ -7420,6 +7421,66 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_spread`).
 - **`--emit-ts` refuses a module that declares one**, with the same message as
   for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
+
+#### An opaque `declare class`: a C pointer type
+
+**A `declare class` with no fields, no members and no `extends` or
+`implements` is opaque: it names a C type the program only ever holds a pointer
+to, such as `sqlite3 *` or `FILE *`. A `declare function` may take it and may
+return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
+what it adds is a name, so one C pointer type is never passed where another is
+wanted** (`tests/cases/ffi_opaque_handle`,
+[cookbook](IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
+`docs/roadmap/wp66-c-headers.md` S3):
+
+```ts
+declare class Db {}
+declare class Stmt {}
+declare function db_open(flags: i32): Db | null
+declare function stmt_prepare(db: Db, n: i32): Stmt
+declare function stmt_close(stmt: Stmt): void
+
+const db = db_open(1)
+if (db !== null) {
+  const stmt = stmt_prepare(db, 3)
+  stmt_close(stmt)
+}
+```
+
+```llvm
+declare i8* @db_open(i32)
+declare i8* @stmt_prepare(i8*, i32)
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %ffi.null, label %ffi.copy
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+```
+
+- **It is placed where a `CPtr` is**: in a `declare function` signature and on
+  a local bound to one, and nowhere else. A field, a parameter or the return
+  type of a function this program defines is `` `Db` cannot be a field: an
+  opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in
+  a `declare function` signature or on a local bound to one `` (NL2805,
+  `tests/link/ffi_opaque_field`, `ffi_opaque_param`), and so is either arm of
+  a `Result` (`ffi_opaque_result`); an array element, an export and module
+  storage are refused as for any `declare class`, above.
+- **Each one is its own type.** Both lower to `i8*`, but a `Db` passed where a
+  `Stmt` is wanted is `` Argument 1 of `stmt_close`: expected Stmt, got Db ``
+  (`tests/link/ffi_opaque_mix`), and neither is a `CPtr`.
+- **C makes it and C reads it.** `new Db()` is `` Cannot `new` `Db`: an opaque
+  `declare class` has no layout to build `` (NL2806,
+  `tests/link/ffi_opaque_new`), and a member of one is `` `Db` is an opaque
+  `declare class`, so it has no member `handle`: C keeps its fields `` (NL2807,
+  `tests/link/ffi_opaque_member`). `readStruct` does not copy into one, since
+  there is nothing to copy: `` `readStruct(p)` cannot copy into `Db` `` (NL2808,
+  `tests/link/ffi_opaque_read_struct`); declare the C function to return the
+  class itself.
+- **A `Name` result is checked for `NULL`.** A `declare function` that returns
+  `Name` promises a pointer, so a `NULL` from C stops the program with
+  `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
+  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  A `Name | null` result is narrowed with `!== null` before it goes back to C,
+  under the rule a `CPtr | null` follows (NL2539).
 
 #### `readStruct`: a struct out of memory C owns
 

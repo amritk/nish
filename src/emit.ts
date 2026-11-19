@@ -2169,10 +2169,11 @@ export class Emitter {
       // WP66 S3: a non-null opaque class is C's promise of a pointer, and a
       // `NULL` that broke it would pass every `!== null` test unseen, so it
       // panics here as a `string` result does; `Name | null` takes it as null.
+      const name = this.table.typeName(sig.returnType)
       emitFfiNullTest(
         this,
         answer,
-        `\`${sig.sourceName}\` returned NULL for a \`${this.table.typeName(sig.returnType)}\` result; declare it \`${this.table.typeName(sig.returnType)} | null\``
+        `\`${sig.sourceName}\` returned NULL for a \`${name}\` result; declare it \`${name} | null\``
       )
     }
     if (keepSize >= 0) {
