@@ -882,17 +882,20 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
  */
 const vectorAdvice = (program: CheckedProgram, call: Node, lanes: i32): string => {
   const args = call.children[1].children
-  const holder = siteLocalName(program, args[args.length - 2])
-  const name = siteLocalName(program, args[args.length - 1])
-  const xs = holder.length > 0 ? holder : "xs"
-  const i = name.length > 0 ? name : "i"
-  const what =
-    name.length > 0 && holder.length > 0
-      ? `\`${i}\` is not proven to keep all ${lanes} lanes in range for \`${xs}\` here`
-      : `this vector access is not proven to keep all ${lanes} lanes in range here`
+  const xs = siteLocalName(program, args[args.length - 2])
+  const i = siteLocalName(program, args[args.length - 1])
+  const checks = "a vector access checks its first and its last lane at once, so guard"
+  // A guard is spelled only over names the access has; a field, call or
+  // computed index gets the rule in words rather than a made-up variable.
+  if (xs.length === 0 || i.length === 0) {
+    return (
+      `this vector access is not proven to keep all ${lanes} lanes in range here: ${checks} its index with ` +
+      `a test that reaches the access and keeps it from 0 to ${lanes} short of the array's length`
+    )
+  }
   const length = program.f64Mode ? `toI32(${xs}.length)` : `${xs}.length`
   return (
-    `${what}: a vector access checks its first and its last lane at once, so guard it with a test that ` +
+    `\`${i}\` is not proven to keep all ${lanes} lanes in range for \`${xs}\` here: ${checks} it with a test that ` +
     `reaches the access — \`if (${i} >= 0 && ${i} <= ${length} - ${lanes})\` proves both ends`
   )
 }
