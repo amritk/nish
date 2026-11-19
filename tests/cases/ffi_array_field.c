@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 struct ShaCtx {
   uint8_t tag;
@@ -53,6 +55,27 @@ uint8_t readData(int32_t i);
 double readScalars(void);
 int32_t zeroed(void);
 int32_t written(void);
+uint32_t sumH(void);
+int32_t poke(int32_t i);
+
+/* `call(arg)` in a child whose stderr is this process's stdout, so the panic
+ * message and the exit status land in the .out file. */
+static void expectPanic(const char *name, int64_t (*call)(int32_t), int32_t arg) {
+  fflush(stdout);
+  pid_t pid = fork();
+  if (pid == 0) {
+    dup2(1, 2);
+    printf("%s(%d) returned %lld\n", name, arg, (long long)call(arg));
+    fflush(stdout);
+    _exit(0);
+  }
+  int status = 0;
+  waitpid(pid, &status, 0);
+  printf("%s(%d) exit %d\n", name, arg, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+}
+
+static int64_t callReadH(int32_t i) { return readH(i); }
+static int64_t callPoke(int32_t i) { return poke(i); }
 
 int main(void) {
   printf("sizeof ShaCtx %zu: tag %zu, h %zu, total %zu, num %zu, data %zu, last %zu\n", sizeof(struct ShaCtx),
@@ -67,5 +90,10 @@ int main(void) {
   printf("scalars %g\n", readScalars());
   printf("zeroed %x\n", zeroed());
   printf("written %x\n", written());
+  printf("sumH %x\n", (unsigned)sumH());
+  printf("poke(1) %x\n", poke(1));
+  expectPanic("readH", callReadH, 5);
+  expectPanic("readH", callReadH, -1);
+  expectPanic("poke", callPoke, 3);
   return 0;
 }

@@ -886,9 +886,12 @@ const checkSpreadSource = (
     }
   }
   if (embedded !== null) {
+    const spread = `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\``
     ctx.error(
       value,
-      `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\` is ${embedded.cLength >= 0 ? "a fixed-length array" : "a \`declare class\`"} embedded in its object, which a spread cannot copy, so set each field by name`
+      embedded.cLength >= 0
+        ? `${spread} is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index`
+        : `${spread} is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
     )
     return null
   }

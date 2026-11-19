@@ -137,7 +137,7 @@
 
 import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
-import { caseValue, parseIntegerLiteral } from "./constants"
+import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
@@ -2898,17 +2898,27 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
 
 /**
  * WP66 S4: whether `index` is inside a fixed-length array of `length`
- * elements whatever it runs as: a constant from 0 to `length - 1` (the
- * checker refused one outside), or a value of an `integer<Lo, Hi>` with
- * `0 <= Lo` and `Hi < length`.
+ * elements whatever it runs as. The length is fixed by the field's type and
+ * nothing can change it, so, as for a constant table, the index's declared
+ * range (an `integer<0, 4>` into five elements), a literal or folded
+ * constant, or the range the state gives an `i32` or `i64` index, below the
+ * length is the proof.
  */
-const provesCArrayIndex = (ctx: CheckContext, index: Node, length: i32): boolean => {
-  const at = caseValue(ctx, index)
-  if (at.known) {
-    return at.value >= toI64(0) && at.value < toI64(length)
+const provesCArrayIndex = (walk: BoundsWalk, state: State, index: Node, length: i32): boolean => {
+  const declared = declaredValueRange(walk.ctx, index)
+  if (declared !== null) {
+    return declared.lo >= toI64(0) && declared.hi < toI64(length)
   }
-  const type = ctx.program.nodeTypes[index.id]
-  return ctx.table.isRanged(type) && ctx.table.rangeLo(type) >= 0 && ctx.table.rangeHi(type) < length
+  const written = walk.ctx.program.nodeTypes[index.id]
+  if (written < 0 || writesSomething(index)) {
+    return false
+  }
+  const type = walk.ctx.table.baseOf(written)
+  if (type !== T_I32 && type !== T_I64) {
+    return false
+  }
+  const range = valueRange(walk, state, index, type)
+  return range.lo >= toI64(0) && range.hi < toI64(length)
 }
 
 /**
@@ -2940,7 +2950,7 @@ const judge = (
   // holder a fact could name; a constant or a range inside it is proved here.
   const array = cArrayField(ctx.program, ctx.table, receiver)
   if (array !== null) {
-    if (provesCArrayIndex(ctx, index, array.cLength)) {
+    if (provesCArrayIndex(walk, state, index, array.cLength)) {
       noteProof(walk, node)
     }
     return

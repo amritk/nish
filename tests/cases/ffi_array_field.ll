@@ -87,6 +87,76 @@ bounds.ok:
   ret i8 %4
 }
 
+define noundef i32 @sumH() #0 {
+entry:
+  %c.addr = alloca %struct.ShaCtx*, align 8
+  %sum.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.ShaCtx* @filled()
+  store %struct.ShaCtx* %0, %struct.ShaCtx** %c.addr, align 8
+  store i32 0, i32* %sum.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %1 = load i32, i32* %i.addr, align 4
+  %2 = icmp slt i32 %1, 5
+  br i1 %2, label %for.body, label %for.end
+
+for.body:
+  %3 = load i32, i32* %sum.addr, align 4
+  %4 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = sext i32 %5 to i64
+  %7 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %4, i32 0, i32 1, i64 %6
+  %8 = load i32, i32* %7, align 4
+  %9 = add i32 %3, %8
+  store i32 %9, i32* %sum.addr, align 4
+  br label %for.inc
+
+for.inc:
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = add nsw i32 %10, 1
+  store i32 %11, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %12 = load i32, i32* %sum.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %12
+}
+
+define internal void @store(%struct.ShaCtx* noundef nonnull align 8 dereferenceable(48) nocapture %c, i32 noundef %i, i8 noundef %v) #0 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = icmp ult i64 %0, 3
+  br i1 %1, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 3)
+  unreachable
+
+bounds.ok:
+  %2 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %c, i32 0, i32 4, i64 %0
+  store i8 %v, i8* %2, align 1
+  ret void
+}
+
+define noundef i32 @poke(i32 noundef %i) #0 {
+entry:
+  %c.addr = alloca %struct.ShaCtx*, align 8
+  %ShaCtx.obj = alloca %struct.ShaCtx, align 8
+  %0 = bitcast %struct.ShaCtx* %ShaCtx.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 48, i1 false)
+  store %struct.ShaCtx* %ShaCtx.obj, %struct.ShaCtx** %c.addr, align 8
+  %1 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  call void @store(%struct.ShaCtx* %1, i32 %i, i8 187)
+  %2 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  %3 = call i32 @checkCtx(%struct.ShaCtx* %2)
+  ret i32 %3
+}
+
 define noundef double @readScalars() #0 {
 entry:
   %c.addr = alloca %struct.ShaCtx*, align 8

@@ -1297,6 +1297,49 @@ export const main = (): i32 => {
 };
 ```
 
+A C struct that holds an array, such as OpenSSL's `SHA_CTX` with its
+`unsigned int h[5]`, or Linux's `struct utsname` with its `char` arrays, spells
+that field `Record<integer<0, Hi>, T>`: `T name[Hi + 1]`, laid out inside the
+struct as C lays it out. `T` is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`
+or `f64`. Read and write it by index:
+
+<!-- nish:ok -->
+```ts
+// glibc's `struct utsname`: six `char` arrays of 65 bytes.
+declare class Utsname {
+  sysname: Record<integer<0, 64>, u8>;
+  nodename: Record<integer<0, 64>, u8>;
+  release: Record<integer<0, 64>, u8>;
+  version: Record<integer<0, 64>, u8>;
+  machine: Record<integer<0, 64>, u8>;
+  domainname: Record<integer<0, 64>, u8>;
+}
+declare function uname(buf: Utsname): i32;
+
+export const main = (): i32 => {
+  const name = new Utsname();
+  if (uname(name) !== 0) {
+    return 1;
+  }
+  let length = 0;
+  while (length < 65 && name.sysname[length] !== 0) {
+    length++;
+  }
+  console.log(length); // 5, for "Linux"
+  return 0;
+};
+```
+
+Every index is checked against the length. A constant outside it, such as
+`name.sysname[65]`, does not compile; any other index outside it panics
+before it reads or writes; and an index the compiler can prove is inside it,
+like a constant or a counter the loop keeps below 65, costs no check. The
+field is part of the struct, not a Nish array: you cannot hold it in a
+variable, pass it to a function, read its `.length` or walk it with
+`for...of`, and you write it one element at a time. Unions and bitfields
+still have no spelling, so a struct with one stays out of reach. The rules
+are in [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
 `declare function` cannot return one, and it cannot be an array element or

@@ -16415,6 +16415,68 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-struct -->
 
+#### A fixed-length array field
+
+A field spelled `Record<integer<0, Hi>, T>`, with `T` a C scalar (WP66 S4),
+is C's `T name[Hi + 1]`: the struct holds `[N x T]` inline, at `T`'s
+alignment, and `new` zeroes it with the rest of the struct in the one
+`memset`. An element is a `getelementptr inbounds` with the field index and
+then the element index. An index the prover cannot place in `0..Hi` is
+checked first with one unsigned compare, so a negative `i32` index, widened
+by `sext`, fails the same `icmp ult` as one past the end and panics through
+`nish_panic_index`; a proven index (a loop over `0..Hi`) has no check, and a
+constant outside the range is NL2810 at compile time. The loads and stores
+carry no TBAA tag: C may reach the same bytes through any pointer.
+
+This is an excerpt, not a cookbook program: the program between
+`cookbook:begin`/`cookbook:end` markers that `docs/cookbook/` checks is still
+to be written. The source, and `nish doc.ts`'s whole `@set`:
+
+```ts
+declare class ShaCtx {
+  tag: u8
+  h: Record<integer<0, 4>, u32>
+}
+declare function use(c: ShaCtx): i32
+export const set = (i: i32): i32 => {
+  const c = new ShaCtx()
+  c.h[i] = 7
+  return use(c)
+}
+```
+
+```llvm
+%struct.ShaCtx = type { i8, [5 x i32] }
+
+define noundef i32 @set(i32 noundef %i) #0 {
+entry:
+  %c.addr = alloca %struct.ShaCtx*, align 8
+  %ShaCtx.obj = alloca %struct.ShaCtx, align 8
+  %0 = bitcast %struct.ShaCtx* %ShaCtx.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 24, i1 false)
+  store %struct.ShaCtx* %ShaCtx.obj, %struct.ShaCtx** %c.addr, align 8
+  %1 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  %2 = sext i32 %i to i64
+  %3 = icmp ult i64 %2, 5
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %2, i64 5)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+  store i32 7, i32* %4, align 4
+  %5 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  %6 = call i32 @use(%struct.ShaCtx* %5)
+  ret i32 %6
+}
+```
+
+Tests: `tests/cases/ffi_array_field` (golden `.ll`, native round trip
+against a C `SHA_CTX` shape), `tests/ffi-struct.js` (offsets and size
+against clang, natively and under `--profile wasi`).
+
 ### `readStruct`: a C-owned struct, copied out
 
 `readStruct(p)` from `nish:unsafe` (WP27 S4.2) is the way back from a struct

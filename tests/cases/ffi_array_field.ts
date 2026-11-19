@@ -4,8 +4,10 @@
 // `uint32_t h[5]` after a `uint8_t`, so it starts at offset 4, and `data` is
 // `uint8_t data[3]` between a `uint16_t` and a `double`, so padding follows
 // it. C fills a zeroed instance (`readH` and `readData` read every element
-// back), and C checks what the program wrote through the class (`written`).
-// An element the two sides placed differently comes back wrong.
+// back), and C checks what the program wrote through the class (`written`,
+// `poke`). An element the two sides placed differently comes back wrong.
+// `readH(5)`, `readH(-1)` and `poke(3)` panic before they touch memory; the
+// driver runs each in a child and prints its message and exit status.
 declare class ShaCtx {
   tag: u8
   h: Record<integer<0, 4>, u32>
@@ -32,6 +34,31 @@ export const readH = (i: i32): u32 => {
 /** Element `i` of C's `data`, checked against 3. */
 export const readData = (i: i32): u8 => {
   return filled().data[i]
+};
+
+/** Every element of `h`, by a loop index the prover keeps inside 0 to 4: no check is emitted. */
+export const sumH = (): u32 => {
+  const c = filled()
+  let sum: u32 = 0
+  for (let i = 0; i < 5; i++) {
+    sum += c.h[i]
+  }
+  return sum
+};
+
+/**
+ * Writes `data[i]` of the struct it is handed: a write through `c`, so `c`
+ * is not `readonly`, and the caller's `checkCtx` sees the byte.
+ */
+const store = (c: ShaCtx, i: i32, v: u8): void => {
+  c.data[i] = v
+}
+
+/** Writes `data[i]` by a dynamic index, checked against 3, and lets C check it. */
+export const poke = (i: i32): i32 => {
+  const c = new ShaCtx()
+  store(c, i, 0xbb)
+  return checkCtx(c)
 };
 
 /** The scalars around the arrays, which move if an array's size or alignment is wrong. */
