@@ -89,6 +89,7 @@ import {
   simulatedUnlabelledBuiltin,
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { cImport } from "./c-import"
 import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
@@ -792,6 +793,10 @@ const commandMain = (): number => {
   // file named `upgrade` in the working directory, as `run` does.
   if (process.argv[1] === "upgrade") {
     return upgrade()
+  }
+  // `nish c-import` writes a module from a C header (src/c-import.ts).
+  if (process.argv[1] === "c-import") {
+    return cImport()
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()

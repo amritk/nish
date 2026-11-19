@@ -43,6 +43,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.usage("run [flags] <file.ts> [args ...]", "build, cache and run it")
   menu.usage("run --watch <file.ts> [args ...]", "rebuild and rerun it on each edit")
   menu.usage("upgrade [<version>] [--check]", "install a newer release")
+  menu.usage("c-import <header> -o <file.ts>", "write declarations from a C header")
   menu.usage("-v, --version | -h, --help", "")
 
   menu.section("Dialect")
