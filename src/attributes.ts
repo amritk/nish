@@ -3431,6 +3431,12 @@ class FactCollector {
       if (!nullable) {
         this.noteSite(call, PANIC_FFI_NULL, false, "")
       }
+    } else if (this.table.isOpaque(callee.returnType)) {
+      // WP66 S3: a non-null opaque class result is tested for `NULL` too.
+      const tail: string[] = []
+      panicTailCallees(tail)
+      this.addCallees(tail)
+      this.noteSite(call, PANIC_FFI_NULL, false, "")
     }
   }
 

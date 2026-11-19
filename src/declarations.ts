@@ -752,6 +752,11 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     // `string` panics on one (`ffi-null`).
     return
   }
+  if (ctx.table.isOpaque(ctx.table.stripNull(sig.returnType))) {
+    // WP66 S3: an opaque class is C's own pointer, handed out as a `CPtr` is,
+    // and `Name | null` answers `null` for `NULL` the way `CPtr | null` does.
+    return
+  }
   if (layoutClass(ctx.program, ctx.table, ctx.table.stripNull(sig.returnType)) !== null) {
     // S4.1: C returning a struct by value, or a pointer into memory it owns,
     // has no owner on this side; S4.2's `readStruct` copies one out of a `CPtr`.
