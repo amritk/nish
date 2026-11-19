@@ -196,8 +196,12 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
 
 - [`mark.svg`](site/mark.svg) is the logo, and the source of every other
   image there: `logo-dark.png` and `logo-light.png` (the mark beside "nish",
-  for the header) and the favicons are renders of it, so a new mark
-  re-renders them all. The theme's violets and cyan are its colours.
+  for the header), the favicons and `icon-512.png` (the logo in the pages'
+  structured data) are renders of it, so a new mark re-renders them all.
+  Google shows a site's favicon in its results only at 48×48 or larger, so
+  `favicon.ico` carries a 48px image and `favicon-48.png` and
+  `favicon-192.png` are linked beside it. The theme's violets and cyan are
+  its colours.
 
 - [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
   gradient behind every page, and every animation — a page's entrance, blocks
