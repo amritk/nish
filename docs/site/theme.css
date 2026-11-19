@@ -2,7 +2,7 @@
   The Nish docs theme: colours from the logo (docs/site/logo-*.png), in a
   light and a dark mode, the vertical rhythm between blocks, and the motion:
   the page's entrance, blocks that rise as they scroll into view, the cards'
-  pointer highlight and the landing page's hero (built by site.js).
+  pointer highlight and the landing page's hero (wired by site.js).
 
   Logo palette (docs/site/mark.svg): charcoal #1e2226, violet #8b3fff,
   mid #5b22c4, deep #42118a, and the cyan fleck #11a8f1.
@@ -257,7 +257,6 @@ aside.t-doc__toc .outline-marker {
 /* A page arrives: one short rise for the whole column on every navigation. */
 @keyframes nish-rise {
   from {
-    opacity: 0;
     transform: translateY(14px);
   }
 }
@@ -467,7 +466,7 @@ table.t-editor__table tbody tr:hover {
   display: none;
 }
 
-/* ── The landing page's hero (docs/guide/index.md; built by site.js) ─────
+/* ── The landing page's hero (static markup in docs/guide/index.md; site.js wires it) ─────
    A source file is typed, flows through the compiler to its three targets,
    and runs, once; then the terminal's prompt waits for a line. One 12s
    clock drives every part: each keyframe set below spans the whole run and
@@ -494,23 +493,6 @@ table.t-editor__table tbody tr:hover {
 }
 .page-node:has(.nish-hero__inner) > .nish-hero {
   margin-top: 0;
-}
-/* The site loads site.js after it has painted the page, so the hero lands
-   on a page that is already on screen and pushes what is under it down: on a
-   phone, off the screen. Until site.js marks the host data-nish-ready, two
-   frames after filling it, the page under the hero is held hidden
-   (visibility, so it keeps its place in the layout): it moves while no one
-   can see it, then shows where it will stay. The hold is an animation that
-   ends by itself, so with site.js slow or missing the page shows after 1.2s,
-   as it did before. Once the host is ready the rule lets go, and each block
-   has its own animation back. */
-@keyframes nish-hold {
-  from {
-    visibility: hidden;
-  }
-}
-.page-node > [data-nish-hero]:not([data-nish-ready]) ~ * {
-  animation: nish-hold 1.2s step-end;
 }
 .nish-hero__inner {
   position: relative;
@@ -1164,9 +1146,5 @@ main.content-sidebar:has(.page-node > [data-nish-hero]) {
   *::after {
     animation: none !important;
     transition: none !important;
-  }
-  /* Not motion: the hold under the landing page's hero (see nish-hold). */
-  .page-node > [data-nish-hero]:not([data-nish-ready]) ~ * {
-    animation: nish-hold 1.2s step-end !important;
   }
 }

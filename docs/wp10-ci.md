@@ -43,7 +43,8 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/9)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/9` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for `bench/crc32.mjs --check` and `bench/adler32.mjs --check` |
+| `examples` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | beside the shards, with the compiler from their cache key (linked here on a miss, saved only by shard 1): `scripts/smoke.sh` over every example with a `main`, `docs/cookbook/regen.sh --check`, and the size report in the job summary. They ran after the suite in shard 1 until #1797, about 80 s on the critical path of every run. Not scoped: it runs on every event |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
@@ -205,7 +206,7 @@ way.
 
 Three jobs took longer than 15 minutes unsplit, so each is split:
 
-- **`test`**, eight ways. `node tests/run.js --shard <i>/<n>` splits the suite.
+- **`test`**, nine ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the sections there that are dealt (`term-io`, `--emit-ts`
   and the fifteen small sections between the golden cases and the link
@@ -265,7 +266,9 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1 says it dealt it. It reads the same spans this paragraph names: the
   costs are the gaps between consecutive programs' last lines in a
   CI shard's log, `shardOne` the span of shard 1's sections after the link
-  programs that are not dealt, plus its steps after the suite, and each dealt
+  programs that are not dealt, plus its steps after the suite (less the
+  smoke, cookbook and size-report steps, which a log from before the
+  `examples` job still holds: `MOVED_STEPS`), and each dealt
   section's entry the span of its lines in the shard that ran it. Runners
   differ in speed by nearly a factor of two (one built stage1 in 34 s where
   its siblings took 57-61 s), so read a span only from a shard whose stage1
@@ -323,6 +326,41 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   run and runs 43109728024 and 43114281714; dealt on it, the old deal's
   pieces measure 5.0 to 8.4 minutes a shard after the setup every shard
   runs, and the new deal's 6.5 minutes each.
+
+  With the smoke, cookbook and size-report steps moved to the `examples`
+  job and shard 1's sections dealt as `tail` groups (#1797), shard 1 was no
+  longer the long pole, but the interim table mis-dealt the rest: in
+  [run 44569577732](https://github.com/amritk/nish/actions/runs/44569577732)
+  (`4614df6`) the shards reached their summaries at 8.2, 10.8, 12.0, 7.2,
+  7.2, 8.2, 9.9 and 8.0 minutes, 12.5 minutes wall. The table was refitted
+  from the median of that run, run 44565722776 and `main`'s run
+  44489604733. Dealt on it eight ways, each shard carries about 511 s of the
+  Test step after its 40 s of setup, about 9.2 minutes a job, above the
+  8.5 minutes that leaves room under ten for a slow runner; nine ways it
+  carries about 454 s, about 8.3 minutes. So the job is split nine ways.
+  One deal runs from 542 to 684 s on the same shard across runs, so a
+  single run's slowest shard says more about its runner than about the
+  table.
+
+  The first nine-way run,
+  [run 44573014763](https://github.com/amritk/nish/actions/runs/44573014763)
+  (`8334dc9`), was dealt 453 s a shard but took 336 to 600 s, 11.7 minutes
+  wall. Its own measure of each piece, summed over that deal, gives 358 to
+  600 s, so the script reads the log right and the eight-way runs had
+  costed the pieces differently. The script also mistook shard 9's golden
+  case `arr_range_call_generic` for the `arrayChecks` section, and now looks
+  for sections only after the golden cases. The table is refitted from the
+  median of that run and runs 44569577732 and 44565722776. Its deal comes to
+  455 s a shard, and summed under each of those three runs' own costs its
+  slowest shard is 1.07 to 1.18 times its median one. The test shards need
+  no other job, but a run's 26 jobs queue for runners, and in that run
+  shard 5 started 1.6 minutes after the first.
+
+  Dealt on that table,
+  [run 44576694180](https://github.com/amritk/nish/actions/runs/44576694180)
+  (`2df949d`) took 9.1 minutes wall, its test jobs 355 to 537 s, the
+  slowest 1.14 times the median. The table was refitted again from the
+  median of the two nine-way runs and run 44569577732.
 
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
