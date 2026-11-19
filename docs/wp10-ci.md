@@ -209,10 +209,9 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the sections there that are dealt (`term-io`, `--emit-ts`
   and the fifteen small sections between the golden cases and the link
-  programs, from `os_host` to `tests/fix`): the setup, stage1 and the golden
-  cases' IR per shard (measured in the paragraph on the eight-way split,
-  below, from before the small sections were dealt). The golden cases are
-  dealt whole: `caseShard` in `tests/run.js` deals them round-robin within
+  programs, from `os_host` to `tests/fix`): the setup and stage1 per shard
+  (measured in the paragraph on the eight-way split, below, from before the
+  small sections were dealt). The golden cases are dealt whole: `caseShard` in `tests/run.js` deals them round-robin within
   each kind (rejections, stdout programs, linked, compiled), and a shard
   compiles, checks the IR of, assembles and runs only its own, printing each
   other case as delegated to the shard that owns it. A later section that
@@ -248,7 +247,9 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   `bench/crypto/expected.txt` and asserts which kernel path ran; the timed
   portability proofs (`bench/crypto/run.mjs` without `--no-proofs`, and the
   paired portable-rounds runs) print as `DELEGATED` to the push-to-main run
-  of the same `test` job, which every push to `main` makes. A check in
+  of the same `test` job. A newer push to `main` cancels an older one's
+  first attempt (`concurrency` in `ci.yml`), so the proofs time the code as
+  it stands at the next push whose run is not cancelled. A check in
   `tests/run.js` fails if `ci.yml`'s `test` job stops running on a push to
   `main`. The builds are most of the section (about 184 s of 273 s locally);
   the timed proofs are the paired runs (49 s and 30 s) and the portable
@@ -599,12 +600,12 @@ the first, `fuzz-smoke` and `postgres-live` spent 96 s and 113 s on
 the `test` job's stage1 through the same action under the same key (stage2
 is the same compiler, which `bootstrap (x86_64-linux)` asserts), and
 `nish-cmp elision`'s candidate, the same `--link` with its row's seed, comes
-through it too. The golden cases are dealt too: a shard compiles
-all of them and does the other work of its eighth only, which took section A
-from 59 s to 30 s of shard 2 in
+through it too. Dealing the golden cases' work after the compile
+(each shard still compiled all of them then) took section A from 59 s to
+30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
-where every job restored stage1 from the cache (since then the compile and
-the IR check are dealt as well, [Shards](#shards-and-time-limits) says how). The longest `test` job there
+where every job restored stage1 from the cache; a shard now compiles and
+checks only its own eighth too, as [Shards](#shards-and-time-limits) says. The longest `test` job there
 took 10 min 49 s and the NEON job 4 min 38 s. What every shard still ran
 before the link programs then was about 90 s of small sections, the largest
 `fnref`'s `--profile debug` runs and lldb check (15 s), the performance

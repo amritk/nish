@@ -464,10 +464,12 @@ jobs:
       # `--delegate-bench-timing`, which tests/run.js honours on a
       # `pull_request` event alone: there the crypto-bench section still
       # builds every twin and checks every checksum against expected.txt, and
-      # leaves the timed portable proofs to the push-to-main run of this job,
-      # which every push to main makes (the merge queue and workflow_call time
-      # them too). A check in tests/run.js fails if this job stops running on
-      # a push to main.
+      # leaves the timed portable proofs to the push-to-main run of this job.
+      # A newer push to main cancels an older one's first attempt (the
+      # concurrency group above), so the proofs time the code as it stands at
+      # the next push whose run is not cancelled; the merge queue and
+      # workflow_call time them too. A check in tests/run.js fails if this job
+      # stops running on a push to main.
       #
       # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a

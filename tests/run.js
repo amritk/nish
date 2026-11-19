@@ -1443,19 +1443,25 @@ const caseLl = (name) => {
 if (SHARD === 1) {
   const source = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8").split("\n")
   const byHand = source.flatMap((line, at) => {
-    const templated = line.includes(["path.join(buildDir, `", "${name}.ll`)"].join(""))
+    // A file name that is one computed value plus `.ll` (whatever the value
+    // is called) may be a case's, so it counts; a literal counts when it
+    // names a case.
+    const computed = /path\.join\(buildDir, (`\$\{[^}]+\}\.ll`|[\w.]+\s*\+\s*["'`]\.ll["'`])\)/.test(line)
     const literal = [...line.matchAll(/path\.join\(buildDir, "([a-z0-9_]+)\.ll"\)/g)].some(([, name]) =>
       fs.existsSync(path.join(casesDir, `${name}.ts`))
     )
-    return templated || literal ? [{ line: at + 1, text: line.trim() }] : []
+    return computed || literal ? [{ line: at + 1, text: line.trim() }] : []
   })
-  // runCase's output, the two accessors, and perf_clamp_quiet's own compile.
+  // runCase's output, the two accessors, and perf_clamp_quiet's own compile:
+  // each names exactly one site.
   const allowed = ["const outLl = ", "made.set(name, spawnSync(NISH", "return path.join(buildDir", "clampQuietCompile.status"]
   const stray = byHand.filter(({ text }) => !allowed.some((start) => text.startsWith(start)))
+  const counts = allowed.map((start) => byHand.filter(({ text }) => text.startsWith(start)).length)
   check(
     `cases: every later reader of a golden case's .ll goes through caseLl (${byHand.length} sites allowed by name)`,
-    stray.length === 0 && byHand.length === allowed.length,
-    stray.map(({ line, text }) => `tests/run.js:${line}: ${text}`).join("\n") || `allowed sites found: ${byHand.length}`
+    stray.length === 0 && counts.every((n) => n === 1),
+    stray.map(({ line, text }) => `tests/run.js:${line}: ${text}`).join("\n") ||
+      allowed.map((start, i) => `${counts[i]}x ${start}`).join("\n")
   )
 }
 
@@ -9790,7 +9796,7 @@ const DELEGATE_BENCH_TIMING =
   process.argv.includes("--delegate-bench-timing") &&
   process.env.GITHUB_ACTIONS === "true" &&
   process.env.GITHUB_EVENT_NAME === "pull_request"
-const BENCH_TIMING_LANE = "the push-to-main run of ci.yml's `test` job (every push to main)"
+const BENCH_TIMING_LANE = "the push-to-main run of ci.yml's `test` job, which times the code as it stands at the next push to main whose run is not cancelled by a newer one"
 
 if (dealtHere("cryptoBench")) {
   // bench/run.mjs carries a section over only when its marker matches
@@ -34228,7 +34234,7 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
     const honoured = /^const DELEGATE_BENCH_TIMING =\n(?:.*\n){0,3}?.*process\.env\.GITHUB_EVENT_NAME === "pull_request"$/m
     const testStep = stepsOf(testJob).find((st) => /npm test -- /.test(st)) ?? ""
     check(
-      "ci.yml: the `test` job delegates the crypto twins' timed proofs only on a pull request, and runs them on every push to main",
+      "ci.yml: the `test` job delegates the crypto twins' timed proofs only on a pull request, and runs them on a push to main",
       testJob !== "" &&
         (!testJob.includes("--delegate-bench-timing") ||
           (/^on:\n {2}push:\n {4}branches: \[main\]$/m.test(ciYmlText) &&
