@@ -2044,6 +2044,64 @@ the layout of the two binaries is a hypothesis, not a finding. With the
 rotation made equal and the link flags matched, no Nish-faster result has been
 measurable.
 
+### Against rusqlite
+
+`sqlite/twin.rs` runs the same four workloads through
+[rusqlite](https://crates.io/crates/rusqlite), the crate most Rust programs
+reach SQLite through. Each call is written in rusqlite's own style: `query_row`
+for a lookup and an insert, and `query` with `Rows::next` for the feed. Each
+call binds, steps, runs the closure, and resets when the rows drop. Text is
+read with `get_ref(c)?.as_bytes()`, which neither allocates nor checks UTF-8,
+and is copied into one reused buffer, as the other sides copy it.
+
+rusqlite refuses to open a connection on a SQLite built `THREADSAFE=0`, so it
+cannot run on the build the other sides use. `run.mjs` therefore times a second
+group on `SQLITE_THREADSAFE=2`, which is what a `--threads` build gets:
+
+- **nish mt:** `main.ts` built with `--link --threads`.
+- **C mt:** `twin.c` on a `sqlite3.c` object compiled with the C twin's flags
+  and `THREADSAFE=2`.
+- **Rust mt:** `twin.rs`, built by cargo with `opt-level = 3`, one codegen
+  unit, fat LTO across the Rust crates and `panic = "abort"`. It is linked to
+  an archive of that same object: libsqlite3-sys is pointed at it with
+  `SQLITE3_LIB_DIR`, never at its bundled copy or the system's. `run.mjs`
+  stops unless the Rust side's `PRAGMA compile_options` matches C mt's and the
+  binary loads no shared `libsqlite3`.
+
+rusqlite is pinned at 0.43.0 and fetched from crates.io on the first run.
+`--no-rust` leaves the group out, and so does a machine with no cargo, with a
+note. The Rust glue does not get the C side's hardening flags: SQLite is the
+same object, but the Rust code is built the way cargo builds it. The six
+binaries share the rotation, so 12 rounds is a multiple of 6.
+
+**The figures.** Twelve rounds of the bench code at commit `f08a1674` (later
+commits only reformat `run.mjs` and rename two locals), on a
+four-core Intel Xeon virtual machine that reports 2.10 GHz, with Ubuntu clang
+18.1.3, rustc 1.97.0, rusqlite 0.43.0 (libsqlite3-sys 0.40.0) and SQLite
+3.54.1. All figures are the median ns per call (IQR). This session's machine
+ran slower and noisier than the one in the table above: `lookup` took about
+6.0 µs, against 5.0 µs there, and `feed`'s noise band was 5.4 %.
+
+| Workload | Nish | C | Nish mt | C mt | Rust mt | Noise band |
+| --- | --- | --- | --- | --- | --- | --- |
+| `lookup` | 6,005 (195) | 5,987 (294) | 6,335 (370) | 6,098 (253) | 6,193 (180) | 32 |
+| `feed` | 20,894 (2,090) | 21,353 (1,616) | 22,222 (5,219) | 20,706 (702) | 22,449 (2,743) | 1,136 |
+| `insert` | 20,254 (1,203) | 20,221 (1,534) | 21,272 (2,417) | 20,764 (912) | 20,744 (2,833) | 431 |
+| `insert-txn` | 5,983 (885) | 5,981 (456) | 6,233 (1,317) | 6,084 (169) | 6,412 (689) | 88 |
+
+**What the figures say.** On the rule above, none of these differences is
+measurable on this machine. Each one is inside the IQR of at least one of the
+two sides it compares:
+
+- **Rust mt − C mt** runs from −20 ns (`insert`) to +1,742 ns (`feed`, 8.4 %).
+- **Nish mt − Rust mt** runs from −227 ns (`feed`) to +528 ns (`insert`).
+- **C mt − C**, the threading mode's own cost, is −647 to +543 ns.
+
+So at this run's noise, `nish/sqlite`, rusqlite and SQLite's C API cost the same
+per call on these workloads. SQLite's own work dominates every call. A
+difference of a few per cent, like `feed`'s 2 to 6 % above, needs a quieter
+machine or a callgrind count to show up.
+
 ## PostgreSQL
 
 `postgres/run.mjs` measures what

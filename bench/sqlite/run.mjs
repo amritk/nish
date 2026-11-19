@@ -198,7 +198,11 @@ const cTwin = (mode, out) => {
     const src = unit === "twin.c" ? path.join(here, unit) : path.join(sqliteDir, unit)
     const obj = path.join(outDir, unit.replace(/\.c$/, `-${mode}.o`))
     const defs = [...SQLITE_DEFS, THREADSAFE[mode]]
-    run(cc, [...CFLAGS, ...HARDEN_CC, ...defs, "-I", sqliteDir, "-c", src, "-o", obj], `${cc} ${unit} (${mode})`)
+    run(
+      cc,
+      [...CFLAGS, ...HARDEN_CC, ...defs, "-I", sqliteDir, "-c", src, "-o", obj],
+      `${cc} ${unit} (${mode})`
+    )
     objects.push(obj)
   }
   run(cc, [...CFLAGS, ...HARDEN, ...LDFLAGS, ...objects, "-lm", "-o", out], `${cc} ${path.basename(out)}`)
@@ -253,10 +257,19 @@ if (cargo !== null) {
     // A system sqlite3.pc would otherwise win over SQLITE3_LIB_DIR.
     SQLITE3_NO_PKG_CONFIG: "1",
   }
-  run(cargo, ["build", "--release", "--quiet", "--manifest-path", path.join(rustDir, "Cargo.toml")], "cargo twin-rs", env)
+  run(
+    cargo,
+    ["build", "--release", "--quiet", "--manifest-path", path.join(rustDir, "Cargo.toml")],
+    "cargo twin-rs",
+    env
+  )
   const lock = fs.readFileSync(path.join(rustDir, "Cargo.lock"), "utf8")
   const crate = (name) => lock.match(new RegExp(`name = "${name}"\nversion = "([^"]+)"`))?.[1] ?? "unknown"
-  const rustc = run(process.env.RUSTC || which("rustc", [path.join(os.homedir(), ".cargo", "bin")]) || "rustc", ["--version"], "rustc --version").trim()
+  const rustc = run(
+    process.env.RUSTC || which("rustc", [path.join(os.homedir(), ".cargo", "bin")]) || "rustc",
+    ["--version"],
+    "rustc --version"
+  ).trim()
   rustVersions = `rusqlite ${crate("rusqlite")}, libsqlite3-sys ${crate("libsqlite3-sys")}, ${rustc}`
 }
 
@@ -293,10 +306,12 @@ const runOnce = (bin, w) => {
 // The Rust side must run the SQLite the C side runs: the same options, and
 // no libsqlite3 of the system's loaded beside it.
 if (cargo !== null) {
-  const want = run(twinMt, ["options", db], "twin-mt options")
-  const got = run(twinRs, ["options", db], "twin-rs options")
-  if (got !== want || !/THREADSAFE=2/.test(got)) {
-    fail(`twin-rs does not run the C twin's SQLite\n  C:    ${want.trim().split("\n").join(" ")}\n  Rust: ${got.trim().split("\n").join(" ")}`)
+  const cOptions = run(twinMt, ["options", db], "twin-mt options")
+  const rsOptions = run(twinRs, ["options", db], "twin-rs options")
+  if (rsOptions !== cOptions || !/THREADSAFE=2/.test(rsOptions)) {
+    fail(
+      `twin-rs does not run the C twin's SQLite\n  C:    ${cOptions.trim().split("\n").join(" ")}\n  Rust: ${rsOptions.trim().split("\n").join(" ")}`
+    )
   }
   const readelf = which("llvm-readelf") || which("readelf")
   if (readelf !== null && /NEEDED.*libsqlite3/.test(run(readelf, ["-d", twinRs], "readelf twin-rs"))) {
