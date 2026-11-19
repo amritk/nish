@@ -356,6 +356,12 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   no other job, but a run's 26 jobs queue for runners, and in that run
   shard 5 started 1.6 minutes after the first.
 
+  Dealt on that table,
+  [run 44576694180](https://github.com/amritk/nish/actions/runs/44576694180)
+  (`2df949d`) took 9.1 minutes wall, its test jobs 355 to 537 s, the
+  slowest 1.14 times the median. The table was refitted again from the
+  median of the two nine-way runs and run 44569577732.
+
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
