@@ -6,8 +6,9 @@ a time, for code that was written for Node and is being moved over. You ask
 for it by name, a build that does not ask is unchanged, and the compiled
 program says which one it was built in.
 
-The dialect changes the number a bare `number` is, and it has four features:
-`optional-chaining`, `nullish`, `string-switch` and `for-of-string`. Each admits a form of TypeScript the strict
+The dialect changes the number a bare `number` is, and it has six features:
+`optional-chaining`, `nullish`, `string-switch`, `for-of-string`,
+`optional-params` and `overloads`. Each admits a form of TypeScript the strict
 dialect refuses, with the meaning Node gives it.
 
 The rules are in the reference, under
@@ -84,7 +85,7 @@ export const main = (): void => {
 ```
 
 ```text
-package.json:5:16: error: `asnyc` is no feature of the compatibility dialect: `nish.compat` is `true` or an array of feature names, and the ones this compiler has built are `nullish`, `optional-chaining`, `string-switch`, `for-of-string`
+package.json:5:16: error: `asnyc` is no feature of the compatibility dialect: `nish.compat` is `true` or an array of feature names, and the ones this compiler has built are `nullish`, `optional-chaining`, `string-switch`, `for-of-string`, `optional-params`, `overloads`
 ```
 
 ## Numbers are doubles
@@ -341,6 +342,99 @@ form a character: a byte that starts a character but is not followed by the
 bytes that finish it is one step on its own, and the next byte gets its own
 step. So `String.fromCharCode(200) + "abc"` takes four steps, as it does in
 Node, although the first step's bytes are nish's, not Node's.
+
+## Optional parameters and defaults that run
+
+The strict dialect asks for a default on every parameter a call may leave
+out, and takes only a constant for it. With `optional-params`, a parameter
+may be written `x?: T`, and a top-level function's default may be any
+expression, run as Node runs it.
+
+<!-- nish:ok -->
+```json package.json
+{
+  "name": "ported",
+  "private": true,
+  "nish": {
+    "compat": ["optional-params"]
+  }
+}
+```
+
+<!-- nish:ok -->
+```ts main.ts
+const fallback = (): number => {
+  console.log("fallback ran")
+  return 10
+}
+
+function greet(name: string, greeting?: string): string {
+  return `${greeting ?? "hello"}, ${name}`
+}
+
+function area(width: number, height: number = fallback(), scale: number = width + height): number {
+  return width * height * scale
+}
+
+export const main = (): void => {
+  console.log(greet("ada"))
+  console.log(greet("ada", "hi"))
+  console.log(area(2))
+  console.log(area(2, 3))
+}
+```
+
+That prints `hello, ada`, `hi, ada`, `fallback ran`, `240` and `30`: a
+default runs once for each call that leaves its argument out, after the
+arguments it got, and never for a call that writes the argument.
+
+An `x?` parameter is read only as the left side of `??`, as in
+`greeting ?? "hello"`. A call that leaves it out gives `undefined` in Node and
+`null` here, and `??` is the one read that treats the two alike; anything
+else, `greeting.length` or `return greeting`, is refused (`NL2803`). An `x?`
+must be of a type that has `null` to stand for the missing argument, such as
+a `string` or a class; `factor?: number` is refused (`NL2804`), so give it a
+default, `factor: number = 1`, instead. A default on a method or a
+constructor is still a constant.
+
+## Overload signatures
+
+With `overloads`, a function, a method or a constructor may be written as
+bodiless signatures followed by its implementation, as TypeScript reads them:
+
+<!-- nish:ok -->
+```json package.json
+{
+  "name": "ported",
+  "private": true,
+  "nish": {
+    "compat": ["overloads"]
+  }
+}
+```
+
+<!-- nish:ok -->
+```ts main.ts
+function area(side: number): number
+function area(width: number, height: number): number
+function area(width: number, height: number = -1): number {
+  return height < 0 ? width * width : width * height
+}
+
+export const main = (): void => {
+  console.log(`${area(3)} ${area(2, 5)}`)
+}
+```
+
+That prints `9 10`. The compiled program is the implementation alone; the
+signatures decide which calls are allowed. Each signature must be one the
+implementation can stand behind, with the same return type, or it is
+refused (`NL2800`). A call is held to the signatures, not to the
+implementation, so a call that no signature takes is refused (`NL2801`)
+even when the implementation would run it, as `tsc` refuses it. A function
+with signatures cannot be exported to C or Node with `--emit-header`,
+`--emit-napi` or `--emit-dts` (`NL2802`): export one function per signature
+instead.
 
 ## Dependencies follow the root package
 

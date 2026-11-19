@@ -184,6 +184,17 @@ stops being able to prove, which is what the `performance` warning will say.
 > as Node does, each a fresh UTF-8 `string`; a destructuring head stays
 > refused. A strict refusal of either names its feature.
 
+> **Status:** the optional-parameter and overload rows are built as two compat
+> features. `optional-params` accepts `x?: T`, `T | null` inside and read only
+> through `??` (NL2803; a `T` with no `null` is NL2804), and a top-level
+> function's default that is not a constant, evaluated in the callee by one
+> wrapper per argument count a call may stop at, so it runs once per call
+> that omits it, after the arguments, as Node runs it. `overloads` accepts
+> bodiless signatures before an implementation, holds each to it (NL2800) and
+> each call to them (NL2801), and lifts them before Phase 0, so the IR is the
+> implementation's alone; a header, N-API or `.d.ts` emit of one is NL2802.
+> A strict refusal of either names its feature.
+
 A callee the checker can name — an arrow written at the call, or a top-level
 function passed by name — is no longer on this list: strict accepts it as a
 function-typed parameter of a top-level function, specialised per callee with
@@ -532,7 +543,7 @@ and §10 leaves with the owner.
 | | Stage | Contents | Size |
 | ---: | --- | --- | --- |
 | **C0** | the machinery, zero features | `--compat`, the allow-list, `nish.compat`, `!nish.compat` in the IR, the `--help` regrouping of §5.2, the compat half of the `performance` class, and S3 as its acceptance test | S. Provably a no-op; every later stage becomes an entry rather than a redesign. **Built** |
-| **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M. `?.` and `??` are **built** (`optional-chaining`, `nullish`; §2.1), and so are string `switch` and `for...of` over a string (`string-switch`, `for-of-string`; §2.1) |
+| **C1** | the free tier | optional parameters and non-constant defaults (constant defaults are in strict mode), `?.`, `??` on nullables, string `switch`, `for...of` over a string, overload signatures — each a wp23 refusal reversed *in compat only*, and each a candidate for a `--fix` rewrite instead wherever one keeps the meaning | M. **Built**: `?.` and `??` (`optional-chaining`, `nullish`), string `switch` and `for...of` over a string (`string-switch`, `for-of-string`), optional parameters and non-constant defaults (`optional-params`), and overload signatures (`overloads`); §2.1 |
 | **C-lib** | the library tier | `Date` objects, `JSON`, `RegExp`, `Buffer`, under WP26's rules. `Map` and `Set` are strict already | L, and per §4.1 it outranks most of what follows |
 | ~~C1, labels~~ | labelled `break`/`continue`, once a C1 entry | **Built in strict**, as direct branches with no flag; it left C1 | — |
 | ~~C2a~~ | callbacks whose callee is statically known | **Built in strict**, as function-typed parameters: free at run time, as §7.4 predicted | — |
