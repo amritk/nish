@@ -15,8 +15,8 @@ Anchors are function names in the files below at the squash merge of the pull
 request that adds `nish.link` (part of #1793).
 
 **Result.** What a `package.json` puts on the clang command line is a name
-from an allowlist of characters, or the real path of a `.c` file inside that
-package. Nothing it writes becomes a flag. A dependency adds nothing the root
+from an allowlist of characters, or the real path of an entry ending in `.c`
+inside that package (`scripts/build.sh` refuses one that is not a file). Nothing it writes becomes a flag. A dependency adds nothing the root
 does not name, entry by entry, and a key the reader does not know is refused
 rather than skipped. The run cache key holds the link set, each source's
 bytes and every file `clang -M` lists for the compile of that source, so a
@@ -49,9 +49,11 @@ well as under `nish run` and `--link`. `--fix`, `--emit-ast`, `--emit-ts` and
 `manifestLinkLibrary` accepts 1 to 255 characters of
 `[A-Za-z0-9_][A-Za-z0-9_.+-]*`: a first character that is not `-`, and no
 `,`, `=`, `/`, space or quote, so `-Wl,…`, `-shared` and `-fplugin=…` are all
-NL3060. `scripts/build.sh` matches the same character pattern again
-(without the length cap) before it writes
-`-l<name>`, so a caller other than the compiler cannot pass one either. The
+NL3060. `scripts/build.sh` checks the name again (without the length cap)
+and refuses one starting with `-` before it writes `-l<name>`, so a caller
+other than the compiler cannot pass a flag either; its bracket ranges follow
+the shell's locale, so its set is not claimed to equal the compiler's, only
+that it is never a flag. The
 length cap refuses a longer name; it never truncates one into another.
 
 A name in `libraries` reaches the linker: the program that calls a symbol
@@ -72,7 +74,8 @@ entry (every one of the root's) with `realpathSync` and
 refuses it (NL3060) unless the real path sits under the package's own real
 directory. A symbolic link written inside the package cannot carry a source
 out of it. `scripts/build.sh` takes a source only as an absolute path to an
-existing `.c` file.
+existing `.c` file; an entry that ends in `.c` but resolves to a directory
+passes NL3060 and is refused there (exit 2).
 
 Tests: `link/pkg_link_source_escape` (`..`), `link/pkg_link_source_absolute`,
 `link/pkg_link_source_backslash`, `link/pkg_link_source_not_c`,
@@ -243,7 +246,10 @@ and each file by hand.
 ### PL-8: `-l` takes what the system linker finds
 
 A library name is resolved by the system linker's search path, not by Nish.
-The name is checked; the file it finds is not.
+The name is checked; the file it finds is not. The run cache key (PL-6) holds
+the name, not that file: a rebuilt `lib<name>.a` or a changed `LIBRARY_PATH`
+reuses the binary already cached until the cache is cleared or a keyed input
+changes.
 
 ### PL-9: a source's includes are not confined
 

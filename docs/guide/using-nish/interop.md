@@ -934,7 +934,9 @@ reads it, and `nish run` and `--link` link what it names:
   and starts with a letter, digit or `_` (so not with `-`, `.` or `+`).
   Nothing in it can become a flag. There is no pkg-config, so
   a library outside the linker's default search path is not found unless
-  `LIBRARY_PATH` names its directory.
+  `LIBRARY_PATH` names its directory. The run cache keys the name, not the
+  file it finds: after rebuilding the library or changing `LIBRARY_PATH`,
+  clear the cache.
 - `sources` are `.c` files inside the package, by their path relative to
   `package.json`. Each is compiled with clang beside the runtime. A path that
   is absolute, holds a backslash or a character outside printable ASCII,
@@ -951,7 +953,9 @@ reads it, and `nish run` and `--link` link what it names:
   emits IR, a compile to IR or `--json` too, not only from `nish run` and
   `--link`.
 - Only the native profiles (`speed`, `size`, `debug`) link it. `--link
-  --profile wasi` with a `nish.link` fails the link (exit 3).
+  --profile wasi` with a `nish.link` fails the link (exit 3); another
+  non-native profile ends in `scripts/build.sh`'s own message, with no NL
+  code.
 
 A dependency's `nish.link` takes effect only when your root `package.json`
 grants it, entry by entry, under `nish.link.dependencies`. Each library or

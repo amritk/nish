@@ -259,8 +259,8 @@ export const makeRulePaths = (text: string): string[] | null => {
   let word = new StringBuilder()
   let i = at
   while (i <= text.length) {
-    const c = i < text.length ? text.charCodeAt(i) : 32
-    const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 32
+    const c = i >= 0 && i < text.length ? text.charCodeAt(i) : 32
+    const next = i >= 0 && i + 1 < text.length ? text.charCodeAt(i + 1) : 32
     if (c === 92 && next !== 10 && next !== 13) {
       let run = 0
       while (i + run < text.length && text.charCodeAt(i + run) === 92) {
