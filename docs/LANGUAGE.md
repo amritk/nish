@@ -7404,8 +7404,9 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_nested_nish_arg`), and replacing it is
   `` a `declare class` embedded in its object is written field by field ``
   (NL2745, `reject_ffi_struct_nested_assign`).
-- **It is not a return type or an array element**, unless it is
-  [opaque](#an-opaque-declare-class-a-c-pointer-type). C returning a struct by
+- **It is not a return type or an array element.** An
+  [opaque](#an-opaque-declare-class-a-c-pointer-type) one is a return type of
+  a `declare function`, and still not an array element. C returning a struct by
   value, or a pointer into memory it owns, leaves the copy with no owner on
   this side: `` a C struct is only lent to C by pointer: take a `Point`
   parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); a struct
@@ -7464,12 +7465,13 @@ ffi.null:
   opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in
   a `declare function` signature or on a local bound to one `` (NL2805,
   `tests/link/ffi_opaque_field`, `ffi_opaque_param`), and so is either arm of
-  a `Result`, written or made (`ffi_opaque_result_type`, `ffi_opaque_result`),
+  a `Result` type, in a signature or on a local (`ffi_opaque_result_type`,
+  `ffi_opaque_result`),
   and a type argument of a generic class or function, written or inferred
   (`ffi_opaque_type_argument`, `ffi_opaque_template_argument`). An arrow handed
   to a call does not capture one, as it does not capture a `CPtr`
-  (`ffi_opaque_capture`). An array element, an export and module storage are
-  refused as for any `declare class`, above (`ffi_opaque_array`).
+  (`ffi_opaque_capture`). An array element is refused as for any
+  `declare class`, above (`ffi_opaque_array`).
 - **Each one is its own type.** Both lower to `i8*`, but a `Db` passed where a
   `Stmt` is wanted is `` Argument 1 of `stmt_close`: expected Stmt, got Db ``
   (`tests/link/ffi_opaque_mix`), and neither is a `CPtr`: a `Db` is not passed
@@ -7489,8 +7491,9 @@ ffi.null:
   `Name` promises a pointer, so a `NULL` from C stops the program with
   `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
   on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
-  A `Name | null` result is narrowed with `!== null` before it goes back to C,
-  under the rule a `CPtr | null` follows (NL2539).
+  A `Name | null` result is narrowed with `!== null` before it goes back to C:
+  passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
+  Db, got Db | null `` (`ffi_opaque_nullable`).
 - **This changed what a field-less `declare class` means.** Before WP66 S3,
   `declare class Db {}` was a zero-byte struct, built with `new Db()` and lent to
   C by pointer like any other `declare class`. It is now an opaque pointer, and

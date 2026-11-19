@@ -16450,7 +16450,8 @@ declare void @stmt_close(i8*)
 A `Db | null` result is stored as it comes and the `db === null` test is a
 pointer compare. A plain `Stmt` result is C's promise of a pointer, so the call
 is followed by the same `ffi.null` check a `string` result gets, which panics
-with the function's name instead of carrying `NULL` into the next call:
+with the function's name instead of carrying `NULL` into the next call (an
+excerpt of `run`'s body, from the call on):
 
 ```llvm
   %4 = call i8* @stmt_prepare(i8* %3, i32 %n)
