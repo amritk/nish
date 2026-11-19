@@ -1299,9 +1299,10 @@ export const main = (): i32 => {
 
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
-`declare function` cannot return one, and it cannot be an array element or
-built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
-for `null`, under the same rule as a `CPtr | null`. The rules are in
+`declare function` cannot return one (unless it has no fields, below), and
+it cannot be an array element or built from an object literal. A parameter
+typed `Rlimit | null` passes `NULL` for `null`, under the same rule as a
+`CPtr | null`. The rules are in
 [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A C function that answers a pointer to a struct it owns, such as `localeconv`
@@ -1339,6 +1340,57 @@ capability, and a build with `--deny unsafe` refuses it. A
 at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
 [`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+
+Many C libraries hand out a pointer to a struct they never show you:
+`sqlite3 *`, `FILE *`, `DIR *`. A `declare class` with no fields is that
+pointer's type. A `declare function` can take it and return it, as `FILE` or
+as `FILE | null`, and it is passed to C as a plain pointer. What it adds over
+`CPtr` is its name: a `FILE` cannot be passed where a `DIR` is wanted, though
+both are pointers.
+
+<!-- nish:ok -->
+```ts
+declare class FILE {}
+declare function fopen(path: string, mode: string): FILE | null;
+declare function fputs(text: string, stream: FILE): i32;
+declare function fclose(stream: FILE): i32;
+
+export const main = (): i32 => {
+  const out = fopen("/dev/null", "w");
+  if (out === null) {
+    return 1;
+  }
+  fputs("hello\n", out);
+  return fclose(out);
+};
+```
+
+It holds no fields, so it has no members and no `new`: only C makes one and
+only C reads it. Like a `CPtr`, it lives in a local and goes to and from C,
+and is refused as a field, an array element, a `Result` arm, a type argument
+of a generic, a capture of an arrow you pass to a call, or a parameter or
+return type of a function your program defines. A `declare function` that returns `FILE`
+rather than `FILE | null` promises C never answers `NULL`, and a `NULL`
+stops the program with `` `fopen` returned NULL for a `FILE` result; declare
+it `FILE | null` `` on stderr and exit status 1:
+
+<!-- nish:err NL2806 -->
+```ts
+declare class FILE {}
+declare function fclose(stream: FILE): i32;
+
+export const main = (): i32 => {
+  return fclose(new FILE());
+};
+```
+
+This is new in WP66 S3. Before it, `declare class FILE {}` was an empty
+struct your program built with `new FILE()` and lent to C. A program that
+did that now gets the error above: declare the C function that makes the
+value, or give the class the fields C lays out.
+
+The rules are in
+[An opaque `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type).
 
 A C function that fails through `errno` is checked with `cErrno` from
 `nish:unsafe`. It answers the errno the most recent `declare function` call on

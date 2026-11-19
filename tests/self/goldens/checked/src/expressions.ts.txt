@@ -2668,16 +2668,21 @@ function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, impor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: want
-  calls: CheckContext.errorType checkBuiltinFunctionNamed checkImportedDottedBuiltin nish_panic_index nish_str_concat
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkImportedDottedBuiltin#0 checkBuiltinFunctionNamed#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=checkImportedDottedBuiltin#1 checkBuiltinFunctionNamed#1
+  calls: CheckContext.errorType TypeTable.isOpaque TypeTable.stripNull TypeTable.typeName checkBuiltinFunctionNamed checkImportedDottedBuiltin nish_panic_index nish_str_concat nish_str_eq
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 checkImportedDottedBuiltin#0 checkBuiltinFunctionNamed#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkImportedDottedBuiltin#1 checkBuiltinFunctionNamed#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkImportedDottedBuiltin#2 checkBuiltinFunctionNamed#2
   pointer imported: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:9 callee: Node (const)
   callee -2:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +2:7 checkImportedDottedBuiltin -> @checkImportedDottedBuiltin
-  callee +3:7 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
+  callee +2:56 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +2:75 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +3:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +5:47 TypeTable.typeName -> @TypeTable.typeName
+  callee +5:66 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +9:7 checkImportedDottedBuiltin -> @checkImportedDottedBuiltin
+  callee +10:7 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
 function checkCall(ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 -> @checkCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

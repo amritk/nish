@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 980
+export const RULE_COUNT: i32 = 984
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -439,6 +439,8 @@ const diagnosticRules = (): string[] => [
   "NL2389",
   "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",
   "NL2682",
+  ": an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one",
+  "NL2805",
   "` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array",
   "NL2762",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
@@ -553,6 +555,8 @@ const diagnosticRules = (): string[] => [
   "NL2643",
   '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`',
   "NL2669",
+  "`: an opaque `declare class` has no fields, so the `CPtr` is the value; declare the C function to return the class itself",
+  "NL2808",
   "`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to ",
   "NL3058",
   "A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)",
@@ -615,6 +619,8 @@ const diagnosticRules = (): string[] => [
   "NL2597",
   "` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds",
   "NL2401",
+  "`: an opaque `declare class` has no layout to build, so only a `declare function` that returns one can make it",
+  "NL2806",
   "A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body",
   "NL2785",
   "Spread arguments are not supported: pass the array itself to a parameter of array type, or write each argument",
@@ -925,6 +931,8 @@ const diagnosticRules = (): string[] => [
   "NL4008",
   "`: a constrained type parameter has only the members its constraint declares",
   "NL2330",
+  "`: C keeps its fields, and only a `declare function` can read or change them",
+  "NL2807",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
   "NL2139",
   "region memory kept by memory outside the region points at freed memory once ",

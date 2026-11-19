@@ -549,6 +549,12 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   if (kind === STRUCT_CLASS && !info.layout) {
     declareHandle(ctx, info, decl)
   }
+  // WP66 S3 (D5): a `declare class` with no members and no heritage clause
+  // describes no struct at all. It is the C type a library hands out and
+  // takes back, so it is opaque: a C pointer, never built or read here.
+  if (info.layout && decl.children[3].children.length === 0 && decl.children[2].children.length === 0) {
+    ctx.table.markOpaque(info.type)
+  }
   if (info.layout && info.exported) {
     ctx.error(
       decl.children[0],
@@ -780,6 +786,8 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     }
   } else if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
+  } else if (rejectOpaque(ctx, type, "a field", decl.children[1])) {
+    return
   } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
     return
   } else if (owner.exported) {
@@ -947,6 +955,7 @@ export const collectMethodSignature = (
       "the return type of a function this program defines",
       returnAnnotation
     )
+    rejectOpaque(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation)
     rejectStoredMask(ctx, sig.returnType, "the return type of a method", returnAnnotation)
     if (sig.exported) {
       deferExportedLayout(
@@ -1029,6 +1038,25 @@ const isLayoutScalar = (t: i32): boolean =>
   t === T_F64
 
 /**
+ * Refuses an opaque `declare class` (WP66 S3) at `position`, a place a `CPtr`
+ * may not stand either (`rejectForeignPointer`): it is the same C pointer
+ * under a name, so it lives where a `CPtr` does -- a `declare function`
+ * signature and the locals bound from one -- and nowhere this compiler would
+ * have to lay out or keep alive. Returns whether it refused.
+ */
+export const rejectOpaque = (ctx: CheckContext, type: i32, position: string, node: Node): boolean => {
+  const bare = ctx.table.stripNull(type)
+  if (!ctx.table.isOpaque(bare)) {
+    return false
+  }
+  ctx.error(
+    node,
+    `\`${ctx.table.typeName(bare)}\` cannot be ${position}: an opaque \`declare class\` is a C pointer, so like a \`CPtr\` it may only appear in a \`declare function\` signature or on a local bound to one`
+  )
+  return true
+}
+
+/**
  * The `declare class` (WP27 S4.1) the non-null type `type` names, or `null`:
  * a C struct layout, which a field embeds by value and a `declare function`
  * takes by pointer.
@@ -1079,6 +1107,9 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
       annotation,
       `${what} has type \`number\`, whose width \`--number-mode\` chooses: a C struct field has one layout, so spell it \`i32\` or \`f64\``
     )
+    return
+  }
+  if (rejectOpaque(ctx, type, "a field", decl.children[1])) {
     return
   }
   // A nested layout is collected first, so its size and alignment are known;
