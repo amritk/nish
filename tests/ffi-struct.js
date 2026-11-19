@@ -91,7 +91,9 @@ const measureOuter = (types) =>
 
 /**
  * WP66 S4: OpenSSL's `SHA_CTX` shape, a fixed-length array after a narrower
- * field and one before a wider field, lent to C so its layout is emitted.
+ * field and one before a wider field, then 8-byte elements after a byte, a
+ * one-element array, two arrays back to back and `f64` elements after `u16`
+ * ones, lent to C so its layout is emitted.
  */
 const SHA_LAYOUT = [
   "declare class ShaCtx {",
@@ -101,6 +103,11 @@ const SHA_LAYOUT = [
   "  num: u16",
   "  data: Record<integer<0, 2>, u8>",
   "  last: f64",
+  "  pad: u8",
+  "  wide: Record<integer<0, 2>, u64>",
+  "  one: Record<integer<0, 0>, u16>",
+  "  halves: Record<integer<0, 1>, u16>",
+  "  doubles: Record<integer<0, 1>, f64>",
   "}",
   "",
   "declare function sha_fill(c: ShaCtx): i32",
@@ -113,7 +120,7 @@ const SHA_LAYOUT = [
 ].join("\n")
 
 /** The fields of `SHA_LAYOUT` after the first, in order: each one's offset is measured. */
-const SHA_FIELDS = ["h", "total", "num", "data", "last"]
+const SHA_FIELDS = ["h", "total", "num", "data", "last", "pad", "wide", "one", "halves", "doubles"]
 
 /** The same struct in C, asserting the offsets and size `llc` gave Nish's. */
 const cShaLayout = (measured) =>
@@ -121,6 +128,8 @@ const cShaLayout = (measured) =>
     "struct ShaCtx {",
     "  unsigned char tag; unsigned int h[5]; unsigned long long total;",
     "  unsigned short num; unsigned char data[3]; double last;",
+    "  unsigned char pad; unsigned long long wide[3]; unsigned short one[1];",
+    "  unsigned short halves[2]; double doubles[2];",
     "};",
     ...SHA_FIELDS.map(
       (f, i) => `_Static_assert(__builtin_offsetof(struct ShaCtx, ${f}) == ${measured[i]}, "${f}");`
@@ -481,7 +490,9 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         .split("\n")
         .filter((line) => /^%struct\.ShaCtx = type /.test(line))
         .join("\n")
-      const inline = types.includes("[5 x i32]") && types.includes("[3 x i8]")
+      const inline = ["[5 x i32]", "[3 x i8]", "[3 x i64]", "[1 x i16]", "[2 x i16]", "[2 x double]"].every(
+        (array) => types.includes(array)
+      )
       check(
         `ffi_array_field: a ${name} build lays each fixed-length array inline, and new zero-fills it whole`,
         built.status === 0 && inline && filled !== null,
