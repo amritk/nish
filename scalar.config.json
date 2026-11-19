@@ -2987,14 +2987,14 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/benchmarks" }]
                 }
               },
-              "/contests": {
+              "/leaderboards": {
                 "type": "page",
-                "title": "Contests",
-                "filepath": "docs/CONTESTS.md",
+                "title": "Leaderboards",
+                "filepath": "docs/LEADERBOARDS.md",
                 "head": {
-                  "title": "Contests · Nish",
-                  "meta": [{ "property": "og:title", "content": "Contests" }],
-                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/contests" }]
+                  "title": "Leaderboards · Nish",
+                  "meta": [{ "property": "og:title", "content": "Leaderboards" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/leaderboards" }]
                 }
               },
               "/changelog": {

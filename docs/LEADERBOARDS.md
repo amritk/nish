@@ -1,8 +1,9 @@
-# Contests
+# Leaderboards
 
-Public contests that Nish entries have been scored in. Each contest's
-organiser ran its measurements on their own hardware, so every figure on
-this page is theirs, quoted from the result they published. None of these
+Public leaderboards that rank a Nish entry. Each is run by a third party,
+who measured every entry on their own hardware under their own rules, so
+every figure on this page is theirs, quoted from the result they published.
+An entry is listed here only once its leaderboard has published it. None of these
 runs come from this repository's bench suite; that suite is in
 [Benchmarks](BENCHMARKS.md).
 
