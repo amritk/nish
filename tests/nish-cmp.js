@@ -8950,6 +8950,17 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  // `reserve` splits its growth into `grow`, so a program whose own module
+  // declares the connection's put methods declares one more.
+  ...[
+    "tests/link/std_postgres_tls_connection_panic/main.ts",
+    "tests/link/std_postgres_tls_pool_panic/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "short Postgres int columns without the overflow test",
+    why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
+  })),
 ]
 
 /**
