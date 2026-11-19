@@ -41,7 +41,7 @@ import {
   NodeKind,
 } from "./nodes"
 import { FieldInfo, FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
-import { checkLiteralInitializer, layoutClass } from "./structs"
+import { checkLiteralInitializer, layoutClass, rejectOpaque } from "./structs"
 import {
   isForeignBuffer,
   isHostWindow,
@@ -135,6 +135,7 @@ export const collectParams = (
     }
     if (!foreign) {
       rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1])
+      rejectOpaque(ctx, type, "a parameter of a function this program defines", param.children[1])
     }
     // A mask has no layout a header, a `.d.ts` or a class describes (`simd.ts`).
     if (sig.exported || owner >= 0) {
@@ -598,6 +599,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
       "the return type of a function this program defines",
       returnAnnotation
     )
+    rejectOpaque(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation)
     if (sig.exported) {
       rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
       deferExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
