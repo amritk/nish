@@ -7199,9 +7199,11 @@ declare function compress(
 - **The call keeps the WP53 check.** The count is widened (`zext`) to 64
   bits, or its field is loaded from the out class after the last argument
   runs, and compared, unsigned, with the buffer's length before C runs; a
-  larger count panics `ffi-length` as a positional one does
-  (`tests/cases/ffi_buffer_counted_by`). A `u8` or `u16` count wider than
-  the buffer is caught the same way.
+  larger count panics `ffi-length` as a positional one does, and C never
+  runs. `tests/cases/ffi_buffer_counted_by_panic` passes a `u16`, a `u32` and
+  an out-class count each larger than its buffer and sees the panic, exit 1,
+  and no line from C; `tests/cases/ffi_buffer_counted_by` runs the counts that
+  fit.
 - **A count of the buffer's own length is proved** at the width it is
   declared: `toU8(b.length)`, `toU16(b.length)`, `toU32(b.length)` or
   `toU64(b.length)` of the buffer itself, under the same conditions as the
@@ -7217,12 +7219,18 @@ declare function compress(
   (`tests/link/ffi_buffer_counted_by_place`). A missing name, a name that is
   not a string literal, or a buffer that is not a `u8[]`: `` `CountedBy` takes
   a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a
-  string literal `` (`ffi_buffer_counted_by_form`). A name that is not a
+  string literal `` (`ffi_buffer_counted_by_form`); so is an empty name or
+  `"?"`, neither of which a parameter can have. A name that is not a
   parameter: `` counts the buffer `dst` by `len`, which is not one of its
   parameters `` (`ffi_buffer_counted_by_unknown`). A signed, nullable or
   many-field count: `` and the count `dst` names is a `u8`, `u16`, `u32` or
   `u64`, or a `declare class` whose one field is one ``
-  (`ffi_buffer_counted_by_width`).
+  (`ffi_buffer_counted_by_width`, whose `expected.json` pins each of the
+  four).
+- **`CountedBy` is read by its name.** The checker matches the bare name
+  `CountedBy` on a parameter, so a program's own type of that name is not
+  reachable there: on a `declare function` the annotation is read as this
+  form, and elsewhere it is refused as above.
 - **`runtime/nish.d.ts` does not declare `CountedBy` yet,** and `nish
   c-import` does not write it: a module that uses it under `tsc` declares the
   alias itself.

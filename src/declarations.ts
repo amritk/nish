@@ -143,6 +143,12 @@ export const collectParams = (
         annotation = args.children[0]
         const count = args.children[1].text
         counted = count.substring(1, count.length - 1)
+        // No parameter is named `""` or `"?"`, and `"?"` marks a refused
+        // spelling below, so either would otherwise pass unchecked.
+        if (counted === "" || counted === "?") {
+          ctx.error(args.children[1], COUNTED_BY_FORM_MESSAGE)
+          counted = "?"
+        }
       }
     }
     const type = untypedDefault || annotation.text === COUNTED_BY ? T_ERROR : resolveType(annotation, ctx)
@@ -825,21 +831,45 @@ const COUNTED_BY_FORM_MESSAGE: string =
 const checkCountedBuffers = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   let k = 0
   while (k < sig.countedBuffers.length) {
-    const buffer = sig.paramNames[sig.countedBuffers[k]]
     const count = sig.paramNames.indexOf(sig.countedNames[k])
     if (count < 0) {
-      ctx.error(
-        decl,
-        `\`declare function ${name}\` counts the buffer \`${buffer}\` by \`${sig.countedNames[k]}\`, which is not one of its parameters`
-      )
+      refuseUnknownCount(ctx, sig, decl, name, k)
     } else if (foreignCountWidth(ctx.program, ctx.table, sig.paramTypes[count]) < 0) {
-      ctx.error(
-        decl,
-        `Parameter \`${sig.paramNames[count]}\` of \`declare function ${name}\` is ${ctx.table.typeName(sig.paramTypes[count])}, and the count \`${buffer}\` names is a \`u8\`, \`u16\`, \`u32\` or \`u64\`, or a \`declare class\` whose one field is one`
-      )
+      refuseCountWidth(ctx, sig, decl, name, k, count)
     }
     k = k + 1
   }
+}
+
+/**
+ * The `k`th `CountedBy` of `declare function name` names no parameter. Its
+ * own function, so the message's strings are released when it returns rather
+ * than kept for every pass of `checkCountedBuffers`' loop (NL9011).
+ */
+const refuseUnknownCount = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, k: i32): void => {
+  ctx.error(
+    decl,
+    `\`declare function ${name}\` counts the buffer \`${sig.paramNames[sig.countedBuffers[k]]}\` by \`${sig.countedNames[k]}\`, which is not one of its parameters`
+  )
+}
+
+/**
+ * The `k`th `CountedBy` of `declare function name` names parameter `count`,
+ * which is no unsigned scalar and no out class holding one. Its own function
+ * for the reason `refuseUnknownCount` is.
+ */
+const refuseCountWidth = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  decl: Node,
+  name: string,
+  k: i32,
+  count: i32
+): void => {
+  ctx.error(
+    decl,
+    `Parameter \`${sig.paramNames[count]}\` of \`declare function ${name}\` is ${ctx.table.typeName(sig.paramTypes[count])}, and the count \`${sig.paramNames[sig.countedBuffers[k]]}\` names is a \`u8\`, \`u16\`, \`u32\` or \`u64\`, or a \`declare class\` whose one field is one`
+  )
 }
 
 /**
