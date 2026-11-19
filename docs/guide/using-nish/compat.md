@@ -397,6 +397,14 @@ a `string` or a class; `factor?: number` is refused (`NL2804`), so give it a
 default, `factor: number = 1`, instead. A default on a method or a
 constructor is still a constant.
 
+A default that runs is taken only on a function every call to which the
+module can see: one that is not exported and not overloaded, with a default
+on every parameter from the first such default to the last. An exported
+function, an overloaded one, or one with a required parameter between two
+such defaults keeps the strict refusal, and its message says which rule it
+missed. Write the default as a constant there, or move the computation into
+the body: `xs: number[] | null = null` and `const list = xs ?? fresh()`.
+
 ## Overload signatures
 
 With `overloads`, a function, a method or a constructor may be written as

@@ -1422,9 +1422,9 @@ function passesKeepingLength(scan: KeepScan, callee: string, k: i32): boolean ->
   stackSites=0 stackLocals=0
   local +0:9 home: SourceFile | null (const)
   callee +4:51 declarationsOf -> @declarationsOf
-  local +7:9 sig: FunctionSig | null (const)
-  callee +7:15 CheckContext.signature -> @CheckContext.signature
-  callee +8:26 keepsParameter -> @keepsParameter
+  local +10:9 sig: FunctionSig | null (const)
+  callee +10:15 CheckContext.signature -> @CheckContext.signature
+  callee +14:5 keepsParameter -> @keepsParameter
 function keepsParameter(ctx: CheckContext, sig: FunctionSig, k: i32, trail: KeepTrail): boolean -> @keepsParameter
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

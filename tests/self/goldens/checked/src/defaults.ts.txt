@@ -5,6 +5,7 @@ import CheckContext from "./context" -> struct CheckContext
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_DEFAULT from "./nodes" -> const FLAG_DEFAULT
+import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
 import FLAG_GENERATOR from "./nodes" -> const FLAG_GENERATOR
 import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
@@ -56,6 +57,38 @@ function takesWrappers(decl: Node): boolean -> @takesWrappers
   calls: nish_panic_index
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function firstDefault(params: Node[], last: i32): i32 -> @firstDefault
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer params: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 first: i32 (let)
+function isOverloaded(file: Node, name: string): boolean -> @isOverloaded
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer file: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 stmt: Node (const)
+function admits(file: Node, decl: Node, last: i32): boolean -> @admits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: last
+  calls: firstDefault isOverloaded nish_panic_index
+  pointer file: size=40 writesThrough=false captured=false passedTo=isOverloaded#0
+  pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:45 isOverloaded -> @isOverloaded
+  local +3:9 params: Node[] (const)
+  local +4:7 i: i32 (let)
+  callee +4:11 firstDefault -> @firstDefault
+function markOptional(parser: Parser, node: Node): void -> @markOptional
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Parser.node markOptional nish_array_grow
+  pointer parser: size=112 writesThrough=true captured=false passedTo=Parser.node#0 markOptional#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:24 Parser.node -> @Parser.node
+  local +2:14 child: Node (const)
+  callee +3:5 markOptional -> @markOptional
 function wrapperName(name: string, arity: i32): string -> @wrapperName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
@@ -74,7 +107,7 @@ function buildWrapper(parser: Parser, decl: Node, arity: i32, next: string): Nod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: +0:3
   escaping: arity next
-  calls: Parser.closeList Parser.list Parser.node cloneTree ident nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq wrapperName
+  calls: Parser.closeList Parser.list Parser.node cloneTree ident nish_array_grow nish_panic_index nish_str_eq wrapperName
   pointer parser: size=112 writesThrough=true captured=false passedTo=Parser.node#0 ident#0 Parser.list#0 Parser.node#0 cloneTree#0 cloneTree#0 Parser.closeList#0 cloneTree#0 Parser.node#0 Parser.node#0 Parser.list#0 Parser.node#0 cloneTree#0 cloneTree#0 Parser.closeList#0 Parser.node#0 ident#0 Parser.list#0 ident#0 Parser.closeList#0 Parser.node#0 Parser.list#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -119,24 +152,29 @@ function buildWrapper(parser: Parser, decl: Node, arity: i32, next: string): Nod
 function liftDefaults(parser: Parser, file: Node, allowed: boolean): DefaultWrappers -> @liftDefaults [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: +0:7
-  calls: DefaultWrappers.constructor buildWrapper lastEvaluated nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow takesWrappers wrapperName
-  pointer parser: size=112 writesThrough=true captured=false passedTo=buildWrapper#0
-  pointer file: size=40 writesThrough=true captured=false
+  calls: DefaultWrappers.constructor admits buildWrapper firstDefault lastEvaluated markOptional nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow takesWrappers wrapperName
+  pointer parser: size=112 writesThrough=true captured=false passedTo=markOptional#0 buildWrapper#0
+  pointer file: size=40 writesThrough=true captured=false passedTo=markOptional#1 admits#0
   stackSites=0 stackLocals=0
-  local -42:9 made: DefaultWrappers (const)
-  callee -42:16 new DefaultWrappers -> @DefaultWrappers.constructor
-  local -40:16 stmt: Node (const)
-  callee -39:11 takesWrappers -> @takesWrappers
-  local -38:15 last: i32 (const)
-  callee -38:22 lastEvaluated -> @lastEvaluated
-  local -37:13 i: i32 (let)
-  local -28:9 kept: Node[] (const)
-  local -27:14 stmt: Node (const)
-  callee -25:10 takesWrappers -> @takesWrappers
-  local -22:11 last: i32 (const)
-  callee -22:18 lastEvaluated -> @lastEvaluated
-  local -18:11 params: Node[] (const)
-  local -17:9 first: i32 (let)
+  local -49:9 made: DefaultWrappers (const)
+  callee -49:16 new DefaultWrappers -> @DefaultWrappers.constructor
+  local -47:16 stmt: Node (const)
+  callee -46:11 takesWrappers -> @takesWrappers
+  local -45:15 last: i32 (const)
+  callee -45:22 lastEvaluated -> @lastEvaluated
+  local -44:15 params: Node[] (const)
+  local -43:13 i: i32 (let)
+  callee -34:3 markOptional -> @markOptional
+  local -33:9 kept: Node[] (const)
+  local -32:14 stmt: Node (const)
+  callee -30:10 takesWrappers -> @takesWrappers
+  local -27:11 last: i32 (const)
+  callee -27:18 lastEvaluated -> @lastEvaluated
+  local -23:11 params: Node[] (const)
+  callee -22:10 admits -> @admits
+  local -21:11 i: i32 (let)
+  local -14:11 first: i32 (const)
+  callee -14:19 firstDefault -> @firstDefault
   local -13:11 name: string (const)
   local -12:9 arity: i32 (let)
   local -10:13 next: string (const)

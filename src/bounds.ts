@@ -2321,8 +2321,15 @@ const passesKeepingLength = (scan: KeepScan, callee: string, k: i32): boolean =>
   if (scan.sig.paramNames.indexOf(callee) >= 0 || declarationsOf(scan.body, callee) > 0) {
     return false
   }
+  // A call that leaves out a default the `optional-params` feature lifts
+  // goes to a wrapper whose default may change the array (`src/defaults.ts`),
+  // so the name answers for none of them.
   const sig = scan.ctx.signature(callee)
-  return sig !== null && keepsParameter(scan.ctx, sig, k, scan.trail)
+  return (
+    sig !== null &&
+    scan.ctx.defaultImpls.indexOf(sig.decl) < 0 &&
+    keepsParameter(scan.ctx, sig, k, scan.trail)
+  )
 }
 
 /**

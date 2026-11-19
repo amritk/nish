@@ -3,6 +3,8 @@
 // default runs in the callee, once per call that leaves its argument out,
 // after the arguments and left to right, so the side-effecting `tick` logs
 // exactly the calls Node logs, and `scale` reads the `height` the call got.
+// `trim`'s default shortens the array it is given, so the loop that calls it
+// reads the length again after each call rather than keep the first one.
 class Counter {
   n: number = 0
 }
@@ -38,6 +40,15 @@ function count(first: number, rest: number[] = [first, first + 1]): number {
   return rest.length + first
 }
 
+const drop = (xs: number[]): number => {
+  xs.pop()
+  return xs.length
+}
+
+function trim(xs: number[], left: number = drop(xs)): number {
+  return left
+}
+
 export const main = (): void => {
   const counter = new Counter()
   console.log(area(counter, 2))
@@ -56,4 +67,13 @@ export const main = (): void => {
   console.log(count(5))
   console.log(count(5, [1]))
   console.log(`calls ${counter.n}`)
+  const xs = [1, 2, 3]
+  let sum = 0
+  let i = 0
+  while (i < xs.length) {
+    sum = sum + xs[i]
+    trim(xs)
+    i = i + 1
+  }
+  console.log(`sum ${sum} left ${xs.length}`)
 }

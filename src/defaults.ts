@@ -15,12 +15,21 @@
 // it, and the checker sends a call that writes `n` arguments to the wrapper
 // for `n` (`defaultTarget`). A constant default after the last moved one stays
 // on `f` and is passed by the call as before.
+//
+// Only a function every call to which this module sees and routes takes
+// wrappers: one that is not exported (a call from another module would pass
+// the defaults it leaves out itself) and not overloaded (a signature names
+// the implementation, not a wrapper), with a default on every parameter from
+// the first lifted one to the last, so that each wrapper drops one argument.
+// Any other function with such a default keeps the strict refusal, with a
+// note that names the rule.
 
 import { CheckContext } from "./context"
 import {
   FLAG_ASYNC,
   FLAG_CONST,
   FLAG_DEFAULT,
+  FLAG_EXPORTED,
   FLAG_FOREIGN,
   FLAG_GENERATOR,
   FLAG_OPTIONAL,
@@ -37,7 +46,11 @@ export class DefaultWrappers {
   impls: Node[]
   arities: i32[]
   wrappers: Node[]
-  /** In a build without the feature, each parameter whose default a wrapper would evaluate with it. */
+  /**
+   * Each parameter whose default a wrapper would evaluate but does not: in a
+   * build without the feature, every one; with it, those of a function the
+   * feature leaves out (`admits`). Their refusal names why.
+   */
   lifted: Node[]
 
   constructor() {
@@ -117,7 +130,7 @@ const lastEvaluated = (decl: Node): i32 => {
   // An `x?` before the last such default would become a parameter a wrapper
   // passes on with no value to give it, so the function keeps its refusal.
   i = 0
-  while (i < last) {
+  while (i < last && i < params.length) {
     if ((params[i].flags & FLAG_OPTIONAL) !== 0) {
       return -1
     }
@@ -135,6 +148,69 @@ const takesWrappers = (decl: Node): boolean =>
   (decl.flags & (FLAG_FOREIGN | FLAG_ASYNC | FLAG_GENERATOR | FLAG_DEFAULT)) === 0 &&
   decl.children.length > 4 &&
   decl.children[4].children.length === 0
+
+/** The position of the first parameter of `params` with a default, at or before `last`. */
+const firstDefault = (params: Node[], last: i32): i32 => {
+  let first = 0
+  while (first < last && first < params.length && (params[first].flags & FLAG_DEFAULT) === 0) {
+    first = first + 1
+  }
+  return first
+}
+
+/** Whether `file` writes a signature with no body for `name`, which makes the function overloaded. */
+const isOverloaded = (file: Node, name: string): boolean => {
+  for (const stmt of file.children) {
+    if (
+      stmt.kind === NodeKind.FunctionDecl &&
+      stmt.children.length > 3 &&
+      stmt.children[0].kind === NodeKind.Ident &&
+      stmt.children[0].text === name &&
+      stmt.children[3].kind !== NodeKind.Block
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether the feature lifts the defaults of `decl` up to parameter `last`:
+ * the function is neither exported nor overloaded, and every parameter from
+ * the first default to `last` has one.
+ */
+const admits = (file: Node, decl: Node, last: i32): boolean => {
+  if ((decl.flags & FLAG_EXPORTED) !== 0 || isOverloaded(file, decl.children[0].text)) {
+    return false
+  }
+  const params = decl.children[1].children
+  let i = firstDefault(params, last)
+  while (i <= last && i < params.length) {
+    if ((params[i].flags & FLAG_DEFAULT) === 0) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/**
+ * Give each `x?` under `node` the `null` a call that leaves it out passes: a
+ * node of its own, so that the checker can record its type for the walks
+ * that read a default. Only a build that allows `optional-params` has one.
+ */
+const markOptional = (parser: Parser, node: Node): void => {
+  if (
+    node.kind === NodeKind.Param &&
+    (node.flags & (FLAG_OPTIONAL | FLAG_DEFAULT)) === FLAG_OPTIONAL &&
+    node.children.length === 2
+  ) {
+    node.children.push(parser.node(NodeKind.Null, node.end, node.end))
+  }
+  for (const child of node.children) {
+    markOptional(parser, child)
+  }
+}
 
 /** The name of the wrapper of `name` that takes `arity` arguments. */
 const wrapperName = (name: string, arity: i32): string => `${name}__default${arity}`
@@ -154,7 +230,7 @@ const buildWrapper = (parser: Parser, decl: Node, arity: i32, next: string): Nod
   wrapper.children.push(ident(parser, wrapperName(decl.children[0].text, arity), decl.children[0]))
   const list = parser.list()
   let i = 0
-  while (i < arity) {
+  while (i < arity && i < params.length) {
     const param = parser.node(NodeKind.Param, params[i].start, params[i].end)
     param.flags = FLAG_SIGNATURE
     param.children.push(cloneTree(parser, params[i].children[0]))
@@ -179,7 +255,7 @@ const buildWrapper = (parser: Parser, decl: Node, arity: i32, next: string): Nod
   call.children.push(ident(parser, next, decl.children[0]))
   const args = parser.list()
   i = 0
-  while (i <= arity) {
+  while (i <= arity && i < params.length) {
     args.children.push(ident(parser, params[i].children[0].text, moved))
     i = i + 1
   }
@@ -201,7 +277,7 @@ const buildWrapper = (parser: Parser, decl: Node, arity: i32, next: string): Nod
  * it builds are numbered with the rest; `allowed` is whether the build allows
  * `optional-params`. Without it the tree is left as written, and the
  * parameters a wrapper would evaluate are recorded, so that their refusal
- * names the feature.
+ * names the feature; with it, so are those of a function `admits` leaves out.
  */
 export const liftDefaults = (parser: Parser, file: Node, allowed: boolean): DefaultWrappers => {
   const made = new DefaultWrappers()
@@ -209,15 +285,17 @@ export const liftDefaults = (parser: Parser, file: Node, allowed: boolean): Defa
     for (const stmt of file.children) {
       if (takesWrappers(stmt)) {
         const last = lastEvaluated(stmt)
+        const params = stmt.children[1].children
         let i = 0
-        while (i <= last) {
-          made.lifted.push(stmt.children[1].children[i])
+        while (i <= last && i < params.length) {
+          made.lifted.push(params[i])
           i = i + 1
         }
       }
     }
     return made
   }
+  markOptional(parser, file)
   const kept: Node[] = []
   for (const stmt of file.children) {
     kept.push(stmt)
@@ -229,10 +307,15 @@ export const liftDefaults = (parser: Parser, file: Node, allowed: boolean): Defa
       continue
     }
     const params = stmt.children[1].children
-    let first = 0
-    while ((params[first].flags & FLAG_DEFAULT) === 0) {
-      first = first + 1
+    if (!admits(file, stmt, last)) {
+      let i = 0
+      while (i <= last && i < params.length) {
+        made.lifted.push(params[i])
+        i = i + 1
+      }
+      continue
     }
+    const first = firstDefault(params, last)
     const name = stmt.children[0].text
     let arity = first
     while (arity <= last) {
@@ -245,7 +328,7 @@ export const liftDefaults = (parser: Parser, file: Node, allowed: boolean): Defa
       arity = arity + 1
     }
     let i = first
-    while (i <= last) {
+    while (i <= last && i < params.length) {
       params[i].flags = params[i].flags & ~FLAG_DEFAULT
       params[i].children = [params[i].children[0], params[i].children[1]]
       i = i + 1

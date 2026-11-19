@@ -16481,9 +16481,17 @@ allows admits. This compiler has built six features, `nullish`,
   leaves its argument out, after the arguments and left to right, as Node
   runs it: a call that writes the argument does not run it. The build gives
   the function one wrapper per argument count a call may stop at, and each
-  call goes to the wrapper for the count it writes. A method's or a
-  constructor's default, and a function whose earlier parameter is an `x?`,
-  keep the strict refusal. Without the feature, the refusal of such a
+  call goes to the wrapper for the count it writes. Only a function every
+  call to which the module sees and routes takes wrappers: an exported
+  function (`compat_optional_params_exported`), whose callers in another
+  module would pass the default themselves, an overloaded one
+  (`compat_optional_params_overloaded`), whose signatures name the
+  implementation, and one with a required parameter between two such
+  defaults (`compat_optional_params_required_between`) keep the strict
+  refusal, with a note that names the rule. So do a method's or a
+  constructor's default, and a function whose earlier parameter is an `x?`.
+  `--emit-ts` writes no wrapper: the TypeScript keeps each default where it
+  was written. Without the feature, the refusal of such a
   default names it (`compat_optional_params_default_feature`), and an
   `x?` stays refused as before (`compat_optional_params_feature`).
 - **`overloads` admits overload signatures**: a function, a method or a

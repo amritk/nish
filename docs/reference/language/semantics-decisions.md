@@ -1788,9 +1788,17 @@ allows admits. This compiler has built six features, `nullish`,
   leaves its argument out, after the arguments and left to right, as Node
   runs it: a call that writes the argument does not run it. The build gives
   the function one wrapper per argument count a call may stop at, and each
-  call goes to the wrapper for the count it writes. A method's or a
-  constructor's default, and a function whose earlier parameter is an `x?`,
-  keep the strict refusal. Without the feature, the refusal of such a
+  call goes to the wrapper for the count it writes. Only a function every
+  call to which the module sees and routes takes wrappers: an exported
+  function (`compat_optional_params_exported`), whose callers in another
+  module would pass the default themselves, an overloaded one
+  (`compat_optional_params_overloaded`), whose signatures name the
+  implementation, and one with a required parameter between two such
+  defaults (`compat_optional_params_required_between`) keep the strict
+  refusal, with a note that names the rule. So do a method's or a
+  constructor's default, and a function whose earlier parameter is an `x?`.
+  `--emit-ts` writes no wrapper: the TypeScript keeps each default where it
+  was written. Without the feature, the refusal of such a
   default names it (`compat_optional_params_default_feature`), and an
   `x?` stays refused as before (`compat_optional_params_feature`).
 - **`overloads` admits overload signatures**: a function, a method or a
@@ -1802,14 +1810,19 @@ allows admits. This compiler has built six features, `nullish`,
   `tsc` holds it: it takes no rest parameter, every argument list it takes
   the implementation takes too, each parameter type is one the
   implementation's takes, and it writes the return type, which is the
-  implementation's; otherwise NL2800 (`compat_overloads_incompatible`,
-  `compat_overloads_return`). A call the implementation accepts is then held
+  implementation's exactly, which is stricter than `tsc`, where a return
+  type the implementation's is assignable to will do; otherwise NL2800
+  (`compat_overloads_incompatible`, `compat_overloads_return`). A call the
+  implementation accepts is then held
   to the signatures: one that no signature takes is NL2801, because the
   implementation's own signature is not one a caller may call
-  (`compat_overloads_no_match`, `compat_overloads_method_no_match`). A
+  (`compat_overloads_no_match`, `compat_overloads_method_no_match`,
+  `compat_overloads_constructor_no_match`). Only a call that names the
+  function, the method or the class is held to the signatures: a call
+  through a function value is held to the implementation alone. A
   function with signatures is refused by `--emit-header`, `--emit-napi` and
   `--emit-dts`, NL2802, since the file would spell only the implementation
-  (`compat_overloads_emit_header`). A generic function or class keeps the
+  (`compat_overloads_emit_header`, `compat_overloads_emit_dts`). A generic function or class keeps the
   strict refusal.
 - **The dialect only adds.** A strict build of a program the strict dialect
   accepts is unchanged by all of the above, byte for byte; what changed for a

@@ -148,8 +148,8 @@ function nameLiftedFeature(ctx: CheckContext, param: Node, before: i32): void ->
   pointer ctx: size=448 writesThrough=false captured=false passedTo=CheckContext.compatAllows#0
   pointer param: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee -6:5 CheckContext.compatAllows -> @CheckContext.compatAllows
   local -2:9 refusal: Diagnostic (const)
+  callee -1:7 CheckContext.compatAllows -> @CheckContext.compatAllows
 function isCompatOptional(ctx: CheckContext, param: Node): boolean -> @isCompatOptional [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.compatAllows

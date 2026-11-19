@@ -26405,6 +26405,35 @@ export const main = (): void => {
       chainedEmit.status === 0 && chainedRun.status === 0 && chainedRun.stdout === "1\n",
       shown(chainedEmit) + shown(chainedRun)
     )
+    // WP28 C1: the wrappers `optional-params` builds in front of a function
+    // with a default that is not a constant are not written: the TypeScript
+    // keeps the default where it was written, and Node evaluates it as the
+    // native program's wrapper does.
+    const liftedOut = path.join(work, "compat_defaults_ts")
+    fs.rmSync(liftedOut, { recursive: true, force: true })
+    const liftedEmit = nish([
+      path.join(root, "tests/cases/compat_optional_params.ts"),
+      "--compat",
+      "--emit-ts",
+      liftedOut,
+    ])
+    const liftedText =
+      liftedEmit.status === 0
+        ? fs.readFileSync(path.join(liftedOut, "compat_optional_params.ts"), "utf8")
+        : ""
+    const liftedRun =
+      liftedEmit.status === 0
+        ? spawnSync("node", [...emitTsNodeFlags, path.join(liftedOut, "entry.ts")], { cwd: root, encoding: "utf8" })
+        : liftedEmit
+    check(
+      "compat: `--emit-ts` writes no `optional-params` wrapper and keeps each default where it was written",
+      liftedEmit.status === 0 &&
+        !liftedText.includes("__default") &&
+        liftedText.includes("height: number = tick(counter, \"height\")") &&
+        liftedRun.status === 0 &&
+        liftedRun.stdout === fs.readFileSync(path.join(root, "tests/cases/compat_optional_params.out"), "utf8"),
+      shown(liftedEmit) + shown(liftedRun)
+    )
     // Strict `--emit-ts` keeps its checked element read inside a chain, byte
     // for byte: only a build that admits `optional-chaining` leaves it to the
     // chain. (Strict's `idx(g?.rows, 0)` throws under Node when `g` is null,

@@ -55,10 +55,11 @@ function recordFrom(ctx: CheckContext, list: Node[], lift: boolean): Node[] -> @
   pointer ctx: size=448 writesThrough=false captured=false
   pointer list: size=0 writesThrough=false captured=false passedTo=implementationAt#0
   stackSites=0 stackLocals=0
-  local -10:9 kept: Node[] (const)
-  local -9:7 i: i32 (let)
-  local -7:11 impl: i32 (const)
-  callee -7:18 implementationAt -> @implementationAt
+  local -11:9 kept: Node[] (const)
+  local -10:7 i: i32 (let)
+  local -8:11 impl: i32 (const)
+  callee -8:18 implementationAt -> @implementationAt
+  local -2:11 target: Node (const)
 function recordOverloads(ctx: CheckContext, file: Node): void -> @recordOverloads [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -139,15 +140,15 @@ function holdsTo(ctx: CheckContext, ov: FunctionSig, sig: FunctionSig, skip: i32
   callee +28:5 incompatible -> @incompatible
   callee +32:32 leastOf -> @leastOf
   callee +32:89 FunctionSig.requiredArity -> @FunctionSig.requiredArity
-  local +36:7 k: i32 (let)
-  local +38:11 have: i32 (const)
-  callee +39:63 TypeTable.assignable -> @TypeTable.assignable
-  callee +40:7 incompatible -> @incompatible
-  callee +44:41 TypeTable.typeName -> @TypeTable.typeName
-  callee +44:97 TypeTable.typeName -> @TypeTable.typeName
-  callee +51:5 incompatible -> @incompatible
-  callee +55:21 TypeTable.typeName -> @TypeTable.typeName
-  callee +55:81 TypeTable.typeName -> @TypeTable.typeName
+  local +38:7 k: i32 (let)
+  local +40:11 have: i32 (const)
+  callee +41:63 TypeTable.assignable -> @TypeTable.assignable
+  callee +47:5 incompatible -> @incompatible
+  callee +51:39 TypeTable.typeName -> @TypeTable.typeName
+  callee +51:107 TypeTable.typeName -> @TypeTable.typeName
+  callee +56:5 incompatible -> @incompatible
+  callee +60:21 TypeTable.typeName -> @TypeTable.typeName
+  callee +60:81 TypeTable.typeName -> @TypeTable.typeName
 function indexIn(params: Node, param: Node): i32 -> @indexIn
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer params: size=40 writesThrough=false captured=false

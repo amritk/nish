@@ -1316,7 +1316,21 @@ const RECURSION_ARENA_WHY =
 
 const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
+const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overload signatures under --compat"
+
 const DECLARED = [
+  {
+    program: "tests/cases/compat_optional_params.ts",
+    file: "exit",
+    changelog: COMPAT_SIGNATURES,
+    why: "`--compat` with `optional-params` lifts a non-constant default into a wrapper the call site evaluates, which the reference refuses",
+  },
+  {
+    program: "tests/cases/compat_overloads.ts",
+    file: "exit",
+    changelog: COMPAT_SIGNATURES,
+    why: "`--compat` with `overloads` accepts body-less overload signatures before one implementation, which the reference refuses as a function with no body",
+  },
   {
     program: "tests/cases/host_import_call.ts",
     file: "host_import_call.ll",

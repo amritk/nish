@@ -67,6 +67,7 @@ tests/wordings/host/regex.ts  # host-module wording; src/host-module.ts reads ex
 tests/wordings/host/unknown_parameter.ts  # host-module wording; src/host-module.ts reads export function
 tests/wordings/host/window_element.ts  # host-module wording; src/host-module.ts reads export function
 tests/wordings/host/window_width.ts  # host-module wording; src/host-module.ts reads export function
+tests/link/compat_optional_params_overloaded/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
 tests/link/compat_overloads_emit_dts/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
 tests/link/compat_overloads_emit_header/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
 tests/link/compat_overloads_feature/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)

@@ -283,14 +283,16 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
  * `optional-params` feature would evaluate that default (`src/defaults.ts`).
  */
 const nameLiftedFeature = (ctx: CheckContext, param: Node, before: i32): void => {
-  if (
-    ctx.sink.items.length <= before ||
-    ctx.defaultLifted.indexOf(param) < 0 ||
-    ctx.compatAllows("optional-params")
-  ) {
+  if (ctx.sink.items.length <= before || ctx.defaultLifted.indexOf(param) < 0) {
     return
   }
   const refusal = ctx.sink.items[ctx.sink.items.length - 1]
+  if (ctx.compatAllows("optional-params")) {
+    refusal.notes.push(
+      "the `optional-params` feature evaluates such a default only on a top-level function that is not exported or overloaded, with a default on every parameter from the first one it evaluates to the last"
+    )
+    return
+  }
   if (ctx.compat) {
     refusal.notes.push(`this program's dialect is \`compat=${ctx.compatFeatures.join(",")}\``)
   }

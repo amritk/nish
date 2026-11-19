@@ -124,14 +124,15 @@ const recordFrom = (ctx: CheckContext, list: Node[], lift: boolean): Node[] => {
   let i = 0
   while (i < list.length) {
     const impl = implementationAt(list, i)
-    if (impl < 0) {
+    if (impl < 0 || impl >= list.length) {
       kept.push(list[i])
       i = i + 1
       continue
     }
-    while (i < impl) {
+    const target = list[impl]
+    while (i < impl && i < list.length) {
       ctx.overloadSignatures.push(list[i])
-      ctx.overloadOf.push(list[impl])
+      ctx.overloadOf.push(target)
       if (!lift) {
         kept.push(list[i])
       }
@@ -270,19 +271,24 @@ const holdsTo = (
     )
     return false
   }
+  // The first parameter the implementation does not take, named once the
+  // loop is over, so that the loop builds no text.
   let k = skip
-  while (k < ov.paramTypes.length) {
+  while (k < ov.paramTypes.length && k < sig.paramTypes.length) {
     const have = ov.paramTypes[k]
     if (have !== T_ERROR && sig.paramTypes[k] !== T_ERROR && !ctx.table.assignable(have, sig.paramTypes[k])) {
-      incompatible(
-        ctx,
-        params.children[k - skip],
-        shown,
-        `parameter ${k - skip + 1} is ${ctx.table.typeName(have)}, which the implementation's ${ctx.table.typeName(sig.paramTypes[k])} does not take`
-      )
-      return false
+      break
     }
     k = k + 1
+  }
+  if (k < ov.paramTypes.length && k < sig.paramTypes.length && k - skip < params.children.length) {
+    incompatible(
+      ctx,
+      params.children[k - skip],
+      shown,
+      `parameter ${k - skip + 1} is ${ctx.table.typeName(ov.paramTypes[k])}, which the implementation's ${ctx.table.typeName(sig.paramTypes[k])} does not take`
+    )
+    return false
   }
   if (ov.returnType !== T_ERROR && sig.returnType !== T_ERROR && ov.returnType !== sig.returnType) {
     incompatible(

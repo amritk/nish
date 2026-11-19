@@ -551,13 +551,13 @@ function lentOnStays(ctx: CheckContext, sig: FunctionSig, call: Node, use: Node,
   local +1:9 home: CheckContext | null (const)
   callee +1:16 homeContext -> @homeContext
   callee +2:58 lendCalleeShadowed -> @lendCalleeShadowed
-  local +8:9 next: FunctionSig | null (const)
-  callee +8:16 CheckContext.signature -> @CheckContext.signature
-  local +12:9 at: i32 (const)
-  local +16:9 origin: SourceFile | null (const)
-  callee +18:12 isHostWindow -> @isHostWindow
-  callee +20:8 lendableParameter -> @lendableParameter
-  callee +23:3 LendQueue.add -> @LendQueue.add
+  local +10:9 next: FunctionSig | null (const)
+  callee +10:16 CheckContext.signature -> @CheckContext.signature
+  local +14:9 at: i32 (const)
+  local +18:9 origin: SourceFile | null (const)
+  callee +20:12 isHostWindow -> @isHostWindow
+  callee +22:8 lendableParameter -> @lendableParameter
+  callee +25:3 LendQueue.add -> @LendQueue.add
 function checkStorageAssignment(ctx: CheckContext, node: Node): void -> @checkStorageAssignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkStorageUses
