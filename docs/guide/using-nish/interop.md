@@ -1333,7 +1333,8 @@ export const main = (): i32 => {
 Every index is checked against the length. A constant outside it, such as
 `name.sysname[65]`, does not compile; any other index outside it panics
 before it reads or writes; and an index the compiler can prove is inside it,
-like a constant or a counter the loop keeps below 65, costs no check. The
+like a constant or a counter the loop keeps below 65, costs no check:
+`--emit-panics` lists the `name.sysname[length]` read above as `proven`. The
 field is part of the struct, not a Nish array: you cannot hold it in a
 variable, pass it to a function, read its `.length` or walk it with
 `for...of`, and you write it one element at a time. Unions and bitfields

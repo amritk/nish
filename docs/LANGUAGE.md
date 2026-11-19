@@ -7389,7 +7389,15 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   says every key from 0 to `Hi` is present, as every element of a C array is.
   A `CArray<T, N>` type would need a declaration in `runtime/nish.d.ts`, a
   tuple has no parser here, and `T[]` cannot carry its length, because `tsc`
-  refuses an initializer in a `declare class`.
+  refuses an initializer in a `declare class`. (A `T[]` field of a Nish
+  class is a different rule: see "Fixed-length array fields are stored
+  inline".)
+  - **It takes `(Hi + 1) × sizeof(T)` bytes**, elements back to back with no
+    padding between them, and the struct pads around the array as C pads
+    around `T name[Hi + 1]`: the array starts at `T`'s alignment, and the
+    field after it starts at its own (`tests/ffi-struct.js` holds 8-byte
+    elements after a byte, a one-element array and two arrays in a row
+    against clang).
   - **The key is `integer<0, Hi>`**, a range from 0, with `Hi` below
     16777216: `` its key must be `integer<0, Hi>` `` (NL2805,
     `tests/link/ffi_array_field_key`: a range from 1, a `string` key, a
@@ -7397,7 +7405,8 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   - **An element is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or
     `f64`**: `` which has no C element layout `` (NL2806,
     `ffi_array_field_element`: a `CPtr` and a `declare class` element).
-  - **An index is checked.** A constant index outside 0 to `Hi` is refused at
+  - **An index is checked.** The index is any value an array index takes,
+    widened to `i64` before it is compared. A constant index outside 0 to `Hi` is refused at
     compile time: `` its indices are 0 to 4 `` (NL2810,
     `ffi_array_field_oob`, past the end and below zero). Any other index is
     compared, unsigned, with the length, and one outside it panics with
@@ -7405,7 +7414,8 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
     `poke(3)` in `ffi_array_field`). An index the prover keeps inside the
     range — a constant, an `integer<0, Hi>` value, a `for` loop's counter
     below the length — emits no check, and `--emit-panics` lists it as proven
-    (`sumH`). Element loads and stores carry no TBAA tag, as the struct's
+    (`sumH` and `written`, pinned by `ffi_array_field.panics`, which lists
+    `readH`'s, `readData`'s and `store`'s indices as unproven). Element loads and stores carry no TBAA tag, as the struct's
     other fields do not.
   - **It is read and written by index and nothing else.** It is not a Nish
     array: holding it, passing it, reading its `.length` or walking it with
