@@ -10,6 +10,7 @@ declare class plain {
 
 declare function use_p(v: CPtr): i32
 declare function use_plain(v: plain): i32
+declare function use_la(v: CPtr): i32
 
 /* Not bound:
  *   struct p: packed or aligned layout (PackedAttr), which a declare class does not follow
@@ -17,4 +18,5 @@ declare function use_plain(v: plain): i32
  *   struct pk: packed or aligned layout (MaxFieldAlignmentAttr), which a declare class does not follow
  *   struct fa: packed or aligned layout (AlignedAttr on field `y`), which a declare class does not follow
  *   struct wa: field `w` is a typedef with its own `aligned` attribute
+ *   struct la: field `a` is a typedef with its own `aligned` attribute
  */

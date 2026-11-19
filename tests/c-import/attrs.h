@@ -33,3 +33,15 @@ int late_alias(int x) __attribute__((alias("target_fn")));
 
 /* clang mangles an overloadable function's symbol. */
 int __attribute__((overloadable)) over(int x);
+
+/* noreturn on a later declaration refuses the function as on the first: C11's
+   is a declaration attribute, GNU's is part of the function's type. clang
+   refuses a calling convention a later declaration adds, so none is here. */
+void late_exit(int c);
+_Noreturn void late_exit(int c);
+void late_gnu_exit(int c);
+void late_gnu_exit(int c) __attribute__((noreturn));
+
+/* A variable declared and then defined is one variable. */
+extern int twice;
+int twice = 3;

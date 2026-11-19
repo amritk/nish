@@ -1022,7 +1022,8 @@ class Importer {
         continue
       } else if (this.kindIs(node, "FunctionDecl")) {
         this.readFunction(node, inHeader)
-      } else if (this.kindIs(node, "VarDecl") && inHeader) {
+      } else if (this.kindIs(node, "VarDecl") && inHeader && !this.listedVar(node)) {
+        // `extern int x; int x = 3;` is one variable, listed once.
         this.varNames.push(this.text(node, "name"))
         this.varLines.push(this.curLine)
       }
@@ -1030,16 +1031,18 @@ class Importer {
     }
   }
 
+  /** Whether `node`'s name is already listed, compared in place so the loop allocates nothing. */
+  listedVar(node: i32): boolean {
+    for (let i = 0; i < this.varNames.length; i++) {
+      if (this.textIs(node, "name", this.varNames[i])) {
+        return true
+      }
+    }
+    return false
+  }
+
   readTypedef(node: i32): void {
     const name = this.text(node, "name")
-    // C11 lets a typedef be declared again (`typedef T T;`), always as the
-    // type it already names: the first is kept, so a typedef's type names
-    // only typedefs declared before it and following them ends.
-    if (this.typedefs.get(name, -1) >= 0) {
-      return
-    }
-    this.typedefs.set(name, this.typedefTypes.length)
-    this.typedefTypes.push(this.qualType(node))
     const children = this.inner(node)
     let aligned = false
     for (let i = 0; i < this.count(children); i++) {
@@ -1047,6 +1050,20 @@ class Importer {
         aligned = true
       }
     }
+    // C11 lets a typedef be declared again (`typedef T T;`), always as the
+    // type it already names: the first type is kept, so a typedef's type
+    // names only typedefs declared before it and following them ends. clang
+    // puts an `aligned` on the declaration that spells it, so any one of
+    // them marks the typedef.
+    const seen = this.typedefs.get(name, -1)
+    if (seen >= 0) {
+      if (aligned && seen < this.typedefAligned.length) {
+        this.typedefAligned[seen] = true
+      }
+      return
+    }
+    this.typedefs.set(name, this.typedefTypes.length)
+    this.typedefTypes.push(this.qualType(node))
     this.typedefAligned.push(aligned)
     // `typedef struct { ... } name;`: the tag has no name of its own, and
     // clang spells it `struct name` from here on.
@@ -1150,8 +1167,20 @@ class Importer {
   }
 
   readEnum(node: i32, inHeader: boolean): void {
+    const name = this.text(node, "name")
+    const seen = name.length > 0 ? this.enumTags.get(`enum ${name}`, -1) : -1
+    if (seen >= 0 && seen < this.enums.length && !this.hasEnumerators(node)) {
+      // `enum e;` after the definition names the same enum: its values
+      // stay the definition's, so its width does too.
+      this.enumIds.set(this.text(node, "id"), seen)
+      if (inHeader) {
+        this.enums[seen].inHeader = true
+      }
+      this.trackRest(node)
+      return
+    }
     const e = new CEnum()
-    e.name = this.text(node, "name")
+    e.name = name
     e.underlying = this.text(this.member(node, "fixedUnderlyingType"), "qualType")
     e.inHeader = inHeader
     const index = this.enums.length
@@ -1198,6 +1227,17 @@ class Importer {
       }
       this.trackRest(child)
     }
+  }
+
+  /** Whether enum declaration `node` lists any enumerator. */
+  hasEnumerators(node: i32): boolean {
+    const children = this.inner(node)
+    for (let i = 0; i < this.count(children); i++) {
+      if (this.kindIs(this.doc.at(children, i), "EnumConstantDecl")) {
+        return true
+      }
+    }
+    return false
   }
 
   /**
@@ -1247,8 +1287,14 @@ class Importer {
           first.inHeader = true
         }
         const again = this.inner(node)
-        for (let i = 0; i < this.count(again) && first.why.length === 0; i++) {
-          first.why = this.attrWhy(this.doc.at(again, i))
+        for (let i = 0; i < this.count(again); i++) {
+          const child = this.doc.at(again, i)
+          if (this.kindIs(child, "ReturnsNonNullAttr")) {
+            // clang puts `returns_nonnull` on the declaration that spells it.
+            first.returnsNonNull = true
+          } else if (first.why.length === 0) {
+            first.why = this.attrWhy(child)
+          }
         }
         if (first.why.length === 0) {
           // -1 skips the prototype check: a later `int f();` keeps the earlier prototype.
@@ -2346,10 +2392,7 @@ class Importer {
       o.ownedBy = owner
       return
     }
-    this.fail(
-      `overrides: \`${o.name}\` "return" must be "nonnull", "nullable" or { "owned": "<function>" }`,
-      1
-    )
+    this.fail(`overrides: \`${o.name}\` "return" must be "nonnull" or { "owned": "<function>" }`, 1)
   }
 
   /** How a failure names parameter `param` of `f`. */

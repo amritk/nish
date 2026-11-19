@@ -46173,7 +46173,7 @@ export function main(): i32 {
       ['{ "functions": [] }', 'overrides: "functions" must be an object'],
       ['{ "functions": { "nope": {} } }', "overrides: `nope` is not a function the header declares"],
       ['{ "functions": { "db_close": 1 } }', "overrides: `db_close` must be an object"],
-      ['{ "functions": { "db_name": { "return": "maybe" } } }', '`db_name` "return" must be "nonnull", "nullable"'],
+      ['{ "functions": { "db_name": { "return": "maybe" } } }', '`db_name` "return" must be "nonnull" or { "owned"'],
       ['{ "functions": { "db_close": { "return": "nullable" } } }', "`db_close` does not return a pointer"],
       [
         '{ "functions": { "db_error": { "return": { "owned": "free_it" } } } }',

@@ -20,4 +20,5 @@ declare function use_box(b: CPtr): void
  *   TABBED: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
  *   RUBOUT: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
  *   INT_MAX$X: its name is not an ASCII identifier
+ *   a declaration whose name is not printable ASCII: its name is not an ASCII identifier
  */

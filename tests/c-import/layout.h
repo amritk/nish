@@ -9,3 +9,8 @@ struct wa { wide_int w; };
 struct plain { int x; unsigned int y; };
 int use_p(struct p *v);
 int use_plain(struct plain *v);
+/* An `aligned` on a typedef's later declaration marks the typedef: `la` is not bound. */
+typedef long long late_aligned;
+typedef late_aligned late_aligned __attribute__((aligned(16)));
+struct la { late_aligned a; };
+int use_la(struct la *v);

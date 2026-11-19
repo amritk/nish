@@ -23,3 +23,7 @@ enum documented {
   /** The second, implicit. */
   DOC_B,
 };
+
+/* `enum high;` again after its definition names the same enum, so it stays unsigned. */
+enum high;
+int take_high_again(enum high h);

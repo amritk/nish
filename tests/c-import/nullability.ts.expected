@@ -11,3 +11,5 @@ declare function must_name(): CPtr
 declare function grid(): CPtr
 declare function first_int(values: CPtr | null): CPtr | null
 declare function weights(w: CPtr): CPtr | null
+declare function later_rn(): CPtr
+declare function later_nn(): CPtr | null

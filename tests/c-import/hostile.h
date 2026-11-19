@@ -26,3 +26,6 @@ enum mode { MODE_A, MODE_$B };
 
 /* A macro name that runs on past `$`: listed whole, never read as limits.h's INT_MAX. */
 #define INT_MAX$X 0
+
+/* A macro name outside ASCII: listed by line, never written as a name. */
+#define CAFÉ_ONE 1

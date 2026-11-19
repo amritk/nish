@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 60 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 61 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -741,4 +741,12 @@ The message of an error contains:
 
 ```text
 …, which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it
+```
+
+## NL3062
+
+The message of an error contains:
+
+```text
+…: a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build
 ```
