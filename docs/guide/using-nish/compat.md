@@ -6,8 +6,8 @@ a time, for code that was written for Node and is being moved over. You ask
 for it by name, a build that does not ask is unchanged, and the compiled
 program says which one it was built in.
 
-The dialect changes the number a bare `number` is, and it has two features:
-`optional-chaining` and `nullish`. Each admits a form of TypeScript the strict
+The dialect changes the number a bare `number` is, and it has four features:
+`optional-chaining`, `nullish`, `string-switch` and `for-of-string`. Each admits a form of TypeScript the strict
 dialect refuses, with the meaning Node gives it.
 
 The rules are in the reference, under
@@ -248,6 +248,85 @@ The default must still have the type of the left side, as TypeScript asks
 (`NL2370`). A `??` on a value that may be `null` is the strict dialect's own,
 and means the same in both.
 
+## A `switch` on a string
+
+The strict dialect switches on integers and enums only. With `string-switch`,
+a `switch` on a `string` compiles too, and picks its case as Node does:
+
+<!-- nish:ok -->
+```json package.json
+{
+  "name": "ported",
+  "private": true,
+  "nish": {
+    "compat": ["string-switch"]
+  }
+}
+```
+
+<!-- nish:ok -->
+```ts main.ts
+const HELLO: string = "hello"
+
+const kind = (word: string): string => {
+  switch (word) {
+    case "a":
+    case "b":
+      return "letter"
+    case HELLO:
+      return "greeting"
+    default:
+      return "other"
+  }
+}
+
+export const main = (): void => {
+  console.log(kind("b"))
+  console.log(kind("hello"))
+  console.log(kind("zz"))
+}
+```
+
+That prints `letter`, `greeting` and `other`. A label is a string literal or a
+module constant of type `string`, since a label is compared without being run;
+a label the compiler would have to run, such as a parameter or a call, is
+refused (`NL2799`), and so are two labels with the same text. Fallthrough,
+`default` and `break` mean what they mean in Node. The compiler compares the
+word with each label in turn, so a switch with many cases costs a comparison
+per case before the one that matches.
+
+## `for...of` over a string
+
+The strict dialect walks arrays. With `for-of-string`, `for...of` walks a
+`string` one character at a time, as Node does: a character outside the
+Basic Multilingual Plane, such as an emoji, is one step, not two.
+
+<!-- nish:ok -->
+```json package.json
+{
+  "name": "ported",
+  "private": true,
+  "nish": {
+    "compat": ["for-of-string"]
+  }
+}
+```
+
+<!-- nish:ok -->
+```ts main.ts
+export const main = (): void => {
+  let out: string = ""
+  for (const c of "né😀") {
+    out = `${out}[${c}]`
+  }
+  console.log(out)
+}
+```
+
+That prints `[n][é][😀]`. Each character is a new `string`; `break`,
+`continue` and labels work as they do over an array. A destructuring head,
+`for (const [c] of s)`, stays refused.
+
 ## Dependencies follow the root package
 
 A program is compiled in one dialect: the one its root package asks for, the
@@ -271,12 +350,12 @@ the number mode and the features:
 
 ```llvm
 !nish.compat = !{!0}
-!0 = !{!"f64", !"nullish", !"optional-chaining"}
+!0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
 ```
 
 A strict build has no such line, so you can tell from a `.ll` file which
 dialect its source was written in. `--emit-checked` opens with the same facts
-(`compat number=f64 features=[nullish,optional-chaining]`).
+(`compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]`).
 
 ## What it does not change
 

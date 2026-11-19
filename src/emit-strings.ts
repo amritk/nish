@@ -20,7 +20,7 @@ import {
   lentBuffer,
 } from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
-import { Emitter } from "./emit"
+import { Emitter, LoopTarget } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
 import { emitFfiNullTest, emitPanicTail, panicTailCallees } from "./emit-builtins"
 import { templateParts } from "./emit-util"
@@ -28,6 +28,7 @@ import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
 import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
+import { Local } from "./symbols"
 import { irEscape } from "./strings"
 import {
   isFloat,
@@ -228,6 +229,74 @@ const clampToLength = (emitter: Emitter, value: string, len: string): string => 
 /** A fresh arena string holding `n` bytes copied from `bytes`. */
 const newString = (emitter: Emitter, bytes: string, n: string): string =>
   emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`)
+
+/**
+ * WP28 C1: `for (const c of s)` under the compatibility dialect's
+ * `for-of-string`, a pass per code point, as JavaScript's string iterator
+ * takes one. A UTF-8 lead byte says how many bytes its code point has — 1
+ * below `0xC0` (a stray continuation byte stands alone), 2 below `0xE0`, 3
+ * below `0xF0`, else 4 — clamped to the bytes left, so a truncated sequence
+ * never reads past the end. `c` is a fresh string of those bytes. The next
+ * offset is kept in `%forof.next` before the body runs, so `continue` steps
+ * by the width as falling out of the body does.
+ */
+export const emitStringWalk = (emitter: Emitter, stmt: Node, local: Local): void => {
+  const fn = emitter.fn
+  const condBlock = fn.newBlock("forof.cond")
+  const bodyBlock = fn.newBlock("forof.body")
+  const incBlock = fn.newBlock("forof.inc")
+  const endBlock = fn.newBlock("forof.end")
+  const slot = fn.emitAlloca(`${local.name}.addr`, "i8*", emitter.align(T_STRING))
+  emitter.setSlot(local, slot)
+  const debug = emitter.debug
+  if (debug !== null) {
+    debug.declareLocal(fn, local, slot, stmt.children[0].children[0].children[0]) // `-g`
+  }
+  const align = emitter.opts.optimizeAttributes ? 8 : 0
+  const idxSlot = fn.emitAlloca("forof.idx", "i64", align)
+  const nextSlot = fn.emitAlloca("forof.next", "i64", align)
+
+  const str = emitter.emitExpression(stmt.children[1])
+  const len = loadStringLength(emitter, str)
+  const data = stringData(emitter, str)
+  fn.emit(`store i64 0, i64* ${idxSlot}${emitter.align8()}`)
+  fn.emit(`br label %${condBlock.label}`)
+
+  fn.placeBlock(condBlock)
+  const idx = fn.emitValue(`load i64, i64* ${idxSlot}${emitter.align8()}`)
+  const more = fn.emitValue(`icmp ult i64 ${idx}, ${len}`)
+  fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`)
+
+  fn.placeBlock(bodyBlock)
+  const at = fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${idx}`)
+  const lead = fn.emitValue(`load i8, i8* ${at}`)
+  let width = "1"
+  // 0xC0, 0xE0 and 0xF0, as an `i8` spells them.
+  for (const bound of ["-64", "-32", "-16"]) {
+    const over = fn.emitValue(`icmp uge i8 ${lead}, ${bound}`)
+    const step = fn.emitValue(`zext i1 ${over} to i64`)
+    width = fn.emitValue(`add i64 ${width}, ${step}`)
+  }
+  const left = fn.emitValue(`sub i64 ${len}, ${idx}`)
+  const n = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${width}, i64 ${left})`)
+  const next = fn.emitValue(`add i64 ${idx}, ${n}`)
+  fn.emit(`store i64 ${next}, i64* ${nextSlot}${emitter.align8()}`)
+  const code = newString(emitter, at, n)
+  fn.emit(`store i8* ${code}, i8** ${slot}${emitter.alignSuffix(T_STRING)}`)
+  emitter.loops.push(new LoopTarget(endBlock, incBlock))
+  emitter.emitStatement(stmt.children[2])
+  emitter.loops.pop()
+  if (!fn.currentBlock().terminated()) {
+    fn.emit(`br label %${incBlock.label}`)
+  }
+
+  fn.placeBlock(incBlock)
+  const stepped = fn.emitValue(`load i64, i64* ${nextSlot}${emitter.align8()}`)
+  fn.emit(`store i64 ${stepped}, i64* ${idxSlot}${emitter.align8()}`)
+  fn.emit(`br label %${condBlock.label}`)
+
+  fn.placeBlock(endBlock)
+}
 
 /**
  * A copy of `str` in the current arena: what a read of a string through a

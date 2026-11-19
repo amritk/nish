@@ -789,7 +789,7 @@ leaves the IR unchanged.
 - **`--compat`** selects the compatibility dialect, which accepts more of
   TypeScript than Nish does by default: a bare `number` is a 64-bit float, as
   `--number-mode f64` makes it, and its features (`nullish`,
-  `optional-chaining`) admit forms the strict dialect refuses.
+  `optional-chaining`, `string-switch`, `for-of-string`) admit forms the strict dialect refuses.
   `--compat=<feature>,...` allows only the features it names, and a
   name that is no feature is a usage error (exit 2). `"compat"` in your
   `package.json`'s `"nish"` field selects the dialect without the flag.

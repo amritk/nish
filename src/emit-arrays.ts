@@ -46,7 +46,7 @@ import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
 import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./parallel"
-import { emitSliceCheck, guardKeep } from "./emit-strings"
+import { emitSliceCheck, emitStringWalk, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
@@ -2532,6 +2532,10 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const local = emitter.program.nodeLocals[decl.id]
   if (local === null) {
     process.exit(internalErrorFor("emitter: a `for...of` variable with no local recorded", emitter.opts.json))
+  }
+  if (emitter.typeOf(stmt.children[1]) === T_STRING) {
+    emitStringWalk(emitter, stmt, local) // WP28 C1: `for-of-string`, a code point per pass
+    return
   }
   const elem = local.type
   const ty = emitter.llvm(elem)

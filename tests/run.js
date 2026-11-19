@@ -26140,7 +26140,7 @@ if (dealtHere("cliChecks")) {
         `compat: \`${flag}\` names a feature this compiler has not built: a usage error that names it, and no IR`,
         refused.r.status === 2 &&
           refused.r.stderr.includes(
-            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, and a bare \`--compat\` allows every one`
+            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, \`string-switch\`, \`for-of-string\`, and a bare \`--compat\` allows every one`
           ) &&
           refused.ir === "",
         shown(refused.r)
@@ -26156,8 +26156,8 @@ if (dealtHere("cliChecks")) {
       checkedStrict.status === 0 &&
         checkedCompat.status === 0 &&
         checkedPinned.status === 0 &&
-        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining]\n") &&
-        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining]\n${checkedStrict.stdout}` &&
+        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]\n") &&
+        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining,string-switch,for-of-string]\n${checkedStrict.stdout}` &&
         !checkedStrict.stdout.includes("compat "),
       shown(checkedCompat) + shown(checkedPinned)
     )
