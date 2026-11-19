@@ -1919,6 +1919,18 @@ const DECLARED = [
     why: "the case is compiled under --compat and uses an optional chain with an element link, which `optional-chaining` admits; the seed has no such feature and refuses it",
   },
   {
+    program: "tests/cases/compat_string_switch.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and switches on a string, which `string-switch` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_for_of_string.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
+  },
+  {
     program: "tests/cases/compat_optional_chain_statement.ts",
     file: "exit",
     changelog: "optional chaining and nullish coalescing under --compat",
