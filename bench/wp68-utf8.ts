@@ -6,18 +6,28 @@
 // position that moves with the round, so each round has a different invalid
 // segment, and with a different ill-formed case: 0xFF, a lone continuation
 // byte, overlongs, surrogates, values above U+10FFFF, and forms cut short by a
-// letter or by the segment's end (`breakAt`). `urlB` is `urlA` byte for byte, so the distance between those two
-// is the run's noise band. The minimum of each side over the rounds is
-// printed, for two texts: `mixed` (a quarter of the symbols non-ASCII) and
-// `ascii` (one in 64):
+// letter, by the segment's end or by the end of the buffer (`breakAt`). `urlB`
+// is `urlA` byte for byte, so the distance between those two is the run's
+// noise band. The minimum of each side over the rounds is printed, for two
+// texts: `mixed` (a quarter of the symbols non-ASCII) and `ascii` (one in 64).
+//
+// `jsonTokLoop` is a synthetic driver: `jsonTokUtf8Length` called from a byte
+// loop of this bench's own, which the tokenizer does not have. `kernel` is the
+// tokenizer's real path: `skipJsonText` from `nish/bytes` (which
+// `jsonTokSkipPlain` calls), then `jsonTokUtf8Length` at the byte where the run
+// stopped. Built natively, `skipJsonText` is the runtime's
+// `nish_bytes_skip_json_text` (src/kernels.ts), whose block width
+// `nish_run_choose` picks when the program starts: 32 bytes with AVX2, 16
+// with SSE2, or as `NISH_SIMD` says.
 //
 //   build/seed/bin/nish bench/wp68-utf8.ts --link build/wp68-utf8 --profile speed
 //   taskset -c 2 build/wp68-utf8
 import { monotonicNanos } from "nish:process"
+import { skipJsonText } from "nish/bytes"
 import { least, report } from "./wp68-report"
 
 /** One round for each ill-formed case `breakAt` writes. */
-const ROUNDS: i32 = 11
+const ROUNDS: i32 = 12
 const PASSES: i32 = 10
 const SIZE: i32 = 4194304
 const SEGMENT: i32 = 4096
@@ -247,11 +257,38 @@ const jsonTokUtf8Length = (src: u8[], at: i32, end: i32): i32 => {
   return length
 }
 
-/** A window walked with `jsonTokUtf8Length`, as the tokenizer walks a string body. */
-const jsonTokWalk = (buf: u8[], off: i32, len: i32): boolean => {
+/** A synthetic driver: a window walked byte by byte, `jsonTokUtf8Length` at every byte from 0x80. */
+const jsonTokLoop = (buf: u8[], off: i32, len: i32): boolean => {
   const end: i32 = off + len
   let i: i32 = off
   while (i >= 0 && i < end && i < toI32(buf.length)) {
+    if (toI32(buf[i]) < 0x80) {
+      i += 1
+      continue
+    }
+    const n: i32 = jsonTokUtf8Length(buf, i, end)
+    if (n < 0) {
+      return false
+    }
+    i += n
+  }
+  return true
+}
+
+/**
+ * The tokenizer's path through a string body: the run `skipJsonText` steps
+ * over, then `jsonTokUtf8Length` at the byte it stopped on. The text holds no
+ * quote, backslash or control byte, so an ASCII stop is stepped over as the
+ * tokenizer's plain-byte branch would.
+ */
+const kernel = (buf: u8[], off: i32, len: i32): boolean => {
+  const end: i32 = off + len
+  let i: i32 = off
+  while (i >= 0 && i < end && i < toI32(buf.length)) {
+    i = skipJsonText(buf, i, end)
+    if (i < 0 || i >= end || i >= toI32(buf.length)) {
+      break
+    }
     if (toI32(buf[i]) < 0x80) {
       i += 1
       continue
@@ -352,7 +389,9 @@ const segments = (buf: u8[], side: i32): i64 => {
     } else if (side === 2) {
       ok = bytesWalk(buf, off, SEGMENT)
     } else if (side === 3) {
-      ok = jsonTokWalk(buf, off, SEGMENT)
+      ok = jsonTokLoop(buf, off, SEGMENT)
+    } else if (side === 4) {
+      ok = kernel(buf, off, SEGMENT)
     } else {
       ok = wordSkip(buf, off, SEGMENT)
     }
@@ -407,8 +446,9 @@ const text = (wide: u32): u8[] => {
  * The ill-formed sequences a round writes, one a round, four bytes a row with
  * the count in `BROKEN_LEN`: a byte never in UTF-8, a lone continuation byte,
  * three overlongs, two surrogates, two values above U+10FFFF and a truncated
- * form cut short by a letter. A tenth case, a four-byte form cut short by the
- * end of its segment, is written by `breakAt`.
+ * form cut short by a letter. The eleventh case, a four-byte form cut short by
+ * the end of its segment, and the twelfth, one cut short by the end of the
+ * buffer, are written by `breakAt`.
  */
 const BROKEN: readonly u8[] = [
   0xff, 0, 0, 0,
@@ -425,6 +465,8 @@ const BROKEN: readonly u8[] = [
 const BROKEN_LEN: readonly i32[] = [1, 1, 2, 3, 4, 3, 3, 4, 4, 3]
 /** The case that `breakAt` writes at a segment's end rather than from the table. */
 const CUT_AT_END: i32 = 10
+/** The case that `breakAt` writes at the end of the buffer, the last segment's end. */
+const CUT_AT_BUFFER_END: i32 = 11
 
 /**
  * Breaks `buf` near `at0` with case `which`, and answers where it wrote, or
@@ -435,8 +477,8 @@ const CUT_AT_END: i32 = 10
  */
 const breakAt = (buf: u8[], at0: i32, which: i32): i32 => {
   const n: i32 = toI32(buf.length)
-  if (which === CUT_AT_END) {
-    const at: i32 = at0 - (at0 % SEGMENT) + SEGMENT - 3
+  if (which === CUT_AT_END || which === CUT_AT_BUFFER_END) {
+    const at: i32 = which === CUT_AT_END ? at0 - (at0 % SEGMENT) + SEGMENT - 3 : n - 3
     if (at < 0 || at + 2 >= n) {
       return -1
     }
@@ -470,22 +512,22 @@ const breakAt = (buf: u8[], at0: i32, which: i32): i32 => {
 /** Times every side over `buf` and prints the report under `title`. */
 const measure = (title: string, buf: u8[]): i32 => {
   console.log(title)
-  const names: string[] = ["urlA", "urlB", "bytesWalk", "jsonTokWalk", "wordSkip"]
-  const best: i64[] = [-1, -1, -1, -1, -1]
-  const sums: i64[] = [0, 0, 0, 0, 0]
+  const names: string[] = ["urlA", "urlB", "bytesWalk", "jsonTokLoop", "kernel", "wordSkip"]
+  const best: i64[] = [-1, -1, -1, -1, -1, -1]
+  const sums: i64[] = [0, 0, 0, 0, 0, 0]
   const kept = new Array<u8>(SIZE)
   for (let i: i32 = 0; i < SIZE && i < toI32(buf.length) && i < toI32(kept.length); i += 1) {
     kept[i] = buf[i]
   }
   for (let round = 0; round < ROUNDS; round++) {
-    // Each round writes a different ill-formed case, the last the one at a segment's end.
+    // Each round writes a different ill-formed case, the last two at a segment's end and the buffer's.
     const at: i32 = breakAt(buf, (round * MOVE) % SIZE, round)
     if (at < 0) {
       return 1
     }
     // Each round starts at a different side, so no side always runs first.
-    for (let k = 0; k < 5; k++) {
-      const side: i32 = (round + k) % 5
+    for (let k = 0; k < 6; k++) {
+      const side: i32 = (round + k) % 6
       const t0 = monotonicNanos()
       let s: i64 = 0
       for (let p = 0; p < PASSES; p++) {

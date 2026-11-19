@@ -13,7 +13,9 @@
 // checksums: length and density vary apart (64 and 1024 bytes, each at 1 in
 // 16 and 1 in 256 escaped), and 8, 16 and 32 bytes at 1 in 256 sit around
 // `JSON_PLAIN_RUN_MIN` = 16 (std/json.ts), where std's writer turns from its
-// byte loop to `runs`:
+// byte loop to `runs`. Two lengths that are not a multiple of 8 (13 and 100
+// bytes, at 1 in 256) and a million empty strings close the list; the empty
+// case's output does not change from round to round, since it reads no byte:
 //
 //   build/seed/bin/nish bench/wp68-json-escape.ts --link build/wp68-json-escape --profile speed
 //   taskset -c 2 build/wp68-json-escape
@@ -24,6 +26,8 @@ import { least, report } from "./wp68-report"
 const ROUNDS: i32 = 9
 const SIZE: i32 = 4194304
 const MOVE: i32 = 5237
+/** How many strings the empty case quotes. */
+const EMPTY_COUNT: i32 = 1048576
 /** Room for every byte escaped as `\u00xx`, plus two quotes a string of one byte. */
 const ROOM: i32 = SIZE * 8
 
@@ -285,10 +289,15 @@ const symbol = (x: u32, mask: u32): u8 => {
   return toU8(97 + toI32((x >> 16) % 26))
 }
 
+/** How many strings of `size` bytes a case quotes: every whole one in `SIZE`, or `EMPTY_COUNT` empty ones. */
+const countOf = (size: i32): i32 => (size > 0 ? SIZE / size : EMPTY_COUNT)
+
 /** Quotes every string of `src` with byte side `side` into `out`; the end, or -1 when it ran out of room. */
 const quoteAll = (out: u8[], src: u8[], side: i32, size: i32): i32 => {
   let at: i32 = 0
-  for (let off: i32 = 0; off < SIZE && at >= 0; off += size) {
+  const count: i32 = countOf(size)
+  for (let n: i32 = 0; n < count && at >= 0; n += 1) {
+    const off: i32 = n * size
     if (side === 0) {
       at = byteA(out, at, src, off, size)
     } else if (side === 1) {
@@ -327,7 +336,9 @@ const measure = (title: string, size: i32, mask: u32): i32 => {
     src[at] = ESCAPED[pick]
     // The `string` copies `builder` reads, made before any clock starts.
     const texts: string[] = []
-    for (let off: i32 = 0; off + size <= SIZE; off += size) {
+    const count: i32 = countOf(size)
+    for (let n: i32 = 0; n < count; n += 1) {
+      const off: i32 = n * size
       const one: string[] = []
       for (let i: i32 = off; i >= 0 && i < off + size && i < src.length; i += 1) {
         one.push(String.fromCharCode(toI32(src[i])))
@@ -372,5 +383,9 @@ export const main = (): i32 => {
   failed += measure("8-byte strings, 1 byte in 256 escaped", 8, 1023)
   failed += measure("16-byte strings, 1 byte in 256 escaped", 16, 1023)
   failed += measure("32-byte strings, 1 byte in 256 escaped", 32, 1023)
+  // Lengths that are not a multiple of 8, and the empty string.
+  failed += measure("13-byte strings, 1 byte in 256 escaped", 13, 1023)
+  failed += measure("100-byte strings, 1 byte in 256 escaped", 100, 1023)
+  failed += measure("empty strings, a million of them", 0, 1023)
   return failed
 }

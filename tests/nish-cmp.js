@@ -8875,6 +8875,12 @@ const DECLARED = [
   },
   {
     program: "bench/wp68-utf8.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
     file: "wp68-utf8.ll",
     changelog: WP68_BENCH,
     why: WP68_BENCH_WHY,
