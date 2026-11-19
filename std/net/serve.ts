@@ -1173,7 +1173,7 @@ class ServeConns {
   growSlots(slot: i32): void {
     // An exchange's connection is set each time its slot is driven; until
     // then it names the pool's first, which this does not lend the slot.
-    const conn: Http1Connection = this.server.connection(-1)
+    const conn: Http1Connection = this.server.connection(toI32(-1))
     let n: i32 = toI32(this.ex.length) * 2
     if (n < 64) {
       n = 64
