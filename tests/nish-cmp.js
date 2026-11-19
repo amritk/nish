@@ -1898,6 +1898,44 @@ const DECLARED = [
     changelog: "nish.compat and the dialect in the IR",
     why: "a dependency's package.json asks for the compatibility dialect and the strict root does not allow it, which the candidate refuses with NL3057; the 0.39.0 seed reads no dependency's nish field, so only the reference compiles it",
   },
+  // WP28 C1: the `nullish` and `optional-chaining` compat features are new, so
+  // the seed refuses the programs they admit and lists no feature in the mark.
+  {
+    program: "tests/cases/compat_nullish_narrowed.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses a `??` on a left operand narrowed to never missing, which `nullish` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_nullish_never_missing.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses a `??` whose left operand is never missing, which `nullish` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_element.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses an optional chain with an element link, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_statement.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses an optional chain as a statement, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/link/compat_manifest_program/main.ts",
+    file: "index.ll",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the `!nish.compat` mark lists the enabled features after the number mode, which the seed's mark does not",
+  },
+  {
+    program: "tests/link/compat_manifest_program/main.ts",
+    file: "main.ll",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the `!nish.compat` mark lists the enabled features after the number mode, which the seed's mark does not",
+  },
   {
     changelog: "internal work-package references from diagnostics and generated files",
     why: "generated comments in async .ll, interop headers, N-API sidecars and wasm loaders no longer name a work package",
