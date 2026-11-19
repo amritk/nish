@@ -13,10 +13,21 @@ runs come from this repository's bench suite; that suite is in
 | | |
 | --- | --- |
 | Challenge | [arjaythedev/multicore-server-challenge](https://github.com/arjaythedev/multicore-server-challenge) |
-| Video | [Which Programming Language Can Handle the Most Users on 8 Cores?](https://www.youtube.com/watch?v=TIyvOtGjnzc) (Arjay McCandless) |
+| Video | [Which Programming Language Can Handle the Most Users on 8 Cores?](https://www.youtube.com/watch?v=TIyvOtGjnzc) (Arjay McCandless, published 2026-11-13); the Nish entry's chapter, "#2 Nish", starts at [19:19](https://www.youtube.com/watch?v=TIyvOtGjnzc&t=1159s) |
 | Entry | [`submissions/nish-std-amritk`](https://github.com/arjaythedev/multicore-server-challenge/tree/main/submissions/nish-std-amritk), last updated by [arjaythedev/multicore-server-challenge#225](https://github.com/arjaythedev/multicore-server-challenge/pull/225) (merged 2026-11-07) |
 | Leaderboard | [LEADERBOARD.md](https://github.com/arjaythedev/multicore-server-challenge/blob/main/LEADERBOARD.md) |
 | Compiler | Nish 0.35.0 |
+
+### The video
+
+The organiser's video walks through the code of the top 10 entries on the
+leaderboard, in Java, F#, Assembly, Swift, C, Zig, Rust and Nish. It
+follows one request through each system down into Postgres, then looks at
+what each submission changed along that path and the commits that moved
+its score. The entries are counted down from #10, and Nish is #2, in the
+chapter at [19:19](https://www.youtube.com/watch?v=TIyvOtGjnzc&t=1159s).
+On 2026-11-19 the video had 68,280 views and about 1,000 likes, and the
+channel had 138,000 subscribers.
 
 ### The challenge
 
@@ -61,9 +72,9 @@ The top of the leaderboard:
 | 3 | 220,000 | rust-epoll-WorriedArrow | 55,855 | 314 ms | 608 ms |
 | 4 | 220,000 | zig-iouring-nick-potts | 55,763 | 316 ms | 438 ms |
 
-Three entries held 220,000 users, so the second place is shared on the score
-itself; the organiser called it a tie for second. The leaderboard has 127
-rows. For comparison, the example servers it lists in Go, Rust, Java and
+Three entries held 220,000 users. The leaderboard and the organiser's video
+both rank Nish second of them, with rust-epoll-WorriedArrow third and
+zig-iouring-nick-potts fourth. The leaderboard has 127 rows. For comparison, the example servers it lists in Go, Rust, Java and
 Python held 24,000, 22,000, 21,000 and 10,000 users.
 
 ### How the entry got there
