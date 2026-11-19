@@ -3911,6 +3911,26 @@
                       "meta": [{ "property": "og:title", "content": "WP66: C libraries from their headers" }],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp66-c-headers" }]
                     }
+                  },
+                  "/wp69-json-schema-runtime": {
+                    "type": "page",
+                    "title": "WP69: JSON Schema validation at run time, with external references",
+                    "filepath": "docs/roadmap/wp69-json-schema-runtime.md",
+                    "head": {
+                      "title": "WP69: JSON Schema validation at run time, with external references · Nish",
+                      "meta": [{ "property": "og:title", "content": "WP69: JSON Schema validation at run time, with external references" }],
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp69-json-schema-runtime" }]
+                    }
+                  },
+                  "/wp70-linter-surface": {
+                    "type": "page",
+                    "title": "WP70: The surface a Spectral-compatible linter asks for",
+                    "filepath": "docs/roadmap/wp70-linter-surface.md",
+                    "head": {
+                      "title": "WP70: The surface a Spectral-compatible linter asks for · Nish",
+                      "meta": [{ "property": "og:title", "content": "WP70: The surface a Spectral-compatible linter asks for" }],
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp70-linter-surface" }]
+                    }
                   }
                 }
               },

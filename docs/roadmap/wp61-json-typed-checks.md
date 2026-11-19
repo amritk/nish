@@ -18,6 +18,6 @@ The option's shape, recording which keyword failed, checking on encode, refusing
 
 ## Not planned
 
-Generating classes from a schema (that is WP62), a runtime schema interpreter, validating a `JsonDocument` against a schema, any second pass, coercing a union field that is not `| null`, and reading past a limit or a syntax error.
+Generating classes from a schema (that is WP62), a runtime schema interpreter and validating a `JsonDocument` against a schema (both WP69), any second pass, coercing a union field that is not `| null`, and reading past a limit or a syntax error.
 
 [All work packages](index.md)

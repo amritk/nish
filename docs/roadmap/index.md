@@ -38,6 +38,7 @@ specified.
 - [WP64: Temporal](wp64-temporal.md): how option bags such as `{ largestUnit: "year" }` get a layout, whether the time zone database is embedded by default, `Duration`'s field width, `epochNanoseconds` without `bigint`, and whether a `RangeError` stays a panic.
 - [WP65: The surface a lexer port asked for](wp65-lexer-surface.md): whether to build `toString()` on a number, which LANGUAGE.md refuses today, or keep the rule and make the refusal name the template literal.
 - [WP66: C libraries from their headers](wp66-c-headers.md): what C may do with a callback (S6), and the owner's decisions D1 to D7: the subcommand's name, where it lives, files per target, `i8` and `i16`, the opaque class's spelling, what linking may run, and whether `std/sqlite` is regenerated.
+- [WP69: JSON Schema validation at run time, with external references](wp69-json-schema-runtime.md): whether S5's differential runs ajv 8 as a dev dependency or reads its answers committed once.
 - [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
 - [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
 
@@ -58,6 +59,8 @@ specified.
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP66: C libraries from their headers](wp66-c-headers.md) | Proposed | 0 of 7 |
+| [WP69: JSON Schema validation at run time, with external references](wp69-json-schema-runtime.md) | Proposed | 0 of 5 |
+| [WP70: The surface a Spectral-compatible linter asks for](wp70-linter-surface.md) | Proposed | 0 of 6 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |

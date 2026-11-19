@@ -1093,8 +1093,8 @@ offset, and unconstrained IR is unmoved.
 
 - generating classes from a JSON Schema or OpenAPI document (that is
   WP62, `docs/wp62-json-schema-classes.md`);
-- a runtime schema interpreter;
-- validating a `JsonDocument` against a schema;
+- a runtime schema interpreter, and validating a `JsonDocument` against a
+  schema (both [WP69](wp69-json-schema-runtime.md));
 - a second pass of any kind;
 - coercion of a union field that is not `| null`, and coercing a value into
   a variant other than the one its tag names;

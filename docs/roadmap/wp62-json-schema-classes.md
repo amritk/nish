@@ -20,6 +20,6 @@ S1: [§12](https://github.com/amritk/nish/blob/main/docs/wp62-json-schema-classe
 
 ## Not planned
 
-A runtime schema interpreter, untagged unions by trial decoding, string enums, leaving absent optional keys out of the encoding, one file per `$defs` entry, OpenAPI 3.0, servers or clients from OpenAPI paths, a schema fetched over the network.
+A runtime schema interpreter (that is WP69), untagged unions by trial decoding, string enums, leaving absent optional keys out of the encoding, one file per `$defs` entry, OpenAPI 3.0, servers or clients from OpenAPI paths, a schema fetched over the network.
 
 [All work packages](index.md)

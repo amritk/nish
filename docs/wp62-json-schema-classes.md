@@ -1140,7 +1140,8 @@ taken; the owner's answers to §10 recorded here.
 
 ## 13. Not planned
 
-A runtime schema interpreter or validating a `JsonDocument` against a schema;
+A runtime schema interpreter or validating a `JsonDocument` against a schema
+([WP69](wp69-json-schema-runtime.md));
 untagged unions by trial decoding; string enums as a language feature;
 leaving absent optional keys out of the encoding (a typed JSON change); one
 file per `$defs` entry; JSON Schema drafts before draft-07; OpenAPI 3.0 beyond folding `nullable`; generating servers or clients from OpenAPI paths; a
