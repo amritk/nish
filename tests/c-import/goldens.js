@@ -11,7 +11,9 @@
  * for `--target x86_64-unknown-linux-gnu` unless the header's name ends in
  * `-wasm32`, from this directory with relative paths, so the module's
  * `Regenerate:` line and every answer clang gives are the same on any host
- * clang runs on. The golden is `<name>.expected.ts`.
+ * clang runs on. The golden is `<name>.ts.expected`: the module is written
+ * as `<name>.ts`, so its `Regenerate:` line reads as a user's would, then
+ * moved aside, since a `.ts` file here would be a module no program imports.
  *
  * Prints one line per header, `ok <name>` or `FAIL <name>` with the first
  * differing line, and exits 1 when any fails (2 when clang is missing).
@@ -39,24 +41,23 @@ const headers = fs
 let failed = 0
 for (const header of headers) {
   const name = header.slice(0, -2)
-  const golden = `${name}.expected.ts`
+  const golden = `${name}.ts.expected`
+  const written = path.join(here, `${name}.ts`)
   const target = name.endsWith("-wasm32") ? "wasm32-unknown-unknown" : "x86_64-unknown-linux-gnu"
   const args = ["c-import", header]
   if (fs.existsSync(path.join(here, `${name}.overrides.json`))) {
     args.push("--overrides", `${name}.overrides.json`)
   }
-  args.push("--target", target, "-o", golden)
-  // Written beside the golden under its own name, so the `Regenerate:` line
-  // names the golden, and put back when the run only compares.
+  args.push("--target", target, "-o", `${name}.ts`)
   const before = fs.existsSync(path.join(here, golden))
     ? fs.readFileSync(path.join(here, golden), "utf8")
     : null
+  fs.rmSync(written, { force: true })
   const run = spawnSync(nish, args, { cwd: here, encoding: "utf8" })
-  const after = fs.existsSync(path.join(here, golden))
-    ? fs.readFileSync(path.join(here, golden), "utf8")
-    : null
-  if (!update && before !== null) {
-    fs.writeFileSync(path.join(here, golden), before)
+  const after = fs.existsSync(written) ? fs.readFileSync(written, "utf8") : null
+  fs.rmSync(written, { force: true })
+  if (update && after !== null) {
+    fs.writeFileSync(path.join(here, golden), after)
   }
   if (run.status !== 0 || after === null) {
     failed++

@@ -3,6 +3,6 @@
 // rather than call limit_of with the wrong width (WP66 D3).
 import { LIMIT } from "./limits"
 
-export function main(): i32 {
+export const main = (): i32 => {
   return LIMIT
-}
+};

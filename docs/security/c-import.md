@@ -25,15 +25,15 @@ backslash. An override that says something the header does not is refused, and
 a module written for one data model is refused by a build for the other
 (NL3059).
 
-Three findings were fixed while the code was written (CI-1, CI-2 and CI-3,
-Low); one is open, accepted (CI-4, Low). Three more properties of the threat
+Four findings were fixed while the code was written (CI-5, Medium; CI-1,
+CI-2 and CI-3, Low); one is open, accepted (CI-4, Low). Three more properties of the threat
 model are recorded as accepted under [Accepted limits](#accepted-limits).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `newDocument`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `shellWord` and `emit` |
+| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `newDocument`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `commentSafe`, `shellWord` and `emit` |
 | `src/c-import-model.ts` | `dataModelOf`, `dataModelRefusal` |
 | `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3059 |
 
@@ -136,7 +136,10 @@ literals of the declared width. A string macro is written only when its body
 is one literal, with quotes only at its ends and no backslash, so it cannot
 close the Nish string it is copied into; any other string, an escape or two
 pieces, is listed as `a string the generator does not copy (escapes or pieces)`.
-The not-bound comment is fixed text and names. A function from a header the
+The not-bound comment is fixed text and names: no reason quotes clang's
+spelling of a type, which carries an attribute's string argument verbatim
+(CI-5), and `commentSafe` writes any report line holding `*/`, `/*` or a line
+break as its name and a fixed reason. A function from a header the
 first one includes is bound only when the overrides file's `allow` names it
 (`selected`). `allow` selects functions only: structs, enums and macros come
 from the header itself whether or not `allow` is given.
@@ -146,7 +149,11 @@ outermost pointer only, and `returns_nonnull` (`ReturnsNonNullAttr`) on a
 result. The `nonnull` function attribute (`NonNullAttr`) is not read: clang's
 JSON AST names the attribute but not the parameter indices it covers, so
 honouring it would mean guessing; a parameter it covers is bound as the
-defaults say, `CPtr` or `string`, which is already non-null for a parameter.
+defaults say: `string` for a `const char *`, the struct's class or `CPtr` for
+a struct pointer, and `CPtr | null` for a `void *`, an `unsigned char *` or a
+`const` pointer to a number. Each default asks no more of the caller than C
+allows, and `paramType` never drops the `| null` a header's `_Nonnull` does
+not remove.
 
 Tests: `c-import: every tests/c-import header writes its golden module`
 (`basic.h`'s `KE` and `KP`, an escape and two pieces, are listed, not
@@ -163,17 +170,23 @@ parameter or free function the header does not declare, makes a non-pointer
 nullable, sets `return` on a function that does not return a pointer (CI-3),
 or binds a buffer that is not a `void *` or `char *` followed by its count.
 `readonly` is refused on a buffer the header lets the function write. An
-override that would change nothing is refused too: one on a function that is
-not bound (variadic, `static` or `inline`, outside `allow`, or declared only in
-an included header), `"nullable": false`, an empty `"buffer"`, an `allow` glob
-that matches no function, `"nullable"` on a parameter already bound as an out
-class, and a key written twice in one object, which JSON readers settle
-differently (the JSON reader refuses it while parsing). A stale override
-cannot silently bind a renamed function, or silently stop applying.
+override that would change nothing is refused too (`checkOverride`, after
+every name is decided): one on a function that is not bound for any reason
+(variadic, `static` or `inline`, outside `allow`, declared only in an included
+header, a name Nish reserves, or a type the generator cannot read), one whose
+declaration comes out the same with and without it, an owned freer that is not
+bound, an empty function object, `"nullable": false`, `"readonly": false`, an
+empty `"buffer"`, `"nullable"` on a buffer, on a `_Nonnull` parameter or on one
+already bound with `| null` or as an out class, a `"return"` the result already
+has, an `allow` glob that matches no function, and a key written twice in one
+object, which JSON readers settle differently (the JSON reader refuses it while
+parsing). A stale override cannot silently bind a renamed function, or silently
+stop applying. `-o` naming the overrides file is refused before clang runs.
 
 Tests: `c-import: the override file ${json} is refused` (nineteen files, one per
-refusal) and `c-import: the override file ${json} for ${header} is refused`
-(twelve files, one per change-nothing case).
+refusal), `c-import: the override file ${json} for ${header} is refused`
+(eighteen files, one per change-nothing case) and `c-import: -o naming the
+overrides file is refused, and the file is kept`.
 
 ### A module for another data model
 
@@ -215,4 +228,5 @@ same as running `clang` on that header by hand. Each is accepted, not fixed.
 | CI-1 | Low | `src/c-import.ts` (`readTypedef`, `resolve`) | A typedef declared again as itself (`typedef T T;`, which C11 allows) was stored over the first, so following `T` led back to `T` until a depth cap of 32 stopped it, and every function using `T` was listed as not bound. | **Fixed** before the command shipped: the first declaration is kept, so a typedef names only earlier ones and following them ends; the depth cap is gone. Before, `c-import: every tests/c-import header writes its golden module` listed `f6: returns a typedef chain deeper than 32`; after, `f6` is `declare function f6(): i64`. |
 | CI-2 | Low | `src/c-import.ts` (`cImport`, `unsafePath`) | Only the header's resolved path was checked, and only for a quote, a backslash and a newline, but the overrides and output paths are also written into the module's first comment lines: a newline or U+2028 in either began a line of code in the generated module. | **Fixed** before the command shipped: every path is refused when it holds a quote, a backslash, a control byte, U+2028 or U+2029, before clang runs. Before, `c-import: ${what} is refused before clang runs, and nothing is written` wrote the module; after, each case exits 1 and writes nothing. |
 | CI-3 | Low | `src/c-import.ts` (`readFunctionOverrides`) | `"return": "nullable"` (or `"nonnull"`, or `owned`) on a function that returns no pointer was accepted and ignored, so an override file that no longer matched its header was not caught. | **Fixed** before the command shipped: it is refused, naming the function. Before, `c-import: the override file { "functions": { "db_close": { "return": "nullable" } } } is refused` exited 0; after, it exits 1 with `` `db_close` does not return a pointer``. |
+| CI-5 | Medium | `src/c-import.ts` (`resolve`, `emit`) | A parameter or result type clang spells with an `__attribute__` or `typeof` was listed as not bound with clang's spelling quoted, and that spelling carries an attribute's string argument as written: `int __attribute__((btf_type_tag("*/ export const pwned = 1 /*"))) *p` closed the not-bound comment and put a line of code into the generated module. | **Fixed** before the command shipped: a declaration with an attribute, a `typeof` or an unnamed type is listed with a fixed reason and no spelling, and `commentSafe` replaces any report line that holds `*/`, `/*` or a line break with its name and a fixed reason. Before, `attrs.h`'s `tagged` wrote `export const pwned = 1` into the module; after, `c-import: every tests/c-import header writes its golden module` pins `tagged: declared with an attribute the generator cannot read`. |
 | CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, so a header that puts escape bytes into an `#error` line writes them to the terminal. | **Open, accepted.** The same text running clang on the header prints; the module is not written. The text can include lines of any file the header `#include`s (see [Accepted limits](#accepted-limits)). |

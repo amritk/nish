@@ -45959,8 +45959,8 @@ export function main(): i32 {
 
     // An override that would change nothing the run binds is refused too: a
     // function from an included header, one `allow` leaves out, a static,
-    // inline or variadic one, a freer that is not bound, and each key that
-    // says nothing new.
+    // inline or variadic one, one whose type the generator cannot read, a
+    // freer that is not bound, and each key that says nothing new.
     fs.writeFileSync(path.join(cImportDir, "refuse-inc.h"), "int inc_fn(int x);\n")
     fs.writeFileSync(
       path.join(cImportDir, "refuse.h"),
@@ -45969,7 +45969,9 @@ export function main(): i32 {
         "static inline int i_helper(int x) { return x; }\n" +
         "int v_log(const char *fmt, ...);\n" +
         "char *r_take(void);\n" +
-        "void r_free_v(char *p, ...);\n"
+        "void r_free_v(char *p, ...);\n" +
+        "int nn_take(int *_Nonnull p);\n" +
+        'int t_attr(int __attribute__((btf_type_tag("x"))) *p);\n'
     )
     const noOpRefusals = [
       ["refuse.h", '{ "functions": { "inc_fn": { "x": {} } } }', "`inc_fn` is not bound (declared in another header)"],
@@ -46002,6 +46004,28 @@ export function main(): i32 {
         '{ "functions": { "db_open": { "out": { "nullable": true } } } }',
         'is bound as `OutPtr` already, so "nullable" changes nothing',
       ],
+      [
+        "refuse.h",
+        '{ "functions": { "t_attr": {} } }',
+        "`t_attr` is not bound (declared with an attribute the generator cannot read)",
+      ],
+      ["refuse.h", '{ "functions": { "nn_take": { "p": { "nullable": true } } } }', "is `_Nonnull` in the header"],
+      ["buffers.h", '{ "functions": { "db_close": {} } }', "`db_close` is an empty object, which changes nothing"],
+      [
+        "buffers.h",
+        '{ "functions": { "db_name": { "return": "nullable" } } }',
+        'returns `string | null` already, so "return" changes nothing',
+      ],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "len", "readonly": false } } } }',
+        '"readonly": false changes nothing; only true has an effect',
+      ],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "len", "nullable": true } } } }',
+        "a `u8[]` that cannot be null, so it cannot be nullable",
+      ],
       ["buffers.h", '{ "functions": {}, "functions": {} }', 'holds one key twice in an object'],
       [
         "buffers.h",
@@ -46032,6 +46056,19 @@ export function main(): i32 {
         selfRun.stderr.includes("is the header itself") &&
         fs.readFileSync(self, "utf8") === fs.readFileSync(path.join(fixtures, "basic.h"), "utf8"),
       shown(selfRun)
+    )
+
+    // `-o` naming the overrides file is refused before clang runs, and the
+    // overrides file is left as it was.
+    const ownOverrides = path.join(cImportDir, "own.overrides.json")
+    fs.writeFileSync(ownOverrides, '{ "header": "buffers.h" }\n')
+    const ownRun = cImport(["buffers.h", "--overrides", ownOverrides, "-o", ownOverrides])
+    check(
+      "c-import: -o naming the overrides file is refused, and the file is kept",
+      ownRun.status === 1 &&
+        ownRun.stderr.includes("is the overrides file") &&
+        fs.readFileSync(ownOverrides, "utf8") === '{ "header": "buffers.h" }\n',
+      shown(ownRun)
     )
 
     // The D3 refusal reads the data model through CRLF line ends: an LP64
@@ -46068,7 +46105,7 @@ export function main(): i32 {
       shown(spacedRun)
     )
 
-    // The guide's wc.h example is the golden tests/c-import/wc.expected.ts.
+    // The guide's wc.h example is the golden tests/c-import/wc.ts.expected.
     const guide = fs.readFileSync(path.join(root, "docs", "guide", "using-nish", "c-import.md"), "utf8")
     const wcAt = guide.indexOf("```ts wc.ts\n") + "```ts wc.ts\n".length
     const wcGuide = guide.slice(wcAt, guide.indexOf("```", wcAt))
@@ -46077,8 +46114,7 @@ export function main(): i32 {
       "c-import: the guide's wc.h example is the header and module tests/c-import pins",
       guide.slice(wcHeaderAt, guide.indexOf("```", wcHeaderAt)) ===
         fs.readFileSync(path.join(fixtures, "wc.h"), "utf8") &&
-        wcGuide ===
-          fs.readFileSync(path.join(fixtures, "wc.expected.ts"), "utf8").replace("-o wc.expected.ts", "-o wc.ts")
+        wcGuide === fs.readFileSync(path.join(fixtures, "wc.ts.expected"), "utf8")
     )
 
     // Every function sqlite3.h declares is either bound or listed as not

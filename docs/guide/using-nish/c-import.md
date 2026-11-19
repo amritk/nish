@@ -103,8 +103,15 @@ The defaults for pointers are the safe ones:
   `CPtr | null`, since C may hand back `NULL`.
 - Any other `char *` result is a `CPtr | null`: the module cannot know
   whether you must free it.
+- A `void *` or `unsigned char *` parameter is a `CPtr | null`, or a `CPtr`
+  when the header marks it `_Nonnull`.
 - A `const` pointer to a number (`const int64_t *`) is a `CPtr | null`, not an
-  out class: C reads it and does not write it.
+  out class: C reads it and does not write it. A pointer to a `const` pointer
+  (`char *const *`) is a `CPtr | null` for the same reason.
+- A non-`const` pointer to a number (`int64_t *`) or to a pointer is an out
+  class, such as `OutI64` or `OutPtr`, which C writes into. An array
+  parameter (`int64_t counts[4]`) is a pointer in C, so it is an out class
+  too.
 - Clang's `_Nonnull` and `_Nullable` on the outermost pointer of a parameter
   or result set its nullability; on an inner pointer
   (`const char * _Nonnull *`) they change nothing.
@@ -165,7 +172,14 @@ bind today:
 - `long double`, `__int128` and `_Complex`, in any spelling or word order;
 - `signed char` and `short`, which have no Nish width, and a plain `char`
   where the target makes it signed;
-- a type clang does not resolve to one of the above;
+- a type clang does not resolve to one of the above, an unnamed struct,
+  union or enum, a `typeof` type, and a type with an attribute;
+- an enum whose values need more than 4 bytes, and a packed enum, narrower
+  than an `int`; an enum constant above 2^63 is listed too;
+- a function declared `_Noreturn` or `noreturn`, with a calling convention
+  other than the C default (`ms_abi`), with another attribute in its type,
+  or without a prototype (`int f()`, which C17 reads as unknown parameters);
+- a variable (`extern int counter`);
 - a name Nish reserves (`eval`, `Array`, an out class name such as `OutI64`),
   and a name two declarations want: a function and a struct both called
   `stat`, or a macro with an enum constant's name. The function, then the out
@@ -173,7 +187,8 @@ bind today:
   others are listed. A parameter with a reserved name is renamed with a
   trailing `_` instead;
 - a declaration from another header the first one includes, unless `allow`
-  names it (below).
+  names it (below). These are not listed: only the header's own functions
+  are, including those `allow` leaves out.
 
 Write those by hand, beside the generated module, in a file of your own.
 
@@ -205,7 +220,8 @@ says so; pass it with `--overrides`:
   - `"return": "nonnull"` or `"nullable"`, for a pointer result;
   - `"return": { "owned": "<free function>" }`, which records above the
     declaration which function frees the result;
-  - per parameter, by name: `"nullable": true` or `false` for a pointer, and
+  - per parameter, by name: `"nullable": true` for a pointer the defaults
+    bind as never null (only `true` changes anything), and
     `"buffer": "<length parameter>"` (with `"readonly": true` for a `const`
     buffer), which binds a `void *` and its length, the next parameter, as a
     `u8[]`. The length must be a 64-bit integer, so on wasm32, where
@@ -217,9 +233,14 @@ With this file, `wc_new` returns `CPtr`, `wc_report` carries the comment
 renamed C function cannot leave a stale override behind: one that names a
 function, a parameter or a free function the header does not have, a function
 that is not bound (variadic, `static`, outside `allow`, or not in the header),
-`"nullable": false`, an empty `"buffer"`, an `allow` glob that matches no
-function, `"nullable"` on a parameter already bound as an out class, or a key
-written twice in one object.
+an empty object, `"nullable": false`, `"readonly": false`, an empty
+`"buffer"`, `"nullable"` with `"buffer"`, an `allow` glob that matches no
+function, `"nullable"` on a parameter already bound as nullable or as an out
+class or marked `_Nonnull` in the header, a `"return"` that asks for what the
+result already is, an `"owned"` free function that is not bound, or a key
+written twice in one object. Each function's override is checked once
+`allow` is read, wherever the keys sit in the file, against the declaration
+the module would write without it.
 
 A refused override is a plain `c-import:` or `overrides:` message on stderr
 with exit code 1, like the command's other refusals; it carries no `NL` code,
@@ -251,7 +272,7 @@ data model if you build for both.
 | Code | Meaning |
 | --- | --- |
 | 0 | the module was written |
-| 1 | refused: the header or overrides file cannot be read, `-o` is the header itself, a scratch directory cannot be made beside the output, a path holds a quote, a backslash or a line break, clang rejected the header, or an override is wrong |
+| 1 | refused: the header or overrides file cannot be read, `-o` is the header itself or the overrides file, a scratch directory cannot be made beside the output, a path holds a quote, a backslash or a line break, clang rejected the header, or an override is wrong |
 | 2 | usage: no header, no `-o`, an unknown flag or target |
 | 3 | `clang` (or `CC`) cannot run |
 
