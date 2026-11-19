@@ -26537,6 +26537,8 @@ export const main = (): void => {
     ].filter((name) => cases.includes(name))
     const admittedDialect = [
       "compat_for_of_string",
+      "compat_for_of_string_fresh",
+      "compat_for_of_string_invalid",
       "compat_nullish_narrowed",
       "compat_nullish_never_missing",
       "compat_optional_chain_element",
@@ -26545,6 +26547,7 @@ export const main = (): void => {
       "compat_optional_chain_skipped_arguments",
       "compat_optional_chain_statement",
       "compat_string_switch",
+      "compat_string_switch_flow",
     ].filter((name) => cases.includes(name))
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",

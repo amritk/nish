@@ -290,8 +290,12 @@ export const main = (): void => {
 That prints `letter`, `greeting` and `other`. A label is a string literal or a
 module constant of type `string`, since a label is compared without being run;
 a label the compiler would have to run, such as a parameter or a call, is
-refused (`NL2799`), and so are two labels with the same text. Fallthrough,
-`default` and `break` mean what they mean in Node. The compiler compares the
+refused (`NL2799`), and so are two labels with the same text, however each is
+spelled (`"\u00e9"` and `"é"` are one label). Fallthrough, `default`,
+`break`, `return` and `continue` mean what they mean in Node, and the word is
+worked out once, before the first comparison. A `string | null` word is not a
+`string`, so its switch gets the strict refusal, which names no feature to
+add: check it for `null` first. The compiler compares the
 word with each label in turn, so a switch with many cases costs a comparison
 per case before the one that matches.
 
@@ -323,9 +327,20 @@ export const main = (): void => {
 }
 ```
 
-That prints `[n][é][😀]`. Each character is a new `string`; `break`,
-`continue` and labels work as they do over an array. A destructuring head,
-`for (const [c] of s)`, stays refused.
+That prints `[n][é][😀]`. Each character is a new `string`, which lives
+until the function around the loop returns (or the loop around it ends a
+pass), so keeping one after the loop is safe; a walk of a long string holds
+one small string per character until then. `break`, `continue` and labels
+work as they do over an array. A destructuring head, `for (const [c] of s)`,
+stays refused, and so does a walk of a `string | null`, with the strict
+refusal: check it for `null` first.
+
+A string that is not valid UTF-8, such as one built with
+`String.fromCharCode(200)`, is walked byte by byte where its bytes do not
+form a character: a byte that starts a character but is not followed by the
+bytes that finish it is one step on its own, and the next byte gets its own
+step. So `String.fromCharCode(200) + "abc"` takes four steps, as it does in
+Node, although the first step's bytes are nish's, not Node's.
 
 ## Dependencies follow the root package
 

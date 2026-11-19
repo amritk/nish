@@ -1931,6 +1931,24 @@ const DECLARED = [
     why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
   },
   {
+    program: "tests/cases/compat_string_switch_flow.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and switches on a string, which `string-switch` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_for_of_string_fresh.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_for_of_string_invalid.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
+  },
+  {
     program: "tests/cases/compat_optional_chain_statement.ts",
     file: "exit",
     changelog: "optional chaining and nullish coalescing under --compat",
@@ -1964,7 +1982,7 @@ const DECLARED = [
     program: "tests/cases/perf_compat_number_i32.ts",
     file: "perf_compat_number_i32.ll",
     changelog: "optional chaining and nullish coalescing under --compat",
-    why: 'the case is compiled under --compat, and the `!nish.compat` mark lists the enabled features after the number mode, `!{!"i32", !"nullish", !"optional-chaining"}`, which the seed\'s mark does not',
+    why: 'the case is compiled under --compat, and the `!nish.compat` mark lists the enabled features after the number mode, `!{!"i32", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}`, which the seed\'s mark does not',
   },
   {
     program: "tests/link/compat_manifest_program/main.ts",
