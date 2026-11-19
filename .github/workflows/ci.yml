@@ -461,6 +461,14 @@ jobs:
       # running them a second time. A check in tests/run.js fails if this step
       # asks for it while `fuzz-smoke` has stopped running either.
       #
+      # `--delegate-bench-timing`, which tests/run.js honours on a
+      # `pull_request` event alone: there the crypto-bench section still
+      # builds every twin and checks every checksum against expected.txt, and
+      # leaves the timed portable proofs to the push-to-main run of this job,
+      # which every push to main makes (the merge queue and workflow_call time
+      # them too). A check in tests/run.js fails if this job stops running on
+      # a push to main.
+      #
       # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
@@ -472,7 +480,7 @@ jobs:
         # The log is kept for the steps below that require a line of it.
         run: |
           set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read

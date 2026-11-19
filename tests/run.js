@@ -368,11 +368,17 @@ const skip = (reason) => {
  *
  * Only a check that another job proves *with the same inputs on the same
  * platform* may be delegated, and only when the workflow asks for it by flag.
- * There are two kinds today. The bootstrap's fixed point, and the WP14 section
- * says when the request is honoured and what makes it true. And a link
- * program's checks of what the compiler wrote rather than of what the program
- * did (`DELEGATE_IR_CHECKS`), which are the same on every host: a mac runs
- * the program, and the Linux `test` job checks the compile.
+ * The bootstrap's fixed point, and the WP14 section says when the request is
+ * honoured and what makes it true. The sanitizer builds and replays, which
+ * `fuzz-smoke` makes (`DELEGATE_SANITIZERS`). And a link program's checks of
+ * what the compiler wrote rather than of what the program did
+ * (`DELEGATE_IR_CHECKS`), which are the same on every host: a mac runs the
+ * program, and the Linux `test` job checks the compile.
+ *
+ * One kind goes to another run rather than another job: a benchmark's timed
+ * proof (`DELEGATE_BENCH_TIMING`). It is delegated only on a pull request,
+ * to the push-to-main run of the same job, which times it on the merged code,
+ * and the line names that lane.
  */
 const delegated = []
 const delegate = (name, provedBy) => {
@@ -615,9 +621,9 @@ if (RETIRED.length > 0) {
 // shard builds the compiler and runs everything before the link programs but
 // the dealt sections there (`DEALT_SECTIONS`: term-io, --emit-ts and the small
 // sections between the native run limit and the link programs) and the
-// golden cases' work past their IR check, which `caseShard` deals by position:
-// every shard compiles every case, since later sections read that compile, and
-// does the rest for its own eighth. Each dealt section before the link programs
+// golden cases, which `caseShard` deals by position: a shard compiles, checks
+// and runs its own eighth, and a later section that reads another shard's
+// case compiles it again through `caseLl`. Each dealt section before the link programs
 // runs in the one shard its cost deals it to. Shard 1 also runs every section
 // after the link programs that is not dealt, and the link programs a later
 // section reads the output of (`LINK_READ_LATER`); a `pinned` group
@@ -688,9 +694,9 @@ if (
 // run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
 // cases are independent of each other and the sections after this one are not
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
-// case has finished before the next section starts; in a sharded run every
-// shard still compiles every case for that reason, and does the rest of the
-// work only for the cases `caseShard` deals it. The checks are
+// case has finished before the next section starts. In a sharded run a shard
+// takes only the cases `caseShard` deals it, and a later section that reads a
+// case another shard owns compiles it on demand (`caseLl`). The checks are
 // reported in corpus order, which keeps the output the same at any width.
 // The filter is the first argument that is neither a flag nor the value of
 // one (`--shard 2/4`, `--jobs 4`).
@@ -752,38 +758,43 @@ const caseEnv = (file) => {
 const selectedCases = cases.filter((name) => !only || name.includes(only))
 
 /**
- * The shard that does a golden case's dealt work: everything after its IR is
- * held to the golden -- `llvm-as`, the `--warn-portability`,
+ * The shard that runs a golden case: its compile, the check of what it
+ * compiled to (its rejection, its stdout or its IR against the golden) and
+ * everything after -- `llvm-as`, the `--warn-portability`,
  * `--emit-capabilities`, `--emit-panics`, `--emit-arena` and
- * `--explain-memory` compiles, and the native link and run. Every shard still
- * compiles every case and checks its IR, because that compile is what later
- * sections read: `build/test/<name>.ll` (the arrays, crypto, runtime and
- * bench blocks, and shard 1's checks after the link programs, most of them
- * behind an `existsSync` that would skip silently) and `caseResults`. None of
- * them reads what the dealt work writes. Section A took 59 s of shard 2 in run
- * 43369900293 and 30 s with the deal (`docs/wp10-ci.md`, "Where the wall
- * clock goes"); what is left is mostly the compiles every shard keeps.
+ * `--explain-memory` compiles, and the native link and run. No other shard
+ * compiles the case in section A. A later section that reads its compile
+ * (`build/test/<name>.ll` in the arrays, runtime and post-link checks, the
+ * diagnostics' error counts) reads it through `caseLl` or `caseCompile`,
+ * which compile it on the spot, with the same arguments, on a shard that did
+ * not: those readers name a few hundred cases between them, and a compile
+ * takes milliseconds, so the shard a reader runs in pays for its own and the
+ * other seven are spared the corpus. Section A took 59 s of shard 2 in run
+ * 43369900293, 30 s once the work past the IR check was dealt, and the rest
+ * was the compiles every shard then kept (`docs/wp10-ci.md`, "Where the wall
+ * clock goes").
  *
- * The deal is by position, the linked cases and the compiled-only ones apart,
- * so each shard gets an eighth of each kind whatever the corpus's order. The
- * first linked case with and without `--threads` stays in shard 1: it is the
- * specimen the `runtime objects:` checks replay there (`keepSpecimen`), and
- * an unsharded run keeps the same one. A rejection or a `.stdout` case has no
- * dealt work. A filtered run deals only the cases it selects, as it does the
- * link programs.
+ * The deal is by position, each kind of case apart -- the linked ones, the
+ * compiled-only ones, the `.stdout` ones and the rejections -- so each shard
+ * gets an eighth of each kind whatever the corpus's order. The first linked
+ * case with and without `--threads` stays in shard 1: it is the specimen the
+ * `runtime objects:` checks replay there (`keepSpecimen`), and an unsharded
+ * run keeps the same one. A filtered run deals only the cases it selects, as
+ * it does the link programs.
  */
 const caseShard = (() => {
   if (SHARDS === 1) {
     return () => SHARD
   }
   const exists = (name, ext) => fs.existsSync(path.join(casesDir, `${name}.${ext}`))
-  const dealt = selectedCases.filter((name) => !exists(name, "err") && !exists(name, "stdout"))
-  const linked = dealt.filter((name) => exists(name, "out"))
+  const kindOf = (name) =>
+    exists(name, "err") ? "err" : exists(name, "stdout") ? "stdout" : exists(name, "out") ? "linked" : "compiled"
+  const byKind = Map.groupBy(selectedCases, kindOf)
   const specimens = [false, true]
-    .map((threads) => linked.find((name) => caseArgs(name).includes("--threads") === threads))
+    .map((threads) => (byKind.get("linked") ?? []).find((name) => caseArgs(name).includes("--threads") === threads))
     .filter((name) => name !== undefined)
   const shardOf = new Map(specimens.map((name) => [name, 1]))
-  for (const group of [linked, dealt.filter((name) => !exists(name, "out"))]) {
+  for (const group of byKind.values()) {
     let next = 0
     for (const name of group.filter((name) => !shardOf.has(name))) {
       shardOf.set(name, (next % SHARDS) + 1)
@@ -1026,10 +1037,14 @@ const runCase = async (name) => {
   const expect = (label, ok, detail) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
+  // A case another shard owns (`caseShard`) is that shard's whole: its
+  // compile, its IR check and everything after them. A later section that
+  // reads its compile here gets one from `caseCompile`.
+  if (caseShard(name) !== SHARD) {
+    return { compiled: null, steps, panicFunctions: 0, dealtTo: caseShard(name) }
+  }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
   const done = { compiled: r, steps, panicFunctions: 0, dealtTo: 0 }
-  // Whether this shard does the case's work past its IR check (`caseShard`).
-  const mine = caseShard(name) === SHARD
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -1056,7 +1071,7 @@ const runCase = async (name) => {
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
     expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
-  if (mine && fs.existsSync(side("portability"))) {
+  if (fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
@@ -1085,7 +1100,7 @@ const runCase = async (name) => {
       "the two .ll files differ"
     )
   }
-  if (mine && fs.existsSync(side("caps.json"))) {
+  if (fs.existsSync(side("caps.json"))) {
     // WP35: the capability report, compiled a second time for the same reason
     // the portability warnings are -- the flag is not in `.args`, because the
     // tools that compile `tests/cases/` with the last release would refuse it.
@@ -1148,11 +1163,6 @@ const runCase = async (name) => {
     actual === expected,
     `--- expected\n${expected}\n--- actual\n${actual}`
   )
-  if (!mine) {
-    done.dealtTo = caseShard(name)
-    return done
-  }
-
   if (HAS_LLVM_AS) {
     const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
     expect(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
@@ -1360,10 +1370,7 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     }
   }
   for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
-    delegate(
-      `llvm-as, the side compiles and the native run of ${count} golden case(s) whose IR this shard checked`,
-      shardJob(i)
-    )
+    delegate(`the compile, the IR or rejection check and the native run of ${count} golden case(s)`, shardJob(i))
   }
 }
 // The bound on native runs, held to what it promises with a bound of half a
@@ -1394,8 +1401,63 @@ if (!only || "native run limit".includes(only)) {
   )
 }
 
-/** Each selected case's own compile, in corpus order, for the checks below that read it again. */
-const caseResults = caseRuns.map((run) => run.compiled)
+/**
+ * The compile of golden case `name` by the compiler under test, with its own
+ * `.args`, for a check below that reads it again: section A's, if this shard
+ * ran the case, and otherwise one made here the first time it is asked for
+ * (`caseShard`). Either way `build/test/<name>.ll` is the file it wrote. A
+ * case the run's filter did not select is not compiled: the answer is `null`,
+ * as it was when every shard compiled the whole selection.
+ */
+const caseCompile = (() => {
+  const made = new Map(selectedCases.map((name, at) => [name, caseRuns[at].compiled]))
+  return (name) => {
+    if (!made.has(name)) {
+      return null
+    }
+    if (made.get(name) === null) {
+      const src = path.join(casesDir, `${name}.ts`)
+      made.set(name, spawnSync(NISH, [src, "-o", path.join(buildDir, `${name}.ll`), ...caseArgs(name)], { cwd: root }))
+    }
+    return made.get(name)
+  }
+})()
+
+/**
+ * Where golden case `name`'s IR is, `build/test/<name>.ll`, compiled first if
+ * this shard has not compiled it yet (`caseCompile`). Every check after
+ * section A that reads a case's `.ll` takes its path from here, so a case
+ * dealt to another shard is read from a compile of its own and never skipped
+ * as if it had not been built.
+ */
+const caseLl = (name) => {
+  caseCompile(name)
+  return path.join(buildDir, `${name}.ll`)
+}
+
+// A check that built a case's `.ll` path by hand would find the file only on
+// the shard that owns the case and skip as unbuilt on the other seven, so no
+// shard would fail when the check broke. Section A and the two accessors
+// above are the only places that name a case's `.ll` under `buildDir`; a
+// section that compiles a case itself writes it under a name of its own.
+if (SHARD === 1) {
+  const source = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8").split("\n")
+  const byHand = source.flatMap((line, at) => {
+    const templated = line.includes(["path.join(buildDir, `", "${name}.ll`)"].join(""))
+    const literal = [...line.matchAll(/path\.join\(buildDir, "([a-z0-9_]+)\.ll"\)/g)].some(([, name]) =>
+      fs.existsSync(path.join(casesDir, `${name}.ts`))
+    )
+    return templated || literal ? [{ line: at + 1, text: line.trim() }] : []
+  })
+  // runCase's output, the two accessors, and perf_clamp_quiet's own compile.
+  const allowed = ["const outLl = ", "made.set(name, spawnSync(NISH", "return path.join(buildDir", "clampQuietCompile.status"]
+  const stray = byHand.filter(({ text }) => !allowed.some((start) => text.startsWith(start)))
+  check(
+    `cases: every later reader of a golden case's .ll goes through caseLl (${byHand.length} sites allowed by name)`,
+    stray.length === 0 && byHand.length === allowed.length,
+    stray.map(({ line, text }) => `tests/run.js:${line}: ${text}`).join("\n") || `allowed sites found: ${byHand.length}`
+  )
+}
 
 // The oracle is only as good as its reading of the IR, so it is handed each
 // panic path it claims to recognise, in a function listed as clean, and must
@@ -4933,7 +4995,7 @@ if (dealtHere("tlsClient")) {
 // `io_nish_import_global` alone, and the comparison would read a stale file or none.
 if (selectedCases.includes("io_nish_import") && selectedCases.includes("io_nish_import_global")) {
   const ir = (name) => {
-    const file = path.join(buildDir, `${name}.ll`)
+    const file = caseLl(name)
     return fs.existsSync(file)
       ? stripHeader(fs.readFileSync(file, "utf8")).split(root).join("<root>").trim()
       : null
@@ -4963,8 +5025,8 @@ for (const name of [
     continue
   }
   // A case renamed or deleted fails here rather than leaving the check empty.
-  const at = selectedCases.indexOf(name)
-  if (at < 0) {
+  const r = caseCompile(name)
+  if (r === null) {
     check(
       `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
       false,
@@ -4972,8 +5034,7 @@ for (const name of [
     )
     continue
   }
-  // The compile the case loop already ran: one summary line per error.
-  const r = caseResults[at]
+  // The case's own compile: one summary line per error.
   const errors = String(r.stderr)
     .split("\n")
     .filter((l) => /:\d+:\d+: error: /.test(l))
@@ -4992,8 +5053,7 @@ for (const name of ["reject_hygiene_held"]) {
   if (only && !name.includes(only)) {
     continue
   }
-  const at = selectedCases.indexOf(name)
-  const r = at < 0 ? null : caseResults[at]
+  const r = caseCompile(name)
   const errors =
     r === null
       ? []
@@ -5021,17 +5081,17 @@ for (const [name, count] of [
   if (only && !name.includes(only)) {
     continue
   }
-  const at = selectedCases.indexOf(name)
+  const r = caseCompile(name)
   const errors =
-    at < 0
+    r === null
       ? []
-      : String(caseResults[at].stderr)
+      : String(r.stderr)
           .split("\n")
           .filter((l) => /:\d+:\d+: error: /.test(l))
   check(
     `${name}: exactly ${count} refusals`,
-    at >= 0 && caseResults[at].status === 1 && errors.length === count,
-    at < 0 ? "(no such case)" : String(caseResults[at].stderr)
+    r !== null && r.status === 1 && errors.length === count,
+    r === null ? "(no such case)" : String(r.stderr)
   )
 }
 
@@ -5040,8 +5100,7 @@ for (const [name, count] of [
 // its `,` and parses the next one, where abandoning the literal would report
 // every token after it.
 if (!only || "reject_computed_skip".includes(only)) {
-  const at = selectedCases.indexOf("reject_computed_skip")
-  const r = at < 0 ? null : caseResults[at]
+  const r = caseCompile("reject_computed_skip")
   const errors =
     r === null
       ? []
@@ -5444,7 +5503,7 @@ if (dealtHere("diagnostics")) {
   // The golden is compiled by the cases loop above, which a `node tests/run.js
   // <sub>` run may have filtered out; verifying a file that was never written
   // reports a failure about the filter rather than about the compiler.
-  const dbgLocalsIr = path.join(buildDir, "dbg_locals.ll")
+  const dbgLocalsIr = caseLl("dbg_locals")
   if (has("opt") && fs.existsSync(dbgLocalsIr)) {
     const v = spawnSync("opt", ["-passes=verify", "-disable-output", dbgLocalsIr])
     check("dbg_locals: opt -passes=verify accepts the -g IR", v.status === 0, String(v.stderr))
@@ -9713,6 +9772,26 @@ if (irDelegated > 0) {
 // It is dealt like the link programs (`DEALT_SECTIONS`) rather than left to
 // shard 1: it builds every twin of five families, four and a half minutes of
 // a CI shard, and reads nothing another section writes.
+// `--delegate-bench-timing` hands the crypto twins' timed portable proofs to
+// the push-to-main run of this same `test` job. ci.yml's Test step passes the
+// flag on every event and it is honoured on a `pull_request` alone
+// (GITHUB_EVENT_NAME), so a push to main (every one; a newer push cancels an
+// older one's first attempt), the merge queue and a workflow_call still time
+// them. Under it `bench/crypto/run.mjs --validate`
+// gets `--no-proofs`: every build, every checksum against expected.txt, the
+// column account and the exact half of each portable proof (a portable
+// column's own binary is other bytes) still run here; what goes is the
+// calibrated, interleaved rounds that measure each portable column slower,
+// and the two curves copies whose paired rounds test that measurement. Like
+// `--delegate-sanitizers` it is honoured only in a GitHub Actions run, and the
+// guard on ci.yml (with the other ci.yml checks) fails if the `test` job
+// stops running on a push to main.
+const DELEGATE_BENCH_TIMING =
+  process.argv.includes("--delegate-bench-timing") &&
+  process.env.GITHUB_ACTIONS === "true" &&
+  process.env.GITHUB_EVENT_NAME === "pull_request"
+const BENCH_TIMING_LANE = "the push-to-main run of ci.yml's `test` job (every push to main)"
+
 if (dealtHere("cryptoBench")) {
   // bench/run.mjs carries a section over only when its marker matches
   // `<!-- ([a-z-]+):begin -->`, so a marker with a digit or a capital is
@@ -9770,7 +9849,13 @@ if (dealtHere("cryptoBench")) {
     )
     const v = spawnSync(
       "node",
-      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      [
+        path.join(root, "bench", "crypto", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--validate",
+        ...(DELEGATE_BENCH_TIMING ? ["--no-proofs"] : []),
+      ],
       { cwd: root, encoding: "utf8" }
     )
     // The runner accounts for every column of every family it validated: a
@@ -9795,7 +9880,13 @@ if (dealtHere("cryptoBench")) {
     // ones (the Nish one unless the CPU lacks every extension it pins off).
     const strict =
       process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
-    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    // Under the delegation a measured proof reads `not timed (--no-proofs)`
+    // instead, and must: a column that printed `unproved` is still one whose
+    // proof was blocked here, not one that was timed elsewhere.
+    const provedLine = (f, id) =>
+      DELEGATE_BENCH_TIMING
+        ? new RegExp(`^portable ${f} ${id}: not timed \\(--no-proofs\\)$`, "m")
+        : new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
     check(
       `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
       v.status === 0 &&
@@ -9828,8 +9919,11 @@ if (dealtHere("cryptoBench")) {
                 provedLine(f, "nish-portable").test(v.stdout) ||
                 new RegExp(`^portable ${f} nish-portable: unproved \\(this CPU has none of `, "m").test(v.stdout)
             ))),
-      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL, Go and Nish portable proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? `; strict: every twin must run and the OpenSSL, Go and Nish portable proofs must be ${DELEGATE_BENCH_TIMING ? "reached (timed by the push-to-main run)" : "measured"}` : ""}\n${v.stdout}${v.stderr}`
     )
+    if (DELEGATE_BENCH_TIMING) {
+      delegate("crypto-bench: the portable columns are measurably slower than their twins' (timed proofs)", BENCH_TIMING_LANE)
+    }
     for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
       if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
         console.log(`      ${line}`)
@@ -9936,6 +10030,10 @@ if (dealtHere("cryptoBench")) {
       },
     ]
     for (const c of paired) {
+      if (DELEGATE_BENCH_TIMING) {
+        delegate(c.name, BENCH_TIMING_LANE)
+        continue
+      }
       const r = validateCopy(copyCurves(c.dir, withFamily(c.edit)), "curves")
       const unproved = /^portable curves openssl-portable: unproved \((.*)\)$/m.exec(r.stdout)
       if (unproved !== null && !strict) {
@@ -10413,7 +10511,7 @@ if (dealtHere("bench") && (!only || "bench".includes(only) || "wp9".includes(onl
       ),
     getbyte.r.stderr
   )
-  const targetLl = path.join(buildDir, "opt_target_triple.ll")
+  const targetLl = caseLl("opt_target_triple")
   if (has("opt") && fs.existsSync(targetLl)) {
     const ir = fs.readFileSync(targetLl, "utf8")
     check(
@@ -10475,7 +10573,7 @@ if (dealtHere("bench") && (!only || "bench".includes(only) || "wp9".includes(onl
   // would be a silent wrap. Signedness is not in the LLVM type — a `u32` is an
   // `i32` — so the check is per function: `mix` is the case's unsigned one and
   // must be plain and unchecked.
-  const nswLl = path.join(buildDir, "opt_nsw.ll")
+  const nswLl = caseLl("opt_nsw")
   if (fs.existsSync(nswLl)) {
     const ir = fs.readFileSync(nswLl, "utf8")
     /** The body of `@<name>`, so an op can be attributed to the function that wrote it. */
@@ -14250,7 +14348,7 @@ if (dealtHere("cryptoChecks")) {
   // wrote into, which is exactly the shape a dominance bug would hide in.
   if (has("opt")) {
     for (const name of cases.filter((c) => c.startsWith("gen_") && (!only || c.includes(only)))) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -14473,7 +14571,7 @@ if (dealtHere("arrayChecks")) {
       ["arr_range_call_flow", "inLoop", 2],
       ["arr_range_call_flow", "inCondition", 1],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -14497,7 +14595,7 @@ if (dealtHere("arrayChecks")) {
         ["arr_range_call_arrow", "a call from a lifted arrow", "2", "9 >= 3"],
         ["arr_range_call_generic", "a call from a generic instantiation", "2", "9 >= 3"],
       ]) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -14534,7 +14632,7 @@ if (dealtHere("arrayChecks")) {
       ["arr_bounds_offset_other", "mixed", 1],
       ["arr_bounds_offset_floor", "pick", 1],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -14551,7 +14649,7 @@ if (dealtHere("arrayChecks")) {
         ["arr_bounds_offset_other", "a guard on another array's length", "", "2 >= 2"],
         ["arr_bounds_offset_floor", "a sum with no floor under its local", "2", "18446744073709551612 >= 3"],
       ]) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -14588,7 +14686,7 @@ if (dealtHere("arrayChecks")) {
       ["arr_bounds_range_kept", "unsignedSum", 1],
       ["arr_bounds_range_kept", "unknownLength", 1],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -14606,7 +14704,7 @@ if (dealtHere("arrayChecks")) {
         ["arr_bounds_range_call", "an index whose call shrinks the array", "", "15 >= 15"],
         ["arr_bounds_range_new", "an index whose constructor shrinks the array", "", "15 >= 15"],
       ]) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -14668,7 +14766,7 @@ if (dealtHere("arrayChecks")) {
       ["arr_bounds_returned_kept", "methodSize", 1],
       ["arr_bounds_returned_kept", "letReceiver", 1],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -14695,7 +14793,7 @@ if (dealtHere("arrayChecks")) {
         ["arr_bounds_returned_through_param", "a call of a function parameter", "", "3 >= 3"],
         ["arr_bounds_returned_through_memo", "an answer drawn on a recursion's assumption", "2", "3 >= 2"],
       ]) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -15174,7 +15272,7 @@ if (dealtHere("arrayChecks")) {
   }
 
   if (!only || only.startsWith("destructur")) {
-    const ll = path.join(buildDir, "destructure_out_of_range.ll")
+    const ll = caseLl("destructure_out_of_range")
     if (!fs.existsSync(ll)) {
       skip("destructure_out_of_range: no .ll was built for it")
     } else {
@@ -15192,7 +15290,7 @@ if (dealtHere("arrayChecks")) {
     }
     // A struct a pattern reads stays on the stack: `destructure_stack`'s
     // `Point` is an `alloca`, and nothing in `sum` reaches the arena or heap.
-    const stack = path.join(buildDir, "destructure_stack.ll")
+    const stack = caseLl("destructure_stack")
     if (!fs.existsSync(stack)) {
       skip("destructure_stack: no .ll was built for it")
     } else {
@@ -15219,7 +15317,7 @@ if (dealtHere("arrayChecks")) {
     }
     // A pattern is the reads it stands for: each `<form>_pattern` body is its
     // `<form>_plain` twin's, unoptimised (local names aside) and after `opt -O2`.
-    const zero = path.join(buildDir, "destructure_zero_cost.ll")
+    const zero = caseLl("destructure_zero_cost")
     // `member` reads through `h.pt` and `h.items`, a field path the pattern
     // reads again where it is written, as the twin does.
     const forms = ["object", "array", "for", "local", "fresh", "guard", "guard_loop", "call", "hole", "let", "rows", "member"]
@@ -15288,7 +15386,7 @@ if (dealtHere("arrayChecks")) {
   if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     if (has("opt")) {
       for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -15296,7 +15394,7 @@ if (dealtHere("arrayChecks")) {
         check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr))
       }
     }
-    const panicLl = path.join(buildDir, "arr_bounds_panic.ll")
+    const panicLl = caseLl("arr_bounds_panic")
     if (fs.existsSync(panicLl)) {
       const exe = path.join(buildDir, "arr_bounds_panic")
       const cc = linkNative(exe, panicLl)
@@ -15313,7 +15411,7 @@ if (dealtHere("arrayChecks")) {
     // WP15 §2: the proof is not a licence. The loop condition proves `i < xs.length`
     // on the way in, but the callee pops through the same array, so the fact dies at
     // the call and the access after it still panics.
-    const shrinkLl = path.join(buildDir, "arr_bounds_shrink_panic.ll")
+    const shrinkLl = caseLl("arr_bounds_shrink_panic")
     if (fs.existsSync(shrinkLl)) {
       const exe = path.join(buildDir, "arr_bounds_shrink_panic")
       const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "runtime/runtime-text.c", "-o", exe], {
@@ -15347,7 +15445,7 @@ if (dealtHere("arrayChecks")) {
       ["arr_path_root", "a reassignment of the root", "1"],
       ["arr_path_nullable", "a rebind of a root declared `Holder | null`", "1"],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -15434,7 +15532,7 @@ if (dealtHere("arrayChecks")) {
         "1 >= 1",
       ],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -15457,7 +15555,7 @@ if (dealtHere("arrayChecks")) {
     // #180's rule stops at inline records: an element store into an array of
     // classes stores a pointer, so `this.src` and `this.nodes` keep their headers
     // in the preheader and the loop reloads no field of `this`.
-    const classStoreLl = path.join(buildDir, "arr_header_hoist_record_class.ll")
+    const classStoreLl = caseLl("arr_header_hoist_record_class")
     if (fs.existsSync(classStoreLl)) {
       const ir = fs.readFileSync(classStoreLl, "utf8")
       const fn = ir.slice(ir.search(/^define[^\n]*@Grid\.sumAndStamp\(/m))
@@ -15472,7 +15570,7 @@ if (dealtHere("arrayChecks")) {
     // And it stops at what the store can reach: a whole-record store into `rs`
     // rewrites a `Rec` slot, and `g.src` is read off a class, so its header stays
     // in the preheader.
-    const classRootLl = path.join(buildDir, "arr_header_hoist_record_class_root.ll")
+    const classRootLl = caseLl("arr_header_hoist_record_class_root")
     if (fs.existsSync(classRootLl)) {
       const ir = fs.readFileSync(classRootLl, "utf8")
       const fn = ir.slice(ir.search(/^define[^\n]*@stamp\(/m))
@@ -15488,7 +15586,7 @@ if (dealtHere("arrayChecks")) {
     // a `Holder | null` narrowed by a guard and over a `Holder`. Only the second
     // may lose its check. The round trip above cannot show this, because the
     // root rule catches the same program; this is the rule by itself.
-    const nullableLl = path.join(buildDir, "arr_path_nullable.ll")
+    const nullableLl = caseLl("arr_path_nullable")
     if (fs.existsSync(nullableLl)) {
       const ir = fs.readFileSync(nullableLl, "utf8")
       const panics = (fn) => panicCount(ir, fn)
@@ -15508,7 +15606,7 @@ if (dealtHere("arrayChecks")) {
     // elements: after `opt -O2` every `%struct.nish_array` access in `@scale` must sit
     // in the preheader, none in the loop body. Without the domains all four were reloaded
     // per iteration, which measured 1.6x on the same shape.
-    const aliasLl = path.join(buildDir, "arr_alias_domains.ll")
+    const aliasLl = caseLl("arr_alias_domains")
     if (has("opt") && fs.existsSync(aliasLl)) {
       const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", aliasLl])
       const body = String(o.stdout).match(/define[^\n]*@scale\b[\s\S]*?\n}/)?.[0] ?? ""
@@ -15560,7 +15658,7 @@ if (dealtHere("arrayChecks")) {
     // multiply keeps its overflow check, so the loop is neither collapsed to one trip
     // count nor vectorised, but the alias domains do not depend on the mode, and every
     // header load must still be hoisted out of it.
-    const aliasCheckedLl = path.join(buildDir, "arr_alias_domains_checked.ll")
+    const aliasCheckedLl = caseLl("arr_alias_domains_checked")
     if (has("opt") && fs.existsSync(aliasCheckedLl)) {
       const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", aliasCheckedLl])
       const body = String(o.stdout).match(/define[^\n]*@scale\b[\s\S]*?\n}/)?.[0] ?? ""
@@ -15588,7 +15686,7 @@ if (dealtHere("arrayChecks")) {
     // should. The field load is the one `load ptr` that carries `!tbaa` and no alias
     // scope (elements and header fields carry both); the length is the header's
     // `load i64`.
-    const reloadLl = path.join(buildDir, "arr_field_reload.ll")
+    const reloadLl = caseLl("arr_field_reload")
     if (has("opt") && fs.existsSync(reloadLl)) {
       const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", reloadLl])
       const body = String(o.stdout).match(/define[^\n]*@Swap\.swap\b[\s\S]*?\n}/)?.[0] ?? ""
@@ -15612,7 +15710,7 @@ if (dealtHere("arrayChecks")) {
     // the element data a scalar access of its lane type is (src/emit-arrays.ts).
     // Untagged, `opt -O3` reloads `this.count` after every `store(v, this.out, i)` in
     // `@Sink.fill`; tagged, it promotes the field to a register for the whole loop.
-    const vectorReloadLl = path.join(buildDir, "simd_store_field_reload.ll")
+    const vectorReloadLl = caseLl("simd_store_field_reload")
     if (has("opt") && fs.existsSync(vectorReloadLl)) {
       const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", vectorReloadLl])
       const body = String(o.stdout).match(/define[^\n]*@Sink\.fill\b[\s\S]*?\n}/)?.[0] ?? ""
@@ -15639,7 +15737,7 @@ if (dealtHere("arrayChecks")) {
     // calls stays opaque there; here each is linked the way `--link` links, `-O3
     // -flto` over the runtime's sources, so `nish_array_grow` is inlined into the
     // Nish code with clang's own TBAA root beside ours, and the answers must not move.
-    const headerTbaaLl = path.join(buildDir, "arr_header_tbaa.ll")
+    const headerTbaaLl = caseLl("arr_header_tbaa")
     if (has("opt") && fs.existsSync(headerTbaaLl)) {
       const o = spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", headerTbaaLl])
       const out = String(o.stdout)
@@ -15677,7 +15775,7 @@ if (dealtHere("arrayChecks")) {
         "arr_header_tbaa_stack",
         "arr_header_tbaa_threads",
       ]) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -15726,7 +15824,7 @@ if (dealtHere("arrayChecks")) {
     // "hoisted once per loop" and buys nothing, because two lengths are two loop
     // exits whatever they were loaded from. One value is the emitter saying so by
     // construction rather than hoping GVN merges them.
-    const hoistLl = path.join(buildDir, "arr_header_hoist.ll")
+    const hoistLl = caseLl("arr_header_hoist")
     if (fs.existsSync(hoistLl)) {
       const ir = fs.readFileSync(hoistLl, "utf8")
       // `!alias.scope !N` where !N is the header scope list; read the number out
@@ -15842,7 +15940,7 @@ if (dealtHere("arrayChecks")) {
       )
     }
     if (has("opt")) {
-      const checkedLl = path.join(buildDir, "arr_sum.ll")
+      const checkedLl = caseLl("arr_sum")
       if (fs.existsSync(checkedLl)) {
         const oc = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedLl])
         const outc = String(oc.stdout)
@@ -15870,14 +15968,14 @@ if (dealtHere("arrayChecks")) {
   if (!only || "strings".includes(only) || only.startsWith("str")) {
     if (HAS_OPT) {
       for (const name of cases.filter((c) => c.startsWith("str_") && (!only || c.includes(only)))) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
         const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll])
         check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr))
       }
-      const sliceLl = path.join(buildDir, "str_slice.ll")
+      const sliceLl = caseLl("str_slice")
       if (fs.existsSync(sliceLl)) {
         const o = spawnSync("opt", ["-O2", "-S", sliceLl])
         const out = String(o.stdout)
@@ -15888,7 +15986,7 @@ if (dealtHere("arrayChecks")) {
         )
       }
     }
-    const slicePanicLl = path.join(buildDir, "str_slice_panic.ll")
+    const slicePanicLl = caseLl("str_slice_panic")
     if (fs.existsSync(slicePanicLl)) {
       const exe = path.join(buildDir, "str_slice_panic")
       const cc = spawnSync(
@@ -15924,7 +16022,7 @@ if (dealtHere("arrayChecks")) {
   if (!only || "memory".includes(only) || only.startsWith("mem")) {
     if (HAS_OPT) {
       for (const name of cases.filter((c) => c.startsWith("mem_") && (!only || c.includes(only)))) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -15932,7 +16030,7 @@ if (dealtHere("arrayChecks")) {
         check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr))
       }
     }
-    const stackLl = path.join(buildDir, "mem_stack_struct.ll")
+    const stackLl = caseLl("mem_stack_struct")
     if (fs.existsSync(stackLl)) {
       const ir = fs.readFileSync(stackLl, "utf8")
       check(
@@ -15967,10 +16065,10 @@ if (dealtHere("arrayChecks")) {
         run ? String(run.stdout) + String(run.stderr) : String(cc.stderr)
       )
     }
-    // Linked here from section A's compile rather than taken from its binary:
-    // every shard compiles every case, but only the shard `caseShard` deals the
-    // case to links it, and this block runs wherever its group was dealt.
-    const scopeLl = path.join(buildDir, "mem_scope_dynamic_array.ll")
+    // Linked here from the case's compile rather than taken from its binary:
+    // only the shard `caseShard` deals the case to links it, and this block
+    // runs wherever its group was dealt.
+    const scopeLl = caseLl("mem_scope_dynamic_array")
     const scopeExe = path.join(buildDir, "mem_scope_dynamic_array_flat")
     if (fs.existsSync(scopeLl)) {
       const cc = linkNative(scopeExe, scopeLl, { driver: null, libm: true })
@@ -16685,7 +16783,7 @@ if (dealtHere("arrayChecks")) {
     }
     if (HAS_OPT) {
       for (const name of cases.filter((c) => c.startsWith("cls_") && (!only || c.includes(only)))) {
-        const ll = path.join(buildDir, `${name}.ll`)
+        const ll = caseLl(name)
         if (!fs.existsSync(ll)) {
           continue
         }
@@ -16706,7 +16804,7 @@ if (dealtHere("arrayChecks")) {
       // WP15: the cheaper one-compare unsigned check still catches a zero divisor.
       ["u_div_zero_panic", "attempt to divide by zero", "before"],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -16730,7 +16828,7 @@ if (dealtHere("arrayChecks")) {
   // overflow-free comparator the docs give sorts the full range first.
   if (!only || "sort".includes(only) || "arr_sort_overflow".includes(only)) {
     const name = "arr_sort_overflow"
-    const ll = path.join(buildDir, `${name}.ll`)
+    const ll = caseLl(name)
     if (fs.existsSync(ll)) {
       const exe = path.join(buildDir, name)
       const cc = linkNative(exe, ll, { libm: true })
@@ -16754,7 +16852,7 @@ if (dealtHere("arrayChecks")) {
   // array `slice` outside `0 <= start <= end <= length` panics with string
   // `slice`'s words where JavaScript would clamp, after the line before it.
   if (!only || "arr_map_template".includes(only)) {
-    const ll = path.join(buildDir, "arr_map_template.ll")
+    const ll = caseLl("arr_map_template")
     // The filter that runs this check also compiles the case, so a missing
     // `.ll` is a failure, not a skip.
     if (!fs.existsSync(ll)) {
@@ -16774,7 +16872,7 @@ if (dealtHere("arrayChecks")) {
   }
   if (!only || "arr_slice_bounds".includes(only)) {
     const name = "arr_slice_bounds"
-    const ll = path.join(buildDir, `${name}.ll`)
+    const ll = caseLl(name)
     if (!fs.existsSync(ll)) {
       check(`${name}: compiled to build/${name}.ll`, false, `missing ${ll}`)
     } else {
@@ -16794,7 +16892,7 @@ if (dealtHere("arrayChecks")) {
   }
   if (!only || "arr_slice_saturate".includes(only)) {
     const name = "arr_slice_saturate"
-    const ll = path.join(buildDir, `${name}.ll`)
+    const ll = caseLl(name)
     if (!fs.existsSync(ll)) {
       check(`${name}: compiled to build/${name}.ll`, false, `missing ${ll}`)
     } else {
@@ -16817,7 +16915,7 @@ if (dealtHere("arrayChecks")) {
   // stop before its "after" line; ovf_repro is the program that showed the old default
   // folding `x + 1 > x` to true, built at `--profile speed`, where the fold happened.
   if (!only || "overflow".includes(only) || only.startsWith("ovf")) {
-    const matrixLl = path.join(buildDir, "ovf_matrix.ll")
+    const matrixLl = caseLl("ovf_matrix")
     const matrixExe = path.join(buildDir, "ovf_matrix")
     const matrix = fs.existsSync(matrixLl) ? linkNative(matrixExe, matrixLl) : null
     if (matrix !== null && matrix.status === 0) {
@@ -16868,7 +16966,7 @@ if (dealtHere("arrayChecks")) {
     // ovf_loop_guard's `x + i` additions test for overflow once before their loop
     // (src/emit-arrays.ts, emitAddGuards); a loop that may overflow keeps the checked
     // add, so each case prints every value up to the overflow and then panics there.
-    const guardLl = path.join(buildDir, "ovf_loop_guard.ll")
+    const guardLl = caseLl("ovf_loop_guard")
     const guardExe = path.join(buildDir, "ovf_loop_guard")
     const guard = fs.existsSync(guardLl) ? linkNative(guardExe, guardLl) : null
     if (guard !== null && guard.status === 0) {
@@ -16901,7 +16999,7 @@ if (dealtHere("arrayChecks")) {
   // did; acc_soundness' two divide-by-zero cases must panic as theirs do, though an
   // overflow is pending; acc_ineligible's sums must stay recursion.
   if (!only || "acc_".includes(only) || only.startsWith("acc")) {
-    const accLl = path.join(buildDir, "acc_overflow.ll")
+    const accLl = caseLl("acc_overflow")
     const accExe = path.join(buildDir, "acc_overflow")
     const linked = fs.existsSync(accLl) ? linkNative(accExe, accLl) : null
     if (linked !== null && linked.status === 0) {
@@ -16922,7 +17020,7 @@ if (dealtHere("arrayChecks")) {
     }
     // acc_effects' `noisy` calls before its first test, so the loop tests each step
     // ahead of that call: the panicking run prints every line once, in order.
-    const effectsLl = path.join(buildDir, "acc_effects.ll")
+    const effectsLl = caseLl("acc_effects")
     const effectsExe = path.join(buildDir, "acc_effects")
     const effectsLinked = fs.existsSync(effectsLl) ? linkNative(effectsExe, effectsLl) : null
     if (effectsLinked !== null && effectsLinked.status === 0) {
@@ -16936,7 +17034,7 @@ if (dealtHere("arrayChecks")) {
       check("acc_effects: links", false, String(effectsLinked.stderr))
     }
     // acc_soundness' cases 0 and 1 divide by zero after steps whose sum has passed MAX.
-    const soundLl = path.join(buildDir, "acc_soundness.ll")
+    const soundLl = caseLl("acc_soundness")
     const soundExe = path.join(buildDir, "acc_soundness")
     const soundLinked = fs.existsSync(soundLl) ? linkNative(soundExe, soundLl) : null
     if (soundLinked !== null && soundLinked.status === 0) {
@@ -17105,7 +17203,7 @@ if (dealtHere("arrayChecks")) {
       ["rng_entry_push_panic", "value out of range: expected integer<0, 9>", "3"],
       ["rng_entry_bitwise_panic", "value out of range: expected integer<0, 15>", "7"],
     ]) {
-      const ll = path.join(buildDir, `${name}.ll`)
+      const ll = caseLl(name)
       if (!fs.existsSync(ll)) {
         continue
       }
@@ -18161,7 +18259,7 @@ if (dealtHere("runtimeChecks")) {
       }
     }
 
-    const addLl = path.join(buildDir, "add.ll")
+    const addLl = caseLl("add")
     const exe = path.join(buildDir, "add_size")
     const r = spawnSync(
       "bash",
@@ -34120,6 +34218,28 @@ if (selects("ci.yml", "ci-scope", "bootstrap", "runtime_sanitize", "fuzz", "nish
       `fuzz-smoke job:\n${fuzzSmoke || "(not found)"}`
   )
 
+  // `--delegate-bench-timing` (DELEGATE_BENCH_TIMING): the crypto twins'
+  // timed portable proofs run in the push-to-main run of this same job. That
+  // holds while ci.yml runs on a push to main, the `test` job has no
+  // job-level `if:` and its Test step none either, and the flag is honoured
+  // on a `pull_request` event alone, so the push run times them.
+  {
+    const runSrc = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8")
+    const honoured = /^const DELEGATE_BENCH_TIMING =\n(?:.*\n){0,3}?.*process\.env\.GITHUB_EVENT_NAME === "pull_request"$/m
+    const testStep = stepsOf(testJob).find((st) => /npm test -- /.test(st)) ?? ""
+    check(
+      "ci.yml: the `test` job delegates the crypto twins' timed proofs only on a pull request, and runs them on every push to main",
+      testJob !== "" &&
+        (!testJob.includes("--delegate-bench-timing") ||
+          (/^on:\n {2}push:\n {4}branches: \[main\]$/m.test(ciYmlText) &&
+            !/^ {4}if:/m.test(testJob) &&
+            testStep !== "" &&
+            !/^ {8}(?:if|continue-on-error):/m.test(testStep) &&
+            honoured.test(runSrc))),
+      `Test step:\n${testStep || "(not found)"}`
+    )
+  }
+
   // #1724: the runtime_sanitize step fails on a failed or skipped check. It
   // pipes the run through `tee`, so without `set -o pipefail` the step's
   // status is tee's; it requires a non-zero passed count with 0 failed, and
@@ -39603,7 +39723,7 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
 // The case adds with `wrappingAdd`: a reduction that can pass INT_MAX is checked by
 // default, and a loop with an overflow exit is not vectorised.
-const sumLoopLl = path.join(buildDir, "cf_sum_loop.ll")
+const sumLoopLl = caseLl("cf_sum_loop")
 if (has("opt") && fs.existsSync(sumLoopLl)) {
   const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", sumLoopLl])
   const out = String(o.stdout)
@@ -39617,7 +39737,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   // `i++` under `i < n` was proven, so the step is the `nuw nsw` an induction
   // variable needs. This is the shape the default build ships; the case above pins
   // what `wrappingAdd` buys back.
-  const checkedSumLl = path.join(buildDir, "cf_sum_loop_checked.ll")
+  const checkedSumLl = caseLl("cf_sum_loop_checked")
   if (fs.existsSync(checkedSumLl)) {
     const c = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedSumLl])
     const body = String(c.stdout).match(/define[^\n]*@sumTo\b[\s\S]*?\n}/)?.[0] ?? ""
@@ -39633,7 +39753,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   }
   // Control-flow modules must satisfy the IR verifier (dominance, terminators, phis), not just the assembler.
   for (const name of cases.filter((c) => c.startsWith("cf_") && (!only || c.includes(only)))) {
-    const ll = path.join(buildDir, `${name}.ll`)
+    const ll = caseLl(name)
     if (!fs.existsSync(ll)) {
       continue
     }
@@ -39647,7 +39767,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
 // idiom pass makes one of that loop. This holds it to that: if the loop ever grows
 // something the pass cannot see through, a `clear` over `i32[]` stays a loop and the
 // rule's claim is false.
-const fillZeroLl = path.join(buildDir, "bytes_fill_zero.ll")
+const fillZeroLl = caseLl("bytes_fill_zero")
 if (has("opt") && fs.existsSync(fillZeroLl)) {
   const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", fillZeroLl])
   const out = String(o.stdout)
@@ -45383,7 +45503,7 @@ if (linkSpecimens.size > 0) {
 // rather than a program with two arenas. `ld` does refuse it -- "TLS reference
 // ... mismatches non-TLS definition" -- and this is where that is written down,
 // because it is the property the whole cache rests on.
-const threadsLl = path.join(buildDir, "mem_threads_arena.ll")
+const threadsLl = caseLl("mem_threads_arena")
 if (fs.existsSync(threadsLl)) {
   const rt = runtimeObjects([])
   const exe = path.join(buildDir, "runtime-obj", "threads_against_default")
