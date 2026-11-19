@@ -137,9 +137,9 @@
 
 import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
-import { parseIntegerLiteral } from "./constants"
+import { caseValue, parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
-import { isOptionalChain, unwrapParens } from "./emit-util"
+import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
 import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringMap } from "./map"
@@ -2897,6 +2897,21 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
 }
 
 /**
+ * WP66 S4: whether `index` is inside a fixed-length array of `length`
+ * elements whatever it runs as: a constant from 0 to `length - 1` (the
+ * checker refused one outside), or a value of an `integer<Lo, Hi>` with
+ * `0 <= Lo` and `Hi < length`.
+ */
+const provesCArrayIndex = (ctx: CheckContext, index: Node, length: i32): boolean => {
+  const at = caseValue(ctx, index)
+  if (at.known) {
+    return at.value >= toI64(0) && at.value < toI64(length)
+  }
+  const type = ctx.program.nodeTypes[index.id]
+  return ctx.table.isRanged(type) && ctx.table.rangeLo(type) >= 0 && ctx.table.rangeHi(type) < length
+}
+
+/**
  * Record the verdict for one access. A proof goes into the side table the
  * emitter reads; the absence of one inside a loop goes on the list the WP15 §8
  * walk reports from, but only for the shape the analysis could have proved —
@@ -2919,6 +2934,15 @@ const judge = (
   const ctx = walk.ctx
   if (provesTableIndex(walk, state, receiver, index)) {
     noteProof(walk, node)
+    return
+  }
+  // WP66 S4: a fixed-length array field has a length the type spells, and no
+  // holder a fact could name; a constant or a range inside it is proved here.
+  const array = cArrayField(ctx.program, ctx.table, receiver)
+  if (array !== null) {
+    if (provesCArrayIndex(ctx, index, array.cLength)) {
+      noteProof(walk, node)
+    }
     return
   }
   const holder = holderOf(walk, receiver)

@@ -1,0 +1,12 @@
+sizeof ShaCtx 48: tag 0, h 4, total 24, num 32, data 34, last 40
+h[0] 1010101
+h[1] 2020202
+h[2] 3030303
+h[3] 4040404
+h[4] f5f5f5f5
+data[0] 11
+data[1] 22
+data[2] f3
+scalars 1023.25
+zeroed 0
+written fff

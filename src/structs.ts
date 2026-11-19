@@ -134,6 +134,9 @@ const fieldAlign = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (nested !== null) {
     return nested.align
   }
+  if (field.cLength >= 0) {
+    return table.alignWithPointer(field.type, pointer) // WP66 S4: C aligns `T h[N]` as one `T`
+  }
   if (field.boxed) {
     return 8
   }
@@ -156,6 +159,9 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   const nested = field.nested
   if (nested !== null) {
     return nested.size
+  }
+  if (field.cLength >= 0) {
+    return field.cLength * table.alignWithPointer(field.type, pointer) // WP66 S4: `N` elements, no padding between
   }
   if (field.boxed) {
     return SLICE_BYTES
@@ -1041,6 +1047,48 @@ export const layoutClass = (program: CheckedProgram, table: TypeTable, type: i32
   return info !== null && info.layout ? info : null
 }
 
+/** The most elements a fixed-length array field holds: its bytes stay well inside an `i32` offset. */
+const C_ARRAY_MAX: i32 = 16777216
+
+/**
+ * WP66 S4: the two type arguments of `Record<K, T>` written as a field's
+ * annotation, or `null` for any other annotation. A `declare class` field so
+ * spelled is a fixed-length array, which TypeScript reads as the object it
+ * indexes by `K`, and which tsc accepts against `runtime/nish.d.ts` as it
+ * stands: the spelling needs no declaration of its own.
+ */
+const cArrayArguments = (annotation: Node): Node | null => {
+  if (annotation.kind !== NodeKind.TypeRef || annotation.text !== "Record") {
+    return null
+  }
+  const args = annotation.children[0]
+  return args.kind === NodeKind.List && args.children.length === 2 ? args : null
+}
+
+/**
+ * The element count a fixed-length array's key `integer<0, Hi>` spells,
+ * `Hi + 1`, or -1 once the key is refused: a range from 0, as C indexes, and
+ * no longer than `C_ARRAY_MAX`.
+ */
+const cArrayLength = (ctx: CheckContext, what: string, keyNode: Node): i32 => {
+  const key = resolveType(keyNode, ctx)
+  if (key === T_ERROR) {
+    return -1
+  }
+  if (
+    ctx.table.isRanged(key) &&
+    ctx.table.rangeLo(key) === 0 &&
+    ctx.table.rangeHi(key) < C_ARRAY_MAX
+  ) {
+    return ctx.table.rangeHi(key) + 1
+  }
+  ctx.error(
+    keyNode,
+    `${what} is a fixed-length array, \`Record<integer<0, Hi>, T>\` for C's \`T name[Hi + 1]\`: its key must be \`integer<0, Hi>\`, a range from 0 with Hi below ${C_ARRAY_MAX}, got \`${ctx.table.typeName(key)}\``
+  )
+  return -1
+}
+
 /**
  * One field of a `declare class` (WP27 S4.1, docs/wp27-ffi.md §9b): a C
  * scalar, a `CPtr` (nullable or not) or another layout embedded by value.
@@ -1065,10 +1113,20 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     ctx.error(decl.children[2], `${what} cannot have an initializer: \`new\` zero-fills a C struct`)
     return
   }
+  // WP66 S4: `Record<integer<0, Hi>, T>` is C's `T name[Hi + 1]`, laid out
+  // inline; the field's type is then the element's (`FieldInfo.cLength`).
+  const elements = cArrayArguments(decl.children[1])
+  let length = -1
+  if (elements !== null) {
+    length = cArrayLength(ctx, what, elements.children[0])
+    if (length < 0) {
+      return
+    }
+  }
   // `number` is i32 or f64 as `--number-mode` says, and a C struct has one
   // layout whatever flag the program is built with. The resolver counts every
   // spelling that reaches it (parentheses, an alias chain, an imported alias).
-  const annotation = decl.children[1]
+  const annotation = elements !== null ? elements.children[1] : decl.children[1]
   const before = ctx.numberSpellings
   const type = resolveType(annotation, ctx)
   if (type === T_ERROR) {
@@ -1079,6 +1137,21 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
       annotation,
       `${what} has type \`number\`, whose width \`--number-mode\` chooses: a C struct field has one layout, so spell it \`i32\` or \`f64\``
     )
+    return
+  }
+  if (length >= 0) {
+    if (!isLayoutScalar(type)) {
+      ctx.error(
+        annotation,
+        `${what} is a fixed-length array of \`${ctx.table.typeName(type)}\`, which has no C element layout: an element of a fixed-length array is i32, i64, u8, u16, u32, u64, f32 or f64`
+      )
+      return
+    }
+    const array = new FieldInfo(name, type, decl)
+    array.index = owner.fields.length
+    array.cLength = length
+    owner.fieldIndex.set(name, owner.fields.length)
+    owner.fields.push(array)
     return
   }
   // A nested layout is collected first, so its size and alignment are known;
