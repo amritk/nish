@@ -197,6 +197,8 @@ the end both stay refused, each with a diagnostic that says why.
 
 **Depends on:** c1-strings, which must merge before this stage starts.
 
+**Amended 2026-11-19, before spawn:** c1-nullish and c1-strings needed five Owns widenings between them, each a file the construct reached through an analysis that walks it. Only one slice runs at a time, so a narrow Owns buys nothing. This stage owns `src/**`, `tests/**` and `docs/**`. It touches a file only where `optional-params` or `overloads` needs it, gated on the feature. It never edits a generated file by hand, and it may not touch `.github/`, `scripts/`, `runtime/` or `std/` without asking the lead.
+
 **Amended again (#1770 round 1):** the emitter's statement-pattern matchers (`appendRangeOf`, `emitAddGuards` in `src/emit-arrays.ts`, `firstCallOf` in `src/fusion.ts`, the inline-array and lend-in-place matchers) do not know an optional call. c1-nullish owns `src/emit-*.ts`, `src/fusion.ts` and `src/inline-arrays.ts` so that it can make each of them refuse to fuse one.
 
 Every stage may also regenerate these: `tests/self/goldens/checked/**`,
