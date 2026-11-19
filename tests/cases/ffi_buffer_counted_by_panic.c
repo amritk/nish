@@ -24,6 +24,7 @@ int32_t c_out(unsigned char *dest, uint64_t *destLen) {
 }
 
 int32_t narrow(void);
+int32_t narrowHigh(void);
 int32_t wide(void);
 int32_t out(void);
 
@@ -43,6 +44,7 @@ static void expectPanic(const char *name, int32_t (*run)(void)) {
 
 int main(void) {
   expectPanic("narrow", narrow);
+  expectPanic("narrowHigh", narrowHigh);
   expectPanic("wide", wide);
   expectPanic("out", out);
   return 0;

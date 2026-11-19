@@ -52,6 +52,47 @@ ffi.ok:
   ret i32 %17
 }
 
+define noundef i32 @narrowHigh() #0 {
+entry:
+  %b.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [4 x i8], align 8
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 4, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 4, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [4 x i8]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %2 to i8*
+  %5 = getelementptr inbounds i8, i8* %4, i64 0
+  store i8 1, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %6 = getelementptr inbounds i8, i8* %4, i64 1
+  store i8 2, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds i8, i8* %4, i64 2
+  store i8 3, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %8 = getelementptr inbounds i8, i8* %4, i64 3
+  store i8 4, i8* %8, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %b.addr, align 8
+  %9 = trunc i32 40000 to i16
+  %10 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %11 = zext i16 %9 to i64
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
+  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %14 = icmp ule i64 %11, %13
+  br i1 %14, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [73 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.ok:
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %17 = call i32 @c_narrow(i16 zeroext %9, i8* %16)
+  ret i32 %17
+}
+
 define noundef i32 @wide() #0 {
 entry:
   %b.addr = alloca %struct.nish_array*, align 8

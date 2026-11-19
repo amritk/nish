@@ -1023,7 +1023,8 @@ The count is paired by position, so it is your word, not the compiler's proof.
 `fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
 as the third argument, so the one count is the whole size. A buffer with no
 `u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
-`u8[]` result are each refused.
+`u8[]` result are each refused; a count of another width, or one elsewhere in
+the declaration, is named with `CountedBy` (below).
 
 A call passes the array's bytes, and checks the count against each buffer
 first: a count larger than the array stops the program before C runs, with
@@ -1042,6 +1043,11 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+C borrows the bytes for the length of the call, and may write a `u8[]` (not a
+`readonly u8[]`), so `read(fd, buf, toU64(buf.length))` fills `buf` in place.
+A task a scope spawns may not call such a function: C's body is unseen, so the
+call could write memory the parent is reading.
 
 When a library's count is not a `u64` straight after the buffer, name it.
 `CountedBy<u8[], "n">` on the buffer says which parameter is its count, and
@@ -1086,11 +1092,6 @@ export const main = (): i32 => {
 write it yet. To check such a file with `tsc`, declare the alias in a
 `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
 `type CountedBy<T, N extends string> = T`.
-
-C borrows the bytes for the length of the call, and may write a `u8[]` (not a
-`readonly u8[]`), so `read(fd, buf, toU64(buf.length))` fills `buf` in place.
-A task a scope spawns may not call such a function: C's body is unseen, so the
-call could write memory the parent is reading.
 
 The one exception is `CPtr`, an address that C owns. A declared function can
 take or return one, a local can hold one, and nothing else can: no field, no

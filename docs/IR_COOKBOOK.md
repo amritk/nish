@@ -16184,6 +16184,11 @@ export const main = (): i32 => {
 }
 ```
 
+The listing is an excerpt, not a generated one: the `%struct.nish_array` type,
+the `@main` wrapper, the `attributes` groups and the `!tbaa` and alias-scope
+metadata it names are left out, and no `docs/cookbook/` program regenerates
+it yet.
+
 ```llvm
 @.str.0 = private unnamed_addr constant { i64, [70 x i8] } { i64 69, [70 x i8] c"`sum16`: argument 1 (n) counts more bytes than argument 2 (src) holds\00" }, align 8
 

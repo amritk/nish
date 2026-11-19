@@ -5576,9 +5576,10 @@ declare function compress(
   bits, or its field is loaded from the out class after the last argument
   runs, and compared, unsigned, with the buffer's length before C runs; a
   larger count panics `ffi-length` as a positional one does, and C never
-  runs. `tests/cases/ffi_buffer_counted_by_panic` passes a `u16`, a `u32` and
-  an out-class count each larger than its buffer and sees the panic, exit 1,
-  and no line from C; `tests/cases/ffi_buffer_counted_by` runs the counts that
+  runs. `tests/cases/ffi_buffer_counted_by_panic` passes a `u16` (once with
+  its top bit set, which a sign extension would pass), a `u32` and an
+  out-class count each larger than its buffer and sees the panic, exit 1, and
+  no line from C; `tests/cases/ffi_buffer_counted_by` runs the counts that
   fit.
 - **A count of the buffer's own length is proved** at the width it is
   declared: `toU8(b.length)`, `toU16(b.length)`, `toU32(b.length)` or
@@ -5587,12 +5588,16 @@ declare function compress(
   proof stays sound. An out-class count is always checked, because C may have
   written it.
 - **A named buffer is outside the positional runs**, so WP53's adjacent-`u64`
-  rule applies to the other buffers of the declaration unchanged, and a
-  declaration may mix the two.
+  rule applies to the other buffers of the declaration, and a declaration may
+  mix the two. A positional run steps over a named buffer when it looks for
+  its `u64`: in `f(a: u8[], b: CountedBy<u8[], "m">, m: u64)`, `a`'s count is
+  `m` as well, and the call checks both buffers against it.
 - **It is refused anywhere else, and in any other shape.** On a function
   written in Nish: `` `CountedBy` names the count of a buffer lent to C, so it
   is written only on a parameter of a `declare function` ``
-  (`tests/link/ffi_buffer_counted_by_place`). A missing name, a name that is
+  (`tests/link/ffi_buffer_counted_by_place`). On a host module's function,
+  whose buffers are windows, it does not cross, as every other non-scalar the
+  page cannot pass (NL2661, `ffi_buffer_counted_by_host`). A missing name, a name that is
   not a string literal, or a buffer that is not a `u8[]`: `` `CountedBy` takes
   a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a
   string literal `` (`ffi_buffer_counted_by_form`); so is an empty name or
