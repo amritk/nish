@@ -369,7 +369,10 @@ const measureShard = (lines, shard, shards, linkCount) => {
   const stopped = delegated.has(STOPPED)
   const after = []
   const starts = []
-  let from = 0
+  // The golden cases print first, under their own names, and a case's name
+  // can match a section's recognizer (`arr_range_call_generic: IR matches
+  // golden` against `arrayChecks`), so no section is looked for before them.
+  let from = Math.max(0, find(PRE_LINK_STARTS, 0, summary))
   for (const s of owned.filter((o) => !o.beforeLink)) {
     const i = find(RECOGNIZERS[s.key], from, summary)
     if (i < 0 && s.tail && stopped && shard > 1) {

@@ -342,6 +342,20 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   single run's slowest shard says more about its runner than about the
   table.
 
+  The first nine-way run,
+  [run 44573014763](https://github.com/amritk/nish/actions/runs/44573014763)
+  (`8334dc9`), was dealt 453 s a shard but took 336 to 600 s, 11.7 minutes
+  wall. Its own measure of each piece, summed over that deal, gives 358 to
+  600 s, so the script reads the log right and the eight-way runs had
+  costed the pieces differently. The script also mistook shard 9's golden
+  case `arr_range_call_generic` for the `arrayChecks` section, and now looks
+  for sections only after the golden cases. The table is refitted from the
+  median of that run and runs 44569577732 and 44565722776. Its deal comes to
+  455 s a shard, and summed under each of those three runs' own costs its
+  slowest shard is 1.07 to 1.18 times its median one. The test shards need
+  no other job, but a run's 26 jobs queue for runners, and in that run
+  shard 5 started 1.6 minutes after the first.
+
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
   rather than running their section again, so those sections stay in shard
