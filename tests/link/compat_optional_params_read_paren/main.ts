@@ -1,6 +1,6 @@
 // NL2803: the parenthesised read `(suffix)` is the same read, and is
 // refused the same way; only `suffix ?? d` reads it.
-function join(name: string, suffix?: string): string {
+const join = (name: string, suffix?: string): string => {
   return (suffix) === null ? name : name + "!"
 }
 

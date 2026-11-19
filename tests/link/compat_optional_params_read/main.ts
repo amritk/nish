@@ -1,7 +1,7 @@
 // NL2803: an `x?` parameter read anywhere but as the left operand of `??`
 // is refused, because the call that leaves it out passes `undefined` in
 // TypeScript and `null` here, and `s === null` would tell them apart.
-function join(name: string, suffix?: string): string {
+const join = (name: string, suffix?: string): string => {
   return suffix === null ? name : name + suffix
 }
 

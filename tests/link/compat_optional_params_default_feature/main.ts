@@ -2,7 +2,7 @@
 // refuses a default that is not a constant, as the strict dialect does.
 const twice = (n: number): number => n * 2
 
-function scale(width: number, factor: number = twice(width)): number {
+const scale = (width: number, factor: number = twice(width)): number => {
   return width * factor
 }
 

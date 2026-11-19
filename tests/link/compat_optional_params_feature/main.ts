@@ -1,6 +1,6 @@
 // NL2605: a compat program whose `nish.compat` leaves out `optional-params`
 // refuses an `x?` parameter as before, and names the feature.
-function join(name: string, suffix?: string): string {
+const join = (name: string, suffix?: string): string => {
   return name + (suffix ?? "")
 }
 

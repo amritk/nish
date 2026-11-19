@@ -428,10 +428,11 @@ export const main = (): void => {
 
 That prints `9 10`. The compiled program is the implementation alone; the
 signatures decide which calls are allowed. Each signature must be one the
-implementation can stand behind, with the same return type, or it is
-refused (`NL2800`). A call is held to the signatures, not to the
+implementation can stand behind, with exactly the same return type (`tsc`
+also allows a narrower one), or it is refused (`NL2800`). A call is held to the signatures, not to the
 implementation, so a call that no signature takes is refused (`NL2801`)
-even when the implementation would run it, as `tsc` refuses it. A function
+even when the implementation would run it, as `tsc` refuses it. A call
+through a function value is held to the implementation only. A function
 with signatures cannot be exported to C or Node with `--emit-header`,
 `--emit-napi` or `--emit-dts` (`NL2802`): export one function per signature
 instead.

@@ -1796,12 +1796,15 @@ spelling; the two compile to identical IR, instruction for instruction
   destructured parameters (`Destructured parameters are not supported`,
   `reject_param_destructured`), optional parameters (`x?: T`,
   `Optional parameters are not supported`, `reject_param_optional`, which names
-  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  `x: T = <default>` instead; the compatibility dialect's `optional-params`
+  feature accepts one read through `??`, [The compatibility
+  dialect](#the-compatibility-dialect)), a default or rest parameter anywhere but the
   declarations [Default and rest parameters](#default-and-rest-parameters)
   lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
-  `Functions must have a body`), an anonymous `export default function ()`
+  `Functions must have a body`; the compatibility dialect's `overloads`
+  feature accepts signatures before the implementation), an anonymous `export default function ()`
   (`Functions must be named`, `reject_fn_anonymous`),
   function expressions, an arrow anywhere but as a top-level `const` or a
   function argument (`reject_fnarg_arrow_value`, `reject_arrow_as_value`),
@@ -16492,14 +16495,19 @@ allows admits. This compiler has built six features, `nullish`,
   `tsc` holds it: it takes no rest parameter, every argument list it takes
   the implementation takes too, each parameter type is one the
   implementation's takes, and it writes the return type, which is the
-  implementation's; otherwise NL2800 (`compat_overloads_incompatible`,
-  `compat_overloads_return`). A call the implementation accepts is then held
+  implementation's exactly, which is stricter than `tsc`, where a return
+  type the implementation's is assignable to will do; otherwise NL2800
+  (`compat_overloads_incompatible`, `compat_overloads_return`). A call the
+  implementation accepts is then held
   to the signatures: one that no signature takes is NL2801, because the
   implementation's own signature is not one a caller may call
-  (`compat_overloads_no_match`, `compat_overloads_method_no_match`). A
+  (`compat_overloads_no_match`, `compat_overloads_method_no_match`,
+  `compat_overloads_constructor_no_match`). Only a call that names the
+  function, the method or the class is held to the signatures: a call
+  through a function value is held to the implementation alone. A
   function with signatures is refused by `--emit-header`, `--emit-napi` and
   `--emit-dts`, NL2802, since the file would spell only the implementation
-  (`compat_overloads_emit_header`). A generic function or class keeps the
+  (`compat_overloads_emit_header`, `compat_overloads_emit_dts`). A generic function or class keeps the
   strict refusal.
 - **The dialect only adds.** A strict build of a program the strict dialect
   accepts is unchanged by all of the above, byte for byte; what changed for a

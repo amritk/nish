@@ -1,6 +1,6 @@
 // NL2804: an `x?` parameter of a type with no `null` has nothing to stand
 // for the omitted argument, so it is refused with the default to write.
-function scale(width: number, factor?: number): number {
+const scale = (width: number, factor?: number): number => {
   return width * (factor ?? 1)
 }
 
