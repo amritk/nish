@@ -43,7 +43,7 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check` and the size report in the job summary |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
@@ -209,13 +209,17 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the sections there that are dealt (`term-io`, `--emit-ts`
   and the fifteen small sections between the golden cases and the link
-  programs, from `os_host` to `tests/fix`): the setup, stage1 and the golden
-  cases' IR per shard (measured in the paragraph on the eight-way split,
-  below, from before the small sections were dealt). Of the golden
-  cases, every shard compiles all of them and checks their IR, because later
-  sections read that compile, and only does the rest of each case's work (the
-  `llvm-as` pass, the side compiles and the native run) for the eighth that
-  `caseShard` in `tests/run.js` deals it by position. Shard 1 runs every section after them
+  programs, from `os_host` to `tests/fix`): the setup and stage1 per shard
+  (measured in the paragraph on the eight-way split, below, from before the
+  small sections were dealt). The golden cases are dealt whole: `caseShard` in `tests/run.js` deals them round-robin within
+  each kind (rejections, stdout programs, linked, compiled), and a shard
+  compiles, checks the IR of, assembles and runs only its own, printing each
+  other case as delegated to the shard that owns it. A later section that
+  reads a case's IR takes the path from `caseLl`, which compiles a case this
+  shard does not own on demand, so a section reads the same `.ll` whichever
+  shard runs it; a check fails on any reader that names a case's `.ll` by
+  hand instead. The two linked specimens, with and without `--threads`, stay
+  on shard 1. Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, the small pre-link sections (`os_host`,
@@ -236,6 +240,20 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   summary claims checks it did not make. A dealt section works in a directory
   of its own and reads nothing another section writes, since the shard that
   runs it runs none of the others it used to run beside.
+
+  On a pull request, crypto-bench's timing leaves the shard
+  (`--delegate-bench-timing`, honoured on a `pull_request` event only). The
+  section still builds every twin, checks every checksum against
+  `bench/crypto/expected.txt` and asserts which kernel path ran; the timed
+  portability proofs (`bench/crypto/run.mjs` without `--no-proofs`, and the
+  paired portable-rounds runs) print as `DELEGATED` to the push-to-main run
+  of the same `test` job. A newer push to `main` cancels an older one's
+  first attempt (`concurrency` in `ci.yml`), so the proofs time the code as
+  it stands at the next push whose run is not cancelled. A check in
+  `tests/run.js` fails if `ci.yml`'s `test` job stops running on a push to
+  `main`. The builds are most of the section (about 184 s of 273 s locally);
+  the timed proofs are the paired runs (49 s and 30 s) and the portable
+  proofs. WP9 bench stays whole on every push: its checks are all asserts.
 
   Regenerate the table when a shard drifts more than about a fifth from the
   others, with `scripts/shard-costs.mjs` over at least three green `ci.yml`
@@ -582,11 +600,12 @@ the first, `fuzz-smoke` and `postgres-live` spent 96 s and 113 s on
 the `test` job's stage1 through the same action under the same key (stage2
 is the same compiler, which `bootstrap (x86_64-linux)` asserts), and
 `nish-cmp elision`'s candidate, the same `--link` with its row's seed, comes
-through it too. The golden cases are dealt too: a shard compiles
-all of them and does the other work of its eighth only, which took section A
-from 59 s to 30 s of shard 2 in
+through it too. Dealing the golden cases' work after the compile
+(each shard still compiled all of them then) took section A from 59 s to
+30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
-where every job restored stage1 from the cache. The longest `test` job there
+where every job restored stage1 from the cache; a shard now compiles and
+checks only its own eighth too, as [Shards](#shards-and-time-limits) says. The longest `test` job there
 took 10 min 49 s and the NEON job 4 min 38 s. What every shard still ran
 before the link programs then was about 90 s of small sections, the largest
 `fnref`'s `--profile debug` runs and lldb check (15 s), the performance

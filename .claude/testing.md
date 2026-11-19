@@ -149,10 +149,18 @@ test is **data, not code**: a source file next to the output it must produce.
   job passes two: `--delegate-fixed-point` leaves the bootstrap's fixed
   point to the `bootstrap (x86_64-linux)` row, which asserts the same two
   equalities with the same seed, and `--delegate-sanitizers` leaves the
-  `runtime_sanitize` rows and the fuzz replays to `fuzz-smoke`. The flag is honoured only inside GitHub
+  `runtime_sanitize` rows and the fuzz replays to `fuzz-smoke`. A third,
+  `--delegate-bench-timing`, is honoured on a `pull_request` event only: it
+  keeps crypto-bench's builds and checksum asserts and leaves its timed
+  portability proofs to the push-to-main run of the same job, a later run
+  rather than the same one (the next push to `main` whose run is not
+  cancelled by a newer one), which a check holds to `ci.yml`'s `push:
+  branches: [main]`. The flags are honoured only inside GitHub
   Actions, so a local `npm test` still runs it, and a check reads `ci.yml` so
   each delegation cannot outlive the job it names. Do not delegate anything
-  that is not already proved elsewhere in the same workflow run.
+  that is not already proved elsewhere in the same workflow run; the one
+  named exception is `--delegate-bench-timing`, whose timed proofs only
+  measure and assert no output, and whose lane is the push-to-main run.
 - **A delegated-to job is a scoped lane, so its read set is part of the
   claim.** `bootstrap` and `fuzz-smoke` skip their steps on a pull request
   that changes nothing `scripts/ci-scope.mjs` says they read
