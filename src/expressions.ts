@@ -15,6 +15,7 @@
 // is being checked *into*, or -1 for none. It is a hint and never a coercion:
 // the result is still checked against what the sink expects.
 
+import { checkOverloadCall } from "./overloads"
 import {
   conditionMessage as secretConditionMessage,
   equalityMessage as secretEqualityMessage,
@@ -4236,6 +4237,7 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
     return T_ERROR
   }
   const foreign = sig.foreign()
+  const gotTypes: i32[] = []
   let i = 0
   while (i < args.children.length) {
     const arg = args.children[i]
@@ -4245,6 +4247,7 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
     }
     const got = checkExpression(ctx, arg, scope, sig.paramTypes[i])
     ctx.embeddedRead = -1
+    gotTypes.push(got)
     const refused = refuseForeignNullable(ctx, sig, i, arg, got, sig.name)
     if (!refused && got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
       const wantName = ctx.table.typeName(sig.paramTypes[i])
@@ -4255,6 +4258,7 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
     }
     i = i + 1
   }
+  checkOverloadCall(ctx, expr, sig, gotTypes, 0, sig.name)
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
 }

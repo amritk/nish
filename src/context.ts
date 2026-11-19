@@ -230,6 +230,16 @@ export class CheckContext {
    * a site asks through `compatAllows`, never reads it.
    */
   compatFeatures: string[]
+  /**
+   * WP28 `overloads`: each bodiless declaration written before an
+   * implementation of the same name (`src/overloads.ts`), and beside it at
+   * the same position, in `overloadOf`, that implementation. Under `--compat`
+   * the signatures are lifted out of the tree, so no pass after the checker
+   * sees them; a strict build records them only to name the feature when it
+   * refuses one.
+   */
+  overloadSignatures: Node[]
+  overloadOf: Node[]
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -419,6 +429,8 @@ export class CheckContext {
     this.deterministic = false
     this.compat = false
     this.compatFeatures = []
+    this.overloadSignatures = []
+    this.overloadOf = []
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.peers = []

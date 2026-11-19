@@ -10,6 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
+import { attachOverloads } from "./overloads"
 import { recordAccumulation } from "./accumulate"
 import {
   checkExportedLayouts,
@@ -728,6 +729,7 @@ export class Checker {
     }
     const sig = collectFunctionSignature(this.ctx, stmt)
     const name = sig.sourceName
+    attachOverloads(this.ctx, sig, -1, name)
     if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
       return
     }

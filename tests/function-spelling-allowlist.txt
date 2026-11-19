@@ -22,6 +22,7 @@ tests/cases/dump_ast.ts  # its expected AST dump is the function-declaration tre
 tests/cases/reject_type_mismatch.ts  # docs/FAQ.md and docs/wp10-ci.md quote its line and its 1:40 diagnostic; tests/run.js pins it
 
 # The `function` spelling is the subject of the test.
+tests/cases/compat_overloads.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
 tests/cases/reject_export_c_symbol_function.ts  # the function spelling of #618; reject_export_c_symbol_const is the arrow sibling
 tests/cases/reject_ffi_body.ts  # an extern function with a body is the rejection (WP22 §8c, §9a)
 tests/differential/arrow-parity/declared.ts  # the declaration half of the stage-B arrow-parity pair

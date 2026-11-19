@@ -221,6 +221,13 @@ export class FunctionSig {
    * every pass sees a call that passes the array.
    */
   restIndex: i32
+  /**
+   * WP28 `overloads`: the bodiless signatures written before this
+   * implementation under `--compat`, each collected as a signature of its
+   * own (`src/overloads.ts`). Empty for every other function. A call is
+   * checked against the implementation and then held to one of these.
+   */
+  overloads: FunctionSig[]
 
   /**
    * How many arguments a call must write: up to the first default, or the
@@ -360,6 +367,7 @@ export class FunctionSig {
     this.keepsLength = []
     this.defaults = []
     this.restIndex = -1
+    this.overloads = []
   }
 }
 

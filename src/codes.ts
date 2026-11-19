@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 972
+export const RULE_COUNT: i32 = 975
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -683,6 +683,8 @@ const diagnosticRules = (): string[] => [
   "NL2165",
   "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
   "NL3040",
+  "): a call is held to the signatures written before the implementation, not to the implementation's own",
+  "NL2801",
   "` makes, where JavaScript reads it once at the call: read it into a `const` first and pass the `const`",
   "NL2759",
   "` takes one `i32`: the milliseconds `sleep` waits, or the descriptor `readable` and `writable` wait on",
@@ -1099,6 +1101,8 @@ const diagnosticRules = (): string[] => [
   "NL2700",
   " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
   "NL2005",
+  "` has overload signatures and cannot be described to C or Node",
+  "NL2802",
   "` is generic, so it names no one function to pass as argument ",
   "NL2341",
   "` takes its signature from the arrow; drop the annotation on `",
@@ -1340,6 +1344,8 @@ const diagnosticRules = (): string[] => [
   "NL2793",
   "` is already declared as a class or interface",
   "NL2074",
+  "` is not compatible with its implementation: ",
+  "NL2800",
   "` takes no type argument (it is an alias of `",
   "NL2107",
   "A pattern may destructure an `await` only of ",
