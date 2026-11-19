@@ -26140,7 +26140,7 @@ if (dealtHere("cliChecks")) {
         `compat: \`${flag}\` names a feature this compiler has not built: a usage error that names it, and no IR`,
         refused.r.status === 2 &&
           refused.r.stderr.includes(
-            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, and a bare \`--compat\` allows every one`
+            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, \`string-switch\`, \`for-of-string\`, and a bare \`--compat\` allows every one`
           ) &&
           refused.ir === "",
         shown(refused.r)
@@ -26156,8 +26156,8 @@ if (dealtHere("cliChecks")) {
       checkedStrict.status === 0 &&
         checkedCompat.status === 0 &&
         checkedPinned.status === 0 &&
-        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining]\n") &&
-        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining]\n${checkedStrict.stdout}` &&
+        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]\n") &&
+        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining,string-switch,for-of-string]\n${checkedStrict.stdout}` &&
         !checkedStrict.stdout.includes("compat "),
       shown(checkedCompat) + shown(checkedPinned)
     )
@@ -26528,12 +26528,17 @@ export const main = (): void => {
     // The reject cases a feature admits, and the cases written for the dialect
     // that the strict dialect refuses: each run natively as under Node.
     const admittedRejects = [
+      "reject_arr_forof_non_array",
       "reject_nullish",
       "reject_nullish_nullable",
       "reject_optional_chain_element_inner",
       "reject_optional_chain_statement",
+      "reject_switch_string",
     ].filter((name) => cases.includes(name))
     const admittedDialect = [
+      "compat_for_of_string",
+      "compat_for_of_string_fresh",
+      "compat_for_of_string_invalid",
       "compat_nullish_narrowed",
       "compat_nullish_never_missing",
       "compat_optional_chain_element",
@@ -26541,6 +26546,8 @@ export const main = (): void => {
       "compat_optional_chain_loops",
       "compat_optional_chain_skipped_arguments",
       "compat_optional_chain_statement",
+      "compat_string_switch",
+      "compat_string_switch_flow",
     ].filter((name) => cases.includes(name))
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
@@ -26839,7 +26846,12 @@ if (dealtHere("releaseChecks")) {
     // The cases whose clauses fall through on purpose, checked in a project
     // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
     // that falls through is added here on purpose and every other keeps the check.
-    const FALLTHROUGH_CASES = new Set(["cf_switch_fallthrough.ts", "cf_label_walks.ts"])
+    const FALLTHROUGH_CASES = new Set([
+      "cf_switch_fallthrough.ts",
+      "cf_label_walks.ts",
+      "compat_string_switch.ts",
+      "compat_string_switch_flow.ts",
+    ])
     const acceptedCases = fs
       .readdirSync(casesDir)
       .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f))

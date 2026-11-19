@@ -83,7 +83,7 @@ import {
   patternSlotName,
 } from "./nodes"
 import { JSON_OPTIONS, jsonOptionsShapeMessage } from "./json-typed"
-import { caseValue } from "./constants"
+import { caseValue, foldConstant } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_STRING, T_VOID } from "./types"
@@ -944,6 +944,14 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   if (ctx.program.nodeCallees[stmt.id] === null && iterable !== T_ERROR) {
     if (ctx.table.isArray(iterable)) {
       element = ctx.table.refOf(iterable)
+    } else if (iterable === T_STRING) {
+      // WP28 C1: the compatibility dialect's `for-of-string` walks a string a
+      // code point per pass, each a `string` of its bytes (`emitStringWalk`).
+      if (ctx.compatAllows("for-of-string")) {
+        element = T_STRING
+      } else {
+        ctx.errorFeature(stmt.children[1], "`for...of` requires an array, got string", "for-of-string")
+      }
     } else if (checkChannelWalk(ctx, stmt, iterable)) {
       // WP29 P3: a receive per pass, recorded as a walk is
     } else if (!checkCollectionWalk(ctx, stmt, iterable)) {
@@ -957,13 +965,14 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   }
   // `for (let x of a)` binds a mutable element, `for (const x of a)` does not,
   // and an element of a `T[]` came from `T` (WP18 G6).
-  const origin = elementOrigin(ctx, stmt.children[1], scope)
+  const origin: TypeOrigin | null = iterable === T_STRING ? null : elementOrigin(ctx, stmt.children[1], scope)
   // A pattern's names are read from the element each pass, by the
   // declaration `Parser.parseForOfRest` put first in the body; only an
   // array's elements are read that way, and a refused element is one of no
   // type, so that its names are declared silently.
   const binding = (stmt.children[0].flags & FLAG_CONST) === 0
-  if (pattern !== null && walked !== null) {
+  // A `--compat` walk of a string is no array either: each code point is a `string`.
+  if (pattern !== null && (walked !== null || (iterable === T_STRING && element !== T_ERROR))) {
     ctx.error(
       pattern,
       "A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body"
@@ -1483,12 +1492,19 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   // checker, so it switches exactly as an integer does — and a `case` label of
   // any other type is caught below, which is what stops `case 1:` standing in
   // for `case Kind.If:`.
-  if (discriminant !== T_ERROR && !isInteger(discriminant) && !ctx.table.isEnum(discriminant)) {
-    ctx.error(
-      stmt.children[0],
-      `\`switch\` requires an integer discriminant, got ${ctx.table.typeName(discriminant)} (use \`if\` / \`else\`; only an integer switch lowers to a jump table)`
-    )
+  // WP28 C1: the compatibility dialect's `string-switch` takes a `string`
+  // discriminant, its labels string constants (`checkStringCaseLabel`), and
+  // `emitStringSwitch` lowers it to a chain of content comparisons.
+  const strings = discriminant === T_STRING && ctx.compatAllows("string-switch")
+  if (discriminant !== T_ERROR && !strings && !isInteger(discriminant) && !ctx.table.isEnum(discriminant)) {
+    const message = `\`switch\` requires an integer discriminant, got ${ctx.table.typeName(discriminant)} (use \`if\` / \`else\`; only an integer switch lowers to a jump table)`
+    if (discriminant === T_STRING) {
+      ctx.errorFeature(stmt.children[0], message, "string-switch")
+    } else {
+      ctx.error(stmt.children[0], message)
+    }
   }
+  const seenText: string[] = []
   const clauses = stmt.children[1].children
   const members = memberSetOf(ctx, stmt.children[0])
   const seen: i64[] = []
@@ -1530,7 +1546,9 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope, label: string)
       hasDefault = true
       groupDefault = true
     } else {
-      if (tagged === null && held === null) {
+      if (strings) {
+        checkStringCaseLabel(ctx, clause, scope, seenText)
+      } else if (tagged === null && held === null) {
         checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
       }
       for (const member of memberSetOf(ctx, clause.children[0])) {
@@ -1819,6 +1837,67 @@ const checkCaseLabel = (
   }
   seen.push(value.value)
   ctx.program.nodeCaseValues[clause.id] = value.value
+}
+
+/**
+ * WP28 C1: a label of a `string-switch` — a string literal, a template with
+ * no substitution, or a module constant holding one — so that no label has a
+ * side effect and the order the emitter compares them in is unobservable.
+ * Two labels with the same text are refused, as two integers are: the second
+ * could never be the one that matches.
+ */
+const checkStringCaseLabel = (ctx: CheckContext, clause: Node, scope: Scope, seen: string[]): void => {
+  const label = clause.children[0]
+  const type = checkExpression(ctx, label, scope, T_STRING)
+  if (type === T_ERROR) {
+    return
+  }
+  if (type !== T_STRING) {
+    ctx.error(label, `\`case\` label is ${ctx.table.typeName(type)} but the discriminant is string`)
+    return
+  }
+  const text = stringCaseText(ctx, label)
+  if (text === null) {
+    ctx.error(
+      label,
+      "A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)"
+    )
+    return
+  }
+  let duplicate = false
+  for (const previous of seen) {
+    if (previous === text) {
+      duplicate = true
+      break
+    }
+  }
+  if (duplicate) {
+    ctx.error(label, `Duplicate \`case\` label \`${ctx.textOf(label)}\` in this \`switch\``)
+    return
+  }
+  seen.push(text)
+}
+
+/** The text of a constant `string` label, or null when it is not one. */
+const stringCaseText = (ctx: CheckContext, expr: Node): string | null => {
+  if (expr.kind === NodeKind.Paren) {
+    return stringCaseText(ctx, expr.children[0])
+  }
+  if (expr.kind === NodeKind.String) {
+    return expr.text
+  }
+  if (expr.kind === NodeKind.Template && expr.children.length === 1) {
+    return expr.children[0].text
+  }
+  if (expr.kind === NodeKind.Ident) {
+    const constant = ctx.program.nodeConstants[expr.id]
+    if (constant === null || constant.type !== T_STRING || constant.storage || constant.table) {
+      return null
+    }
+    foldConstant(ctx, constant)
+    return constant.folded ? constant.textValue : null
+  }
+  return null
 }
 
 const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {

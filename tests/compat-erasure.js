@@ -118,10 +118,12 @@ const GOLDEN_FLAGS = [
  * under the dialect with every feature but that one.
  */
 const ADMITTED = new Map([
+  ["reject_arr_forof_non_array", "for-of-string"],
   ["reject_nullish", "nullish"],
   ["reject_nullish_nullable", "nullish"],
   ["reject_optional_chain_element_inner", "optional-chaining"],
   ["reject_optional_chain_statement", "optional-chaining"],
+  ["reject_switch_string", "string-switch"],
 ])
 
 /** The note a strict refusal of an admitted construct closes with, naming its feature. */

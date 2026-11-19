@@ -7949,7 +7949,9 @@ The condition must be `boolean`: there is no truthiness
 ### `for (const x of a)`
 
 - `a` must be an array (`` `for...of` requires an array, got string ``,
-  `tests/cases/reject_arr_forof_non_array`), or a walk of the global `Map` or
+  `tests/cases/reject_arr_forof_non_array`;
+  [the compatibility dialect](#the-compatibility-dialect) walks a string one
+  code point at a time under `for-of-string`), or a walk of the global `Map` or
   `Set`: `m.keys()`, `m.values()`, a `Set` itself, `s.keys()` or `s.values()`
   ([`Map` and `Set`](#map-and-set)), or a `Channel` from `nish/threads`, which
   takes values off it ([Channels](#channels-channelt)); `x` gets the element type and
@@ -7995,7 +7997,8 @@ switch (node.kind) {
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
   of `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
-  honestly.
+  honestly. [The compatibility dialect](#the-compatibility-dialect) admits
+  that chain under `string-switch`.
 - Every `case` label is an **integer constant expression** of the
   discriminant's type: a literal, its negation, a module constant, or an enum
   member
@@ -16305,8 +16308,8 @@ performance warning about the same check is not printed beside the error.
 Nish has two dialects. The strict one is this document. The compatibility
 dialect accepts more of TypeScript, feature by feature: it differs from the
 strict dialect in the number a bare `number` is, and in what each feature it
-allows admits. This compiler has built two features, `nullish` and
-`optional-chaining`.
+allows admits. This compiler has built four features, `nullish`,
+`optional-chaining`, `string-switch` and `for-of-string`.
 
 - **`--compat` selects the dialect with every feature this compiler has
   built; `--compat=<feature>,...` selects it with only the features named.**
@@ -16350,11 +16353,11 @@ allows admits. This compiler has built two features, `nullish` and
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64", !"nullish", !"optional-chaining"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[nullish,optional-chaining]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]`, and prints no such
   line for a strict build.
 - **A strict refusal of a construct a feature admits names the feature.** It
   closes with the note ``add `<feature>` to `nish.compat` in package.json to
@@ -16412,6 +16415,50 @@ allows admits. This compiler has built two features, `nullish` and
   reads `undefined` and answers the default, where the bounds check panics,
   so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
   (`reject_nullish_element_never_missing`).
+- **`string-switch` admits a `switch` whose discriminant is a `string`**
+  (`tests/cases/compat_string_switch`, strict `reject_switch_string`). Each
+  `case` label is a string literal, a template with no substitution, or a
+  module constant of type `string`, parenthesised or not, because a label is compared without being
+  run; any other label is NL2799
+  (`tests/link/compat_string_switch_label_not_constant`), a label of another
+  type is the strict `` `case` label is f64 but the discriminant is string ``
+  (`compat_string_switch_label_type`), and two labels with the same text, a
+  constant's included, are `` Duplicate `case` label `` as in an integer
+  switch (`compat_string_switch_duplicate`): the text is what the label
+  spells once its escapes are read, so `"\u00e9"` and `"é"`, or a template
+  and the literal it spells, are the same label
+  (`compat_string_switch_duplicate_spelling`,
+  `compat_string_switch_duplicate_template`). Fallthrough, into and out of a
+  `default` in any place, an empty case group, `return` from a case, `break`
+  and a labelled `break` out of an enclosing loop, and `continue` of an
+  enclosing loop mean what they mean in Node, and the discriminant is run
+  once, before the first comparison (`tests/cases/compat_string_switch_flow`).
+  A nullable discriminant, `string | null`, is no `string` and keeps the
+  strict refusal, naming no feature. The switch compares the discriminant with each label in
+  source order, one `nish_str_eq` call each, and jumps to the first that
+  matches, or to `default`: a chain, not a tree bucketed by length, because
+  `nish_str_eq` already answers on a length mismatch before it reads a byte.
+- **`for-of-string` admits `for (const c of s)` over a `string`**
+  (`tests/cases/compat_for_of_string`, strict `reject_arr_forof_non_array`).
+  Each pass binds `c` to the next code point, as Node walks a string: a
+  character outside the Basic Multilingual Plane is one pass, not two. `c` is
+  a new `string` holding that code point's UTF-8 bytes. `break`, `continue`
+  and labels work as they do over an array. A destructuring head,
+  `for (const [a] of s)`, keeps the array walk's refusal
+  (`tests/link/compat_for_of_string_destructure`), and so does a nullable
+  iterable, `string | null`, naming no feature. A string that is not valid
+  UTF-8 (`String.fromCharCode(200)`, `String.fromBytes`) is walked a lead
+  byte at a time: a pass takes the lead and only the continuation bytes
+  (`10xxxxxx`) after it, up to the width the lead names, so a lead with none
+  is a pass of one byte and the byte after it starts the next pass, a stray
+  continuation byte is a pass alone, and a sequence cut short by the end is
+  one pass of what is left. The number of passes is then Node's for the same
+  characters (`tests/cases/compat_for_of_string_invalid`), though `c`'s bytes
+  are nish's, not Node's UTF-16. `c` is fresh each pass, and the walk opens
+  no arena pass of its own: each `c` stays until the scope around the loop
+  releases its arena, so a code point kept past the loop, in a variable or
+  returned, is still there (`tests/cases/compat_for_of_string_fresh`), and a
+  walk of `n` code points holds `n` small strings until then.
 - **The dialect only adds.** A strict build of a program the strict dialect
   accepts is unchanged by all of the above, byte for byte; what changed for a
   program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the

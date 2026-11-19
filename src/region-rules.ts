@@ -931,9 +931,12 @@ class RegionWalk {
       return
     }
     if (kind === NodeKind.ForOf) {
+      // WP28 C1: a `--compat` walk of a string copies each code point out into
+      // memory this function allocates (`emitStringWalk`), not the string's.
+      const walked = node.children[1]
       this.bind(
         this.program.nodeLocals[node.children[0].children[0].children[0].id],
-        this.origin(node.children[1])
+        this.typeOf(walked) === T_STRING ? ORIGIN_REGION : this.origin(walked)
       )
     } else if (kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       this.visitAssignment(node)

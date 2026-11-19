@@ -3504,6 +3504,19 @@ class FactCollector {
   collectStringFacts(node: Node): void {
     const program = this.unit.program
     const table = this.table
+    // WP28 C1: a `for...of` over a string reads its bytes and copies each code
+    // point out (`emitStringWalk`); a string `switch` compares its subject with
+    // each label (`emitStringDispatch`). Only a `--compat` build checks either.
+    if (node.kind === NodeKind.ForOf && program.nodeTypes[node.children[1].id] === T_STRING) {
+      this.facts.readsMemory = true
+      this.facts.callees.add("nish_str_new")
+      return
+    }
+    if (node.kind === NodeKind.Switch && program.nodeTypes[node.children[0].id] === T_STRING) {
+      this.facts.readsMemory = true
+      this.facts.callees.add("nish_str_eq")
+      return
+    }
     if (
       node.kind === NodeKind.Call &&
       node.children[0].kind === NodeKind.Member &&

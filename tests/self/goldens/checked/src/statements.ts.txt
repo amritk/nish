@@ -88,6 +88,7 @@ import patternSlotName from "./nodes" -> function @patternSlotName
 import JSON_OPTIONS from "./json-typed" -> const JSON_OPTIONS
 import jsonOptionsShapeMessage from "./json-typed" -> function @jsonOptionsShapeMessage
 import caseValue from "./constants" -> function @caseValue
+import foldConstant from "./constants" -> function @foldConstant
 import annotationSpelling from "./arrays" -> function @annotationSpelling
 import elementSpelling from "./arrays" -> function @elementSpelling
 import isFreshArrayExpression from "./arrays" -> function @isFreshArrayExpression
@@ -679,8 +680,8 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: label stmt
-  calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.adopt Scope.child TypeTable.isArray TypeTable.refOf TypeTable.typeName checkChannelWalk checkCollectionWalk checkExpression checkStatement clearNarrowingsAssignedIn declareLocal declareSlots elementOrigin elementSpelling flowBegin flowEnd flowHead flowNoteBack heldAcross keySteadyVariables nish_panic_index nish_str_concat patternOf patternReceiverFits typedArraySpelling
-  pointer ctx: size=368 writesThrough=true captured=true passedTo=flowBegin#0 heldAcross#0 clearNarrowingsAssignedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 checkChannelWalk#0 checkCollectionWalk#0 CheckContext.error#0 elementOrigin#0 CheckContext.error#0 patternReceiverFits#0 declareLocal#0 declareSlots#0 typedArraySpelling#0 keySteadyVariables#0 flowHead#0 CheckContext.pushLoop#0 checkStatement#0 flowNoteBack#0 CheckContext.popLoop#0 flowEnd#0
+  calls: CheckContext.compatAllows CheckContext.error CheckContext.errorFeature CheckContext.popLoop CheckContext.pushLoop Scope.adopt Scope.child TypeTable.isArray TypeTable.refOf TypeTable.typeName checkChannelWalk checkCollectionWalk checkExpression checkStatement clearNarrowingsAssignedIn declareLocal declareSlots elementOrigin elementSpelling flowBegin flowEnd flowHead flowNoteBack heldAcross keySteadyVariables nish_panic_index nish_str_concat patternOf patternReceiverFits typedArraySpelling
+  pointer ctx: size=368 writesThrough=true captured=true passedTo=flowBegin#0 heldAcross#0 clearNarrowingsAssignedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.compatAllows#0 CheckContext.errorFeature#0 checkChannelWalk#0 checkCollectionWalk#0 CheckContext.error#0 elementOrigin#0 CheckContext.error#0 patternReceiverFits#0 declareLocal#0 declareSlots#0 typedArraySpelling#0 keySteadyVariables#0 flowHead#0 CheckContext.pushLoop#0 checkStatement#0 flowNoteBack#0 CheckContext.popLoop#0 flowEnd#0
   pointer stmt: size=40 writesThrough=true captured=true passedTo=flowBegin#1 heldAcross#1 clearNarrowingsAssignedIn#1 checkChannelWalk#1 checkCollectionWalk#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=flowBegin#2 heldAcross#2 clearNarrowingsAssignedIn#2 Scope.adopt#0 checkExpression#2 Scope.child#0 elementOrigin#2 typedArraySpelling#2 flowHead#2 Scope.adopt#0 flowEnd#2
   stackSites=1 stackLocals=0
@@ -704,31 +705,33 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope, label: string):
   local +5:7 element: i32 (let)
   callee +7:9 TypeTable.isArray -> @TypeTable.isArray
   callee +8:17 TypeTable.refOf -> @TypeTable.refOf
-  callee +9:16 checkChannelWalk -> @checkChannelWalk
-  callee +11:17 checkCollectionWalk -> @checkCollectionWalk
-  callee +12:7 CheckContext.error -> @CheckContext.error
-  callee +12:74 TypeTable.typeName -> @TypeTable.typeName
-  local +16:9 walked: FunctionSig | null (const)
-  local +22:9 origin: TypeOrigin | null (const)
-  callee +22:18 elementOrigin -> @elementOrigin
-  local +27:9 binding: boolean (const)
-  callee +29:5 CheckContext.error -> @CheckContext.error
-  callee +34:35 patternReceiverFits -> @patternReceiverFits
-  callee +37:3 declareLocal -> @declareLocal
-  callee +39:5 declareSlots -> @declareSlots
-  local +44:9 local: Local | null (const)
-  callee +46:24 elementSpelling -> @elementSpelling
-  callee +46:40 typedArraySpelling -> @typedArraySpelling
-  callee +48:3 keySteadyVariables -> @keySteadyVariables
-  callee +49:3 flowHead -> @flowHead
-  callee +50:3 CheckContext.pushLoop -> @CheckContext.pushLoop
-  local +51:9 inner: Scope (const)
-  callee +51:17 Scope.child -> @Scope.child
-  callee +52:8 checkStatement -> @checkStatement
-  callee +53:5 flowNoteBack -> @flowNoteBack
-  callee +55:3 CheckContext.popLoop -> @CheckContext.popLoop
-  callee +56:3 Scope.adopt -> @Scope.adopt
-  callee +57:3 flowEnd -> @flowEnd
+  callee +12:11 CheckContext.compatAllows -> @CheckContext.compatAllows
+  callee +15:9 CheckContext.errorFeature -> @CheckContext.errorFeature
+  callee +17:16 checkChannelWalk -> @checkChannelWalk
+  callee +19:17 checkCollectionWalk -> @checkCollectionWalk
+  callee +20:7 CheckContext.error -> @CheckContext.error
+  callee +20:74 TypeTable.typeName -> @TypeTable.typeName
+  local +24:9 walked: FunctionSig | null (const)
+  local +30:9 origin: TypeOrigin | null (const)
+  callee +30:68 elementOrigin -> @elementOrigin
+  local +35:9 binding: boolean (const)
+  callee +38:5 CheckContext.error -> @CheckContext.error
+  callee +43:35 patternReceiverFits -> @patternReceiverFits
+  callee +46:3 declareLocal -> @declareLocal
+  callee +48:5 declareSlots -> @declareSlots
+  local +53:9 local: Local | null (const)
+  callee +55:24 elementSpelling -> @elementSpelling
+  callee +55:40 typedArraySpelling -> @typedArraySpelling
+  callee +57:3 keySteadyVariables -> @keySteadyVariables
+  callee +58:3 flowHead -> @flowHead
+  callee +59:3 CheckContext.pushLoop -> @CheckContext.pushLoop
+  local +60:9 inner: Scope (const)
+  callee +60:17 Scope.child -> @Scope.child
+  callee +61:8 checkStatement -> @checkStatement
+  callee +62:5 flowNoteBack -> @flowNoteBack
+  callee +64:3 CheckContext.popLoop -> @CheckContext.popLoop
+  callee +65:3 Scope.adopt -> @Scope.adopt
+  callee +66:3 flowEnd -> @flowEnd
 function refuseUnsupportedForms(ctx: CheckContext, node: Node): void -> @refuseUnsupportedForms [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via sweepForms
@@ -960,11 +963,11 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: label
-  calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child Scope.clearNarrowing Scope.constructor SwitchFrame.constructor TypeTable.isEnum TypeTable.typeName addLocals captureNarrowings checkCaseLabel checkExpression checkStatements enumVariable isInteger joinExits labelledMembers localsAssignedIn memberSetOf membersOfSet narrowAfterSwitch narrowClause nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat snapshotExit switchCovered tagVariable unionTagRead withoutMembers
-  pointer ctx: size=368 writesThrough=true captured=true passedTo=checkExpression#0 localsAssignedIn#0 CheckContext.error#0 memberSetOf#0 tagVariable#0 enumVariable#0 checkCaseLabel#0 CheckContext.error#0 checkCaseLabel#0 memberSetOf#0 CheckContext.error#0 narrowClause#0 CheckContext.pushLoop#0 checkStatements#0 CheckContext.popLoop#0 snapshotExit#0 localsAssignedIn#0 narrowClause#0 switchCovered#0 unionTagRead#0 withoutMembers#0 membersOfSet#0 labelledMembers#0 snapshotExit#0 narrowAfterSwitch#0 joinExits#0
+  calls: CheckContext.compatAllows CheckContext.error CheckContext.errorFeature CheckContext.popLoop CheckContext.pushLoop Scope.child Scope.clearNarrowing Scope.constructor SwitchFrame.constructor TypeTable.isEnum TypeTable.typeName addLocals captureNarrowings checkCaseLabel checkExpression checkStatements checkStringCaseLabel enumVariable isInteger joinExits labelledMembers localsAssignedIn memberSetOf membersOfSet narrowAfterSwitch narrowClause nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat snapshotExit switchCovered tagVariable unionTagRead withoutMembers
+  pointer ctx: size=368 writesThrough=true captured=true passedTo=checkExpression#0 localsAssignedIn#0 CheckContext.compatAllows#0 CheckContext.errorFeature#0 CheckContext.error#0 memberSetOf#0 tagVariable#0 enumVariable#0 checkCaseLabel#0 CheckContext.error#0 checkStringCaseLabel#0 checkCaseLabel#0 memberSetOf#0 CheckContext.error#0 narrowClause#0 CheckContext.pushLoop#0 checkStatements#0 CheckContext.popLoop#0 snapshotExit#0 localsAssignedIn#0 narrowClause#0 switchCovered#0 unionTagRead#0 withoutMembers#0 membersOfSet#0 labelledMembers#0 snapshotExit#0 narrowAfterSwitch#0 joinExits#0
   pointer stmt: size=40 writesThrough=false captured=false
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 localsAssignedIn#2 SwitchFrame.constructor#2 captureNarrowings#1 tagVariable#2 enumVariable#2 checkCaseLabel#2 checkCaseLabel#2 captureNarrowings#2 Scope.clearNarrowing#0 Scope.child#0 localsAssignedIn#2 captureNarrowings#2 Scope.child#0 narrowAfterSwitch#1 joinExits#2
-  stackSites=6 stackLocals=5
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 localsAssignedIn#2 SwitchFrame.constructor#2 captureNarrowings#1 tagVariable#2 enumVariable#2 checkCaseLabel#2 checkStringCaseLabel#2 checkCaseLabel#2 captureNarrowings#2 Scope.clearNarrowing#0 Scope.child#0 localsAssignedIn#2 captureNarrowings#2 Scope.child#0 narrowAfterSwitch#1 joinExits#2
+  stackSites=7 stackLocals=6
   local -6:9 discriminant: i32 (const)
   callee -6:24 checkExpression -> @checkExpression
   local -3:9 assigned: Local[] (const)
@@ -977,69 +980,75 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope, label: string)
   local +7:9 before: Scope (const)
   callee +7:18 new Scope -> @Scope.constructor
   callee +8:3 captureNarrowings -> @captureNarrowings
-  callee +13:36 isInteger -> @isInteger
-  callee +13:64 TypeTable.isEnum -> @TypeTable.isEnum
-  callee +14:5 CheckContext.error -> @CheckContext.error
-  callee +16:59 TypeTable.typeName -> @TypeTable.typeName
-  local +19:9 clauses: Node[] (const)
-  local +20:9 members: i32[] (const)
-  callee +20:19 memberSetOf -> @memberSetOf
-  local +21:9 seen: i64[] (const)
-  local +25:9 tagged: Local | null (const)
-  callee +25:18 tagVariable -> @tagVariable
-  local +26:9 held: Local | null (const)
-  callee +26:48 enumVariable -> @enumVariable
-  local +28:16 clause: Node (const)
-  callee +30:9 checkCaseLabel -> @checkCaseLabel
-  local +34:7 hasDefault: boolean (let)
-  local +35:7 lastTerminates: boolean (let)
-  local +36:7 broke: boolean (let)
-  local +38:7 group: i32[] (let)
-  local +39:7 groupDefault: boolean (let)
-  local +42:9 reaching: i32[] (const)
-  local +43:7 defaultReaches: boolean (let)
-  local +47:7 fell: boolean (let)
-  local +48:7 fallen: Local[] (let)
-  local +49:7 i: i32 (let)
-  local +51:11 clause: Node (const)
-  local +52:11 body: Node (const)
-  callee +55:9 CheckContext.error -> @CheckContext.error
-  callee +61:9 checkCaseLabel -> @checkCaseLabel
-  local +63:18 member: i32 (const)
-  callee +63:28 memberSetOf -> @memberSetOf
-  local +67:16 statement: Node (const)
-  callee +69:9 CheckContext.error -> @CheckContext.error
-  local +75:9 terminates: boolean (let)
-  callee +77:7 captureNarrowings -> @captureNarrowings
-  local +79:20 local: Local (const)
-  callee +80:11 Scope.clearNarrowing -> @Scope.clearNarrowing
-  local +83:13 clauseScope: Scope (const)
-  callee +83:27 Scope.child -> @Scope.child
-  local +84:13 steers: boolean (const)
-  callee +87:9 narrowClause -> @narrowClause
-  callee +89:7 CheckContext.pushLoop -> @CheckContext.pushLoop
-  callee +90:47 checkStatements -> @checkStatements
-  local +91:13 clauseBroke: boolean (const)
-  callee +91:27 CheckContext.popLoop -> @CheckContext.popLoop
-  callee +94:9 snapshotExit -> @snapshotExit
-  local +97:20 member: i32 (const)
-  callee +104:9 localsAssignedIn -> @localsAssignedIn
-  callee +116:3 captureNarrowings -> @captureNarrowings
-  local +117:7 covered: boolean (let)
-  local +119:11 unmatched: Scope (const)
-  callee +119:23 Scope.child -> @Scope.child
-  callee +121:7 narrowClause -> @narrowClause
-  callee +124:17 switchCovered -> @switchCovered
-  local +126:13 union: i32 (const)
-  callee +126:21 unionTagRead -> @unionTagRead
-  callee +129:9 withoutMembers -> @withoutMembers
-  callee +129:29 membersOfSet -> @membersOfSet
-  callee +129:55 labelledMembers -> @labelledMembers
-  callee +132:7 snapshotExit -> @snapshotExit
-  local +135:9 coverage: i32 (const)
-  callee +139:5 narrowAfterSwitch -> @narrowAfterSwitch
-  local +141:9 steered: Local[] (const)
-  callee +148:3 joinExits -> @joinExits
+  local +16:9 strings: boolean (const)
+  callee +16:48 CheckContext.compatAllows -> @CheckContext.compatAllows
+  callee +17:48 isInteger -> @isInteger
+  callee +17:76 TypeTable.isEnum -> @TypeTable.isEnum
+  local +18:11 message: string (const)
+  callee +18:73 TypeTable.typeName -> @TypeTable.typeName
+  callee +20:7 CheckContext.errorFeature -> @CheckContext.errorFeature
+  callee +22:7 CheckContext.error -> @CheckContext.error
+  local +25:9 seenText: string[] (const)
+  local +26:9 clauses: Node[] (const)
+  local +27:9 members: i32[] (const)
+  callee +27:19 memberSetOf -> @memberSetOf
+  local +28:9 seen: i64[] (const)
+  local +32:9 tagged: Local | null (const)
+  callee +32:18 tagVariable -> @tagVariable
+  local +33:9 held: Local | null (const)
+  callee +33:48 enumVariable -> @enumVariable
+  local +35:16 clause: Node (const)
+  callee +37:9 checkCaseLabel -> @checkCaseLabel
+  local +41:7 hasDefault: boolean (let)
+  local +42:7 lastTerminates: boolean (let)
+  local +43:7 broke: boolean (let)
+  local +45:7 group: i32[] (let)
+  local +46:7 groupDefault: boolean (let)
+  local +49:9 reaching: i32[] (const)
+  local +50:7 defaultReaches: boolean (let)
+  local +54:7 fell: boolean (let)
+  local +55:7 fallen: Local[] (let)
+  local +56:7 i: i32 (let)
+  local +58:11 clause: Node (const)
+  local +59:11 body: Node (const)
+  callee +62:9 CheckContext.error -> @CheckContext.error
+  callee +68:9 checkStringCaseLabel -> @checkStringCaseLabel
+  callee +70:9 checkCaseLabel -> @checkCaseLabel
+  local +72:18 member: i32 (const)
+  callee +72:28 memberSetOf -> @memberSetOf
+  local +76:16 statement: Node (const)
+  callee +78:9 CheckContext.error -> @CheckContext.error
+  local +84:9 terminates: boolean (let)
+  callee +86:7 captureNarrowings -> @captureNarrowings
+  local +88:20 local: Local (const)
+  callee +89:11 Scope.clearNarrowing -> @Scope.clearNarrowing
+  local +92:13 clauseScope: Scope (const)
+  callee +92:27 Scope.child -> @Scope.child
+  local +93:13 steers: boolean (const)
+  callee +96:9 narrowClause -> @narrowClause
+  callee +98:7 CheckContext.pushLoop -> @CheckContext.pushLoop
+  callee +99:47 checkStatements -> @checkStatements
+  local +100:13 clauseBroke: boolean (const)
+  callee +100:27 CheckContext.popLoop -> @CheckContext.popLoop
+  callee +103:9 snapshotExit -> @snapshotExit
+  local +106:20 member: i32 (const)
+  callee +113:9 localsAssignedIn -> @localsAssignedIn
+  callee +125:3 captureNarrowings -> @captureNarrowings
+  local +126:7 covered: boolean (let)
+  local +128:11 unmatched: Scope (const)
+  callee +128:23 Scope.child -> @Scope.child
+  callee +130:7 narrowClause -> @narrowClause
+  callee +133:17 switchCovered -> @switchCovered
+  local +135:13 union: i32 (const)
+  callee +135:21 unionTagRead -> @unionTagRead
+  callee +138:9 withoutMembers -> @withoutMembers
+  callee +138:29 membersOfSet -> @membersOfSet
+  callee +138:55 labelledMembers -> @labelledMembers
+  callee +141:7 snapshotExit -> @snapshotExit
+  local +144:9 coverage: i32 (const)
+  callee +148:5 narrowAfterSwitch -> @narrowAfterSwitch
+  local +150:9 steered: Local[] (const)
+  callee +157:3 joinExits -> @joinExits
 function unionTagRead(ctx: CheckContext, node: Node): i32 -> @unionTagRead
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isUnion TypeTable.tagNameOf isOptionalChain nish_panic_index nish_str_eq unwrapParens
@@ -1161,6 +1170,37 @@ function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discrimin
   callee -12:5 CheckContext.error -> @CheckContext.error
   local -6:14 previous: i64 (const)
   callee -4:7 CheckContext.error -> @CheckContext.error
+function checkStringCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, seen: string[]): void -> @checkStringCaseLabel
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: CheckContext.error CheckContext.textOf TypeTable.typeName checkExpression nish_array_grow nish_str_concat nish_str_eq stringCaseText
+  pointer ctx: size=368 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 stringCaseText#0 CheckContext.error#0 CheckContext.error#0 CheckContext.textOf#0
+  pointer clause: size=40 writesThrough=false captured=false
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  pointer seen: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -28:9 label: Node (const)
+  local -27:9 type: i32 (const)
+  callee -27:16 checkExpression -> @checkExpression
+  callee -22:5 CheckContext.error -> @CheckContext.error
+  callee -22:43 TypeTable.typeName -> @TypeTable.typeName
+  local -19:9 text: string | null (const)
+  callee -19:16 stringCaseText -> @stringCaseText
+  callee -17:5 CheckContext.error -> @CheckContext.error
+  local -11:7 duplicate: boolean (let)
+  local -10:14 previous: string (const)
+  callee -3:5 CheckContext.error -> @CheckContext.error
+  callee -3:52 CheckContext.textOf -> @CheckContext.textOf
+function stringCaseText(ctx: CheckContext, expr: Node): string | null -> @stringCaseText
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via stringCaseText
+  calls: foldConstant nish_panic_index stringCaseText
+  pointer ctx: size=368 writesThrough=true captured=false passedTo=stringCaseText#0 foldConstant#0
+  pointer expr: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 stringCaseText -> @stringCaseText
+  local +9:11 constant: ConstInfo | null (const)
+  callee +13:5 foldConstant -> @foldConstant
 function checkBreak(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkBreak
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

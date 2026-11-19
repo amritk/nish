@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 790 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 791 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15471,4 +15471,12 @@ export const main = (): i32 => {
 
 ```text
 `Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+## NL2799
+
+The message of an error contains:
+
+```text
+A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)
 ```

@@ -326,7 +326,7 @@ function EscapeAnalysis.visit(this: EscapeAnalysis, node: Node): void -> @Escape
   escaping: node
   calls: EscapeAnalysis.addRef EscapeAnalysis.compactType EscapeAnalysis.elementSize EscapeAnalysis.noteCaptures EscapeAnalysis.visit EscapeAnalysis.visitCall EscapeAnalysis.visitNew Site.constructor TypeTable.isArray TypeTable.refOf TypeTable.resultByValue isTemplateExpression nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq unwrapStringPassthrough
   pointer this: size=144 writesThrough=true captured=false passedTo=EscapeAnalysis.noteCaptures#0 EscapeAnalysis.addRef#0 EscapeAnalysis.visitNew#0 EscapeAnalysis.compactType#0 EscapeAnalysis.elementSize#0 EscapeAnalysis.visitCall#0 EscapeAnalysis.visit#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=EscapeAnalysis.noteCaptures#1 EscapeAnalysis.addRef#2 EscapeAnalysis.visitNew#1 Site.constructor#1 Site.constructor#1 Site.constructor#1 isTemplateExpression#0 unwrapStringPassthrough#1 Site.constructor#1 EscapeAnalysis.visitCall#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=EscapeAnalysis.noteCaptures#1 EscapeAnalysis.addRef#2 EscapeAnalysis.visitNew#1 Site.constructor#1 Site.constructor#1 Site.constructor#1 Site.constructor#1 isTemplateExpression#0 unwrapStringPassthrough#1 Site.constructor#1 EscapeAnalysis.visitCall#1
   stackSites=0 stackLocals=0
   local -25:11 program: CheckedProgram (const)
   local -18:13 lifted: FunctionSig | null (const)
@@ -343,13 +343,14 @@ function EscapeAnalysis.visit(this: EscapeAnalysis, node: Node): void -> @Escape
   callee +10:32 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
   callee +10:49 TypeTable.refOf -> @TypeTable.refOf
   callee +11:23 new Site -> @Site.constructor
-  callee +14:25 new Site -> @Site.constructor
-  callee +16:16 isTemplateExpression -> @isTemplateExpression
-  callee +17:11 unwrapStringPassthrough -> @unwrapStringPassthrough
-  callee +18:25 new Site -> @Site.constructor
-  callee +21:7 EscapeAnalysis.visitCall -> @EscapeAnalysis.visitCall
-  local +23:16 child: Node (const)
-  callee +24:7 EscapeAnalysis.visit -> @EscapeAnalysis.visit
+  callee +16:23 new Site -> @Site.constructor
+  callee +19:25 new Site -> @Site.constructor
+  callee +21:16 isTemplateExpression -> @isTemplateExpression
+  callee +22:11 unwrapStringPassthrough -> @unwrapStringPassthrough
+  callee +23:25 new Site -> @Site.constructor
+  callee +26:7 EscapeAnalysis.visitCall -> @EscapeAnalysis.visitCall
+  local +28:16 child: Node (const)
+  callee +29:7 EscapeAnalysis.visit -> @EscapeAnalysis.visit
 function EscapeAnalysis.noteCaptures(this: EscapeAnalysis, arrow: Node, lifted: FunctionSig): void -> @EscapeAnalysis.noteCaptures [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -456,18 +457,19 @@ function EscapeAnalysis.flowTarget(this: EscapeAnalysis, expr: Node): FlowTarget
   pointer this: size=144 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local +0:9 node: Node (let)
-  local +2:13 parent: Node | null (const)
-  callee +2:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +4:16 new FlowTarget -> @FlowTarget.constructor
-  callee +21:26 yieldsInteriorPointer -> @yieldsInteriorPointer
-  callee +29:26 storesInlineElements -> @storesInlineElements
-  callee +31:16 new FlowTarget -> @FlowTarget.constructor
-  callee +37:16 new FlowTarget -> @FlowTarget.constructor
-  callee +40:16 new FlowTarget -> @FlowTarget.constructor
-  callee +50:16 new FlowTarget -> @FlowTarget.constructor
-  local +52:13 neither: FlowTarget (const)
-  callee +52:23 new FlowTarget -> @FlowTarget.constructor
+  callee +0:14 new FlowTarget -> @FlowTarget.constructor
+  local +2:9 node: Node (let)
+  local +4:13 parent: Node | null (const)
+  callee +4:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +6:16 new FlowTarget -> @FlowTarget.constructor
+  callee +23:26 yieldsInteriorPointer -> @yieldsInteriorPointer
+  callee +31:26 storesInlineElements -> @storesInlineElements
+  callee +33:16 new FlowTarget -> @FlowTarget.constructor
+  callee +39:16 new FlowTarget -> @FlowTarget.constructor
+  callee +42:16 new FlowTarget -> @FlowTarget.constructor
+  callee +52:16 new FlowTarget -> @FlowTarget.constructor
+  local +54:13 neither: FlowTarget (const)
+  callee +54:23 new FlowTarget -> @FlowTarget.constructor
 function EscapeAnalysis.calleeCaptures(this: EscapeAnalysis, callee: FunctionSig, index: i32): boolean -> @EscapeAnalysis.calleeCaptures [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
@@ -1282,40 +1284,40 @@ function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [me
   local -2:13 local: Local | null (const)
   callee +1:13 PassWalk.isPassListing -> @PassWalk.isPassListing
   local +6:13 variable: Local | null (const)
-  local +13:13 callee: FunctionSig | null (const)
-  callee +15:9 PassWalk.visitCallee -> @PassWalk.visitCallee
-  callee +16:18 isPushCall -> @isPushCall
-  callee +17:9 PassWalk.visitPush -> @PassWalk.visitPush
-  callee +18:18 isSpawnPipedArity -> @isSpawnPipedArity
-  callee +18:36 builtinNameOf -> @builtinNameOf
+  local +15:13 callee: FunctionSig | null (const)
+  callee +17:9 PassWalk.visitCallee -> @PassWalk.visitCallee
+  callee +18:18 isPushCall -> @isPushCall
   callee +19:9 PassWalk.visitPush -> @PassWalk.visitPush
-  callee +20:9 PassWalk.visitPush -> @PassWalk.visitPush
-  callee +21:18 resultMethodName -> @resultMethodName
-  callee +26:11 PassWalk.refuse -> @PassWalk.refuse
-  local +30:13 ctor: FunctionSig | null (const)
-  callee +30:20 constructorOf -> @constructorOf
-  callee +30:55 intrinsicType -> @intrinsicType
-  callee +32:9 PassWalk.visitCallee -> @PassWalk.visitCallee
-  callee +34:49 isAssignmentOperator -> @isAssignmentOperator
-  local +35:13 target: Node (const)
-  callee +35:22 unwrapParens -> @unwrapParens
-  local +36:13 local: Local | null (const)
-  callee +39:10 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee +40:10 isScalarArgument -> @isScalarArgument
-  callee +41:32 PassWalk.isOld -> @PassWalk.isOld
-  callee +43:9 PassWalk.refuse -> @PassWalk.refuse
-  callee +45:29 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee +45:59 PassWalk.isPassListing -> @PassWalk.isPassListing
-  local +49:15 type: i32 (const)
-  callee +51:26 isScalarArgument -> @isScalarArgument
-  callee +52:34 PassWalk.isOld -> @PassWalk.isOld
-  callee +54:11 PassWalk.refuse -> @PassWalk.refuse
-  local +58:13 value: Node (const)
-  local +64:13 handsNothing: boolean (const)
-  callee +65:62 PassWalk.isOld -> @PassWalk.isOld
-  callee +67:9 PassWalk.refuse -> @PassWalk.refuse
-  local +70:16 child: Node (const)
-  callee +71:7 PassWalk.visit -> @PassWalk.visit
+  callee +20:18 isSpawnPipedArity -> @isSpawnPipedArity
+  callee +20:36 builtinNameOf -> @builtinNameOf
+  callee +21:9 PassWalk.visitPush -> @PassWalk.visitPush
+  callee +22:9 PassWalk.visitPush -> @PassWalk.visitPush
+  callee +23:18 resultMethodName -> @resultMethodName
+  callee +28:11 PassWalk.refuse -> @PassWalk.refuse
+  local +32:13 ctor: FunctionSig | null (const)
+  callee +32:20 constructorOf -> @constructorOf
+  callee +32:55 intrinsicType -> @intrinsicType
+  callee +34:9 PassWalk.visitCallee -> @PassWalk.visitCallee
+  callee +36:49 isAssignmentOperator -> @isAssignmentOperator
+  local +37:13 target: Node (const)
+  callee +37:22 unwrapParens -> @unwrapParens
+  local +38:13 local: Local | null (const)
+  callee +41:10 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee +42:10 isScalarArgument -> @isScalarArgument
+  callee +43:32 PassWalk.isOld -> @PassWalk.isOld
+  callee +45:9 PassWalk.refuse -> @PassWalk.refuse
+  callee +47:29 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee +47:59 PassWalk.isPassListing -> @PassWalk.isPassListing
+  local +51:15 type: i32 (const)
+  callee +53:26 isScalarArgument -> @isScalarArgument
+  callee +54:34 PassWalk.isOld -> @PassWalk.isOld
+  callee +56:11 PassWalk.refuse -> @PassWalk.refuse
+  local +60:13 value: Node (const)
+  local +66:13 handsNothing: boolean (const)
+  callee +67:62 PassWalk.isOld -> @PassWalk.isOld
+  callee +69:9 PassWalk.refuse -> @PassWalk.refuse
+  local +72:16 child: Node (const)
+  callee +73:7 PassWalk.visit -> @PassWalk.visit
 function loopBody(loop: Node): Node -> @loopBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index

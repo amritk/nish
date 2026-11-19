@@ -32,6 +32,7 @@ import isAtomicArrayConstructor from "./parallel" -> function @isAtomicArrayCons
 import isChannelReader from "./parallel" -> function @isChannelReader
 import isGuardedAccess from "./parallel" -> function @isGuardedAccess
 import emitSliceCheck from "./emit-strings" -> function @emitSliceCheck
+import emitStringWalk from "./emit-strings" -> function @emitStringWalk
 import guardKeep from "./emit-strings" -> function @guardKeep
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import internalErrorFor from "./ice" -> function @internalErrorFor
@@ -2110,17 +2111,19 @@ function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32): strin
 function emitForOf(emitter: Emitter, stmt: Node): void -> @emitForOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: ArrayBase.constructor DebugInfo.declareLocal Emitter.align Emitter.align8 Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor bindsHiddenReceiver emitChannelWalk emitWalk internalErrorFor isChannelReader loadElement loadLength nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat
-  pointer emitter: size=424 writesThrough=true captured=false passedTo=emitChannelWalk#0 emitWalk#0 Emitter.llvm#0 Emitter.declareType#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.align8#0 Emitter.align8#0 loadLength#0 loadElement#0 Emitter.alignSuffix#0 Emitter.emitStatement#0 Emitter.align8#0 Emitter.align8#0
-  pointer stmt: size=40 writesThrough=false captured=false passedTo=emitChannelWalk#1 emitWalk#1
+  calls: ArrayBase.constructor DebugInfo.declareLocal Emitter.align Emitter.align8 Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot Emitter.typeOf IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor bindsHiddenReceiver emitChannelWalk emitStringWalk emitWalk internalErrorFor isChannelReader loadElement loadLength nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=emitChannelWalk#0 emitWalk#0 Emitter.typeOf#0 emitStringWalk#0 Emitter.llvm#0 Emitter.declareType#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.align8#0 Emitter.align8#0 loadLength#0 loadElement#0 Emitter.alignSuffix#0 Emitter.emitStatement#0 Emitter.align8#0 Emitter.align8#0
+  pointer stmt: size=40 writesThrough=false captured=false passedTo=emitChannelWalk#1 emitWalk#1 emitStringWalk#1
   stackSites=1 stackLocals=0
-  local -45:9 read: FunctionSig | null (const)
-  callee -44:24 isChannelReader -> @isChannelReader
-  callee -43:5 emitChannelWalk -> @emitChannelWalk
-  callee -39:5 emitWalk -> @emitWalk
-  local -36:9 decl: Node (const)
-  local -35:9 local: Local | null (const)
-  callee -33:18 internalErrorFor -> @internalErrorFor
+  local -49:9 read: FunctionSig | null (const)
+  callee -48:24 isChannelReader -> @isChannelReader
+  callee -47:5 emitChannelWalk -> @emitChannelWalk
+  callee -43:5 emitWalk -> @emitWalk
+  local -40:9 decl: Node (const)
+  local -39:9 local: Local | null (const)
+  callee -37:18 internalErrorFor -> @internalErrorFor
+  callee -35:7 Emitter.typeOf -> @Emitter.typeOf
+  callee -34:5 emitStringWalk -> @emitStringWalk
   local -31:9 elem: i32 (const)
   local -30:9 ty: string (const)
   callee -30:14 Emitter.llvm -> @Emitter.llvm

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 971
+export const RULE_COUNT: i32 = 972
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -549,6 +549,8 @@ const diagnosticRules = (): string[] => [
   "NL2669",
   "`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to ",
   "NL3058",
+  "A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)",
+  "NL2799",
   "A default in a destructuring pattern is not supported; every name is read, and one that is missing has no default to take",
   "NL2774",
   "`: a `Map` has size, get, set, has, delete, clear and forEach, and a `Set` has size, add, has, delete, clear and forEach",

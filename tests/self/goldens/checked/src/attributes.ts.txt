@@ -2144,35 +2144,37 @@ function FactCollector.collectStringFacts(this: FactCollector, node: Node): void
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteBuiltin#0 FactCollector.noteBuiltinSite#0 FactCollector.noteWrittenArguments#0 FactCollector.addCallees#0 FactCollector.noteSite#0 FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=builtinCalleesNamed#3 FactCollector.noteWorld#1 FactCollector.noteBuiltin#2 FactCollector.noteBuiltinSite#1 FactCollector.noteWrittenArguments#1 isStringMethodCall#1 FactCollector.noteSite#1 FactCollector.noteSite#1 isTemplateExpression#0 templateParts#0
   stackSites=0 stackLocals=0
-  local -32:11 program: CheckedProgram (const)
-  local -31:11 table: TypeTable (const)
-  callee -27:8 receiverIsValue -> @receiverIsValue
-  local -25:13 name: string (const)
-  callee -25:20 dottedName -> @dottedName
-  local -24:13 dotted: string[] (const)
-  callee -24:22 builtinCalleesNamed -> @builtinCalleesNamed
-  callee -23:7 FactCollector.addCallees -> @FactCollector.addCallees
-  callee -22:7 FactCollector.noteWorld -> @FactCollector.noteWorld
-  callee -20:9 FactCollector.noteBuiltin -> @FactCollector.noteBuiltin
-  callee -18:7 FactCollector.noteBuiltinSite -> @FactCollector.noteBuiltinSite
-  callee -15:7 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
-  local -11:13 op: string (const)
-  callee -9:9 StringSet.add -> @StringSet.add
-  callee -7:9 StringSet.add -> @StringSet.add
-  callee -3:40 isStringMethodCall -> @isStringMethodCall
-  local +1:13 name: string (const)
-  callee +2:7 FactCollector.addCallees -> @FactCollector.addCallees
-  callee +2:23 stringConstructCallees -> @stringConstructCallees
-  callee +4:9 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +6:9 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +14:9 isTemplateExpression -> @isTemplateExpression
-  local +15:13 parts: Node[] (const)
-  callee +15:21 templateParts -> @templateParts
-  callee +17:9 StringSet.add -> @StringSet.add
-  local +19:18 part: Node (const)
-  local +21:17 callee: string (const)
-  callee +21:26 stringifyCallee -> @stringifyCallee
-  callee +23:13 StringSet.add -> @StringSet.add
+  local -6:11 program: CheckedProgram (const)
+  local -5:11 table: TypeTable (const)
+  callee +1:7 StringSet.add -> @StringSet.add
+  callee +6:7 StringSet.add -> @StringSet.add
+  callee +12:8 receiverIsValue -> @receiverIsValue
+  local +14:13 name: string (const)
+  callee +14:20 dottedName -> @dottedName
+  local +15:13 dotted: string[] (const)
+  callee +15:22 builtinCalleesNamed -> @builtinCalleesNamed
+  callee +16:7 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +17:7 FactCollector.noteWorld -> @FactCollector.noteWorld
+  callee +19:9 FactCollector.noteBuiltin -> @FactCollector.noteBuiltin
+  callee +21:7 FactCollector.noteBuiltinSite -> @FactCollector.noteBuiltinSite
+  callee +24:7 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
+  local +28:13 op: string (const)
+  callee +30:9 StringSet.add -> @StringSet.add
+  callee +32:9 StringSet.add -> @StringSet.add
+  callee +36:40 isStringMethodCall -> @isStringMethodCall
+  local +40:13 name: string (const)
+  callee +41:7 FactCollector.addCallees -> @FactCollector.addCallees
+  callee +41:23 stringConstructCallees -> @stringConstructCallees
+  callee +43:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +45:9 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +53:9 isTemplateExpression -> @isTemplateExpression
+  local +54:13 parts: Node[] (const)
+  callee +54:21 templateParts -> @templateParts
+  callee +56:9 StringSet.add -> @StringSet.add
+  local +58:18 part: Node (const)
+  local +60:17 callee: string (const)
+  callee +60:26 stringifyCallee -> @stringifyCallee
+  callee +62:13 StringSet.add -> @StringSet.add
 function FactCollector.collectClassFacts(this: FactCollector, node: Node): void -> @FactCollector.collectClassFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9

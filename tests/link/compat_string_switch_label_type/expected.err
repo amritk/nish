@@ -1,0 +1,1 @@
+main.ts:7:10: error: `case` label is f64 but the discriminant is string
