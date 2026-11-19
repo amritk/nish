@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 984
+export const RULE_COUNT: i32 = 988
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -449,6 +449,8 @@ const diagnosticRules = (): string[] => [
   "NL2721",
   "`'s `tag` is not a string literal: a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text",
   "NL2722",
+  '`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`',
+  "NL2810",
   ", and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count",
   "NL2555",
   ", which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it",
@@ -613,6 +615,8 @@ const diagnosticRules = (): string[] => [
   "NL2796",
   "`: each member of a string enum has its own string, because the string is how JSON and `String` name the member",
   "NL2786",
+  "`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`",
+  "NL2809",
   ": the block releases what it allocated before the function returns, so the caller would be handed freed memory",
   "NL2423",
   "` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end",
@@ -851,6 +855,8 @@ const diagnosticRules = (): string[] => [
   "NL2320",
   "` must be the name of a top-level function or an arrow written at the call, because `",
   "NL2339",
+  "` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one",
+  "NL2812",
   "` may be `null`: a nullable function reference is called only after a test such as `",
   "NL2758",
   "` specifier names a module inside it, so no segment may be empty or begin with a `.`",
@@ -1506,6 +1512,8 @@ const diagnosticRules = (): string[] => [
   "NL2183",
   "` must be declared `const`, not `let`",
   "NL2272",
+  "`, which is not one of its parameters",
+  "NL2811",
   "`break` outside of a loop or `switch`",
   "NL2122",
   "`fill` expects 1 to 3 arguments, got ",

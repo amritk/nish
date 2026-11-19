@@ -27235,6 +27235,17 @@ if (dealtHere("releaseChecks")) {
         // fails: the `pop` divergence above.
         "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
       ],
+      [
+        "ffi_buffer_counted_by.ts",
+        // WP66 S5: `CountedBy` is declared by the program's own `.d.ts`, not
+        // runtime/nish.d.ts (docs/guide/using-nish/interop.md); checked below
+        // with that declaration.
+        "`CountedBy` is declared by the program's own `.d.ts` (checked below with one)",
+      ],
+      [
+        "ffi_buffer_counted_by_panic.ts",
+        "`CountedBy` is declared by the program's own `.d.ts` (checked below with one)",
+      ],
     ])
     // The cases whose clauses fall through on purpose, checked in a project
     // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
@@ -27262,6 +27273,22 @@ if (dealtHere("releaseChecks")) {
       `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences, ${fallthroughCases.length} without the fallthrough check)`,
       everyCase.ok && fallingThrough.ok && fallthroughCases.length === FALLTHROUGH_CASES.size,
       everyCase.output + fallingThrough.output
+    )
+
+    // WP66 S5: the `CountedBy` cases, with the one-line `.d.ts` the guide tells
+    // a program to write (docs/guide/using-nish/interop.md), so tsc still
+    // checks everything else in them.
+    const countedByDts = path.join(ambientDir, "counted-by.d.ts")
+    fs.writeFileSync(countedByDts, "type CountedBy<T, N extends string> = T\n")
+    const countedByCases = ["ffi_buffer_counted_by.ts", "ffi_buffer_counted_by_panic.ts"]
+    const countedByCheck = typeCheck("counted-by", [
+      countedByDts,
+      ...countedByCases.map((f) => path.join(casesDir, f)),
+    ])
+    check(
+      `tsc accepts the CountedBy cases with the guide's one-line \`.d.ts\` (${countedByCases.length} cases)`,
+      countedByCheck.ok,
+      countedByCheck.output
     )
 
     // And on the largest Nish program there is: the compiler itself.

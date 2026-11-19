@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 800 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 804 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15551,4 +15551,36 @@ The message of an error contains:
 
 ```text
 `: an opaque `declare class` has no fields, so the `CPtr` is the value; declare the C function to return the class itself
+```
+
+## NL2809
+
+The message of an error contains:
+
+```text
+`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`
+```
+
+## NL2810
+
+The message of an error contains:
+
+```text
+`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`
+```
+
+## NL2811
+
+The message of an error contains:
+
+```text
+`, which is not one of its parameters
+```
+
+## NL2812
+
+The message of an error contains:
+
+```text
+` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one
 ```
