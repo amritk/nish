@@ -1171,7 +1171,7 @@ function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discrimin
   local -6:14 previous: i64 (const)
   callee -4:7 CheckContext.error -> @CheckContext.error
 function checkStringCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, seen: string[]): void -> @checkStringCaseLabel
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.error CheckContext.textOf TypeTable.typeName checkExpression nish_array_grow nish_str_concat nish_str_eq stringCaseText
   pointer ctx: size=368 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0 stringCaseText#0 CheckContext.error#0 CheckContext.error#0 CheckContext.textOf#0
@@ -1179,17 +1179,18 @@ function checkStringCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, see
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   pointer seen: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -23:9 label: Node (const)
-  local -22:9 type: i32 (const)
-  callee -22:16 checkExpression -> @checkExpression
+  local -28:9 label: Node (const)
+  local -27:9 type: i32 (const)
+  callee -27:16 checkExpression -> @checkExpression
+  callee -22:5 CheckContext.error -> @CheckContext.error
+  callee -22:43 TypeTable.typeName -> @TypeTable.typeName
+  local -19:9 text: string | null (const)
+  callee -19:16 stringCaseText -> @stringCaseText
   callee -17:5 CheckContext.error -> @CheckContext.error
-  callee -17:43 TypeTable.typeName -> @TypeTable.typeName
-  local -14:9 text: string | null (const)
-  callee -14:16 stringCaseText -> @stringCaseText
-  callee -12:5 CheckContext.error -> @CheckContext.error
-  local -6:14 previous: string (const)
-  callee -4:7 CheckContext.error -> @CheckContext.error
-  callee -4:54 CheckContext.textOf -> @CheckContext.textOf
+  local -11:7 duplicate: boolean (let)
+  local -10:14 previous: string (const)
+  callee -3:5 CheckContext.error -> @CheckContext.error
+  callee -3:52 CheckContext.textOf -> @CheckContext.textOf
 function stringCaseText(ctx: CheckContext, expr: Node): string | null -> @stringCaseText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringCaseText
