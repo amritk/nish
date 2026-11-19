@@ -839,6 +839,12 @@ export class LinkManifest {
   refuse(message: string, start: i32, end: i32): void {
     this.problems.push(new ManifestProblem(message, start, manifestSpanEnd(start, end)))
   }
+
+  /** What the root grants the dependency `name`: an empty request when it grants nothing. */
+  grantFor(name: string): LinkRequest {
+    const at = this.grantees.indexOf(name)
+    return at >= 0 && at < this.grants.length ? this.grants[at] : new LinkRequest()
+  }
 }
 
 /** Whether `name` is a library name `-l` takes and no flag: `[A-Za-z0-9_][A-Za-z0-9_.+-]*`. */
@@ -850,10 +856,7 @@ export const manifestLinkLibrary = (name: string): boolean => {
   while (i < name.length) {
     const code = name.charCodeAt(i)
     const plain =
-      (code >= DIGIT_ZERO && code <= 57) ||
-      (code >= UPPER_A && code <= 90) ||
-      (code >= LOWER_A && code <= LOWER_Z) ||
-      code === 95
+      isDigit(code) || (code >= UPPER_A && code <= 90) || (code >= LOWER_A && code <= LOWER_Z) || code === 95
     const inner = code === DOT || code === PLUS || code === MINUS
     if (!plain && !(inner && i > 0)) {
       return false
@@ -903,6 +906,7 @@ const manifestReadLinkList = (
     const entry = read.entries[i]
     const start = read.offsets[i]
     const stop = read.ends[i]
+    const problem = kind === "sources" ? manifestLinkSourceProblem(entry) : ""
     if (start < 0 || start >= manifest.length || manifest.charCodeAt(start) !== QUOTE) {
       out.refuse(
         `${manifestJsonKind(manifest, start)} in \`${kind}\` is not a string${LINK_SHAPE}`,
@@ -911,8 +915,8 @@ const manifestReadLinkList = (
       )
     } else if (kind === "libraries" && !manifestLinkLibrary(entry)) {
       out.refuse(`\`${entry}\` is not a library name${LINK_ENTRY}`, start, stop)
-    } else if (kind === "sources" && manifestLinkSourceProblem(entry).length > 0) {
-      out.refuse(`${manifestLinkSourceProblem(entry)}${LINK_ENTRY}`, start, stop)
+    } else if (problem.length > 0) {
+      out.refuse(`${problem}${LINK_ENTRY}`, start, stop)
     } else {
       into.entries.push(entry)
       into.offsets.push(start)

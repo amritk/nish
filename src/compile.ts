@@ -2247,7 +2247,7 @@ const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
   }
   if (root !== null) {
     const rootDir = dirname(root.path)
-    const realRoot = realpathSync(rootDir)
+    const realRoot = realpathSync(rootDir.length === 0 ? "." : rootDir)
     if (realRoot !== null) {
       skip.push(realRoot)
     }
@@ -2257,7 +2257,7 @@ const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
     if (nish.problem.length === 0) {
       granted = manifestLink(root.text, nish.linkAt, nish.linkEnd, true)
       reportLinkProblems(compilation, root, granted)
-      addLinkRequest(compilation, root, rootDir, granted.own, granted.own, links)
+      addLinkRequest(compilation, root, rootDir, realRoot, granted.own, granted.own, links)
     }
   }
   for (const dependency of linkPackages(compilation)) {
@@ -2276,8 +2276,7 @@ const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
       } else if (nish.linkAt >= 0) {
         const asked = manifestLink(text, nish.linkAt, nish.linkEnd, false)
         reportLinkProblems(compilation, source, asked)
-        const at = granted.grantees.indexOf(dependency.name)
-        const grant = at >= 0 && at < granted.grants.length ? granted.grants[at] : new LinkRequest()
+        const grant = granted.grantFor(dependency.name)
         refuseUngranted(
           compilation,
           source,
@@ -2294,7 +2293,7 @@ const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
           asked.own.sources,
           grant.sources
         )
-        addLinkRequest(compilation, source, dependency.dir, asked.own, grant, links)
+        addLinkRequest(compilation, source, dependency.dir, real, asked.own, grant, links)
       }
     }
   }
@@ -2356,13 +2355,15 @@ const refuseUngranted = (
 /**
  * Into `links`, what `asked` names that `grant` names too (for the root,
  * `grant` is `asked`): each library as written, and each source as its real
- * path, refused (NL3060) unless that path is a file inside the package's real
- * directory, so a symbolic link cannot carry a source out of the package.
+ * path, refused (NL3060) unless that path is a file inside `realDir`, the
+ * package's real directory (null when it has none), so a symbolic link cannot
+ * carry a source out of the package.
  */
 const addLinkRequest = (
   compilation: Compilation,
   source: SourceFile,
   dir: string,
+  realDir: string | null,
   asked: LinkRequest,
   grant: LinkRequest,
   links: LinkSet
@@ -2372,7 +2373,6 @@ const addLinkRequest = (
       links.addLibrary(name)
     }
   }
-  const realDir = realpathSync(dir.length === 0 ? "." : dir)
   let i = 0
   while (
     i < asked.sources.entries.length &&
