@@ -915,8 +915,60 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 `--target wasm32-wasi` build links C, so it keeps `declare function` even with
 `--emit-dts`.
 
-A function from the C library links with `nish run` or `--link` as it is. One
-of your own goes on the build line beside the runtime:
+A function from the C library links with `nish run` or `--link` as it is.
+Your own C, and any other library, is named in the `nish.link` field of the
+`package.json` beside your program. `nish run` and `--link` read it:
+
+<!-- nish:ok -->
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "link": { "libraries": ["z"], "sources": ["c/mylib.c"] }
+  }
+}
+```
+
+- `libraries` are passed to the linker as `-l<name>`, so `"z"` links
+  `libz`. A name is letters, digits, `_`, `.`, `+` and `-`, and does not
+  start with `-`. Nothing in it can become a flag. There is no pkg-config, so
+  a library outside the linker's default search path is not found.
+- `sources` are `.c` files inside the package, by their path relative to
+  `package.json`. Each is compiled with clang beside the runtime. A path that
+  is absolute, climbs out with `..`, or resolves outside the package through a
+  symbolic link is refused (NL3060).
+- Any other key in `link` is refused (NL3059), not skipped.
+- The run cache key holds the link set and each source's bytes, so editing
+  `c/mylib.c` makes the next `nish run` link again.
+- Only the native profiles (`speed`, `size`, `debug`) link it. `--link
+  --profile wasi` with a `nish.link` fails the link (exit 3).
+
+A dependency's `nish.link` takes effect only when your root `package.json`
+grants it, entry by entry, under `nish.link.dependencies`. Each library or
+source a dependency names that you have not granted is refused (NL3061). The
+dependency still needs the `ffi` capability to call its C:
+
+<!-- nish:ok -->
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "capabilities": { "dependencies": { "zstd-bind": ["ffi"] } },
+    "link": {
+      "dependencies": {
+        "zstd-bind": { "libraries": ["zstd"], "sources": ["c/shim.c"] }
+      }
+    }
+  }
+}
+```
+
+`nish/sqlite` needs none of this: the standard library links SQLite itself
+when a program calls it. What a link can and cannot confine is recorded in
+[`docs/security/package-link.md`](https://github.com/amritk/nish/blob/main/docs/security/package-link.md).
+
+Without a `package.json`, your own C still goes on the build line beside the
+runtime:
 
 ```console
 $ nish app.ts -o app.ll

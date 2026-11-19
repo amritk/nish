@@ -25957,6 +25957,62 @@ if (dealtHere("cliChecks")) {
     }
   }
 
+  // ---- WP66 S7: a package's `nish.link` is part of the run cache key ------------------
+  // `tests/link/pkg_link_*` prove the link and its refusals under `--link`. What they
+  // cannot say is that `nish run` rebuilds when only a linked C source changes: the IR
+  // is the same, so the key has to carry the source's bytes.
+  if (!only || "package-link".includes(only) || "pkg_link".includes(only)) {
+    if (!HAS_CLANG) {
+      skip("package-link: clang not on PATH, so no package can be linked")
+    } else {
+      const pkgDir = path.join(buildDir, "package-link")
+      fs.rmSync(pkgDir, { recursive: true, force: true })
+      fs.cpSync(path.join(root, "tests", "link", "pkg_link_own"), path.join(pkgDir, "app"), { recursive: true })
+      const pkgRun = () =>
+        spawnSync(NISH, ["run", "main.ts"], {
+          cwd: path.join(pkgDir, "app"),
+          encoding: "utf8",
+          env: { ...process.env, XDG_CACHE_HOME: path.join(pkgDir, "cache") },
+        })
+      const before = pkgRun()
+      fs.writeFileSync(
+        path.join(pkgDir, "app", "c", "add.c"),
+        "int pkg_link_add(int a, int b) { return a * 100 + b; }\n"
+      )
+      const after = pkgRun()
+      check(
+        "package-link: `nish run` links the package's own source and library, and a change to the source alone links again",
+        before.status === 0 &&
+          before.stdout === "5\ntrue\n" &&
+          after.status === 0 &&
+          after.stdout === "203\ntrue\n",
+        before.stdout + before.stderr + after.stdout + after.stderr
+      )
+
+      // A granted source that is a symbolic link out of its package is refused by
+      // its real path, though the path as written is inside the package.
+      const depDir = path.join(pkgDir, "dep")
+      fs.cpSync(path.join(root, "tests", "link", "pkg_link_dep_granted"), depDir, { recursive: true })
+      const outside = path.join(pkgDir, "outside.c")
+      fs.writeFileSync(outside, "int pkg_link_mul(int a, int b) { return a - b; }\n")
+      const linked = path.join(depDir, "node_modules", "pkg_mul", "c", "mul.c")
+      fs.rmSync(linked)
+      fs.symlinkSync(outside, linked)
+      const escaped = spawnSync(NISH, ["run", "main.ts"], {
+        cwd: depDir,
+        encoding: "utf8",
+        env: { ...process.env, XDG_CACHE_HOME: path.join(pkgDir, "cache") },
+      })
+      check(
+        "package-link: a granted source that is a symbolic link out of its package is refused, and nothing runs",
+        escaped.status === 1 &&
+          escaped.stdout === "" &&
+          escaped.stderr.includes("`c/mul.c` is no file inside the package"),
+        escaped.stdout + escaped.stderr
+      )
+    }
+  }
+
   // ---- `nish run`: a script built into a cache and started ----------------------------
   // `nish run [flags] <file.ts> [args ...]` compiles every time, links only when the
   // IR (or the recipe, or the runtime) is new, and answers the program's own exit

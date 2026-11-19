@@ -8,6 +8,13 @@ import EmittedModule from "./compilation" -> struct EmittedModule
 import dirname from "./paths" -> function @dirname
 import hexDigitLower from "./strings" -> function @hexDigitLower
 import StringBuilder from "./strings" -> struct StringBuilder
+struct LinkSet (class) size=24 align=8 exported
+  field libraries: string[] index=0 offset=0
+  field sources: string[] index=1 offset=8
+  field sqlite: boolean index=2 offset=16
+  constructor -> @LinkSet.constructor
+  method addLibrary -> @LinkSet.addLibrary
+  method addSource -> @LinkSet.addSource
 function runCacheRoot(): string -> @runCacheRoot [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -61,6 +68,38 @@ function anyCallsSqlite(modules: EmittedModule[]): boolean -> @anyCallsSqlite [e
   stackSites=0 stackLocals=0
   local +0:14 module: EmittedModule (const)
   callee +1:9 callsSqlite -> @callsSqlite
+function LinkSet.constructor(this: LinkSet): void -> @LinkSet.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function LinkSet.addLibrary(this: LinkSet, name: string): void -> @LinkSet.addLibrary [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: name
+  calls: nish_array_grow nish_str_eq
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function LinkSet.addSource(this: LinkSet, path: string): void -> @LinkSet.addSource [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: path
+  calls: nish_array_grow nish_str_eq
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function linkSetLines(links: LinkSet): string -> @linkSetLines [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fileFingerprint
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32
+  pointer links: size=24 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 key: StringBuilder (const)
+  callee +0:15 new StringBuilder -> @StringBuilder.constructor
+  local +1:14 name: string (const)
+  callee +2:5 StringBuilder.add -> @StringBuilder.add
+  local +4:14 path: string (const)
+  callee +5:5 StringBuilder.add -> @StringBuilder.add
+  callee +5:51 fileFingerprint -> @fileFingerprint
+  callee +7:10 StringBuilder.toText -> @StringBuilder.toText
 function runBinaryName(name: string): string -> @runBinaryName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -191,10 +230,10 @@ function profileLine(profile: string, cpu: string, debugInfo: boolean, threads: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, cc: string, sqlite: string): string -> @runCacheKey [exported]
+function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, cc: string, sqlite: string, link: string): string -> @runCacheKey [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via addRecipeFingerprints
-  escaping: arenaRange cpu debugArena debugInfo profile root sqlite threads
+  escaping: arenaRange cpu debugArena debugInfo link profile root sqlite threads
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints nish_str_concat nish_str_from_i32 profileLine
   pointer modules: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -207,10 +246,11 @@ function runCacheKey(modules: EmittedModule[], name: string, root: string, profi
   callee +4:3 StringBuilder.add -> @StringBuilder.add
   callee +5:3 addRecipeFingerprints -> @addRecipeFingerprints
   callee +6:3 StringBuilder.add -> @StringBuilder.add
-  local +7:14 module: EmittedModule (const)
-  callee +8:5 StringBuilder.add -> @StringBuilder.add
+  callee +7:3 StringBuilder.add -> @StringBuilder.add
+  local +8:14 module: EmittedModule (const)
   callee +9:5 StringBuilder.add -> @StringBuilder.add
-  callee +11:10 StringBuilder.toText -> @StringBuilder.toText
+  callee +10:5 StringBuilder.add -> @StringBuilder.add
+  callee +12:10 StringBuilder.toText -> @StringBuilder.toText
 function runtimeCacheKey(root: string, runtimeDir: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, cc: string, ccVersion: string): string -> @runtimeCacheKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via addRecipeFingerprints

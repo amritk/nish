@@ -1,0 +1,7 @@
+{
+  "name": "pkg-link-own",
+  "private": true,
+  "nish": {
+    "link": { "libraries": ["m"], "sources": ["c/add.c"] }
+  }
+}
