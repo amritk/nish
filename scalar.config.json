@@ -2987,6 +2987,16 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/benchmarks" }]
                 }
               },
+              "/leaderboards": {
+                "type": "page",
+                "title": "Leaderboards",
+                "filepath": "docs/LEADERBOARDS.md",
+                "head": {
+                  "title": "Leaderboards · Nish",
+                  "meta": [{ "property": "og:title", "content": "Leaderboards" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/leaderboards" }]
+                }
+              },
               "/changelog": {
                 "type": "page",
                 "title": "Changelog",
