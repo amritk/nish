@@ -206,13 +206,13 @@ jobs:
         run: node scripts/ci-scope.mjs
 
   test:
-    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)
+    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
     # a 15-minute limit cancelled it. With four shards, shard 1 alone ran the
     # twelve minutes of sections after the tests/link programs and took 21
-    # minutes (run 41882940444). Those sections are now dealt too, eight ways,
+    # minutes (run 41882940444). Those sections are now dealt too, nine ways,
     # by the costs in tests/shard-costs.json (regenerated from that run), so
     # each shard takes about nine; the limit stays as headroom while the
     # table drifts.
@@ -300,14 +300,14 @@ jobs:
         # cancelling the Linux row that says whether it is the platform or the
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the four checks above
-        # `npm test` is split eight ways by `--shard` (tests/run.js, "Shards"):
+        # `npm test` is split nine ways by `--shard` (tests/run.js, "Shards"):
         # shard 1 runs the sections after the tests/link programs that are not
         # dealt (`DEALT_SECTIONS`), shard 2 the `simd` group the steps below
         # read, and the programs and the other sections are dealt by their
-        # cost in tests/shard-costs.json so that the eight finish together.
-        # One unsharded run took 25 minutes. The `/8` in the Test step is this
+        # cost in tests/shard-costs.json so that the nine finish together.
+        # One unsharded run took 25 minutes. The `/9` in the Test step is this
         # list's length, and a check in tests/run.js holds the two together.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -423,7 +423,7 @@ jobs:
       # every shard, and the same binary as the last run whose src/, std/, seed
       # and toolchain were these: tests/self/compiler-cache.js keys it on all
       # of them, and the Test step below copies it rather than linking again.
-      # Shard 1 alone saves a miss, since the eight build the same bytes;
+      # Shard 1 alone saves a miss, since the nine build the same bytes;
       # `fuzz-smoke` and `postgres-live` read the same key and save nothing.
       - name: The compiler under test
         uses: ./.github/actions/compiler-cache
@@ -484,7 +484,7 @@ jobs:
         # The log is kept for the steps below that require a line of it.
         run: |
           set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee "$RUNNER_TEMP/test.log"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -2129,7 +2129,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       # The typecheck, once per push. It used to run in each of the `test`
-      # job's eight shards, over the same sources every time.
+      # job's shards, over the same sources every time.
       - name: Typecheck
         run: npm run check
 

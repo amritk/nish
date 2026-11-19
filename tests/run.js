@@ -622,7 +622,7 @@ if (RETIRED.length > 0) {
 // the dealt sections there (`DEALT_SECTIONS`: term-io, --emit-ts and the small
 // sections between the native run limit and the link programs) and the
 // golden cases, which `caseShard` deals by position: a shard compiles, checks
-// and runs its own eighth, and a later section that reads another shard's
+// and runs its own share, and a later section that reads another shard's
 // case compiles it again through `caseLl`. Each dealt section before the link programs
 // runs in the one shard its cost deals it to. Shard 1 also runs every section
 // after the link programs that is not dealt, and the link programs a later
@@ -1520,7 +1520,7 @@ if (SHARD === 1) {
 // The oracle above passes vacuously on a function it never finds, so the run
 // says how many it read: every golden with a clean function contributes, and
 // a symbol spelling the oracle stopped recognising would take this to zero.
-// A shard reads only the cases dealt to it (`caseShard`), about an eighth of
+// A shard reads only the cases dealt to it (`caseShard`), about one shard's share of
 // the corpus's 2,861 functions, so the floor is shared out the same way.
 if (only === undefined) {
   const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
@@ -40195,7 +40195,7 @@ if (selects("ci-scope", "ci.yml")) {
     ["nish-cmp (aarch64-linux)", "nish_cmp"],
     ["the NEON path agrees (aarch64-linux)", "simd"],
     ["SHA-256 on Apple silicon (macos-latest)", "sha256_macos"],
-    ["test (ubuntu-latest, shard 1/8)", null],
+    ["test (ubuntu-latest, shard 1/9)", null],
     ["lint", null],
     ["the golden cases, in Nish (shard 1/3)", null],
     ["nish-cmp", null],
