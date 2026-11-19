@@ -5,7 +5,7 @@
 ## Stages
 
 - [ ] S1: `zeroext` on `u8`, `u16` and `boolean` parameters and results of a `declare function` ([#1755](https://github.com/amritk/nish/issues/1755))
-- [ ] S2: `nish c-import`: a header read through clang becomes a Nish module of `declare function`s, `declare class`es, out classes and constants, with an override file and a list of what was not bound
+- [x] S2: `nish c-import`: a header read through clang becomes a Nish module of `declare function`s, `declare class`es, out classes and constants, with an override file and a list of what was not bound
 - [ ] S3: opaque classes: a field-less `declare class` C can return, so one C pointer type is not passed where another is wanted
 - [ ] S4: fixed-length array fields in a `declare class`
 - [ ] S5: a buffer paired with its count by name, with a count of any unsigned width

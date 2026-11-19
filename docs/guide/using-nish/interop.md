@@ -915,6 +915,9 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 `--target wasm32-wasi` build links C, so it keeps `declare function` even with
 `--emit-dts`.
 
+For a whole library, `nish c-import` writes these declarations from its
+header: see [Binding a C library](c-import.md).
+
 A function from the C library links with `nish run` or `--link` as it is. One
 of your own goes on the build line beside the runtime:
 
