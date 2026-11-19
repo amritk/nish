@@ -2,12 +2,17 @@
 
 <div data-nish-hero></div>
 
-Nish — **N**ative **I**nstruction **S**tatic **H**ost — compiles a strict,
-static subset of TypeScript ahead of time to native code. You write `.ts`
-files with the syntax you already know; the compiler checks that every value
-has one fixed type and layout, turns the program into LLVM IR, and LLVM turns
-that into a small executable for x86_64, ARM64 or WebAssembly. There is no
-interpreter, no garbage collector and nothing to ship beside the binary.
+**Write TypeScript, ship a fast native binary.** Nish — **N**ative
+**I**nstruction **S**tatic **H**ost — compiles a strict, static subset of
+TypeScript ahead of time, through LLVM, to a small executable for x86_64,
+ARM64 or WebAssembly. There is no interpreter, no JIT and no garbage
+collector, and nothing to ship beside the binary. In the recorded
+[benchmark run](../BENCHMARKS.md), Nish is faster than Go on all seven programs
+and at most 2% slower than Rust `-O3` on six of them.
+
+You write `.ts` files with the syntax you already know; the compiler checks
+that every value has one fixed type and layout, so it can lay data out and
+generate code the way a C compiler would.
 
 > [!CAUTION]
 > **Nish is pre-alpha. Do not use it in production.** It is an early
