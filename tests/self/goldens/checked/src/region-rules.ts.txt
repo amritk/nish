@@ -725,8 +725,8 @@ function RegionWalk.store(this: RegionWalk, holder: i32, value: i32, at: Node, w
 function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit
-  calls: RegionWalk.bind RegionWalk.origin RegionWalk.visit RegionWalk.visitAssignment RegionWalk.visitCall RegionWalk.visitLiteral RegionWalk.visitNew isAssignmentOperator nish_panic_index
-  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.origin#0 RegionWalk.visitAssignment#0 RegionWalk.visitCall#0 RegionWalk.visitNew#0 RegionWalk.visitLiteral#0 RegionWalk.visit#0
+  calls: RegionWalk.bind RegionWalk.origin RegionWalk.typeOf RegionWalk.visit RegionWalk.visitAssignment RegionWalk.visitCall RegionWalk.visitLiteral RegionWalk.visitNew isAssignmentOperator nish_panic_index
+  pointer this: size=160 writesThrough=true captured=false passedTo=RegionWalk.visit#0 RegionWalk.origin#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.bind#0 RegionWalk.typeOf#0 RegionWalk.origin#0 RegionWalk.visitAssignment#0 RegionWalk.visitCall#0 RegionWalk.visitNew#0 RegionWalk.visitLiteral#0 RegionWalk.visit#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RegionWalk.visitAssignment#1 RegionWalk.visitCall#1 RegionWalk.visitNew#1 RegionWalk.visitLiteral#1
   stackSites=0 stackLocals=0
   local +0:11 kind: NodeKind (const)
@@ -738,15 +738,17 @@ function RegionWalk.visit(this: RegionWalk, node: Node): void -> @RegionWalk.vis
   callee +12:11 RegionWalk.bind -> @RegionWalk.bind
   local +15:22 name: Node (const)
   callee +16:13 RegionWalk.bind -> @RegionWalk.bind
-  callee +23:7 RegionWalk.bind -> @RegionWalk.bind
-  callee +25:9 RegionWalk.origin -> @RegionWalk.origin
-  callee +27:44 isAssignmentOperator -> @isAssignmentOperator
-  callee +28:7 RegionWalk.visitAssignment -> @RegionWalk.visitAssignment
-  callee +31:7 RegionWalk.visitCall -> @RegionWalk.visitCall
-  callee +34:7 RegionWalk.visitNew -> @RegionWalk.visitNew
-  callee +36:7 RegionWalk.visitLiteral -> @RegionWalk.visitLiteral
-  local +38:16 child: Node (const)
-  callee +39:7 RegionWalk.visit -> @RegionWalk.visit
+  local +25:13 walked: Node (const)
+  callee +26:7 RegionWalk.bind -> @RegionWalk.bind
+  callee +28:9 RegionWalk.typeOf -> @RegionWalk.typeOf
+  callee +28:60 RegionWalk.origin -> @RegionWalk.origin
+  callee +30:44 isAssignmentOperator -> @isAssignmentOperator
+  callee +31:7 RegionWalk.visitAssignment -> @RegionWalk.visitAssignment
+  callee +34:7 RegionWalk.visitCall -> @RegionWalk.visitCall
+  callee +37:7 RegionWalk.visitNew -> @RegionWalk.visitNew
+  callee +39:7 RegionWalk.visitLiteral -> @RegionWalk.visitLiteral
+  local +41:16 child: Node (const)
+  callee +42:7 RegionWalk.visit -> @RegionWalk.visit
 function RegionWalk.visitAssignment(this: RegionWalk, node: Node): void -> @RegionWalk.visitAssignment [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RegionWalk.visit

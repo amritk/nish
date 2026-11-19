@@ -30,9 +30,8 @@ const classify = (s: string): string => {
   return out;
 };
 
-const words: string[] = ["a", "b", "hi", "héllo", "😀", "", "hello", "zz"];
-
 export const main = (): void => {
+  const words: string[] = ["a", "b", "hi", "héllo", "😀", "", "hello", "zz"];
   for (const w of words) {
     console.log(`${w}: ${classify(w)}`);
   }

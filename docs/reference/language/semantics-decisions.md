@@ -1618,8 +1618,8 @@ performance warning about the same check is not printed beside the error.
 Nish has two dialects. The strict one is this document. The compatibility
 dialect accepts more of TypeScript, feature by feature: it differs from the
 strict dialect in the number a bare `number` is, and in what each feature it
-allows admits. This compiler has built two features, `nullish` and
-`optional-chaining`.
+allows admits. This compiler has built four features, `nullish`,
+`optional-chaining`, `string-switch` and `for-of-string`.
 
 - **`--compat` selects the dialect with every feature this compiler has
   built; `--compat=<feature>,...` selects it with only the features named.**
@@ -1663,11 +1663,11 @@ allows admits. This compiler has built two features, `nullish` and
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64", !"nullish", !"optional-chaining"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[nullish,optional-chaining]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]`, and prints no such
   line for a strict build.
 - **A strict refusal of a construct a feature admits names the feature.** It
   closes with the note ``add `<feature>` to `nish.compat` in package.json to
@@ -1725,6 +1725,29 @@ allows admits. This compiler has built two features, `nullish` and
   reads `undefined` and answers the default, where the bounds check panics,
   so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
   (`reject_nullish_element_never_missing`).
+- **`string-switch` admits a `switch` whose discriminant is a `string`**
+  (`tests/cases/compat_string_switch`, strict `reject_switch_string`). Each
+  `case` label is a string literal, a template with no substitution, or a
+  module constant of type `string`, because a label is compared without being
+  run; any other label is NL2799
+  (`tests/link/compat_string_switch_label_not_constant`), a label of another
+  type is the strict `` `case` label is f64 but the discriminant is string ``
+  (`compat_string_switch_label_type`), and two labels with the same text, a
+  constant's included, are `` Duplicate `case` label `` as in an integer
+  switch (`compat_string_switch_duplicate`). Fallthrough, `default` in any
+  place, `break` and a labelled `break` out of an enclosing loop mean what
+  they mean in Node. The switch compares the discriminant with each label in
+  source order, one `nish_str_eq` call each, and jumps to the first that
+  matches, or to `default`: a chain, not a tree bucketed by length, because
+  `nish_str_eq` already answers on a length mismatch before it reads a byte.
+- **`for-of-string` admits `for (const c of s)` over a `string`**
+  (`tests/cases/compat_for_of_string`, strict `reject_arr_forof_non_array`).
+  Each pass binds `c` to the next code point, as Node walks a string: a
+  character outside the Basic Multilingual Plane is one pass, not two. `c` is
+  a new `string` holding that code point's UTF-8 bytes. `break`, `continue`
+  and labels work as they do over an array. A destructuring head,
+  `for (const [a] of s)`, keeps the array walk's refusal
+  (`tests/link/compat_for_of_string_destructure`).
 - **The dialect only adds.** A strict build of a program the strict dialect
   accepts is unchanged by all of the above, byte for byte; what changed for a
   program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the

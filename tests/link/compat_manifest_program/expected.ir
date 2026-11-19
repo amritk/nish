@@ -1,3 +1,3 @@
 !nish.compat = !{
-= !{!"f64", !"nullish", !"optional-chaining"}
+= !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
 double @pkg_loose.half(double noundef %n)

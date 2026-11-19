@@ -26528,12 +26528,15 @@ export const main = (): void => {
     // The reject cases a feature admits, and the cases written for the dialect
     // that the strict dialect refuses: each run natively as under Node.
     const admittedRejects = [
+      "reject_arr_forof_non_array",
       "reject_nullish",
       "reject_nullish_nullable",
       "reject_optional_chain_element_inner",
       "reject_optional_chain_statement",
+      "reject_switch_string",
     ].filter((name) => cases.includes(name))
     const admittedDialect = [
+      "compat_for_of_string",
       "compat_nullish_narrowed",
       "compat_nullish_never_missing",
       "compat_optional_chain_element",
@@ -26541,6 +26544,7 @@ export const main = (): void => {
       "compat_optional_chain_loops",
       "compat_optional_chain_skipped_arguments",
       "compat_optional_chain_statement",
+      "compat_string_switch",
     ].filter((name) => cases.includes(name))
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",

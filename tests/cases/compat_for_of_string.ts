@@ -4,7 +4,7 @@
 // an astral `😀` each take one pass; `break`, `continue` and labels work.
 const count = (s: string): number => {
   let n = 0;
-  for (const c of s) {
+  for (const _c of s) {
     n = n + 1;
   }
   return n;
