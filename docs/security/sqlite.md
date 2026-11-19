@@ -117,6 +117,30 @@ one, a generated column, an expression or non-`BINARY` index column, a
 declared column list that differs from the schema's, and a database whose
 encoding is not UTF-8.
 
+A connection keeps up to eight shapes the check passed (name, declared
+columns, root page, alias, the index's `KeyInfo`), each with the schema
+cookie (`BTREE_SCHEMA_VERSION`, read with `sqlite3BtreeGetMeta`) it was
+checked under. An open answers from a kept shape, without the check's
+queries, only when the `main` transaction is `SQLITE_TXN_READ` and its cookie
+equals the shape's; a shape is kept only from such an open, so its cookie is a
+committed one. A write transaction's open always runs the check and keeps
+nothing, so a DDL it rolls back, followed by as many DDL statements
+committed, cannot bring a shape checked against the rolled-back schema back
+under the same cookie. The cache is SQLite's own test of whether a prepared
+statement still matches the schema; it does not cover a change to the file
+made outside SQLite's locking, which a prepared statement does not catch
+either. A kept `KeyInfo` holds one reference (`sqlite3KeyInfoRef`), released
+at eviction and at `nishsqlite_close`, which frees it under the connection's
+mutex.
+
+`beginRead` and `endRead` run their `BEGIN`, schema read and `COMMIT` from
+statements prepared once per connection (`SQLITE_PREPARE_PERSISTENT`) and
+reset after each run; they are finalized at `nishsqlite_close`, before the
+statement table. A schema change re-prepares them inside `sqlite3_step`
+under the adapter's `internal` flag, which the authorizer passes without
+classifying; no cursor is open then (`BEGIN` runs in autocommit, and
+`endRead` frees its cursors before `COMMIT`).
+
 Column reads are bounded twice. A column number outside the declared list is
 `SQLITE_RANGE`, and one past the fields the row's record holds is
 `SQLITE_SCHEMA`. `columnInto` and `keyTextBytes` bound the caller's buffer as
@@ -159,6 +183,14 @@ Tests:
   `PRAGMA x = y`, and a closed cursor's handle once a new cursor takes its
   slot. It runs again with `-DSQLITE_DEBUG`, so SQLite's assertions check the
   same sequences.
+- `tests/link/std_sqlite_cursor_shapes`: a kept table and index shape read
+  again; a kept shape refused after `ALTER TABLE ADD COLUMN` (same root page),
+  a `DROP` then `CREATE`, another connection's `DROP` then `CREATE` on a file
+  database, and a write transaction's two DDL statements that are rolled back
+  and then matched by two committed ones; twelve shapes, past the eight kept,
+  each read right twice over; and `close` with shapes kept. It runs again
+  with `-DSQLITE_DEBUG`, whose assertions check that `close` frees the kept
+  `KeyInfo` under the connection's mutex.
 - `tests/link/std_sqlite_cursor_sql`: every walk of a table and an index in
   both directions, and each seek, checked row by row against the `SELECT`
   that answers the same question, with index keys and records on overflow

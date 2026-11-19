@@ -177,6 +177,168 @@ export const anyCallsSqlite = (modules: EmittedModule[]): boolean => {
 }
 
 /**
+ * What a link adds beyond the program and the runtime (WP66 S7): the C
+ * libraries it passes to `-l`, the C files it compiles beside the runtime
+ * (absolute paths, each inside the package that named it), and the standard
+ * library's own entry, SQLite, which is linked when the IR calls it
+ * (`anyCallsSqlite`) rather than because a manifest asks. The libraries and
+ * sources are the root's own plus what it granted its dependencies, each once,
+ * in the order they were first named.
+ */
+export class LinkSet {
+  libraries: string[]
+  sources: string[]
+  /** Every file other than a source that a source's compile reads, by `--link-depends`. */
+  includes: string[]
+  /** Whether some source's reads could not be listed, so no cached binary is trusted. */
+  includesUnlisted: boolean
+  sqlite: boolean
+
+  constructor() {
+    this.libraries = []
+    this.sources = []
+    this.includes = []
+    this.includesUnlisted = false
+    this.sqlite = false
+  }
+
+  /** Add `name` unless it is there already. */
+  addLibrary(name: string): void {
+    if (this.libraries.indexOf(name) < 0) {
+      this.libraries.push(name)
+    }
+  }
+
+  /** Add the source at `path` unless it is there already. */
+  addSource(path: string): void {
+    if (this.sources.indexOf(path) < 0) {
+      this.sources.push(path)
+    }
+  }
+
+  /** Add the file at `path`, one a source's compile reads, unless it is there already. */
+  addInclude(path: string): void {
+    if (this.sources.indexOf(path) < 0 && this.includes.indexOf(path) < 0) {
+      this.includes.push(path)
+    }
+  }
+}
+
+/** `count` backslashes added to `word`. */
+const addBackslashes = (word: StringBuilder, count: i32): void => {
+  for (let n: i32 = 0; n < count; n++) {
+    word.addChar(92)
+  }
+}
+
+/**
+ * The prerequisites of the make rule `clang -M` prints (`scripts/build.sh
+ * --link-depends`), in its order: what follows the target's `: `, split at
+ * blanks and at a backslash-newline. Clang's escapes are undone: `\#` is `#`,
+ * `$$` is `$`, and a run of 2k+1 backslashes before a blank is k backslashes
+ * and a blank in the name; any other backslash is the name's own. A name that
+ * ends in a backslash before the blank that ends it reads together with the
+ * next, a name no file has, which the caller then cannot read and keys
+ * nothing by (docs/security/package-link.md, PL-6). Null when the text holds no rule or
+ * names a path that is not absolute, which every path is when the source's
+ * path is, so a reply this cannot read keys nothing it would get wrong.
+ */
+export const makeRulePaths = (text: string): string[] | null => {
+  // 58 `:`, 32 blank, 9 tab, 10 newline, 13 return, 92 backslash, 36 `$`, 35 `#`.
+  let at = 0
+  let found = false
+  while (at < text.length && !found) {
+    const after = at + 1 < text.length ? text.charCodeAt(at + 1) : 10
+    found = text.charCodeAt(at) === 58 && (after === 32 || after === 10)
+    at = at + 1
+  }
+  if (!found) {
+    return null
+  }
+  const out: string[] = []
+  let word = new StringBuilder()
+  let i = at
+  while (i <= text.length) {
+    const c = i >= 0 && i < text.length ? text.charCodeAt(i) : 32
+    const next = i >= 0 && i + 1 < text.length ? text.charCodeAt(i + 1) : 32
+    if (c === 92 && next !== 10 && next !== 13) {
+      let run = 0
+      while (i + run < text.length && text.charCodeAt(i + run) === 92) {
+        run = run + 1
+      }
+      const blank = i + run < text.length && text.charCodeAt(i + run) === 32
+      if (run === 1 && i + 1 < text.length && next === 35) {
+        word.addChar(35)
+        i = i + 2
+      } else if (blank && run % 2 === 1) {
+        addBackslashes(word, run >> 1)
+        word.addChar(32)
+        i = i + run + 1
+      } else {
+        addBackslashes(word, run)
+        i = i + run
+      }
+    } else if (c === 36 && next === 36) {
+      word.addChar(36)
+      i = i + 2
+    } else if (c === 32 || c === 9 || c === 10 || c === 13 || c === 92) {
+      const done = word.toText()
+      if (done.length > 0 && !done.startsWith("/")) {
+        return null
+      }
+      if (done.length > 0) {
+        out.push(done)
+      }
+      word = new StringBuilder()
+      i = i + 1
+    } else {
+      word.addChar(c)
+      i = i + 1
+    }
+  }
+  return out
+}
+
+/**
+ * The run-cache key's lines for `links`' libraries and sources: one per
+ * library, one per source with its path and its bytes' hash, since an edit
+ * to a package's C file is a different binary, and one per file the
+ * sources' compiles read (`includes`, what clang -M listed: every header
+ * and included file of any name, the system's too), since an edit to any of
+ * them is one too. When some source's reads could not be listed, a line
+ * that says so, and the run links afresh whatever the cache holds rather
+ * than trust a key that may miss a read (docs/security/package-link.md,
+ * PL-6). Empty for a
+ * link that names none, so every key from before WP66 S7 is the bytes it was.
+ */
+export const linkSetLines = (links: LinkSet): string => {
+  const key = new StringBuilder()
+  for (const name of links.libraries) {
+    key.add(`link-library ${name}\n`)
+  }
+  addFileLines(key, "link-source", links.sources, 0)
+  addFileLines(key, "link-include", links.includes, 0)
+  if (links.includesUnlisted) {
+    key.add("link-include-unlisted\n")
+  }
+  return key.toText()
+}
+
+/**
+ * A `<tag> <length> <path> <hash>` line for each of `paths` from `at` on.
+ * Recursive rather than a loop, for the reason `addUnitFingerprints` gives:
+ * a call gives each file's text back when it returns (NL9011).
+ */
+const addFileLines = (key: StringBuilder, tag: string, paths: string[], at: i32): void => {
+  if (at < 0 || at >= paths.length) {
+    return
+  }
+  const path = paths[at]
+  key.add(`${tag} ${path.length} ${path} ${fileFingerprint(path)}\n`)
+  addFileLines(key, tag, paths, at + 1)
+}
+
+/**
  * The file an entry keeps the binary in: the script's own name, unless that
  * name is one the entry already uses for itself. A script called `key.ts` would
  * otherwise be linked to `<entry>/key`, and then overwritten by the key and
@@ -423,7 +585,8 @@ const profileLine = (
  * different binary. `cpu` is the `--cpu` level, empty for the baseline, which
  * the profile line names only when it is set, so a baseline key is the bytes
  * it was before the flag existed. `sqlite` is `sqliteFingerprint` when a module
- * calls SQLite (`anyCallsSqlite`), and empty when none does.
+ * calls SQLite (`anyCallsSqlite`), and empty when none does. `link` is
+ * `linkSetLines` of the libraries and C sources the packages link.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
@@ -436,7 +599,8 @@ export const runCacheKey = (
   debugArena: boolean,
   arenaRange: boolean,
   cc: string,
-  sqlite: string
+  sqlite: string,
+  link: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
@@ -445,6 +609,7 @@ export const runCacheKey = (
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
   key.add(sqlite)
+  key.add(link)
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`)
     key.add(module.ir)

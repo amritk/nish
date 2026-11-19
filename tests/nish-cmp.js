@@ -1318,7 +1318,93 @@ const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
 const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overload signatures under --compat"
 
+const PACKAGE_LINK = "A package links a C library or its own C sources"
+
 const DECLARED = [
+  {
+    program: "tests/link/pkg_link_flag_library/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_escape/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_unknown_key/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_repeated_key/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_repeated_package/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_absolute/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_backslash/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nonascii/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nonascii_raw/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_control/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nul/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_dep_key_nonascii/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_not_c/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_wrong_type/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
   {
     program: "tests/cases/compat_optional_params.ts",
     file: "exit",
@@ -8950,6 +9036,17 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  // `reserve` splits its growth into `grow`, so a program whose own module
+  // declares the connection's put methods declares one more.
+  ...[
+    "tests/link/std_postgres_tls_connection_panic/main.ts",
+    "tests/link/std_postgres_tls_pool_panic/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "short Postgres int columns without the overflow test",
+    why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
+  })),
 ]
 
 /**
