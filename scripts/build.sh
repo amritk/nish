@@ -165,6 +165,14 @@
 #                            not, so the caller keeps every object it compiled
 #                            (`nish run`'s module cache, src/build-cache.ts).
 #                            The inputs' file names must differ.
+#   --link-lib <name>        debug, speed and size only: link the C library
+#                            <name> (-l<name>, after the inputs and before -lm);
+#                            <name> is [A-Za-z0-9_][A-Za-z0-9_.+-]*, so it is
+#                            never a flag. A package's `nish.link.libraries`
+#                            (WP66 S7, docs/security/package-link.md).
+#   --link-source <file.c>   debug, speed and size only: compile the C file, an
+#                            absolute path, with the profile's flags and link
+#                            it with the program. A package's `nish.link.sources`.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -187,6 +195,8 @@ modules_at=""                          # --module-objects <dir>: each X.ll's obj
 memory_mib=""                          # --memory <MiB>: wasm-host's fixed memory (WP50 stage 1)
 wasm_opt=""                            # what the build line says of wasm-opt; set only by wasm-host
 inline_to=""                           # --inline <file.mjs>: wasm-host's bytes as an ES module
+link_libs=()                           # --link-lib <name>: -l<name> on the link line (WP66 S7)
+link_sources=()                        # --link-source <file.c>: a package's own C, compiled into the link
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -209,6 +219,15 @@ while [ $# -gt 0 ]; do
     --inline)
       [ -n "${2-}" ] || { echo "error: --inline needs a file to write" >&2; exit 2; }
       inline_to="$2"; shift 2 ;;
+    --link-lib)
+      [[ "${2-}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.+-]*$ ]] || { echo "error: --link-lib takes a library name of letters, digits, _ . + and -, not '${2-}'" >&2; exit 2; }
+      link_libs+=("-l$2"); shift 2 ;;
+    --link-source)
+      case "${2-}" in
+        /*.c) [ -f "$2" ] || { echo "error: --link-source: $2 is not a file" >&2; exit 2; } ;;
+        *) echo "error: --link-source takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
+      esac
+      link_sources+=("$2"); shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -810,12 +829,22 @@ fi
 # why Linux never noticed. `pgo`, `elf`, `strip_flag` and `libs` are all empty on
 # ordinary builds, so please do not simplify these back.
 case "$profile" in debug|speed|size) sqlite_objects "${compile[@]}" ;; esac
+# A package's own C sources join the inputs here, after the runtime's halves
+# and SQLite were decided from the IR alone, so a source can neither stand in
+# for runtime.c nor be taken for one of its siblings. clang compiles each by
+# its .c name on the one link line, with the profile's flags.
+if [ ${#link_libs[@]} -gt 0 ] || [ ${#link_sources[@]} -gt 0 ]; then
+  case "$profile" in
+    debug|speed|size) inputs+=(${link_sources[@]+"${link_sources[@]}"}) ;;
+    *) echo "error: --link-lib and --link-source take the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+fi
 case "$profile" in
   debug)
-    "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
+    "$CC" "${common[@]}" "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
   speed|size)
     "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
-      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
+      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
   wasm|wasm-host)
     # A region's chunks come from malloc, and the freestanding wasm runtime
     # (runtime-wasm.c) has none, so IR that makes or enters one is refused here

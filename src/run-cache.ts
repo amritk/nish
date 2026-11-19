@@ -177,6 +177,58 @@ export const anyCallsSqlite = (modules: EmittedModule[]): boolean => {
 }
 
 /**
+ * What a link adds beyond the program and the runtime (WP66 S7): the C
+ * libraries it passes to `-l`, the C files it compiles beside the runtime
+ * (absolute paths, each inside the package that named it), and the standard
+ * library's own entry, SQLite, which is linked when the IR calls it
+ * (`anyCallsSqlite`) rather than because a manifest asks. The libraries and
+ * sources are the root's own plus what it granted its dependencies, each once,
+ * in the order they were first named.
+ */
+export class LinkSet {
+  libraries: string[]
+  sources: string[]
+  sqlite: boolean
+
+  constructor() {
+    this.libraries = []
+    this.sources = []
+    this.sqlite = false
+  }
+
+  /** Add `name` unless it is there already. */
+  addLibrary(name: string): void {
+    if (this.libraries.indexOf(name) < 0) {
+      this.libraries.push(name)
+    }
+  }
+
+  /** Add the source at `path` unless it is there already. */
+  addSource(path: string): void {
+    if (this.sources.indexOf(path) < 0) {
+      this.sources.push(path)
+    }
+  }
+}
+
+/**
+ * The run-cache key's lines for `links`' libraries and sources: one per
+ * library, and one per source with its path and its bytes' hash, since an
+ * edit to a package's C file is a different binary. Empty for a link that
+ * names none, so every key from before WP66 S7 is the bytes it was.
+ */
+export const linkSetLines = (links: LinkSet): string => {
+  const key = new StringBuilder()
+  for (const name of links.libraries) {
+    key.add(`link-library ${name}\n`)
+  }
+  for (const path of links.sources) {
+    key.add(`link-source ${path.length} ${path} ${fileFingerprint(path)}\n`)
+  }
+  return key.toText()
+}
+
+/**
  * The file an entry keeps the binary in: the script's own name, unless that
  * name is one the entry already uses for itself. A script called `key.ts` would
  * otherwise be linked to `<entry>/key`, and then overwritten by the key and
@@ -423,7 +475,8 @@ const profileLine = (
  * different binary. `cpu` is the `--cpu` level, empty for the baseline, which
  * the profile line names only when it is set, so a baseline key is the bytes
  * it was before the flag existed. `sqlite` is `sqliteFingerprint` when a module
- * calls SQLite (`anyCallsSqlite`), and empty when none does.
+ * calls SQLite (`anyCallsSqlite`), and empty when none does. `link` is
+ * `linkSetLines` of the libraries and C sources the packages link.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
@@ -436,7 +489,8 @@ export const runCacheKey = (
   debugArena: boolean,
   arenaRange: boolean,
   cc: string,
-  sqlite: string
+  sqlite: string,
+  link: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
@@ -445,6 +499,7 @@ export const runCacheKey = (
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
   key.add(sqlite)
+  key.add(link)
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`)
     key.add(module.ir)
