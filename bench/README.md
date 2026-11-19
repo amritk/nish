@@ -1921,6 +1921,7 @@ statement prepared once. Text is copied into one reused buffer, with
 | --- | --- | --- |
 | `lookup` | 200,000 | Reads one post by a random id, with its author and its like count. |
 | `feed` | 10,000 | Reads the 20 newest posts: 20 rows of five columns. |
+| `feed-cursor` | 10,000 | Reads the same 20 posts, authors and like counts through four cursors instead of SQL. Nish only. |
 | `insert` | 20,000 | Runs `INSERT … RETURNING id, created_at` in autocommit. |
 | `insert-txn` | 100,000 | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
 
@@ -1928,6 +1929,17 @@ The inserts run with `synchronous=NORMAL`. Every value read is folded into a
 checksum inside the timed loop on both sides, so the optimiser cannot drop a
 read. Each side's fold keeps its sum in a local variable across a column's
 bytes.
+
+**`feed-cursor`** reads `feed`'s rows through the
+[cursor API](../docs/sqlite-cursor.md) instead of a statement. Each call takes
+a read transaction with `beginRead` and opens four cursors, each checking its
+schema. It walks `posts_created_at_id_idx` newest first. For each post it seeks
+`posts` and `users` by rowid, then counts the post's entries in
+`likes_post_id_idx`. `endRead` closes the cursors. It folds each row in
+`POST_SQL`'s order, so it must print `feed`'s row count and checksum, and
+`--validate` checks that. The C twin has no cursor path, so `run.mjs` runs
+`feed-cursor` on the build and its copy only. Its report sets it against
+`feed`'s build times from the same rounds, not against C.
 
 **The builds.**
 
@@ -1966,7 +1978,8 @@ database with the same flags and PRAGMAs.
   rounded up to a multiple of 3.
 - Each round runs every workload on the build, its copy and the C twin. The
   order rotates by round, so over a multiple of 3 rounds each binary goes
-  first, second and third equally often.
+  first, second and third equally often. `feed-cursor` runs on the build and
+  its copy only, and they alternate.
 - A run times its own loop. Every run of a workload must print the same row
   count and checksum.
 - The report is ns per call: min, median and interquartile range over the
