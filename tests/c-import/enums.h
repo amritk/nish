@@ -15,3 +15,11 @@ int take_cast(enum cast c);
 
 /* The pointee is a const pointer: the callee writes through neither level. */
 int read_names(char *const *names, int count);
+
+/* Doc comments on enumerators are not values: DOC_B counts on from DOC_A. */
+enum documented {
+  /** The first. */
+  DOC_A = 5,
+  /** The second, implicit. */
+  DOC_B,
+};

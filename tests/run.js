@@ -45862,7 +45862,7 @@ export function main(): i32 {
     const quote = cImport([quoted, "-o", out])
     check(
       "c-import: a header whose path holds a quote is refused before clang runs",
-      quote.status === 1 && quote.stderr.includes("a path holds a quote, a backslash or a line break"),
+      quote.status === 1 && quote.stderr.includes("a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII"),
       shown(quote)
     )
     // Every path is named in the module's first comment lines, where a line
@@ -45876,7 +45876,7 @@ export function main(): i32 {
       check(
         `c-import: ${what} is refused before clang runs, and nothing is written`,
         run.status === 1 &&
-          run.stderr.includes("a path holds a quote, a backslash or a line break") &&
+          run.stderr.includes("a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII") &&
           fs.readdirSync(cImportDir).every((f) => !f.startsWith("x")) &&
           !fs.existsSync(out),
         shown(run)
@@ -45971,7 +45971,10 @@ export function main(): i32 {
         "char *r_take(void);\n" +
         "void r_free_v(char *p, ...);\n" +
         "int nn_take(int *_Nonnull p);\n" +
-        'int t_attr(int __attribute__((btf_type_tag("x"))) *p);\n'
+        'int t_attr(int __attribute__((btf_type_tag("x"))) *p);\n' +
+        "char *_Nonnull nn_ret(void);\n" +
+        "int i_buf(void *p, long long n);\n" +
+        'int asm_fn(int x) __asm__("real_asm");\n'
     )
     const noOpRefusals = [
       ["refuse.h", '{ "functions": { "inc_fn": { "x": {} } } }', "`inc_fn` is not bound (declared in another header)"],
@@ -46026,13 +46029,36 @@ export function main(): i32 {
         '{ "functions": { "db_write": { "data": { "buffer": "len", "nullable": true } } } }',
         "a `u8[]` that cannot be null, so it cannot be nullable",
       ],
-      ["buffers.h", '{ "functions": {}, "functions": {} }', 'holds one key twice in an object'],
+      ["buffers.h", '{ "functions": {}, "functions": {} }', 'the file holds the key "functions" twice'],
       [
         "buffers.h",
         '{ "functions": { "db_close": { "d": { "nullable": true, "nullable": true } } } }',
-        'holds one key twice in an object',
+        '`db_close` parameter `d` holds the key "nullable" twice',
       ],
     ]
+    // A file, a "functions" object or a parameter object that says nothing,
+    // and the claims a header already contradicts.
+    noOpRefusals.push(
+      ["buffers.h", "{}", 'the file holds neither "allow" nor "functions", so it changes nothing'],
+      ["buffers.h", '{ "functions": {} }', '"functions" is an empty object, which changes nothing'],
+      ["buffers.h", '{ "functions": { "db_close": { "d": {} } } }', "parameter `d` is an empty object, which changes nothing"],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "len", "readonly": true } } } }',
+        'is `const` in the header, so it is bound `readonly u8[]` already and "readonly" changes nothing',
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "nn_ret": { "return": "nullable" } } }',
+        "returns a `_Nonnull` or `returns_nonnull` pointer, so it cannot be nullable",
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "i_buf": { "p": { "buffer": "n" } } } }',
+        "an unsigned 64-bit integer passed by value",
+      ],
+      ["refuse.h", '{ "functions": { "asm_fn": {} } }', "`asm_fn` is not bound (declared with an asm label or alias"]
+    )
     for (const [header, json, message] of noOpRefusals) {
       const file = path.join(cImportDir, "refused.overrides.json")
       fs.writeFileSync(file, json.replace("{", `{ "header": "${header}", `).replace(", }", " }"))

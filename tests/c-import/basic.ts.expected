@@ -44,6 +44,6 @@ declare function f6(): i64
  *   KF: a floating-point constant
  *   FN: a function-like macro
  *   _PRIV: a name starting with `_`, which C reserves
- *   KE: a string the generator does not copy (escapes or pieces)
- *   KP: a string the generator does not copy (escapes or pieces)
+ *   KE: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
+ *   KP: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
  */

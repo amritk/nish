@@ -26,16 +26,7 @@ import { StringMap, StringSet } from "./map"
 import { basename, dirname } from "./paths"
 import { StringBuilder, hexOfI64, splitByte } from "./strings"
 import { resolveTarget } from "./target"
-import {
-  JSON_VALUE_ARRAY,
-  JSON_VALUE_BOOLEAN,
-  JSON_VALUE_MAX_VALUES,
-  JSON_VALUE_NUMBER,
-  JSON_VALUE_OBJECT,
-  JSON_VALUE_STRING,
-  JsonDocument,
-} from "nish/json-value"
-import { JsonLimits } from "nish/json-tokenizer"
+import { CJ_ARRAY, CJ_BOOLEAN, CJ_NUMBER, CJ_OBJECT, CJ_STRING, CJson } from "./c-import-json"
 import { C_IMPORT_MARKER, DATA_MODEL_LINE, dataModelOf } from "./c-import-model"
 
 /** How many macros one probe run evaluates. */
@@ -244,12 +235,18 @@ const sortReport = (report: string[], lines: i32[]): void => {
     const line = lines[i]
     let j = i - 1
     while (j >= 0 && j < lines.length && j < report.length && lines[j] > line) {
-      report[j + 1] = report[j]
-      lines[j + 1] = lines[j]
+      const k = j + 1
+      if (k < lines.length && k < report.length) {
+        report[k] = report[j]
+        lines[k] = lines[j]
+      }
       j--
     }
-    report[j + 1] = entry
-    lines[j + 1] = line
+    const k = j + 1
+    if (k >= 0 && k < lines.length && k < report.length) {
+      report[k] = entry
+      lines[k] = line
+    }
   }
 }
 
@@ -270,21 +267,82 @@ const trimSpaces = (s: string): string => {
 const isIdentByte = (c: i32): boolean =>
   (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95
 
+/** An emitted word that is an ASCII C identifier. */
+const AS_IDENT: i32 = 1
+/** An emitted word that is a decimal integer. */
+const AS_INTEGER: i32 = 2
+/** An emitted word that is a string literal of printable ASCII. */
+const AS_STRING: i32 = 3
+/** An emitted line inside the module's closing comment. */
+const AS_COMMENT: i32 = 4
+
+/** Whether `c` is printable ASCII, a space through `~`. */
+const isPrintable = (c: i32): boolean => c >= 32 && c <= 126
+
 /**
- * Whether `s` is a C identifier: the only header text, besides integers and
- * checked strings, that the module copies into a comment or declaration.
+ * The one check every piece of text the module copies from the header, the
+ * overrides or the command line passes before it is written: an ASCII C
+ * identifier (no `$`, no byte above 127), a decimal integer, a string
+ * literal of printable ASCII holding no `"` or `\`, or a comment line of
+ * printable ASCII holding neither comment delimiter. Nothing else reaches
+ * the module, so no header can put a bidi control, a line break or a
+ * comment's end into it.
  */
-const isIdent = (s: string): boolean => {
-  if (s.length === 0 || (s.charCodeAt(0) >= 48 && s.charCodeAt(0) <= 57)) {
-    return false
-  }
-  for (let i = 0; i < s.length; i++) {
-    if (!isIdentByte(s.charCodeAt(i))) {
+const emittable = (s: string, as: i32): boolean => {
+  if (as === AS_IDENT) {
+    if (s.length === 0 || (s.charCodeAt(0) >= 48 && s.charCodeAt(0) <= 57)) {
       return false
     }
+    for (let i = 0; i < s.length; i++) {
+      if (!isIdentByte(s.charCodeAt(i))) {
+        return false
+      }
+    }
+    return true
   }
-  return true
+  if (as === AS_INTEGER) {
+    const signed = s.length > 1 && s.charCodeAt(0) === 45
+    if (s.length === 0) {
+      return false
+    }
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i)
+      if ((c < 48 || c > 57) && !(i === 0 && signed)) {
+        return false
+      }
+    }
+    return true
+  }
+  if (as === AS_STRING) {
+    if (s.length < 2 || s.charCodeAt(0) !== 34 || s.charCodeAt(s.length - 1) !== 34) {
+      return false
+    }
+    for (let i = 1; i < s.length - 1; i++) {
+      const c = s.charCodeAt(i)
+      if (!isPrintable(c) || c === 34 || c === 92) {
+        return false
+      }
+    }
+    return true
+  }
+  if (as === AS_COMMENT) {
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i)
+      if (!isPrintable(c)) {
+        return false
+      }
+      const next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0
+      if ((c === 42 && next === 47) || (c === 47 && next === 42)) {
+        return false
+      }
+    }
+    return true
+  }
+  return false
 }
+
+/** Whether `s` is an ASCII C identifier, the only name the module copies. */
+const isIdent = (s: string): boolean => emittable(s, AS_IDENT)
 
 /** A type spelling as words, with each `*` a word of its own. */
 const typeWords = (spelling: string): string[] => {
@@ -308,7 +366,7 @@ const typeWords = (spelling: string): string[] => {
 /** The digits `s[from, to)` read as a number, negated, which holds -2^63. */
 const negatedDigits = (s: string, from: i32, to: i32): i64 => {
   let value: i64 = 0
-  for (let i = from; i < to; i++) {
+  for (let i = from; i >= 0 && i < to && i < s.length; i++) {
     value = value * 10 - toI64(s.charCodeAt(i) - 48)
   }
   return value
@@ -360,8 +418,9 @@ const globMatches = (glob: string, name: string): boolean => {
   let star = -1
   let mark = 0
   while (n < name.length) {
-    const gc = g < glob.length ? glob.charCodeAt(g) : -1
-    if (gc === 63 || (gc >= 0 && gc !== 42 && gc === name.charCodeAt(n))) {
+    const gc = g >= 0 && g < glob.length ? glob.charCodeAt(g) : -1
+    const nc = n >= 0 ? name.charCodeAt(n) : -1
+    if (gc === 63 || (gc >= 0 && gc !== 42 && gc === nc)) {
       g++
       n++
     } else if (gc === 42) {
@@ -376,7 +435,7 @@ const globMatches = (glob: string, name: string): boolean => {
       return false
     }
   }
-  while (g < glob.length && glob.charCodeAt(g) === 42) {
+  while (g >= 0 && g < glob.length && glob.charCodeAt(g) === 42) {
     g++
   }
   return g === glob.length
@@ -385,16 +444,16 @@ const globMatches = (glob: string, name: string): boolean => {
 /**
  * Whether `path` holds what its place in the output cannot carry: the probe
  * names the header in an `#include "..."` line, and the module names every
- * path in a `//` comment, which a control byte, U+2028 or U+2029 would end.
+ * path in a comment, which `emittable` lets hold printable ASCII only.
  */
 const unsafePath = (path: string): boolean => {
   for (let i = 0; i < path.length; i++) {
     const c = path.charCodeAt(i)
-    if (c < 32 || c === 127 || c === 34 || c === 39 || c === 92) {
+    if (!isPrintable(c) || c === 34 || c === 39 || c === 92) {
       return true
     }
   }
-  return path.indexOf("\u2028") >= 0 || path.indexOf("\u2029") >= 0
+  return !emittable(path, AS_COMMENT)
 }
 
 /** The text of `bytes`. */
@@ -470,13 +529,15 @@ const scratchBeside = (out: string): string => {
 
 /** A C type read from clang's spelling of it. */
 class CType {
-  base: i32
   /** The Nish scalar for `BASE_SCALAR`. */
   scalar: string = ""
-  /** `CHAR_*` for `BASE_CHAR`. */
-  sign: i32
   /** `struct x` or `union x` for `BASE_RECORD`. */
   tag: string = ""
+  /** Why it has no Nish type, for `BASE_REFUSED`. */
+  reason: string = ""
+  base: i32
+  /** `CHAR_*` for `BASE_CHAR`. */
+  sign: i32
   pointers: i32 = 0
   /** Whether the innermost pointed-to type is `const`. */
   constBase: boolean = false
@@ -489,8 +550,6 @@ class CType {
   nonnull: boolean = false
   /** A typedef with its own `aligned` attribute, held by value: not the scalar's natural layout. */
   aligned: boolean = false
-  /** Why it has no Nish type, for `BASE_REFUSED`. */
-  reason: string = ""
 
   constructor() {
     this.base = BASE_REFUSED
@@ -509,23 +568,23 @@ const refusedType = (reason: string): CType => {
 class CRecord {
   key: string = ""
   className: string = ""
-  isUnion: boolean = false
-  complete: boolean = false
-  inHeader: boolean = false
   fieldNames: string[]
   fieldTypes: string[]
   fieldBitfields: boolean[]
-  fit: i32
   /** Why it is not a `declare class`, once `fit` is `FIT_NO`. */
   why: string = ""
-  /** The header line it is declared on, for the order of the report. */
-  line: i32 = 0
   /** The attribute that gives it other than natural layout, or empty. */
   layout: string = ""
-  /** Named by a `typedef struct { ... } name;`, not by a tag of its own. */
-  typedefNamed: boolean = false
   /** Why its name cannot be a class in the module, or empty. */
   nameClash: string = ""
+  fit: i32
+  /** The header line it is declared on, for the order of the report. */
+  line: i32 = 0
+  isUnion: boolean = false
+  complete: boolean = false
+  inHeader: boolean = false
+  /** Named by a `typedef struct { ... } name;`, not by a tag of its own. */
+  typedefNamed: boolean = false
 
   constructor() {
     this.fieldNames = []
@@ -560,15 +619,15 @@ class CEnum {
 class CFunc {
   name: string = ""
   qualType: string = ""
+  /** Why the header's declaration says more than a `declare function` can, or empty. */
+  why: string = ""
+  paramNames: string[]
+  paramTypes: string[]
+  line: i32 = 0
   variadic: boolean = false
   noSymbol: boolean = false
   inHeader: boolean = false
   returnsNonNull: boolean = false
-  /** Why the header's declaration says more than a `declare function` can, or empty. */
-  why: string = ""
-  line: i32 = 0
-  paramNames: string[]
-  paramTypes: string[]
 
   constructor() {
     this.paramNames = []
@@ -577,29 +636,18 @@ class CFunc {
 }
 
 /** Whether an attribute node `kind` sets a calling convention. */
-const isCallingConvention = (kind: string): boolean =>
-  kind === "MSABIAttr" ||
-  kind === "SysVABIAttr" ||
-  kind === "StdCallAttr" ||
-  kind === "FastCallAttr" ||
-  kind === "VectorCallAttr" ||
-  kind === "RegCallAttr" ||
-  kind === "PreserveMostAttr" ||
-  kind === "PreserveAllAttr"
-
 /**
- * A report line as the module's closing comment can hold it. Every reason
- * is this file's own wording, but one that came to hold the header's text
- * and with it a comment's end, or a line break, is never copied: its name
- * is kept, with a fixed reason.
+ * A report line as the module's closing comment can hold it: `name` only
+ * when it is printable ASCII, and the reason only when the whole line is.
+ * Every reason is this file's own wording, but one that came to hold the
+ * header's text and with it a comment's end or a byte the comment cannot
+ * carry is never copied.
  */
-const commentSafe = (line: string): string => {
-  if (line.indexOf("*/") < 0 && line.indexOf("/*") < 0 && line.indexOf("\n") < 0 && line.indexOf("\r") < 0) {
-    return line
-  }
-  const colon = line.indexOf(":")
-  const name = colon > 0 ? line.slice(0, colon) : ""
-  return `${isIdent(name) ? name : "a declaration"}: a reason the module cannot carry in a comment`
+const reportLine = (name: string, why: string): string => {
+  const shown =
+    name.length > 0 && emittable(name, AS_COMMENT) ? name : "a declaration whose name is not printable ASCII"
+  const line = `${shown}: ${why}`
+  return emittable(line, AS_COMMENT) ? line : `${shown}: a reason the module cannot carry in a comment`
 }
 
 /** An object-like macro in the header's own file. */
@@ -698,28 +746,16 @@ const parseArgs = (argv: string[]): CImportArgs => {
   return args
 }
 
-/** A JSON document sized for a header's AST. */
-const newDocument = (): JsonDocument => {
-  const doc = new JsonDocument(new JsonLimits())
-  doc.maxValues = JSON_VALUE_MAX_VALUES
-  return doc
-}
-
 /** The whole import: clang's answers, the tables built from them, and the module. */
 class Importer {
-  doc: JsonDocument
+  doc: CJson
   triple: string
-  lp64: boolean
-  charUnsigned: boolean
   headerAbs: string
   cc: string
   /** The directory `scratchBeside` made for this import. */
   scratch: string = ""
   failure: string = ""
-  /** The status `failure` exits with. */
-  failureStatus: i32 = 1
   curFile: string = ""
-  curLine: i32 = 0
   typedefs: StringMap
   typedefTypes: string[]
   /** Per typedef, whether it carries its own `aligned` attribute. */
@@ -737,15 +773,22 @@ class Importer {
   overrides: FnOverride[]
   overrideIndex: StringMap
   allow: string[]
-  hasAllow: boolean = false
   /** The variables the header's own file declares, listed as not bound. */
   varNames: string[]
   varLines: i32[]
-  /** Whether `decideNames` has run: every struct's name is settled before any `fits`. */
-  namesDecided: boolean = false
   usedOut: StringSet
   /** The out classes the function being declared needs, kept only if it is bound. */
   pendingOut: string[]
+  /** The status `failure` exits with. */
+  failureStatus: i32 = 1
+  curLine: i32 = 0
+  lp64: boolean
+  charUnsigned: boolean
+  hasAllow: boolean = false
+  /** Whether `decideNames` has run: every struct's name is settled before any `fits`. */
+  namesDecided: boolean = false
+  /** Set when `word` met text the module cannot hold: `cImport` then writes nothing. */
+  refusedEmit: boolean = false
 
   constructor(triple: string, headerAbs: string) {
     this.typedefs = new StringMap()
@@ -768,7 +811,7 @@ class Importer {
     this.varLines = []
     this.usedOut = new StringSet()
     this.pendingOut = []
-    this.doc = newDocument()
+    this.doc = new CJson()
     this.triple = triple
     this.lp64 = dataModelOf(triple) === "LP64"
     // Plain `char` is unsigned only on aarch64 Linux among the targets; elsewhere
@@ -804,7 +847,7 @@ class Importer {
   // ---- JSON access ----
 
   member(v: i32, key: string): i32 {
-    if (v < 0 || this.doc.kind(v) !== JSON_VALUE_OBJECT) {
+    if (v < 0 || this.doc.kind(v) !== CJ_OBJECT) {
       return -1
     }
     return this.doc.get(v, key)
@@ -812,18 +855,62 @@ class Importer {
 
   text(v: i32, key: string): string {
     const x = this.member(v, key)
-    return x >= 0 && this.doc.kind(x) === JSON_VALUE_STRING ? this.doc.string(x) : ""
+    return x >= 0 && this.doc.kind(x) === CJ_STRING ? this.doc.string(x) : ""
+  }
+
+  /** Whether `v`'s member `key` is the string `s`. Allocates nothing. */
+  /**
+   * `s` as the module may hold it: itself when `emittable` passes it as
+   * `as`, else nothing, and the module is not written. Every piece of the
+   * header's, the overrides' or the command line's text the module holds is
+   * written through here; the checks before it list a declaration whose
+   * text would fail, so a failure here is this file's own mistake.
+   */
+  word(s: string, as: i32): string {
+    if (emittable(s, as)) {
+      return s
+    }
+    this.refusedEmit = true
+    return ""
+  }
+
+  textIs(v: i32, key: string, s: string): boolean {
+    return this.doc.stringEquals(this.member(v, key), s)
+  }
+
+  /** Whether node `v`'s `kind` is `s`. Allocates nothing. */
+  kindIs(v: i32, s: string): boolean {
+    return this.textIs(v, "kind", s)
+  }
+
+  /** Whether node `v`'s `kind` ends with `s`. Allocates nothing. */
+  kindEndsWith(v: i32, s: string): boolean {
+    return this.doc.stringEndsWith(this.member(v, "kind"), s)
+  }
+
+  /** Whether `v` is an attribute naming a calling convention other than C's. */
+  isCallingConvention(v: i32): boolean {
+    return (
+      this.kindIs(v, "MSABIAttr") ||
+      this.kindIs(v, "SysVABIAttr") ||
+      this.kindIs(v, "StdCallAttr") ||
+      this.kindIs(v, "FastCallAttr") ||
+      this.kindIs(v, "VectorCallAttr") ||
+      this.kindIs(v, "RegCallAttr") ||
+      this.kindIs(v, "PreserveMostAttr") ||
+      this.kindIs(v, "PreserveAllAttr")
+    )
   }
 
   flag(v: i32, key: string): boolean {
     const x = this.member(v, key)
-    return x >= 0 && this.doc.kind(x) === JSON_VALUE_BOOLEAN && this.doc.boolean(x)
+    return x >= 0 && this.doc.kind(x) === CJ_BOOLEAN && this.doc.boolean(x)
   }
 
   /** The children of `v`'s `inner`, or -1 when it has none. */
   inner(v: i32): i32 {
     const x = this.member(v, "inner")
-    return x >= 0 && this.doc.kind(x) === JSON_VALUE_ARRAY ? x : -1
+    return x >= 0 && this.doc.kind(x) === CJ_ARRAY ? x : -1
   }
 
   count(array: i32): i32 {
@@ -851,7 +938,7 @@ class Importer {
       this.curFile = file
     }
     const line = this.member(loc, "line")
-    if (line >= 0 && this.doc.kind(line) === JSON_VALUE_NUMBER) {
+    if (line >= 0 && this.doc.kind(line) === CJ_NUMBER) {
       this.curLine = parseInt(this.doc.numberText(line))
     }
   }
@@ -880,7 +967,7 @@ class Importer {
   /** Parses clang's JSON in `bytes`, recording a failure when it cannot. */
   parse(bytes: u8[], what: string): i32 {
     this.doc.clear()
-    const root = this.doc.parse(bytes, 0, bytes.length)
+    const root = this.doc.parse(bytes)
     if (root < 0) {
       this.fail(
         `cannot read clang's AST of ${what}: not JSON, or deeper than 64 or more than 4194304 values`,
@@ -926,18 +1013,17 @@ class Importer {
       const node = this.doc.at(decls, i)
       this.trackLoc(this.member(node, "loc"))
       const inHeader = this.curFile === this.headerAbs
-      const kind = this.text(node, "kind")
-      if (kind === "TypedefDecl") {
+      if (this.kindIs(node, "TypedefDecl")) {
         this.readTypedef(node)
-      } else if (kind === "RecordDecl") {
+      } else if (this.kindIs(node, "RecordDecl")) {
         this.readRecord(node, inHeader)
-      } else if (kind === "EnumDecl") {
+      } else if (this.kindIs(node, "EnumDecl")) {
         // Reads its enumerators' lines in document order, carrying the state.
         this.readEnum(node, inHeader)
         continue
-      } else if (kind === "FunctionDecl") {
+      } else if (this.kindIs(node, "FunctionDecl")) {
         this.readFunction(node, inHeader)
-      } else if (kind === "VarDecl" && inHeader) {
+      } else if (this.kindIs(node, "VarDecl") && inHeader) {
         this.varNames.push(this.text(node, "name"))
         this.varLines.push(this.curLine)
       }
@@ -958,7 +1044,7 @@ class Importer {
     const children = this.inner(node)
     let aligned = false
     for (let i = 0; i < this.count(children); i++) {
-      if (this.text(this.doc.at(children, i), "kind") === "AlignedAttr") {
+      if (this.textIs(this.doc.at(children, i), "kind", "AlignedAttr")) {
         aligned = true
       }
     }
@@ -998,7 +1084,7 @@ class Importer {
 
   readRecord(node: i32, inHeader: boolean): void {
     const name = this.text(node, "name")
-    const isUnion = this.text(node, "tagUsed") === "union"
+    const isUnion = this.textIs(node, "tagUsed", "union")
     const key = name.length > 0 ? `${isUnion ? "union" : "struct"} ${name}` : ""
     const complete = this.flag(node, "completeDefinition")
     let index = key.length > 0 ? this.tags.get(key, -1) : -1
@@ -1041,22 +1127,25 @@ class Importer {
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
       const child = this.doc.at(children, i)
-      const kind = this.text(child, "kind")
-      if (kind === "FieldDecl") {
+      if (this.kindIs(child, "FieldDecl")) {
         r.fieldNames.push(this.text(child, "name"))
         r.fieldTypes.push(this.qualType(child))
         r.fieldBitfields.push(this.flag(child, "isBitfield"))
         const attrs = this.inner(child)
         for (let j = 0; j < this.count(attrs); j++) {
-          const attr = this.text(this.doc.at(attrs, j), "kind")
-          if (attr === "AlignedAttr" || attr === "PackedAttr") {
-            r.layout = r.layout.length > 0 ? r.layout : `${attr} on field \`${this.text(child, "name")}\``
+          const at = this.doc.at(attrs, j)
+          if (r.layout.length === 0 && (this.kindIs(at, "AlignedAttr") || this.kindIs(at, "PackedAttr"))) {
+            r.layout = `${this.kindIs(at, "AlignedAttr") ? "AlignedAttr" : "PackedAttr"} on field \`${r.fieldNames[r.fieldNames.length - 1]}\``
           }
         }
-      } else if (kind === "RecordDecl") {
+      } else if (this.kindIs(child, "RecordDecl")) {
         this.readRecord(child, inHeader)
-      } else if (kind === "PackedAttr" || kind === "AlignedAttr" || kind === "MaxFieldAlignmentAttr") {
-        r.layout = r.layout.length > 0 ? r.layout : kind
+      } else if (
+        this.kindIs(child, "PackedAttr") ||
+        this.kindIs(child, "AlignedAttr") ||
+        this.kindIs(child, "MaxFieldAlignmentAttr")
+      ) {
+        r.layout = r.layout.length > 0 ? r.layout : this.text(child, "kind")
       }
     }
   }
@@ -1081,10 +1170,9 @@ class Importer {
     for (let i = 0; i < n; i++) {
       const child = this.doc.at(children, i)
       this.trackLoc(this.member(child, "loc"))
-      const kind = this.text(child, "kind")
-      if (kind === "PackedAttr") {
+      if (this.kindIs(child, "PackedAttr")) {
         e.packed = true
-      } else if (kind === "EnumConstantDecl") {
+      } else if (this.kindIs(child, "EnumConstantDecl")) {
         let v = next
         let why = nextWhy
         if (this.hasInitializer(child)) {
@@ -1113,48 +1201,82 @@ class Importer {
     }
   }
 
-  /** Whether an enumerator spells its value: a child that is not an attribute. */
+  /**
+   * Whether an enumerator spells its value: a child that is neither an
+   * attribute nor a doc comment (`FullComment`). Any other child counts, so
+   * one the generator does not know is read as a value and, unreadable, listed.
+   */
   hasInitializer(decl: i32): boolean {
     const inner = this.inner(decl)
     for (let i = 0; i < this.count(inner); i++) {
-      if (!this.text(this.doc.at(inner, i), "kind").endsWith("Attr")) {
+      const child = this.doc.at(inner, i)
+      if (!this.kindEndsWith(child, "Attr") && !this.kindEndsWith(child, "Comment")) {
         return true
       }
     }
     return false
   }
 
+  /**
+   * Names each unnamed parameter `argN`, or `argN_K` while another
+   * parameter already holds that name, so `int f(int, int arg0)` stays two.
+   */
+  uniqueArgNames(f: CFunc): void {
+    for (let i = 0; i < f.paramNames.length; i++) {
+      if (f.paramNames[i].length === 0) {
+        let name = `arg${i}`
+        let k = 0
+        while (f.paramNames.indexOf(name) >= 0) {
+          k += 1
+          name = `arg${i}_${k}`
+        }
+        f.paramNames[i] = name
+      }
+    }
+  }
+
   readFunction(node: i32, inHeader: boolean): void {
     const name = this.text(node, "name")
     if (this.funcIndex.has(name)) {
+      // A redeclaration in the header itself makes an included function the header's.
+      const seen = this.funcIndex.get(name, -1)
+      if (inHeader && seen >= 0 && seen < this.funcs.length) {
+        this.funcs[seen].inHeader = true
+      }
       return
     }
     const f = new CFunc()
     f.name = name
     f.qualType = this.qualType(node)
     f.variadic = this.flag(node, "variadic")
-    f.noSymbol = this.text(node, "storageClass") === "static" || this.flag(node, "inline")
+    f.noSymbol = this.textIs(node, "storageClass", "static") || this.flag(node, "inline")
     f.inHeader = inHeader
     f.line = this.curLine
     const children = this.inner(node)
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
       const child = this.doc.at(children, i)
-      const kind = this.text(child, "kind")
-      if (kind === "ParmVarDecl") {
+      if (this.kindIs(child, "ParmVarDecl")) {
         const pname = this.text(child, "name")
-        f.paramNames.push(pname.length > 0 ? pname : `arg${f.paramNames.length}`)
+        f.paramNames.push(pname)
         f.paramTypes.push(this.qualType(child))
-      } else if (kind === "CompoundStmt") {
+      } else if (this.kindIs(child, "CompoundStmt")) {
         f.noSymbol = true
-      } else if (kind === "ReturnsNonNullAttr") {
+      } else if (this.kindIs(child, "ReturnsNonNullAttr")) {
         f.returnsNonNull = true
-      } else if (kind === "C11NoReturnAttr" || kind === "NoReturnAttr" || kind === "CXX11NoReturnAttr") {
+      } else if (
+        this.kindIs(child, "C11NoReturnAttr") ||
+        this.kindIs(child, "NoReturnAttr") ||
+        this.kindIs(child, "CXX11NoReturnAttr")
+      ) {
         f.why = "declared noreturn, which a `declare function` cannot say"
-      } else if (isCallingConvention(kind) && f.why.length === 0) {
+      } else if (f.why.length === 0 && this.isCallingConvention(child)) {
         f.why = "declared with a calling convention other than the C default"
+      } else if (this.kindIs(child, "AsmLabelAttr") || this.kindIs(child, "AliasAttr")) {
+        f.why = "declared with an asm label or alias, so its symbol is not its name"
       }
     }
+    this.uniqueArgNames(f)
     // The function type carries what its attributes change: the words are
     // matched, never copied, since an attribute's text is the header's.
     const fnType = f.qualType
@@ -1375,13 +1497,20 @@ class Importer {
    */
   enumType(name: string): CType {
     const index = this.enumTags.get(`enum ${name}`, -1)
+    if (index < 0 || index >= this.enums.length) {
+      const t = new CType()
+      t.base = BASE_SCALAR
+      t.scalar = "i32"
+      return t
+    }
+    return this.enumScalar(this.enums[index])
+  }
+
+  /** `enumType` for an enum in hand: the one decision its type and its constants' types share. */
+  enumScalar(e: CEnum): CType {
     const t = new CType()
     t.base = BASE_SCALAR
     t.scalar = "i32"
-    if (index < 0 || index >= this.enums.length) {
-      return t
-    }
-    const e = this.enums[index]
     if (e.underlying.length > 0) {
       return this.resolve(e.underlying)
     }
@@ -1513,6 +1642,9 @@ class Importer {
       if (r.fieldNames[i].length === 0) {
         return "an anonymous member"
       }
+      if (!isIdent(r.fieldNames[i])) {
+        return `field ${i + 1}'s name is not an ASCII identifier`
+      }
       if (r.fieldBitfields[i]) {
         return `${field}a bitfield`
       }
@@ -1541,7 +1673,7 @@ class Importer {
         return "!the struct itself"
       }
       if (this.fits(index)) {
-        return this.records[index].className
+        return this.word(this.records[index].className, AS_IDENT)
       }
       return `!a struct that is not a declare class (\`${t.tag}\`)`
     }
@@ -1607,7 +1739,7 @@ class Importer {
     if (t.base === BASE_RECORD) {
       const index = this.recordOf(t.tag)
       if (this.fits(index)) {
-        return `${this.records[index].className}${orNull}`
+        return `${this.word(this.records[index].className, AS_IDENT)}${orNull}`
       }
       return `CPtr${orNull}`
     }
@@ -1706,10 +1838,10 @@ class Importer {
     } else if (m.body.length === 0) {
       m.why = "an empty macro"
     } else if (m.body.startsWith('"')) {
-      const plain =
-        m.body.endsWith('"') && m.body.indexOf('"', 1) === m.body.length - 1 && m.body.indexOf("\\") < 0
       m.type = "string"
-      m.why = plain ? "" : "a string the generator does not copy (escapes or pieces)"
+      m.why = emittable(m.body, AS_STRING)
+        ? ""
+        : "a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)"
     }
   }
 
@@ -1783,23 +1915,7 @@ class Importer {
         this.readProbe(text, start, end)
         return
       }
-      let dropped = 0
-      const errors = splitByte(clangText(run.err), 10)
-      const prefix = `${this.probePath()}:`
-      for (let i = 0; i < errors.length; i++) {
-        const e = errors[i]
-        if (e.startsWith(prefix)) {
-          const line = toI32(parseI64(e.slice(prefix.length))) - 2
-          if (line >= 0 && line < lines.length) {
-            const index = lines[line]
-            if (index >= 0 && index < this.macros.length && this.macros[index].why.length === 0) {
-              this.macros[index].why = "not an integer constant"
-              dropped++
-            }
-          }
-        }
-      }
-      if (dropped === 0) {
+      if (this.dropProbed(run.err, lines) === 0) {
         break
       }
     }
@@ -1809,6 +1925,30 @@ class Importer {
         m.why = "not an integer constant"
       }
     }
+  }
+
+  /**
+   * Drops every macro whose probe line clang's diagnostics `err` name, and
+   * gives how many it dropped.
+   */
+  dropProbed(err: u8[], lines: i32[]): i32 {
+    let dropped = 0
+    const errors = splitByte(clangText(err), 10)
+    const prefix = `${this.probePath()}:`
+    for (let i = 0; i < errors.length; i++) {
+      const e = errors[i]
+      if (e.startsWith(prefix)) {
+        const line = toI32(parseI64(e.slice(prefix.length))) - 2
+        if (line >= 0 && line < lines.length) {
+          const index = lines[line]
+          if (index >= 0 && index < this.macros.length && this.macros[index].why.length === 0) {
+            this.macros[index].why = "not an integer constant"
+            dropped++
+          }
+        }
+      }
+    }
+    return dropped
   }
 
   /** Reads the values clang gave the probe's enumerators for `[start, end)`. */
@@ -1827,7 +1967,7 @@ class Importer {
     const n = this.count(decls)
     for (let i = 0; i < n; i++) {
       const node = this.doc.at(decls, i)
-      if (this.text(node, "kind") === "EnumDecl") {
+      if (this.textIs(node, "kind", "EnumDecl")) {
         const children = this.inner(node)
         const m = this.count(children)
         for (let j = 0; j < m; j++) {
@@ -1859,13 +1999,13 @@ class Importer {
     let node = -1
     for (let i = 0; i < this.count(children) && node < 0; i++) {
       const child = this.doc.at(children, i)
-      if (!this.text(child, "kind").endsWith("Attr")) {
+      if (!this.kindEndsWith(child, "Attr") && !this.kindEndsWith(child, "Comment")) {
         node = child
       }
     }
     for (let depth = 0; depth < 8 && node >= 0; depth++) {
       const kind = this.text(node, "kind")
-      if (kind === "ConstantExpr" || kind === "IntegerLiteral") {
+      if (this.kindIs(node, "ConstantExpr") || this.kindIs(node, "IntegerLiteral")) {
         return this.text(node, "value")
       }
       if (kind !== "ImplicitCastExpr") {
@@ -1913,8 +2053,10 @@ class Importer {
       if (unsigned && m.value < 0) {
         m.why = "an unsigned value above 2^63, which a Nish literal does not hold"
       }
-    } else {
+    } else if (size === 1 || size === 2 || size === 4) {
       m.type = size === 4 && unsigned ? "u32" : "i32"
+    } else {
+      m.why = "an integer wider than 8 bytes, which no Nish scalar holds"
     }
   }
 
@@ -1933,31 +2075,37 @@ class Importer {
       this.fail(`overrides: ${path} is not JSON, or holds one key twice in an object`, 1)
       return
     }
-    if (this.doc.kind(root) !== JSON_VALUE_OBJECT) {
+    if (this.doc.kind(root) !== CJ_OBJECT) {
       this.fail(`overrides: ${path} is not a JSON object`, 1)
       return
     }
-    if (this.refuseDuplicate(root, "the file")) {
+    if (this.refuseDuplicate(root, "the file", false)) {
       return
     }
     // `allow` decides which functions are bound, so it is read, and the
     // struct names settled, before any function's override is checked
     // against the module, wherever the keys sit in the file.
     let functions = -1
+    let unknown = -1
     for (let i = 0; i < this.doc.length(root); i++) {
-      const key = this.doc.keyAt(root, i)
       const value = this.doc.at(root, i)
-      if (key === "header") {
-        if (this.doc.kind(value) !== JSON_VALUE_STRING || this.doc.string(value) !== headerName) {
+      if (this.doc.keyIs(root, i, "header")) {
+        if (this.doc.kind(value) !== CJ_STRING || !this.doc.stringEquals(value, headerName)) {
           this.fail(`overrides: "header" must be "${headerName}"`, 1)
         }
-      } else if (key === "allow") {
+      } else if (this.doc.keyIs(root, i, "allow")) {
         this.readAllow(value)
-      } else if (key === "functions") {
+      } else if (this.doc.keyIs(root, i, "functions")) {
         functions = value
-      } else {
-        this.fail(`overrides: unknown key "${key}"`, 1)
+      } else if (unknown < 0) {
+        unknown = i
       }
+    }
+    if (unknown >= 0) {
+      this.fail(`overrides: unknown key "${this.doc.keyAt(root, unknown)}"`, 1)
+    }
+    if (this.failure.length === 0 && !this.hasAllow && functions < 0) {
+      this.fail('overrides: the file holds neither "allow" nor "functions", so it changes nothing', 1)
     }
     for (let i = 0; i < this.allow.length && this.failure.length === 0; i++) {
       let matched = false
@@ -2022,12 +2170,12 @@ class Importer {
   }
 
   /** Refuses an object that holds one key twice, which JSON readers settle differently. */
-  refuseDuplicate(object: i32, where: string): boolean {
+  refuseDuplicate(object: i32, where: string, quoted: boolean): boolean {
     const seen = new StringSet()
     for (let i = 0; i < this.doc.length(object); i++) {
       const key = this.doc.keyAt(object, i)
       if (seen.has(key)) {
-        this.fail(`overrides: ${where} holds the key "${key}" twice`, 1)
+        this.fail(`overrides: ${quoted ? `\`${where}\`` : where} holds the key "${key}" twice`, 1)
         return true
       }
       seen.add(key)
@@ -2036,14 +2184,14 @@ class Importer {
   }
 
   readAllow(value: i32): void {
-    if (this.doc.kind(value) !== JSON_VALUE_ARRAY) {
+    if (this.doc.kind(value) !== CJ_ARRAY) {
       this.fail('overrides: "allow" must be an array of name globs', 1)
       return
     }
     this.hasAllow = true
     for (let i = 0; i < this.doc.length(value); i++) {
       const glob = this.doc.at(value, i)
-      if (this.doc.kind(glob) !== JSON_VALUE_STRING) {
+      if (this.doc.kind(glob) !== CJ_STRING) {
         this.fail('overrides: "allow" must be an array of name globs', 1)
         return
       }
@@ -2052,11 +2200,15 @@ class Importer {
   }
 
   readFunctionOverrides(value: i32): void {
-    if (this.doc.kind(value) !== JSON_VALUE_OBJECT) {
+    if (this.doc.kind(value) !== CJ_OBJECT) {
       this.fail('overrides: "functions" must be an object', 1)
       return
     }
-    if (this.refuseDuplicate(value, '"functions"')) {
+    if (this.refuseDuplicate(value, '"functions"', false)) {
+      return
+    }
+    if (this.doc.length(value) === 0) {
+      this.fail('overrides: "functions" is an empty object, which changes nothing', 1)
       return
     }
     for (let i = 0; i < this.doc.length(value); i++) {
@@ -2072,11 +2224,11 @@ class Importer {
         this.fail(`overrides: \`${name}\` is not bound (${unbound}), so an override cannot change it`, 1)
         return
       }
-      if (this.doc.kind(body) !== JSON_VALUE_OBJECT) {
+      if (this.doc.kind(body) !== CJ_OBJECT) {
         this.fail(`overrides: \`${name}\` must be an object`, 1)
         return
       }
-      if (this.refuseDuplicate(body, `\`${name}\``)) {
+      if (this.refuseDuplicate(body, name, true)) {
         return
       }
       if (this.doc.length(body) === 0) {
@@ -2097,6 +2249,13 @@ class Importer {
             this.fail(`overrides: \`${name}\` does not return a pointer, so "return" cannot apply`, 1)
             return
           }
+          if (o.returnMode === RETURN_NULLABLE && (f.returnsNonNull || this.returnNonnull(f))) {
+            this.fail(
+              `overrides: \`${name}\` returns a \`_Nonnull\` or \`returns_nonnull\` pointer, so it cannot be nullable`,
+              1
+            )
+            return
+          }
           if (o.returnMode !== RETURN_OWNED && this.functionReturn(f, o) === result) {
             this.fail(`overrides: \`${name}\` returns \`${result}\` already, so "return" changes nothing`, 1)
             return
@@ -2110,16 +2269,16 @@ class Importer {
 
   readReturnOverride(o: FnOverride, value: i32): void {
     const kind = this.doc.kind(value)
-    if (kind === JSON_VALUE_STRING && this.doc.stringEquals(value, "nonnull")) {
+    if (kind === CJ_STRING && this.doc.stringEquals(value, "nonnull")) {
       o.returnMode = RETURN_NONNULL
       return
     }
-    if (kind === JSON_VALUE_STRING && this.doc.stringEquals(value, "nullable")) {
+    if (kind === CJ_STRING && this.doc.stringEquals(value, "nullable")) {
       o.returnMode = RETURN_NULLABLE
       return
     }
     const owner = this.text(value, "owned")
-    if (kind === JSON_VALUE_OBJECT && this.doc.length(value) === 1 && owner.length > 0) {
+    if (kind === CJ_OBJECT && this.doc.length(value) === 1 && owner.length > 0) {
       const freer = this.funcIndex.get(owner, -1)
       if (freer < 0 || freer >= this.funcs.length) {
         this.fail(`overrides: \`${o.name}\` is freed by \`${owner}\`, which the header does not declare`, 1)
@@ -2140,6 +2299,11 @@ class Importer {
     )
   }
 
+  /** How a failure names parameter `param` of `f`. */
+  paramWhere(f: CFunc, param: string): string {
+    return `\`${f.name}\` parameter \`${param}\``
+  }
+
   readParamOverride(f: CFunc, o: FnOverride, param: string, value: i32): void {
     let at = -1
     for (let i = 0; i < f.paramNames.length; i++) {
@@ -2147,62 +2311,80 @@ class Importer {
         at = i
       }
     }
-    const where = `\`${f.name}\` parameter \`${param}\``
     if (at < 0 || at >= f.paramTypes.length) {
       this.fail(`overrides: \`${f.name}\` has no parameter \`${param}\``, 1)
       return
     }
-    if (this.doc.kind(value) !== JSON_VALUE_OBJECT) {
-      this.fail(`overrides: ${where} must be an object`, 1)
+    if (this.doc.kind(value) !== CJ_OBJECT) {
+      this.fail(`overrides: ${this.paramWhere(f, param)} must be an object`, 1)
       return
     }
-    if (this.refuseDuplicate(value, where)) {
+    if (this.refuseDuplicate(value, this.paramWhere(f, param), false)) {
+      return
+    }
+    if (this.doc.length(value) === 0) {
+      this.fail(`overrides: ${this.paramWhere(f, param)} is an empty object, which changes nothing`, 1)
       return
     }
     let buffer = ""
     let readonly = false
     let nullable = false
-    for (let i = 0; i < this.doc.length(value); i++) {
-      const key = this.doc.keyAt(value, i)
+    let unknown = -1
+    let bufferAt = -1
+    let problem = ""
+    for (let i = 0; i < this.doc.length(value) && unknown < 0 && problem.length === 0; i++) {
       const v = this.doc.at(value, i)
-      const isBool = this.doc.kind(v) === JSON_VALUE_BOOLEAN
-      if (key === "buffer" && this.doc.kind(v) === JSON_VALUE_STRING) {
-        buffer = this.doc.string(v)
-        if (buffer.length === 0) {
-          this.fail(`overrides: ${where}: "buffer" must name the count parameter`, 1)
-          return
+      const isBool = this.doc.kind(v) === CJ_BOOLEAN
+      if (this.doc.keyIs(value, i, "buffer") && this.doc.kind(v) === CJ_STRING) {
+        bufferAt = v
+        if (this.doc.stringEquals(v, "")) {
+          problem = '"buffer" must name the count parameter'
         }
-      } else if (key === "readonly" && isBool) {
+      } else if (this.doc.keyIs(value, i, "readonly") && isBool) {
         readonly = this.doc.boolean(v)
         if (!readonly) {
-          this.fail(`overrides: ${where}: "readonly": false changes nothing; only true has an effect`, 1)
-          return
+          problem = '"readonly": false changes nothing; only true has an effect'
         }
-      } else if (key === "nullable" && isBool) {
+      } else if (this.doc.keyIs(value, i, "nullable") && isBool) {
         nullable = this.doc.boolean(v)
         if (!nullable) {
-          this.fail(`overrides: ${where}: "nullable": false changes nothing; only true has an effect`, 1)
-          return
+          problem = '"nullable": false changes nothing; only true has an effect'
         }
       } else {
-        this.fail(`overrides: ${where}: unknown or mistyped key "${key}"`, 1)
-        return
+        unknown = i
       }
+    }
+    if (problem.length > 0) {
+      this.fail(`overrides: ${this.paramWhere(f, param)}: ${problem}`, 1)
+      return
+    }
+    if (unknown >= 0) {
+      this.fail(
+        `overrides: ${this.paramWhere(f, param)}: unknown or mistyped key "${this.doc.keyAt(value, unknown)}"`,
+        1
+      )
+      return
+    }
+    if (bufferAt >= 0) {
+      buffer = this.doc.string(bufferAt)
     }
     const t = this.resolve(f.paramTypes[at])
     if (nullable && t.pointers === 0) {
-      this.fail(`overrides: ${where} is not a pointer, so it cannot be nullable`, 1)
+      this.fail(`overrides: ${this.paramWhere(f, param)} is not a pointer, so it cannot be nullable`, 1)
       return
     }
     if (nullable && buffer.length > 0) {
       this.fail(
-        `overrides: ${where} is a buffer, a \`u8[]\` that cannot be null, so it cannot be nullable`,
+        `overrides: ${this.paramWhere(f, param)} is a buffer, a \`u8[]\` that cannot be null, so it cannot be nullable`,
         1
       )
       return
     }
     if (nullable && t.nonnull) {
-      this.fail(`overrides: ${where} is \`_Nonnull\` in the header, so it cannot be nullable`, 1)
+      this.fail(
+        `overrides: ${this.paramWhere(f, param)} is \`_Nonnull\` in the header, so it cannot be nullable`,
+        1
+      )
       return
     }
     if (nullable) {
@@ -2213,7 +2395,7 @@ class Importer {
       this.pendingOut = []
       if (before.startsWith("!") || before === after) {
         this.fail(
-          `overrides: ${where} is bound as \`${before.startsWith("!") ? "not bound" : before}\` already, so "nullable" changes nothing`,
+          `overrides: ${this.paramWhere(f, param)} is bound as \`${before.startsWith("!") ? "not bound" : before}\` already, so "nullable" changes nothing`,
           1
         )
         return
@@ -2221,29 +2403,38 @@ class Importer {
     }
     if (buffer.length > 0) {
       if (t.pointers !== 1 || (t.base !== BASE_VOID && t.base !== BASE_CHAR)) {
-        this.fail(`overrides: ${where} is a buffer, so it must be a \`void *\` or \`char *\``, 1)
+        this.fail(
+          `overrides: ${this.paramWhere(f, param)} is a buffer, so it must be a \`void *\` or \`char *\``,
+          1
+        )
         return
       }
       if (readonly && !t.constBase) {
-        this.fail(`overrides: ${where} is readonly, but the header lets the function write it`, 1)
+        this.fail(
+          `overrides: ${this.paramWhere(f, param)} is readonly, but the header lets the function write it`,
+          1
+        )
+        return
+      }
+      if (readonly) {
+        this.fail(
+          `overrides: ${this.paramWhere(f, param)} is \`const\` in the header, so it is bound \`readonly u8[]\` already and "readonly" changes nothing`,
+          1
+        )
         return
       }
       const count = at + 1 < f.paramNames.length && at + 1 < f.paramTypes.length ? f.paramNames[at + 1] : ""
       const countType = count === buffer ? this.resolve(f.paramTypes[at + 1]) : new CType()
-      if (
-        count !== buffer ||
-        countType.pointers > 0 ||
-        (countType.scalar !== "u64" && countType.scalar !== "i64")
-      ) {
+      if (count !== buffer || countType.pointers > 0 || countType.scalar !== "u64") {
         this.fail(
-          `overrides: ${where}'s count \`${buffer}\` must be the next parameter, a 64-bit integer passed by value (other pairings are not bound yet)`,
+          `overrides: ${this.paramWhere(f, param)}'s count \`${buffer}\` must be the next parameter, an unsigned 64-bit integer passed by value (other pairings are not bound yet)`,
           1
         )
         return
       }
       readonly = t.constBase
     } else if (readonly) {
-      this.fail(`overrides: ${where} is readonly but not a buffer`, 1)
+      this.fail(`overrides: ${this.paramWhere(f, param)} is readonly but not a buffer`, 1)
       return
     }
     o.params.push(param)
@@ -2275,6 +2466,9 @@ class Importer {
     if (!this.selected(f)) {
       return this.hasAllow ? '"allow" does not name it' : "declared in another header"
     }
+    if (!isIdent(f.name)) {
+      return "its name is not an ASCII identifier"
+    }
     if (f.noSymbol) {
       return "static or inline"
     }
@@ -2299,6 +2493,9 @@ class Importer {
 
   /** The declaration of `f`, or `!` and the reason it is not bound. */
   functionDecl(f: CFunc, useOverride: boolean): string {
+    if (!isIdent(f.name)) {
+      return "!its name is not an ASCII identifier"
+    }
     if (f.noSymbol) {
       return "!has no symbol to link (static or inline)"
     }
@@ -2311,15 +2508,18 @@ class Importer {
     const oi = useOverride ? this.overrideIndex.get(f.name, -1) : -1
     const o: FnOverride | null = oi >= 0 && oi < this.overrides.length ? this.overrides[oi] : null
     const params = new StringBuilder()
-    let counts = ""
+    const counts = new StringSet()
     for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
       const name = f.paramNames[i]
+      if (!isIdent(name)) {
+        return `!parameter ${i + 1}'s name is not an ASCII identifier`
+      }
       const p = this.paramOverride(o, name)
       let type = ""
       if (o !== null && p >= 0 && p < o.buffers.length && o.buffers[p].length > 0) {
         type = o.readonlys[p] ? "readonly u8[]" : "u8[]"
-        counts = `${counts},${o.buffers[p]},`
-      } else if (counts.indexOf(`,${name},`) >= 0) {
+        counts.add(o.buffers[p])
+      } else if (counts.has(name)) {
         type = "u64"
       } else {
         const nullable = o !== null && p >= 0 && p < o.nullables.length && o.nullables[p]
@@ -2331,7 +2531,7 @@ class Importer {
       if (i > 0) {
         params.add(", ")
       }
-      params.add(`${nishName(name)}: ${type}`)
+      params.add(`${this.word(nishName(name), AS_IDENT)}: ${type}`)
     }
     const ret = this.functionReturn(f, o)
     if (ret.startsWith("!")) {
@@ -2339,13 +2539,29 @@ class Importer {
     }
     const owned =
       o !== null && o.returnMode === RETURN_OWNED
-        ? `// The result is owned: free it with ${o.ownedBy}.\n`
+        ? `// The result is owned: free it with ${this.word(o.ownedBy, AS_IDENT)}.\n`
         : ""
-    return `${owned}declare function ${f.name}(${params.toText()}): ${ret}`
+    return `${owned}declare function ${this.word(f.name, AS_IDENT)}(${params.toText()}): ${ret}`
   }
 
   /** The Nish type of `f`'s result, read from the part of its type before its parameter list. */
+  /** Whether `f`'s result type is marked `_Nonnull`, as spelled or through a typedef. */
+  returnNonnull(f: CFunc): boolean {
+    const spelling = this.returnSpelling(f)
+    return spelling.indexOf("(") < 0 && this.resolve(spelling).nonnull
+  }
+
   functionReturn(f: CFunc, o: FnOverride | null): string {
+    const spelling = this.returnSpelling(f)
+    if (spelling.indexOf("(") >= 0) {
+      return "!a function pointer"
+    }
+    const mode = o === null ? RETURN_DEFAULT : o.returnMode
+    return this.returnType(this.resolve(spelling), mode, f.returnsNonNull)
+  }
+
+  /** The spelling of `f`'s result type: its function type before the parameter list. */
+  returnSpelling(f: CFunc): string {
     let depth = 0
     let open = -1
     for (let i = f.qualType.length - 1; i >= 0 && open < 0; i--) {
@@ -2359,12 +2575,7 @@ class Importer {
         }
       }
     }
-    const spelling = trimSpaces(f.qualType.slice(0, open < 0 ? 0 : open))
-    if (spelling.indexOf("(") >= 0) {
-      return "!a function pointer"
-    }
-    const mode = o === null ? RETURN_DEFAULT : o.returnMode
-    return this.returnType(this.resolve(spelling), mode, f.returnsNonNull)
+    return trimSpaces(f.qualType.slice(0, open < 0 ? 0 : open))
   }
 
   /** Writes the `declare class` of record `index` after the classes it embeds. */
@@ -2383,9 +2594,9 @@ class Importer {
       if (t.base === BASE_RECORD && t.pointers === 0) {
         this.emitClass(this.recordOf(t.tag), out, done)
       }
-      fields.push(`  ${r.fieldNames[i]}: ${this.fieldType(t)}\n`)
+      fields.push(`  ${this.word(r.fieldNames[i], AS_IDENT)}: ${this.fieldType(t)}\n`)
     }
-    out.add(`declare class ${r.className} {\n`)
+    out.add(`declare class ${this.word(r.className, AS_IDENT)} {\n`)
     for (let i = 0; i < fields.length; i++) {
       out.add(fields[i])
     }
@@ -2413,13 +2624,13 @@ class Importer {
     return ""
   }
 
-  /** The type of an enumerator: the enum's fixed type, else `i32` when the value fits. */
-  enumConstType(e: CEnum, value: i64): string {
-    if (e.underlying.length > 0) {
-      const t = this.resolve(e.underlying)
-      return t.pointers === 0 && t.base === BASE_SCALAR && t.scalar !== "boolean" ? t.scalar : ""
-    }
-    return value >= -2147483648 && value <= 2147483647 ? "i32" : "i64"
+  /**
+   * The type of an enumerator: the enum's own scalar, from the same
+   * decision as `enumType`, or empty when the enum has none.
+   */
+  enumConstType(e: CEnum): string {
+    const t = this.enumScalar(e)
+    return t.pointers === 0 && t.base === BASE_SCALAR && t.scalar !== "boolean" ? t.scalar : ""
   }
 
   /**
@@ -2446,7 +2657,9 @@ class Importer {
       if (!r.inHeader || !r.complete || r.className.length === 0 || r.isUnion || r.nameClash.length > 0) {
         continue
       }
-      if (isClassReserved(r.className)) {
+      if (!isIdent(r.className)) {
+        r.nameClash = "its name is not an ASCII identifier"
+      } else if (isClassReserved(r.className)) {
         r.nameClash = `its name \`${r.className}\` is a word or type Nish reserves`
       } else if (candidates.has(r.className)) {
         r.nameClash = `the module gives \`${r.className}\` to the function \`${r.className}\``
@@ -2472,10 +2685,10 @@ class Importer {
       regenerate.add(` --overrides ${shellWord(args.overrides)}`)
     }
     regenerate.add(` --target ${this.triple} -o ${shellWord(basename(args.out))}`)
-    out.add(`${C_IMPORT_MARKER} from ${args.header}. Do not edit; regenerate it.\n`)
-    out.add(`// Target: ${this.triple}\n`)
+    out.add(`${C_IMPORT_MARKER} from ${this.word(args.header, AS_COMMENT)}. Do not edit; regenerate it.\n`)
+    out.add(`// Target: ${this.word(this.triple, AS_COMMENT)}\n`)
     out.add(`${DATA_MODEL_LINE}${dataModelOf(this.triple)}\n`)
-    out.add(`// Regenerate: ${regenerate.toText()}\n\n`)
+    out.add(`// Regenerate: ${this.word(regenerate.toText(), AS_COMMENT)}\n\n`)
 
     // The report lists what is not bound in header order: each entry carries
     // its declaration's line, and functions from other headers go last.
@@ -2498,7 +2711,7 @@ class Importer {
           decl = "!its name is a word or type Nish reserves"
         }
         if (decl.startsWith("!")) {
-          report.push(`${f.name}: ${decl.slice(1)}`)
+          report.push(reportLine(f.name, decl.slice(1)))
           reportLines.push(f.inHeader ? f.line : 1000000000 + i)
         } else {
           functions.add(`${decl}\n`)
@@ -2509,12 +2722,12 @@ class Importer {
           }
         }
       } else if (f.inHeader) {
-        report.push(`${f.name}: "allow" does not name it`)
+        report.push(reportLine(f.name, '"allow" does not name it'))
         reportLines.push(f.line)
       }
     }
     for (let i = 0; i < this.varNames.length && i < this.varLines.length; i++) {
-      report.push(`${this.varNames[i]}: a variable, which the generator does not bind`)
+      report.push(reportLine(this.varNames[i], "a variable, which the generator does not bind"))
       reportLines.push(this.varLines[i])
     }
 
@@ -2549,11 +2762,11 @@ class Importer {
           names.set(r.className, owners.length)
           owners.push(`the struct \`${r.key}\``)
         } else {
-          report.push(`${r.key}: ${r.why}`)
+          report.push(reportLine(r.key, r.why))
           reportLines.push(r.line)
         }
       } else if (r.nameClash.length > 0 && r.className.length > 0) {
-        report.push(`${r.key.length > 0 ? r.key : r.className}: ${r.nameClash}`)
+        report.push(reportLine(r.key.length > 0 ? r.key : r.className, r.nameClash))
         reportLines.push(r.line)
       }
     }
@@ -2567,19 +2780,24 @@ class Importer {
         j++
       ) {
         const name = e.constNames[j]
-        const type = this.enumConstType(e, e.constValues[j])
+        const type = this.enumConstType(e)
         let why = j < e.constWhys.length ? e.constWhys[j] : ""
+        if (why.length === 0 && !isIdent(name)) {
+          why = "its name is not an ASCII identifier"
+        }
         if (why.length === 0) {
           why =
             type.length > 0
               ? this.claimConst(name, names, owners)
-              : "an enumerator of a type that has no Nish scalar"
+              : `an enumerator of ${this.enumScalar(e).reason.length > 0 ? this.enumScalar(e).reason : "a type that has no Nish scalar"}`
         }
         if (why.length > 0) {
-          report.push(`${name}: ${why}`)
+          report.push(reportLine(name, why))
           reportLines.push(e.constLines[j])
         } else {
-          consts.add(`export const ${name}: ${type} = ${e.constValues[j]}\n`)
+          consts.add(
+            `export const ${this.word(name, AS_IDENT)}: ${this.word(type, AS_IDENT)} = ${this.word(`${e.constValues[j]}`, AS_INTEGER)}\n`
+          )
         }
       }
     }
@@ -2587,12 +2805,14 @@ class Importer {
       const m = this.macros[i]
       const why = m.why.length > 0 ? m.why : this.claimConst(m.name, names, owners)
       if (why.length > 0) {
-        report.push(`${m.name}: ${why}`)
+        report.push(reportLine(m.name, why))
         reportLines.push(m.line)
       } else if (m.type === "string") {
-        consts.add(`export const ${m.name}: string = ${m.body}\n`)
+        consts.add(`export const ${this.word(m.name, AS_IDENT)}: string = ${this.word(m.body, AS_STRING)}\n`)
       } else {
-        consts.add(`export const ${m.name}: ${m.type} = ${m.value}\n`)
+        consts.add(
+          `export const ${this.word(m.name, AS_IDENT)}: ${this.word(m.type, AS_IDENT)} = ${this.word(`${m.value}`, AS_INTEGER)}\n`
+        )
       }
     }
     sortReport(report, reportLines)
@@ -2604,7 +2824,10 @@ class Importer {
     if (report.length > 0) {
       out.add("\n/* Not bound:\n")
       for (let i = 0; i < report.length; i++) {
-        out.add(` *   ${commentSafe(report[i])}\n`)
+        const line = this.word(report[i], AS_COMMENT)
+        out.add(" *   ")
+        out.add(line)
+        out.add("\n")
       }
       out.add(" */\n")
     }
@@ -2616,10 +2839,11 @@ class Importer {
  * `nish c-import <header> [--overrides <file>] [--target <triple>] -o <file>`:
  * writes the Nish module for a C header.
  *
+ * @param argv - the process arguments, `c-import` at index 1.
  * @returns the exit status: 0 written, 1 refused, 2 a usage error, 3 no clang.
  */
-export const cImport = (): i32 => {
-  const args = parseArgs(process.argv)
+export const cImport = (argv: string[]): i32 => {
+  const args = parseArgs(argv)
   if (args.status >= 0) {
     return args.status
   }
@@ -2640,7 +2864,7 @@ export const cImport = (): i32 => {
     unsafePath(args.out)
   ) {
     console.error(
-      "c-import: a path holds a quote, a backslash or a line break, which the module cannot carry"
+      "c-import: a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII, which the module cannot carry"
     )
     return 1
   }
@@ -2676,6 +2900,11 @@ export const cImport = (): i32 => {
     console.error(`c-import: ${importer.failure}`)
     return importer.failureStatus
   }
-  writeFileSync(args.out, importer.emit(args))
+  const text = importer.emit(args)
+  if (importer.refusedEmit) {
+    console.error("c-import: a name or value the module would hold is not plain ASCII; nothing written")
+    return 1
+  }
+  writeFileSync(args.out, text)
   return 0
 }

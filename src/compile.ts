@@ -796,7 +796,7 @@ const commandMain = (): number => {
   }
   // `nish c-import` writes a module from a C header (src/c-import.ts).
   if (process.argv[1] === "c-import") {
-    return cImport()
+    return cImport(process.argv)
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
