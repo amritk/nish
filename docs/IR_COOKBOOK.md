@@ -16514,6 +16514,63 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-struct -->
 
+### An opaque `declare class`: a C pointer type
+
+A `declare class` with no fields (WP66 S3) is the pointer type a C library
+hands out and takes back: SQLite's `sqlite3 *`, stdio's `FILE *`. It lowers to
+`i8*`, exactly as `CPtr` does, so the C side sees a plain pointer; the name
+lives only in the checker, which keeps a `Stmt` from being passed where a `Db`
+is wanted. `%struct.Db = type {}` is still declared and nothing uses it.
+
+```ts
+declare class Db {}
+declare class Stmt {}
+
+declare function db_open(flags: i32): Db | null;
+declare function db_close(db: Db): void;
+declare function stmt_prepare(db: Db, n: i32): Stmt;
+declare function stmt_step(stmt: Stmt): i32;
+declare function stmt_close(stmt: Stmt): void;
+```
+
+Every signature carries `i8*` where the class is named:
+
+```llvm
+%struct.Db = type {}
+%struct.Stmt = type {}
+
+declare i8* @db_open(i32)
+declare void @db_close(i8*)
+declare i8* @stmt_prepare(i8*, i32)
+declare i32 @stmt_step(i8*)
+declare void @stmt_close(i8*)
+```
+
+A `Db | null` result is stored as it comes and the `db === null` test is a
+pointer compare. A plain `Stmt` result is C's promise of a pointer, so the call
+is followed by the same `ffi.null` check a `string` result gets, which panics
+with the function's name instead of carrying `NULL` into the next call (an
+excerpt of `run`'s body, from the call on):
+
+```llvm
+  %4 = call i8* @stmt_prepare(i8* %3, i32 %n)
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  store i8* %4, i8** %stmt.addr, align 8
+```
+
+The class has no layout, so `new`, a member access, `readStruct`, a field, a
+`Result` arm and a parameter or return of a function the program defines are
+refused before any IR is written (NL2805 to NL2808). The rule is in
+[`LANGUAGE.md`](LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type); the full
+golden is `tests/cases/ffi_opaque_handle.ll`.
+
 ### `readStruct`: a C-owned struct, copied out
 
 `readStruct(p)` from `nish:unsafe` (WP27 S4.2) is the way back from a struct

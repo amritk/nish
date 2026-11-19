@@ -412,9 +412,13 @@ const mayShareMemory = (programs: CheckedProgram[], table: TypeTable, from: i32,
   return false
 }
 
-/** Adds to `out` the heap types a value of `type` reaches; false when it may reach any. */
+/**
+ * Adds to `out` the heap types a value of `type` reaches; false when it may
+ * reach any. A `CPtr` and an opaque `declare class` (WP66 S3), the same C
+ * pointer under a name, may reach any.
+ */
 const heapTypesIn = (programs: CheckedProgram[], table: TypeTable, type: i32, out: i32[]): boolean => {
-  if (type < 0 || table.isRegion(type) || type === T_CPTR) {
+  if (type < 0 || table.isRegion(type) || type === T_CPTR || table.isOpaque(type)) {
     return false
   }
   if (out.indexOf(type) >= 0) {

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 984
+export const RULE_COUNT: i32 = 988
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -439,6 +439,8 @@ const diagnosticRules = (): string[] => [
   "NL2389",
   "` is a buffer window with no `at: u32, n: u32` after it: a window is the buffer followed by the first element the page may touch and how many",
   "NL2682",
+  ": an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one",
+  "NL2805",
   "` cannot hold a function reference in an arm: an arm is not a place a reference's set is built from, so hold it in a class field or an array",
   "NL2762",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
@@ -448,7 +450,7 @@ const diagnosticRules = (): string[] => [
   "`'s `tag` is not a string literal: a variant's tag is written on the wire as a string, and typed JSON reads which one from the class's text",
   "NL2722",
   '`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`',
-  "NL2806",
+  "NL2810",
   ", and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count",
   "NL2555",
   ", which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it",
@@ -555,6 +557,8 @@ const diagnosticRules = (): string[] => [
   "NL2643",
   '`HostHandle` takes one type argument, its kind as a string literal of letters, digits and `_`, e.g. `HostHandle<"canvas">`',
   "NL2669",
+  "`: an opaque `declare class` has no fields, so the `CPtr` is the value; declare the C function to return the class itself",
+  "NL2808",
   "`: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to ",
   "NL3058",
   "A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)",
@@ -612,13 +616,15 @@ const diagnosticRules = (): string[] => [
   "`: each member of a string enum has its own string, because the string is how JSON and `String` name the member",
   "NL2786",
   "`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`",
-  "NL2805",
+  "NL2809",
   ": the block releases what it allocated before the function returns, so the caller would be handed freed memory",
   "NL2423",
   "` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end",
   "NL2597",
   "` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds",
   "NL2401",
+  "`: an opaque `declare class` has no layout to build, so only a `declare function` that returns one can make it",
+  "NL2806",
   "A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body",
   "NL2785",
   "Spread arguments are not supported: pass the array itself to a parameter of array type, or write each argument",
@@ -850,7 +856,7 @@ const diagnosticRules = (): string[] => [
   "` must be the name of a top-level function or an arrow written at the call, because `",
   "NL2339",
   "` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one",
-  "NL2808",
+  "NL2812",
   "` may be `null`: a nullable function reference is called only after a test such as `",
   "NL2758",
   "` specifier names a module inside it, so no segment may be empty or begin with a `.`",
@@ -931,6 +937,8 @@ const diagnosticRules = (): string[] => [
   "NL4008",
   "`: a constrained type parameter has only the members its constraint declares",
   "NL2330",
+  "`: C keeps its fields, and only a `declare function` can read or change them",
+  "NL2807",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
   "NL2139",
   "region memory kept by memory outside the region points at freed memory once ",
@@ -1505,7 +1513,7 @@ const diagnosticRules = (): string[] => [
   "` must be declared `const`, not `let`",
   "NL2272",
   "`, which is not one of its parameters",
-  "NL2807",
+  "NL2811",
   "`break` outside of a loop or `switch`",
   "NL2122",
   "`fill` expects 1 to 3 arguments, got ",

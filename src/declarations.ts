@@ -41,7 +41,7 @@ import {
   NodeKind,
 } from "./nodes"
 import { FieldInfo, FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
-import { checkLiteralInitializer, foreignCountWidth, layoutClass } from "./structs"
+import { checkLiteralInitializer, foreignCountWidth, layoutClass, rejectOpaque } from "./structs"
 import {
   isForeignBuffer,
   isHostWindow,
@@ -167,6 +167,7 @@ export const collectParams = (
     }
     if (!foreign) {
       rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1])
+      rejectOpaque(ctx, type, "a parameter of a function this program defines", param.children[1])
     }
     // A mask has no layout a header, a `.d.ts` or a class describes (`simd.ts`).
     if (sig.exported || owner >= 0) {
@@ -634,6 +635,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
       "the return type of a function this program defines",
       returnAnnotation
     )
+    rejectOpaque(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation)
     if (sig.exported) {
       rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
       deferExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
@@ -790,6 +792,11 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     // (`docs/wp27-ffi.md` §8d), so the string is the program's from then on
     // and C keeps its own. `string | null` answers `null` for `NULL`, and a
     // `string` panics on one (`ffi-null`).
+    return
+  }
+  if (ctx.table.isOpaque(ctx.table.stripNull(sig.returnType))) {
+    // WP66 S3: an opaque class is C's own pointer, handed out as a `CPtr` is,
+    // and `Name | null` answers `null` for `NULL` the way `CPtr | null` does.
     return
   }
   if (layoutClass(ctx.program, ctx.table, ctx.table.stripNull(sig.returnType)) !== null) {
