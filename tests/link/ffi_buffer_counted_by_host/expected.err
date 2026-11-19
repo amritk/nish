@@ -1,1 +1,0 @@
-Parameter `dst` of host function `fill` is `CountedBy`, and only a scalar, an enum or a `HostHandle` crosses between the page and wasm

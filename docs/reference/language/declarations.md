@@ -5597,7 +5597,7 @@ declare function compress(
   is written only on a parameter of a `declare function` ``
   (`tests/link/ffi_buffer_counted_by_place`). On a host module's function,
   whose buffers are windows, it does not cross, as every other non-scalar the
-  page cannot pass (NL2661, `ffi_buffer_counted_by_host`). A missing name, a name that is
+  page cannot pass (NL2661, pinned in `tests/ffi-buffer.js`). A missing name, a name that is
   not a string literal, or a buffer that is not a `u8[]`: `` `CountedBy` takes
   a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a
   string literal `` (`ffi_buffer_counted_by_form`); so is an empty name or

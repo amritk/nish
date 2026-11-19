@@ -1,1 +1,0 @@
---target wasm32 --host tests/link/ffi_buffer_counted_by_host/host.ts

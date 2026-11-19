@@ -201,6 +201,52 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       unprovedLength.length === 2 && unprovedLength.every((p) => p.proven !== true),
       unprovedSites.report === null ? shown(unprovedSites.r) : JSON.stringify(unprovedSites.report)
     )
+    // A host module is the page's, not C's, so `CountedBy` on its function is
+    // refused before the checker reads it (NL2661), never silently ignored.
+    // Written here, not under tests/link: a host module keeps its
+    // `export function` spelling, which the arrow-corpus check refuses.
+    const countedHost = write(
+      "counted-host.ts",
+      [
+        'import type { i32, u8, u32 } from "nish"',
+        'export function fill(dst: CountedBy<u8[], "n">, n: u32): i32 {',
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const countedHostMain = write(
+      "counted-host-main.ts",
+      [
+        'import { fill } from "./counted-host"',
+        "",
+        "export const main = (): i32 => {",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const countedHostBuilt = spawnSync(
+      nish,
+      [
+        countedHostMain,
+        "--target",
+        "wasm32",
+        "--host",
+        countedHost,
+        "-o",
+        path.join(bufDir, "counted-host.ll"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      "ffi_buffer: a host function's `CountedBy` parameter is refused with NL2661",
+      countedHostBuilt.status === 1 &&
+        countedHostBuilt.stderr.includes(
+          "Parameter `dst` of host function `fill` is `CountedBy`, and only a scalar, an enum or a `HostHandle` crosses between the page and wasm"
+        ),
+      shown(countedHostBuilt)
+    )
     const provedFfi = compileBuf(proved, ["--deny", "ffi"])
     check(
       "ffi_buffer: --deny ffi refuses a call that passes a buffer",
