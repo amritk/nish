@@ -27,7 +27,8 @@
 //
 // Each round runs every workload on the build, its copy and the C twin, in an
 // order that rotates by round, so over a multiple of 3 rounds each goes first
-// equally often. A run times
+// equally often; feed-cursor, which twin.c has no path for, runs on the build
+// and its copy alone, and its line is set against feed's. A run times
 // its own loop and prints a checksum of every value it read; every run of a
 // workload must print the same rows and checksum. The report is ns per call,
 // min, median and interquartile range over the rounds; the cost of the module
@@ -69,9 +70,13 @@ if (!(rounds >= 2)) {
 }
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
+// feed-cursor reads feed's rows through cursors instead of SQL: it runs at
+// feed's count and must print feed's line (`same`), and twin.c has no cursor
+// path, so it runs on the build and its copy only (`noTwin`).
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
+  { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
   { name: "insert-txn", count: validate ? 2000 : 100000 },
 ]
@@ -208,14 +213,26 @@ const runOnce = (bin, w) => {
 
 const bins = [exe, copy, twin]
 const labels = ["nish", "nish copy", "C"]
+/** The binaries that run workload `w`: index into `bins`. */
+const ranBy = (w) => (w.noTwin ? [0, 1] : [0, 1, 2])
+const byName = new Map(WORKLOADS.map((w, i) => [w.name, i]))
 
 if (validate) {
+  const seen = new Map()
   for (const w of WORKLOADS) {
-    const answers = bins.map((b) => runOnce(b, w).answer)
+    const answers = ranBy(w).map((k) => runOnce(bins[k], w).answer)
     if (answers.some((a) => a !== answers[0])) {
       fail(`${w.name}: the sides disagree\n${answers.map((a, k) => `  ${labels[k]}: ${a}`).join("\n")}`)
     }
-    console.log(`${w.name}: ${answers[0]}, the same on both sides`)
+    if (w.same !== undefined && answers[0] !== seen.get(w.same)) {
+      fail(`${w.name} printed ${answers[0]}, not ${w.same}'s ${seen.get(w.same)}`)
+    }
+    seen.set(w.name, answers[0])
+    console.log(
+      w.same !== undefined
+        ? `${w.name}: ${answers[0]}, the same on the build and its copy, and the same as ${w.same}`
+        : `${w.name}: ${answers[0]}, the same on both sides`
+    )
   }
   console.log("bench/sqlite: valid")
   process.exit(0)
@@ -244,11 +261,14 @@ const answers = WORKLOADS.map(() => null)
 const timed = Math.ceil(rounds / bins.length) * bins.length
 for (let round = 0; round <= timed; round++) {
   for (let w = 0; w < WORKLOADS.length; w++) {
-    for (let j = 0; j < bins.length; j++) {
-      const k = (j + round) % bins.length
+    const ks = ranBy(WORKLOADS[w])
+    for (let j = 0; j < ks.length; j++) {
+      const k = ks[(j + round) % ks.length]
       const r = runOnce(bins[k], WORKLOADS[w])
-      if (answers[w] !== null && r.answer !== answers[w]) {
-        fail(`round ${round}: ${labels[k]} ${WORKLOADS[w].name} printed ${r.answer}, not ${answers[w]}`)
+      const same = WORKLOADS[w].same
+      const expected = answers[w] ?? (same === undefined ? null : answers[byName.get(same)])
+      if (expected !== null && r.answer !== expected) {
+        fail(`round ${round}: ${labels[k]} ${WORKLOADS[w].name} printed ${r.answer}, not ${expected}`)
       }
       answers[w] = r.answer
       if (round > 0) {
@@ -267,16 +287,27 @@ console.log(`sqlite: ${timed} rounds; SQLite ${version?.[1] ?? "of unknown versi
 for (let w = 0; w < WORKLOADS.length; w++) {
   const [n, c, t] = times[w]
   console.log(`${WORKLOADS[w].name}: ${answers[w]}`)
-  for (let k = 0; k < bins.length; k++) {
+  for (const k of ranBy(WORKLOADS[w])) {
     console.log(
       `  ${labels[k].padEnd(10)} min ${ns(min(times[w][k]))}/call, median ${ns(median(times[w][k]))}/call,` +
         ` IQR ${ns(iqr(times[w][k]))}`
     )
   }
-  console.log(
-    `  nish - C   min ${signed(min(n) - min(t))}, median ${signed(median(n) - median(t))}` +
-      ` (${(((median(n) - median(t)) / median(t)) * 100).toFixed(1)}% of C's median)`
-  )
+  const same = WORKLOADS[w].same
+  if (same !== undefined) {
+    // Against the other workload's build, timed in the same rounds.
+    const s = times[byName.get(same)][0]
+    console.log(
+      `  - ${same.padEnd(8)} min ${signed(min(n) - min(s))}, median ${signed(median(n) - median(s))}` +
+        ` (${(((median(n) - median(s)) / median(s)) * 100).toFixed(1)}% of ${same}'s median)`
+    )
+  }
+  if (!WORKLOADS[w].noTwin) {
+    console.log(
+      `  nish - C   min ${signed(min(n) - min(t))}, median ${signed(median(n) - median(t))}` +
+        ` (${(((median(n) - median(t)) / median(t)) * 100).toFixed(1)}% of C's median)`
+    )
+  }
   console.log(
     `  noise band (build against its copy): min ${ns(Math.abs(min(n) - min(c)))}` +
       ` (${((Math.abs(min(n) - min(c)) / min(n)) * 100).toFixed(1)}%),` +
