@@ -877,3 +877,122 @@ export const padStart = (text: string, width: i32, fill: string): string =>
  */
 export const padEnd = (text: string, width: i32, fill: string): string =>
   text + textPadding(text, width, fill, "padEnd")
+
+/**
+ * The ASCII digits of 00 to 99, two bytes a number: `n`'s pair starts at
+ * `2 * n`. One load per digit pair is what makes `formatI64` cheaper than a
+ * digit-at-a-time loop, which divides once per digit.
+ */
+// biome-ignore format: one row a line, ten pairs each
+const TEXT_DIGIT_PAIRS: readonly u8[] = [
+  48, 48, 48, 49, 48, 50, 48, 51, 48, 52, 48, 53, 48, 54, 48, 55, 48, 56, 48, 57,
+  49, 48, 49, 49, 49, 50, 49, 51, 49, 52, 49, 53, 49, 54, 49, 55, 49, 56, 49, 57,
+  50, 48, 50, 49, 50, 50, 50, 51, 50, 52, 50, 53, 50, 54, 50, 55, 50, 56, 50, 57,
+  51, 48, 51, 49, 51, 50, 51, 51, 51, 52, 51, 53, 51, 54, 51, 55, 51, 56, 51, 57,
+  52, 48, 52, 49, 52, 50, 52, 51, 52, 52, 52, 53, 52, 54, 52, 55, 52, 56, 52, 57,
+  53, 48, 53, 49, 53, 50, 53, 51, 53, 52, 53, 53, 53, 54, 53, 55, 53, 56, 53, 57,
+  54, 48, 54, 49, 54, 50, 54, 51, 54, 52, 54, 53, 54, 54, 54, 55, 54, 56, 54, 57,
+  55, 48, 55, 49, 55, 50, 55, 51, 55, 52, 55, 53, 55, 54, 55, 55, 55, 56, 55, 57,
+  56, 48, 56, 49, 56, 50, 56, 51, 56, 52, 56, 53, 56, 54, 56, 55, 56, 56, 56, 57,
+  57, 48, 57, 49, 57, 50, 57, 51, 57, 52, 57, 53, 57, 54, 57, 55, 57, 56, 57, 57,
+]
+
+/**
+ * Writes the decimal digits of `value` at the end of `buf`, a 20-byte buffer,
+ * and answers the index of the first digit; 20 digits is the most a `u64`
+ * has. Four digits at a time while at least five remain, then the last one to
+ * four. The pair loop counts `k` up and writes at `16 - 4 * k` rather than
+ * decrementing a cursor, so the bounds proof (`src/bounds.ts`) and LLVM both
+ * see every index in range and the access needs no check; a remainder is
+ * written `%`, so LLVM knows each pair index is below 200.
+ */
+const writeTextDigits = (buf: u8[], value: u64): i32 => {
+  let u: u64 = value
+  let p: i32 = 20
+  // 10^16 * 10^4 > 2^64, so a fifth group never starts.
+  for (let k: i32 = 0; k < 4 && u >= toU64(10000); k++) {
+    const group: u32 = toU32(u % toU64(10000))
+    u = u / toU64(10000)
+    const hi: i32 = toI32(group / toU32(100)) * 2
+    const lo: i32 = toI32(group % toU32(100)) * 2
+    const at: i32 = toI32(16) - k * 4
+    if (at >= 0 && at + 3 < toI32(buf.length)) {
+      buf[at] = TEXT_DIGIT_PAIRS[hi]
+      buf[at + 1] = TEXT_DIGIT_PAIRS[hi + 1]
+      buf[at + 2] = TEXT_DIGIT_PAIRS[lo]
+      buf[at + 3] = TEXT_DIGIT_PAIRS[lo + 1]
+    }
+    p = at
+  }
+  let rest: u32 = toU32(u)
+  if (rest >= toU32(100)) {
+    const lo: i32 = toI32(rest % toU32(100)) * 2
+    rest = rest / toU32(100)
+    const at: i32 = p - 2
+    if (at >= 0 && at + 1 < toI32(buf.length)) {
+      buf[at] = TEXT_DIGIT_PAIRS[lo]
+      buf[at + 1] = TEXT_DIGIT_PAIRS[lo + 1]
+    }
+    p = at
+  }
+  if (rest >= toU32(10)) {
+    const pair: i32 = toI32(rest) * 2
+    const at: i32 = p - 2
+    if (at >= 0 && at + 1 < toI32(buf.length)) {
+      buf[at] = TEXT_DIGIT_PAIRS[pair]
+      buf[at + 1] = TEXT_DIGIT_PAIRS[pair + 1]
+    }
+    p = at
+  } else {
+    const at: i32 = p - 1
+    if (at >= 0 && at < toI32(buf.length)) {
+      buf[at] = toU8(toI32(rest) + 48)
+    }
+    p = at
+  }
+  return p
+}
+
+/**
+ * `value` in decimal: the string `` `${value}` `` makes for an `i64`, with a
+ * `-` in front of a negative one and no leading zeros, so `formatI64(-42)` is
+ * `"-42"` and the smallest `i64` is `"-9223372036854775808"`. An `i32` is
+ * `formatI64(toI64(x))`.
+ *
+ * Written in Nish where `` `${value}` `` calls the runtime's C formatter
+ * (`nish_str_from_i64`), and cheaper than it: the digits go two to a load
+ * from a 200-byte table, four to a 64-bit division, into a 20-byte buffer the
+ * function keeps on its stack, and the string is one `String.fromBytes` of
+ * it. `bench/int-format.ts` times the two over the same values. Not for the
+ * Node prelude, which leaves `i64` and `u64` out (`docs/RUN_UNDER_NODE.md`).
+ *
+ * @param value The integer to write.
+ * @returns Its decimal digits, after a `-` when it is negative.
+ */
+export const formatI64 = (value: i64): string => {
+  const buf: u8[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  const negative = value < toI64(0)
+  // `0 - u` in u64 is the magnitude, the smallest i64 included.
+  let p: i32 = writeTextDigits(buf, negative ? toU64(0) - toU64(value) : toU64(value))
+  if (negative) {
+    p = p - 1
+    if (p >= 0 && p < toI32(buf.length)) {
+      buf[p] = toU8(45)
+    }
+  }
+  return String.fromBytes(buf, p, 20)
+}
+
+/**
+ * `value` in decimal: the string `` `${value}` `` makes for a `u64`, so the
+ * largest is `"18446744073709551615"`. A `u8`, `u16` or `u32` is
+ * `formatU64(toU64(x))`. The digits are `formatI64`'s loop.
+ *
+ * @param value The integer to write.
+ * @returns Its decimal digits.
+ */
+export const formatU64 = (value: u64): string => {
+  const buf: u8[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  const p: i32 = writeTextDigits(buf, value)
+  return String.fromBytes(buf, p, 20)
+}

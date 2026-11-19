@@ -3461,6 +3461,7 @@ const ASCII_LOWER_Z: i32 = 122
 const ASCII_UPPER_A: i32 = 65
 const ASCII_UPPER_Z: i32 = 90
 const ASCII_CASE_DISTANCE: i32 = 32
+const TEXT_DIGIT_PAIRS: readonly u8[] = [48, 48, 48, 49, 48, 50, 48, 51, 48, 52, 48, 53, 48, 54, 48, 55, 48, 56, 48, 57, 49, 48, 49, 49, 49, 50, 49, 51, 49, 52, 49, 53, 49, 54, 49, 55, 49, 56, 49, 57, 50, 48, 50, 49, 50, 50, 50, 51, 50, 52, 50, 53, 50, 54, 50, 55, 50, 56, 50, 57, 51, 48, 51, 49, 51, 50, 51, 51, 51, 52, 51, 53, 51, 54, 51, 55, 51, 56, 51, 57, 52, 48, 52, 49, 52, 50, 52, 51, 52, 52, 52, 53, 52, 54, 52, 55, 52, 56, 52, 57, 53, 48, 53, 49, 53, 50, 53, 51, 53, 52, 53, 53, 53, 54, 53, 55, 53, 56, 53, 57, 54, 48, 54, 49, 54, 50, 54, 51, 54, 52, 54, 53, 54, 54, 54, 55, 54, 56, 54, 57, 55, 48, 55, 49, 55, 50, 55, 51, 55, 52, 55, 53, 55, 54, 55, 55, 55, 56, 55, 57, 56, 48, 56, 49, 56, 50, 56, 51, 56, 52, 56, 53, 56, 54, 56, 55, 56, 56, 56, 57, 57, 48, 57, 49, 57, 50, 57, 51, 57, 52, 57, 53, 57, 54, 57, 55, 57, 56, 57, 57]
 function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -3657,6 +3658,42 @@ function padEnd(text: string, width: i32, fill: string): string -> @nish.padEnd 
   calls: nish.textPadding nish_str_concat
   stackSites=0 stackLocals=0
   callee +0:10 textPadding -> @nish.textPadding
+function writeTextDigits(buf: u8[], value: u64): i32 -> @nish.writeTextDigits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: value
+  calls: nish_panic_div nish_panic_index nish_panic_overflow
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -10:7 u: u64 (let)
+  local -9:7 p: i32 (let)
+  local -7:12 k: i32 (let)
+  local -6:11 group: u32 (const)
+  local -4:11 hi: i32 (const)
+  local -3:11 lo: i32 (const)
+  local -2:11 at: i32 (const)
+  local +7:7 rest: u32 (let)
+  local +9:11 lo: i32 (const)
+  local +11:11 at: i32 (const)
+  local +19:11 pair: i32 (const)
+  local +20:11 at: i32 (const)
+  local +27:11 at: i32 (const)
+function formatI64(value: i64): string -> @nish.formatI64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.writeTextDigits nish_panic_overflow nish_panic_slice nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:9 buf: u8[] (const)
+  local +1:9 negative: boolean (const)
+  local +3:7 p: i32 (let)
+  callee +3:16 writeTextDigits -> @nish.writeTextDigits
+function formatU64(value: u64): string -> @nish.formatU64 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: value
+  calls: nish.writeTextDigits nish_panic_slice nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:9 buf: u8[] (const)
+  local +1:9 p: i32 (const)
+  callee +1:18 writeTextDigits -> @nish.writeTextDigits
 import YAML_ALIAS from "nish/yaml" -> const YAML_ALIAS
 import YAML_MAP from "nish/yaml" -> const YAML_MAP
 import YAML_PAIR from "nish/yaml" -> const YAML_PAIR

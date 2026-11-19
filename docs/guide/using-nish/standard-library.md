@@ -187,7 +187,7 @@ shown).
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
-| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny`, `splitLimit`, `toFixed` |
+| [`nish/text`](#nishtext) | `split`, `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `asciiUpper`, `asciiLower`, `padStart`, `padEnd`, `firstDifference`, `codePointLength`, `indexOfAny`, `splitLimit`, `toFixed`, `formatI64`, `formatU64` |
 | [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
@@ -331,6 +331,33 @@ total: 60.00
 (`toFixed: digits must be 0 to 100`). `NaN`, the infinities and a number of
 magnitude `1e21` or more print as a template hole prints them, as JavaScript
 does. The answers are the same compiled and under Node.
+
+`formatI64(x)` and `formatU64(x)` write an integer in decimal, the same
+string `` `${x}` `` makes: `formatI64(-42)` is `"-42"` and
+`formatU64(toU64(0) - toU64(1))` is `"18446744073709551615"`. Write a smaller
+type through a conversion, `formatI64(toI64(n))` for an `i32`. They are
+written in Nish where the template hole calls the runtime's C formatter,
+and they run about a tenth faster on a mix of short and long numbers
+([`bench/int-format.ts`](https://github.com/amritk/nish/blob/main/bench/int-format.ts)),
+so a loop that prints many integers can use them. They are not for the Node
+prelude, which leaves `i64` and `u64` out.
+
+<!-- nish:ok -->
+```ts
+import { formatI64, formatU64 } from "nish/text";
+
+export const main = (): i32 => {
+  console.log(formatI64(toI64(-42)));
+  console.log(formatU64(toU64(0) - toU64(1)));
+  return 0;
+};
+```
+
+```console
+$ nish run digits.ts
+-42
+18446744073709551615
+```
 
 `asciiUpper(text)` and `asciiLower(text)` change the letters `a` to `z` and
 `A` to `Z` and nothing else, so every other byte, the bytes of `é` and `ß`

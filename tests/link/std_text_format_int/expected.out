@@ -1,0 +1,15 @@
+PASS  formatI64: zero
+PASS  formatI64: one digit
+PASS  formatI64: a negative one-digit
+PASS  formatI64: two digits
+PASS  formatI64: a negative two-digit
+PASS  formatI64: five digits, one past a group
+PASS  formatI64: an i32 through toI64
+PASS  formatI64: the largest i64
+PASS  formatI64: the smallest i64, whose magnitude no i64 holds
+PASS  formatU64: zero
+PASS  formatU64: the largest u64, twenty digits
+PASS  formatU64: a u32 through toU64
+PASS  formatI64 and formatU64: every power of ten and its neighbours match the template hole
+PASS  formatI64 and formatU64: two hundred thousand xorshift values match the template hole
+format-int: 14 passed, 0 failed, 0 skipped

@@ -11,6 +11,8 @@ import {
   codePointLength,
   contains,
   firstDifference,
+  formatI64,
+  formatU64,
   indexOfAny,
   padEnd,
   padStart,
@@ -74,6 +76,18 @@ Whether `needle` occurs anywhere in `haystack`.
 <scalar-card title="first​Difference" icon="phosphor/regular/function" href="#firstdifference">
 
 The index of the first line at which `left` and `right` differ, or `-1` when one is a prefix of the other and they have the same length — that is, when they are equal.
+
+</scalar-card>
+
+<scalar-card title="format​I64" icon="phosphor/regular/function" href="#formati64">
+
+`value` in decimal: the string `` `${value}` `` makes for an `i64`, with a `-` in front of a negative one and no leading zeros, so `formatI64(-42)` is `"-42"` and the smallest `i64` is `"-9223372036854775808"`.
+
+</scalar-card>
+
+<scalar-card title="format​U64" icon="phosphor/regular/function" href="#formatu64">
+
+`value` in decimal: the string `` `${value}` `` makes for a `u64`, so the largest is `"18446744073709551615"`.
 
 </scalar-card>
 
@@ -352,6 +366,58 @@ The other side's lines, compared to `left`'s with `!==` by
 
 The index of the first line that differs, the shorter length when
   one side is a prefix of the other, or `-1` when they are equal.
+
+</scalar-field>
+
+### formatI64
+
+`value` in decimal: the string `` `${value}` `` makes for an `i64`, with a
+`-` in front of a negative one and no leading zeros, so `formatI64(-42)` is
+`"-42"` and the smallest `i64` is `"-9223372036854775808"`. An `i32` is
+`formatI64(toI64(x))`.
+
+Written in Nish where `` `${value}` `` calls the runtime's C formatter
+(`nish_str_from_i64`), and cheaper than it: the digits go two to a load
+from a 200-byte table, four to a 64-bit division, into a 20-byte buffer the
+function keeps on its stack, and the string is one `String.fromBytes` of
+it. `bench/int-format.ts` times the two over the same values. Not for the
+Node prelude, which leaves `i64` and `u64` out (`docs/RUN_UNDER_NODE.md`).
+
+```ts
+const formatI64: (value: i64) => string
+```
+
+<scalar-field name="value" type="i64" required>
+
+The integer to write.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+Its decimal digits, after a `-` when it is negative.
+
+</scalar-field>
+
+### formatU64
+
+`value` in decimal: the string `` `${value}` `` makes for a `u64`, so the
+largest is `"18446744073709551615"`. A `u8`, `u16` or `u32` is
+`formatU64(toU64(x))`. The digits are `formatI64`'s loop.
+
+```ts
+const formatU64: (value: u64) => string
+```
+
+<scalar-field name="value" type="u64" required>
+
+The integer to write.
+
+</scalar-field>
+
+<scalar-field name="returns" type="string">
+
+Its decimal digits.
 
 </scalar-field>
 
