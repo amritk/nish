@@ -291,12 +291,25 @@ check(
   ogVideoUrls.join(", ")
 )
 
+/** A copy of `node`'s tree with no listeners: markup as the server sends it. */
+const copyTree = (node, document) => {
+  const copy = document.createElement(node.tag)
+  copy.className = node.className
+  copy.attributes = { ...node.attributes }
+  copy.text = node.text
+  copy.append(...node.children.map((c) => (typeof c === "string" ? c : copyTree(c, document))))
+  return copy
+}
+
 /**
  * Runs site.js in a fresh fake document. Its `import(...)` goes to
  * `load(specifier)`, so a test decides what the import does.
  */
-const runSite = (load) => {
+const runSite = (load, prefill = null) => {
   const { document, host } = makeDocument()
+  if (prefill !== null) {
+    host.append(copyTree(prefill, document))
+  }
   const window = {}
   // What the page has selected: a test selects text with `selection.isCollapsed = false`.
   const selection = { isCollapsed: true }
@@ -331,6 +344,22 @@ const runSite = (load) => {
     index.match(line)?.[0] === markup,
     "run node tests/break-web/check.mjs --write-hero"
   )
+}
+
+{
+  // The hero already in the page, as the server's HTML puts it there: wired, not built again.
+  const asked = []
+  const built = runSite(() => new Promise(() => {})).host.children[0]
+  const hero = runSite((specifier) => {
+    asked.push(specifier)
+    return new Promise(() => {})
+  }, built)
+  check("site.js wires a hero already on the page and builds no second one", hero.host.children.length === 1 &&
+    hero.host.attributes["data-nish-ready"] === "", hero.host.children.length)
+  check("the copy button of a hero already on the page answers a click",
+    (hero.host.find("nish-hero__install")?.listeners.get("click") ?? []).length === 1)
+  typeIn(hero.terminal.find("nish-hero__input"), "l")
+  check("the terminal of a hero already on the page asks for the shell", asked.join(", ") === "/break/shell.mjs", asked.join(", "))
 }
 
 {
