@@ -51,15 +51,16 @@ function implementationAt(list: Node[], i: i32): i32 -> @implementationAt
 function recordFrom(ctx: CheckContext, list: Node[], lift: boolean): Node[] -> @recordFrom
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: implementationAt nish_array_grow nish_panic_index
+  calls: implementationAt nish_array_grow
   pointer ctx: size=448 writesThrough=false captured=false
   pointer list: size=0 writesThrough=false captured=false passedTo=implementationAt#0
   stackSites=0 stackLocals=0
-  local -11:9 kept: Node[] (const)
-  local -10:7 i: i32 (let)
-  local -8:11 impl: i32 (const)
-  callee -8:18 implementationAt -> @implementationAt
-  local -2:11 target: Node (const)
+  local -12:9 kept: Node[] (const)
+  local -11:7 i: i32 (let)
+  local -9:11 impl: i32 (const)
+  callee -9:18 implementationAt -> @implementationAt
+  local -3:11 target: Node (const)
+  local -1:13 signature: Node (const)
 function recordOverloads(ctx: CheckContext, file: Node): void -> @recordOverloads [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

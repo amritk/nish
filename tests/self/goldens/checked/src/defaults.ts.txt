@@ -69,9 +69,9 @@ function isOverloaded(file: Node, name: string): boolean -> @isOverloaded
   stackSites=0 stackLocals=0
   local +0:14 stmt: Node (const)
 function admits(file: Node, decl: Node, last: i32): boolean -> @admits
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: last
-  calls: firstDefault isOverloaded nish_panic_index
+  calls: firstDefault isOverloaded
   pointer file: size=40 writesThrough=false captured=false passedTo=isOverloaded#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -120,35 +120,36 @@ function buildWrapper(parser: Parser, decl: Node, arity: i32, next: string): Nod
   local +1:9 list: Node (const)
   callee +1:16 Parser.list -> @Parser.list
   local +2:7 i: i32 (let)
-  local +4:11 param: Node (const)
-  callee +4:19 Parser.node -> @Parser.node
-  callee +6:25 cloneTree -> @cloneTree
+  local +4:11 source: Node (const)
+  local +5:11 param: Node (const)
+  callee +5:19 Parser.node -> @Parser.node
   callee +7:25 cloneTree -> @cloneTree
-  callee +11:25 Parser.closeList -> @Parser.closeList
-  callee +12:25 cloneTree -> @cloneTree
-  local +13:9 body: Node (const)
-  callee +13:16 Parser.node -> @Parser.node
-  local +14:9 local: Node (const)
-  callee +14:17 Parser.node -> @Parser.node
-  local +16:9 decls: Node (const)
-  callee +16:17 Parser.list -> @Parser.list
-  local +17:9 binding: Node (const)
-  callee +17:19 Parser.node -> @Parser.node
-  callee +18:25 cloneTree -> @cloneTree
+  callee +8:25 cloneTree -> @cloneTree
+  callee +12:25 Parser.closeList -> @Parser.closeList
+  callee +13:25 cloneTree -> @cloneTree
+  local +14:9 body: Node (const)
+  callee +14:16 Parser.node -> @Parser.node
+  local +15:9 local: Node (const)
+  callee +15:17 Parser.node -> @Parser.node
+  local +17:9 decls: Node (const)
+  callee +17:17 Parser.list -> @Parser.list
+  local +18:9 binding: Node (const)
+  callee +18:19 Parser.node -> @Parser.node
   callee +19:25 cloneTree -> @cloneTree
-  callee +22:23 Parser.closeList -> @Parser.closeList
-  local +24:9 call: Node (const)
-  callee +24:16 Parser.node -> @Parser.node
-  callee +25:22 ident -> @ident
-  local +26:9 args: Node (const)
-  callee +26:16 Parser.list -> @Parser.list
-  callee +29:24 ident -> @ident
-  callee +32:22 Parser.closeList -> @Parser.closeList
-  local +33:9 returned: Node (const)
-  local +34:9 isVoid: boolean (const)
-  local +35:9 stmt: Node (const)
-  callee +35:16 Parser.node -> @Parser.node
-  callee +39:25 Parser.list -> @Parser.list
+  callee +20:25 cloneTree -> @cloneTree
+  callee +23:23 Parser.closeList -> @Parser.closeList
+  local +25:9 call: Node (const)
+  callee +25:16 Parser.node -> @Parser.node
+  callee +26:22 ident -> @ident
+  local +27:9 args: Node (const)
+  callee +27:16 Parser.list -> @Parser.list
+  callee +30:24 ident -> @ident
+  callee +33:22 Parser.closeList -> @Parser.closeList
+  local +34:9 returned: Node (const)
+  local +35:9 isVoid: boolean (const)
+  local +36:9 stmt: Node (const)
+  callee +36:16 Parser.node -> @Parser.node
+  callee +40:25 Parser.list -> @Parser.list
 function liftDefaults(parser: Parser, file: Node, allowed: boolean): DefaultWrappers -> @liftDefaults [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: +0:7
@@ -156,32 +157,33 @@ function liftDefaults(parser: Parser, file: Node, allowed: boolean): DefaultWrap
   pointer parser: size=112 writesThrough=true captured=false passedTo=markOptional#0 buildWrapper#0
   pointer file: size=40 writesThrough=true captured=false passedTo=markOptional#1 admits#0
   stackSites=0 stackLocals=0
-  local -49:9 made: DefaultWrappers (const)
-  callee -49:16 new DefaultWrappers -> @DefaultWrappers.constructor
-  local -47:16 stmt: Node (const)
-  callee -46:11 takesWrappers -> @takesWrappers
-  local -45:15 last: i32 (const)
-  callee -45:22 lastEvaluated -> @lastEvaluated
-  local -44:15 params: Node[] (const)
-  local -43:13 i: i32 (let)
-  callee -34:3 markOptional -> @markOptional
-  local -33:9 kept: Node[] (const)
-  local -32:14 stmt: Node (const)
-  callee -30:10 takesWrappers -> @takesWrappers
-  local -27:11 last: i32 (const)
-  callee -27:18 lastEvaluated -> @lastEvaluated
-  local -23:11 params: Node[] (const)
-  callee -22:10 admits -> @admits
-  local -21:11 i: i32 (let)
-  local -14:11 first: i32 (const)
-  callee -14:19 firstDefault -> @firstDefault
-  local -13:11 name: string (const)
-  local -12:9 arity: i32 (let)
-  local -10:13 next: string (const)
-  callee -10:35 wrapperName -> @wrapperName
-  local -9:13 wrapper: Node (const)
-  callee -9:23 buildWrapper -> @buildWrapper
-  local -2:9 i: i32 (let)
+  local -50:9 made: DefaultWrappers (const)
+  callee -50:16 new DefaultWrappers -> @DefaultWrappers.constructor
+  local -48:16 stmt: Node (const)
+  callee -47:11 takesWrappers -> @takesWrappers
+  local -46:15 last: i32 (const)
+  callee -46:22 lastEvaluated -> @lastEvaluated
+  local -45:15 params: Node[] (const)
+  local -44:13 i: i32 (let)
+  callee -35:3 markOptional -> @markOptional
+  local -34:9 kept: Node[] (const)
+  local -33:14 stmt: Node (const)
+  callee -31:10 takesWrappers -> @takesWrappers
+  local -28:11 last: i32 (const)
+  callee -28:18 lastEvaluated -> @lastEvaluated
+  local -24:11 params: Node[] (const)
+  callee -23:10 admits -> @admits
+  local -22:11 i: i32 (let)
+  local -15:11 first: i32 (const)
+  callee -15:19 firstDefault -> @firstDefault
+  local -14:11 name: string (const)
+  local -13:9 arity: i32 (let)
+  local -11:13 next: string (const)
+  callee -11:35 wrapperName -> @wrapperName
+  local -10:13 wrapper: Node (const)
+  callee -10:23 buildWrapper -> @buildWrapper
+  local -3:9 i: i32 (let)
+  local -1:13 param: Node (const)
 function defaultTarget(ctx: CheckContext, sig: FunctionSig, count: i32): FunctionSig -> @defaultTarget [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=208
   escaping: sig

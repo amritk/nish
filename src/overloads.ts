@@ -130,11 +130,12 @@ const recordFrom = (ctx: CheckContext, list: Node[], lift: boolean): Node[] => {
       continue
     }
     const target = list[impl]
-    while (i < impl && i < list.length) {
-      ctx.overloadSignatures.push(list[i])
+    while (i >= 0 && i < impl && i < list.length) {
+      const signature = list[i]
+      ctx.overloadSignatures.push(signature)
       ctx.overloadOf.push(target)
       if (!lift) {
-        kept.push(list[i])
+        kept.push(signature)
       }
       i = i + 1
     }

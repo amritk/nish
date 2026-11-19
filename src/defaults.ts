@@ -185,7 +185,7 @@ const admits = (file: Node, decl: Node, last: i32): boolean => {
   }
   const params = decl.children[1].children
   let i = firstDefault(params, last)
-  while (i <= last && i < params.length) {
+  while (i >= 0 && i <= last && i < params.length) {
     if ((params[i].flags & FLAG_DEFAULT) === 0) {
       return false
     }
@@ -230,11 +230,12 @@ const buildWrapper = (parser: Parser, decl: Node, arity: i32, next: string): Nod
   wrapper.children.push(ident(parser, wrapperName(decl.children[0].text, arity), decl.children[0]))
   const list = parser.list()
   let i = 0
-  while (i < arity && i < params.length) {
-    const param = parser.node(NodeKind.Param, params[i].start, params[i].end)
+  while (i >= 0 && i < arity && i < params.length) {
+    const source = params[i]
+    const param = parser.node(NodeKind.Param, source.start, source.end)
     param.flags = FLAG_SIGNATURE
-    param.children.push(cloneTree(parser, params[i].children[0]))
-    param.children.push(cloneTree(parser, params[i].children[1]))
+    param.children.push(cloneTree(parser, source.children[0]))
+    param.children.push(cloneTree(parser, source.children[1]))
     list.children.push(param)
     i = i + 1
   }
@@ -328,9 +329,10 @@ export const liftDefaults = (parser: Parser, file: Node, allowed: boolean): Defa
       arity = arity + 1
     }
     let i = first
-    while (i <= last && i < params.length) {
-      params[i].flags = params[i].flags & ~FLAG_DEFAULT
-      params[i].children = [params[i].children[0], params[i].children[1]]
+    while (i >= 0 && i <= last && i < params.length) {
+      const param = params[i]
+      param.flags = param.flags & ~FLAG_DEFAULT
+      param.children = [param.children[0], param.children[1]]
       i = i + 1
     }
   }
