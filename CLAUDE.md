@@ -26,7 +26,7 @@ call `walk.missType()`, never take the "not bound" branch.
 Locally, before pushing: `npm run check`, `npm run lint`, and
 `node tests/run.js <filter>` for every section or program the change touches
 (plus the `src/` runs below). **The full-suite gate is CI**: every
-`test (…, shard N/8)` row green on the current head, each shard's summary read
+`test (…, shard N/9)` row green on the current head, each shard's summary read
 for its skip count like a local run (`AGENTS.md` → "Trusting a test run"). Run
 the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
@@ -149,7 +149,7 @@ Every call re-reads the whole context, so cost is context size × calls.
   shipping, offer a short handoff for a fresh session instead.
 - **CI runs the full suite, not the session.** Unsharded, `npm test` takes 40
   to 70 minutes in a 4-core cloud session; CI's `test` job runs all of it in
-  eight cost-dealt shards on every push (about 10 minutes wall). Run the
+  nine cost-dealt shards on every push (about 10 minutes wall). Run the
   targeted sections in the [definition of done](#definition-of-done) and let
   the shards answer for the rest.
 - **Wait for a long run without polling.** Commit first, start it once in the
