@@ -12113,6 +12113,18 @@ int main(void) {
         staleRun.stdout === fs.readFileSync(path.join(root, staleDir, "expected.out"), "utf8"),
       staleDebug.stderr + (staleRun ? staleRun.stdout.slice(-2000) + staleRun.stderr : "")
     )
+    // The shape cache frees its KeyInfo references at close; SQLite asserts
+    // that a free through a connection holds that connection's mutex.
+    const shapesDir = path.join("tests", "link", "std_sqlite_cursor_shapes")
+    const shapesDebug = link(path.join(shapesDir, "main.ts"), "shapes-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const shapesRun = shapesDebug.status === 0 ? runOut("shapes-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_shapes passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      shapesRun !== null &&
+        shapesRun.status === 0 &&
+        shapesRun.stdout === fs.readFileSync(path.join(root, shapesDir, "expected.out"), "utf8"),
+      shapesDebug.stderr + (shapesRun ? shapesRun.stdout.slice(-2000) + shapesRun.stderr : "")
+    )
     // The default build has no virtual-table module, so the schema program
     // makes an rtree only when SQLite is built with one.
     const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {
