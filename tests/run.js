@@ -58,6 +58,7 @@ import {
   HTTP3_SERVER_START_BYTES,
   HTTP3_SERVER_SLOT_BYTES,
   RUNTIME_BUDGETS,
+  SQLITE_BUILD_DEFINES,
   TLS_TCP_START_BYTES,
   WASM_HOST_SIZE_BUDGETS,
   WASM_PLAIN_DIGESTS,
@@ -11491,7 +11492,7 @@ if (dealtHere("sqliteLink")) {
     const cacheRoot = path.join(sqDir, "cache", "nish", "runtime")
     const entries = () => (fs.existsSync(cacheRoot) ? fs.readdirSync(cacheRoot).sort() : [])
     // The entries that hold SQLite's objects rather than the runtime's.
-    const sqliteEntries = () => entries().filter((e) => fs.existsSync(path.join(cacheRoot, e, "sqlite3.o")))
+    const sqliteEntries = () => entries().filter((e) => fs.existsSync(path.join(cacheRoot, e, "nish-sqlite.o")))
     const env = (extra = {}) => ({
       ...process.env,
       XDG_CACHE_HOME: path.join(sqDir, "cache"),
@@ -11511,12 +11512,13 @@ if (dealtHere("sqliteLink")) {
       .readdirSync(path.join(root, "runtime"))
       .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
     const program = "tests/link/sqlite_link/main.ts"
-    // The units of runtime/sqlite/: the amalgamation and the `nish/sqlite`
-    // adapter. `sqliteUnits` (src/run-cache.ts) reads the directory, so a unit
-    // added there compiles, lands in the entry and is linked.
+    // The units of runtime/sqlite/: every `.c` but the amalgamation, which the
+    // `nish/sqlite` adapter includes so its cursor calls reach SQLite's static
+    // functions. `sqliteUnits` (src/run-cache.ts) reads the directory, so a
+    // unit added there compiles, lands in the entry and is linked.
     const sqliteC = fs
       .readdirSync(path.join(root, "runtime", "sqlite"))
-      .filter((f) => f.endsWith(".c"))
+      .filter((f) => f.endsWith(".c") && f !== "sqlite3.c")
       .sort()
     const vendored = sqliteC.map((f) => f.replace(/\.c$/, ".o"))
 
@@ -11529,6 +11531,7 @@ if (dealtHere("sqliteLink")) {
       first.status === 0 &&
         runOut("first").stdout === "3.54.1 3054001 0\n" &&
         firstC.length === runtimeUnits + sqliteC.length &&
+        !firstC.includes("sqlite3.c") &&
         sqliteC.every((u) => firstC.filter((c) => c === u).length === 1),
       first.stderr + firstC.join(", ")
     )
@@ -11541,7 +11544,7 @@ if (dealtHere("sqliteLink")) {
       entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
     )
     check(
-      "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
+      "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c but sqlite3.c, which nish-sqlite.c includes",
       sqEntry.length > 0 &&
         fs
           .readdirSync(sqEntry)
@@ -11550,6 +11553,97 @@ if (dealtHere("sqliteLink")) {
           .join(",") === vendored.join(","),
       vendored.join(", ")
     )
+
+    // The cursors call SQLite's internal allocator, decoder and B-tree, which
+    // expect the connection's mutex held as SQLite's own API holds it. A
+    // SQLITE_DEBUG, THREADSAFE=1 build asserts that on every such call, so a
+    // helper that calls every exported cursor and key function (walks a table
+    // both ways, seeks a rowid, reads each kind of column, builds integer,
+    // text and byte keys and seeks on them) exits 0 only if each takes it.
+    {
+      const helper = path.join(sqDir, "mutex-held.c")
+      const exe = path.join(sqDir, "mutex-held")
+      fs.writeFileSync(
+        helper,
+        `#include <stdint.h>
+int32_t nishsqlite_open(const char *, int32_t);
+int32_t nishsqlite_exec(int32_t, const char *);
+int32_t nishsqlite_close(int32_t);
+int32_t nishsqlite_begin_read(int32_t);
+int32_t nishsqlite_end_read(int32_t);
+int32_t nishsqlite_cursor_open(int32_t, const char *, const char *);
+int32_t nishsqlite_cursor_first(int32_t);
+int32_t nishsqlite_cursor_next(int32_t);
+int32_t nishsqlite_cursor_close(int32_t);
+int64_t nishsqlite_cursor_column_i64(int32_t, int32_t);
+int32_t nishsqlite_cursor_column_into(int32_t, int32_t, uint8_t *, uint64_t, int32_t);
+int32_t nishsqlite_key_reset(int32_t);
+int32_t nishsqlite_key_text(int32_t, const char *);
+int32_t nishsqlite_cursor_seek(int32_t, int32_t);
+int32_t nishsqlite_cursor_last(int32_t);
+int32_t nishsqlite_cursor_previous(int32_t);
+int32_t nishsqlite_cursor_seek_rowid(int32_t, int64_t);
+int32_t nishsqlite_key_i64(int32_t, int64_t);
+int32_t nishsqlite_key_bytes(int32_t, const uint8_t *, uint64_t, int32_t, int32_t);
+int32_t nishsqlite_cursor_column_type(int32_t, int32_t);
+int64_t nishsqlite_cursor_rowid(int32_t);
+int main(void) {
+  uint8_t buf[512];
+  int64_t sum = 0;
+  int32_t db = nishsqlite_open(":memory:", 6);
+  if (db <= 0 || nishsqlite_exec(db, "CREATE TABLE t (a INTEGER, b TEXT); CREATE INDEX ti ON t (b);"
+      " CREATE INDEX ta ON t (a);"
+      " WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 500)"
+      " INSERT INTO t SELECT x, printf('%0300d', x) FROM c") != 0) return 2;
+  if (nishsqlite_begin_read(db) != 0) return 3;
+  int32_t c = nishsqlite_cursor_open(db, "t", "a,b");
+  for (int32_t r = nishsqlite_cursor_first(c); r == 1; r = nishsqlite_cursor_next(c)) {
+    sum += nishsqlite_cursor_column_i64(c, 0);
+    if (nishsqlite_cursor_column_into(c, 1, buf, sizeof buf, 0) != 300) return 4;
+  }
+  if (sum != 125250) return 5;
+  int32_t i = nishsqlite_cursor_open(db, "ti", "b,rowid");
+  if (nishsqlite_key_reset(i) != 0 || nishsqlite_key_text(i, "0") != 0 || nishsqlite_cursor_seek(i, 1) != 1) return 6;
+  if (nishsqlite_cursor_last(c) != 1 || nishsqlite_cursor_rowid(c) != 500) return 9;
+  if (nishsqlite_cursor_previous(c) != 1 || nishsqlite_cursor_rowid(c) != 499) return 10;
+  if (nishsqlite_cursor_column_type(c, 0) != 1 || nishsqlite_cursor_column_type(c, 1) != 3) return 11;
+  if (nishsqlite_cursor_seek_rowid(c, 250) != 1 || nishsqlite_cursor_column_i64(c, 0) != 250) return 12;
+  int32_t a = nishsqlite_cursor_open(db, "ta", "a,rowid");
+  if (nishsqlite_key_reset(a) != 0 || nishsqlite_key_i64(a, 250) != 0 || nishsqlite_cursor_seek(a, 1) != 1 ||
+      nishsqlite_cursor_rowid(a) != 250) return 13;
+  for (int32_t k = 0; k < 300; k++) buf[k] = k == 299 ? '7' : '0';
+  if (nishsqlite_key_reset(i) != 0 || nishsqlite_key_bytes(i, buf, sizeof buf, 0, 300) != 0 ||
+      nishsqlite_cursor_seek(i, 1) != 1 || nishsqlite_cursor_rowid(i) != 7) return 14;
+  if (nishsqlite_cursor_close(c) != 0 || nishsqlite_end_read(db) != 0) return 7;
+  return nishsqlite_close(db) == 0 ? 0 : 8;
+}
+`
+      )
+      const built = spawnSync(
+        "clang",
+        [
+          "-O0",
+          "-w",
+          `-I${path.join(root, "runtime", "sqlite")}`,
+          "-DSQLITE_OMIT_SHARED_CACHE",
+          "-DSQLITE_DEBUG",
+          "-DSQLITE_THREADSAFE=1",
+          path.join(root, "runtime", "sqlite", "nish-sqlite.c"),
+          helper,
+          "-o",
+          exe,
+          "-lpthread",
+          "-lm",
+        ],
+        { encoding: "utf8" }
+      )
+      const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: under SQLITE_DEBUG and THREADSAFE=1 every cursor call holds its connection's mutex (SQLite's asserts pass)",
+        ran !== null && ran.status === 0,
+        built.stderr + (ran ? `exit ${ran.status} ${ran.signal ?? ""} ${ran.stderr}` : "")
+      )
+    }
 
     // What ships of runtime/sqlite/: its units, its headers and its notice.
     // The README's SHA3-256 lines name the two vendored files' bytes, and each
@@ -11835,7 +11929,7 @@ if (dealtHere("sqliteLink")) {
     const reused = linkSqCopy("copy-unit-again", callsUnit)
     const reusedC = compiledC()
     check(
-      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
+      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside nish-sqlite.o, links into a program that calls it, and a second link reuses it",
       withUnit.status === 0 &&
         runOut("copy-unit").stdout === "3.54.1 7\n" &&
         unitC.join(",") === [...sqliteC, "nish_throwaway.c"].sort().join(",") &&
@@ -11876,8 +11970,154 @@ if (dealtHere("sqliteLink")) {
       adapterLink.status === 0 &&
         runOut("copy-adapter").stdout === "3054001\n" &&
         adapterC.includes("nishsqlite_probe.c") &&
-        adapterC.includes("sqlite3.c"),
+        adapterC.includes("nish-sqlite.c"),
       `${adapterLink.stderr}compiled: ${adapterC.join(", ")}`
+    )
+
+    // The cursor programs under flags the default build leaves off. Under
+    // SQLITE_DEBUG SQLite's own asserts run, so a cursor left open across a
+    // transaction's end, or a call on one it closed, would abort here rather
+    // than read freed memory quietly.
+    const staleDir = path.join("tests", "link", "std_sqlite_cursor_stale")
+    const staleDebug = link(path.join(staleDir, "main.ts"), "stale-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const staleRun = staleDebug.status === 0 ? runOut("stale-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_stale passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      staleRun !== null &&
+        staleRun.status === 0 &&
+        staleRun.stdout === fs.readFileSync(path.join(root, staleDir, "expected.out"), "utf8"),
+      staleDebug.stderr + (staleRun ? staleRun.stdout.slice(-2000) + staleRun.stderr : "")
+    )
+    // The default build has no virtual-table module, so the schema program
+    // makes an rtree only when SQLite is built with one.
+    const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {
+      NISH_SQLITE_CFLAGS: "-DSQLITE_ENABLE_RTREE",
+    })
+    const rtreeRun = rtree.status === 0 ? runOut("schema-rtree") : null
+    check(
+      "sqlite-link: with -DSQLITE_ENABLE_RTREE, openCursor refuses an rtree virtual table and its shadow table",
+      rtreeRun !== null &&
+        rtreeRun.status === 0 &&
+        rtreeRun.stdout.includes("PASS  rtree: a virtual table is refused") &&
+        rtreeRun.stdout.includes("PASS  rtree: and its shadow table"),
+      rtree.stderr + (rtreeRun ? rtreeRun.stdout.slice(-2000) + rtreeRun.stderr : "")
+    )
+    // A scan holds its memory flat: after the first row, stepping a cursor over
+    // 10,000 rows and reading their columns allocates nothing SQLite's own
+    // counters see (SQLITE_DEFAULT_MEMSTATUS=1 turns them on). The second line
+    // is the other routes: integer-key seeks on an index, then a table walked
+    // backwards from last() reading 5,000-byte text that spills past a 4 KiB
+    // page onto overflow pages. The first such read grows the cursor's record
+    // buffer and SQLite's overflow-page cache once, so this run measures two
+    // passes after a first full one, and checks the first pass did grow.
+    const memTs = path.join(sqDir, "cursor-memory.ts")
+    fs.writeFileSync(
+      memTs,
+      [
+        'import { Cursor, OPEN_CREATE, OPEN_READWRITE, SEEK_GE, openDatabase } from "nish/sqlite";',
+        "",
+        "declare function sqlite3_memory_used(): i64;",
+        "declare function sqlite3_memory_highwater(reset: i32): i64;",
+        "",
+        "const pass = (idx: Cursor, tab: Cursor, buf: u8[]): i64 => {",
+        "  let got = toI64(0);",
+        "  for (let k = 0; k < 1000; k = k + 7) {",
+        '    idx.keyReset().expect("keyReset");',
+        '    idx.keyI64(toI64(k)).expect("keyI64");',
+        '    if (idx.seek(SEEK_GE).expect("seek")) got = got + idx.rowid();',
+        "  }",
+        '  let more = tab.last().expect("last");',
+        "  while (more) {",
+        '    got = got + toI64(tab.columnInto(2, buf, 0).expect("big"));',
+        '    more = tab.previous().expect("previous");',
+        "  }",
+        "  return got;",
+        "};",
+        "",
+        "export const main = (): i32 => {",
+        '  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");',
+        "  db.exec(",
+        '    "CREATE TABLE t (id INTEGER PRIMARY KEY, a INTEGER, b TEXT);" +',
+        '      "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 10000)" +',
+        "      \" INSERT INTO t SELECT x, x * 3, printf('%08d', x) FROM c\"",
+        '  ).expect("fill");',
+        '  db.beginRead().expect("beginRead");',
+        '  const cur = db.openCursor("t", "id,a,b").expect("openCursor");',
+        "  const buf = new Array<u8>(8192);",
+        '  let r = cur.first().expect("first");',
+        '  cur.columnInto(2, buf, 0).expect("columnInto");',
+        "  const used = sqlite3_memory_used();",
+        "  sqlite3_memory_highwater(1);",
+        "  let rows = 0;",
+        "  let sum = toI64(0);",
+        "  while (r) {",
+        "    sum = sum + cur.columnI64(1);",
+        '    cur.columnInto(2, buf, 0).expect("columnInto");',
+        "    rows = rows + 1;",
+        '    r = cur.next().expect("next");',
+        "  }",
+        "  const peak = sqlite3_memory_highwater(0);",
+        "  const after = sqlite3_memory_used();",
+        "  console.log(`${rows} ${sum} ${used} ${peak} ${after}`);",
+        '  cur.close().expect("close");',
+        '  db.endRead().expect("endRead");',
+        "  db.exec(",
+        '    "CREATE TABLE w (id INTEGER PRIMARY KEY, a INTEGER, big TEXT); CREATE INDEX wa ON w (a);" +',
+        '      "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 500)" +',
+        "      \" INSERT INTO w SELECT x, x * 2, printf('%05000d', x) FROM c\"",
+        '  ).expect("fill w");',
+        '  db.beginRead().expect("beginRead w");',
+        '  const idx = db.openCursor("wa", "a,rowid").expect("open wa");',
+        '  const tab = db.openCursor("w", "id,a,big").expect("open w");',
+        "  const before = sqlite3_memory_used();",
+        "  const once = pass(idx, tab, buf);",
+        "  const used2 = sqlite3_memory_used();",
+        "  sqlite3_memory_highwater(1);",
+        "  const twice = pass(idx, tab, buf) + pass(idx, tab, buf);",
+        "  const peak2 = sqlite3_memory_highwater(0);",
+        "  const after2 = sqlite3_memory_used();",
+        "  console.log(`${once} ${twice} ${before} ${used2} ${peak2} ${after2}`);",
+        '  idx.close().expect("close wa");',
+        '  tab.close().expect("close w");',
+        '  db.endRead().expect("endRead w");',
+        '  db.close().expect("close the database");',
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const mem = link(memTs, "cursor-memory", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEFAULT_MEMSTATUS=1" })
+    const memRun = mem.status === 0 ? runOut("cursor-memory") : null
+    const memLines = memRun ? memRun.stdout.trim().split("\n") : []
+    const [memRows, memSum, memUsed, memPeak, memAfter] = (memLines[0] ?? "").split(" ")
+    const [seekOnce, seekTwice, seekBefore, seekUsed, seekPeak, seekAfter] = (memLines[1] ?? "").split(" ")
+    check(
+      "sqlite-link: a cursor scan of 10,000 rows with column reads keeps SQLite's memory at what it held after the first row",
+      memRun !== null &&
+        memRun.status === 0 &&
+        memRows === "10000" &&
+        memSum === String(3 * 5000 * 10001) &&
+        Number(memUsed) > 0 &&
+        memPeak === memUsed &&
+        memAfter === memUsed,
+      mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
+    )
+    // Rowids 1..500 sit at a = 2..1000; a seek for k from 0 by 7 finds the
+    // first a >= k, rowid max(1, ceil(k / 2)), and each row's text is 5,000
+    // bytes.
+    let seekWant = 0
+    for (let k = 0; k < 1000; k += 7) seekWant += Math.max(1, Math.ceil(k / 2))
+    seekWant += 500 * 5000
+    check(
+      "sqlite-link: after a first pass grows the overflow buffers once, two more passes of index seeks and a backward walk over overflow rows keep SQLite's memory flat",
+      memRun !== null &&
+        memRun.status === 0 &&
+        seekOnce === String(seekWant) &&
+        seekTwice === String(2 * seekWant) &&
+        Number(seekUsed) > Number(seekBefore) &&
+        seekPeak === seekUsed &&
+        seekAfter === seekUsed,
+      mem.stderr + (memRun ? memRun.stdout + memRun.stderr : "")
     )
 
     // A Node addon links SQLite too, and keeps its API to itself: a Node that
@@ -42948,14 +43188,16 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  */
 const sizeReportDisagreements = (report, budgets, measured) => {
   const unitKey = (src, flags) => `${src} ${flags}`.trim()
+  const entryKey = (entry) =>
+    unitKey(`${entry.src}${entry.baseline === null ? "" : ` less ${entry.baseline}`}`, entry.flags.join(" "))
   const rowPattern =
-    /^(.*?)\s+(\d+)\s+clang -Oz (?:(.*) )?-c (\S+) && size -A \(\.text\*; budget (\d+), (\w+)\)$/
+    /^(.*?)\s+(\d+)\s+clang -Oz (?:(.*) )?-c (\S+) && size -A \(\.text\*(?:, less the same for (\S+))?; budget (\d+), (\w+)\)$/
   const rows = report
     .split("\n")
     .map((line) => rowPattern.exec(line))
     .filter((m) => m !== null)
-    .map(([, , bytes, flags, src, budget, constant]) => ({
-      key: unitKey(src, flags ?? ""),
+    .map(([, , bytes, flags, src, baseline, budget, constant]) => ({
+      key: unitKey(`${src}${baseline === undefined ? "" : ` less ${baseline}`}`, flags ?? ""),
       bytes: Number(bytes),
       budget: Number(budget),
       constant,
@@ -42963,7 +43205,7 @@ const sizeReportDisagreements = (report, budgets, measured) => {
   const problems = []
   for (const entry of budgets) {
     const label = budgetLabel(entry)
-    const key = unitKey(entry.src, entry.flags.join(" "))
+    const key = entryKey(entry)
     const found = rows.filter((r) => r.key === key)
     if (found.length !== 1) {
       problems.push(`${label}: the report prints ${found.length} rows for it, not 1`)
@@ -42980,7 +43222,7 @@ const sizeReportDisagreements = (report, budgets, measured) => {
       problems.push(`${label}: the report measured ${row.bytes} bytes, the gate ${measured.get(label)}`)
     }
   }
-  const keys = new Set(budgets.map((entry) => unitKey(entry.src, entry.flags.join(" "))))
+  const keys = new Set(budgets.map(entryKey))
   for (const row of rows.filter((r) => !keys.has(r.key))) {
     problems.push(`${row.key}: the report has a row the gate does not measure`)
   }
@@ -43035,26 +43277,57 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   if (reason !== null) {
     skip(reason)
   } else {
+    // The SQLite row compiles with build.sh's options; a list that drifted from them
+    // would measure a build no program links. THREADSAFE is build.sh's default, 0.
+    const buildSh = fs.readFileSync(path.join(root, "scripts/build.sh"), "utf8")
+    const sqliteLoop = /^for d in (-DSQLITE_[^;]*); do$/ms.exec(buildSh)?.[1] ?? ""
+    const buildDefines = sqliteLoop
+      .split(/[\s\\]+/)
+      .filter((word) => word !== "")
+      .map((word) => word.replace(/^"|"$/g, "").replace("$sqlite_threadsafe", "0"))
+    check(
+      "runtime budgets: the nish-sqlite.c row compiles with scripts/build.sh's SQLite options",
+      buildDefines.join(" ") === SQLITE_BUILD_DEFINES.join(" "),
+      `build.sh: ${buildDefines.join(" ")}\nSQLITE_BUILD_DEFINES: ${SQLITE_BUILD_DEFINES.join(" ")}`
+    )
     const measured = new Map()
     for (const entry of RUNTIME_BUDGETS) {
-      const { src, budget, constant, flags } = entry
-      const name = path.basename(src)
+      const { src, budget, constant, flags, baseline } = entry
       const label = budgetLabel(entry)
-      // One object per configuration: `-DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` is `_arena_range_threads`.
-      const suffix = flags.map((flag) => `_${flag.replace(/^-DNISH_|=1$/g, "").toLowerCase()}`).join("")
-      const stem = `${name.replace(/\.c$/, "")}${suffix}`
-      const obj = path.join(buildDir, `${stem}_budget.o`)
-      const cc = spawnSync("clang", ["-Oz", ...flags, "-c", src, "-o", obj], { cwd: root })
-      const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null
+      // One object per configuration: `-DNISH_ARENA_RANGE=1 -DNISH_THREADS=1` is
+      // `_arena_range_threads`. A row over a baseline has build.sh's flags, the same for
+      // both compiles, and its objects are named for the two files.
+      const objOf = (file) => {
+        const suffix =
+          baseline === null
+            ? flags.map((flag) => `_${flag.replace(/^-DNISH_|=1$/g, "").toLowerCase()}`).join("")
+            : "_build_defines"
+        return path.join(buildDir, `${path.basename(file).replace(/\.c$/, "")}${suffix}_budget.o`)
+      }
       // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
       // name starts with `.text` counts, whatever clang decided to call it.
-      const sections = String(sz?.stdout ?? "")
-        .split("\n")
-        .map((line) => line.trim().split(/\s+/))
-        .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
-        .map((row) => [row[0], Number(row[1])])
-      const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0)
-      const breakdown = sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ")
+      const measure = (file) => {
+        const obj = objOf(file)
+        const cc = spawnSync("clang", ["-Oz", ...flags, "-c", file, "-o", obj], { cwd: root })
+        const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null
+        const sections = String(sz?.stdout ?? "")
+          .split("\n")
+          .map((line) => line.trim().split(/\s+/))
+          .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
+          .map((row) => [row[0], Number(row[1])])
+        return { cc, sz, sections, total: sections.reduce((sum, [, bytes]) => sum + bytes, 0) }
+      }
+      const unit = measure(src)
+      // The adapter includes the amalgamation, so its own bytes are the unit's less
+      // SQLite's, compiled alone with the same options.
+      const base = baseline === null || unit.cc.status !== 0 ? null : measure(baseline)
+      const failed = base !== null && (base.cc.status !== 0 || base.sections.length === 0) ? base : unit
+      const { cc, sz } = failed
+      const sections = failed.sections
+      const total = unit.total - (base?.total ?? 0)
+      const breakdown =
+        sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ") +
+        (base === null ? "" : `, less ${base.total} for ${baseline}`)
       if (cc.status === 0 && sections.length > 0) {
         measured.set(label, total)
       }
@@ -43653,7 +43926,10 @@ if (!only || "pgo".includes(only)) {
         .flatMap((l) => l.match(/\/runtime\/runtime(-[a-z0-9]+)?\.c(?= |$)/g) ?? [])
         .sort()
         .join(",")
-    const sqliteC = (l) => / -c /.test(l) && /(^| )sqlite3\.c( |$)/.test(l)
+    // SQLite is compiled as one unit with the adapter: nish-sqlite.c includes
+    // sqlite3.c, so no line compiles sqlite3.c on its own.
+    const sqliteC = (l) => / -c /.test(l) && /(^| )(\S*\/)?nish-sqlite\.c( |$)/.test(l)
+    const amalgamationAlone = (l) => /(^| )(\S*\/)?sqlite3\.c( |$)/.test(l)
 
     const unread = path.join(pgoDir, "unread")
     const truncated = nish([hello, "-o", path.join(pgoDir, "unread.ll"), "--link", unread, "--pgo-use", indexedMagic], env)
@@ -43679,6 +43955,7 @@ if (!only || "pgo".includes(only)) {
       trained.status === 0 &&
         runtimeUnits(trainedLines).includes("/runtime/runtime.c") &&
         trainedLines.some(sqliteC) &&
+        !trainedLines.some(amalgamationAlone) &&
         trainedLines.some((l) => !/ -c /.test(l)) &&
         trainedLines.every((l) => l.includes("-fprofile-generate")),
       trained.stderr + trainedLines.join("\n")
@@ -43733,6 +44010,7 @@ if (!only || "pgo".includes(only)) {
       used.status === 0 &&
         runtimeUnits(usedLines) === runtimeUnits(trainedLines) &&
         usedLines.some(sqliteC) &&
+        !usedLines.some(amalgamationAlone) &&
         usedLines.every((l) => l.includes(`-fprofile-use=${fs.realpathSync(profile)}`)) &&
         ranPgo.status === 0 &&
         ranPgo.stdout === ranPlain.stdout &&
