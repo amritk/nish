@@ -450,7 +450,7 @@ skips against a compiler that has no hook.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
-node tests/run.js --shard 2/8       # one of CI's eight shards (docs/wp10-ci.md)
+node tests/run.js --shard 2/9       # one of CI's nine shards (docs/wp10-ci.md)
 npm run test:update                 # write missing .ll goldens and tests/self/goldens/
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --stage1 --count 200
@@ -460,9 +460,16 @@ npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
 A filter is what a session runs before pushing: one for every section or
-program the change touches. The unfiltered suite is CI's eight `test` shards,
+program the change touches. The unfiltered suite is CI's nine `test` shards,
 read per [`CLAUDE.md`](../CLAUDE.md#definition-of-done); run it locally only for
 a change to the suite itself or a fork PR.
+`scripts/smoke.sh`, `docs/cookbook/regen.sh --check` and the size report are
+not part of `npm test`: CI runs them in its `examples` job, beside the shards.
+A change to `examples/` or `docs/IR_COOKBOOK.md` runs the first two locally
+(`NISH=build/nish`). A step that reads the Test step's log stays in the
+`test` job, behind `if: matrix.shard == N`; one that only needs a compiler
+goes to `examples`, not onto a shard's critical path
+([docs/wp10-ci.md](../docs/wp10-ci.md#shards-and-time-limits)).
 
 **A filtered run's count is a measurement only after `rm -rf build/test`.**
 `run.js` is one process and section A compiles the goldens before anything else
