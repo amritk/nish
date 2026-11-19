@@ -15,7 +15,7 @@ runs come from this repository's bench suite; that suite is in
 | Challenge | [arjaythedev/multicore-server-challenge](https://github.com/arjaythedev/multicore-server-challenge) |
 | Video | [Which Programming Language Can Handle the Most Users on 8 Cores?](https://www.youtube.com/watch?v=TIyvOtGjnzc) (Arjay McCandless, published 2026-11-13); the Nish entry's chapter, "#2 Nish", starts at [19:19](https://www.youtube.com/watch?v=TIyvOtGjnzc&t=1159s) |
 | Entry | [`submissions/nish-std-amritk`](https://github.com/arjaythedev/multicore-server-challenge/tree/main/submissions/nish-std-amritk), last updated by [arjaythedev/multicore-server-challenge#225](https://github.com/arjaythedev/multicore-server-challenge/pull/225) (merged 2026-11-07) |
-| Leaderboard | [LEADERBOARD.md](https://github.com/arjaythedev/multicore-server-challenge/blob/main/LEADERBOARD.md) |
+| Leaderboard | [benchmarks.arjaythedev.com/multicore](https://benchmarks.arjaythedev.com/multicore), also as [LEADERBOARD.md](https://github.com/arjaythedev/multicore-server-challenge/blob/main/LEADERBOARD.md) in the repository |
 | Compiler | Nish 0.35.0 |
 
 ### The video
