@@ -134,6 +134,71 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       provedDeny.status === 0,
       shown(provedDeny)
     )
+
+    const counted = write(
+      "counted.ts",
+      [
+        "declare class OutLen {",
+        "  value: u64;",
+        "}",
+        'declare function fill8(dst: CountedBy<u8[], "n">, n: u8): i32;',
+        'declare function fill16(n: u16, dst: CountedBy<u8[], "n">): i32;',
+        'declare function fill32(dst: CountedBy<u8[], "n">, n: u32): i32;',
+        "",
+        "export const main = (): i32 => {",
+        "  const b: u8[] = [1, 2, 3];",
+        "  fill8(b, toU8(b.length));",
+        "  fill16(toU16(b.length), b);",
+        "  fill32(b, toU32(b.length));",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const countedSites = sitesOf(counted)
+    const countedLength = countedSites.report === null
+      ? []
+      : fnSites(countedSites.report, "main").filter((p) => p.kind === "ffi-length")
+    check(
+      "ffi_buffer: a `CountedBy` count of the buffer's own length is proved at u8, u16 and u32",
+      countedLength.length === 3 && countedLength.every((p) => p.proven === true),
+      countedSites.report === null ? shown(countedSites.r) : JSON.stringify(countedSites.report)
+    )
+    const countedDeny = compileBuf(counted, ["--deny-panics"])
+    check(
+      "ffi_buffer: a proved `CountedBy` count compiles under --deny-panics",
+      countedDeny.status === 0,
+      shown(countedDeny)
+    )
+    const unproved = write(
+      "counted-unproved.ts",
+      [
+        "declare class OutLen {",
+        "  value: u64;",
+        "}",
+        'declare function fill16(n: u16, dst: CountedBy<u8[], "n">): i32;',
+        'declare function pack(dst: CountedBy<u8[], "len">, len: OutLen): i32;',
+        "",
+        "export const main = (): i32 => {",
+        "  const b: u8[] = [1, 2, 3];",
+        "  fill16(toU16(4), b);",
+        "  const len = new OutLen();",
+        "  len.value = toU64(b.length);",
+        "  pack(b, len);",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const unprovedSites = sitesOf(unproved)
+    const unprovedLength = unprovedSites.report === null
+      ? []
+      : fnSites(unprovedSites.report, "main").filter((p) => p.kind === "ffi-length")
+    check(
+      "ffi_buffer: a literal `CountedBy` count and an out-class count stay checked",
+      unprovedLength.length === 2 && unprovedLength.every((p) => p.proven !== true),
+      unprovedSites.report === null ? shown(unprovedSites.r) : JSON.stringify(unprovedSites.report)
+    )
     const provedFfi = compileBuf(proved, ["--deny", "ffi"])
     check(
       "ffi_buffer: --deny ffi refuses a call that passes a buffer",

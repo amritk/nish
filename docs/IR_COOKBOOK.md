@@ -16153,6 +16153,100 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-buffer -->
 
+### `CountedBy`: a buffer that names its count
+
+A `declare function` parameter written `CountedBy<u8[], "len">` (or
+`CountedBy<readonly u8[], "len">`) is a plain `u8[]` buffer at the call: the
+`elements` pointer, loaded from the header's third field, passes as `i8*`, as
+in the section above. The name says which parameter is its count, at any
+place in the list and at any unsigned width. A `u32` count passes as `i32`,
+a `u16` as `i16 zeroext`, a `u8` as `i8 zeroext`; a count that is a
+`declare class` with one `u64` field passes as that struct's pointer, and its
+field is what is checked (zlib's `uLongf *destLen`).
+
+The check is WP53's: the count, widened with `zext` to `i64` (or loaded out
+of the class's field), against the header's `length`, `icmp ule`, and a
+failure is the `ffi-length` panic naming both arguments. Below, `sum16` is
+passed the literal `toU16(2)`, so the call keeps the check. `crc32` is passed
+`toU32(b.length)`, the buffer's own length narrowed: a `trunc` only lowers a
+count, so the prover drops the check and the call is straight-line. The
+prover does not follow a class field, so an out-class count is always checked.
+
+```ts
+declare function crc32(crc: u32, buf: CountedBy<readonly u8[], "len">, len: u32): u32
+declare function sum16(n: u16, src: CountedBy<readonly u8[], "n">): u32
+
+export const main = (): i32 => {
+  const b: u8[] = [104, 105, 10]
+  const c = crc32(toU32(0), b, toU32(b.length))
+  const s = sum16(toU16(2), b)
+  return toI32(c + s)
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [70 x i8] } { i64 69, [70 x i8] c"`sum16`: argument 1 (n) counts more bytes than argument 2 (src) holds\00" }, align 8
+
+declare i32 @crc32(i32, i8*, i32)
+declare i32 @sum16(i16 zeroext, i8*)
+declare void @nish_free_arena() #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %b.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i8], align 8
+  %c.addr = alloca i32, align 4
+  %s.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [3 x i8]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %2 to i8*
+  %5 = getelementptr inbounds i8, i8* %4, i64 0
+  store i8 104, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %6 = getelementptr inbounds i8, i8* %4, i64 1
+  store i8 105, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds i8, i8* %4, i64 2
+  store i8 10, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %b.addr, align 8
+  %8 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %9 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = trunc i64 %11 to i32
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %15 = call i32 @crc32(i32 0, i8* %14, i32 %12)
+  store i32 %15, i32* %c.addr, align 4
+  %16 = trunc i32 2 to i16
+  %17 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %18 = zext i16 %16 to i64
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %21 = icmp ule i64 %18, %20
+  br i1 %21, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [70 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.ok:
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %24 = call i32 @sum16(i16 zeroext %16, i8* %23)
+  store i32 %24, i32* %s.addr, align 4
+  %25 = load i32, i32* %c.addr, align 4
+  %26 = load i32, i32* %s.addr, align 4
+  %27 = add i32 %25, %26
+  ret i32 %27
+}
+```
+
 ### `using` of a handle class: the close at every exit
 
 A class with a `CPtr` field is a handle class (WP53 H1.2), and a `using` of

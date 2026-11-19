@@ -1,6 +1,6 @@
 # WP66: C libraries from their headers
 
-**State:** Proposed · **Done:** 0 of 7 · **Design note:** [`docs/wp66-c-headers.md`](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)
+**State:** In progress · **Done:** 1 of 7 · **Design note:** [`docs/wp66-c-headers.md`](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)
 
 ## Stages
 
@@ -8,7 +8,7 @@
 - [ ] S2: `nish c-import`: a header read through clang becomes a Nish module of `declare function`s, `declare class`es, out classes and constants, with an override file and a list of what was not bound
 - [ ] S3: opaque classes: a field-less `declare class` C can return, so one C pointer type is not passed where another is wanted
 - [ ] S4: fixed-length array fields in a `declare class`
-- [ ] S5: a buffer paired with its count by name, with a count of any unsigned width
+- [x] S5: a buffer paired with its count by name, with a count of any unsigned width
 - [ ] S6: C callbacks: a top-level function named at the call, passed as a C function pointer *(open question)*
 - [ ] S7: a package links a C library or C sources of its own, under `nish run` and `--link`
 

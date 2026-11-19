@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 796 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 800 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15519,4 +15519,36 @@ The message of an error contains:
 
 ```text
 …which has no `null` to stand for an omitted argument
+```
+
+## NL2805
+
+The message of an error contains:
+
+```text
+`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`
+```
+
+## NL2806
+
+The message of an error contains:
+
+```text
+`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`
+```
+
+## NL2807
+
+The message of an error contains:
+
+```text
+`, which is not one of its parameters
+```
+
+## NL2808
+
+The message of an error contains:
+
+```text
+` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one
 ```
