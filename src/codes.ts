@@ -465,7 +465,7 @@ const diagnosticRules = (): string[] => [
   "NL3050",
   "` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body",
   "NL2474",
-  "An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first",
+  "An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first",
   "NL1068",
   "` has a type parameter's type, so a default cannot be one value: the type is the caller's, and TypeScript refuses a constant for it too",
   "NL2596",

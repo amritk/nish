@@ -3,6 +3,7 @@
 entry: src/fusion.ts src/context.ts src/diagnostics.ts std/cli.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/region.ts src/branding.ts src/std-modules.ts src/paths.ts src/nish-modules.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-root.ts src/ice.ts src/types.ts src/secret.ts src/builtins.ts src/annotations.ts src/simd.ts src/arrays.ts src/expressions.ts src/constants.ts src/async-check.ts src/emit-util.ts src/symbols.ts src/region-rules.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/parallel.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/checker.ts src/accumulate.ts src/members.ts src/declarations.ts src/host-module.ts src/parser.ts src/fnrefs.ts src/visibility.ts src/parents.ts src/region-check.ts src/module-storage.ts src/assignment.ts src/script.ts src/hygiene.ts src/statements.ts src/validator.ts src/loop-flow.ts src/tbaa.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-map.ts src/runtime.ts src/target.ts src/emit-region.ts src/emit-shm-window.ts src/shm-window.ts src/emit-json.ts src/emit-async.ts src/capabilities.ts src/debug.ts src/emit-fnrefs.ts src/emit-accumulate.ts src/compat.ts
 import CheckContext from "./context" -> struct CheckContext
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
+import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import isCollectionStruct from "./generics" -> function @isCollectionStruct
 import isMapOwner from "./generics" -> function @isMapOwner
@@ -21,7 +22,7 @@ function recordUpdateFusion(ctx: CheckContext, call: Node): void -> @recordUpdat
   sharedWrite: via isInert
   calls: CheckedProgram.isCollections FusionTable.record collectionOwnerOf isFusableKey isFusablePlace isInert nish_panic_index sameCallTarget
   pointer ctx: size=368 writesThrough=false captured=false passedTo=isInert#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=collectionOwnerOf#1
+  pointer call: size=40 writesThrough=true captured=true passedTo=collectionOwnerOf#1
   stackSites=1 stackLocals=1
   local +0:9 owner: StructInfo | null (const)
   callee +0:17 collectionOwnerOf -> @collectionOwnerOf
@@ -71,13 +72,14 @@ function recordGuardFusion(ctx: CheckContext, stmt: Node): void -> @recordGuardF
   callee +36:3 FusionTable.record -> @FusionTable.record
 function collectionOwnerOf(program: CheckedProgram, call: Node, name: string): StructInfo | null -> @collectionOwnerOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: isCollectionStruct nish_panic_index nish_str_eq
+  calls: isCollectionStruct isOptionalChain nish_panic_index nish_str_eq
   pointer program: size=912 writesThrough=false captured=false
-  pointer call: size=40 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0
   stackSites=0 stackLocals=0
-  local +0:9 sig: FunctionSig | null (const)
-  local +4:9 owner: StructInfo | null (const)
-  callee +5:26 isCollectionStruct -> @isCollectionStruct
+  callee +0:5 isOptionalChain -> @isOptionalChain
+  local +4:9 sig: FunctionSig | null (const)
+  local +8:9 owner: StructInfo | null (const)
+  callee +9:26 isCollectionStruct -> @isCollectionStruct
 function firstCallOf(branch: Node): Node | null -> @firstCallOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: branch

@@ -41,7 +41,7 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isOptionalChain, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
@@ -1927,12 +1927,16 @@ const isUnitStep = (node: Node, name: string): boolean => {
   )
 }
 
-/** The single expression statement a loop body is, or `null`. */
+/**
+ * The single expression statement a loop body is, or `null`. A `?.` chain
+ * (`dst?.push(x)`, WP28 C1) is `null` too: it skips its call when a link is
+ * missing, which no range written for the whole loop can.
+ */
 const soleExpression = (body: Node): Node | null => {
   if (body.kind === NodeKind.Block) {
     return body.children.length === 1 ? soleExpression(body.children[0]) : null
   }
-  return body.kind === NodeKind.ExprStmt ? body.children[0] : null
+  return body.kind === NodeKind.ExprStmt && !isOptionalChain(body.children[0]) ? body.children[0] : null
 }
 
 /**

@@ -190,6 +190,12 @@ export class Walk {
    * same instructions as the native build, rather than as the platform's.
    */
   deterministic: boolean
+  /**
+   * The build's dialect admits `optional-chaining` (WP28 C1): an element read
+   * inside a `?.` chain is left to the chain, which skips it on a missing
+   * link. A strict build keeps its `idx(a?.b, i)`, byte for byte.
+   */
+  optionalChaining: boolean
   /** Every name the emitted module must import from `nish/math`, in first-use order. */
   mathNames: StringSet
   /** Every width type the module spells, in first-use order. */
@@ -309,6 +315,7 @@ export class Walk {
     this.choiceTexts = []
     this.helpers = new StringSet()
     this.deterministic = false
+    this.optionalChaining = false
     this.mathNames = new StringSet()
     this.widths = new StringSet()
     this.hostHandle = false

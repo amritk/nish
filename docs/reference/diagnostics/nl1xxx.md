@@ -729,5 +729,5 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first
+An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first
 ```

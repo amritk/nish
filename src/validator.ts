@@ -257,7 +257,7 @@ const finalElementLink = (): string =>
 
 /** An optional call, which no dialect admits yet: its callee has no `null` test to lower to. */
 const optionalCall = (): string =>
-  "An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first"
+  "An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first"
 
 /** Whether `chain`'s last link is a `?.[i]`. */
 const endsInElementLink = (chain: Node): boolean =>

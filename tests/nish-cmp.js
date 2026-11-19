@@ -1925,6 +1925,24 @@ const DECLARED = [
     why: "the case is compiled under --compat and uses an optional chain as a statement, which `optional-chaining` admits; the seed has no such feature and refuses it",
   },
   {
+    program: "tests/cases/compat_optional_chain_loops.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses optional chains as loop bodies and whole statements, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_skipped_arguments.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses optional calls as statements, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/perf_compat_number_i32.ts",
+    file: "perf_compat_number_i32.ll",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: 'the case is compiled under --compat, and the `!nish.compat` mark lists the enabled features after the number mode, `!{!"i32", !"nullish", !"optional-chaining"}`, which the seed\'s mark does not',
+  },
+  {
     program: "tests/link/compat_manifest_program/main.ts",
     file: "index.ll",
     changelog: "optional chaining and nullish coalescing under --compat",

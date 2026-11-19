@@ -784,7 +784,7 @@ value, so nothing is boxed; `null` takes its type from context. A
   one that ends the chain is
   `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
   (NL1067, `reject_optional_chain_element`), and an optional call is
-  `` An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first ``
+  `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first ``
   (NL1068, `reject_optional_call`), in both dialects. A chain that ends in an element read is the
   element-read refusal above (`reject_optional_chain_element_last`), and one
   that ends in `get` is
@@ -16678,7 +16678,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
 | `a?.[i]` inside a chain ([the compatibility dialect](#the-compatibility-dialect) admits it) | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain_element_inner` |
-| `a?.[i]` ending a chain, `f?.()` (in both dialects) | `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``; `` An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first `` | `reject_optional_chain_element`, `reject_optional_call` |
+| `a?.[i]` ending a chain, `f?.()` (in both dialects) | `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``; `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first `` | `reject_optional_chain_element`, `reject_optional_call` |
 | `a?.b` outside a chain that is the left operand of `??` ([Nullable types](#nullable-types); [the compatibility dialect](#the-compatibility-dialect) admits a chain that is a statement) | `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` `` | `reject_optional_chain`, `reject_optional_chain_paren`, `reject_optional_chain_argument` |
 | `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)); [the compatibility dialect](#the-compatibility-dialect) admits it | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |

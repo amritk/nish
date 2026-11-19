@@ -413,11 +413,15 @@ export class Diagnostic {
 
   /** `message`, painted by `style` (`summary`, `excerpt`, and `note` for a dependency's file). */
   styledMessage(style: Style): string {
-    let report = `${this.summary(style)}\n${this.excerpt(style)}`
+    const lines: string[] = [`${this.summary(style)}\n${this.excerpt(style)}`]
+    const marker = style.faint("=")
     for (const note of this.notes) {
-      report = `${report}\n  ${style.faint("=")} ${paintText(style, note)}`
+      lines.push(`  ${marker} ${paintText(style, note)}`)
     }
-    return this.source.dependency.length > 0 ? `${report}\n${this.note(style)}` : report
+    if (this.source.dependency.length > 0) {
+      lines.push(this.note(style))
+    }
+    return lines.join("\n")
   }
 
   /**

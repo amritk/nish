@@ -639,7 +639,7 @@ value, so nothing is boxed; `null` takes its type from context. A
   one that ends the chain is
   `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
   (NL1067, `reject_optional_chain_element`), and an optional call is
-  `` An optional call `f?.()` is not supported, in the compatibility dialect either: call `f()` directly, or narrow `f` with `!== null` first ``
+  `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first ``
   (NL1068, `reject_optional_call`), in both dialects. A chain that ends in an element read is the
   element-read refusal above (`reject_optional_chain_element_last`), and one
   that ends in `get` is

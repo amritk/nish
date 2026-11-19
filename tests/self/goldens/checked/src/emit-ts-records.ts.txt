@@ -357,18 +357,18 @@ function recordsRow(walk: Walk, node: Node, operands: Operands): string | null -
   pointer node: size=40 writesThrough=true captured=true passedTo=checkedAt#1 storeRow#1 recordCallRow#1 literalRow#1 newRow#1 processArgv#1 checkedPattern#1 checkedPatternHead#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 storeRow#2 recordCallRow#2 literalRow#2 newRow#2 checkedPattern#2 checkedPatternHead#2
   stackSites=0 stackLocals=0
-  callee +0:49 isOptionalChain -> @isOptionalChain
-  callee +0:87 checkedAt -> @checkedAt
-  callee +3:17 Walk.helperName -> @Walk.helperName
-  callee +3:43 Operands.at -> @Operands.at
-  callee +3:62 Operands.at -> @Operands.at
-  callee +5:14 storeRow -> @storeRow
-  callee +7:14 recordCallRow -> @recordCallRow
-  callee +9:14 literalRow -> @literalRow
-  callee +11:14 newRow -> @newRow
-  callee +13:14 processArgv -> @processArgv
-  callee +15:14 checkedPattern -> @checkedPattern
-  callee +17:14 checkedPatternHead -> @checkedPatternHead
+  callee +0:35 isOptionalChain -> @isOptionalChain
+  callee +1:10 checkedAt -> @checkedAt
+  callee +5:17 Walk.helperName -> @Walk.helperName
+  callee +5:43 Operands.at -> @Operands.at
+  callee +5:62 Operands.at -> @Operands.at
+  callee +7:14 storeRow -> @storeRow
+  callee +9:14 recordCallRow -> @recordCallRow
+  callee +11:14 literalRow -> @literalRow
+  callee +13:14 newRow -> @newRow
+  callee +15:14 processArgv -> @processArgv
+  callee +17:14 checkedPattern -> @checkedPattern
+  callee +19:14 checkedPatternHead -> @checkedPatternHead
 function uncheckedReads(walk: Walk, list: Node, from: i32, end: i32): string[] -> @uncheckedReads
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from

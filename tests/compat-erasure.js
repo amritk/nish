@@ -408,6 +408,10 @@ const admit = async (name, feature, strict, result) => {
     ],
     { cwd: root, timeout: COMPILE_TIMEOUT_MS }
   )
+  // An exit status alone is a weak answer: a native crash can exit 1 too.
+  if (node.stdout.length === 0) {
+    return `${name}: \`${FLAG}=${feature}\` admits it, but it prints nothing under Node, so a silent crash would match it`
+  }
   const [a, b] = [runAnswer(node), runAnswer(native)]
   if (!a.equals(b)) {
     result.difference = {

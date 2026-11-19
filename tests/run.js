@@ -26163,6 +26163,50 @@ export const main = (): void => {
       chainedEmit.status === 0 && chainedRun.status === 0 && chainedRun.stdout === "1\n",
       shown(chainedEmit) + shown(chainedRun)
     )
+    // Strict `--emit-ts` keeps its checked element read inside a chain, byte
+    // for byte: only a build that admits `optional-chaining` leaves it to the
+    // chain. (Strict's `idx(g?.rows, 0)` throws under Node when `g` is null,
+    // where the native program answers the default: an open strict finding.)
+    const strictChain = path.join(work, "strict_chain_element.ts")
+    fs.writeFileSync(
+      strictChain,
+      `class Row {
+  n: number = 0
+}
+
+class Grid {
+  rows: Row[]
+  constructor() {
+    this.rows = [new Row()]
+  }
+}
+
+export const first = (g: Grid | null): number => g?.rows[0].n ?? -1
+`
+    )
+    const strictChainLine = (flags) => {
+      const out = path.join(work, `strict_chain_element_ts${flags.length}`)
+      fs.rmSync(out, { recursive: true, force: true })
+      const r = nish([strictChain, ...flags, "--emit-ts", out])
+      const file = path.join(out, "strict_chain_element.ts")
+      const line = fs.existsSync(file)
+        ? fs
+            .readFileSync(file, "utf8")
+            .split("\n")
+            .find((l) => l.startsWith("export const first"))
+        : undefined
+      return { r, line: line ?? "" }
+    }
+    const strictLine = strictChainLine([])
+    const compatLine = strictChainLine(["--compat=optional-chaining"])
+    check(
+      "compat: strict `--emit-ts` still writes a chained element read as `idx(g?.rows, 0)`, and only `optional-chaining` leaves it to the chain",
+      strictLine.r.status === 0 &&
+        strictLine.line === "export const first = (g: Grid | null): number => idx(g?.rows, 0).n ?? -1" &&
+        compatLine.r.status === 0 &&
+        compatLine.line === "export const first = (g: Grid | null): number => g?.rows[0].n ?? -1",
+      shown(strictLine.r) + shown(compatLine.r) + `${strictLine.line}\n${compatLine.line}\n`
+    )
     const placed = [
       ["--compat", "Dialect"],
       ["--number-mode", "Dialect"],
@@ -26243,6 +26287,14 @@ export const main = (): void => {
       "reject_optional_chain_element_inner",
       "reject_optional_chain_statement",
     ].filter((name) => cases.includes(name))
+    const admittedDialect = [
+      "compat_nullish_narrowed",
+      "compat_nullish_never_missing",
+      "compat_optional_chain_element",
+      "compat_optional_chain_loops",
+      "compat_optional_chain_skipped_arguments",
+      "compat_optional_chain_statement",
+    ].filter((name) => cases.includes(name))
     check(
       "compat-erasure: every positive case is byte-identical under `--compat`, and every reject case is rejected with the same exit, code and words",
       corpus.status === 0 && counts !== null,
@@ -26258,7 +26310,7 @@ export const main = (): void => {
       counts !== null &&
         positiveCount + rejectCount + admittedCount === cases.length &&
         rejectCount === rejectCases - admittedRejects.length &&
-        admittedCount > admittedRejects.length &&
+        admittedCount === admittedRejects.length + admittedDialect.length &&
         fileCount > 0 &&
         codedCount >= rejectCount &&
         uncodedCases === 0 &&

@@ -623,7 +623,11 @@ const processArgv = (walk: Walk, node: Node): string | null => {
 export const recordsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   switch (node.kind) {
     case NodeKind.Index:
-      if ((node.flags & FLAG_OPTIONAL) !== 0 || isOptionalChain(node.children[0]) || !checkedAt(walk, node)) {
+      if (
+        (node.flags & FLAG_OPTIONAL) !== 0 ||
+        (walk.optionalChaining && isOptionalChain(node.children[0])) ||
+        !checkedAt(walk, node)
+      ) {
         return null
       }
       return `${walk.helperName("idx")}(${operands.at(0)}, ${operands.at(1)})`
