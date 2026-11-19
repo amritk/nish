@@ -25978,6 +25978,227 @@ if (dealtHere("cliChecks")) {
     }
   }
 
+  // ---- WP66 S7: a package's `nish.link` is part of the run cache key ------------------
+  // `tests/link/pkg_link_*` prove the link and its refusals under `--link`. What they
+  // cannot say is that `nish run` rebuilds when only a linked C source changes: the IR
+  // is the same, so the key has to carry the source's bytes.
+  if (!only || "package-link".includes(only) || "pkg_link".includes(only)) {
+    if (!HAS_CLANG) {
+      skip("package-link: clang not on PATH, so no package can be linked")
+    } else {
+      const pkgDir = path.join(buildDir, "package-link")
+      fs.rmSync(pkgDir, { recursive: true, force: true })
+      fs.cpSync(path.join(root, "tests", "link", "pkg_link_own"), path.join(pkgDir, "app"), { recursive: true })
+      const pkgRun = () =>
+        spawnSync(NISH, ["run", "main.ts"], {
+          cwd: path.join(pkgDir, "app"),
+          encoding: "utf8",
+          env: { ...process.env, XDG_CACHE_HOME: path.join(pkgDir, "cache") },
+        })
+      const before = pkgRun()
+      fs.writeFileSync(
+        path.join(pkgDir, "app", "c", "add.c"),
+        "int pkg_link_add(int a, int b) { return a * 100 + b; }\n"
+      )
+      const after = pkgRun()
+      check(
+        "package-link: `nish run` links the package's own source and library, and a change to the source alone links again",
+        before.status === 0 &&
+          before.stdout === "5\ntrue\n" &&
+          after.status === 0 &&
+          after.stdout === "203\ntrue\n",
+        before.stdout + before.stderr + after.stdout + after.stderr
+      )
+
+      // A header the source includes keys the cache too: an edit to `add.h` alone
+      // leaves the IR and `add.c` as they were, and must still link again.
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "add.h"), "#define PKG_LINK_SCALE 1\n")
+      fs.writeFileSync(
+        path.join(pkgDir, "app", "c", "add.c"),
+        '#include "add.h"\nint pkg_link_add(int a, int b) { return a * PKG_LINK_SCALE + b; }\n'
+      )
+      const headerBefore = pkgRun()
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "add.h"), "#define PKG_LINK_SCALE 10\n")
+      const headerAfter = pkgRun()
+      check(
+        "package-link: a change to a header the linked source includes, and nothing else, links again",
+        headerBefore.status === 0 &&
+          headerBefore.stdout === "5\ntrue\n" &&
+          headerAfter.status === 0 &&
+          headerAfter.stdout === "23\ntrue\n",
+        headerBefore.stdout + headerBefore.stderr + headerAfter.stdout + headerAfter.stderr
+      )
+
+      // Whatever else the compile reads keys it too, by the depfile the compile's own
+      // flags give (`build.sh --link-depends`), not by file name: an edit to a
+      // `.inc` file alone, then to a `.c` file the source includes alone, links again.
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "table.inc"), "#define PKG_LINK_TABLE 1\n")
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "other.c"), "static int pkg_link_bias(void) { return 0; }\n")
+      fs.writeFileSync(
+        path.join(pkgDir, "app", "c", "add.c"),
+        '#include "table.inc"\n#include "other.c"\nint pkg_link_add(int a, int b) { return a * PKG_LINK_TABLE + b + pkg_link_bias(); }\n'
+      )
+      const incBefore = pkgRun()
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "table.inc"), "#define PKG_LINK_TABLE 100\n")
+      const incAfter = pkgRun()
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "other.c"), "static int pkg_link_bias(void) { return 1000; }\n")
+      const otherAfter = pkgRun()
+      check(
+        "package-link: a change to a `.inc` file, or a `.c` file, the linked source includes, and nothing else, links again",
+        incBefore.status === 0 &&
+          incBefore.stdout === "5\ntrue\n" &&
+          incAfter.status === 0 &&
+          incAfter.stdout === "203\ntrue\n" &&
+          otherAfter.status === 0 &&
+          otherAfter.stdout === "1203\ntrue\n",
+        incBefore.stdout + incBefore.stderr + incAfter.stdout + incAfter.stderr + otherAfter.stdout + otherAfter.stderr
+      )
+
+      // The depfile escapes some characters of a path (`\#`, `$$`, a blank), and
+      // `makeRulePaths` undoes them: a package under a directory whose name holds
+      // `#`, `$` and a blank keys its header, so a second run with nothing changed
+      // is a hit (no file in its cache is rewritten; a list it could not read
+      // would link on every run) and an edit to that header alone links again.
+      // Under a directory whose name holds a backslash, which clang lists as `/`,
+      // the listed header cannot be read, so the run links afresh and the same
+      // edit still takes effect.
+      const oddCase = (dirName, wantHit) => {
+        const app = path.join(pkgDir, dirName, "app")
+        const cache = path.join(pkgDir, `${dirName.replace(/[^a-z]/g, "")}-cache`)
+        fs.cpSync(path.join(root, "tests", "link", "pkg_link_own"), app, { recursive: true })
+        fs.writeFileSync(path.join(app, "c", "add.h"), "#define PKG_LINK_SCALE 1\n")
+        fs.writeFileSync(
+          path.join(app, "c", "add.c"),
+          '#include "add.h"\nint pkg_link_add(int a, int b) { return a * PKG_LINK_SCALE + b; }\n'
+        )
+        const run = () =>
+          spawnSync(NISH, ["run", "main.ts"], {
+            cwd: app,
+            encoding: "utf8",
+            env: { ...process.env, XDG_CACHE_HOME: cache },
+          })
+        const cacheFiles = () =>
+          fs
+            .readdirSync(cache, { recursive: true })
+            .map((f) => path.join(cache, String(f)))
+            .filter((f) => fs.statSync(f).isFile())
+            .map((f) => `${f} ${fs.statSync(f).mtimeMs}`)
+            .sort()
+            .join("\n")
+        const first = run()
+        const filesFirst = cacheFiles()
+        const again = run()
+        const filesAgain = cacheFiles()
+        fs.writeFileSync(path.join(app, "c", "add.h"), "#define PKG_LINK_SCALE 10\n")
+        const edited = run()
+        const ok =
+          first.status === 0 &&
+          first.stdout === "5\ntrue\n" &&
+          again.status === 0 &&
+          again.stdout === "5\ntrue\n" &&
+          filesFirst.length > 0 &&
+          (filesAgain === filesFirst) === wantHit &&
+          edited.status === 0 &&
+          edited.stdout === "23\ntrue\n"
+        return {
+          ok,
+          shown: `${first.stdout}${first.stderr}${again.stdout}${again.stderr}${edited.stdout}${edited.stderr}\n--- cache after the first run\n${filesFirst}\n--- after the second\n${filesAgain}`,
+        }
+      }
+      const oddEscaped = oddCase("odd#$ dir", true)
+      check(
+        "package-link: under a directory named with `#`, `$` and a blank, an unchanged run is a hit and a change to the included header alone links again",
+        oddEscaped.ok,
+        oddEscaped.shown
+      )
+      const slashed = oddCase("back\\slash", false)
+      check(
+        "package-link: under a directory named with a backslash, which clang lists as `/`, every run links afresh, so a change to the included header takes effect",
+        slashed.ok,
+        slashed.shown
+      )
+
+      // `libraries` reaches the linker: the symbol lives only in a shared library
+      // this check builds with clang, found by `-l<name>` on LIBRARY_PATH and at
+      // run time on LD_LIBRARY_PATH. Without the entry the same program does not
+      // link, so `-lm` from build.sh proves nothing here. The `.so` and its search
+      // variables are Linux's, so elsewhere the check is skipped.
+      if (process.platform !== "linux") {
+        skip("package-link: the shared-library check builds an ELF `.so`, so it runs on Linux only")
+      } else {
+        const libDir = path.join(pkgDir, "lib")
+        fs.mkdirSync(libDir, { recursive: true })
+        fs.writeFileSync(path.join(libDir, "triple.c"), "int pkg_link_triple(int x) { return x * 3; }\n")
+        const shared = spawnSync(
+          "clang",
+          ["-shared", "-fPIC", "-o", path.join(libDir, "libnishpkglinktriple.so"), path.join(libDir, "triple.c")],
+          { encoding: "utf8" }
+        )
+        const libApp = path.join(pkgDir, "libapp")
+        fs.mkdirSync(libApp, { recursive: true })
+        fs.writeFileSync(
+          path.join(libApp, "lib.ts"),
+          "declare function pkg_link_triple(x: i32): i32\n\nexport function triple(x: i32): i32 {\n  return pkg_link_triple(x)\n}\n"
+        )
+        fs.writeFileSync(
+          path.join(libApp, "main.ts"),
+          'import { triple } from "./lib"\n\nexport const main = (): i32 => {\n  console.log(triple(14))\n  return 0\n}\n'
+        )
+        const libRun = (libraries) => {
+          fs.writeFileSync(
+            path.join(libApp, "package.json"),
+            JSON.stringify({ name: "pkg-link-libapp", private: true, nish: { link: { libraries } } })
+          )
+          return spawnSync(NISH, ["run", "main.ts"], {
+            cwd: libApp,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              XDG_CACHE_HOME: path.join(pkgDir, "cache"),
+              LIBRARY_PATH: libDir,
+              LD_LIBRARY_PATH: libDir,
+            },
+          })
+        }
+        const unnamed = libRun([])
+        const named = libRun(["nishpkglinktriple"])
+        check(
+          "package-link: a library named in `libraries` is passed to the linker, and without it the link fails on the unresolved symbol",
+          shared.status === 0 &&
+            unnamed.status !== 0 &&
+            unnamed.stdout === "" &&
+            /undefined (symbol|reference)/.test(unnamed.stderr) &&
+            unnamed.stderr.includes("pkg_link_triple") &&
+            named.status === 0 &&
+            named.stdout === "42\n",
+          shared.stderr + unnamed.stdout + unnamed.stderr + named.stdout + named.stderr
+        )
+      }
+
+      // A granted source that is a symbolic link out of its package is refused by
+      // its real path, though the path as written is inside the package.
+      const depDir = path.join(pkgDir, "dep")
+      fs.cpSync(path.join(root, "tests", "link", "pkg_link_dep_granted"), depDir, { recursive: true })
+      const outside = path.join(pkgDir, "outside.c")
+      fs.writeFileSync(outside, "int pkg_link_mul(int a, int b) { return a - b; }\n")
+      const linked = path.join(depDir, "node_modules", "pkg_mul", "c", "mul.c")
+      fs.rmSync(linked)
+      fs.symlinkSync(outside, linked)
+      const escaped = spawnSync(NISH, ["run", "main.ts"], {
+        cwd: depDir,
+        encoding: "utf8",
+        env: { ...process.env, XDG_CACHE_HOME: path.join(pkgDir, "cache") },
+      })
+      check(
+        "package-link: a granted source that is a symbolic link out of its package is refused, and nothing runs",
+        escaped.status === 1 &&
+          escaped.stdout === "" &&
+          escaped.stderr.includes("`c/mul.c` is no file inside the package"),
+        escaped.stdout + escaped.stderr
+      )
+    }
+  }
+
   // ---- `nish run`: a script built into a cache and started ----------------------------
   // `nish run [flags] <file.ts> [args ...]` compiles every time, links only when the
   // IR (or the recipe, or the runtime) is new, and answers the program's own exit
