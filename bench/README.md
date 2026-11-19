@@ -2411,8 +2411,9 @@ and than the IQR of both sides. On this run:
 - The module costs the client less CPU than tokio-postgres on every workload.
 - tokio-postgres costs more than libpq on `pk` and `insert`, and the same as
   libpq on `list`, as far as this machine can see.
-- The system time is within 1.6 µs across the three sides on every workload,
-  so the differences are user time.
+- The system time is within 0.5 µs across the three sides on `pk` and
+  `insert` and within 2.4 µs on `list`, where the differences are 11 to 12 µs.
+  So the differences come from user time.
 
 Why tokio-postgres's user time is higher was not measured. Its requests pass
 through a channel to the connection task, and each query allocates its
