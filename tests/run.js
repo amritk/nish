@@ -26295,6 +26295,7 @@ export const main = (): void => {
       "compat_nullish_narrowed",
       "compat_nullish_never_missing",
       "compat_optional_chain_element",
+      "compat_optional_chain_fusion",
       "compat_optional_chain_loops",
       "compat_optional_chain_skipped_arguments",
       "compat_optional_chain_statement",

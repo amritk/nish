@@ -1655,20 +1655,39 @@ allows admits. This compiler has built two features, `nullish` and
   and does nothing from the first one that is `null` or `undefined`, as in
   Node: the arguments of a call it skips are not evaluated
   (`tests/cases/compat_optional_chain_statement`, refused in the strict
-  dialect as `reject_optional_chain_statement`). `?.[i]` is admitted inside a
+  dialect as `reject_optional_chain_statement`), so an enum value one of them
+  assigns is, after the call, one the variable may or may not hold, as
+  `?:` has it (`tests/link/compat_optional_skipped_enum`). `?.[i]` is admitted inside a
   chain that a member, a method call or a `??` default follows: the element is
   read, and bounds-checked, only when the array is there
   (`compat_optional_chain_element`, strict `reject_optional_chain_element_inner`).
   An index read inside a link the chain skips is not counted as checked for
   the reads after it. Two forms stay refused in the compatibility dialect
-  too, because Node's answer and the build's would part: `?.[i]` that ends a
-  chain is NL1067, since past the end of the array Node answers `undefined`
-  and takes the default where the bounds check panics
-  (`tests/link/compat_optional_element_last`); and an optional call `f?.()`
-  is NL1068 (`compat_optional_call`).
+  too, because Node's answer and the build's would part. An element read the
+  chain carries on past is NL1067, since past the end of the array Node
+  answers `undefined` and goes on where the bounds check panics: in a `??`
+  chain or a statement chain, a `?.[i]` that ends it
+  (`tests/link/compat_optional_element_last`); and in a statement chain any
+  element read that ends it, `a?.xs[i];`
+  (`tests/link/compat_optional_element_statement`), or an element read,
+  plain or `?.`, that a `?.` link tests, `xs[i]?.m();`
+  (`tests/link/compat_optional_element_before`). In a `??` chain a plain
+  element read a `?.` tests, `xs[i]?.m() ?? d`, is the strict dialect's own
+  and keeps its meaning in both: the `?.` tests a nullable element, and the
+  read is bounds-checked as every element read is. A
+  `?.[i]` that ends a chain in any other place, `const x = xs?.[0]`, is the
+  `?.` refusal of a chain with no default, NL1049. And an optional call
+  `f?.()` is NL1068 (`compat_optional_call`).
 - **`nullish` admits a `??` whose left operand is never missing**: a value
   whose type is not nullable, or a nullable one narrowed past `null` (the
-  strict dialect refuses both, as a default with nothing to replace). Node's
+  strict dialect refuses both, as a default with nothing to replace), when the
+  left operand is one of the forms JavaScript can be seen not to answer
+  `undefined` for: a literal (number, string, `true`, `false`, template, array
+  or object), a name, `this`, a `new`, a unary or binary operation, or a
+  plain member read of one of these, in parentheses or not. Any other left
+  operand keeps the strict refusal in the same words whatever its type: a
+  call, `f(x) ?? 1`, and a ternary, `(c ? a : b) ?? d`, are not on the list
+  yet (`tests/link/compat_nullish_call_left`), nor is an element read, below. Node's
   answer is always the left operand, so the build keeps the left operand alone
   and says so: one `performance` warning, NL9021, at the `??`, naming the
   default to drop (`tests/cases/compat_nullish_never_missing`,
@@ -1681,8 +1700,9 @@ allows admits. This compiler has built two features, `nullish` and
   reads `undefined` and answers the default, where the bounds check panics,
   so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
   (`reject_nullish_element_never_missing`).
-- **The dialect only adds.** A strict build is unchanged by all of the above,
-  byte for byte. A compat build is `--number-mode f64` for every program the
+- **The dialect only adds.** A strict build of a program the strict dialect
+  accepts is unchanged by all of the above, byte for byte; what changed for a
+  program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the
   strict dialect accepts: the same IR but for the mark, the same refusals in
   the same words. And under one number mode a compat build and a strict build
   of such a program differ in the mark alone. `tests/compat-erasure.js` checks

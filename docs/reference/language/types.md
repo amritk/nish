@@ -637,7 +637,7 @@ value, so nothing is boxed; `null` takes its type from context. A
   `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) ``
   (`reject_optional_chain_element_inner`, which `optional-chaining` admits),
   one that ends the chain is
-  `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
+  `` An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
   (NL1067, `reject_optional_chain_element`), and an optional call is
   `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first ``
   (NL1068, `reject_optional_call`), in both dialects. A chain that ends in an element read is the

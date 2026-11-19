@@ -4089,7 +4089,11 @@ const checkImportedBuiltin = (
     : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)
 }
 
-const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
+const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 => {
+  // WP28 C1: a call a `?.` may skip runs its arguments only when the chain
+  // reaches it, so what they hold is held in a child scope, as an arm of `?:`
+  // holds it; an assignment there still drops the outer narrowing.
+  const scope = isOptionalChain(expr) ? outer.child() : outer
   const callee = expr.children[0]
   if (callee.kind === NodeKind.Super) {
     return checkExpression(ctx, callee, scope, -1) // WP25: reports on the `super` token

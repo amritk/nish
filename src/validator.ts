@@ -247,13 +247,18 @@ const optionalIndexForbidden = (): string =>
   "Optional chaining `?.` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
 
 /**
- * A `?.[i]` that is the last link of its chain. Past the end of the array
- * JavaScript answers `undefined`, which the default or the dropped statement
+ * An element read the chain carries on past: a `?.[i]` that ends a `??` chain
+ * or a statement chain, or, in a statement chain, any element read that ends
+ * it or that a `?.` link tests. Past the end of the array JavaScript answers
+ * `undefined`, which the default, the dropped statement or the next `?.`
  * absorbs, and a bounds check panics, so neither dialect admits one: the two
- * would disagree on exactly the reads a `?.` is written to survive.
+ * would disagree on exactly the reads a `?.` is written to survive. A plain
+ * element read a `?.` tests in a `??` chain, `xs[i]?.m() ?? d`, is the strict
+ * dialect's own and keeps its meaning: the `?.` tests a nullable element, and
+ * the read is bounds-checked as every element read is.
  */
 const finalElementLink = (): string =>
-  "`?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)"
+  "An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)"
 
 /** An optional call, which no dialect admits yet: its callee has no `null` test to lower to. */
 const optionalCall = (): string =>
@@ -262,6 +267,35 @@ const optionalCall = (): string =>
 /** Whether `chain`'s last link is a `?.[i]`. */
 const endsInElementLink = (chain: Node): boolean =>
   chain.kind === NodeKind.Index && (chain.flags & FLAG_OPTIONAL) !== 0
+
+/**
+ * The element read in `chain` that the chain would carry on past, or null:
+ * its last link when that is a `?.[i]`; for a statement, also its last link
+ * when that is any element read, or an element read, plain or `?.`, whose
+ * value a `?.` member link tests. `xs[i]?.m();` with `i` past the end reads
+ * `undefined` in JavaScript and skips the call, where the bounds check panics.
+ */
+const carriedElement = (chain: Node, statement: boolean): Node | null => {
+  if (chain.kind === NodeKind.Index && (statement || (chain.flags & FLAG_OPTIONAL) !== 0)) {
+    return chain
+  }
+  if (!statement) {
+    return null
+  }
+  let node = chain
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
+    const receiver = node.children[0]
+    if (
+      (node.flags & FLAG_OPTIONAL) !== 0 &&
+      node.kind !== NodeKind.Call &&
+      receiver.kind === NodeKind.Index
+    ) {
+      return receiver
+    }
+    node = receiver
+  }
+  return null
+}
 
 /**
  * The outermost `?.` member or element link of `chain`, or null when it has
@@ -326,8 +360,9 @@ const admitChain = (ctx: CheckContext, chain: Node, elements: boolean): void => 
  * names that feature where it refuses one the feature would admit.
  */
 const admitCoalesceChain = (ctx: CheckContext, chain: Node): void => {
-  if (endsInElementLink(chain)) {
-    ctx.error(chain, finalElementLink())
+  const carried = carriedElement(chain, false)
+  if (carried !== null) {
+    ctx.error(carried, finalElementLink())
     return
   }
   const elements = ctx.compatAllows("optional-chaining")
@@ -349,8 +384,9 @@ const admitCoalesceChain = (ctx: CheckContext, chain: Node): void => {
  * feature; a chain neither dialect admits is left to the link's own rule.
  */
 const admitStatementChain = (ctx: CheckContext, chain: Node): void => {
-  if (endsInElementLink(chain)) {
-    ctx.error(chain, finalElementLink())
+  const carried = carriedElement(chain, true)
+  if (carried !== null) {
+    ctx.error(carried, finalElementLink())
     return
   }
   if (ctx.compatAllows("optional-chaining")) {

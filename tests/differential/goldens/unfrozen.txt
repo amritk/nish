@@ -202,6 +202,7 @@ cases/compact_view added after R6: no rewriter to freeze it with
 cases/compat_nullish_narrowed added after R6: no rewriter to freeze it with
 cases/compat_nullish_never_missing added after R6: no rewriter to freeze it with
 cases/compat_optional_chain_element added after R6: no rewriter to freeze it with
+cases/compat_optional_chain_fusion added after R6: no rewriter to freeze it with
 cases/compat_optional_chain_loops added after R6: no rewriter to freeze it with
 cases/compat_optional_chain_skipped_arguments added after R6: no rewriter to freeze it with
 cases/compat_optional_chain_statement added after R6: no rewriter to freeze it with

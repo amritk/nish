@@ -25,7 +25,9 @@ const doubled = (dst: i32[] | null, src: i32[]): void => {
   for (const x of src) dst?.push(x * 2);
 };
 
-// A `Map.set` and a `Set.add` as whole statements: the lookup-fusion matcher.
+// A `Map.set` and a `Set.add` as whole statements, through a `?.`. With no
+// `has` or `get` beside them they reach no matcher: the lookup-fusion
+// matcher's shapes are `compat_optional_chain_fusion`.
 const put = (m: Map<string, i32> | null, k: string, v: i32): void => {
   m?.set(k, v);
 };

@@ -18,11 +18,14 @@ class Counter {
   }
 }
 
-export const main = (): void => {
-  const t = new Counter();
-  const a: Cell | null = new Cell();
-  const z: Cell | null = null;
+// The receivers are parameters, so neither dialect nor tsc knows which one is
+// missing.
+const both = (t: Counter, a: Cell | null, z: Cell | null): void => {
   a?.bump(t.tick());
   z?.bump(t.tick());
   console.log(`${a?.n ?? -1} ${t.calls}`);
+};
+
+export const main = (): void => {
+  both(new Counter(), new Cell(), null);
 };

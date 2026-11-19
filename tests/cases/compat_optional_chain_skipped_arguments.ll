@@ -59,66 +59,60 @@ ovf.fail:
   unreachable
 }
 
-define void @nish_main() #0 {
+define internal void @both(%struct.Counter* noundef nonnull align 8 dereferenceable(4) nocapture %t, %struct.Cell* noundef align 8 nocapture %a, %struct.Cell* noundef align 8 nocapture %z) #0 {
 entry:
-  %t.addr = alloca %struct.Counter*, align 8
-  %Counter.obj = alloca %struct.Counter, align 8
-  %a.addr = alloca %struct.Cell*, align 8
-  %Cell.obj = alloca %struct.Cell, align 8
-  %z.addr = alloca %struct.Cell*, align 8
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %Counter.obj, i32 0, i32 0
-  store i32 0, i32* %0, align 4, !tbaa !4
-  store %struct.Counter* %Counter.obj, %struct.Counter** %t.addr, align 8
-  %1 = getelementptr inbounds %struct.Cell, %struct.Cell* %Cell.obj, i32 0, i32 0
-  store i32 0, i32* %1, align 4, !tbaa !6
-  store %struct.Cell* %Cell.obj, %struct.Cell** %a.addr, align 8
-  store %struct.Cell* null, %struct.Cell** %z.addr, align 8
-  %2 = load %struct.Cell*, %struct.Cell** %a.addr, align 8
-  %3 = icmp eq %struct.Cell* %2, null
-  br i1 %3, label %chain.end, label %chain.next
+  %0 = icmp eq %struct.Cell* %a, null
+  br i1 %0, label %chain.end, label %chain.next
 
 chain.next:
-  %4 = load %struct.Counter*, %struct.Counter** %t.addr, align 8
-  %5 = call i32 @Counter.tick(%struct.Counter* %4)
-  call void @Cell.bump(%struct.Cell* %2, i32 %5)
+  %1 = call i32 @Counter.tick(%struct.Counter* %t)
+  call void @Cell.bump(%struct.Cell* %a, i32 %1)
   br label %chain.end
 
 chain.end:
-  %6 = load %struct.Cell*, %struct.Cell** %z.addr, align 8
-  %7 = icmp eq %struct.Cell* %6, null
-  br i1 %7, label %chain.end.1, label %chain.next.1
+  %2 = icmp eq %struct.Cell* %z, null
+  br i1 %2, label %chain.end.1, label %chain.next.1
 
 chain.next.1:
-  %8 = load %struct.Counter*, %struct.Counter** %t.addr, align 8
-  %9 = call i32 @Counter.tick(%struct.Counter* %8)
-  call void @Cell.bump(%struct.Cell* %6, i32 %9)
+  %3 = call i32 @Counter.tick(%struct.Counter* %t)
+  call void @Cell.bump(%struct.Cell* %z, i32 %3)
   br label %chain.end.1
 
 chain.end.1:
-  %10 = load %struct.Cell*, %struct.Cell** %a.addr, align 8
-  %11 = icmp eq %struct.Cell* %10, null
-  br i1 %11, label %nullish.default, label %chain.next.2
+  %4 = icmp eq %struct.Cell* %a, null
+  br i1 %4, label %nullish.default, label %chain.next.2
 
 chain.next.2:
-  %12 = getelementptr inbounds %struct.Cell, %struct.Cell* %10, i32 0, i32 0
-  %13 = load i32, i32* %12, align 4, !tbaa !6
+  %5 = getelementptr inbounds %struct.Cell, %struct.Cell* %a, i32 0, i32 0
+  %6 = load i32, i32* %5, align 4, !tbaa !6
   br label %nullish.end
 
 nullish.default:
   br label %nullish.end
 
 nullish.end:
-  %14 = phi i32 [ %13, %chain.next.2 ], [ -1, %nullish.default ]
-  %15 = call i8* @nish_str_from_i32(i32 %14)
-  %16 = call i8* @nish_str_concat(i8* %15, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %17 = load %struct.Counter*, %struct.Counter** %t.addr, align 8
-  %18 = getelementptr inbounds %struct.Counter, %struct.Counter* %17, i32 0, i32 0
-  %19 = load i32, i32* %18, align 4, !tbaa !4
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  %21 = call i8* @nish_str_concat(i8* %16, i8* %20)
-  call void @nish_print(i8* %21)
+  %7 = phi i32 [ %6, %chain.next.2 ], [ -1, %nullish.default ]
+  %8 = call i8* @nish_str_from_i32(i32 %7)
+  %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %10 = getelementptr inbounds %struct.Counter, %struct.Counter* %t, i32 0, i32 0
+  %11 = load i32, i32* %10, align 4, !tbaa !4
+  %12 = call i8* @nish_str_from_i32(i32 %11)
+  %13 = call i8* @nish_str_concat(i8* %9, i8* %12)
+  call void @nish_print(i8* %13)
   call void @nish_arena_release(i64 %arena.mark)
+  ret void
+}
+
+define void @nish_main() #0 {
+entry:
+  %Counter.obj = alloca %struct.Counter, align 8
+  %Cell.obj = alloca %struct.Cell, align 8
+  %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %Counter.obj, i32 0, i32 0
+  store i32 0, i32* %0, align 4, !tbaa !4
+  %1 = getelementptr inbounds %struct.Cell, %struct.Cell* %Cell.obj, i32 0, i32 0
+  store i32 0, i32* %1, align 4, !tbaa !6
+  call void @both(%struct.Counter* %Counter.obj, %struct.Cell* %Cell.obj, %struct.Cell* null)
   ret void
 }
 

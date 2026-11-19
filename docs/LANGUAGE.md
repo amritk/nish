@@ -782,7 +782,7 @@ value, so nothing is boxed; `null` takes its type from context. A
   `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) ``
   (`reject_optional_chain_element_inner`, which `optional-chaining` admits),
   one that ends the chain is
-  `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
+  `` An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
   (NL1067, `reject_optional_chain_element`), and an optional call is
   `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first ``
   (NL1068, `reject_optional_call`), in both dialects. A chain that ends in an element read is the
@@ -16342,20 +16342,39 @@ allows admits. This compiler has built two features, `nullish` and
   and does nothing from the first one that is `null` or `undefined`, as in
   Node: the arguments of a call it skips are not evaluated
   (`tests/cases/compat_optional_chain_statement`, refused in the strict
-  dialect as `reject_optional_chain_statement`). `?.[i]` is admitted inside a
+  dialect as `reject_optional_chain_statement`), so an enum value one of them
+  assigns is, after the call, one the variable may or may not hold, as
+  `?:` has it (`tests/link/compat_optional_skipped_enum`). `?.[i]` is admitted inside a
   chain that a member, a method call or a `??` default follows: the element is
   read, and bounds-checked, only when the array is there
   (`compat_optional_chain_element`, strict `reject_optional_chain_element_inner`).
   An index read inside a link the chain skips is not counted as checked for
   the reads after it. Two forms stay refused in the compatibility dialect
-  too, because Node's answer and the build's would part: `?.[i]` that ends a
-  chain is NL1067, since past the end of the array Node answers `undefined`
-  and takes the default where the bounds check panics
-  (`tests/link/compat_optional_element_last`); and an optional call `f?.()`
-  is NL1068 (`compat_optional_call`).
+  too, because Node's answer and the build's would part. An element read the
+  chain carries on past is NL1067, since past the end of the array Node
+  answers `undefined` and goes on where the bounds check panics: in a `??`
+  chain or a statement chain, a `?.[i]` that ends it
+  (`tests/link/compat_optional_element_last`); and in a statement chain any
+  element read that ends it, `a?.xs[i];`
+  (`tests/link/compat_optional_element_statement`), or an element read,
+  plain or `?.`, that a `?.` link tests, `xs[i]?.m();`
+  (`tests/link/compat_optional_element_before`). In a `??` chain a plain
+  element read a `?.` tests, `xs[i]?.m() ?? d`, is the strict dialect's own
+  and keeps its meaning in both: the `?.` tests a nullable element, and the
+  read is bounds-checked as every element read is. A
+  `?.[i]` that ends a chain in any other place, `const x = xs?.[0]`, is the
+  `?.` refusal of a chain with no default, NL1049. And an optional call
+  `f?.()` is NL1068 (`compat_optional_call`).
 - **`nullish` admits a `??` whose left operand is never missing**: a value
   whose type is not nullable, or a nullable one narrowed past `null` (the
-  strict dialect refuses both, as a default with nothing to replace). Node's
+  strict dialect refuses both, as a default with nothing to replace), when the
+  left operand is one of the forms JavaScript can be seen not to answer
+  `undefined` for: a literal (number, string, `true`, `false`, template, array
+  or object), a name, `this`, a `new`, a unary or binary operation, or a
+  plain member read of one of these, in parentheses or not. Any other left
+  operand keeps the strict refusal in the same words whatever its type: a
+  call, `f(x) ?? 1`, and a ternary, `(c ? a : b) ?? d`, are not on the list
+  yet (`tests/link/compat_nullish_call_left`), nor is an element read, below. Node's
   answer is always the left operand, so the build keeps the left operand alone
   and says so: one `performance` warning, NL9021, at the `??`, naming the
   default to drop (`tests/cases/compat_nullish_never_missing`,
@@ -16368,8 +16387,9 @@ allows admits. This compiler has built two features, `nullish` and
   reads `undefined` and answers the default, where the bounds check panics,
   so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
   (`reject_nullish_element_never_missing`).
-- **The dialect only adds.** A strict build is unchanged by all of the above,
-  byte for byte. A compat build is `--number-mode f64` for every program the
+- **The dialect only adds.** A strict build of a program the strict dialect
+  accepts is unchanged by all of the above, byte for byte; what changed for a
+  program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the
   strict dialect accepts: the same IR but for the mark, the same refusals in
   the same words. And under one number mode a compat build and a strict build
   of such a program differ in the mark alone. `tests/compat-erasure.js` checks
@@ -16678,7 +16698,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
 | `a?.[i]` inside a chain ([the compatibility dialect](#the-compatibility-dialect) admits it) | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain_element_inner` |
-| `a?.[i]` ending a chain, `f?.()` (in both dialects) | `` `?.[i]` cannot end a `?.` chain: past the end of the array JavaScript answers `undefined` and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``; `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first `` | `reject_optional_chain_element`, `reject_optional_call` |
+| `a?.[i]` ending a chain, `f?.()` (in both dialects) | `` An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``; `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first `` | `reject_optional_chain_element`, `reject_optional_call` |
 | `a?.b` outside a chain that is the left operand of `??` ([Nullable types](#nullable-types); [the compatibility dialect](#the-compatibility-dialect) admits a chain that is a statement) | `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` `` | `reject_optional_chain`, `reject_optional_chain_paren`, `reject_optional_chain_argument` |
 | `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)); [the compatibility dialect](#the-compatibility-dialect) admits it | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |

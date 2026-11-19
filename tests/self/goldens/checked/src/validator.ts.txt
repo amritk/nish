@@ -88,6 +88,14 @@ function endsInElementLink(chain: Node): boolean -> @endsInElementLink
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer chain: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function carriedElement(chain: Node, statement: boolean): Node | null -> @carriedElement
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: chain
+  calls: nish_panic_index
+  pointer chain: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:7 node: Node (let)
+  local +2:11 receiver: Node (const)
 function admissibleLink(chain: Node): Node | null -> @admissibleLink
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: chain
@@ -118,39 +126,41 @@ function admitCoalesceChain(ctx: CheckContext, chain: Node): void -> @admitCoale
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   escaping: chain
-  calls: CheckContext.compatAllows CheckContext.error CheckContext.errorFeature admissibleLink admitChain endsInElementLink finalElementLink hasElementLink nish_panic_index optionalIndexForbidden
+  calls: CheckContext.compatAllows CheckContext.error CheckContext.errorFeature admissibleLink admitChain carriedElement finalElementLink hasElementLink nish_panic_index optionalIndexForbidden
   pointer ctx: size=368 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.compatAllows#0 admitChain#0 CheckContext.errorFeature#0
-  pointer chain: size=40 writesThrough=true captured=true passedTo=endsInElementLink#0 CheckContext.error#1 admitChain#1 hasElementLink#0 admissibleLink#0
+  pointer chain: size=40 writesThrough=true captured=true passedTo=carriedElement#0 admitChain#1 hasElementLink#0 admissibleLink#0
   stackSites=0 stackLocals=0
-  callee +0:7 endsInElementLink -> @endsInElementLink
-  callee +1:5 CheckContext.error -> @CheckContext.error
-  callee +1:22 finalElementLink -> @finalElementLink
-  local +4:9 elements: boolean (const)
-  callee +4:20 CheckContext.compatAllows -> @CheckContext.compatAllows
-  callee +5:3 admitChain -> @admitChain
-  callee +6:20 hasElementLink -> @hasElementLink
-  callee +6:45 admissibleLink -> @admissibleLink
-  local +7:9 node: Node (let)
-  callee +11:5 CheckContext.errorFeature -> @CheckContext.errorFeature
-  callee +11:28 optionalIndexForbidden -> @optionalIndexForbidden
+  local +0:9 carried: Node | null (const)
+  callee +0:19 carriedElement -> @carriedElement
+  callee +2:5 CheckContext.error -> @CheckContext.error
+  callee +2:24 finalElementLink -> @finalElementLink
+  local +5:9 elements: boolean (const)
+  callee +5:20 CheckContext.compatAllows -> @CheckContext.compatAllows
+  callee +6:3 admitChain -> @admitChain
+  callee +7:20 hasElementLink -> @hasElementLink
+  callee +7:45 admissibleLink -> @admissibleLink
+  local +8:9 node: Node (let)
+  callee +12:5 CheckContext.errorFeature -> @CheckContext.errorFeature
+  callee +12:28 optionalIndexForbidden -> @optionalIndexForbidden
 function admitStatementChain(ctx: CheckContext, chain: Node): void -> @admitStatementChain
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  calls: CheckContext.compatAllows CheckContext.error CheckContext.errorFeature admissibleLink admitChain chainWithoutDefault endsInElementLink finalElementLink optionalIndexForbidden
+  calls: CheckContext.compatAllows CheckContext.error CheckContext.errorFeature admissibleLink admitChain carriedElement chainWithoutDefault finalElementLink optionalIndexForbidden
   pointer ctx: size=368 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.compatAllows#0 admitChain#0 CheckContext.errorFeature#0
-  pointer chain: size=40 writesThrough=true captured=true passedTo=endsInElementLink#0 CheckContext.error#1 admitChain#1 admissibleLink#0
+  pointer chain: size=40 writesThrough=true captured=true passedTo=carriedElement#0 admitChain#1 admissibleLink#0
   stackSites=0 stackLocals=0
-  callee +0:7 endsInElementLink -> @endsInElementLink
-  callee +1:5 CheckContext.error -> @CheckContext.error
-  callee +1:22 finalElementLink -> @finalElementLink
-  callee +4:7 CheckContext.compatAllows -> @CheckContext.compatAllows
-  callee +5:5 admitChain -> @admitChain
-  local +8:9 link: Node | null (const)
-  callee +8:16 admissibleLink -> @admissibleLink
-  local +10:11 message: string (const)
-  callee +10:52 optionalIndexForbidden -> @optionalIndexForbidden
-  callee +10:79 chainWithoutDefault -> @chainWithoutDefault
-  callee +11:5 CheckContext.errorFeature -> @CheckContext.errorFeature
+  local +0:9 carried: Node | null (const)
+  callee +0:19 carriedElement -> @carriedElement
+  callee +2:5 CheckContext.error -> @CheckContext.error
+  callee +2:24 finalElementLink -> @finalElementLink
+  callee +5:7 CheckContext.compatAllows -> @CheckContext.compatAllows
+  callee +6:5 admitChain -> @admitChain
+  local +9:9 link: Node | null (const)
+  callee +9:16 admissibleLink -> @admissibleLink
+  local +11:11 message: string (const)
+  callee +11:52 optionalIndexForbidden -> @optionalIndexForbidden
+  callee +11:79 chainWithoutDefault -> @chainWithoutDefault
+  callee +12:5 CheckContext.errorFeature -> @CheckContext.errorFeature
 function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void -> @visit
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rejectFunctionModifiers

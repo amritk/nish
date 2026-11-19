@@ -1925,6 +1925,12 @@ const DECLARED = [
     why: "the case is compiled under --compat and uses an optional chain as a statement, which `optional-chaining` admits; the seed has no such feature and refuses it",
   },
   {
+    program: "tests/cases/compat_optional_chain_fusion.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses optional calls as statements and `??` conditions, which `optional-chaining` and `nullish` admit; the seed has no such features and refuses it",
+  },
+  {
     program: "tests/cases/compat_optional_chain_loops.ts",
     file: "exit",
     changelog: "optional chaining and nullish coalescing under --compat",
@@ -1935,6 +1941,12 @@ const DECLARED = [
     file: "exit",
     changelog: "optional chaining and nullish coalescing under --compat",
     why: "the case is compiled under --compat and uses optional calls as statements, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/link/compat_optional_skipped_enum/main.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the program's package.json turns on `optional-chaining` and it uses an optional call as a statement, which that feature admits; the seed has no such feature and refuses it",
   },
   {
     program: "tests/cases/perf_compat_number_i32.ts",

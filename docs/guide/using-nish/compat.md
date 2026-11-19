@@ -169,10 +169,16 @@ That prints `2`. An element read may sit inside a chain, as in
 ### What stays refused
 
 Two forms stay refused in both dialects, because Node's answer and the
-compiled program's would part. `?.[i]` cannot end a chain (`NL1067`): past the
-end of the array Node answers `undefined`, where Nish's bounds check panics.
-Test the index against `length` instead. And an optional call `f?.()` is
-refused (`NL1068`): narrow `f` with `!== null` and call it.
+compiled program's would part. An element read the chain would carry on past
+is refused (`NL1067`): a `?.[i]` that ends a `??` chain or a statement, and,
+in a statement, any element read that ends it, `h?.xs[i];`, or that a `?.`
+tests, `xs[i]?.bump();`. Past the end of the array Node answers `undefined`
+and goes on, where Nish's bounds check panics. Test the index against
+`length` instead. (With a `??` default, `xs[i]?.n ?? 0` is the strict
+dialect's own: the `?.` tests a nullable element, and the read is
+bounds-checked as every element read is.) (A `?.[i]` that ends a chain anywhere else, as in
+`const x = xs?.[0]`, is refused as a chain with no default.) And an optional
+call `f?.()` is refused (`NL1068`): narrow `f` with `!== null` and call it.
 
 <!-- nish:ok -->
 ```json package.json
@@ -230,6 +236,12 @@ export const main = (): void => {
 main.ts:3:13: performance: `p` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? "fallback"`)
 ```
 
+This covers a left side the compiler can see JavaScript never leaves
+`undefined`: a literal, a name, `this`, a `new`, an arithmetic or logical
+operation, or a field read of one of these. A call or a ternary on the left,
+`twice(x) ?? 1` or `(c ? a : b) ?? 0`, keeps the strict refusal for now, as
+does an element read, `xs[i] ?? 0`, which can run past the end.
+
 The default must still have the type of the left side, as TypeScript asks
 (`NL2370`). A `??` on a value that may be `null` is the strict dialect's own,
 and means the same in both.
@@ -266,8 +278,8 @@ dialect its source was written in. `--emit-checked` opens with the same facts
 
 ## What it does not change
 
-- A build that does not ask for the dialect is the same build it was, byte
-  for byte.
+- A build that does not ask for the dialect compiles every program it
+  accepted before to the same IR, byte for byte.
 - A program the strict dialect accepts compiles under the dialect to the
   program `--number-mode f64` compiles. It is not slower, and nothing is
   checked more loosely.
