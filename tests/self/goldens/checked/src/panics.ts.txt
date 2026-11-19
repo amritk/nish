@@ -455,14 +455,12 @@ function vectorAdvice(program: CheckedProgram, call: Node, lanes: i32): string -
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
-  local +1:9 holder: string (const)
-  callee +1:18 siteLocalName -> @siteLocalName
-  local +2:9 name: string (const)
-  callee +2:16 siteLocalName -> @siteLocalName
-  local +3:9 xs: string (const)
-  local +4:9 i: string (const)
-  local +5:9 what: string (const)
-  local +9:9 length: string (const)
+  local +1:9 xs: string (const)
+  callee +1:14 siteLocalName -> @siteLocalName
+  local +2:9 i: string (const)
+  callee +2:13 siteLocalName -> @siteLocalName
+  local +3:9 checks: string (const)
+  local +12:9 length: string (const)
 function sliceAdvice(program: CheckedProgram, node: Node): string -> @sliceAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName nish_str_concat nish_str_eq
