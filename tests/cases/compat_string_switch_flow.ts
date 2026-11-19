@@ -63,7 +63,7 @@ const loops = (s: string): number => {
   return n;
 };
 
-export function main(): void {
+export const main = (): void => {
   const words = ["tpl", "par", "into", "after", "other", "empty", "group"];
   const calls = [0];
   for (const w of words) {
@@ -86,4 +86,4 @@ export function main(): void {
     seen.push("!");
   }
   console.log(seen.join(""));
-}
+};

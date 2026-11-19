@@ -21,7 +21,7 @@ const first = (s: string): string => {
   return "";
 };
 
-export function main(): void {
+export const main = (): void => {
   const kept = lastOf("aé😀", 3);
   const pad = first("pp") + first("dd");
   console.log(kept);
@@ -34,4 +34,4 @@ export function main(): void {
   }
   console.log(heads.join(""));
   console.log(first("") + "|" + first("z"));
-}
+};

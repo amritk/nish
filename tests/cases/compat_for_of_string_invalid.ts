@@ -12,9 +12,9 @@ const count = (s: string): number => {
   return n;
 };
 
-export function main(): void {
+export const main = (): void => {
   console.log(`${count(String.fromCharCode(200) + "abc")}`);
   console.log(`${count("x" + String.fromCharCode(240) + "yz")}`);
   console.log(`${count(String.fromCharCode(128) + String.fromCharCode(191))}`);
   console.log(`${count("é" + String.fromCharCode(226))}`);
-}
+};
