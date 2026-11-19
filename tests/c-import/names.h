@@ -15,3 +15,7 @@ int width(void);
 #define let 2
 #define ok_value 9
 #define FINE 4
+
+/* A reserved parameter name renamed with `_` stays distinct from one already named so. */
+int two_in(int in, int in_);
+int two_in_rev(int in_, int in);

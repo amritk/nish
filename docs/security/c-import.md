@@ -30,16 +30,17 @@ changes nothing, is refused, but a hostile overrides file can still make a
 binding wrong (CI-A4). A module written for one data model is refused by a
 build for the other (NL3059).
 
-Six findings were fixed while the code was written (CI-5, CI-6 and CI-7,
-Medium; CI-1, CI-2 and CI-3, Low); one is open, accepted (CI-4, Low). Four more
-properties of the threat model are recorded as accepted under
-[Accepted limits](#accepted-limits) (CI-A1 to CI-A4).
+Seven findings were fixed while the code was written or reviewed (CI-5, CI-6 and CI-7,
+Medium; CI-1, CI-2, CI-3 and CI-8, Low); one is open, accepted (CI-4, Low). Four more
+properties of the threat model, each Low, are recorded as accepted under
+[Accepted limits](#accepted-limits) (CI-A1 to CI-A4) and are not counted in
+the index row.
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `emittable`, `isIdent`, `isPrintable` and `reportLine` |
+| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `attrWhy`, `typeWhy`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `emittable`, `isIdent`, `isPrintable` and `reportLine` |
 | `src/c-import-json.ts` | `CJson`, the JSON reader the AST, the macro probe's AST and the overrides file go through, with its depth and value limits |
 | `src/c-import-model.ts` | `dataModelOf`, `dataModelRefusal` |
 | `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3059 |
@@ -133,7 +134,8 @@ a newline), `c-import: a header path with a space is quoted in the Regenerate li
 clang accepts more in a name than Nish should copy: `$` and, since C23 and
 as an extension before it, any Unicode letter, so a name can hold a Cyrillic
 letter that looks like a Latin one or a bidirectional control. Every string
-the module holds is therefore written through one method, `Importer.word`,
+taken from the header, the overrides or the command line is therefore
+written through one method, `Importer.word`,
 which calls `emittable` with what the string is: an identifier
 (`[A-Za-z_][A-Za-z0-9_]*`), a decimal integer, a string literal's body
 (printable ASCII, no `"` or `\`) or a comment line (printable ASCII). The
@@ -242,19 +244,19 @@ whole message), `c-import: the data model is read through CRLF line ends`.
 These follow from running clang on a header the attacker wrote, and are the
 same as running `clang` on that header by hand. Each is accepted, not fixed.
 
-- **CI-A1. An `#include` reads any file the user can.** The header can include any
+- **CI-A1 (Low). An `#include` reads any file the user can.** The header can include any
   path (`#include "/home/user/.ssh/id_ed25519"`). Nothing of it reaches the
   module: only declarations clang parsed are written, by name. It can reach
   the terminal, in clang's errors when the file is not C (CI-4).
-- **CI-A2. clang runs with no timeout.** A header can make the preprocessor work for
+- **CI-A2 (Low). clang runs with no timeout.** A header can make the preprocessor work for
   a long time (deep macro expansion, many includes). The command waits for
   clang as `nish build` waits for its toolchain; the user stops it.
-- **CI-A3. The 16 MiB cap applies after clang has written.** `readCapped` checks the
+- **CI-A3 (Low). The 16 MiB cap applies after clang has written.** `readCapped` checks the
   size of each stream's file before reading it, so the command never reads
   more than 16 MiB, but clang has already written the whole stream to the
   scratch directory, which `scratchBeside` removes afterwards. A header that
   expands to gigabytes fills the disk beside `-o` for the length of the run.
-- **CI-A4. A hostile overrides file can make a binding wrong.** The overrides
+- **CI-A4 (Low). A hostile overrides file can make a binding wrong.** The overrides
   file says what the header cannot: that a pointer may be null, that a result
   is owned and by which freer, that two parameters are a buffer and its
   length. `readOverrides` refuses one that names something the header does not
@@ -272,6 +274,7 @@ same as running `clang` on that header by hand. Each is accepted, not fixed.
 | CI-2 | Low | `src/c-import.ts` (`cImport`, `unsafePath`) | Only the header's resolved path was checked, and only for a quote, a backslash and a newline, but the overrides and output paths are also written into the module's first comment lines: a newline or U+2028 in either began a line of code in the generated module. | **Fixed** before the command shipped: every path is refused when it holds a quote, a backslash, a control byte, U+2028 or U+2029, before clang runs. Before, `c-import: ${what} is refused before clang runs, and nothing is written` wrote the module; after, each case exits 1 and writes nothing. |
 | CI-3 | Low | `src/c-import.ts` (`readFunctionOverrides`) | `"return": "nullable"` (or `"nonnull"`, or `owned`) on a function that returns no pointer was accepted and ignored, so an override file that no longer matched its header was not caught. | **Fixed** before the command shipped: it is refused, naming the function. Before, `c-import: the override file { "functions": { "db_close": { "return": "nullable" } } } is refused` exited 0; after, it exits 1 with `` `db_close` does not return a pointer``. |
 | CI-5 | Medium | `src/c-import.ts` (`resolve`, `emit`) | A parameter or result type clang spells with an `__attribute__` or `typeof` was listed as not bound with clang's spelling quoted, and that spelling carries an attribute's string argument as written: `int __attribute__((btf_type_tag("*/ export const pwned = 1 /*"))) *p` closed the not-bound comment and put a line of code into the generated module. | **Fixed** before the command shipped: a declaration with an attribute, a `typeof` or an unnamed type is listed with a fixed reason and no spelling, and `reportLine` (then named `commentSafe`) replaces any report line that holds `*/`, `/*` or a line break with its name and a fixed reason. Before, `attrs.h`'s `tagged` wrote `export const pwned = 1` into the module; after, `c-import: every tests/c-import header writes its golden module` pins `tagged: declared with an attribute the generator cannot read`. |
-| CI-6 | Medium | `src/c-import.ts` (`emit`, `functionDecl`, `decideNames`, `whyNotClass`, `readEnum`) | Names were copied into the module as clang gave them, and clang accepts `$` and Unicode letters in an identifier: a function `pаss` with a Cyrillic `а` was declared under a name that reads as `pass`, a struct `wіdget` became `declare class wіdget`, and `get$value`, a field `$bad` and an enumerator `MODE_$B` were written as they stood, so a header could put look-alike or bidirectional-control names into a module that is read as reviewed code. | **Fixed** before the command shipped: every string the module holds is written through `Importer.word`, which checks it with `emittable` as an identifier, integer, string body or comment line, and the same check before a declaration is chosen lists it as not bound (`its name is not an ASCII identifier`). Before, `hostile.h` wrote `declare function get$value(x: i32): i32`, `declare function pаss(x: i32): i32`, `declare class wіdget`, `$bad: i32` and `export const MODE_$B: i32 = 1`; after, `c-import: every tests/c-import header writes its golden module` pins each listed and only `use_box(b: CPtr)` and `MODE_A` written. |
+| CI-6 | Medium | `src/c-import.ts` (`emit`, `functionDecl`, `decideNames`, `whyNotClass`, `readEnum`) | Names were copied into the module as clang gave them, and clang accepts `$` and Unicode letters in an identifier: a function `pаss` with a Cyrillic `а` was declared under a name that reads as `pass`, a struct `wіdget` became `declare class wіdget`, and `get$value`, a field `$bad` and an enumerator `MODE_$B` were written as they stood, so a header could put look-alike or bidirectional-control names into a module that is read as reviewed code. | **Fixed** before the command shipped: every string taken from the header, the overrides or the command line is written through `Importer.word`, which checks it with `emittable` as an identifier, integer, string body or comment line, and the same check before a declaration is chosen lists it as not bound (`its name is not an ASCII identifier`). Before, `hostile.h` wrote `declare function get$value(x: i32): i32`, `declare function pаss(x: i32): i32`, `declare class wіdget`, `$bad: i32` and `export const MODE_$B: i32 = 1`; after, `c-import: every tests/c-import header writes its golden module` pins each listed and only `use_box(b: CPtr)` and `MODE_A` written. |
 | CI-7 | Medium | `src/c-import.ts` (`readDefine`, `emit`) | A string macro was copied when its body was one literal with no backslash, whatever bytes it held, so `#define SNEAKY "admin<U+202E>txt.exe"` put a right-to-left override into a Nish string literal, which an editor shows reversed (`adminexe.txt`). | **Fixed** before the command shipped: a string body is copied only when every byte is printable ASCII (0x20 to 0x7e) with no `"` or `\` inside, checked by `emittable` when the macro is read and again when it is written. Before, `hostile.h` wrote `export const SNEAKY: string = "admin\u202etxt.exe"` (the byte itself) and `export const CAFE: string = "café"`; after, both are listed as `a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)` and only `GREETING` is written. |
+| CI-8 | Low | `src/c-import.ts` (`readFunction`, `attrWhy`, `readDefine`) | Only a function's first declaration was read, so `int f(int); int f(int) __asm__("g");` bound `f` though the linker resolves it as `g`, and the same held for `alias` and `overloadable`; and a macro's name was cut at the first byte that is not an identifier byte, so `#define INT_MAX$X 0` in a header that includes `<limits.h>` was read as `INT_MAX` and exported a constant the header itself never defines. | **Fixed** in review: every redeclaration's attributes and type are read and refuse the function as the first's would, and a macro's name runs to a space, tab, `(` or the line's end and is listed when it is not an ASCII identifier. Before, `attrs.h` wrote `declare function late_label(x: i32): i32`, `late_alias` and `over`, and `hostile.h` wrote `export const INT_MAX: i32 = 2147483647`; after, `c-import: every tests/c-import header writes its golden module` lists each as not bound (`declared with an asm label or alias, so its symbol is not its name`, `declared overloadable, so clang mangles its symbol`, `INT_MAX$X: its name is not an ASCII identifier`). |
 | CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, so a header that puts escape bytes into an `#error` line writes them to the terminal. | **Open, accepted.** The same text running clang on the header prints; the module is not written. The text can include lines of any file the header `#include`s (see [Accepted limits](#accepted-limits)). |

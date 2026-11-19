@@ -24,3 +24,12 @@ int aliased(int x) __attribute__((alias("target_fn")));
 
 /* An unnamed parameter beside one named `arg0`: the two stay distinct. */
 int pair(int, int arg0);
+
+/* An attribute on a later declaration refuses the function as on the first. */
+int late_label(int x);
+int late_label(int x) __asm__("real_late_label");
+int late_alias(int x);
+int late_alias(int x) __attribute__((alias("target_fn")));
+
+/* clang mangles an overloadable function's symbol. */
+int __attribute__((overloadable)) over(int x);

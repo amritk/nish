@@ -635,7 +635,6 @@ class CFunc {
   }
 }
 
-/** Whether an attribute node `kind` sets a calling convention. */
 /**
  * A report line as the module's closing comment can hold it: `name` only
  * when it is printable ASCII, and the reason only when the whole line is.
@@ -858,7 +857,6 @@ class Importer {
     return x >= 0 && this.doc.kind(x) === CJ_STRING ? this.doc.string(x) : ""
   }
 
-  /** Whether `v`'s member `key` is the string `s`. Allocates nothing. */
   /**
    * `s` as the module may hold it: itself when `emittable` passes it as
    * `as`, else nothing, and the module is not written. Every piece of the
@@ -874,6 +872,7 @@ class Importer {
     return ""
   }
 
+  /** Whether `v`'s member `key` is the string `s`. Allocates nothing. */
   textIs(v: i32, key: string, s: string): boolean {
     return this.doc.stringEquals(this.member(v, key), s)
   }
@@ -1238,10 +1237,23 @@ class Importer {
   readFunction(node: i32, inHeader: boolean): void {
     const name = this.text(node, "name")
     if (this.funcIndex.has(name)) {
-      // A redeclaration in the header itself makes an included function the header's.
+      // A redeclaration in the header itself makes an included function the
+      // header's, and an attribute it spells (`int f(int) __asm__("g");`
+      // after `int f(int);`) refuses the function as on a first declaration.
       const seen = this.funcIndex.get(name, -1)
-      if (inHeader && seen >= 0 && seen < this.funcs.length) {
-        this.funcs[seen].inHeader = true
+      if (seen >= 0 && seen < this.funcs.length) {
+        const first = this.funcs[seen]
+        if (inHeader) {
+          first.inHeader = true
+        }
+        const again = this.inner(node)
+        for (let i = 0; i < this.count(again) && first.why.length === 0; i++) {
+          first.why = this.attrWhy(this.doc.at(again, i))
+        }
+        if (first.why.length === 0) {
+          // -1 skips the prototype check: a later `int f();` keeps the earlier prototype.
+          first.why = this.typeWhy(this.qualType(node), -1)
+        }
       }
       return
     }
@@ -1264,31 +1276,61 @@ class Importer {
         f.noSymbol = true
       } else if (this.kindIs(child, "ReturnsNonNullAttr")) {
         f.returnsNonNull = true
-      } else if (
-        this.kindIs(child, "C11NoReturnAttr") ||
-        this.kindIs(child, "NoReturnAttr") ||
-        this.kindIs(child, "CXX11NoReturnAttr")
-      ) {
-        f.why = "declared noreturn, which a `declare function` cannot say"
-      } else if (f.why.length === 0 && this.isCallingConvention(child)) {
-        f.why = "declared with a calling convention other than the C default"
-      } else if (this.kindIs(child, "AsmLabelAttr") || this.kindIs(child, "AliasAttr")) {
-        f.why = "declared with an asm label or alias, so its symbol is not its name"
+      } else if (f.why.length === 0) {
+        f.why = this.attrWhy(child)
       }
     }
     this.uniqueArgNames(f)
-    // The function type carries what its attributes change: the words are
-    // matched, never copied, since an attribute's text is the header's.
-    const fnType = f.qualType
-    if (f.why.length > 0) {
-      // Already refused.
-    } else if (fnType.indexOf("typeof") >= 0) {
-      f.why = "declared with a `typeof` type"
-    } else if (fnType.indexOf("(unnamed") >= 0 || fnType.indexOf("(anonymous") >= 0) {
-      f.why = "declared with an unnamed struct, union or enum"
-    } else if (fnType.indexOf("noreturn") >= 0) {
-      f.why = "declared noreturn, which a `declare function` cannot say"
-    } else if (
+    if (f.why.length === 0) {
+      f.why = this.typeWhy(f.qualType, f.paramTypes.length)
+    }
+    this.funcIndex.set(name, this.funcs.length)
+    this.funcs.push(f)
+  }
+
+  /**
+   * Why a function attribute keeps it from being bound, or `""`: noreturn,
+   * a calling convention, an asm label or alias (its symbol is not its name)
+   * or `overloadable` (clang mangles its symbol). Read on every declaration
+   * of a function, since clang puts an attribute on the declaration that
+   * spells it.
+   */
+  attrWhy(child: i32): string {
+    if (
+      this.kindIs(child, "C11NoReturnAttr") ||
+      this.kindIs(child, "NoReturnAttr") ||
+      this.kindIs(child, "CXX11NoReturnAttr")
+    ) {
+      return "declared noreturn, which a `declare function` cannot say"
+    }
+    if (this.isCallingConvention(child)) {
+      return "declared with a calling convention other than the C default"
+    }
+    if (this.kindIs(child, "AsmLabelAttr") || this.kindIs(child, "AliasAttr")) {
+      return "declared with an asm label or alias, so its symbol is not its name"
+    }
+    if (this.kindIs(child, "OverloadableAttr")) {
+      return "declared overloadable, so clang mangles its symbol"
+    }
+    return ""
+  }
+
+  /**
+   * Why a function's type keeps it from being bound, or `""`. The type
+   * carries what its attributes change: the words are matched, never copied,
+   * since an attribute's text is the header's.
+   */
+  typeWhy(fnType: string, paramCount: i32): string {
+    if (fnType.indexOf("typeof") >= 0) {
+      return "declared with a `typeof` type"
+    }
+    if (fnType.indexOf("(unnamed") >= 0 || fnType.indexOf("(anonymous") >= 0) {
+      return "declared with an unnamed struct, union or enum"
+    }
+    if (fnType.indexOf("noreturn") >= 0) {
+      return "declared noreturn, which a `declare function` cannot say"
+    }
+    if (
       fnType.indexOf("ms_abi") >= 0 ||
       fnType.indexOf("sysv_abi") >= 0 ||
       fnType.indexOf("stdcall") >= 0 ||
@@ -1297,15 +1339,16 @@ class Importer {
       fnType.indexOf("regcall") >= 0 ||
       fnType.indexOf("preserve_") >= 0
     ) {
-      f.why = "declared with a calling convention other than the C default"
-    } else if (fnType.indexOf("__attribute__") >= 0) {
-      f.why = "declared with an attribute the generator cannot read"
-    } else if (fnType.endsWith("()") && f.paramTypes.length === 0) {
-      // C17 reads `int f()` as a function of unknown parameters, not none.
-      f.why = "declared without a prototype, so its parameters are unknown"
+      return "declared with a calling convention other than the C default"
     }
-    this.funcIndex.set(name, this.funcs.length)
-    this.funcs.push(f)
+    if (fnType.indexOf("__attribute__") >= 0) {
+      return "declared with an attribute the generator cannot read"
+    }
+    if (fnType.endsWith("()") && paramCount === 0) {
+      // C17 reads `int f()` as a function of unknown parameters, not none.
+      return "declared without a prototype, so its parameters are unknown"
+    }
+    return ""
   }
 
   // ---- Types ----
@@ -1758,7 +1801,8 @@ class Importer {
       return `!a pointer to ${t.reason}`
     }
     if (mode === RETURN_OWNED) {
-      return "CPtr | null"
+      // An owned result is freed by handle, so it is a `CPtr` even for `char *`.
+      return headerNonNull || t.nonnull ? "CPtr" : "CPtr | null"
     }
     const nonnull = mode === RETURN_NONNULL || (mode === RETURN_DEFAULT && (headerNonNull || t.nonnull))
     if (t.pointers === 1 && t.base === BASE_CHAR && t.sign === CHAR_PLAIN && t.constBase) {
@@ -1810,8 +1854,15 @@ class Importer {
   }
 
   readDefine(rest: string, line: i32): void {
+    // The name runs to a space, a tab, `(` or the line's end, so a byte that
+    // cannot continue an identifier (`$`, one above 127) is part of it and the
+    // macro is listed, never read as the shorter name before that byte.
     let end = 0
-    while (end < rest.length && isIdentByte(rest.charCodeAt(end))) {
+    while (end < rest.length) {
+      const c = rest.charCodeAt(end)
+      if (c === 32 || c === 9 || c === 40) {
+        break
+      }
       end++
     }
     const name = rest.slice(0, end)
@@ -1831,7 +1882,9 @@ class Importer {
     m.type = ""
     m.line = line
     m.body = trimSpaces(rest.slice(end))
-    if (name.startsWith("_")) {
+    if (!isIdent(name)) {
+      m.why = "its name is not an ASCII identifier"
+    } else if (name.startsWith("_")) {
       m.why = "a name starting with `_`, which C reserves"
     } else if (end < rest.length && rest.charCodeAt(end) === 40) {
       m.why = "a function-like macro"
@@ -2509,6 +2562,7 @@ class Importer {
     const o: FnOverride | null = oi >= 0 && oi < this.overrides.length ? this.overrides[oi] : null
     const params = new StringBuilder()
     const counts = new StringSet()
+    const outNames: string[] = []
     for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
       const name = f.paramNames[i]
       if (!isIdent(name)) {
@@ -2531,7 +2585,17 @@ class Importer {
       if (i > 0) {
         params.add(", ")
       }
-      params.add(`${this.word(nishName(name), AS_IDENT)}: ${type}`)
+      // A reserved name gains `_`, then `_1`, `_2`, ... until it is no other
+      // parameter's name, so `int f(int in, int in_)` stays two parameters.
+      const base = nishName(name)
+      let out = base
+      let k = 0
+      while (outNames.indexOf(out) >= 0 || (out !== name && f.paramNames.indexOf(out) >= 0)) {
+        k += 1
+        out = `${base}${k}`
+      }
+      outNames.push(out)
+      params.add(`${this.word(out, AS_IDENT)}: ${type}`)
     }
     const ret = this.functionReturn(f, o)
     if (ret.startsWith("!")) {
@@ -2544,13 +2608,13 @@ class Importer {
     return `${owned}declare function ${this.word(f.name, AS_IDENT)}(${params.toText()}): ${ret}`
   }
 
-  /** The Nish type of `f`'s result, read from the part of its type before its parameter list. */
   /** Whether `f`'s result type is marked `_Nonnull`, as spelled or through a typedef. */
   returnNonnull(f: CFunc): boolean {
     const spelling = this.returnSpelling(f)
     return spelling.indexOf("(") < 0 && this.resolve(spelling).nonnull
   }
 
+  /** The Nish type of `f`'s result, read from the part of its type before its parameter list. */
   functionReturn(f: CFunc, o: FnOverride | null): string {
     const spelling = this.returnSpelling(f)
     if (spelling.indexOf("(") >= 0) {

@@ -186,6 +186,8 @@ struct Importer (class) size=232 align=8
   method hasInitializer -> @Importer.hasInitializer
   method uniqueArgNames -> @Importer.uniqueArgNames
   method readFunction -> @Importer.readFunction
+  method attrWhy -> @Importer.attrWhy
+  method typeWhy -> @Importer.typeWhy
   method resolve -> @Importer.resolve
   method enumType -> @Importer.enumType
   method enumScalar -> @Importer.enumScalar
@@ -864,45 +866,67 @@ function Importer.uniqueArgNames(this: Importer, f: CFunc): void -> @Importer.un
   local -6:13 name: string (let)
   local -5:13 k: i32 (let)
 function Importer.readFunction(this: Importer, node: i32, inHeader: boolean): void -> @Importer.readFunction [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:11
   escaping: inHeader node
-  calls: CFunc.constructor CJson.at Importer.count Importer.flag Importer.inner Importer.isCallingConvention Importer.kindIs Importer.qualType Importer.text Importer.textIs Importer.uniqueArgNames StringMap.get StringMap.has StringMap.set nish_alloc_struct nish_array_grow nish_str_at nish_str_index_of nish_str_index_of_from
-  pointer this: size=232 writesThrough=false captured=false passedTo=Importer.text#0 Importer.qualType#0 Importer.flag#0 Importer.textIs#0 Importer.flag#0 Importer.inner#0 Importer.count#0 Importer.kindIs#0 Importer.text#0 Importer.qualType#0 Importer.kindIs#0 Importer.kindIs#0 Importer.kindIs#0 Importer.kindIs#0 Importer.kindIs#0 Importer.isCallingConvention#0 Importer.kindIs#0 Importer.kindIs#0 Importer.uniqueArgNames#0
+  calls: CFunc.constructor CJson.at Importer.attrWhy Importer.count Importer.flag Importer.inner Importer.kindIs Importer.qualType Importer.text Importer.textIs Importer.typeWhy Importer.uniqueArgNames StringMap.get StringMap.has StringMap.set nish_alloc_struct nish_array_grow
+  pointer this: size=232 writesThrough=false captured=false passedTo=Importer.text#0 Importer.inner#0 Importer.count#0 Importer.attrWhy#0 Importer.typeWhy#0 Importer.qualType#0 Importer.qualType#0 Importer.flag#0 Importer.textIs#0 Importer.flag#0 Importer.inner#0 Importer.count#0 Importer.kindIs#0 Importer.text#0 Importer.qualType#0 Importer.kindIs#0 Importer.kindIs#0 Importer.attrWhy#0 Importer.uniqueArgNames#0 Importer.typeWhy#0
   stackSites=0 stackLocals=0
-  local -5:11 name: string (const)
-  callee -5:18 Importer.text -> @Importer.text
-  callee -4:9 StringMap.has -> @StringMap.has
-  local -2:13 seen: i32 (const)
-  callee -2:20 StringMap.get -> @StringMap.get
-  local +4:11 f: CFunc (const)
-  callee +4:15 new CFunc -> @CFunc.constructor
-  callee +6:18 Importer.qualType -> @Importer.qualType
-  callee +7:18 Importer.flag -> @Importer.flag
-  callee +8:18 Importer.textIs -> @Importer.textIs
-  callee +8:65 Importer.flag -> @Importer.flag
-  local +11:11 children: i32 (const)
-  callee +11:22 Importer.inner -> @Importer.inner
-  local +12:11 n: i32 (const)
-  callee +12:15 Importer.count -> @Importer.count
-  local +13:14 i: i32 (let)
-  local +14:13 child: i32 (const)
-  callee +14:21 CJson.at -> @CJson.at
-  callee +15:11 Importer.kindIs -> @Importer.kindIs
-  local +16:15 pname: string (const)
-  callee +16:23 Importer.text -> @Importer.text
-  callee +18:27 Importer.qualType -> @Importer.qualType
-  callee +19:18 Importer.kindIs -> @Importer.kindIs
-  callee +21:18 Importer.kindIs -> @Importer.kindIs
-  callee +24:9 Importer.kindIs -> @Importer.kindIs
-  callee +25:9 Importer.kindIs -> @Importer.kindIs
-  callee +26:9 Importer.kindIs -> @Importer.kindIs
-  callee +29:40 Importer.isCallingConvention -> @Importer.isCallingConvention
-  callee +31:18 Importer.kindIs -> @Importer.kindIs
-  callee +31:56 Importer.kindIs -> @Importer.kindIs
-  callee +35:5 Importer.uniqueArgNames -> @Importer.uniqueArgNames
-  local +38:11 fnType: string (const)
-  callee +63:5 StringMap.set -> @StringMap.set
+  local -9:11 name: string (const)
+  callee -9:18 Importer.text -> @Importer.text
+  callee -8:9 StringMap.has -> @StringMap.has
+  local -4:13 seen: i32 (const)
+  callee -4:20 StringMap.get -> @StringMap.get
+  local -2:15 first: CFunc (const)
+  local +2:15 again: i32 (const)
+  callee +2:23 Importer.inner -> @Importer.inner
+  local +3:18 i: i32 (let)
+  callee +3:29 Importer.count -> @Importer.count
+  callee +4:23 Importer.attrWhy -> @Importer.attrWhy
+  callee +4:36 CJson.at -> @CJson.at
+  callee +8:23 Importer.typeWhy -> @Importer.typeWhy
+  callee +8:36 Importer.qualType -> @Importer.qualType
+  local +13:11 f: CFunc (const)
+  callee +13:15 new CFunc -> @CFunc.constructor
+  callee +15:18 Importer.qualType -> @Importer.qualType
+  callee +16:18 Importer.flag -> @Importer.flag
+  callee +17:18 Importer.textIs -> @Importer.textIs
+  callee +17:65 Importer.flag -> @Importer.flag
+  local +20:11 children: i32 (const)
+  callee +20:22 Importer.inner -> @Importer.inner
+  local +21:11 n: i32 (const)
+  callee +21:15 Importer.count -> @Importer.count
+  local +22:14 i: i32 (let)
+  local +23:13 child: i32 (const)
+  callee +23:21 CJson.at -> @CJson.at
+  callee +24:11 Importer.kindIs -> @Importer.kindIs
+  local +25:15 pname: string (const)
+  callee +25:23 Importer.text -> @Importer.text
+  callee +27:27 Importer.qualType -> @Importer.qualType
+  callee +28:18 Importer.kindIs -> @Importer.kindIs
+  callee +30:18 Importer.kindIs -> @Importer.kindIs
+  callee +33:17 Importer.attrWhy -> @Importer.attrWhy
+  callee +36:5 Importer.uniqueArgNames -> @Importer.uniqueArgNames
+  callee +38:15 Importer.typeWhy -> @Importer.typeWhy
+  callee +40:5 StringMap.set -> @StringMap.set
+function Importer.attrWhy(this: Importer, child: i32): string -> @Importer.attrWhy [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: child
+  calls: Importer.isCallingConvention Importer.kindIs
+  pointer this: size=232 writesThrough=false captured=false passedTo=Importer.kindIs#0 Importer.kindIs#0 Importer.kindIs#0 Importer.isCallingConvention#0 Importer.kindIs#0 Importer.kindIs#0 Importer.kindIs#0
+  stackSites=0 stackLocals=0
+  callee +0:7 Importer.kindIs -> @Importer.kindIs
+  callee +1:7 Importer.kindIs -> @Importer.kindIs
+  callee +2:7 Importer.kindIs -> @Importer.kindIs
+  callee +6:9 Importer.isCallingConvention -> @Importer.isCallingConvention
+  callee +9:9 Importer.kindIs -> @Importer.kindIs
+  callee +9:47 Importer.kindIs -> @Importer.kindIs
+  callee +12:9 Importer.kindIs -> @Importer.kindIs
+function Importer.typeWhy(this: Importer, fnType: string, paramCount: i32): string -> @Importer.typeWhy [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at nish_str_index_of nish_str_index_of_from
+  pointer this: size=232 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function Importer.resolve(this: Importer, spelling: string): CType -> @Importer.resolve [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
   sharedWrite: +0:7
@@ -1074,7 +1098,7 @@ function Importer.returnType(this: Importer, t: CType, mode: i32, headerNonNull:
   pointer t: size=48 writesThrough=false captured=false passedTo=Importer.valueType#1
   stackSites=0 stackLocals=0
   callee +0:14 Importer.valueType -> @Importer.valueType
-  local +8:11 nonnull: boolean (const)
+  local +9:11 nonnull: boolean (const)
 function Importer.readMacros(this: Importer): void -> @Importer.readMacros [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
@@ -1103,11 +1127,11 @@ function Importer.readDefine(this: Importer, rest: string, line: i32): void -> @
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: line
-  calls: StringMap.get StringMap.set emittable isIdentByte nish_alloc_struct nish_array_grow nish_panic_index nish_panic_slice nish_str_at nish_str_new trimSpaces
+  calls: StringMap.get StringMap.set emittable isIdent nish_alloc_struct nish_array_grow nish_panic_index nish_panic_slice nish_str_at nish_str_new trimSpaces
   pointer this: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -13:9 end: i32 (let)
-  callee -12:33 isIdentByte -> @isIdentByte
+  local -17:9 end: i32 (let)
+  local -15:13 c: i32 (const)
   local -9:11 name: string (const)
   local -5:9 index: i32 (let)
   callee -5:17 StringMap.get -> @StringMap.get
@@ -1115,7 +1139,8 @@ function Importer.readDefine(this: Importer, rest: string, line: i32): void -> @
   callee +1:7 StringMap.set -> @StringMap.set
   local +3:11 m: CMacro (const)
   callee +7:14 trimSpaces -> @trimSpaces
-  callee +16:15 emittable -> @emittable
+  callee +8:10 isIdent -> @isIdent
+  callee +18:15 emittable -> @emittable
 function Importer.probeText(this: Importer, lines: i32[], start: i32, end: i32): string -> @Importer.probeText [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -1558,10 +1583,10 @@ function Importer.selected(this: Importer, f: CFunc): boolean -> @Importer.selec
 function Importer.functionDecl(this: Importer, f: CFunc, useOverride: boolean): string -> @Importer.functionDecl [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Importer.paramType
-  calls: Importer.functionReturn Importer.paramOverride Importer.paramType Importer.resolve Importer.word StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get StringSet.add StringSet.constructor StringSet.has isIdent nishName nish_panic_index nish_panic_slice nish_str_at nish_str_concat nish_str_from_i32 nish_str_new
+  calls: Importer.functionReturn Importer.paramOverride Importer.paramType Importer.resolve Importer.word StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get StringSet.add StringSet.constructor StringSet.has isIdent nishName nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_at nish_str_concat nish_str_eq nish_str_from_i32 nish_str_new
   pointer this: size=232 writesThrough=true captured=false passedTo=Importer.paramOverride#0 Importer.paramType#0 Importer.resolve#0 Importer.word#0 Importer.functionReturn#0 Importer.word#0 Importer.word#0
   pointer f: size=48 writesThrough=false captured=false passedTo=Importer.functionReturn#1
-  stackSites=2 stackLocals=2
+  stackSites=3 stackLocals=3
   callee +0:10 isIdent -> @isIdent
   local +12:11 oi: i32 (const)
   callee +12:30 StringMap.get -> @StringMap.get
@@ -1570,27 +1595,31 @@ function Importer.functionDecl(this: Importer, f: CFunc, useOverride: boolean): 
   callee +14:20 new StringBuilder -> @StringBuilder.constructor
   local +15:11 counts: StringSet (const)
   callee +15:20 new StringSet -> @StringSet.constructor
-  local +16:14 i: i32 (let)
-  local +17:13 name: string (const)
-  callee +18:12 isIdent -> @isIdent
-  local +21:13 p: i32 (const)
-  callee +21:17 Importer.paramOverride -> @Importer.paramOverride
-  local +22:11 type: string (let)
-  callee +25:9 StringSet.add -> @StringSet.add
-  callee +26:18 StringSet.has -> @StringSet.has
-  local +29:15 nullable: boolean (const)
-  callee +30:16 Importer.paramType -> @Importer.paramType
-  callee +30:31 Importer.resolve -> @Importer.resolve
-  callee +36:9 StringBuilder.add -> @StringBuilder.add
-  callee +38:7 StringBuilder.add -> @StringBuilder.add
-  callee +38:21 Importer.word -> @Importer.word
-  callee +38:31 nishName -> @nishName
-  local +40:11 ret: string (const)
-  callee +40:17 Importer.functionReturn -> @Importer.functionReturn
-  local +44:11 owned: string (const)
-  callee +46:51 Importer.word -> @Importer.word
-  callee +48:40 Importer.word -> @Importer.word
-  callee +48:71 StringBuilder.toText -> @StringBuilder.toText
+  local +16:11 outNames: string[] (const)
+  local +17:14 i: i32 (let)
+  local +18:13 name: string (const)
+  callee +19:12 isIdent -> @isIdent
+  local +22:13 p: i32 (const)
+  callee +22:17 Importer.paramOverride -> @Importer.paramOverride
+  local +23:11 type: string (let)
+  callee +26:9 StringSet.add -> @StringSet.add
+  callee +27:18 StringSet.has -> @StringSet.has
+  local +30:15 nullable: boolean (const)
+  callee +31:16 Importer.paramType -> @Importer.paramType
+  callee +31:31 Importer.resolve -> @Importer.resolve
+  callee +37:9 StringBuilder.add -> @StringBuilder.add
+  local +41:13 base: string (const)
+  callee +41:20 nishName -> @nishName
+  local +42:11 out: string (let)
+  local +43:11 k: i32 (let)
+  callee +49:7 StringBuilder.add -> @StringBuilder.add
+  callee +49:21 Importer.word -> @Importer.word
+  local +51:11 ret: string (const)
+  callee +51:17 Importer.functionReturn -> @Importer.functionReturn
+  local +55:11 owned: string (const)
+  callee +57:51 Importer.word -> @Importer.word
+  callee +59:40 Importer.word -> @Importer.word
+  callee +59:71 StringBuilder.toText -> @StringBuilder.toText
 function Importer.returnNonnull(this: Importer, f: CFunc): boolean -> @Importer.returnNonnull [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Importer.resolve

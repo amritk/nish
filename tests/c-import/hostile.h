@@ -1,5 +1,7 @@
 /* Names and text a module must not copy: each is listed, never written. */
 
+#include <limits.h>
+
 /* `$` is a byte clang takes in a name and Nish does not. */
 int get$value(int x);
 
@@ -19,3 +21,8 @@ enum mode { MODE_A, MODE_$B };
 #define GREETING "hello"
 #define SNEAKY "admin‮txt.exe"
 #define CAFE "café"
+#define TABBED "a	b"
+#define RUBOUT "ab"
+
+/* A macro name that runs on past `$`: listed whole, never read as limits.h's INT_MAX. */
+#define INT_MAX$X 0

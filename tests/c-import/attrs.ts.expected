@@ -21,4 +21,7 @@ declare function pair(arg0_1: i32, arg0: i32): i32
  *   renamed: declared with an asm label or alias, so its symbol is not its name
  *   aliased: declared with an asm label or alias, so its symbol is not its name
  *   WIDE_ONE: an integer wider than 8 bytes, which no Nish scalar holds
+ *   late_label: declared with an asm label or alias, so its symbol is not its name
+ *   late_alias: declared with an asm label or alias, so its symbol is not its name
+ *   over: declared overloadable, so clang mangles its symbol
  */

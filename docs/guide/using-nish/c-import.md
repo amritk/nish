@@ -117,7 +117,8 @@ The defaults for pointers are the safe ones:
   parameter (`int64_t counts[4]`) is a pointer in C, so it is an out class
   too.
 - Clang's `_Nonnull` and `_Nullable` on the outermost pointer of a parameter
-  or result set its nullability; on an inner pointer
+  or result set its nullability (a `_Nullable` parameter is `string | null`
+  or `CPtr | null`, with no override needed); on an inner pointer
   (`const char * _Nonnull *`) they change nothing.
 
 A module that uses an out class or a struct declares it itself. A class name
@@ -230,9 +231,10 @@ says so; pass it with `--overrides`:
   them, and every other function is listed as not bound. It does not select
   structs, enums or macros: those still come from the header itself.
 - `functions` sets, per function:
-  - `"return": "nonnull"` or `"nullable"`, for a pointer result
-    (`"nullable"` is refused on one the header marks `_Nonnull` or
-    `returns_nonnull`);
+  - `"return": "nonnull"`, for a pointer result C never returns as `NULL`.
+    `"return": "nullable"` is always refused: a pointer result is already
+    nullable unless the header marks it `_Nonnull` or `returns_nonnull`, and
+    the overrides file cannot overrule the header;
   - `"return": { "owned": "<free function>" }`, which records above the
     declaration which function frees the result;
   - per parameter, by name: `"nullable": true` for a pointer the defaults

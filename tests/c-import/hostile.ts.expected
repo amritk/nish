@@ -17,4 +17,7 @@ declare function use_box(b: CPtr): void
  *   MODE_$B: its name is not an ASCII identifier
  *   SNEAKY: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
  *   CAFE: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
+ *   TABBED: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
+ *   RUBOUT: a string the generator does not copy (escapes, pieces, or bytes that are not printable ASCII)
+ *   INT_MAX$X: its name is not an ASCII identifier
  */
