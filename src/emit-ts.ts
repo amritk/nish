@@ -402,6 +402,7 @@ const emitModules = (compilation: Compilation): EmittedProgram => {
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     walk.warnStubs = unit.packageName === ROOT_PACKAGE
     walk.deterministic = unit.checker.ctx.deterministic
+    walk.optionalChaining = unit.checker.ctx.compatAllows("optional-chaining")
     let slot = 0
     while (slot < layouts.length) {
       const s = layouts[slot]

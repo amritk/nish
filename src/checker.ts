@@ -2305,6 +2305,8 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     // the first operand of that `??` is sure to run.
     const chained =
       node.kind === NodeKind.Binary && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
+    // WP28 C1: a statement that is a `?.` chain stops at its links the same way.
+    const skipped = node.kind === NodeKind.ExprStmt && isOptionalChain(node.children[0])
     const repeats =
       node.kind === NodeKind.While ||
       node.kind === NodeKind.Do ||
@@ -2314,6 +2316,7 @@ const guardStatement = (body: Node, access: Node): Node | null => {
       down !== node &&
       ((branches && (!first || chained)) ||
         repeats ||
+        skipped ||
         node.kind === NodeKind.Arrow ||
         node.kind === NodeKind.Labeled)
     if (crosses) {

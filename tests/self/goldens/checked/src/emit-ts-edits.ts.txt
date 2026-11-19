@@ -50,38 +50,39 @@ struct Walk (class) size=256 align=8 exported
   field helpers: StringSet index=9 offset=72
   field listAt: i32 index=10 offset=80
   field deterministic: boolean index=11 offset=84
-  field mathNames: StringSet index=12 offset=88
-  field widths: StringSet index=13 offset=96
-  field names: StringSet index=14 offset=104
-  field typeNames: StringSet index=15 offset=112
-  field specifierFrom: string[] index=16 offset=120
-  field specifierTo: string[] index=17 offset=128
-  field refusedAt: Node[] index=18 offset=136
-  field refusals: string[] index=19 offset=144
-  field stubIds: i32[] index=20 offset=152
-  field stubNames: string[] index=21 offset=160
-  field stubbedAt: Node[] index=22 offset=168
-  field stubWarnings: string[] index=23 offset=176
-  field failure: string index=24 offset=184
-  field storageImport: string index=25 offset=192
-  field preludes: string[] index=26 offset=200
-  field storageIds: i32[] index=27 offset=208
-  field storageSlots: i32[] index=28 offset=216
-  field list: Node | null index=29 offset=224
-  field temps: i32 index=30 offset=232
-  field untyped: boolean index=31 offset=236
-  field inInstance: boolean index=32 offset=237
-  field repeat: boolean index=33 offset=238
-  field instanceChoice: boolean index=34 offset=239
-  field warnStubs: boolean index=35 offset=240
-  field typeMiss: boolean index=36 offset=241
-  field usesStorage: boolean index=37 offset=242
-  field hostHandle: boolean index=38 offset=243
-  field hoistHere: boolean index=39 offset=244
-  field hoistable: boolean index=40 offset=245
-  field effects: boolean index=41 offset=246
-  field localsRead: boolean index=42 offset=247
-  field lastOperands: Operands | null index=43 offset=248
+  field optionalChaining: boolean index=12 offset=85
+  field mathNames: StringSet index=13 offset=88
+  field widths: StringSet index=14 offset=96
+  field names: StringSet index=15 offset=104
+  field typeNames: StringSet index=16 offset=112
+  field specifierFrom: string[] index=17 offset=120
+  field specifierTo: string[] index=18 offset=128
+  field refusedAt: Node[] index=19 offset=136
+  field refusals: string[] index=20 offset=144
+  field stubIds: i32[] index=21 offset=152
+  field stubNames: string[] index=22 offset=160
+  field stubbedAt: Node[] index=23 offset=168
+  field stubWarnings: string[] index=24 offset=176
+  field failure: string index=25 offset=184
+  field storageImport: string index=26 offset=192
+  field preludes: string[] index=27 offset=200
+  field storageIds: i32[] index=28 offset=208
+  field storageSlots: i32[] index=29 offset=216
+  field list: Node | null index=30 offset=224
+  field temps: i32 index=31 offset=232
+  field untyped: boolean index=32 offset=236
+  field inInstance: boolean index=33 offset=237
+  field repeat: boolean index=34 offset=238
+  field instanceChoice: boolean index=35 offset=239
+  field warnStubs: boolean index=36 offset=240
+  field typeMiss: boolean index=37 offset=241
+  field usesStorage: boolean index=38 offset=242
+  field hostHandle: boolean index=39 offset=243
+  field hoistHere: boolean index=40 offset=244
+  field hoistable: boolean index=41 offset=245
+  field effects: boolean index=42 offset=246
+  field localsRead: boolean index=43 offset=247
+  field lastOperands: Operands | null index=44 offset=248
   constructor -> @Walk.constructor
   method stub -> @Walk.stub
   method missType -> @Walk.missType
@@ -116,34 +117,34 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   stackSites=1 stackLocals=1
   local +0:9 i: i32 (let)
   callee +18:20 new StringSet -> @StringSet.constructor
-  callee +20:22 new StringSet -> @StringSet.constructor
-  callee +21:19 new StringSet -> @StringSet.constructor
-  callee +23:18 new StringSet -> @StringSet.constructor
-  callee +24:22 new StringSet -> @StringSet.constructor
-  local +25:16 imp: ImportBinding (const)
-  local +26:13 struct: StructInfo | null (const)
-  local +27:13 template: StructTemplateInfo | null (const)
-  callee +32:9 StringSet.add -> @StringSet.add
-  local +36:16 imp: ImportBinding (const)
-  callee +37:11 StringMap.get -> @StringMap.get
-  callee +38:9 StringSet.add -> @StringSet.add
-  local +63:16 sig: FunctionSig (const)
-  local +64:13 instance: Instantiation | null (const)
-  callee +65:32 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +71:16 template: TemplateInfo (const)
-  callee +73:9 Walk.stub -> @Walk.stub
-  local +78:11 called: StringSet (const)
-  callee +78:20 new StringSet -> @StringSet.constructor
-  local +79:16 template: TemplateInfo (const)
-  callee +81:9 StringSet.add -> @StringSet.add
-  local +84:16 template: TemplateInfo (const)
-  callee +85:42 StringSet.has -> @StringSet.has
-  callee +86:9 Walk.stub -> @Walk.stub
-  local +95:16 template: StructTemplateInfo (const)
-  local +97:20 member: Node (const)
-  callee +99:13 Walk.stub -> @Walk.stub
-  callee +101:13 Walk.stub -> @Walk.stub
-  callee +103:13 Walk.stub -> @Walk.stub
+  callee +21:22 new StringSet -> @StringSet.constructor
+  callee +22:19 new StringSet -> @StringSet.constructor
+  callee +24:18 new StringSet -> @StringSet.constructor
+  callee +25:22 new StringSet -> @StringSet.constructor
+  local +26:16 imp: ImportBinding (const)
+  local +27:13 struct: StructInfo | null (const)
+  local +28:13 template: StructTemplateInfo | null (const)
+  callee +33:9 StringSet.add -> @StringSet.add
+  local +37:16 imp: ImportBinding (const)
+  callee +38:11 StringMap.get -> @StringMap.get
+  callee +39:9 StringSet.add -> @StringSet.add
+  local +64:16 sig: FunctionSig (const)
+  local +65:13 instance: Instantiation | null (const)
+  callee +66:32 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +72:16 template: TemplateInfo (const)
+  callee +74:9 Walk.stub -> @Walk.stub
+  local +79:11 called: StringSet (const)
+  callee +79:20 new StringSet -> @StringSet.constructor
+  local +80:16 template: TemplateInfo (const)
+  callee +82:9 StringSet.add -> @StringSet.add
+  local +85:16 template: TemplateInfo (const)
+  callee +86:42 StringSet.has -> @StringSet.has
+  callee +87:9 Walk.stub -> @Walk.stub
+  local +96:16 template: StructTemplateInfo (const)
+  local +98:20 member: Node (const)
+  callee +100:13 Walk.stub -> @Walk.stub
+  callee +102:13 Walk.stub -> @Walk.stub
+  callee +104:13 Walk.stub -> @Walk.stub
 function Walk.stub(this: Walk, decl: Node, nodeCount: i32, name: string): void -> @Walk.stub [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

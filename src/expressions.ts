@@ -3470,10 +3470,7 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     return checkNullableCoalesce(ctx, expr, scope, left)
   }
   if (!ctx.table.isMaybe(left)) {
-    return ctx.errorType(
-      expr,
-      "Nullish coalescing `??` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
-    )
+    return checkNeverMissingCoalesce(ctx, expr, scope, left)
   }
   const value = ctx.table.refOf(left)
   const fallback = checkExpression(ctx, expr.children[1], scope, value)
@@ -3487,6 +3484,73 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     )
   }
   return value
+}
+
+/**
+ * `a ?? d`, where `a` is neither a maybe nor a `T | null`: the default never
+ * runs. Strict refuses it, in the words Phase 0 always used. The `nullish`
+ * feature of the compatibility dialect (WP28 C1) accepts it with Node's
+ * meaning, the left operand alone, and warns that the default is dead; only
+ * a left operand whose every part is listed in `neverMissing` qualifies. An
+ * element read, which JavaScript answers `undefined` past the end, is not
+ * one: it keeps strict's refusal, word for word and with no feature named,
+ * in both dialects.
+ */
+const checkNeverMissingCoalesce = (ctx: CheckContext, expr: Node, scope: Scope, left: i32): i32 => {
+  const operand = unwrapParens(expr.children[0])
+  const refusal = "Nullish coalescing `??` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
+  if (!neverMissing(operand)) {
+    return ctx.errorType(expr, refusal)
+  }
+  if (!ctx.compatAllows("nullish")) {
+    ctx.errorFeature(expr, refusal, "nullish")
+    return T_ERROR
+  }
+  const fallback = checkExpression(ctx, expr.children[1], scope, left)
+  if (fallback === T_ERROR) {
+    return T_ERROR
+  }
+  if (!ctx.table.assignable(fallback, left)) {
+    return ctx.errorType(
+      expr.children[1],
+      `The right operand of \`??\` stands in for a missing value, so it must be \`${ctx.table.typeName(left)}\`, the type of the value on its left; got \`${ctx.table.typeName(fallback)}\``
+    )
+  }
+  ctx.performance(
+    expr,
+    `\`${ctx.textOf(expr.children[0])}\` is never \`null\` or \`undefined\`, so \`??\` never runs its default: the build keeps the left operand alone (drop \`?? ${ctx.textOf(expr.children[1])}\`)`
+  )
+  return left
+}
+
+/**
+ * Whether JavaScript can never answer `undefined` for `node`, a left operand
+ * of `??` whose type is neither nullable nor a maybe. An allowlist, so a kind
+ * not named here keeps the strict refusal: an element read can run past the
+ * end, and a call or a ternary is left to a later stage.
+ */
+const neverMissing = (node: Node): boolean => {
+  const kind = node.kind
+  if (kind === NodeKind.Paren) {
+    return neverMissing(node.children[0])
+  }
+  if (kind === NodeKind.Member) {
+    return (node.flags & FLAG_OPTIONAL) === 0 && neverMissing(node.children[0])
+  }
+  return (
+    kind === NodeKind.Number ||
+    kind === NodeKind.String ||
+    kind === NodeKind.True ||
+    kind === NodeKind.False ||
+    kind === NodeKind.Template ||
+    kind === NodeKind.Ident ||
+    kind === NodeKind.This ||
+    kind === NodeKind.New ||
+    kind === NodeKind.Array ||
+    kind === NodeKind.Object ||
+    kind === NodeKind.Binary ||
+    kind === NodeKind.Unary
+  )
 }
 
 /**
@@ -4025,7 +4089,13 @@ const checkImportedBuiltin = (
     : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)
 }
 
-const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
+const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 => {
+  // WP28 C1: a call a `?.` may skip runs its arguments only when the chain
+  // reaches it, so what they hold is held in a child scope, as an arm of `?:`
+  // holds it; an assignment there still drops the outer narrowing. Only
+  // `optional-chaining` takes the child scope, so a strict build checks
+  // `a?.m(args) ?? d` exactly as it did before the dialect.
+  const scope = isOptionalChain(expr) && ctx.compatAllows("optional-chaining") ? outer.child() : outer
   const callee = expr.children[0]
   if (callee.kind === NodeKind.Super) {
     return checkExpression(ctx, callee, scope, -1) // WP25: reports on the `super` token

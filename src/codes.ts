@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 968
+export const RULE_COUNT: i32 = 971
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -89,6 +89,8 @@ const diagnosticRules = (): string[] => [
   "NL2585",
   ": its bytes are zero-filled where a page can read them, so an element is a number, a `boolean`, an enum or range whose zero is a member, a `HostHandle`, or an interface no class implements whose fields are all of these — never a string, an array, a class, a `Map` or a `| null`",
   "NL2686",
+  "An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)",
+  "NL1067",
   "` is a `Secret` parameter, which its caller owns and wipes: returned, it would be a second name for that key in the caller, one of the two wiped by nobody or both read once it is wiped. Return a value computed from it inside `expose`, or a new `secret(...)` made from one",
   "NL2546",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
@@ -513,6 +515,8 @@ const diagnosticRules = (): string[] => [
   "NL2716",
   "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
   "NL2499",
+  "An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first",
+  "NL1068",
   ", and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target",
   "NL2551",
   "` an argument, which only `fs.read` and `fs.write` (a directory), `process.spawn` (a program) and `net` (a host) take: grant `",
@@ -1095,8 +1099,6 @@ const diagnosticRules = (): string[] => [
   "NL2005",
   "` is generic, so it names no one function to pass as argument ",
   "NL2341",
-  "` is never `null` here, so `?.` has nothing to skip: write `.`",
-  "NL2490",
   "` takes its signature from the arrow; drop the annotation on `",
   "NL2273",
   "A bound of `integer<Lo, Hi>` must be an integer literal, got `",
@@ -1121,6 +1123,8 @@ const diagnosticRules = (): string[] => [
   "NL2056",
   "` in a constant requires two operands of the same type, got ",
   "NL2070",
+  "` is never `null` here, so `?.` has nothing to skip: write `",
+  "NL2490",
   "` takes an array whose elements are the vector's lane type, ",
   "NL2579",
   "`unwrapOr(...)` needs a success value to fall back to, and `",
@@ -1975,6 +1979,8 @@ const performanceRules = (): string[] => [
   "NL9012",
   "--unchecked-indexing is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call `uncheckedGet` and `uncheckedSet` from `",
   "NL9014",
+  "` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? ",
+  "NL9021",
   " functions, more than eight, so it branches on a `switch` of them where a direct call would not",
   "NL9017",
   "keeps an allocation on every call and runs on every pass of a loop that releases nothing",

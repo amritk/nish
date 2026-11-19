@@ -21,6 +21,7 @@ import emitIntBinary from "./emit-ops" -> function @emitIntBinary
 import floatText from "./emit-ops" -> function @floatText
 import isBitwiseAssignment from "./emit-ops" -> function @isBitwiseAssignment
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
+import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import isUncheckedAccess from "./emit-util" -> function @isUncheckedAccess
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import emitWalk from "./emit-map" -> function @emitWalk
@@ -1633,10 +1634,11 @@ function isUnitStep(node: Node, name: string): boolean -> @isUnitStep
   callee +5:5 isIdentNamed -> @isIdentNamed
 function soleExpression(body: Node): Node | null -> @soleExpression
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index soleExpression
+  calls: isOptionalChain nish_panic_index soleExpression
   pointer body: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:41 soleExpression -> @soleExpression
+  callee +2:46 isOptionalChain -> @isOptionalChain
 function appendRangeOf(emitter: Emitter, stmt: Node): AppendRange | null -> @appendRangeOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

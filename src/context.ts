@@ -219,6 +219,17 @@ export class CheckContext {
    * `std/math.ts`'s, as on a page module, and a NaN's bits are the quiet one.
    */
   deterministic: boolean
+  /**
+   * WP28: the build is in the compatibility dialect (`opts.compat`), which
+   * `errorFeature` names when it refuses a construct. Set with `wasm`.
+   */
+  compat: boolean
+  /**
+   * WP28: the compatibility features this build allows
+   * (`opts.compatFeatures`), empty for the strict dialect. Set with `compat`;
+   * a site asks through `compatAllows`, never reads it.
+   */
+  compatFeatures: string[]
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -406,6 +417,8 @@ export class CheckContext {
     this.wasmFreestanding = false
     this.pageModule = false
     this.deterministic = false
+    this.compat = false
+    this.compatFeatures = []
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.peers = []
@@ -444,6 +457,38 @@ export class CheckContext {
     this.pending = []
     this.pendingFinish = []
     this.exportedLayoutUses = []
+  }
+
+  /**
+   * WP28: whether this build's dialect allows compatibility feature `name`.
+   * Every site that accepts a construct only under `--compat` asks here.
+   */
+  compatAllows(name: string): boolean {
+    for (const feature of this.compatFeatures) {
+      if (feature === name) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * `error`, for a construct compatibility feature `feature` accepts and this
+   * build's dialect does not allow: the message, then a note naming the
+   * feature, after one naming the dialect when the build is in the
+   * compatibility one (WP28 §5.2). The same once-per-statement guard.
+   */
+  errorFeature(node: Node, message: string, feature: string): void {
+    if (this.errored) {
+      return
+    }
+    const diagnostic = new Diagnostic(this.source, node.start, node.end, "error", message)
+    if (this.compat) {
+      diagnostic.notes.push(`this program's dialect is \`compat=${this.compatFeatures.join(",")}\``)
+    }
+    diagnostic.notes.push(`add \`${feature}\` to \`nish.compat\` in package.json to accept it`)
+    this.sink.add(diagnostic)
+    this.errored = true
   }
 
   /**

@@ -786,10 +786,11 @@ leaves the IR unchanged.
 
   Use it for a simulation a server and a browser both run and must agree on
   ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
-- **`--compat`** selects the compatibility dialect, which will accept more of
-  TypeScript than Nish does by default. It has no feature yet, so today it
-  means one thing: a bare `number` is a 64-bit float, as `--number-mode f64`
-  makes it. `--compat=<feature>,...` allows only the features it names, and a
+- **`--compat`** selects the compatibility dialect, which accepts more of
+  TypeScript than Nish does by default: a bare `number` is a 64-bit float, as
+  `--number-mode f64` makes it, and its features (`nullish`,
+  `optional-chaining`) admit forms the strict dialect refuses.
+  `--compat=<feature>,...` allows only the features it names, and a
   name that is no feature is a usage error (exit 2). `"compat"` in your
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too

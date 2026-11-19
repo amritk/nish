@@ -91,6 +91,7 @@ import isResultConstructorCall from "./emit-result" -> function @isResultConstru
 import privateAbi from "./emit-result" -> function @privateAbi
 import unpackReturnedResult from "./emit-result" -> function @unpackReturnedResult
 import emitFusedCall from "./emit-map" -> function @emitFusedCall
+import emitChainStatement from "./emit-map" -> function @emitChainStatement
 import emitChainTest from "./emit-map" -> function @emitChainTest
 import emitLibraryCopies from "./emit-map" -> function @emitLibraryCopies
 import emitMapIntrinsic from "./emit-map" -> function @emitMapIntrinsic
@@ -136,6 +137,7 @@ import isEnumStringCall from "./emit-strings" -> function @isEnumStringCall
 import dottedName from "./emit-util" -> function @dottedName
 import intrinsicType from "./emit-util" -> function @intrinsicType
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
+import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import receiverIsValue from "./emit-util" -> function @receiverIsValue
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import IRBlock from "./ir" -> struct IRBlock
@@ -1061,28 +1063,30 @@ function Emitter.outermostPass(this: Emitter): LoopTarget | null -> @Emitter.out
 function Emitter.emitStatementKind(this: Emitter, stmt: Node): void -> @Emitter.emitStatementKind [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitReturn
-  calls: Emitter.emitBlock Emitter.emitExpression Emitter.emitReturn Emitter.emitVariableDeclaration emitBreak emitContinue emitDo emitFor emitForOf emitIf emitLabeled emitSwitch emitThrow emitWhile internalErrorFor nish_exit nish_panic_index nish_str_concat nodeName openScope
-  pointer this: size=424 writesThrough=true captured=false passedTo=Emitter.emitReturn#0 Emitter.emitVariableDeclaration#0 openScope#0 Emitter.emitExpression#0 Emitter.emitBlock#0 emitIf#0 emitWhile#0 emitDo#0 emitFor#0 emitForOf#0 emitSwitch#0 emitBreak#0 emitContinue#0 emitLabeled#0 emitThrow#0
+  calls: Emitter.emitBlock Emitter.emitExpression Emitter.emitReturn Emitter.emitVariableDeclaration emitBreak emitChainStatement emitContinue emitDo emitFor emitForOf emitIf emitLabeled emitSwitch emitThrow emitWhile internalErrorFor isOptionalChain nish_exit nish_panic_index nish_str_concat nodeName openScope
+  pointer this: size=424 writesThrough=true captured=false passedTo=Emitter.emitReturn#0 Emitter.emitVariableDeclaration#0 openScope#0 emitChainStatement#0 Emitter.emitExpression#0 Emitter.emitBlock#0 emitIf#0 emitWhile#0 emitDo#0 emitFor#0 emitForOf#0 emitSwitch#0 emitBreak#0 emitContinue#0 emitLabeled#0 emitThrow#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=Emitter.emitReturn#1 Emitter.emitBlock#1 emitIf#1 emitWhile#1 emitDo#1 emitFor#1 emitForOf#1 emitSwitch#1 emitBreak#1 emitContinue#1 emitLabeled#1 emitThrow#1
   stackSites=0 stackLocals=0
   callee +0:9 Emitter.emitReturn -> @Emitter.emitReturn
   local +6:20 decl: Node (const)
   callee +7:11 Emitter.emitVariableDeclaration -> @Emitter.emitVariableDeclaration
   callee +9:13 openScope -> @openScope
-  callee +14:9 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +17:9 Emitter.emitBlock -> @Emitter.emitBlock
-  callee +20:9 emitIf -> @emitIf
-  callee +23:9 emitWhile -> @emitWhile
-  callee +26:9 emitDo -> @emitDo
-  callee +29:9 emitFor -> @emitFor
-  callee +32:9 emitForOf -> @emitForOf
-  callee +35:9 emitSwitch -> @emitSwitch
-  callee +38:9 emitBreak -> @emitBreak
-  callee +41:9 emitContinue -> @emitContinue
-  callee +44:9 emitLabeled -> @emitLabeled
-  callee +47:9 emitThrow -> @emitThrow
-  callee +50:22 internalErrorFor -> @internalErrorFor
-  callee +50:72 nodeName -> @nodeName
+  callee +14:13 isOptionalChain -> @isOptionalChain
+  callee +15:11 emitChainStatement -> @emitChainStatement
+  callee +17:11 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +21:9 Emitter.emitBlock -> @Emitter.emitBlock
+  callee +24:9 emitIf -> @emitIf
+  callee +27:9 emitWhile -> @emitWhile
+  callee +30:9 emitDo -> @emitDo
+  callee +33:9 emitFor -> @emitFor
+  callee +36:9 emitForOf -> @emitForOf
+  callee +39:9 emitSwitch -> @emitSwitch
+  callee +42:9 emitBreak -> @emitBreak
+  callee +45:9 emitContinue -> @emitContinue
+  callee +48:9 emitLabeled -> @emitLabeled
+  callee +51:9 emitThrow -> @emitThrow
+  callee +54:22 internalErrorFor -> @internalErrorFor
+  callee +54:72 nodeName -> @nodeName
 function Emitter.emitReturn(this: Emitter, stmt: Node): void -> @Emitter.emitReturn [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitScopeJoins

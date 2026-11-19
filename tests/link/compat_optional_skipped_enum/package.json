@@ -1,0 +1,7 @@
+{
+  "name": "compat-optional-skipped-enum",
+  "private": true,
+  "nish": {
+    "compat": ["optional-chaining"]
+  }
+}
