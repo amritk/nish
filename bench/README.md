@@ -1939,7 +1939,8 @@ schema. It walks `posts_created_at_id_idx` newest first. For each post it seeks
 `POST_SQL`'s order, so it must print `feed`'s row count and checksum, and
 `--validate` checks that. The C twin has no cursor path, so `run.mjs` runs
 `feed-cursor` on the build and its copy only. Its report sets it against
-`feed`'s build times from the same rounds, not against C.
+`feed`'s build times from the same rounds, not against C. Its figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#the-feed-through-cursors-against-sql).
 
 **The builds.**
 
