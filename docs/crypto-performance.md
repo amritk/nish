@@ -126,8 +126,8 @@ which the table's notes say no `OPENSSL_ia32cap` mask moves. Sign is mostly
 table reads and mixed additions from the 22 KiB comb; verify is mostly
 doublings and additions on a variable point. The operation both lean on is the
 field multiply, ported from fiat-crypto on four 64-bit limbs, whose high halves
-`p256FiatMulxU64Hi` builds from four 32 × 32 products, since Nish has no 128-bit
-product. Both inversions are already safegcd (#780, #1469).
+are the `mulHigh` builtin (WP41), one multiply on x86-64 and AArch64; before it
+they were four 32 × 32 products each. Both inversions are already safegcd (#780, #1469).
 
 ## TLS 1.3 handshake and x509-parse
 

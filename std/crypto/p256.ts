@@ -50,7 +50,7 @@
  *  bits, which Nish has no integer for, so each comes from its own helper:
  *  the sum, difference or low product by wrapping arithmetic, the carry or
  *  borrow from the top bits of the operands and the answer, and the high
- *  product from four 32-by-32 products (`p256FiatMulxU64Hi`). Either way only
+ *  product from the `mulHigh` builtin. Either way only
  *  the outputs fiat goes on to read are declared. And each function opens
  *  with a length guard, so that the literal indices after it compile with no
  *  bounds check.
@@ -231,25 +231,6 @@ const p256FiatSubborrowxU64 = (arg1: u64, arg2: u64, arg3: u64): u64 => arg2 - a
 const p256FiatSubborrowxU64Out2 = (arg2: u64, arg3: u64, out1: u64): u64 =>
   ((~arg2 & arg3) | (~(arg2 ^ arg3) & out1)) >> 63
 
-/**
- * fiat's `mulx_u64`, its `out2`: the high half of the 128-bit product, from
- * four 32-by-32 products, since Nish has no wider integer. The low half,
- * fiat's `out1`, is the wrapping `arg1 * arg2`. `mid` is at most
- * 3 * (2^32 - 1), so it cannot wrap.
- */
-const p256FiatMulxU64Hi = (arg1: u64, arg2: u64): u64 => {
-  const a0: u64 = arg1 & 0xffffffff
-  const a1: u64 = arg1 >> 32
-  const b0: u64 = arg2 & 0xffffffff
-  const b1: u64 = arg2 >> 32
-  const p00: u64 = a0 * b0
-  const p01: u64 = a0 * b1
-  const p10: u64 = a1 * b0
-  const p11: u64 = a1 * b1
-  const mid: u64 = (p00 >> 32) + (p01 & 0xffffffff) + (p10 & 0xffffffff)
-  return p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32)
-}
-
 /** fiat's `cmovznz_u64`: `arg2` when `arg1` is zero and `arg3` otherwise, as `p256FiatCmovznzU32` does. */
 const p256FiatCmovznzU64 = (arg1: u64, arg2: u64, arg3: u64): u64 => ctSelect(ctEq(arg1, 0), arg2, arg3)
 
@@ -271,13 +252,13 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x3: u64 = arg1Limb3
   const x4: u64 = arg1Limb0
   const x5: u64 = x4 * arg2Limb3
-  const x6: u64 = p256FiatMulxU64Hi(x4, arg2Limb3)
+  const x6: u64 = mulHigh(x4, arg2Limb3)
   const x7: u64 = x4 * arg2Limb2
-  const x8: u64 = p256FiatMulxU64Hi(x4, arg2Limb2)
+  const x8: u64 = mulHigh(x4, arg2Limb2)
   const x9: u64 = x4 * arg2Limb1
-  const x10: u64 = p256FiatMulxU64Hi(x4, arg2Limb1)
+  const x10: u64 = mulHigh(x4, arg2Limb1)
   const x11: u64 = x4 * arg2Limb0
-  const x12: u64 = p256FiatMulxU64Hi(x4, arg2Limb0)
+  const x12: u64 = mulHigh(x4, arg2Limb0)
   const x13: u64 = p256FiatAddcarryxU64(0x0, x12, x9)
   const x14: u64 = p256FiatAddcarryxU64Out2(x12, x9, x13)
   const x15: u64 = p256FiatAddcarryxU64(x14, x10, x7)
@@ -286,11 +267,11 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x18: u64 = p256FiatAddcarryxU64Out2(x8, x5, x17)
   const x19: u64 = x18 + x6
   const x20: u64 = x11 * p256FiatWord64(0xffffffff, 0x1)
-  const x21: u64 = p256FiatMulxU64Hi(x11, p256FiatWord64(0xffffffff, 0x1))
+  const x21: u64 = mulHigh(x11, p256FiatWord64(0xffffffff, 0x1))
   const x22: u64 = x11 * 0xffffffff
-  const x23: u64 = p256FiatMulxU64Hi(x11, 0xffffffff)
+  const x23: u64 = mulHigh(x11, 0xffffffff)
   const x24: u64 = x11 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x25: u64 = p256FiatMulxU64Hi(x11, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x25: u64 = mulHigh(x11, p256FiatWord64(0xffffffff, 0xffffffff))
   const x26: u64 = p256FiatAddcarryxU64(0x0, x25, x22)
   const x27: u64 = p256FiatAddcarryxU64Out2(x25, x22, x26)
   const x28: u64 = x27 + x23
@@ -305,13 +286,13 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x37: u64 = p256FiatAddcarryxU64(x36, x19, x21)
   const x38: u64 = p256FiatAddcarryxU64Out2(x19, x21, x37)
   const x39: u64 = x1 * arg2Limb3
-  const x40: u64 = p256FiatMulxU64Hi(x1, arg2Limb3)
+  const x40: u64 = mulHigh(x1, arg2Limb3)
   const x41: u64 = x1 * arg2Limb2
-  const x42: u64 = p256FiatMulxU64Hi(x1, arg2Limb2)
+  const x42: u64 = mulHigh(x1, arg2Limb2)
   const x43: u64 = x1 * arg2Limb1
-  const x44: u64 = p256FiatMulxU64Hi(x1, arg2Limb1)
+  const x44: u64 = mulHigh(x1, arg2Limb1)
   const x45: u64 = x1 * arg2Limb0
-  const x46: u64 = p256FiatMulxU64Hi(x1, arg2Limb0)
+  const x46: u64 = mulHigh(x1, arg2Limb0)
   const x47: u64 = p256FiatAddcarryxU64(0x0, x46, x43)
   const x48: u64 = p256FiatAddcarryxU64Out2(x46, x43, x47)
   const x49: u64 = p256FiatAddcarryxU64(x48, x44, x41)
@@ -330,11 +311,11 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x62: u64 = p256FiatAddcarryxU64(x61, x38, x53)
   const x63: u64 = p256FiatAddcarryxU64Out2(x38, x53, x62)
   const x64: u64 = x54 * p256FiatWord64(0xffffffff, 0x1)
-  const x65: u64 = p256FiatMulxU64Hi(x54, p256FiatWord64(0xffffffff, 0x1))
+  const x65: u64 = mulHigh(x54, p256FiatWord64(0xffffffff, 0x1))
   const x66: u64 = x54 * 0xffffffff
-  const x67: u64 = p256FiatMulxU64Hi(x54, 0xffffffff)
+  const x67: u64 = mulHigh(x54, 0xffffffff)
   const x68: u64 = x54 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x69: u64 = p256FiatMulxU64Hi(x54, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x69: u64 = mulHigh(x54, p256FiatWord64(0xffffffff, 0xffffffff))
   const x70: u64 = p256FiatAddcarryxU64(0x0, x69, x66)
   const x71: u64 = p256FiatAddcarryxU64Out2(x69, x66, x70)
   const x72: u64 = x71 + x67
@@ -350,13 +331,13 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x82: u64 = p256FiatAddcarryxU64Out2(x62, x65, x81)
   const x83: u64 = x82 + x63
   const x84: u64 = x2 * arg2Limb3
-  const x85: u64 = p256FiatMulxU64Hi(x2, arg2Limb3)
+  const x85: u64 = mulHigh(x2, arg2Limb3)
   const x86: u64 = x2 * arg2Limb2
-  const x87: u64 = p256FiatMulxU64Hi(x2, arg2Limb2)
+  const x87: u64 = mulHigh(x2, arg2Limb2)
   const x88: u64 = x2 * arg2Limb1
-  const x89: u64 = p256FiatMulxU64Hi(x2, arg2Limb1)
+  const x89: u64 = mulHigh(x2, arg2Limb1)
   const x90: u64 = x2 * arg2Limb0
-  const x91: u64 = p256FiatMulxU64Hi(x2, arg2Limb0)
+  const x91: u64 = mulHigh(x2, arg2Limb0)
   const x92: u64 = p256FiatAddcarryxU64(0x0, x91, x88)
   const x93: u64 = p256FiatAddcarryxU64Out2(x91, x88, x92)
   const x94: u64 = p256FiatAddcarryxU64(x93, x89, x86)
@@ -375,11 +356,11 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x107: u64 = p256FiatAddcarryxU64(x106, x83, x98)
   const x108: u64 = p256FiatAddcarryxU64Out2(x83, x98, x107)
   const x109: u64 = x99 * p256FiatWord64(0xffffffff, 0x1)
-  const x110: u64 = p256FiatMulxU64Hi(x99, p256FiatWord64(0xffffffff, 0x1))
+  const x110: u64 = mulHigh(x99, p256FiatWord64(0xffffffff, 0x1))
   const x111: u64 = x99 * 0xffffffff
-  const x112: u64 = p256FiatMulxU64Hi(x99, 0xffffffff)
+  const x112: u64 = mulHigh(x99, 0xffffffff)
   const x113: u64 = x99 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x114: u64 = p256FiatMulxU64Hi(x99, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x114: u64 = mulHigh(x99, p256FiatWord64(0xffffffff, 0xffffffff))
   const x115: u64 = p256FiatAddcarryxU64(0x0, x114, x111)
   const x116: u64 = p256FiatAddcarryxU64Out2(x114, x111, x115)
   const x117: u64 = x116 + x112
@@ -395,13 +376,13 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x127: u64 = p256FiatAddcarryxU64Out2(x107, x110, x126)
   const x128: u64 = x127 + x108
   const x129: u64 = x3 * arg2Limb3
-  const x130: u64 = p256FiatMulxU64Hi(x3, arg2Limb3)
+  const x130: u64 = mulHigh(x3, arg2Limb3)
   const x131: u64 = x3 * arg2Limb2
-  const x132: u64 = p256FiatMulxU64Hi(x3, arg2Limb2)
+  const x132: u64 = mulHigh(x3, arg2Limb2)
   const x133: u64 = x3 * arg2Limb1
-  const x134: u64 = p256FiatMulxU64Hi(x3, arg2Limb1)
+  const x134: u64 = mulHigh(x3, arg2Limb1)
   const x135: u64 = x3 * arg2Limb0
-  const x136: u64 = p256FiatMulxU64Hi(x3, arg2Limb0)
+  const x136: u64 = mulHigh(x3, arg2Limb0)
   const x137: u64 = p256FiatAddcarryxU64(0x0, x136, x133)
   const x138: u64 = p256FiatAddcarryxU64Out2(x136, x133, x137)
   const x139: u64 = p256FiatAddcarryxU64(x138, x134, x131)
@@ -420,11 +401,11 @@ const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x152: u64 = p256FiatAddcarryxU64(x151, x128, x143)
   const x153: u64 = p256FiatAddcarryxU64Out2(x128, x143, x152)
   const x154: u64 = x144 * p256FiatWord64(0xffffffff, 0x1)
-  const x155: u64 = p256FiatMulxU64Hi(x144, p256FiatWord64(0xffffffff, 0x1))
+  const x155: u64 = mulHigh(x144, p256FiatWord64(0xffffffff, 0x1))
   const x156: u64 = x144 * 0xffffffff
-  const x157: u64 = p256FiatMulxU64Hi(x144, 0xffffffff)
+  const x157: u64 = mulHigh(x144, 0xffffffff)
   const x158: u64 = x144 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x159: u64 = p256FiatMulxU64Hi(x144, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x159: u64 = mulHigh(x144, p256FiatWord64(0xffffffff, 0xffffffff))
   const x160: u64 = p256FiatAddcarryxU64(0x0, x159, x156)
   const x161: u64 = p256FiatAddcarryxU64Out2(x159, x156, x160)
   const x162: u64 = x161 + x157
@@ -477,13 +458,13 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x3: u64 = arg1Limb3
   const x4: u64 = arg1Limb0
   const x5: u64 = x4 * arg1Limb3
-  const x6: u64 = p256FiatMulxU64Hi(x4, arg1Limb3)
+  const x6: u64 = mulHigh(x4, arg1Limb3)
   const x7: u64 = x4 * arg1Limb2
-  const x8: u64 = p256FiatMulxU64Hi(x4, arg1Limb2)
+  const x8: u64 = mulHigh(x4, arg1Limb2)
   const x9: u64 = x4 * arg1Limb1
-  const x10: u64 = p256FiatMulxU64Hi(x4, arg1Limb1)
+  const x10: u64 = mulHigh(x4, arg1Limb1)
   const x11: u64 = x4 * arg1Limb0
-  const x12: u64 = p256FiatMulxU64Hi(x4, arg1Limb0)
+  const x12: u64 = mulHigh(x4, arg1Limb0)
   const x13: u64 = p256FiatAddcarryxU64(0x0, x12, x9)
   const x14: u64 = p256FiatAddcarryxU64Out2(x12, x9, x13)
   const x15: u64 = p256FiatAddcarryxU64(x14, x10, x7)
@@ -492,11 +473,11 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x18: u64 = p256FiatAddcarryxU64Out2(x8, x5, x17)
   const x19: u64 = x18 + x6
   const x20: u64 = x11 * p256FiatWord64(0xffffffff, 0x1)
-  const x21: u64 = p256FiatMulxU64Hi(x11, p256FiatWord64(0xffffffff, 0x1))
+  const x21: u64 = mulHigh(x11, p256FiatWord64(0xffffffff, 0x1))
   const x22: u64 = x11 * 0xffffffff
-  const x23: u64 = p256FiatMulxU64Hi(x11, 0xffffffff)
+  const x23: u64 = mulHigh(x11, 0xffffffff)
   const x24: u64 = x11 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x25: u64 = p256FiatMulxU64Hi(x11, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x25: u64 = mulHigh(x11, p256FiatWord64(0xffffffff, 0xffffffff))
   const x26: u64 = p256FiatAddcarryxU64(0x0, x25, x22)
   const x27: u64 = p256FiatAddcarryxU64Out2(x25, x22, x26)
   const x28: u64 = x27 + x23
@@ -511,13 +492,13 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x37: u64 = p256FiatAddcarryxU64(x36, x19, x21)
   const x38: u64 = p256FiatAddcarryxU64Out2(x19, x21, x37)
   const x39: u64 = x1 * arg1Limb3
-  const x40: u64 = p256FiatMulxU64Hi(x1, arg1Limb3)
+  const x40: u64 = mulHigh(x1, arg1Limb3)
   const x41: u64 = x1 * arg1Limb2
-  const x42: u64 = p256FiatMulxU64Hi(x1, arg1Limb2)
+  const x42: u64 = mulHigh(x1, arg1Limb2)
   const x43: u64 = x1 * arg1Limb1
-  const x44: u64 = p256FiatMulxU64Hi(x1, arg1Limb1)
+  const x44: u64 = mulHigh(x1, arg1Limb1)
   const x45: u64 = x1 * arg1Limb0
-  const x46: u64 = p256FiatMulxU64Hi(x1, arg1Limb0)
+  const x46: u64 = mulHigh(x1, arg1Limb0)
   const x47: u64 = p256FiatAddcarryxU64(0x0, x46, x43)
   const x48: u64 = p256FiatAddcarryxU64Out2(x46, x43, x47)
   const x49: u64 = p256FiatAddcarryxU64(x48, x44, x41)
@@ -536,11 +517,11 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x62: u64 = p256FiatAddcarryxU64(x61, x38, x53)
   const x63: u64 = p256FiatAddcarryxU64Out2(x38, x53, x62)
   const x64: u64 = x54 * p256FiatWord64(0xffffffff, 0x1)
-  const x65: u64 = p256FiatMulxU64Hi(x54, p256FiatWord64(0xffffffff, 0x1))
+  const x65: u64 = mulHigh(x54, p256FiatWord64(0xffffffff, 0x1))
   const x66: u64 = x54 * 0xffffffff
-  const x67: u64 = p256FiatMulxU64Hi(x54, 0xffffffff)
+  const x67: u64 = mulHigh(x54, 0xffffffff)
   const x68: u64 = x54 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x69: u64 = p256FiatMulxU64Hi(x54, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x69: u64 = mulHigh(x54, p256FiatWord64(0xffffffff, 0xffffffff))
   const x70: u64 = p256FiatAddcarryxU64(0x0, x69, x66)
   const x71: u64 = p256FiatAddcarryxU64Out2(x69, x66, x70)
   const x72: u64 = x71 + x67
@@ -556,13 +537,13 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x82: u64 = p256FiatAddcarryxU64Out2(x62, x65, x81)
   const x83: u64 = x82 + x63
   const x84: u64 = x2 * arg1Limb3
-  const x85: u64 = p256FiatMulxU64Hi(x2, arg1Limb3)
+  const x85: u64 = mulHigh(x2, arg1Limb3)
   const x86: u64 = x2 * arg1Limb2
-  const x87: u64 = p256FiatMulxU64Hi(x2, arg1Limb2)
+  const x87: u64 = mulHigh(x2, arg1Limb2)
   const x88: u64 = x2 * arg1Limb1
-  const x89: u64 = p256FiatMulxU64Hi(x2, arg1Limb1)
+  const x89: u64 = mulHigh(x2, arg1Limb1)
   const x90: u64 = x2 * arg1Limb0
-  const x91: u64 = p256FiatMulxU64Hi(x2, arg1Limb0)
+  const x91: u64 = mulHigh(x2, arg1Limb0)
   const x92: u64 = p256FiatAddcarryxU64(0x0, x91, x88)
   const x93: u64 = p256FiatAddcarryxU64Out2(x91, x88, x92)
   const x94: u64 = p256FiatAddcarryxU64(x93, x89, x86)
@@ -581,11 +562,11 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x107: u64 = p256FiatAddcarryxU64(x106, x83, x98)
   const x108: u64 = p256FiatAddcarryxU64Out2(x83, x98, x107)
   const x109: u64 = x99 * p256FiatWord64(0xffffffff, 0x1)
-  const x110: u64 = p256FiatMulxU64Hi(x99, p256FiatWord64(0xffffffff, 0x1))
+  const x110: u64 = mulHigh(x99, p256FiatWord64(0xffffffff, 0x1))
   const x111: u64 = x99 * 0xffffffff
-  const x112: u64 = p256FiatMulxU64Hi(x99, 0xffffffff)
+  const x112: u64 = mulHigh(x99, 0xffffffff)
   const x113: u64 = x99 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x114: u64 = p256FiatMulxU64Hi(x99, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x114: u64 = mulHigh(x99, p256FiatWord64(0xffffffff, 0xffffffff))
   const x115: u64 = p256FiatAddcarryxU64(0x0, x114, x111)
   const x116: u64 = p256FiatAddcarryxU64Out2(x114, x111, x115)
   const x117: u64 = x116 + x112
@@ -601,13 +582,13 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x127: u64 = p256FiatAddcarryxU64Out2(x107, x110, x126)
   const x128: u64 = x127 + x108
   const x129: u64 = x3 * arg1Limb3
-  const x130: u64 = p256FiatMulxU64Hi(x3, arg1Limb3)
+  const x130: u64 = mulHigh(x3, arg1Limb3)
   const x131: u64 = x3 * arg1Limb2
-  const x132: u64 = p256FiatMulxU64Hi(x3, arg1Limb2)
+  const x132: u64 = mulHigh(x3, arg1Limb2)
   const x133: u64 = x3 * arg1Limb1
-  const x134: u64 = p256FiatMulxU64Hi(x3, arg1Limb1)
+  const x134: u64 = mulHigh(x3, arg1Limb1)
   const x135: u64 = x3 * arg1Limb0
-  const x136: u64 = p256FiatMulxU64Hi(x3, arg1Limb0)
+  const x136: u64 = mulHigh(x3, arg1Limb0)
   const x137: u64 = p256FiatAddcarryxU64(0x0, x136, x133)
   const x138: u64 = p256FiatAddcarryxU64Out2(x136, x133, x137)
   const x139: u64 = p256FiatAddcarryxU64(x138, x134, x131)
@@ -626,11 +607,11 @@ const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x152: u64 = p256FiatAddcarryxU64(x151, x128, x143)
   const x153: u64 = p256FiatAddcarryxU64Out2(x128, x143, x152)
   const x154: u64 = x144 * p256FiatWord64(0xffffffff, 0x1)
-  const x155: u64 = p256FiatMulxU64Hi(x144, p256FiatWord64(0xffffffff, 0x1))
+  const x155: u64 = mulHigh(x144, p256FiatWord64(0xffffffff, 0x1))
   const x156: u64 = x144 * 0xffffffff
-  const x157: u64 = p256FiatMulxU64Hi(x144, 0xffffffff)
+  const x157: u64 = mulHigh(x144, 0xffffffff)
   const x158: u64 = x144 * p256FiatWord64(0xffffffff, 0xffffffff)
-  const x159: u64 = p256FiatMulxU64Hi(x144, p256FiatWord64(0xffffffff, 0xffffffff))
+  const x159: u64 = mulHigh(x144, p256FiatWord64(0xffffffff, 0xffffffff))
   const x160: u64 = p256FiatAddcarryxU64(0x0, x159, x156)
   const x161: u64 = p256FiatAddcarryxU64Out2(x159, x156, x160)
   const x162: u64 = x161 + x157

@@ -14387,6 +14387,25 @@ if (dealtHere("cryptoChecks")) {
         `${a64.stderr}\n${a64Body.join("\n")}`
       )
 
+      // The constant-time promise std/crypto/p256.ts leans on: both operands
+      // secret, `high` has no branch, call or secret-addressed memory access on
+      // either target (tests/ct-asm.js, the reader the ct_asm fixtures use).
+      for (const [name, built, asm, target] of [
+        ["mul_high_native", host, x86, CT_TARGETS[0]],
+        ["mul_high_aarch64", arm, a64, CT_TARGETS[1]],
+      ]) {
+        const [spec] = ctSpecs(fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8"))
+        const ctBody = asm.status === 0 ? functionBody(asm.stdout.split("\n"), "high", target) : null
+        const found = ctBody === null || spec.problems.length > 0 ? [] : ctViolations(ctBody, spec, target)
+        check(
+          `mul_high: ${name}'s \`high\` on ${target.name} is constant time in both operands`,
+          ctBody !== null && spec.problems.length === 0 && found.length === 0,
+          ctBody === null
+            ? `no symbol high in ${name}'s ${target.name} assembly${built.error ? `\n${built.error}` : ""}`
+            : `${spec.problems.join("\n")}${found.map((v) => `${v.kind}: ${v.line}`).join("\n")}\n---\n${ctBody.join("\n")}`
+        )
+      }
+
       // The whole of `mul_high_basic` for wasm32, the loop of 10^6 included:
       // no i128 in the IR, and no `__multi3` once LLVM has optimised it.
       const wasmIr = ir("mul_high_basic", ["--target", "wasm32"])

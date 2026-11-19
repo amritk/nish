@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 796 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 797 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15519,4 +15519,12 @@ The message of an error contains:
 
 ```text
 …which has no `null` to stand for an omitted argument
+```
+
+## NL2805
+
+The message of an error contains:
+
+```text
+` takes u64 operands (convert with toU64), got …
 ```

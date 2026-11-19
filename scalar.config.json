@@ -3687,9 +3687,7 @@
                     "head": {
                       "title": "WP41: A 64×64→128 high product · Nish",
                       "meta": [{ "property": "og:title", "content": "WP41: A 64×64→128 high product" }],
-                      "links": [
-                        { "rel": "canonical", "href": "https://nishlang.com/roadmap/wp41-mul-high" }
-                      ]
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp41-mul-high" }]
                     }
                   },
                   "/wp43-http-app-layer": {
