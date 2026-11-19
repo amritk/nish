@@ -231,6 +231,21 @@ export class CheckContext {
    */
   compatFeatures: string[]
   /**
+   * WP28 `optional-params`: each wrapper `liftDefaults` built for a function
+   * with a default that is not a constant (`src/defaults.ts`), and beside it
+   * at the same position the function it stands in front of and the number
+   * of arguments it takes. Empty without the feature.
+   */
+  defaultImpls: Node[]
+  defaultArities: i32[]
+  defaultWrappers: Node[]
+  /**
+   * WP28 `optional-params`, in a build without it: each parameter whose
+   * default a wrapper would evaluate with it, so that the refusal of that
+   * default names the feature (`liftDefaults`).
+   */
+  defaultLifted: Node[]
+  /**
    * WP28 `overloads`: each bodiless declaration written before an
    * implementation of the same name (`src/overloads.ts`), and beside it at
    * the same position, in `overloadOf`, that implementation. Under `--compat`
@@ -240,6 +255,17 @@ export class CheckContext {
    */
   overloadSignatures: Node[]
   overloadOf: Node[]
+  /**
+   * WP28 C1: the parameters written `x?: T` under the `optional-params`
+   * feature, by signature and position, and their locals once a body declares
+   * them. A read of one is refused unless it is `optionalRead`, the left
+   * operand of the `??` being checked (`docs/LANGUAGE.md`, "The compatibility
+   * dialect").
+   */
+  optionalSigs: FunctionSig[]
+  optionalAt: i32[]
+  optionalLocals: Local[]
+  optionalRead: Node | null
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -429,8 +455,16 @@ export class CheckContext {
     this.deterministic = false
     this.compat = false
     this.compatFeatures = []
+    this.defaultImpls = []
+    this.defaultArities = []
+    this.defaultWrappers = []
+    this.defaultLifted = []
     this.overloadSignatures = []
     this.overloadOf = []
+    this.optionalSigs = []
+    this.optionalAt = []
+    this.optionalLocals = []
+    this.optionalRead = null
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.peers = []

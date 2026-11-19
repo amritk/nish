@@ -56,7 +56,7 @@ import { recordGuardFusion } from "./fusion"
 import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
-import { optionalParameterMessage, parameterFormHereMessage } from "./declarations"
+import { isCompatOptional, optionalParameterMessage, parameterFormHereMessage } from "./declarations"
 import {
   FLAG_ABSTRACT,
   FLAG_ACCESSOR,
@@ -1139,13 +1139,17 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
       ctx.error(node, parameterFormHereMessage(true))
     } else if (node.children[0].kind === NodeKind.BindingPattern) {
       ctx.error(node, "Destructured parameters are not supported")
-    } else if ((node.flags & FLAG_OPTIONAL) !== 0) {
-      ctx.error(
-        node,
-        (node.flags & FLAG_SIGNATURE) !== 0
-          ? optionalParameterMessage(ctx, node)
-          : parameterFormHereMessage(false)
-      )
+    } else if ((node.flags & FLAG_OPTIONAL) !== 0 && !isCompatOptional(ctx, node)) {
+      if ((node.flags & (FLAG_SIGNATURE | FLAG_DEFAULT)) === FLAG_SIGNATURE) {
+        ctx.errorFeature(node, optionalParameterMessage(ctx, node), "optional-params")
+      } else {
+        ctx.error(
+          node,
+          (node.flags & FLAG_SIGNATURE) !== 0
+            ? optionalParameterMessage(ctx, node)
+            : parameterFormHereMessage(false)
+        )
+      }
     }
   }
 }

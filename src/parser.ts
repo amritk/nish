@@ -2209,6 +2209,11 @@ export class Parser {
     if (this.eat(TOK_ASSIGN)) {
       param.children.push(this.parseExpression())
       param.flags = param.flags | FLAG_DEFAULT
+    } else if ((param.flags & FLAG_OPTIONAL) !== 0) {
+      // WP28 C1: the `null` a call that leaves `x?` out passes under the
+      // `optional-params` feature, a node of its own so that the checker can
+      // record its type for the walks that read a default.
+      param.children.push(this.node(NodeKind.Null, this.previousEnd, this.previousEnd))
     }
     param.end = this.previousEnd
     return param

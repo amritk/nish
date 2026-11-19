@@ -16353,11 +16353,11 @@ allows admits. This compiler has built four features, `nullish`,
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]`, and prints no such
   line for a strict build.
 - **A strict refusal of a construct a feature admits names the feature.** It
   closes with the note ``add `<feature>` to `nish.compat` in package.json to

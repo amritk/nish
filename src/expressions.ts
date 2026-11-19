@@ -15,6 +15,7 @@
 // is being checked *into*, or -1 for none. It is a hint and never a coercion:
 // the result is still checked against what the sink expects.
 
+import { defaultTarget } from "./defaults"
 import { checkOverloadCall } from "./overloads"
 import {
   conditionMessage as secretConditionMessage,
@@ -1124,10 +1125,34 @@ const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
  */
 export const unproven = (ctx: CheckContext, type: i32): i32 => ctx.table.withState(type, R_UNKNOWN)
 
+/**
+ * NL2803: a name of an `x?: T` parameter (WP28 C1, `optional-params`) read
+ * anywhere but as the left operand of `??`. A call that leaves the argument
+ * out passes `null` here and `undefined` in TypeScript, and `x ?? d` is the
+ * one read that gives both the same value; `true` when it reported.
+ */
+const refuseOptionalRead = (ctx: CheckContext, expr: Node, local: Local | null): boolean => {
+  if (local === null || ctx.optionalLocals.indexOf(local) < 0) {
+    return false
+  }
+  const read = ctx.optionalRead
+  if (read !== null && read === expr) {
+    return false
+  }
+  ctx.error(
+    expr,
+    `Optional parameter \`${expr.text}\` can only be read as the left operand of \`??\`: a call that leaves it out passes \`undefined\` in TypeScript and \`null\` here, and \`${expr.text} ?? <default>\` is the one read that gives both the same value`
+  )
+  return true
+}
+
 const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text)
   if (local !== null) {
     ctx.program.nodeLocals[expr.id] = local
+    if (refuseOptionalRead(ctx, expr, sourceLocal(local))) {
+      return T_ERROR
+    }
     if (scope.exhausted(local)) {
       return ctx.errorType(expr, exhaustedMessage(expr.text))
     }
@@ -1145,6 +1170,9 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return T_ERROR
     }
     ctx.program.nodeLocals[expr.id] = captured
+    if (refuseOptionalRead(ctx, expr, sourceLocal(captured))) {
+      return T_ERROR
+    }
     // A `const` holds at the call what it held when it was declared.
     const outer = captured.captureOf
     const held = outer === null ? -1 : ctx.arrowOuterScopes[0].heldBy(outer)
@@ -3463,7 +3491,11 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (isOptionalChain(unwrapParens(expr.children[0]))) {
     return checkChainCoalesce(ctx, expr, scope)
   }
+  const bare = unwrapParens(expr.children[0])
+  const outerRead = ctx.optionalRead
+  ctx.optionalRead = bare.kind === NodeKind.Ident ? bare : null
   const left = maybeOperand(ctx, expr.children[0], scope)
+  ctx.optionalRead = outerRead
   if (left === T_ERROR) {
     return T_ERROR
   }
@@ -4233,10 +4265,13 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
     return T_ERROR
   }
   const args = expr.children[1]
-  if (!fitArguments(ctx, expr, args, sig, 0, sig.name)) {
+  // WP28 `optional-params`: a call that leaves out a default evaluated per
+  // call goes to the wrapper that evaluates it (`src/defaults.ts`).
+  const fit = defaultTarget(ctx, sig, args.children.length)
+  if (!fitArguments(ctx, expr, args, fit, 0, sig.name)) {
     return T_ERROR
   }
-  const foreign = sig.foreign()
+  const foreign = fit.foreign()
   const gotTypes: i32[] = []
   let i = 0
   while (i < args.children.length) {
@@ -4245,12 +4280,12 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
       // WP27 S4.1: C borrows a nested layout field by its interior address.
       ctx.embeddedRead = unwrapParens(arg).id
     }
-    const got = checkExpression(ctx, arg, scope, sig.paramTypes[i])
+    const got = checkExpression(ctx, arg, scope, fit.paramTypes[i])
     ctx.embeddedRead = -1
     gotTypes.push(got)
-    const refused = refuseForeignNullable(ctx, sig, i, arg, got, sig.name)
-    if (!refused && got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
-      const wantName = ctx.table.typeName(sig.paramTypes[i])
+    const refused = refuseForeignNullable(ctx, fit, i, arg, got, sig.name)
+    if (!refused && got !== T_ERROR && !ctx.table.assignable(got, fit.paramTypes[i])) {
+      const wantName = ctx.table.typeName(fit.paramTypes[i])
       ctx.error(
         arg,
         `Argument ${i + 1} of \`${sig.name}\`: expected ${wantName}, got ${ctx.table.typeName(got)}`
@@ -4259,8 +4294,8 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
     i = i + 1
   }
   checkOverloadCall(ctx, expr, sig, gotTypes, 0, sig.name)
-  ctx.program.nodeCallees[expr.id] = sig
-  return sig.returnType
+  ctx.program.nodeCallees[expr.id] = fit
+  return fit.returnType
 }
 
 /**

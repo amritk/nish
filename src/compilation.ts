@@ -66,6 +66,7 @@ import {
 } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
+import { liftDefaults } from "./defaults"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
@@ -921,6 +922,12 @@ export class Compilation {
       // takes its ids from the same parser.
       liftScript(parser, file)
     }
+    // WP28 `optional-params`: before the checker too, for the same reason.
+    const lifted = liftDefaults(
+      parser,
+      file,
+      read === null && this.opts.compatFeatures.indexOf("optional-params") >= 0
+    )
     const checker = new Checker(
       this.table,
       source,
@@ -945,6 +952,10 @@ export class Compilation {
     checker.ctx.deterministic = this.opts.deterministic
     checker.ctx.compat = this.opts.compat
     checker.ctx.compatFeatures = this.opts.compatFeatures
+    checker.ctx.defaultImpls = lifted.impls
+    checker.ctx.defaultArities = lifted.arities
+    checker.ctx.defaultWrappers = lifted.wrappers
+    checker.ctx.defaultLifted = lifted.lifted
     recordOverloads(checker.ctx, file)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals

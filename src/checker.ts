@@ -34,7 +34,13 @@ import {
   unsafeModule,
 } from "./nish-modules"
 import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
-import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations"
+import {
+  collectFunctionSignature,
+  collectImports,
+  isExported,
+  isOptionalParameter,
+  markEntryMain,
+} from "./declarations"
 import {
   checkDeferredConstraints,
   collectStructTypeParamNames,
@@ -1214,6 +1220,9 @@ export class Checker {
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM)
       local.origin = parameterOrigin(this.ctx, sig, i)
       local.typedArray = parameterSpelling(this.ctx, sig, sig.paramNames[i])
+      if (isOptionalParameter(this.ctx, sig, i)) {
+        this.ctx.optionalLocals.push(local)
+      }
       if (!scope.declare(local)) {
         this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``)
       }

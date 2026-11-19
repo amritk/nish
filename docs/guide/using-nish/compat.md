@@ -365,12 +365,12 @@ the number mode and the features:
 
 ```llvm
 !nish.compat = !{!0}
-!0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
+!0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}
 ```
 
 A strict build has no such line, so you can tell from a `.ll` file which
 dialect its source was written in. `--emit-checked` opens with the same facts
-(`compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]`).
+(`compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]`).
 
 ## What it does not change
 

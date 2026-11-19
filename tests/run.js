@@ -26140,7 +26140,7 @@ if (dealtHere("cliChecks")) {
         `compat: \`${flag}\` names a feature this compiler has not built: a usage error that names it, and no IR`,
         refused.r.status === 2 &&
           refused.r.stderr.includes(
-            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, \`string-switch\`, \`for-of-string\`, and a bare \`--compat\` allows every one`
+            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, \`string-switch\`, \`for-of-string\`, \`optional-params\`, \`overloads\`, and a bare \`--compat\` allows every one`
           ) &&
           refused.ir === "",
         shown(refused.r)
@@ -26156,8 +26156,8 @@ if (dealtHere("cliChecks")) {
       checkedStrict.status === 0 &&
         checkedCompat.status === 0 &&
         checkedPinned.status === 0 &&
-        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]\n") &&
-        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining,string-switch,for-of-string]\n${checkedStrict.stdout}` &&
+        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]\n") &&
+        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]\n${checkedStrict.stdout}` &&
         !checkedStrict.stdout.includes("compat "),
       shown(checkedCompat) + shown(checkedPinned)
     )
@@ -26529,10 +26529,14 @@ export const main = (): void => {
     // that the strict dialect refuses: each run natively as under Node.
     const admittedRejects = [
       "reject_arr_forof_non_array",
+      "reject_ffi_handle_walk_optional_param",
       "reject_nullish",
       "reject_nullish_nullable",
       "reject_optional_chain_element_inner",
       "reject_optional_chain_statement",
+      "reject_param_default_array",
+      "reject_param_default_expression",
+      "reject_param_default_object",
       "reject_switch_string",
     ].filter((name) => cases.includes(name))
     const admittedDialect = [
@@ -26546,6 +26550,8 @@ export const main = (): void => {
       "compat_optional_chain_loops",
       "compat_optional_chain_skipped_arguments",
       "compat_optional_chain_statement",
+      "compat_optional_params",
+      "compat_overloads",
       "compat_string_switch",
       "compat_string_switch_flow",
     ].filter((name) => cases.includes(name))

@@ -142,4 +142,4 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !9 = !{i32 8, !"branch-target-enforcement", i32 1}
 !10 = !{i32 8, !"sign-return-address", i32 1}
 !11 = !{i32 4, !"probe-stack", !"inline-asm"}
-!12 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
+!12 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}

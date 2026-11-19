@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 975
+export const RULE_COUNT: i32 = 977
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1231,6 +1231,8 @@ const diagnosticRules = (): string[] => [
   "NL2094",
   "Union variants must take their tags from one enum: `",
   "NL2524",
+  "which has no `null` to stand for an omitted argument",
+  "NL2804",
   " would be key material outside the `Secret`'s rules",
   "NL2445",
   "; reinterpret the lanes with `asU8x16` and the rest",
@@ -1368,6 +1370,8 @@ const diagnosticRules = (): string[] => [
   "NL2644",
   "`, and an arrow argument cannot capture it: ",
   "NL2588",
+  "can only be read as the left operand of `??`",
+  "NL2803",
   "Type assertion to `unknown` is forbidden in ",
   "NL1052",
   " functions (identical to --emit-header). */",
