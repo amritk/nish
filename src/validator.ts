@@ -272,8 +272,10 @@ const endsInElementLink = (chain: Node): boolean =>
  * The element read in `chain` that the chain would carry on past, or null:
  * its last link when that is a `?.[i]`; for a statement, also its last link
  * when that is any element read, or an element read, plain or `?.`, whose
- * value a `?.` member link tests. `xs[i]?.m();` with `i` past the end reads
- * `undefined` in JavaScript and skips the call, where the bounds check panics.
+ * value a `?.` member link tests, parenthesised or not. `xs[i]?.m();` with `i`
+ * past the end reads `undefined` in JavaScript and skips the call, where the
+ * bounds check panics. A parenthesised statement, `(a?.xs[i]);`, is no
+ * statement chain and is refused by the link's own rule.
  */
 const carriedElement = (chain: Node, statement: boolean): Node | null => {
   if (chain.kind === NodeKind.Index && (statement || (chain.flags & FLAG_OPTIONAL) !== 0)) {
@@ -284,7 +286,9 @@ const carriedElement = (chain: Node, statement: boolean): Node | null => {
   }
   let node = chain
   while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
-    const receiver = node.children[0]
+    // Parentheses change nothing here: `(xs[i])?.m();` reads the element
+    // before the `?.` tests it, as `xs[i]?.m();` does.
+    const receiver = unwrapParens(node.children[0])
     if (
       (node.flags & FLAG_OPTIONAL) !== 0 &&
       node.kind !== NodeKind.Call &&

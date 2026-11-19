@@ -172,11 +172,13 @@ Two forms stay refused in both dialects, because Node's answer and the
 compiled program's would part. An element read the chain would carry on past
 is refused (`NL1067`): a `?.[i]` that ends a `??` chain or a statement, and,
 in a statement, any element read that ends it, `h?.xs[i];`, or that a `?.`
-tests, `xs[i]?.bump();`. Past the end of the array Node answers `undefined`
+tests, `xs[i]?.bump();` or `(xs[i])?.bump();`. Past the end of the array Node answers `undefined`
 and goes on, where Nish's bounds check panics. Test the index against
 `length` instead. (With a `??` default, `xs[i]?.n ?? 0` is the strict
 dialect's own: the `?.` tests a nullable element, and the read is
-bounds-checked as every element read is.) (A `?.[i]` that ends a chain anywhere else, as in
+bounds-checked as every element read is. So is a plain element read that
+ends a `??` chain, `h?.xs[5] ?? 0`: it panics past the end where Node gives
+`0`, exactly as the strict build does.) (A `?.[i]` that ends a chain anywhere else, as in
 `const x = xs?.[0]`, is refused as a chain with no default.) And an optional
 call `f?.()` is refused (`NL1068`): narrow `f` with `!== null` and call it.
 

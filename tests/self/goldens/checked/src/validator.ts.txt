@@ -91,11 +91,12 @@ function endsInElementLink(chain: Node): boolean -> @endsInElementLink
 function carriedElement(chain: Node, statement: boolean): Node | null -> @carriedElement
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: chain
-  calls: nish_panic_index
+  calls: nish_panic_index unwrapParens
   pointer chain: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:7 node: Node (let)
-  local +2:11 receiver: Node (const)
+  local +4:11 receiver: Node (const)
+  callee +4:22 unwrapParens -> @unwrapParens
 function admissibleLink(chain: Node): Node | null -> @admissibleLink
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: chain
