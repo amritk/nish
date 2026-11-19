@@ -9,7 +9,7 @@
  *
  * Each `<name>.h` is imported with `<name>.overrides.json` when there is one,
  * for `--target x86_64-unknown-linux-gnu` unless the header's name ends in
- * `_wasm32`, from this directory with relative paths, so the module's
+ * `-wasm32`, from this directory with relative paths, so the module's
  * `Regenerate:` line and every answer clang gives are the same on any host
  * clang runs on. The golden is `<name>.expected.ts`.
  *
@@ -40,7 +40,7 @@ let failed = 0
 for (const header of headers) {
   const name = header.slice(0, -2)
   const golden = `${name}.expected.ts`
-  const target = name.endsWith("_wasm32") ? "wasm32-unknown-unknown" : "x86_64-unknown-linux-gnu"
+  const target = name.endsWith("-wasm32") ? "wasm32-unknown-unknown" : "x86_64-unknown-linux-gnu"
   const args = ["c-import", header]
   if (fs.existsSync(path.join(here, `${name}.overrides.json`))) {
     args.push("--overrides", `${name}.overrides.json`)

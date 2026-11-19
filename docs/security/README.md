@@ -538,6 +538,7 @@ only.
 | PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 | SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A same-user peer that shrinks a region with `ftruncate` makes a later access past the new end a `SIGBUS`, not a checked panic | — |
 | SERVE-14 | Low | `std/net/serve.ts` (`serveOn`, `serveFreeSlot`) | No per-peer share of `inFlight`: one client with `inFlight` connections, each holding a slow request, has every other request answered 503 | #1278 |
+| CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, escape bytes and lines of any file it includes among them, as running clang on the header by hand prints them; the module is not written | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

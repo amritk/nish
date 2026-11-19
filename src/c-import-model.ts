@@ -49,6 +49,10 @@ export const dataModelRefusal = (text: string, wasm: boolean): DataModelRefusal 
   if (end < 0) {
     end = text.length
   }
+  // A module checked out with CRLF line ends records the same model.
+  if (end > from && text.charCodeAt(end - 1) === 13) {
+    end = end - 1
+  }
   const recorded = text.slice(from, end)
   const model = wasm ? "ILP32" : "LP64"
   if (recorded === model) {

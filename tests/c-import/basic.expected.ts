@@ -35,14 +35,15 @@ declare function f2(): string | null
 declare function f6(): i64
 
 /* Not bound:
- *   f3: variadic
- *   f4: returns a function pointer
- *   f5: parameter `cb` is a function pointer
  *   struct bits: field `a` is a bitfield
  *   struct arr: field `a` is an array
  *   union u: a union, which has no Nish type
+ *   f3: variadic
+ *   f4: returns a function pointer
+ *   f5: parameter `cb` is a function pointer
  *   KF: a floating-point constant
  *   FN: a function-like macro
+ *   _PRIV: a name starting with `_`, which C reserves
  *   KE: a string the generator does not copy (escapes or pieces)
  *   KP: a string the generator does not copy (escapes or pieces)
  */

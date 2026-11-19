@@ -86,7 +86,7 @@ Each part of the header becomes one kind of declaration:
 | a function | a `declare function` with the same name |
 | a struct of numbers and pointers | a `declare class` with the same fields; a pointer field is `CPtr \| null` |
 | a struct the header only names (`typedef struct counter counter`) | nothing: a pointer to it is a `CPtr` |
-| an enum constant, an integer `#define` | an `export const` of `i32`, `i64` or `u64` |
+| an enum constant, an integer `#define` | an `export const` of `i32`, `u32`, `i64` or `u64`, by the constant's C type |
 | a string `#define` | an `export const` of `string` |
 | a pointer to a number a function writes into (`int64_t *`) | an out class, `OutI64`, with one `value` field |
 
@@ -103,14 +103,25 @@ The defaults for pointers are the safe ones:
   `CPtr | null`, since C may hand back `NULL`.
 - Any other `char *` result is a `CPtr | null`: the module cannot know
   whether you must free it.
+- A `const` pointer to a number (`const int64_t *`) is a `CPtr | null`, not an
+  out class: C reads it and does not write it.
+- Clang's `_Nonnull` and `_Nullable` on the outermost pointer of a parameter
+  or result set its nullability; on an inner pointer
+  (`const char * _Nonnull *`) they change nothing.
 
-A module that uses an out class declares it, so two modules can each declare
-`OutI64`: they are the same class.
+A module that uses an out class or a struct declares it itself. A class name
+is unique across a program, so two generated modules that both declare
+`OutI64`, or the same struct, cannot be built together (the second is
+refused). To bind two libraries for one program, write a header that includes
+both and generate one module from it, with `allow` naming both libraries'
+functions.
 
 ## Using the module
 
 Import what you need and call it as you would any declared function. The
-library links like any other of your own C, on the build line:
+library is linked the way any other C your program calls is, as
+[Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
+shows:
 
 <!-- nish:ok -->
 ```ts
@@ -142,16 +153,27 @@ The comment at the end of the module names every function, struct and macro
 the command skipped, and why. Nothing is skipped silently. What it does not
 bind today:
 
-- a variadic function (`printf`), one that takes or returns a function
-  pointer (a callback), and a `static` or `inline` function, which has no
-  symbol to link;
+- a variadic function (`printf`), one that takes a `va_list`, one that takes
+  or returns a function pointer (a callback), and a `static` or `inline`
+  function, which has no symbol to link;
+- a function that takes or returns a struct by value, not through a pointer;
 - a function-like macro, or a macro whose value is not an integer or a
   string;
-- a union, a struct with a bitfield or an array in it, a `long double`;
+- a union, a struct with a bitfield or an array in it, a packed struct or one
+  with an `aligned` attribute or under `#pragma pack`, whose layout a
+  `declare class` cannot copy;
+- `long double`, `__int128` and `_Complex`, in any spelling or word order;
 - `signed char` and `short`, which have no Nish width, and a plain `char`
   where the target makes it signed;
-- a declaration from another header the first one includes, unless an
-  override names it (below).
+- a type clang does not resolve to one of the above;
+- a name Nish reserves (`eval`, `Array`, an out class name such as `OutI64`),
+  and a name two declarations want: a function and a struct both called
+  `stat`, or a macro with an enum constant's name. The function, then the out
+  class, then the struct, then the enum constant, then the macro keeps it; the
+  others are listed. A parameter with a reserved name is renamed with a
+  trailing `_` instead;
+- a declaration from another header the first one includes, unless `allow`
+  names it (below).
 
 Write those by hand, beside the generated module, in a file of your own.
 
@@ -174,22 +196,35 @@ says so; pass it with `--overrides`:
 ```
 
 - `header` is the header this file is for; a different header is refused.
-- `allow` lists the names to bind, as globs (`*` matches any run of
-  characters). Without it, every declaration in the header itself is bound;
-  with it, only those names are, from whatever header declared them.
+- `allow` lists the functions to bind, as globs (`*` matches any run of
+  characters). Without it, every function in the header itself is bound;
+  with it, only the functions it names are, from whatever header declared
+  them, and every other function is listed as not bound. It does not select
+  structs, enums or macros: those still come from the header itself.
 - `functions` sets, per function:
   - `"return": "nonnull"` or `"nullable"`, for a pointer result;
   - `"return": { "owned": "<free function>" }`, which records above the
     declaration which function frees the result;
   - per parameter, by name: `"nullable": true` or `false` for a pointer, and
     `"buffer": "<length parameter>"` (with `"readonly": true` for a `const`
-    buffer), which binds a `void *` and its `size_t` length as a `u8[]`.
+    buffer), which binds a `void *` and its length, the next parameter, as a
+    `u8[]`. The length must be a 64-bit integer, so on wasm32, where
+    `size_t` is 32 bits, the pairing is refused.
 
 With this file, `wc_new` returns `CPtr`, `wc_report` carries the comment
 `// The result is owned: free it with wc_free_report.`, and `wc_feed` takes
-`string | null`. An override that names a function, a parameter or a free
-function the header does not have is refused, so a renamed C function cannot
-leave a stale override behind.
+`string | null`. An override that would change nothing is refused, so a
+renamed C function cannot leave a stale override behind: one that names a
+function, a parameter or a free function the header does not have, a function
+that is not bound (variadic, `static`, outside `allow`, or not in the header),
+`"nullable": false`, an empty `"buffer"`, an `allow` glob that matches no
+function, `"nullable"` on a parameter already bound as an out class, or a key
+written twice in one object.
+
+A refused override is a plain `c-import:` or `overrides:` message on stderr
+with exit code 1, like the command's other refusals; it carries no `NL` code,
+since codes name diagnostics in a Nish program and an overrides file is not
+one.
 
 ## Targets and the data model
 
@@ -216,7 +251,7 @@ data model if you build for both.
 | Code | Meaning |
 | --- | --- |
 | 0 | the module was written |
-| 1 | refused: the header or overrides file cannot be read, a scratch directory cannot be made beside the output, a path holds a quote, a backslash or a line break, clang rejected the header, or an override is wrong |
+| 1 | refused: the header or overrides file cannot be read, `-o` is the header itself, a scratch directory cannot be made beside the output, a path holds a quote, a backslash or a line break, clang rejected the header, or an override is wrong |
 | 2 | usage: no header, no `-o`, an unknown flag or target |
 | 3 | `clang` (or `CC`) cannot run |
 

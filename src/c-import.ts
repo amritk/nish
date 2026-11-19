@@ -30,6 +30,7 @@ import {
   JSON_VALUE_ARRAY,
   JSON_VALUE_BOOLEAN,
   JSON_VALUE_MAX_VALUES,
+  JSON_VALUE_NUMBER,
   JSON_VALUE_OBJECT,
   JSON_VALUE_STRING,
   JsonDocument,
@@ -120,8 +121,137 @@ const isCReservedWord = (name: string): boolean =>
   name === "implements" ||
   name === "instanceof"
 
-/** A C name as a Nish identifier: a reserved word gets a trailing `_`. */
-const nishName = (name: string): string => (isCReservedWord(name) ? `${name}_` : name)
+/** The words Nish's parser refuses as a field name (checked against the compiler). */
+const isFieldReserved = (name: string): boolean =>
+  name === "if" ||
+  name === "do" ||
+  name === "new" ||
+  name === "let" ||
+  name === "for" ||
+  name === "else" ||
+  name === "case" ||
+  name === "this" ||
+  name === "null" ||
+  name === "true" ||
+  name === "while" ||
+  name === "break" ||
+  name === "false" ||
+  name === "class" ||
+  name === "const" ||
+  name === "super" ||
+  name === "throw" ||
+  name === "return" ||
+  name === "export" ||
+  name === "import" ||
+  name === "switch" ||
+  name === "default" ||
+  name === "extends" ||
+  name === "function" ||
+  name === "continue" ||
+  name === "debugger" ||
+  name === "undefined" ||
+  name === "interface" ||
+  name === "prototype" ||
+  name === "implements"
+
+/** The names a function, constant or parameter may not have. */
+const isNameReserved = (name: string): boolean =>
+  isCReservedWord(name) ||
+  isFieldReserved(name) ||
+  name === "var" ||
+  name === "catch" ||
+  name === "eval" ||
+  name === "Symbol" ||
+  name === "arguments"
+
+/** The out classes a module may declare, whose names nothing else may take. */
+const isOutName = (name: string): boolean =>
+  name === "OutPtr" ||
+  name === "OutI32" ||
+  name === "OutU32" ||
+  name === "OutI64" ||
+  name === "OutU64" ||
+  name === "OutU8" ||
+  name === "OutU16" ||
+  name === "OutF32" ||
+  name === "OutF64"
+
+/** The names a `declare class` may not have: reserved words and Nish's own types. */
+const isClassReserved = (name: string): boolean =>
+  isNameReserved(name) ||
+  isOutName(name) ||
+  name === "any" ||
+  name === "unknown" ||
+  name === "never" ||
+  name === "object" ||
+  name === "symbol" ||
+  name === "bigint" ||
+  name === "readonly" ||
+  name === "i8" ||
+  name === "i16" ||
+  name === "i32" ||
+  name === "i64" ||
+  name === "u8" ||
+  name === "u16" ||
+  name === "u32" ||
+  name === "u64" ||
+  name === "f32" ||
+  name === "f64" ||
+  name === "isize" ||
+  name === "usize" ||
+  name === "CPtr" ||
+  name === "Array" ||
+  name === "Map" ||
+  name === "Set" ||
+  name === "Promise" ||
+  name === "Error"
+
+/** A C parameter name as a Nish identifier: a reserved word gets a trailing `_`. */
+const nishName = (name: string): string => (isNameReserved(name) ? `${name}_` : name)
+
+/**
+ * `path` as one shell word for the `Regenerate:` line: as it is when every
+ * character is one a shell leaves alone, else in single quotes (a path with a
+ * quote never gets here: `unsafePath` refuses it).
+ */
+const shellWord = (path: string): string => {
+  for (let i = 0; i < path.length; i++) {
+    const c = path.charCodeAt(i)
+    const plain =
+      (c >= 48 && c <= 57) ||
+      (c >= 65 && c <= 90) ||
+      (c >= 97 && c <= 122) ||
+      c === 43 ||
+      c === 44 ||
+      c === 45 ||
+      c === 46 ||
+      c === 47 ||
+      c === 58 ||
+      c === 61 ||
+      c === 64 ||
+      c === 95
+    if (!plain) {
+      return `'${path}'`
+    }
+  }
+  return path.length > 0 ? path : "''"
+}
+
+/** Sorts `report` by `lines`, keeping the order of entries on one line (an insertion sort). */
+const sortReport = (report: string[], lines: i32[]): void => {
+  for (let i = 1; i < report.length && i < lines.length; i++) {
+    const entry = report[i]
+    const line = lines[i]
+    let j = i - 1
+    while (j >= 0 && j < lines.length && j < report.length && lines[j] > line) {
+      report[j + 1] = report[j]
+      lines[j + 1] = lines[j]
+      j--
+    }
+    report[j + 1] = entry
+    lines[j + 1] = line
+  }
+}
 
 /** `s` without the spaces and tabs at either end. */
 const trimSpaces = (s: string): string => {
@@ -216,7 +346,7 @@ const globMatches = (glob: string, name: string): boolean => {
 const unsafePath = (path: string): boolean => {
   for (let i = 0; i < path.length; i++) {
     const c = path.charCodeAt(i)
-    if (c < 32 || c === 127 || c === 34 || c === 92) {
+    if (c < 32 || c === 127 || c === 34 || c === 39 || c === 92) {
       return true
     }
   }
@@ -306,8 +436,11 @@ class CType {
   pointers: i32 = 0
   /** Whether the innermost pointed-to type is `const`. */
   constBase: boolean = false
+  /** The outermost pointer's nullability qualifier, as spelled or through a typedef. */
   nullable: boolean = false
   nonnull: boolean = false
+  /** A typedef with its own `aligned` attribute, held by value: not the scalar's natural layout. */
+  aligned: boolean = false
   /** Why it has no Nish type, for `BASE_REFUSED`. */
   reason: string = ""
 
@@ -337,6 +470,14 @@ class CRecord {
   fit: i32
   /** Why it is not a `declare class`, once `fit` is `FIT_NO`. */
   why: string = ""
+  /** The header line it is declared on, for the order of the report. */
+  line: i32 = 0
+  /** The attribute that gives it other than natural layout, or empty. */
+  layout: string = ""
+  /** Named by a `typedef struct { ... } name;`, not by a tag of its own. */
+  typedefNamed: boolean = false
+  /** Why its name cannot be a class in the module, or empty. */
+  nameClash: string = ""
 
   constructor() {
     this.fieldNames = []
@@ -353,10 +494,12 @@ class CEnum {
   inHeader: boolean = false
   constNames: string[]
   constValues: i64[]
+  constLines: i32[]
 
   constructor() {
     this.constNames = []
     this.constValues = []
+    this.constLines = []
   }
 }
 
@@ -368,6 +511,7 @@ class CFunc {
   noSymbol: boolean = false
   inHeader: boolean = false
   returnsNonNull: boolean = false
+  line: i32 = 0
   paramNames: string[]
   paramTypes: string[]
 
@@ -385,6 +529,7 @@ class CMacro {
   why: string = ""
   value: i64 = 0
   type: string = ""
+  line: i32 = 0
 }
 
 /** What the override file says about one function. */
@@ -438,6 +583,7 @@ const parseArgs = (argv: string[]): CImportArgs => {
         "  --overrides <file>  the JSON that names what the header cannot say (buffers, nullability)"
       )
       console.log("  --target <triple>   the target whose ABI the module is for (default: host)")
+      console.log("  -o <file>           the module to write; it may not be the header itself")
       args.status = 0
       return args
     }
@@ -492,8 +638,11 @@ class Importer {
   /** The status `failure` exits with. */
   failureStatus: i32 = 1
   curFile: string = ""
+  curLine: i32 = 0
   typedefs: StringMap
   typedefTypes: string[]
+  /** Per typedef, whether it carries its own `aligned` attribute. */
+  typedefAligned: boolean[]
   tags: StringMap
   recordIds: StringMap
   enumIds: StringMap
@@ -515,6 +664,7 @@ class Importer {
   constructor(triple: string, headerAbs: string) {
     this.typedefs = new StringMap()
     this.typedefTypes = []
+    this.typedefAligned = []
     this.tags = new StringMap()
     this.recordIds = new StringMap()
     this.enumIds = new StringMap()
@@ -612,13 +762,22 @@ class Importer {
     if (file.length > 0) {
       this.curFile = file
     }
+    const line = this.member(loc, "line")
+    if (line >= 0 && this.doc.kind(line) === JSON_VALUE_NUMBER) {
+      this.curLine = parseInt(this.doc.numberText(line))
+    }
+  }
+
+  /** Carries the state through `node`'s own range, not its children. */
+  trackRange(node: i32): void {
+    const range = this.member(node, "range")
+    this.trackLoc(this.member(range, "begin"))
+    this.trackLoc(this.member(range, "end"))
   }
 
   /** Carries the file state through `node`'s range and its children. */
   trackRest(node: i32): void {
-    const range = this.member(node, "range")
-    this.trackLoc(this.member(range, "begin"))
-    this.trackLoc(this.member(range, "end"))
+    this.trackRange(node)
     const children = this.inner(node)
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
@@ -635,7 +794,10 @@ class Importer {
     this.doc.clear()
     const root = this.doc.parse(bytes, 0, bytes.length)
     if (root < 0) {
-      this.fail(`cannot read clang's AST of ${what} (deeper than 64 or more than 4194304 values)`, 1)
+      this.fail(
+        `cannot read clang's AST of ${what}: not JSON, or deeper than 64 or more than 4194304 values`,
+        1
+      )
     }
     return root
   }
@@ -651,6 +813,7 @@ class Importer {
       `--target=${this.triple}`,
       "-x",
       "c",
+      "--",
       source,
     ]
     return this.clang(argv, "")
@@ -681,7 +844,9 @@ class Importer {
       } else if (kind === "RecordDecl") {
         this.readRecord(node, inHeader)
       } else if (kind === "EnumDecl") {
+        // Reads its enumerators' lines in document order, carrying the state.
         this.readEnum(node, inHeader)
+        continue
       } else if (kind === "FunctionDecl") {
         this.readFunction(node, inHeader)
       }
@@ -699,9 +864,17 @@ class Importer {
     }
     this.typedefs.set(name, this.typedefTypes.length)
     this.typedefTypes.push(this.qualType(node))
+    const children = this.inner(node)
+    let aligned = false
+    for (let i = 0; i < this.count(children); i++) {
+      if (this.text(this.doc.at(children, i), "kind") === "AlignedAttr") {
+        aligned = true
+      }
+    }
+    this.typedefAligned.push(aligned)
     // `typedef struct { ... } name;`: the tag has no name of its own, and
     // clang spells it `struct name` from here on.
-    const owned = this.member(this.doc.at(this.inner(node), 0), "ownedTagDecl")
+    const owned = this.member(this.doc.at(children, 0), "ownedTagDecl")
     if (owned < 0 || this.text(owned, "name").length > 0) {
       return
     }
@@ -709,8 +882,21 @@ class Importer {
     const record = this.recordIds.get(id, -1)
     if (record >= 0 && record < this.records.length) {
       const r = this.records[record]
-      r.key = `${r.isUnion ? "union" : "struct"} ${name}`
+      const key = `${r.isUnion ? "union" : "struct"} ${name}`
+      const other = this.tags.get(key, -1)
+      if (other >= 0 && other < this.records.length) {
+        // A struct tagged `name` exists too, and clang spells both `struct
+        // name`: which one a use means cannot be told, so neither is bound.
+        const clash = `a struct tag and a typedef both name \`${name}\``
+        this.records[other].nameClash = clash
+        r.nameClash = clash
+        r.key = `typedef ${name}`
+        r.className = name
+        return
+      }
+      r.key = key
       r.className = name
+      r.typedefNamed = true
       this.tags.set(r.key, record)
     }
     const e = this.enumIds.get(id, -1)
@@ -725,12 +911,28 @@ class Importer {
     const key = name.length > 0 ? `${isUnion ? "union" : "struct"} ${name}` : ""
     const complete = this.flag(node, "completeDefinition")
     let index = key.length > 0 ? this.tags.get(key, -1) : -1
+    if (index >= 0 && index < this.records.length && this.records[index].typedefNamed) {
+      // `typedef struct { ... } name;` came first and took `struct name`.
+      const clash = `a struct tag and a typedef both name \`${name}\``
+      this.records[index].nameClash = clash
+      this.records[index].key = `typedef ${name}`
+      const twin = new CRecord()
+      twin.key = key
+      twin.className = name
+      twin.isUnion = isUnion
+      twin.nameClash = clash
+      twin.line = this.curLine
+      this.recordIds.set(this.text(node, "id"), this.records.length)
+      this.records.push(twin)
+      return
+    }
     if (index < 0 || index >= this.records.length) {
       index = this.records.length
       const fresh = new CRecord()
       fresh.key = key
       fresh.className = name
       fresh.isUnion = isUnion
+      fresh.line = this.curLine
       this.records.push(fresh)
       if (key.length > 0) {
         this.tags.set(key, index)
@@ -743,6 +945,7 @@ class Importer {
     }
     r.complete = true
     r.inHeader = inHeader
+    r.line = this.curLine
     const children = this.inner(node)
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
@@ -752,8 +955,17 @@ class Importer {
         r.fieldNames.push(this.text(child, "name"))
         r.fieldTypes.push(this.qualType(child))
         r.fieldBitfields.push(this.flag(child, "isBitfield"))
+        const attrs = this.inner(child)
+        for (let j = 0; j < this.count(attrs); j++) {
+          const attr = this.text(this.doc.at(attrs, j), "kind")
+          if (attr === "AlignedAttr" || attr === "PackedAttr") {
+            r.layout = r.layout.length > 0 ? r.layout : `${attr} on field \`${this.text(child, "name")}\``
+          }
+        }
       } else if (kind === "RecordDecl") {
         this.readRecord(child, inHeader)
+      } else if (kind === "PackedAttr" || kind === "AlignedAttr" || kind === "MaxFieldAlignmentAttr") {
+        r.layout = r.layout.length > 0 ? r.layout : kind
       }
     }
   }
@@ -770,17 +982,21 @@ class Importer {
       this.enumTags.set(`enum ${e.name}`, index)
     }
     let next: i64 = 0
+    this.trackRange(node)
     const children = this.inner(node)
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
       const child = this.doc.at(children, i)
+      this.trackLoc(this.member(child, "loc"))
       if (this.text(child, "kind") === "EnumConstantDecl") {
         const value = this.text(this.doc.at(this.inner(child), 0), "value")
         const v = value.length > 0 ? parseI64(value) : next
         e.constNames.push(this.text(child, "name"))
         e.constValues.push(v)
+        e.constLines.push(this.curLine)
         next = v + 1
       }
+      this.trackRest(child)
     }
   }
 
@@ -795,6 +1011,7 @@ class Importer {
     f.variadic = this.flag(node, "variadic")
     f.noSymbol = this.text(node, "storageClass") === "static" || this.flag(node, "inline")
     f.inHeader = inHeader
+    f.line = this.curLine
     const children = this.inner(node)
     const n = this.count(children)
     for (let i = 0; i < n; i++) {
@@ -818,6 +1035,17 @@ class Importer {
 
   /** The C type clang spells `spelling`, following typedefs. */
   resolve(spelling: string): CType {
+    // Words whose type this file cannot read in any position: refused before
+    // the parenthesis checks, since `_Atomic(int)` and `_BitInt(8)` hold one.
+    if (spelling.indexOf("_Atomic") >= 0) {
+      return refusedType("an `_Atomic` type")
+    }
+    if (spelling.indexOf("_BitInt") >= 0) {
+      return refusedType("a `_BitInt`")
+    }
+    if (spelling.indexOf("__attribute__") >= 0 || spelling.indexOf("typeof") >= 0) {
+      return refusedType(`a type the generator cannot read (\`${spelling}\`)`)
+    }
     if (spelling.indexOf("(*") >= 0 || spelling.indexOf("(^") >= 0) {
       const fn = new CType()
       fn.base = BASE_FNPTR
@@ -836,15 +1064,19 @@ class Importer {
     const words = typeWords(spelling)
     let pointers = 0
     let constBase = false
+    // A nullability qualifier follows the `*` it qualifies, so each `*` starts
+    // the next pointer's state afresh and what is left is the outermost one's.
     let nullable = false
     let nonnull = false
     let tagWord = ""
     let tagName = ""
     let named = ""
     let longs = 0
+    let isShort = false
     let isUnsigned = false
     let isSigned = false
     let builtin = ""
+    let refusedWord = ""
     for (let i = 0; i < words.length; i++) {
       const w = words[i]
       if (
@@ -860,9 +1092,11 @@ class Importer {
         tagName = w
       } else if (w === "*") {
         pointers++
+        nullable = false
+        nonnull = false
       } else if (w === "const") {
         constBase = constBase || pointers === 0
-      } else if (w === "_Nullable") {
+      } else if (w === "_Nullable" || w === "_Nullable_result") {
         nullable = true
       } else if (w === "_Nonnull") {
         nonnull = true
@@ -870,53 +1104,77 @@ class Importer {
         tagWord = w
       } else if (w === "long") {
         longs++
+      } else if (w === "short") {
+        isShort = true
       } else if (w === "unsigned") {
         isUnsigned = true
       } else if (w === "signed") {
         isSigned = true
       } else if (
-        w === "int" ||
-        w === "char" ||
-        w === "short" ||
-        w === "float" ||
-        w === "double" ||
-        w === "void" ||
-        w === "_Bool" ||
-        w === "__int128" ||
         w === "_Complex" ||
+        w === "_Imaginary" ||
+        w === "__int128" ||
         w === "_Float16" ||
         w === "__fp16" ||
-        w === "__bf16"
+        w === "__bf16" ||
+        w === "_Float128" ||
+        w === "__float128" ||
+        w === "__ibm128"
       ) {
-        builtin = builtin === "double" || builtin === "float" ? builtin : w
+        refusedWord = w
+      } else if (w === "int") {
+        builtin = builtin.length === 0 ? w : builtin
+      } else if (w === "char" || w === "float" || w === "double" || w === "void" || w === "_Bool") {
+        builtin = w
       } else {
         named = w
       }
     }
     let t = new CType()
-    if (tagWord === "enum") {
+    if (refusedWord.length > 0) {
+      t = refusedType(`\`${refusedWord}\`, which has no Nish type`)
+    } else if (tagWord === "enum") {
       t = this.enumType(tagName)
+    } else if (tagWord.length > 0 && tagName.startsWith("__va_list")) {
+      // A `va_list` parameter decays to a pointer to clang's own tag: the
+      // pointer is the decay, not the C type the header wrote.
+      return refusedType("a `va_list`")
     } else if (tagWord.length > 0) {
       t.base = BASE_RECORD
       t.tag = `${tagWord} ${tagName}`
     } else if (named.length > 0) {
       if (named.indexOf("va_list") >= 0) {
-        return refusedType("a `va_list`")
+        t = refusedType("a `va_list`")
+        t.pointers = pointers
+        return t
       }
       const index = this.typedefs.get(named, -1)
-      if (index < 0 || index >= this.typedefTypes.length) {
-        return refusedType(`the unknown type \`${named}\``)
+      if (index < 0 || index >= this.typedefTypes.length || index >= this.typedefAligned.length) {
+        t = refusedType(`the unknown type \`${named}\``)
+        t.pointers = pointers
+        return t
       }
       t = this.resolve(this.typedefTypes[index])
       if (t.pointers === 0) {
         t.constBase = t.constBase || constBase
       }
+      if (pointers > 0) {
+        // The outermost pointer is spelled here, so its qualifier is the one
+        // spelled here; the typedef's own qualifies a pointer further in.
+        t.nullable = nullable
+        t.nonnull = nonnull
+        t.aligned = false
+      } else {
+        if (nullable || nonnull) {
+          t.nullable = nullable
+          t.nonnull = nonnull
+        }
+        t.aligned = t.aligned || this.typedefAligned[index]
+      }
       t.pointers += pointers
-      t.nullable = t.nullable || nullable
-      t.nonnull = t.nonnull || nonnull
       return t
     } else {
-      t = this.builtinType(builtin, longs, isUnsigned, isSigned)
+      t = this.builtinType(isShort ? "short" : builtin, longs, isUnsigned, isSigned)
     }
     t.pointers = pointers
     t.constBase = constBase
@@ -967,10 +1225,6 @@ class Importer {
       t.scalar = "f64"
     } else if (builtin === "float") {
       t.scalar = "f32"
-    } else if (builtin === "__int128" || builtin === "_Complex") {
-      return refusedType(`\`${builtin}\``)
-    } else if (builtin.length > 0 && builtin !== "int") {
-      return refusedType("a half-precision float")
     } else if (longs === 0 && builtin.length === 0 && !isUnsigned && !isSigned) {
       return refusedType("a type the generator cannot read")
     } else if (longs === 2 || (longs === 1 && this.lp64)) {
@@ -1038,6 +1292,12 @@ class Importer {
     if (!r.complete || !r.inHeader) {
       return "not defined in the header"
     }
+    if (r.nameClash.length > 0) {
+      return r.nameClash
+    }
+    if (r.layout.length > 0) {
+      return `packed or aligned layout (${r.layout}), which a declare class does not follow`
+    }
     if (r.fieldNames.length === 0) {
       return "no fields"
     }
@@ -1048,6 +1308,9 @@ class Importer {
       }
       if (r.fieldBitfields[i]) {
         return `${field}a bitfield`
+      }
+      if (isFieldReserved(r.fieldNames[i])) {
+        return `${field}named with a word Nish reserves`
       }
       const type = this.fieldType(this.resolve(r.fieldTypes[i]))
       if (type.startsWith("!")) {
@@ -1061,6 +1324,9 @@ class Importer {
   fieldType(t: CType): string {
     if (t.base === BASE_FNPTR || (t.pointers > 0 && t.base !== BASE_REFUSED)) {
       return "CPtr | null"
+    }
+    if (t.aligned) {
+      return "!a typedef with its own `aligned` attribute"
     }
     if (t.base === BASE_RECORD) {
       const index = this.recordOf(t.tag)
@@ -1118,6 +1384,10 @@ class Importer {
       if (t.scalar === "boolean") {
         return "!a pointer to `_Bool`"
       }
+      if (t.constBase) {
+        // The function reads through it: an out class would say it writes.
+        return nonnull || t.nonnull ? "CPtr" : "CPtr | null"
+      }
       return this.outClass(t.scalar)
     }
     if (t.base === BASE_RECORD) {
@@ -1155,7 +1425,7 @@ class Importer {
 
   /** The object-like macros the header's own file defines, from `clang -E -dD`. */
   readMacros(): void {
-    const argv: string[] = [this.cc, "-E", "-dD", `--target=${this.triple}`, "-x", "c", this.headerAbs]
+    const argv: string[] = [this.cc, "-E", "-dD", `--target=${this.triple}`, "-x", "c", "--", this.headerAbs]
     const run = this.clang(argv, "")
     if (this.failure.length > 0) {
       return
@@ -1166,6 +1436,9 @@ class Importer {
     }
     const lines = splitByte(clangText(run.out), 10)
     let file = ""
+    // A line marker `# N "file"` says the next line is line N of `file`; every
+    // other output line is the one after the last.
+    let lineNo = 0
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       if (line.startsWith("# ")) {
@@ -1173,20 +1446,30 @@ class Importer {
         const close = line.indexOf('"', open + 1)
         if (open > 0 && close > open) {
           file = line.slice(open + 1, close)
+          lineNo = parseInt(line.slice(2, open))
         }
-      } else if (file === this.headerAbs && line.startsWith("#define ")) {
-        this.readDefine(line.slice(8))
+        continue
       }
+      if (file === this.headerAbs && line.startsWith("#define ")) {
+        this.readDefine(line.slice(8), lineNo)
+      } else if (file === this.headerAbs && line.startsWith("#undef ")) {
+        const index = this.macroIndex.get(trimSpaces(line.slice(7)), -1)
+        if (index >= 0 && index < this.macros.length) {
+          this.macros[index].why = "removed by a later `#undef`"
+          this.macros[index].type = ""
+        }
+      }
+      lineNo++
     }
   }
 
-  readDefine(rest: string): void {
+  readDefine(rest: string, line: i32): void {
     let end = 0
     while (end < rest.length && isIdentByte(rest.charCodeAt(end))) {
       end++
     }
     const name = rest.slice(0, end)
-    if (name.length === 0 || name.startsWith("_")) {
+    if (name.length === 0) {
       return
     }
     let index = this.macroIndex.get(name, -1)
@@ -1199,8 +1482,12 @@ class Importer {
     }
     const m = this.macros[index]
     m.why = ""
+    m.type = ""
+    m.line = line
     m.body = trimSpaces(rest.slice(end))
-    if (end < rest.length && rest.charCodeAt(end) === 40) {
+    if (name.startsWith("_")) {
+      m.why = "a name starting with `_`, which C reserves"
+    } else if (end < rest.length && rest.charCodeAt(end) === 40) {
       m.why = "a function-like macro"
     } else if (m.body.length === 0) {
       m.why = "an empty macro"
@@ -1248,6 +1535,7 @@ class Importer {
     argv.push(`--target=${this.triple}`)
     argv.push("-x")
     argv.push("c")
+    argv.push("--")
     argv.push(this.probePath())
     return argv
   }
@@ -1418,8 +1706,15 @@ class Importer {
     }
     this.doc.clear()
     const root = this.doc.parseText(text)
-    if (root < 0 || this.doc.kind(root) !== JSON_VALUE_OBJECT) {
+    if (root < 0) {
+      this.fail(`overrides: ${path} is not JSON, or holds one key twice in an object`, 1)
+      return
+    }
+    if (this.doc.kind(root) !== JSON_VALUE_OBJECT) {
       this.fail(`overrides: ${path} is not a JSON object`, 1)
+      return
+    }
+    if (this.refuseDuplicate(root, "the file")) {
       return
     }
     for (let i = 0; i < this.doc.length(root); i++) {
@@ -1437,6 +1732,29 @@ class Importer {
         this.fail(`overrides: unknown key "${key}"`, 1)
       }
     }
+    for (let i = 0; i < this.allow.length && this.failure.length === 0; i++) {
+      let matched = false
+      for (let j = 0; j < this.funcs.length && !matched; j++) {
+        matched = globMatches(this.allow[i], this.funcs[j].name)
+      }
+      if (!matched) {
+        this.fail(`overrides: "allow" glob "${this.allow[i]}" matches no function the header declares`, 1)
+      }
+    }
+  }
+
+  /** Refuses an object that holds one key twice, which JSON readers settle differently. */
+  refuseDuplicate(object: i32, where: string): boolean {
+    const seen = new StringSet()
+    for (let i = 0; i < this.doc.length(object); i++) {
+      const key = this.doc.keyAt(object, i)
+      if (seen.has(key)) {
+        this.fail(`overrides: ${where} holds the key "${key}" twice`, 1)
+        return true
+      }
+      seen.add(key)
+    }
+    return false
   }
 
   readAllow(value: i32): void {
@@ -1460,6 +1778,9 @@ class Importer {
       this.fail('overrides: "functions" must be an object', 1)
       return
     }
+    if (this.refuseDuplicate(value, '"functions"')) {
+      return
+    }
     for (let i = 0; i < this.doc.length(value); i++) {
       const name = this.doc.keyAt(value, i)
       const body = this.doc.at(value, i)
@@ -1468,8 +1789,16 @@ class Importer {
         this.fail(`overrides: \`${name}\` is not a function the header declares`, 1)
         return
       }
+      const unbound = this.whyUnbound(this.funcs[index])
+      if (unbound.length > 0) {
+        this.fail(`overrides: \`${name}\` is not bound (${unbound}), so an override cannot change it`, 1)
+        return
+      }
       if (this.doc.kind(body) !== JSON_VALUE_OBJECT) {
         this.fail(`overrides: \`${name}\` must be an object`, 1)
+        return
+      }
+      if (this.refuseDuplicate(body, `\`${name}\``)) {
         return
       }
       const o = new FnOverride()
@@ -1505,8 +1834,14 @@ class Importer {
     }
     const owner = this.text(value, "owned")
     if (kind === JSON_VALUE_OBJECT && this.doc.length(value) === 1 && owner.length > 0) {
-      if (!this.funcIndex.has(owner)) {
+      const freer = this.funcIndex.get(owner, -1)
+      if (freer < 0 || freer >= this.funcs.length) {
         this.fail(`overrides: \`${o.name}\` is freed by \`${owner}\`, which the header does not declare`, 1)
+        return
+      }
+      const unbound = this.whyUnbound(this.funcs[freer])
+      if (unbound.length > 0) {
+        this.fail(`overrides: \`${o.name}\` is freed by \`${owner}\`, which is not bound (${unbound})`, 1)
         return
       }
       o.returnMode = RETURN_OWNED
@@ -1535,6 +1870,9 @@ class Importer {
       this.fail(`overrides: ${where} must be an object`, 1)
       return
     }
+    if (this.refuseDuplicate(value, where)) {
+      return
+    }
     let buffer = ""
     let readonly = false
     let nullable = false
@@ -1544,10 +1882,18 @@ class Importer {
       const isBool = this.doc.kind(v) === JSON_VALUE_BOOLEAN
       if (key === "buffer" && this.doc.kind(v) === JSON_VALUE_STRING) {
         buffer = this.doc.string(v)
+        if (buffer.length === 0) {
+          this.fail(`overrides: ${where}: "buffer" must name the count parameter`, 1)
+          return
+        }
       } else if (key === "readonly" && isBool) {
         readonly = this.doc.boolean(v)
       } else if (key === "nullable" && isBool) {
         nullable = this.doc.boolean(v)
+        if (!nullable) {
+          this.fail(`overrides: ${where}: "nullable": false changes nothing; only true has an effect`, 1)
+          return
+        }
       } else {
         this.fail(`overrides: ${where}: unknown or mistyped key "${key}"`, 1)
         return
@@ -1557,6 +1903,19 @@ class Importer {
     if (nullable && t.pointers === 0) {
       this.fail(`overrides: ${where} is not a pointer, so it cannot be nullable`, 1)
       return
+    }
+    if (nullable && buffer.length === 0) {
+      // Only a type that `nullable` widens to `| null` takes it: one already
+      // nullable, an out class or a refused type would ignore it.
+      const before = this.paramType(t, false, false)
+      this.pendingOut = []
+      if (before.startsWith("!") || before.startsWith("Out") || before.endsWith(" | null")) {
+        this.fail(
+          `overrides: ${where} is bound as \`${before.startsWith("!") ? "not bound" : before}\` already, so "nullable" changes nothing`,
+          1
+        )
+        return
+      }
     }
     if (buffer.length > 0) {
       if (t.pointers !== 1 || (t.base !== BASE_VOID && t.base !== BASE_CHAR)) {
@@ -1605,6 +1964,23 @@ class Importer {
   }
 
   // ---- The module ----
+
+  /**
+   * Why a declared function gets no `declare function` whatever the override
+   * file says, or the empty string when it may get one.
+   */
+  whyUnbound(f: CFunc): string {
+    if (!this.selected(f)) {
+      return this.hasAllow ? '"allow" does not name it' : "declared in another header"
+    }
+    if (f.noSymbol) {
+      return "static or inline"
+    }
+    if (f.variadic) {
+      return "variadic"
+    }
+    return ""
+  }
 
   /** Whether the function is one the module binds or reports. */
   selected(f: CFunc): boolean {
@@ -1711,13 +2087,25 @@ class Importer {
     out.add("}\n\n")
   }
 
-  /** Writes `export const name: type = value` unless the name is already taken. */
-  constDecl(name: string, value: i64, type: string, out: StringBuilder, names: StringSet): void {
-    if (names.has(name)) {
-      return
+  /**
+   * Why the constant `name` cannot be declared: a reserved word, or a name the
+   * module already gives to a function, class or earlier constant. Empty when
+   * it can, and then the name is claimed.
+   */
+  claimConst(name: string, names: StringMap, owners: string[]): string {
+    if (isNameReserved(name)) {
+      return "a word Nish reserves"
     }
-    names.add(name)
-    out.add(`export const ${name}: ${type} = ${value}\n`)
+    if (isOutName(name)) {
+      return "the name of an out class the module may declare"
+    }
+    const owner = names.get(name, -1)
+    if (owner >= 0 && owner < owners.length) {
+      return `the module already gives \`${name}\` to ${owners[owner]}`
+    }
+    names.set(name, owners.length)
+    owners.push("an earlier constant")
+    return ""
   }
 
   /** The type of an enumerator: the enum's fixed type, else `i32` when the value fits. */
@@ -1733,27 +2121,67 @@ class Importer {
   emit(args: CImportArgs): string {
     const out = new StringBuilder()
     const regenerate = new StringBuilder()
-    regenerate.add(`${CLI} c-import ${args.header}`)
+    regenerate.add(`${CLI} c-import ${shellWord(args.header)}`)
     if (args.overrides.length > 0) {
-      regenerate.add(` --overrides ${args.overrides}`)
+      regenerate.add(` --overrides ${shellWord(args.overrides)}`)
     }
-    regenerate.add(` --target ${this.triple} -o ${basename(args.out)}`)
+    regenerate.add(` --target ${this.triple} -o ${shellWord(basename(args.out))}`)
     out.add(`${C_IMPORT_MARKER} from ${args.header}. Do not edit; regenerate it.\n`)
     out.add(`// Target: ${this.triple}\n`)
     out.add(`${DATA_MODEL_LINE}${dataModelOf(this.triple)}\n`)
     out.add(`// Regenerate: ${regenerate.toText()}\n\n`)
 
+    // The report lists what is not bound in header order: each entry carries
+    // its declaration's line, and functions from other headers go last.
     const report: string[] = []
+    const reportLines: i32[] = []
+
+    // The names the module gives out, each to its first claimant: functions,
+    // then classes, then constants, so a constant never shadows a declaration.
+    const names = new StringMap()
+    const owners: string[] = []
+    const candidates = new StringSet()
+    for (let i = 0; i < this.funcs.length; i++) {
+      const f = this.funcs[i]
+      if (this.selected(f) && !f.noSymbol && !f.variadic && !isNameReserved(f.name) && !isOutName(f.name)) {
+        candidates.add(f.name)
+      }
+    }
+    // A struct's name is decided before any `fits`, so a pointer to a struct
+    // that loses its name is a `CPtr` everywhere.
+    const classNames = new StringSet()
+    for (let i = 0; i < this.records.length; i++) {
+      const r = this.records[i]
+      if (!r.inHeader || !r.complete || r.className.length === 0 || r.isUnion || r.nameClash.length > 0) {
+        continue
+      }
+      if (isClassReserved(r.className)) {
+        r.nameClash = `its name \`${r.className}\` is a word or type Nish reserves`
+      } else if (candidates.has(r.className)) {
+        r.nameClash = `the module gives \`${r.className}\` to the function \`${r.className}\``
+      } else if (classNames.has(r.className)) {
+        r.nameClash = `the module already gives \`${r.className}\` to another struct`
+      } else {
+        classNames.add(r.className)
+      }
+    }
+
     const functions = new StringBuilder()
     for (let i = 0; i < this.funcs.length; i++) {
       const f = this.funcs[i]
       if (this.selected(f)) {
         this.pendingOut = []
-        const decl = this.functionDecl(f)
+        let decl = this.functionDecl(f)
+        if (!decl.startsWith("!") && (isNameReserved(f.name) || isOutName(f.name))) {
+          decl = "!its name is a word or type Nish reserves"
+        }
         if (decl.startsWith("!")) {
           report.push(`${f.name}: ${decl.slice(1)}`)
+          reportLines.push(f.inHeader ? f.line : 1000000000 + i)
         } else {
           functions.add(`${decl}\n`)
+          names.set(f.name, owners.length)
+          owners.push(`the function \`${f.name}\``)
           for (let j = 0; j < this.pendingOut.length; j++) {
             this.usedOut.add(this.pendingOut[j])
           }
@@ -1789,38 +2217,53 @@ class Importer {
       if (r.inHeader && r.complete && r.className.length > 0) {
         if (this.fits(i)) {
           this.emitClass(i, out, done)
+          names.set(r.className, owners.length)
+          owners.push(`the struct \`${r.key}\``)
         } else {
           report.push(`${r.key}: ${r.why}`)
+          reportLines.push(r.line)
         }
+      } else if (r.nameClash.length > 0 && r.className.length > 0) {
+        report.push(`${r.key.length > 0 ? r.key : r.className}: ${r.nameClash}`)
+        reportLines.push(r.line)
       }
     }
 
-    const names = new StringSet()
     const consts = new StringBuilder()
     for (let i = 0; i < this.enums.length; i++) {
       const e = this.enums[i]
-      for (let j = 0; e.inHeader && j < e.constNames.length && j < e.constValues.length; j++) {
+      for (
+        let j = 0;
+        e.inHeader && j < e.constNames.length && j < e.constValues.length && j < e.constLines.length;
+        j++
+      ) {
+        const name = e.constNames[j]
         const type = this.enumConstType(e, e.constValues[j])
-        if (type.length > 0) {
-          this.constDecl(e.constNames[j], e.constValues[j], type, consts, names)
+        const why =
+          type.length > 0
+            ? this.claimConst(name, names, owners)
+            : "an enumerator of a type that has no Nish scalar"
+        if (why.length > 0) {
+          report.push(`${name}: ${why}`)
+          reportLines.push(e.constLines[j])
         } else {
-          report.push(`${e.constNames[j]}: an enumerator of a type that has no Nish scalar`)
+          consts.add(`export const ${name}: ${type} = ${e.constValues[j]}\n`)
         }
       }
     }
     for (let i = 0; i < this.macros.length; i++) {
       const m = this.macros[i]
-      if (m.why.length > 0) {
-        report.push(`${m.name}: ${m.why}`)
+      const why = m.why.length > 0 ? m.why : this.claimConst(m.name, names, owners)
+      if (why.length > 0) {
+        report.push(`${m.name}: ${why}`)
+        reportLines.push(m.line)
       } else if (m.type === "string") {
-        if (!names.has(m.name)) {
-          names.add(m.name)
-          consts.add(`export const ${m.name}: string = ${m.body}\n`)
-        }
+        consts.add(`export const ${m.name}: string = ${m.body}\n`)
       } else {
-        this.constDecl(m.name, m.value, m.type, consts, names)
+        consts.add(`export const ${m.name}: ${m.type} = ${m.value}\n`)
       }
     }
+    sortReport(report, reportLines)
     if (!consts.isEmpty()) {
       out.add(consts.toText())
       out.add("\n")
@@ -1867,6 +2310,11 @@ export const cImport = (): i32 => {
     console.error(
       "c-import: a path holds a quote, a backslash or a line break, which the module cannot carry"
     )
+    return 1
+  }
+  const outAbs = realpathSync(args.out)
+  if (outAbs !== null && outAbs === headerAbs) {
+    console.error(`c-import: -o ${args.out} is the header itself, which the module would overwrite`)
     return 1
   }
   const scratch = scratchBeside(args.out)

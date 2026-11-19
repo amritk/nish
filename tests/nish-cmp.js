@@ -1337,6 +1337,14 @@ const DECLARED = [
     changelog: FFI_ZEROEXT,
     why: "a call to a narrow host import now carries the `zeroext` its declaration already did, on the `i8` argument and result (#1755)",
   },
+  // The compiler reads clang's JSON AST through src/c-import.ts, so it links
+  // nish/bytes and nish/json-value, which the seed's compiler does not.
+  ...["bytes.ll", "json-value.ll"].map((file) => ({
+    program: "src/compile.ts",
+    file,
+    changelog: "c-import writes a Nish module from a C header",
+    why: "the compiler now imports nish/json-value (and through it nish/bytes) for `nish c-import`, and those modules already differ from the seed's for this release's other declared reasons: bytes.ll's loop guard, json-value.ll's tokenizer layout",
+  })),
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
   ...ecnEcho(

@@ -13,11 +13,11 @@ function dataModelOf(triple: string): string -> @dataModelOf [exported]
   stackSites=0 stackLocals=0
 function dataModelRefusal(text: string, wasm: boolean): DataModelRefusal | null -> @dataModelRefusal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_alloc_struct nish_panic_overflow nish_panic_slice nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish_alloc_struct nish_panic_index nish_panic_overflow nish_panic_slice nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
   local +4:9 from: i32 (const)
   local +5:7 end: i32 (let)
-  local +9:9 recorded: string (const)
-  local +10:9 model: string (const)
-  local +14:9 refusal: DataModelRefusal (const)
+  local +13:9 recorded: string (const)
+  local +14:9 model: string (const)
+  local +18:9 refusal: DataModelRefusal (const)

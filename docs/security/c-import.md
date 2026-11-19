@@ -10,11 +10,13 @@ written with the code, at base commit `4199a3a6`, rather than after an audit.
 It names functions rather than lines, so it holds at any commit that has them.
 
 **Result.** clang is started from an argument vector, never through a shell,
-with `-fsyntax-only`, so nothing in the header is compiled or run, and neither
-is the module: the command writes it and exits. clang's output is read up to
+and only to preprocess (`-E -dD`) or to check and dump the AST
+(`-fsyntax-only`), so nothing in the header is compiled to an object or run,
+and neither is the module: the command writes it and exits. clang's output is read up to
 16 MiB per run, and its JSON up to 64 levels deep and 4,194,304 values; past
 either the import is refused with exit 1 and nothing is written. Every path the
-command is given is refused when it holds a quote, a backslash, a control byte,
+command is given is refused when it holds a double or single quote, a
+backslash, a control byte,
 U+2028 or U+2029, since the probe names the header in an `#include "..."` line
 and the module names every path in a `//` comment. What the header puts into
 the module is names, which are C identifiers, integer values clang computed,
@@ -24,13 +26,14 @@ a module written for one data model is refused by a build for the other
 (NL3059).
 
 Three findings were fixed while the code was written (CI-1, CI-2 and CI-3,
-Low); one is open, accepted (CI-4, Low).
+Low); one is open, accepted (CI-4, Low). Three more properties of the threat
+model are recorded as accepted under [Accepted limits](#accepted-limits).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `newDocument`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected` and `emit` |
+| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `newDocument`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `shellWord` and `emit` |
 | `src/c-import-model.ts` | `dataModelOf`, `dataModelRefusal` |
 | `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3059 |
 
@@ -64,9 +67,12 @@ header's absolute path or the probe's. No shell reads it, so no path or flag
 can add a command. The probe and clang's two output streams are files in a
 directory `scratchBeside` makes beside the module with mode 0700; `mkdir`
 refuses a name already taken, so a symbolic link planted there is never
-followed, and the directory is removed before the command exits. Every run is `-fsyntax-only`: clang
-preprocesses and checks the header and writes its AST or its errors, and
-produces no object. The macro probe (`probeText`) writes, for each object-like
+followed, and the directory is removed before the command exits. clang runs
+three ways, none of which produces an object: `-Xclang -ast-dump=json
+-fsyntax-only` over the header (its declarations), `-E -dD` over the header
+(the preprocessed text with its `#define` lines, for the list of macros), and
+`-Xclang -ast-dump=json -fsyntax-only` over the probe. Each path follows a
+`--`, so a path that begins with `-` is not read as a flag. The macro probe (`probeText`) writes, for each object-like
 macro, one `enum` line that names the macro and asks clang for its value, its
 kind, its size and its sign; the macro's own text is never copied into the
 probe, and the names in it are C identifiers `readDefine` read. The module is
@@ -100,32 +106,54 @@ thousand enumerators), `c-import: a header whose AST is deeper than 64 levels is
 ### A path that escapes its line
 
 `cImport` refuses, before clang runs, a header (as given and as resolved),
-overrides or output path that holds `"`, `\`, a byte below 0x20, 0x7f, U+2028
-or U+2029 (`unsafePath`): the header's path sits inside the probe's
+overrides or output path that holds `"`, `'`, `\`, a byte below 0x20, 0x7f,
+U+2028 or U+2029 (`unsafePath`): the header's path sits inside the probe's
 `#include "..."`, and all three are named in the module's first `//` lines,
-which a line break would end (CI-2).
+which a line break would end (CI-2). The `Regenerate:` line is a command a
+reader may paste into a shell, so `shellWord` puts a path holding anything
+outside `[0-9A-Za-z+,-./:=@_]` (a space, `$`, `;`) in single quotes, which the
+refusal of `'` keeps closed. An output path that resolves to the header itself
+is refused, so the command cannot overwrite the header it reads.
 
 Tests: `c-import: a header whose path holds a quote is refused before clang runs`,
 `c-import: ${what} is refused before clang runs, and nothing is written` (an
 output name with a newline, an output name with U+2028, an overrides path with
-a newline).
+a newline), `c-import: a header path with a space is quoted in the Regenerate line`,
+`c-import: -o naming the header itself is refused, and the header is kept`.
 
 ### What the header can write into the module
 
 Function, parameter, field, struct, enum and macro names are C identifiers,
-which clang has checked, and a name that is a Nish reserved word gets a
-trailing `_`. Numbers are the values clang computed, written as decimal
+which clang has checked. A parameter whose name is a Nish reserved word gets a
+trailing `_`. Any other name Nish reserves (a keyword, `eval`, `arguments`, a
+built-in type such as `Array` or `u32`, an out class name such as `OutI64`)
+is not written: the function, the struct (or the struct holding the field), the enum constant or the macro is
+listed as not bound, naming the reason. Two declarations that want one name
+are settled in a fixed order (functions, then out classes, then structs, then
+enum constants, then macros, `claimConst`); the later one is listed, so the
+module never declares a name twice. Numbers are the values clang computed, written as decimal
 literals of the declared width. A string macro is written only when its body
 is one literal, with quotes only at its ends and no backslash, so it cannot
 close the Nish string it is copied into; any other string, an escape or two
 pieces, is listed as `a string the generator does not copy (escapes or pieces)`.
-The not-bound comment is fixed text and names. A declaration from a header the
+The not-bound comment is fixed text and names. A function from a header the
 first one includes is bound only when the overrides file's `allow` names it
-(`selected`).
+(`selected`). `allow` selects functions only: structs, enums and macros come
+from the header itself whether or not `allow` is given.
+
+clang's `_Nonnull` and `_Nullable` are read on a parameter's or result's
+outermost pointer only, and `returns_nonnull` (`ReturnsNonNullAttr`) on a
+result. The `nonnull` function attribute (`NonNullAttr`) is not read: clang's
+JSON AST names the attribute but not the parameter indices it covers, so
+honouring it would mean guessing; a parameter it covers is bound as the
+defaults say, `CPtr` or `string`, which is already non-null for a parameter.
 
 Tests: `c-import: every tests/c-import header writes its golden module`
 (`basic.h`'s `KE` and `KP`, an escape and two pieces, are listed, not
-copied), `c-import: sqlite3.h binds sqlite3_open with an out class and lists what it cannot bind`.
+copied), the goldens `names.h` (reserved names and collisions), `nullability.h`
+(outer pointer only), `complex.h` and `layout.h` (types and layouts that are
+listed, not bound), `c-import: sqlite3.h binds sqlite3_open with an out class and lists what it cannot bind`,
+and `c-import: each of the 300 functions clang finds in sqlite3.h is bound or listed as not bound`.
 
 ### An override the header does not support
 
@@ -134,20 +162,51 @@ JSON object, names another header, has an unknown key, names a function,
 parameter or free function the header does not declare, makes a non-pointer
 nullable, sets `return` on a function that does not return a pointer (CI-3),
 or binds a buffer that is not a `void *` or `char *` followed by its count.
-`readonly` is refused on a buffer the header lets the function write. A stale
-override cannot silently bind a renamed function.
+`readonly` is refused on a buffer the header lets the function write. An
+override that would change nothing is refused too: one on a function that is
+not bound (variadic, `static` or `inline`, outside `allow`, or declared only in
+an included header), `"nullable": false`, an empty `"buffer"`, an `allow` glob
+that matches no function, `"nullable"` on a parameter already bound as an out
+class, and a key written twice in one object, which JSON readers settle
+differently (the JSON reader refuses it while parsing). A stale override
+cannot silently bind a renamed function, or silently stop applying.
 
 Tests: `c-import: the override file ${json} is refused` (nineteen files, one per
-refusal).
+refusal) and `c-import: the override file ${json} for ${header} is refused`
+(twelve files, one per change-nothing case).
 
 ### A module for another data model
 
 The module's third line names its data model (`dataModelOf`: ILP32 for wasm32,
 LP64 for the other targets). `dataModelRefusal` makes a build for the other
 model refuse the module with NL3059, rather than call C with `long` and
-pointers of the wrong width.
+pointers of the wrong width. The line is read through a CRLF line end, so a
+module checked out with CRLF records the same model. A module whose first
+line is not the generator's marker (one edited by hand, or behind a byte-order
+mark, which the parser refuses on its own) is not checked: the refusal guards
+against a stale generated module, not a forged one. Only an ILP32 module in an
+LP64 build is tested; the other direction is the same comparison.
 
-Tests: `tests/link/c_import_data_model` (an ILP32 module in an LP64 build).
+Tests: `tests/link/c_import_data_model` (an ILP32 module in an LP64 build, the
+whole message), `c-import: the data model is read through CRLF line ends`.
+
+## Accepted limits
+
+These follow from running clang on a header the attacker wrote, and are the
+same as running `clang` on that header by hand. Each is accepted, not fixed.
+
+- **An `#include` reads any file the user can.** The header can include any
+  path (`#include "/home/user/.ssh/id_ed25519"`). Nothing of it reaches the
+  module: only declarations clang parsed are written, by name. It can reach
+  the terminal, in clang's errors when the file is not C (CI-4).
+- **clang runs with no timeout.** A header can make the preprocessor work for
+  a long time (deep macro expansion, many includes). The command waits for
+  clang as `nish build` waits for its toolchain; the user stops it.
+- **The 16 MiB cap applies after clang has written.** `readCapped` checks the
+  size of each stream's file before reading it, so the command never reads
+  more than 16 MiB, but clang has already written the whole stream to the
+  scratch directory, which `scratchBeside` removes afterwards. A header that
+  expands to gigabytes fills the disk beside `-o` for the length of the run.
 
 ## Findings
 
@@ -156,4 +215,4 @@ Tests: `tests/link/c_import_data_model` (an ILP32 module in an LP64 build).
 | CI-1 | Low | `src/c-import.ts` (`readTypedef`, `resolve`) | A typedef declared again as itself (`typedef T T;`, which C11 allows) was stored over the first, so following `T` led back to `T` until a depth cap of 32 stopped it, and every function using `T` was listed as not bound. | **Fixed** before the command shipped: the first declaration is kept, so a typedef names only earlier ones and following them ends; the depth cap is gone. Before, `c-import: every tests/c-import header writes its golden module` listed `f6: returns a typedef chain deeper than 32`; after, `f6` is `declare function f6(): i64`. |
 | CI-2 | Low | `src/c-import.ts` (`cImport`, `unsafePath`) | Only the header's resolved path was checked, and only for a quote, a backslash and a newline, but the overrides and output paths are also written into the module's first comment lines: a newline or U+2028 in either began a line of code in the generated module. | **Fixed** before the command shipped: every path is refused when it holds a quote, a backslash, a control byte, U+2028 or U+2029, before clang runs. Before, `c-import: ${what} is refused before clang runs, and nothing is written` wrote the module; after, each case exits 1 and writes nothing. |
 | CI-3 | Low | `src/c-import.ts` (`readFunctionOverrides`) | `"return": "nullable"` (or `"nonnull"`, or `owned`) on a function that returns no pointer was accepted and ignored, so an override file that no longer matched its header was not caught. | **Fixed** before the command shipped: it is refused, naming the function. Before, `c-import: the override file { "functions": { "db_close": { "return": "nullable" } } } is refused` exited 0; after, it exits 1 with `` `db_close` does not return a pointer``. |
-| CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, so a header that puts escape bytes into an `#error` line writes them to the terminal. | **Open, accepted.** The same text running clang on the header prints; the module is not written. |
+| CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, so a header that puts escape bytes into an `#error` line writes them to the terminal. | **Open, accepted.** The same text running clang on the header prints; the module is not written. The text can include lines of any file the header `#include`s (see [Accepted limits](#accepted-limits)). |
