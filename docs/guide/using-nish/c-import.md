@@ -277,7 +277,7 @@ holds the module. `--target <triple>` writes the module for another
 target; without it, the module is for the machine you run the command on.
 
 A build for a target with another data model refuses a generated module
-(NL3059), instead of calling C with the wrong widths:
+(NL3062), instead of calling C with the wrong widths:
 
 ```console
 $ nish c-import limits.h --target wasm32-unknown-unknown -o limits.ts

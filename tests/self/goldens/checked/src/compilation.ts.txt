@@ -863,7 +863,7 @@ function Compilation.readNoPanic(this: Compilation, source: SourceFile | null, n
   calls: Compilation.identityOf DiagnosticSink.report StringMap.get dirname joinPath manifestNoPanic nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq
   pointer this: size=224 writesThrough=true captured=false passedTo=Compilation.identityOf#0
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
-  pointer nish: size=48 writesThrough=false captured=false
+  pointer nish: size=56 writesThrough=false captured=false
   stackSites=1 stackLocals=0
   local +1:16 unit: ModuleUnit (const)
   local +7:11 dir: string (const)
@@ -883,7 +883,7 @@ function Compilation.readNetRings(this: Compilation, source: SourceFile | null, 
   calls: DiagnosticSink.report nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new
   pointer this: size=224 writesThrough=true captured=false
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
-  pointer nish: size=48 writesThrough=false captured=false
+  pointer nish: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +4:11 text: string (const)
   local +5:9 value: i32 (let)
@@ -980,7 +980,7 @@ function Compilation.readCompat(this: Compilation, source: SourceFile | null, ni
   calls: Compilation.entry DiagnosticSink.report DiagnosticSink.reportPerformance compatHasFeature compatKnownText manifestCompat nish_str_concat
   pointer this: size=224 writesThrough=false captured=false passedTo=Compilation.entry#0
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
-  pointer nish: size=48 writesThrough=false captured=false
+  pointer nish: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:13 asked: ManifestCompat (const)
   callee +0:21 manifestCompat -> @manifestCompat
@@ -1021,7 +1021,7 @@ function Compilation.readCapabilityPolicy(this: Compilation, source: SourceFile 
   calls: Compilation.grantMask Compilation.policyListMask DiagnosticSink.report capabilityNames manifestCapabilities nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq
   pointer this: size=224 writesThrough=true captured=false passedTo=Compilation.policyListMask#0 Compilation.policyListMask#0 Compilation.grantMask#0
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1 Compilation.policyListMask#1 Compilation.policyListMask#1 DiagnosticSink.report#1 DiagnosticSink.report#1 Compilation.grantMask#1
-  pointer nish: size=48 writesThrough=false captured=false
+  pointer nish: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -27:11 policy: CapabilityManifest (const)
   callee -27:20 manifestCapabilities -> @manifestCapabilities

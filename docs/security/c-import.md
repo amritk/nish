@@ -28,7 +28,7 @@ unchecked anyway the import is refused and nothing is written. An override is
 trusted to describe the library: one that names nothing in the header, or
 changes nothing, is refused, but a hostile overrides file can still make a
 binding wrong (CI-A4). A module written for one data model is refused by a
-build for the other (NL3059).
+build for the other (NL3062).
 
 Seven findings were fixed while the code was written or reviewed (CI-5, CI-6 and CI-7,
 Medium; CI-1, CI-2, CI-3 and CI-8, Low); one is open, accepted (CI-4, Low). Four more
@@ -43,7 +43,7 @@ the index row.
 | `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `attrWhy`, `typeWhy`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `selected`, `refuseDuplicate`, `functionDecl`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `emittable`, `isIdent`, `isPrintable` and `reportLine` |
 | `src/c-import-json.ts` | `CJson`, the JSON reader the AST, the macro probe's AST and the overrides file go through, with its depth and value limits |
 | `src/c-import-model.ts` | `dataModelOf`, `dataModelRefusal` |
-| `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3059 |
+| `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3062 |
 
 Read but not owned: the spawn the CLI shares with `nish build` (recorded in
 [`cli.md`](cli.md)).
@@ -228,7 +228,7 @@ overrides file is refused, and the file is kept`.
 
 The module's third line names its data model (`dataModelOf`: ILP32 for wasm32,
 LP64 for the other targets). `dataModelRefusal` makes a build for the other
-model refuse the module with NL3059, rather than call C with `long` and
+model refuse the module with NL3062, rather than call C with `long` and
 pointers of the wrong width. The line is read through a CRLF line end, so a
 module checked out with CRLF records the same model. A module whose first
 line is not the generator's marker (one edited by hand, or behind a byte-order

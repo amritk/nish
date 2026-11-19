@@ -2,13 +2,15 @@
 #
 # test: the full golden/native test suite on Linux with LLVM 18
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), every case compiled by a
-#       stage1 the last released nish builds, then a binary size table in the
-#       job summary, and the IR cookbook staleness check. The matrix is
+#       stage1 the last released nish builds. The matrix is
 #       written for macOS too and that row is commented out; the comment beside
 #       it names the four checks that still fail there, with the run that
 #       measured them. `bootstrap` below has had darwin rows since the 0.4.0
 #       seeds, `runtime-net` runs the network runtime on a mac, and `nish-cmp`
 #       runs on the Linux rows only (.github/seed-matrix.sh says why).
+# examples: scripts/smoke.sh over every example with a main, the IR
+#       cookbook staleness check and the binary size table in the job
+#       summary, with the compiler the shards test, beside the shards.
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -204,13 +206,13 @@ jobs:
         run: node scripts/ci-scope.mjs
 
   test:
-    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)
+    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
     # a 15-minute limit cancelled it. With four shards, shard 1 alone ran the
     # twelve minutes of sections after the tests/link programs and took 21
-    # minutes (run 41882940444). Those sections are now dealt too, eight ways,
+    # minutes (run 41882940444). Those sections are now dealt too, nine ways,
     # by the costs in tests/shard-costs.json (regenerated from that run), so
     # each shard takes about nine; the limit stays as headroom while the
     # table drifts.
@@ -298,14 +300,14 @@ jobs:
         # cancelling the Linux row that says whether it is the platform or the
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the four checks above
-        # `npm test` is split eight ways by `--shard` (tests/run.js, "Shards"):
+        # `npm test` is split nine ways by `--shard` (tests/run.js, "Shards"):
         # shard 1 runs the sections after the tests/link programs that are not
         # dealt (`DEALT_SECTIONS`), shard 2 the `simd` group the steps below
         # read, and the programs and the other sections are dealt by their
-        # cost in tests/shard-costs.json so that the eight finish together.
-        # One unsharded run took 25 minutes. The `/8` in the Test step is this
+        # cost in tests/shard-costs.json so that the nine finish together.
+        # One unsharded run took 25 minutes. The `/9` in the Test step is this
         # list's length, and a check in tests/run.js holds the two together.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -421,7 +423,7 @@ jobs:
       # every shard, and the same binary as the last run whose src/, std/, seed
       # and toolchain were these: tests/self/compiler-cache.js keys it on all
       # of them, and the Test step below copies it rather than linking again.
-      # Shard 1 alone saves a miss, since the eight build the same bytes;
+      # Shard 1 alone saves a miss, since the nine build the same bytes;
       # `fuzz-smoke` and `postgres-live` read the same key and save nothing.
       - name: The compiler under test
         uses: ./.github/actions/compiler-cache
@@ -482,7 +484,7 @@ jobs:
         # The log is kept for the steps below that require a line of it.
         run: |
           set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee "$RUNNER_TEMP/test.log"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -648,24 +650,6 @@ jobs:
         if: matrix.shard == 1
         run: node bench/adler32.mjs --check
 
-      # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
-      # run, the compiler this job built.
-      - name: Smoke (build + run every example with a main, size profile)
-        if: matrix.shard == 1
-        env:
-          NISH: build/nish
-        run: bash scripts/smoke.sh
-
-      # docs/IR_COOKBOOK.md promises the exact IR each construct compiles to
-      # *today*, and agents are pointed at it as a reference. It drifted once
-      # (the `internal` linkage of --strict-exports and the `nsw` defaults were
-      # missing), so the staleness check is a gate rather than a chore.
-      - name: Docs (IR cookbook up to date)
-        if: matrix.shard == 1
-        env:
-          NISH: build/nish
-        run: bash docs/cookbook/regen.sh --check
-
       # The diagnostic-code registry's `gen-diagnostic-codes.mjs --check` and
       # `security-scope.mjs` are not steps here: `npm test` runs both, in the
       # diagnostics section (`codes: scripts/gen-diagnostic-codes.mjs --check
@@ -679,15 +663,85 @@ jobs:
       # `npm test`, which runs `tests/diagnostic-coverage.js` with
       # `--require-coverage` and `--strict-refusals`.
 
-      - name: Size report
-        if: matrix.shard == 1
+  # examples: the checks that drive a linked compiler over examples/ and
+  # docs/IR_COOKBOOK.md rather than through `npm test`: the smoke test, the IR
+  # cookbook staleness check and the binary size table. They ran after the
+  # suite on test shard 1, about 80 s on the critical path of every run; here
+  # they run beside the shards on their own runner. The compiler comes from
+  # the same cache key the shards link (tests/self/compiler-cache.js), so it is
+  # the binary the suite tests. Not scoped: like `test` and `lint`, it runs on
+  # every event, and `ci-gate` needs it.
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.13.1
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev
+
+      - name: Link the LLVM 18 tools by their plain names
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-link llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the seed
+        timeout-minutes: 5
         env:
-          MATRIX_OS: ${{ matrix.os }}
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
+        run: bash scripts/fetch-seed.sh
+
+      # The test shards save this key; this job only reads it, so a miss links
+      # here (about a minute) and saves nothing.
+      - name: The compiler under test
+        timeout-minutes: 10
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: "false"
+
+      # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
+      # run, the compiler the step above linked.
+      - name: Smoke (build + run every example with a main, size profile)
+        env:
+          NISH: build/nish
+        run: bash scripts/smoke.sh
+
+      # docs/IR_COOKBOOK.md promises the exact IR each construct compiles to
+      # *today*, and agents are pointed at it as a reference. It drifted once
+      # (the `internal` linkage of --strict-exports and the `nsw` defaults were
+      # missing), so the staleness check is a gate rather than a chore.
+      - name: Docs (IR cookbook up to date)
+        env:
+          NISH: build/nish
+        run: bash docs/cookbook/regen.sh --check
+
+      - name: Size report
+        env:
+          RUNNER_LABEL: ubuntu-latest
         run: |
           build/nish examples/add.ts -o build/add.ll
           bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
           {
-            echo "### Binary size ($MATRIX_OS, LLVM 18)"
+            echo "### Binary size ($RUNNER_LABEL, LLVM 18)"
             echo
             echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime-os.c`'
             echo
@@ -2075,7 +2129,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       # The typecheck, once per push. It used to run in each of the `test`
-      # job's eight shards, over the same sources every time.
+      # job's shards, over the same sources every time.
       - name: Typecheck
         run: npm run check
 
@@ -2128,6 +2182,7 @@ jobs:
     needs:
       - scope
       - test
+      - examples
       - seeds
       - bootstrap
       - nish-cmp

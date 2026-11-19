@@ -918,8 +918,71 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 For a whole library, `nish c-import` writes these declarations from its
 header: see [Binding a C library](c-import.md).
 
-A function from the C library links with `nish run` or `--link` as it is. One
-of your own goes on the build line beside the runtime:
+A function from the C library links with `nish run` or `--link` as it is.
+Your own C, and any other library, is named in the `nish.link` field of the
+nearest `package.json` above the entry file. Every compile that emits IR
+reads it, and `nish run` and `--link` link what it names:
+
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "link": { "libraries": ["z"], "sources": ["c/mylib.c"] }
+  }
+}
+```
+
+- `libraries` are passed to the linker as `-l<name>`, so `"z"` links
+  `libz`. A name is printable ASCII letters, digits, `_`, `.`, `+` and `-`,
+  and starts with a letter, digit or `_` (so not with `-`, `.` or `+`).
+  Nothing in it can become a flag. There is no pkg-config, so
+  a library outside the linker's default search path is not found unless
+  `LIBRARY_PATH` names its directory. The run cache keys the name, not the
+  file it finds: after rebuilding the library or changing `LIBRARY_PATH`,
+  clear the cache.
+- `sources` are `.c` files inside the package, by their path relative to
+  `package.json`. Each is compiled with clang beside the runtime. A path that
+  is absolute, holds a backslash or a character outside printable ASCII,
+  climbs out with `..`, or resolves outside the package through a symbolic
+  link is refused (NL3060).
+- Any other key in `link` is refused (NL3059), not skipped.
+- The run cache key holds the link set, each source's bytes and the files
+  `clang -M` lists for its compile, so editing `c/mylib.c`, a header, or any
+  other file it `#include`s makes the next `nish run` link again. A file
+  clang does not list is not in the key: one an assembler `.incbin` pulls
+  in, or a header you add later that would be found ahead of one already
+  included. After such a change, edit the source too, or clear the cache.
+- These refusals (NL3059, NL3060, NL3061) come from every compile that
+  emits IR, a compile to IR or `--json` too, not only from `nish run` and
+  `--link`.
+- Only the native profiles (`speed`, `size`, `debug`) link it. `--link
+  --profile wasi` with a `nish.link` fails the link (exit 3).
+
+A dependency's `nish.link` takes effect only when your root `package.json`
+grants it, entry by entry, under `nish.link.dependencies`. Each library or
+source a dependency names that you have not granted is refused (NL3061). The
+dependency still needs the `ffi` capability to call its C:
+
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "capabilities": { "dependencies": { "zstd-bind": ["ffi"] } },
+    "link": {
+      "dependencies": {
+        "zstd-bind": { "libraries": ["zstd"], "sources": ["c/shim.c"] }
+      }
+    }
+  }
+}
+```
+
+`nish/sqlite` needs none of this: the standard library links SQLite itself
+when a program calls it. What a link can and cannot confine is recorded in
+[`docs/security/package-link.md`](https://github.com/amritk/nish/blob/main/docs/security/package-link.md).
+
+Without a `package.json`, your own C still goes on the build line beside the
+runtime:
 
 ```console
 $ nish app.ts -o app.ll

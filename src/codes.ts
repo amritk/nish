@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 978
+export const RULE_COUNT: i32 = 981
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -189,6 +189,8 @@ const diagnosticRules = (): string[] => [
   "NL2367",
   "`, and only its `[Symbol.dispose]` may call it on the pointer the object owns: the `using` block closes it at every exit, so a close written here would be followed by a use after close and a second close",
   "NL2572",
+  ": a `nish.link` library is a name `-l` takes, of letters, digits, `_`, `.`, `+` and `-` and not starting with `-`, and a source is a `.c` file inside the package, by its path relative to `package.json`",
+  "NL3060",
   "` does not declare: Node copies every own field of an instance and none of its methods, so a class instance is spread only into a type that declares each of its fields; otherwise set the fields by name",
   "NL2706",
   " = g(...)` as a statement at the top of the constructor, where `g` is a `declare function` and nothing before it leaves the constructor: any other write would replace or copy a pointer the object owns",
@@ -355,6 +357,8 @@ const diagnosticRules = (): string[] => [
   "NL2797",
   " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`",
   "NL2373",
+  ": `nish.link` is an object whose `libraries` and `sources` are arrays of strings, and only the root package's may grant a dependency's under `dependencies`",
+  "NL3059",
   "` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for",
   "NL2557",
   "` runs may reach no I/O, no clock, no entropy, no C, and no `panic` or exit whose message or status is computed, so that what it returns is all that leaves",
@@ -445,6 +449,8 @@ const diagnosticRules = (): string[] => [
   "NL2722",
   ", and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count",
   "NL2555",
+  ", which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it",
+  "NL3061",
   "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
   "NL2346",
   " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`",
@@ -528,7 +534,7 @@ const diagnosticRules = (): string[] => [
   "` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker",
   "NL2795",
   ": a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build",
-  "NL3059",
+  "NL3062",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
   "NL2442",
   "` names no directory: a grant's directory is resolved from the root package's directory and exists when the program is built",
