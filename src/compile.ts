@@ -1791,7 +1791,10 @@ const commandMain = (): number => {
   const arenaRange = hasCompactClass(compilation)
   const links = new LinkSet()
   links.sqlite = anyCallsSqlite(emitted)
-  if ((runMode || link.length > 0) && !readLinkSet(compilation, links)) {
+  // Read on every compile, not only one that links: a link a package may not
+  // have is refused by a compile to IR and by `--json` too, so a check that
+  // never links still sees it.
+  if (!readLinkSet(compilation, links)) {
     report(compilation, json)
     return 1
   }
@@ -2261,44 +2264,64 @@ const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
       addLinkRequest(compilation, root, rootDir, realRoot, granted.own, granted.own, links)
     }
   }
-  for (const dependency of linkPackages(compilation)) {
-    const real = realpathSync(dependency.dir)
-    const path = joinPath([dependency.dir, "package.json"])
-    const text = readFileSyncOrNull(path)
-    if (real !== null && skip.indexOf(real) < 0 && text !== null) {
-      skip.push(real)
-      const source = new SourceFile(path, text)
-      const nish = manifestNish(text, PACKAGE_CONDITION)
-      if (nish.problem.length > 0) {
-        // Fails closed: a field this reader cannot read may hold a link.
-        if (text.indexOf("link") >= 0) {
-          compilation.sink.report(source, nish.problemStart, nish.problemEnd, `${nish.problem}${LINK_SHAPE}`)
-        }
-      } else if (nish.linkAt >= 0) {
-        const asked = manifestLink(text, nish.linkAt, nish.linkEnd, false)
-        reportLinkProblems(compilation, source, asked)
-        const grant = granted.grantFor(dependency.name)
-        refuseUngranted(
-          compilation,
-          source,
-          dependency.name,
-          "links the C library",
-          asked.own.libraries,
-          grant.libraries
-        )
-        refuseUngranted(
-          compilation,
-          source,
-          dependency.name,
-          "compiles the C source",
-          asked.own.sources,
-          grant.sources
-        )
-        addLinkRequest(compilation, source, dependency.dir, real, asked.own, grant, links)
+  readDependencyLinks(compilation, linkPackages(compilation), 0, granted, skip, links)
+  return !compilation.sink.hasErrors()
+}
+
+/**
+ * `readLinkSet`'s reading of each of `packages` from `at` on: its `nish.link`
+ * checked against `granted`, and what it may link added to `links`. `skip`
+ * holds the real directories already read. Recursive rather than a loop, so
+ * each package's manifest text is given back when its call returns (NL9011).
+ */
+const readDependencyLinks = (
+  compilation: Compilation,
+  packages: LinkPackage[],
+  at: i32,
+  granted: LinkManifest,
+  skip: string[],
+  links: LinkSet
+): void => {
+  if (at < 0 || at >= packages.length) {
+    return
+  }
+  const dependency = packages[at]
+  const real = realpathSync(dependency.dir)
+  const path = joinPath([dependency.dir, "package.json"])
+  const text = readFileSyncOrNull(path)
+  if (real !== null && skip.indexOf(real) < 0 && text !== null) {
+    skip.push(real)
+    const source = new SourceFile(path, text)
+    const nish = manifestNish(text, PACKAGE_CONDITION)
+    if (nish.problem.length > 0) {
+      // Fails closed: a field this reader cannot read may hold a link.
+      if (text.indexOf("link") >= 0) {
+        compilation.sink.report(source, nish.problemStart, nish.problemEnd, `${nish.problem}${LINK_SHAPE}`)
       }
+    } else if (nish.linkAt >= 0) {
+      const asked = manifestLink(text, nish.linkAt, nish.linkEnd, false)
+      reportLinkProblems(compilation, source, asked)
+      const grant = granted.grantFor(dependency.name)
+      refuseUngranted(
+        compilation,
+        source,
+        dependency.name,
+        "links the C library",
+        asked.own.libraries,
+        grant.libraries
+      )
+      refuseUngranted(
+        compilation,
+        source,
+        dependency.name,
+        "compiles the C source",
+        asked.own.sources,
+        grant.sources
+      )
+      addLinkRequest(compilation, source, dependency.dir, real, asked.own, grant, links)
     }
   }
-  return !compilation.sink.hasErrors()
+  readDependencyLinks(compilation, packages, at + 1, granted, skip, links)
 }
 
 /** The packages other than the root that the program loaded a module of. */
@@ -2464,12 +2487,13 @@ const runProgram = (
 }
 
 /**
- * Into `links.includes`, every file the compile of each of its sources reads,
- * as `scripts/build.sh --link-depends` lists it with this recipe's flags
- * (clang -M: headers and included files of any name, the system's too), so an
- * edit to any of them is another key (docs/security/package-link.md, PL-6).
- * A source whose list cannot be had or read sets `includesUnlisted`, and the
- * run links afresh rather than trust a key that may miss a read.
+ * Into `links.includes`, every file `scripts/build.sh --link-depends` lists for
+ * the compile of each of its sources with this recipe's flags (clang -M:
+ * headers and included files of any name, the system's too), so an edit to
+ * any of them is another key (docs/security/package-link.md, PL-6). A source
+ * whose list cannot be had or read, or names a file that cannot be read, sets
+ * `includesUnlisted`, and the run links afresh rather than trust a key that
+ * may miss a read.
  */
 const readLinkIncludes = (
   links: LinkSet,
@@ -2501,6 +2525,12 @@ const readLinkIncludes = (
     } else {
       for (const path of paths) {
         links.addInclude(path)
+        // A listed path that cannot be read keys nothing: clang writes a
+        // backslash in a directory name as `/`, so the name it lists is not
+        // the file it read.
+        if (readFileSyncOrNull(path) === null) {
+          links.includesUnlisted = true
+        }
       }
     }
   }
@@ -2537,7 +2567,9 @@ const cachedBinary = (
     cached.status = 3
     return cached
   }
-  if (refuseCacheRoot(cacheRoot, json)) {
+  // A linked source's include list is written to a scratch file in the root,
+  // so a first run makes the root, private, before that file.
+  if (refuseCacheRoot(cacheRoot, json) || (links.sources.length > 0 && !makePrivateRoot(cacheRoot, json))) {
     cached.status = 3
     return cached
   }

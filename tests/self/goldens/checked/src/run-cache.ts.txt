@@ -96,10 +96,18 @@ function LinkSet.addInclude(this: LinkSet, path: string): void -> @LinkSet.addIn
   calls: nish_array_grow nish_str_eq
   pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function addBackslashes(word: StringBuilder, count: i32): void -> @addBackslashes
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringBuilder.addChar
+  calls: StringBuilder.addChar
+  pointer word: size=8 writesThrough=false captured=false passedTo=StringBuilder.addChar#0
+  stackSites=0 stackLocals=0
+  local +0:12 n: i32 (let)
+  callee +1:5 StringBuilder.addChar -> @StringBuilder.addChar
 function makeRulePaths(text: string): string[] | null -> @makeRulePaths [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.addChar
-  calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_at
+  calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText addBackslashes nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_at
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   local +1:7 found: boolean (let)
@@ -110,29 +118,43 @@ function makeRulePaths(text: string): string[] | null -> @makeRulePaths [exporte
   local +12:7 i: i32 (let)
   local +14:11 c: i32 (const)
   local +15:11 next: i32 (const)
-  callee +17:7 StringBuilder.addChar -> @StringBuilder.addChar
-  local +20:13 done: string (const)
-  callee +20:20 StringBuilder.toText -> @StringBuilder.toText
-  callee +27:14 new StringBuilder -> @StringBuilder.constructor
-  callee +30:7 StringBuilder.addChar -> @StringBuilder.addChar
+  local +17:11 run: i32 (let)
+  local +21:13 blank: boolean (const)
+  callee +23:9 StringBuilder.addChar -> @StringBuilder.addChar
+  callee +26:9 addBackslashes -> @addBackslashes
+  callee +27:9 StringBuilder.addChar -> @StringBuilder.addChar
+  callee +30:9 addBackslashes -> @addBackslashes
+  callee +34:7 StringBuilder.addChar -> @StringBuilder.addChar
+  local +37:13 done: string (const)
+  callee +37:20 StringBuilder.toText -> @StringBuilder.toText
+  callee +44:14 new StringBuilder -> @StringBuilder.constructor
+  callee +47:7 StringBuilder.addChar -> @StringBuilder.addChar
 function linkSetLines(links: LinkSet): string -> @linkSetLines [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via fileFingerprint
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32
+  sharedWrite: via addFileLines
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addFileLines nish_str_concat
   pointer links: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
   local +1:14 name: string (const)
   callee +2:5 StringBuilder.add -> @StringBuilder.add
-  local +4:14 path: string (const)
-  callee +5:5 StringBuilder.add -> @StringBuilder.add
-  callee +5:51 fileFingerprint -> @fileFingerprint
-  local +7:14 path: string (const)
-  callee +8:5 StringBuilder.add -> @StringBuilder.add
-  callee +8:52 fileFingerprint -> @fileFingerprint
-  callee +11:5 StringBuilder.add -> @StringBuilder.add
-  callee +13:10 StringBuilder.toText -> @StringBuilder.toText
+  callee +4:3 addFileLines -> @addFileLines
+  callee +5:3 addFileLines -> @addFileLines
+  callee +7:5 StringBuilder.add -> @StringBuilder.add
+  callee +9:10 StringBuilder.toText -> @StringBuilder.toText
+function addFileLines(key: StringBuilder, tag: string, paths: string[], at: i32): void -> @addFileLines
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringBuilder.add
+  escaping: at tag
+  calls: StringBuilder.add addFileLines fileFingerprint nish_str_concat nish_str_from_i32
+  pointer key: size=8 writesThrough=false captured=false passedTo=StringBuilder.add#0 addFileLines#0
+  pointer paths: size=0 writesThrough=false captured=false passedTo=addFileLines#2
+  stackSites=0 stackLocals=0
+  local +0:9 path: string (const)
+  callee +1:3 StringBuilder.add -> @StringBuilder.add
+  callee +1:44 fileFingerprint -> @fileFingerprint
+  callee +2:3 addFileLines -> @addFileLines
 function runBinaryName(name: string): string -> @runBinaryName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name

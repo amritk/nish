@@ -907,6 +907,44 @@ const manifestLinkSourceProblem = (path: string): string => {
   return ""
 }
 
+/**
+ * Each of `read`'s entries from `at` on kept in `into`, or refused into `out`
+ * when it is no string or no `kind` entry. Recursive rather than a loop, so
+ * each entry's refusal text is given back when its call returns (NL9011).
+ */
+const manifestKeepLinkEntries = (
+  manifest: string,
+  kind: string,
+  read: ManifestList,
+  at: i32,
+  into: ManifestList,
+  out: LinkManifest
+): void => {
+  if (at < 0 || at >= read.entries.length || at >= read.offsets.length || at >= read.ends.length) {
+    return
+  }
+  const entry = read.entries[at]
+  const start = read.offsets[at]
+  const stop = read.ends[at]
+  const problem = kind === "sources" ? manifestLinkSourceProblem(entry) : ""
+  if (start < 0 || start >= manifest.length || manifest.charCodeAt(start) !== QUOTE) {
+    out.refuse(
+      `${manifestJsonKind(manifest, start)} in \`${kind}\` is not a string${LINK_SHAPE}`,
+      start,
+      stop
+    )
+  } else if (kind === "libraries" && !manifestLinkLibrary(entry)) {
+    out.refuse(`\`${entry}\` is not a library name${LINK_ENTRY}`, start, stop)
+  } else if (problem.length > 0) {
+    out.refuse(`${problem}${LINK_ENTRY}`, start, stop)
+  } else {
+    into.entries.push(entry)
+    into.offsets.push(start)
+    into.ends.push(stop)
+  }
+  manifestKeepLinkEntries(manifest, kind, read, at + 1, into, out)
+}
+
 /** The array at `manifest[at]` (`kind` is `libraries` or `sources`) read into `into`, each bad entry refused. */
 const manifestReadLinkList = (
   manifest: string,
@@ -922,29 +960,7 @@ const manifestReadLinkList = (
   }
   const read = new ManifestList()
   manifestReadList(manifest, at, read)
-  let i = 0
-  while (i < read.entries.length && i < read.offsets.length && i < read.ends.length) {
-    const entry = read.entries[i]
-    const start = read.offsets[i]
-    const stop = read.ends[i]
-    const problem = kind === "sources" ? manifestLinkSourceProblem(entry) : ""
-    if (start < 0 || start >= manifest.length || manifest.charCodeAt(start) !== QUOTE) {
-      out.refuse(
-        `${manifestJsonKind(manifest, start)} in \`${kind}\` is not a string${LINK_SHAPE}`,
-        start,
-        stop
-      )
-    } else if (kind === "libraries" && !manifestLinkLibrary(entry)) {
-      out.refuse(`\`${entry}\` is not a library name${LINK_ENTRY}`, start, stop)
-    } else if (problem.length > 0) {
-      out.refuse(`${problem}${LINK_ENTRY}`, start, stop)
-    } else {
-      into.entries.push(entry)
-      into.offsets.push(start)
-      into.ends.push(stop)
-    }
-    i = i + 1
-  }
+  manifestKeepLinkEntries(manifest, kind, read, 0, into, out)
   // A list the walk could not finish might hold more than it read: refuse it
   // rather than link part of it.
   const last = read.ends.length > 0 ? read.ends[read.ends.length - 1] : at + 1

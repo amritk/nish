@@ -224,16 +224,27 @@ export class LinkSet {
   }
 }
 
+/** `count` backslashes added to `word`. */
+const addBackslashes = (word: StringBuilder, count: i32): void => {
+  for (let n: i32 = 0; n < count; n++) {
+    word.addChar(92)
+  }
+}
+
 /**
  * The prerequisites of the make rule `clang -M` prints (`scripts/build.sh
  * --link-depends`), in its order: what follows the target's `: `, split at
- * blanks and at a backslash-newline, a backslash-blank kept as a blank and
- * `$$` as `$`. Null when the text holds no rule or names a path that is not
- * absolute, which every path is when the source's path is, so a reply this
- * cannot read keys nothing it would get wrong.
+ * blanks and at a backslash-newline. Clang's escapes are undone: `\#` is `#`,
+ * `$$` is `$`, and a run of 2k+1 backslashes before a blank is k backslashes
+ * and a blank in the name; any other backslash is the name's own. A name that
+ * ends in a backslash before the blank that ends it reads together with the
+ * next, a name no file has, which the caller then cannot read and keys
+ * nothing by (docs/security/package-link.md, PL-6). Null when the text holds no rule or
+ * names a path that is not absolute, which every path is when the source's
+ * path is, so a reply this cannot read keys nothing it would get wrong.
  */
 export const makeRulePaths = (text: string): string[] | null => {
-  // 58 `:`, 32 blank, 9 tab, 10 newline, 13 return, 92 backslash, 36 `$`.
+  // 58 `:`, 32 blank, 9 tab, 10 newline, 13 return, 92 backslash, 36 `$`, 35 `#`.
   let at = 0
   let found = false
   while (at < text.length && !found) {
@@ -250,8 +261,25 @@ export const makeRulePaths = (text: string): string[] | null => {
   while (i <= text.length) {
     const c = i < text.length ? text.charCodeAt(i) : 32
     const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 32
-    if ((c === 92 && next === 32) || (c === 36 && next === 36)) {
-      word.addChar(next)
+    if (c === 92 && next !== 10 && next !== 13) {
+      let run = 0
+      while (i + run < text.length && text.charCodeAt(i + run) === 92) {
+        run = run + 1
+      }
+      const blank = i + run < text.length && text.charCodeAt(i + run) === 32
+      if (run === 1 && i + 1 < text.length && next === 35) {
+        word.addChar(35)
+        i = i + 2
+      } else if (blank && run % 2 === 1) {
+        addBackslashes(word, run >> 1)
+        word.addChar(32)
+        i = i + run + 1
+      } else {
+        addBackslashes(word, run)
+        i = i + run
+      }
+    } else if (c === 36 && next === 36) {
+      word.addChar(36)
       i = i + 2
     } else if (c === 32 || c === 9 || c === 10 || c === 13 || c === 92) {
       const done = word.toText()
@@ -288,16 +316,26 @@ export const linkSetLines = (links: LinkSet): string => {
   for (const name of links.libraries) {
     key.add(`link-library ${name}\n`)
   }
-  for (const path of links.sources) {
-    key.add(`link-source ${path.length} ${path} ${fileFingerprint(path)}\n`)
-  }
-  for (const path of links.includes) {
-    key.add(`link-include ${path.length} ${path} ${fileFingerprint(path)}\n`)
-  }
+  addFileLines(key, "link-source", links.sources, 0)
+  addFileLines(key, "link-include", links.includes, 0)
   if (links.includesUnlisted) {
     key.add("link-include-unlisted\n")
   }
   return key.toText()
+}
+
+/**
+ * A `<tag> <length> <path> <hash>` line for each of `paths` from `at` on.
+ * Recursive rather than a loop, for the reason `addUnitFingerprints` gives:
+ * a call gives each file's text back when it returns (NL9011).
+ */
+const addFileLines = (key: StringBuilder, tag: string, paths: string[], at: i32): void => {
+  if (at < 0 || at >= paths.length) {
+    return
+  }
+  const path = paths[at]
+  key.add(`${tag} ${path.length} ${path} ${fileFingerprint(path)}\n`)
+  addFileLines(key, tag, paths, at + 1)
 }
 
 /**

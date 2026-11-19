@@ -26033,6 +26033,70 @@ if (dealtHere("cliChecks")) {
         incBefore.stdout + incBefore.stderr + incAfter.stdout + incAfter.stderr + otherAfter.stdout + otherAfter.stderr
       )
 
+      // The depfile escapes some characters of a path (`\#`, `$$`, a blank), and
+      // `makeRulePaths` undoes them: a package under a directory whose name holds
+      // `#`, `$` and a blank keys its header, so a second run with nothing changed
+      // is a hit (no file in its cache is rewritten; a list it could not read
+      // would link on every run) and an edit to that header alone links again.
+      // Under a directory whose name holds a backslash, which clang lists as `/`,
+      // the listed header cannot be read, so the run links afresh and the same
+      // edit still takes effect.
+      const oddCase = (dirName, wantHit) => {
+        const app = path.join(pkgDir, dirName, "app")
+        const cache = path.join(pkgDir, `${dirName.replace(/[^a-z]/g, "")}-cache`)
+        fs.cpSync(path.join(root, "tests", "link", "pkg_link_own"), app, { recursive: true })
+        fs.writeFileSync(path.join(app, "c", "add.h"), "#define PKG_LINK_SCALE 1\n")
+        fs.writeFileSync(
+          path.join(app, "c", "add.c"),
+          '#include "add.h"\nint pkg_link_add(int a, int b) { return a * PKG_LINK_SCALE + b; }\n'
+        )
+        const run = () =>
+          spawnSync(NISH, ["run", "main.ts"], {
+            cwd: app,
+            encoding: "utf8",
+            env: { ...process.env, XDG_CACHE_HOME: cache },
+          })
+        const cacheFiles = () =>
+          fs
+            .readdirSync(cache, { recursive: true })
+            .map((f) => path.join(cache, String(f)))
+            .filter((f) => fs.statSync(f).isFile())
+            .map((f) => `${f} ${fs.statSync(f).mtimeMs}`)
+            .sort()
+            .join("\n")
+        const first = run()
+        const filesFirst = cacheFiles()
+        const again = run()
+        const filesAgain = cacheFiles()
+        fs.writeFileSync(path.join(app, "c", "add.h"), "#define PKG_LINK_SCALE 10\n")
+        const edited = run()
+        const ok =
+          first.status === 0 &&
+          first.stdout === "5\ntrue\n" &&
+          again.status === 0 &&
+          again.stdout === "5\ntrue\n" &&
+          filesFirst.length > 0 &&
+          (filesAgain === filesFirst) === wantHit &&
+          edited.status === 0 &&
+          edited.stdout === "23\ntrue\n"
+        return {
+          ok,
+          shown: `${first.stdout}${first.stderr}${again.stdout}${again.stderr}${edited.stdout}${edited.stderr}\n--- cache after the first run\n${filesFirst}\n--- after the second\n${filesAgain}`,
+        }
+      }
+      const oddEscaped = oddCase("odd#$ dir", true)
+      check(
+        "package-link: under a directory named with `#`, `$` and a blank, an unchanged run is a hit and a change to the included header alone links again",
+        oddEscaped.ok,
+        oddEscaped.shown
+      )
+      const slashed = oddCase("back\\slash", false)
+      check(
+        "package-link: under a directory named with a backslash, which clang lists as `/`, every run links afresh, so a change to the included header takes effect",
+        slashed.ok,
+        slashed.shown
+      )
+
       // `libraries` reaches the linker: the symbol lives only in a shared library
       // this check builds with clang, found by `-l<name>` on LIBRARY_PATH and at
       // run time on LD_LIBRARY_PATH. Without the entry the same program does not
@@ -26078,10 +26142,12 @@ if (dealtHere("cliChecks")) {
         const unnamed = libRun([])
         const named = libRun(["nishpkglinktriple"])
         check(
-          "package-link: a library named in `libraries` is passed to the linker, and the program does not link without it",
+          "package-link: a library named in `libraries` is passed to the linker, and without it the link fails on the unresolved symbol",
           shared.status === 0 &&
             unnamed.status !== 0 &&
             unnamed.stdout === "" &&
+            /undefined (symbol|reference)/.test(unnamed.stderr) &&
+            unnamed.stderr.includes("pkg_link_triple") &&
             named.status === 0 &&
             named.stdout === "42\n",
           shared.stderr + unnamed.stdout + unnamed.stderr + named.stdout + named.stderr

@@ -19,17 +19,19 @@ from an allowlist of characters, or the real path of a `.c` file inside that
 package. Nothing it writes becomes a flag. A dependency adds nothing the root
 does not name, entry by entry, and a key the reader does not know is refused
 rather than skipped. The run cache key holds the link set, each source's
-bytes and every file the compile of that source reads, as clang lists them,
-so a changed source, or anything it includes, links again. Each property PL-1
+bytes and every file `clang -M` lists for the compile of that source, so a
+changed source, or anything it `#include`s, links again. Each property PL-1
 to PL-6 names the tests that pin it; a claim with no test beside it is stated
 from the code alone. Two findings were fixed before merge (PL-F1 and PL-F2,
-Low). Three limits are accepted: PL-7 (the C runs with every power the
-program has), PL-8 (`-l` takes whatever the system linker finds) and PL-9 (a
-source's `#include`s are not confined).
+Low). Four limits are accepted: PL-7 (the C runs with every power the
+program has), PL-8 (`-l` takes whatever the system linker finds), PL-9 (a
+source's `#include`s are not confined) and PL-10 (a file `clang -M` does not
+list is not in the run cache key).
 
-The link diagnostics (NL3059, NL3060, NL3061) are reported only when the
-program is linked, under `nish run` or `--link`. A compile to IR alone does
-not read the entries of `nish.link` and refuses none of them.
+`readLinkSet` runs on every compile that emits IR, so the link diagnostics
+(NL3059, NL3060, NL3061) are reported by a compile to IR and by `--json` as
+well as under `nish run` and `--link`. `--fix`, `--emit-ast`, `--emit-ts` and
+`--emit-checked` stop before it and link nothing.
 
 ## Scope
 
@@ -47,7 +49,8 @@ not read the entries of `nish.link` and refuses none of them.
 `manifestLinkLibrary` accepts 1 to 255 characters of
 `[A-Za-z0-9_][A-Za-z0-9_.+-]*`: a first character that is not `-`, and no
 `,`, `=`, `/`, space or quote, so `-Wl,…`, `-shared` and `-fplugin=…` are all
-NL3060. `scripts/build.sh` matches the same pattern again before it writes
+NL3060. `scripts/build.sh` matches the same character pattern again
+(without the length cap) before it writes
 `-l<name>`, so a caller other than the compiler cannot pass one either. The
 length cap refuses a longer name; it never truncates one into another.
 
@@ -56,7 +59,7 @@ only a test-built shared library defines links with the entry and does not
 link without it.
 
 Tests: `link/pkg_link_flag_library` (expected.err `` `-Wl,-rpath,/tmp` is not a library name ``);
-`package-link: a library named in \`libraries\` is passed to the linker, and the program does not link without it`.
+`package-link: a library named in \`libraries\` is passed to the linker, and without it the link fails on the unresolved symbol`.
 The length cap and the refusal of a leading `.` or `+` are stated from the
 code; no test provokes them.
 
@@ -64,7 +67,8 @@ code; no test provokes them.
 
 `manifestLinkSourceProblem` refuses a source that is empty, holds a
 character outside printable ASCII (PL-F1), is absolute, starts with `-`,
-holds a backslash, climbs out with `..`, or does not end in `.c` (NL3060). `addLinkRequest` then resolves each one with `realpathSync` and
+holds a backslash, climbs out with `..`, or does not end in `.c` (NL3060). `addLinkRequest` then resolves each granted
+entry (every one of the root's) with `realpathSync` and
 refuses it (NL3060) unless the real path sits under the package's own real
 directory. A symbolic link written inside the package cannot carry a source
 out of it. `scripts/build.sh` takes a source only as an absolute path to an
@@ -87,8 +91,10 @@ module of, as `linkPackages` lists them: a module whose file sits under a
 package directory names that package, read once per package name. A module
 outside any package directory names none, so no manifest is read for it, and
 a second copy of a package under the same name is not read again. Both fail
-safe: a package that is not read adds nothing to the link, and its C symbols
-then do not resolve. Each library and each
+safe: a package that is not read adds nothing to the link. Its C symbols
+resolve only against what the link already holds, such as the source granted
+to the first copy of that name, and nothing beyond the root's grants is
+linked for it. Each library and each
 source it names that the root's `nish.link.dependencies.<name>` does not
 also name is NL3061, written at the entry. A grant of a source but not a
 library refuses the library. Only the root may grant: `dependencies` inside a
@@ -109,16 +115,20 @@ type, a repeated key or a repeated package. A package name under
 `dependencies` that is not printable ASCII is NL3060 (PL-F1). There is no
 pkg-config, so a
 `pkgConfig` key is refused, not ignored. A dependency `nish` field the reader
-cannot parse at all is refused when its text mentions `link`. Read as
-"nothing linked", it could hide a request. No count or length cap drops a
-distinct entry: each refused entry is its own diagnostic.
+cannot parse at all is refused when its `package.json` mentions `link`
+anywhere. Read as "nothing linked", it could hide a request. No count or
+length cap drops a distinct entry: each refused entry is its own diagnostic,
+except that a value that is not an object, a repeated key or a repeated
+package refuses its whole object with one diagnostic and links nothing from
+it.
 
 A known leniency: `manifestReadList` on its own steps over a missing comma
 (`["a" "b"]` reads as two entries) and a trailing one (`["a",]` as one). It
 is reached only through `manifestNish`, which first checks the whole manifest
-with `manifestMalformedAt`, and a manifest that is not JSON and spells
-`link` (or holds a `\u` escape) is refused where it breaks (NL3059,
-`` `package.json` stops being JSON here ``). Each entry it reads is then
+with `manifestMalformedAt`: a manifest that is not JSON is refused where it
+breaks when it spells `nish` or holds a `\u` escape, the root's as NL3036 and
+a dependency's as NL3059 (`` `package.json` stops being JSON here ``), the
+latter only when its text also spells `link`. Each entry it reads is then
 checked on its own, so the leniency adds no entry the text does not spell. A
 new caller that reads a list without that check would inherit it.
 
@@ -128,7 +138,9 @@ Tests: `link/pkg_link_unknown_key` (`pkgConfig`), `link/pkg_link_wrong_type`,
 and mentions `link`), `link/pkg_link_dep_list_not_json` (a dependency's list
 missing its comma), `link/pkg_link_dep_key_nonascii` (a granted package name
 spelled `"pkg_m\u00fcl"`), `link/pkg_link_dep_source_collision` (the grant
-`"c/\u00e9.c"` against the ask `"c/\u00ea.c"`, both refused). That no cap
+`"c/\u00e9.c"` against the ask `"c/\u00ea.c"`; its expected.json pins both
+refusals, the grant's in the root `package.json` and the ask's in the
+dependency's). That no cap
 drops an entry is stated from the code.
 
 ### PL-5: SQLite is one entry of the same set
@@ -151,22 +163,31 @@ Tests: the existing `sqlite-link:` checks in `tests/run.js`.
 
 `linkSetLines` adds one `link-library` line per library, one
 `link-source <length> <path> <fingerprint>` line per source, and one
-`link-include <length> <path> <fingerprint>` line per file the compile of a
-source reads, to the key `runCacheKey` hashes. `readLinkIncludes` asks
+`link-include <length> <path> <fingerprint>` line per file `clang -M` lists
+for the compile of a source, to the key `runCacheKey` hashes. `readLinkIncludes` asks
 `scripts/build.sh --link-depends` for that list: clang's `-M` make rule for
 the source, under the same profile, CPU and flags the link will compile it
 with, so headers, `.inc` files, an included `.c` file and system headers are
-all in it, wherever they live, by name or not. `makeRulePaths` reads the
-rule; a list that cannot be had (the preprocessor fails) or read (no rule, or
-a path that is not absolute) sets `includesUnlisted`, and `cachedBinary` then
-links again on every run rather than trust a key that misses a file. A
+all in it, wherever they live, by name or not. What clang does not list is
+not keyed (PL-10). `makeRulePaths` reads the rule, undoing clang's escapes
+(`\#`, `$$`, a backslash run before a blank). A list that cannot be had (the
+preprocessor fails) or read (no rule, or a path that is not absolute), or
+that names a file that cannot be read, sets `includesUnlisted`, and
+`cachedBinary` then links again on every run rather than trust a key that
+misses a file. Clang lists a backslash in a directory name as `/`, so a
+package under such a directory links on every run. A
 program whose IR is unchanged but whose source, an included file or library
 list changed is a miss and links again.
 
 Tests: `package-link: \`nish run\` links the package's own source and library, and a change to the source alone links again`;
 `package-link: a change to a header the linked source includes, and nothing else, links again`;
 `package-link: a change to a \`.inc\` file, or a \`.c\` file, the linked source includes, and nothing else, links again`.
-With `addInclude` disabled, the second and third fail and the first passes.
+`package-link: under a directory named with \`#\`, \`$\` and a blank, an unchanged run is a hit and a change to the included header alone links again`
+pins the escapes;
+`package-link: under a directory named with a backslash, which clang lists as \`/\`, every run links afresh, so a change to the included header takes effect`
+pins the unreadable name.
+With `addInclude` disabled, the second, third and fourth fail and the first
+and fifth pass.
 That a changed library list is a miss, and that an unlisted source links on
 every run, are stated from the code.
 
@@ -206,8 +227,9 @@ a system header, was a run-cache hit, and `nish run` ran the old binary. The
 walk was also unbounded in a large package. The key now holds what the
 compile reads, as PL-6 says, and the walk is gone.
 
-Before (`addInclude` disabled): the `.inc`/`.c` check and the header check
-fail, each run printing the first binary's output. After: both pass.
+Before (the first version): the `.inc`/`.c` check fails, each run printing
+the first binary's output. With `addInclude` disabled, the header check fails
+as well. After: both pass.
 
 ## Accepted limits
 
@@ -228,5 +250,24 @@ The name is checked; the file it finds is not.
 A granted source is compiled with clang's default include paths. Its
 `#include` may read any header the compiler can open, inside or outside the
 package. Only the source file itself is held to the package. What it reads
-does key the run cache (PL-6), so a file it reads outside the package is
-still rebuilt on.
+does key the run cache when `clang -M` lists it (PL-6), so a header it
+includes from outside the package is still rebuilt on.
+
+### PL-10: a file `clang -M` does not list is not keyed
+
+The key holds the files `clang -M` lists, which are the files the
+preprocessor opened. Two kinds of change it does not see:
+
+- a file the compile reads after preprocessing, such as one an inline
+  assembler `.incbin` directive pulls in;
+- a header created later in a directory searched ahead of the one a listed
+  header was found in, which the next compile would read instead.
+
+A name clang cannot spell back (a backslash in a directory, which it lists
+as `/`, or a name ending in a backslash, which `makeRulePaths` reads together
+with the path after it) is not this limit: the name read cannot be opened,
+so the run links afresh every time (PL-6). After either change above
+`nish run` takes the cached
+binary until the source, a listed file or the IR changes, or the cache is
+cleared. A granted source is the root's own review point (PL-7), and a source
+that reads such a file is visible in it. Stated from the code.

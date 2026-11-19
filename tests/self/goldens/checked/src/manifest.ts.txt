@@ -436,29 +436,39 @@ function manifestLinkSourceProblem(path: string): string -> @manifestLinkSourceP
   callee +0:8 manifestPrintableAscii -> @manifestPrintableAscii
   callee +3:7 manifestAbsolutePath -> @manifestAbsolutePath
   callee +6:7 manifestLeavesRoot -> @manifestLeavesRoot
+function manifestKeepLinkEntries(manifest: string, kind: string, read: ManifestList, at: i32, into: ManifestList, out: LinkManifest): void -> @manifestKeepLinkEntries
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at kind manifest
+  calls: LinkManifest.refuse manifestJsonKind manifestKeepLinkEntries manifestLinkLibrary manifestLinkSourceProblem nish_array_grow nish_str_concat nish_str_eq
+  pointer read: size=24 writesThrough=false captured=false passedTo=manifestKeepLinkEntries#2
+  pointer into: size=24 writesThrough=false captured=false passedTo=manifestKeepLinkEntries#4
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0 manifestKeepLinkEntries#5
+  stackSites=0 stackLocals=0
+  local -15:9 entry: string (const)
+  local -14:9 start: i32 (const)
+  local -13:9 stop: i32 (const)
+  local -12:9 problem: string (const)
+  callee -12:40 manifestLinkSourceProblem -> @manifestLinkSourceProblem
+  callee -10:5 LinkManifest.refuse -> @LinkManifest.refuse
+  callee -9:10 manifestJsonKind -> @manifestJsonKind
+  callee -5:39 manifestLinkLibrary -> @manifestLinkLibrary
+  callee -4:5 LinkManifest.refuse -> @LinkManifest.refuse
+  callee -2:5 LinkManifest.refuse -> @LinkManifest.refuse
+  callee +4:3 manifestKeepLinkEntries -> @manifestKeepLinkEntries
 function manifestReadLinkList(manifest: string, at: i32, end: i32, kind: string, into: ManifestList, out: LinkManifest): void -> @manifestReadLinkList
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  escaping: at end manifest
-  calls: LinkManifest.refuse ManifestList.constructor manifestJsonKind manifestLinkLibrary manifestLinkSourceProblem manifestReadList manifestSkipBlank nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq
-  pointer into: size=24 writesThrough=false captured=false
-  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via LinkManifest.refuse
+  escaping: at end kind manifest
+  calls: LinkManifest.refuse ManifestList.constructor manifestKeepLinkEntries manifestReadList manifestSkipBlank nish_panic_index nish_panic_overflow nish_str_concat
+  pointer into: size=24 writesThrough=false captured=false passedTo=manifestKeepLinkEntries#4
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 manifestKeepLinkEntries#5 LinkManifest.refuse#0
   stackSites=1 stackLocals=1
-  callee -22:5 LinkManifest.refuse -> @LinkManifest.refuse
-  local -19:9 read: ManifestList (const)
-  callee -19:16 new ManifestList -> @ManifestList.constructor
-  callee -18:3 manifestReadList -> @manifestReadList
-  local -17:7 i: i32 (let)
-  local -15:11 entry: string (const)
-  local -14:11 start: i32 (const)
-  local -13:11 stop: i32 (const)
-  local -12:11 problem: string (const)
-  callee -12:42 manifestLinkSourceProblem -> @manifestLinkSourceProblem
-  callee -10:7 LinkManifest.refuse -> @LinkManifest.refuse
-  callee -9:12 manifestJsonKind -> @manifestJsonKind
-  callee -5:41 manifestLinkLibrary -> @manifestLinkLibrary
-  callee -4:7 LinkManifest.refuse -> @LinkManifest.refuse
-  callee -2:7 LinkManifest.refuse -> @LinkManifest.refuse
+  callee +0:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local +3:9 read: ManifestList (const)
+  callee +3:16 new ManifestList -> @ManifestList.constructor
+  callee +4:3 manifestReadList -> @manifestReadList
+  callee +5:3 manifestKeepLinkEntries -> @manifestKeepLinkEntries
   local +8:9 last: i32 (const)
   local +9:9 close: i32 (const)
   callee +9:17 manifestSkipBlank -> @manifestSkipBlank

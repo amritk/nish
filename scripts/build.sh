@@ -174,8 +174,9 @@
 #                            absolute path, with the profile's flags and link
 #                            it with the program. A package's `nish.link.sources`.
 #   --link-depends <file.c>  debug, speed and size only: print, as a make rule
-#                            (clang -M), every file the compile of that source
-#                            with this profile's flags reads, and link nothing.
+#                            (clang -M), the files it lists for the compile of
+#                            that source with this profile's flags, and link
+#                            nothing.
 #                            `nish run` keys its cache on them.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
@@ -600,11 +601,12 @@ case "$profile" in
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
 esac
 
-# --link-depends: the files a package source's compile reads, every header
-# and every included file of any name, as clang -M prints them with the flags
-# the link line compiles that source with (`common` and the profile's
-# `optimise`), so `nish run` keys exactly what the compile would read rather
-# than guessing at it (docs/security/package-link.md, PL-6).
+# --link-depends: the files clang -M lists for a package source's compile,
+# every header and every #included file of any name, with the flags the link
+# line compiles that source with (`common` and the profile's `optimise`), so
+# `nish run` keys those rather than guessing at them by name. clang -M does
+# not list a file an assembler `.incbin` reads, nor a header that would shadow
+# a listed one if it appeared later (docs/security/package-link.md, PL-6, PL-10).
 if [ -n "$link_depends" ]; then
   case "$profile" in
     debug) exec "$CC" "${common[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;

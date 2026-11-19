@@ -460,7 +460,7 @@ the record that found it. The notes below the table name each such finding.
     Total `main` carried before this row (fixed `3 / 17 / 96 / 207`, open
     `0 / 0 / 2 / 42`) did not sum its rows; it is recomputed here.
 30. PL-F1 and PL-F2 (Low) were fixed in review and are counted as fixed Lows.
-    PL-7, PL-8 and PL-9 are accepted limits, with the reason in their record,
+    PL-7, PL-8, PL-9 and PL-10 are accepted limits, with the reason in their record,
     and are not counted. The Total moves by this row: fixed +2 Low.
 
 ## Fuzzed

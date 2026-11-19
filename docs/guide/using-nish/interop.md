@@ -917,7 +917,8 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 
 A function from the C library links with `nish run` or `--link` as it is.
 Your own C, and any other library, is named in the `nish.link` field of the
-nearest `package.json` above the entry file. `nish run` and `--link` read it:
+nearest `package.json` above the entry file. Every compile that emits IR
+reads it, and `nish run` and `--link` link what it names:
 
 ```json package.json
 {
@@ -932,18 +933,23 @@ nearest `package.json` above the entry file. `nish run` and `--link` read it:
   `libz`. A name is printable ASCII letters, digits, `_`, `.`, `+` and `-`,
   and starts with a letter, digit or `_` (so not with `-`, `.` or `+`).
   Nothing in it can become a flag. There is no pkg-config, so
-  a library outside the linker's default search path is not found.
+  a library outside the linker's default search path is not found unless
+  `LIBRARY_PATH` names its directory.
 - `sources` are `.c` files inside the package, by their path relative to
   `package.json`. Each is compiled with clang beside the runtime. A path that
   is absolute, holds a backslash or a character outside printable ASCII,
   climbs out with `..`, or resolves outside the package through a symbolic
   link is refused (NL3060).
 - Any other key in `link` is refused (NL3059), not skipped.
-- The run cache key holds the link set, each source's bytes and every file
-  its compile reads, as clang lists them, so editing `c/mylib.c`, a header,
-  or any other file it includes makes the next `nish run` link again.
-- These refusals (NL3059, NL3060, NL3061) come only from `nish run` and
-  `--link`. A compile to IR alone does not read the link entries.
+- The run cache key holds the link set, each source's bytes and the files
+  `clang -M` lists for its compile, so editing `c/mylib.c`, a header, or any
+  other file it `#include`s makes the next `nish run` link again. A file
+  clang does not list is not in the key: one an assembler `.incbin` pulls
+  in, or a header you add later that would be found ahead of one already
+  included. After such a change, edit the source too, or clear the cache.
+- These refusals (NL3059, NL3060, NL3061) come from every compile that
+  emits IR, a compile to IR or `--json` too, not only from `nish run` and
+  `--link`.
 - Only the native profiles (`speed`, `size`, `debug`) link it. `--link
   --profile wasi` with a `nish.link` fails the link (exit 3).
 
