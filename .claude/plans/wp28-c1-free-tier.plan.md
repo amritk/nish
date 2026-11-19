@@ -166,7 +166,7 @@ updates from `main` before it starts editing.
 
 ### c1-nullish
 
-**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/compilation.ts`, `src/emit.ts`, `src/bounds.ts`, `src/checker.ts`, `src/arrays.ts`, `src/validator.ts`, `src/expressions.ts`, `src/members.ts`, `src/emit-util.ts`, `src/emit-map.ts`, `src/emit-ts-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_optional_*`, `tests/cases/reject_nullish*`, `tests/cases/nullish_*`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`
+**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/diagnostics.ts`, `src/compilation.ts`, `src/emit.ts`, `src/bounds.ts`, `src/checker.ts`, `src/arrays.ts`, `src/validator.ts`, `src/expressions.ts`, `src/members.ts`, `src/emit-util.ts`, `src/emit-map.ts`, `src/emit-ts-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_optional_*`, `tests/cases/reject_nullish*`, `tests/cases/nullish_*`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`, `src/emit-*.ts`, `src/fusion.ts`, `src/inline-arrays.ts`
 
 **Depends on:** none.
 
@@ -190,6 +190,8 @@ the end both stay refused, each with a diagnostic that says why.
 **Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/declarations.ts`, `src/annotations.ts`, `src/statements.ts`, `src/expressions.ts`, `src/emit.ts`, `src/emit-classes.ts`, `src/emit-ts-*.ts`, `src/interop-*.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_param_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `docs/roadmap/wp28-compatibility-mode.md`, `docs/roadmap/wp33-round-trip.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`
 
 **Depends on:** c1-strings, which must merge before this stage starts.
+
+**Amended again (#1770 round 1):** the emitter's statement-pattern matchers (`appendRangeOf`, `emitAddGuards` in `src/emit-arrays.ts`, `firstCallOf` in `src/fusion.ts`, the inline-array and lend-in-place matchers) do not know an optional call. c1-nullish owns `src/emit-*.ts`, `src/fusion.ts` and `src/inline-arrays.ts` so that it can make each of them refuse to fuse one.
 
 Every stage may also regenerate these: `tests/self/goldens/checked/**`,
 `docs/reference/**`, `scalar.config.json` (reference routes only),
