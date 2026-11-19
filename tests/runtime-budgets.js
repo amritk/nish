@@ -958,10 +958,13 @@ export const SQLITE_BUILD_DEFINES = [
  * compiled alone. The cursors read SQLite's B-tree layer, which only the amalgamation's
  * own translation unit can call, so `nish-sqlite.c` now includes `sqlite3.c` and the
  * measurement subtracts it. Measured **7,564 bytes** on 2026-11-18 with clang 18.1.3 on
- * linux-x64 (561,803 for the unit, 554,239 for `sqlite3.c` alone). The budget is the
- * next 256-byte boundary above the measurement, as every ceiling here was set.
+ * linux-x64 (561,803 for the unit, 554,239 for `sqlite3.c` alone). Measured **8,213
+ * bytes** on 2026-11-19 (562,452 for the unit), with the cursor shape cache and the read
+ * transaction's kept statements (docs/wp7-runtime.md, "How the ceilings moved"). The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here was
+ * set.
  */
-const RUNTIME_SQLITE_TEXT_BUDGET = 7680
+const RUNTIME_SQLITE_TEXT_BUDGET = 8448
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
