@@ -3,7 +3,8 @@
 // the no-panic scope, so each unproven load in `lanes.ts` is NL2457 at the
 // load, with advice that names the guard proving its first and last lanes:
 // `- 16` for the `u8x16` load, `- 4` for the `i32x4` one. The third load's
-// array comes from a call, so its advice states the rule without a variable.
+// array comes from a call, so its advice states the rule in words rather than
+// a guard over a variable the caller does not have.
 // `simd_deny_panics_unguarded` is the same load reached across the scope.
 import { firstBytes, firstWords, fromCall } from "./lanes"
 
