@@ -1569,8 +1569,11 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once**, and anything
-  else is an error (NL3036) where `package.json` writes it: a second `"nish"`
+  keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once**, and anything
+  else is an error (NL3036) where `package.json` writes it (`link`, the C
+  libraries and sources a package links, has rules of its own: a bad shape is
+  NL3059, a bad entry NL3060 and a dependency's entry the root does not grant
+  NL3061, [`docs/security/package-link.md`](../../security/package-link.md)): a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
   key it does not know, a misspelt `capabilites` included
