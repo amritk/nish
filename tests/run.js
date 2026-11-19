@@ -26008,55 +26008,85 @@ if (dealtHere("cliChecks")) {
         headerBefore.stdout + headerBefore.stderr + headerAfter.stdout + headerAfter.stderr
       )
 
+      // Whatever else the compile reads keys it too, by the depfile the compile's own
+      // flags give (`build.sh --link-depends`), not by file name: an edit to a
+      // `.inc` file alone, then to a `.c` file the source includes alone, links again.
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "table.inc"), "#define PKG_LINK_TABLE 1\n")
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "other.c"), "static int pkg_link_bias(void) { return 0; }\n")
+      fs.writeFileSync(
+        path.join(pkgDir, "app", "c", "add.c"),
+        '#include "table.inc"\n#include "other.c"\nint pkg_link_add(int a, int b) { return a * PKG_LINK_TABLE + b + pkg_link_bias(); }\n'
+      )
+      const incBefore = pkgRun()
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "table.inc"), "#define PKG_LINK_TABLE 100\n")
+      const incAfter = pkgRun()
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "other.c"), "static int pkg_link_bias(void) { return 1000; }\n")
+      const otherAfter = pkgRun()
+      check(
+        "package-link: a change to a `.inc` file, or a `.c` file, the linked source includes, and nothing else, links again",
+        incBefore.status === 0 &&
+          incBefore.stdout === "5\ntrue\n" &&
+          incAfter.status === 0 &&
+          incAfter.stdout === "203\ntrue\n" &&
+          otherAfter.status === 0 &&
+          otherAfter.stdout === "1203\ntrue\n",
+        incBefore.stdout + incBefore.stderr + incAfter.stdout + incAfter.stderr + otherAfter.stdout + otherAfter.stderr
+      )
+
       // `libraries` reaches the linker: the symbol lives only in a shared library
       // this check builds with clang, found by `-l<name>` on LIBRARY_PATH and at
       // run time on LD_LIBRARY_PATH. Without the entry the same program does not
-      // link, so `-lm` from build.sh proves nothing here.
-      const libDir = path.join(pkgDir, "lib")
-      fs.mkdirSync(libDir, { recursive: true })
-      fs.writeFileSync(path.join(libDir, "triple.c"), "int pkg_link_triple(int x) { return x * 3; }\n")
-      const shared = spawnSync(
-        "clang",
-        ["-shared", "-fPIC", "-o", path.join(libDir, "libnishpkglinktriple.so"), path.join(libDir, "triple.c")],
-        { encoding: "utf8" }
-      )
-      const libApp = path.join(pkgDir, "libapp")
-      fs.mkdirSync(libApp, { recursive: true })
-      fs.writeFileSync(
-        path.join(libApp, "lib.ts"),
-        "declare function pkg_link_triple(x: i32): i32\n\nexport function triple(x: i32): i32 {\n  return pkg_link_triple(x)\n}\n"
-      )
-      fs.writeFileSync(
-        path.join(libApp, "main.ts"),
-        'import { triple } from "./lib"\n\nexport const main = (): i32 => {\n  console.log(triple(14))\n  return 0\n}\n'
-      )
-      const libRun = (libraries) => {
-        fs.writeFileSync(
-          path.join(libApp, "package.json"),
-          JSON.stringify({ name: "pkg-link-libapp", private: true, nish: { link: { libraries } } })
+      // link, so `-lm` from build.sh proves nothing here. The `.so` and its search
+      // variables are Linux's, so elsewhere the check is skipped.
+      if (process.platform !== "linux") {
+        skip("package-link: the shared-library check builds an ELF `.so`, so it runs on Linux only")
+      } else {
+        const libDir = path.join(pkgDir, "lib")
+        fs.mkdirSync(libDir, { recursive: true })
+        fs.writeFileSync(path.join(libDir, "triple.c"), "int pkg_link_triple(int x) { return x * 3; }\n")
+        const shared = spawnSync(
+          "clang",
+          ["-shared", "-fPIC", "-o", path.join(libDir, "libnishpkglinktriple.so"), path.join(libDir, "triple.c")],
+          { encoding: "utf8" }
         )
-        return spawnSync(NISH, ["run", "main.ts"], {
-          cwd: libApp,
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            XDG_CACHE_HOME: path.join(pkgDir, "cache"),
-            LIBRARY_PATH: libDir,
-            LD_LIBRARY_PATH: libDir,
-          },
-        })
+        const libApp = path.join(pkgDir, "libapp")
+        fs.mkdirSync(libApp, { recursive: true })
+        fs.writeFileSync(
+          path.join(libApp, "lib.ts"),
+          "declare function pkg_link_triple(x: i32): i32\n\nexport function triple(x: i32): i32 {\n  return pkg_link_triple(x)\n}\n"
+        )
+        fs.writeFileSync(
+          path.join(libApp, "main.ts"),
+          'import { triple } from "./lib"\n\nexport const main = (): i32 => {\n  console.log(triple(14))\n  return 0\n}\n'
+        )
+        const libRun = (libraries) => {
+          fs.writeFileSync(
+            path.join(libApp, "package.json"),
+            JSON.stringify({ name: "pkg-link-libapp", private: true, nish: { link: { libraries } } })
+          )
+          return spawnSync(NISH, ["run", "main.ts"], {
+            cwd: libApp,
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              XDG_CACHE_HOME: path.join(pkgDir, "cache"),
+              LIBRARY_PATH: libDir,
+              LD_LIBRARY_PATH: libDir,
+            },
+          })
+        }
+        const unnamed = libRun([])
+        const named = libRun(["nishpkglinktriple"])
+        check(
+          "package-link: a library named in `libraries` is passed to the linker, and the program does not link without it",
+          shared.status === 0 &&
+            unnamed.status !== 0 &&
+            unnamed.stdout === "" &&
+            named.status === 0 &&
+            named.stdout === "42\n",
+          shared.stderr + unnamed.stdout + unnamed.stderr + named.stdout + named.stderr
+        )
       }
-      const unnamed = libRun([])
-      const named = libRun(["nishpkglinktriple"])
-      check(
-        "package-link: a library named in `libraries` is passed to the linker, and the program does not link without it",
-        shared.status === 0 &&
-          unnamed.status !== 0 &&
-          unnamed.stdout === "" &&
-          named.status === 0 &&
-          named.stdout === "42\n",
-        shared.stderr + unnamed.stdout + unnamed.stderr + named.stdout + named.stderr
-      )
 
       // A granted source that is a symbolic link out of its package is refused by
       // its real path, though the path as written is inside the package.

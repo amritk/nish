@@ -3323,6 +3323,7 @@ import moduleCacheRoot from "./build-cache" -> function @moduleCacheRoot
 import anyCallsSqlite from "./run-cache" -> function @anyCallsSqlite
 import LinkSet from "./run-cache" -> struct LinkSet
 import linkSetLines from "./run-cache" -> function @linkSetLines
+import makeRulePaths from "./run-cache" -> function @makeRulePaths
 import runBinaryName from "./run-cache" -> function @runBinaryName
 import runCacheKey from "./run-cache" -> function @runCacheKey
 import runCacheRoot from "./run-cache" -> function @runCacheRoot
@@ -4053,13 +4054,13 @@ function refuseUngranted(compilation: Compilation, source: SourceFile, name: str
 function addLinkRequest(compilation: Compilation, source: SourceFile, dir: string, realDir: string | null, asked: LinkRequest, grant: LinkRequest, links: LinkSet): void -> @addLinkRequest
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via LinkSet.addLibrary
-  escaping: dir realDir
-  calls: DiagnosticSink.report LinkSet.addHeaderDir LinkSet.addLibrary LinkSet.addSource joinPath nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq
+  escaping: dir
+  calls: DiagnosticSink.report LinkSet.addLibrary LinkSet.addSource joinPath nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq
   pointer compilation: size=224 writesThrough=false captured=false
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
   pointer asked: size=16 writesThrough=false captured=false
   pointer grant: size=16 writesThrough=false captured=false
-  pointer links: size=32 writesThrough=false captured=false passedTo=LinkSet.addLibrary#0 LinkSet.addSource#0 LinkSet.addHeaderDir#0
+  pointer links: size=32 writesThrough=false captured=false passedTo=LinkSet.addLibrary#0 LinkSet.addSource#0
   stackSites=1 stackLocals=0
   local +0:14 name: string (const)
   callee +2:7 LinkSet.addLibrary -> @LinkSet.addLibrary
@@ -4069,7 +4070,6 @@ function addLinkRequest(compilation: Compilation, source: SourceFile, dir: strin
   callee +13:33 joinPath -> @joinPath
   callee +15:9 DiagnosticSink.report -> @DiagnosticSink.report
   callee +22:9 LinkSet.addSource -> @LinkSet.addSource
-  callee +23:9 LinkSet.addHeaderDir -> @LinkSet.addHeaderDir
 function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, links: LinkSet, json: boolean, argsFrom: i32): i32 -> @runProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via cachedBinary
@@ -4077,7 +4077,7 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   calls: cachedBinary nish_array_grow nish_panic_index nish_spawn nish_str_concat reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false passedTo=cachedBinary#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=cachedBinary#1
-  pointer links: size=32 writesThrough=false captured=false passedTo=cachedBinary#9
+  pointer links: size=32 writesThrough=true captured=false passedTo=cachedBinary#9
   stackSites=0 stackLocals=0
   local +0:9 cached: CachedBinary (const)
   callee +0:18 cachedBinary -> @cachedBinary
@@ -4085,14 +4085,33 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   local +18:7 i: i32 (let)
   local +23:9 status: i32 (const)
   callee +25:5 reportToolchainFailure -> @reportToolchainFailure
+function readLinkIncludes(links: LinkSet, root: string, cacheRoot: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean): void -> @readLinkIncludes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: arenaRange cacheRoot cpu debugArena debugInfo profile threads
+  calls: LinkSet.addInclude makeRulePaths makeScratchFile nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat pushRecipeFlags
+  pointer links: size=32 writesThrough=true captured=false passedTo=LinkSet.addInclude#0
+  stackSites=0 stackLocals=0
+  local -15:14 source: string (const)
+  local -14:11 scratch: string (const)
+  callee -14:21 makeScratchFile -> @makeScratchFile
+  local -13:9 paths: string[] | null (let)
+  local -11:13 argv: string[] (const)
+  callee -10:7 pushRecipeFlags -> @pushRecipeFlags
+  local -9:13 status: i32 (const)
+  local -8:13 text: string | null (const)
+  callee -6:17 makeRulePaths -> @makeRulePaths
+  local -4:13 forget: string[] (const)
+  local +2:18 path: string (const)
+  callee +3:9 LinkSet.addInclude -> @LinkSet.addInclude
 function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, links: LinkSet, json: boolean): CachedBinary -> @cachedBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via runCacheRoot
   escaping: arenaRange cpu debugArena debugInfo json name profile threads
-  calls: buildIntoCache cCompiler linkSetLines nish_alloc_struct nish_read_file_or_null nish_str_concat nish_str_eq nish_write_file refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex sqliteCflags sqliteFingerprint
+  calls: buildIntoCache cCompiler linkSetLines nish_alloc_struct nish_read_file_or_null nish_str_concat nish_str_eq nish_write_file readLinkIncludes refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex sqliteCflags sqliteFingerprint
   pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=buildIntoCache#1
-  pointer links: size=32 writesThrough=false captured=false passedTo=linkSetLines#0 buildIntoCache#12
+  pointer links: size=32 writesThrough=true captured=false passedTo=readLinkIncludes#0 linkSetLines#0 buildIntoCache#12
   stackSites=0 stackLocals=0
   local +0:9 cached: CachedBinary (const)
   local +1:9 cacheRoot: string (const)
@@ -4101,17 +4120,18 @@ function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string
   callee +10:7 refuseCacheRoot -> @refuseCacheRoot
   local +14:9 file: string (const)
   callee +14:16 runBinaryName -> @runBinaryName
-  local +16:9 sqliteLines: string (const)
-  callee +16:38 sqliteFingerprint -> @sqliteFingerprint
-  callee +16:66 sqliteCflags -> @sqliteCflags
-  local +17:9 key: string (const)
-  callee +17:15 runCacheKey -> @runCacheKey
-  callee +27:5 cCompiler -> @cCompiler
-  callee +29:5 linkSetLines -> @linkSetLines
-  callee +31:34 sha256Hex -> @sha256Hex
-  local +33:9 keyFile: string (const)
-  local +34:9 stored: string | null (const)
-  callee +36:21 buildIntoCache -> @buildIntoCache
+  callee +15:3 readLinkIncludes -> @readLinkIncludes
+  local +17:9 sqliteLines: string (const)
+  callee +17:38 sqliteFingerprint -> @sqliteFingerprint
+  callee +17:66 sqliteCflags -> @sqliteCflags
+  local +18:9 key: string (const)
+  callee +18:15 runCacheKey -> @runCacheKey
+  callee +28:5 cCompiler -> @cCompiler
+  callee +30:5 linkSetLines -> @linkSetLines
+  callee +32:34 sha256Hex -> @sha256Hex
+  local +34:9 keyFile: string (const)
+  local +35:9 stored: string | null (const)
+  callee +37:21 buildIntoCache -> @buildIntoCache
 function isCheckout(pkg: PackageSearch): boolean -> @isCheckout
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_realpath

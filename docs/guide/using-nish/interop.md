@@ -939,10 +939,9 @@ nearest `package.json` above the entry file. `nish run` and `--link` read it:
   climbs out with `..`, or resolves outside the package through a symbolic
   link is refused (NL3060).
 - Any other key in `link` is refused (NL3059), not skipped.
-- The run cache key holds the link set, each source's bytes and each `.h`
-  file in the source's package, so editing `c/mylib.c` or a header beside it
-  makes the next `nish run` link again. A header outside the package is not
-  keyed.
+- The run cache key holds the link set, each source's bytes and every file
+  its compile reads, as clang lists them, so editing `c/mylib.c`, a header,
+  or any other file it includes makes the next `nish run` link again.
 - These refusals (NL3059, NL3060, NL3061) come only from `nish run` and
   `--link`. A compile to IR alone does not read the link entries.
 - Only the native profiles (`speed`, `size`, `debug`) link it. `--link

@@ -107,6 +107,7 @@ import {
   anyCallsSqlite,
   LinkSet,
   linkSetLines,
+  makeRulePaths,
   runBinaryName,
   runCacheKey,
   runCacheRoot,
@@ -2357,8 +2358,8 @@ const refuseUngranted = (
  * `grant` is `asked`): each library as written, and each source as its real
  * path, refused (NL3060) unless that path is a file inside `realDir`, the
  * package's real directory (null when it has none), so a symbolic link cannot
- * carry a source out of the package. That directory's headers then key the
- * run cache (`linkSetLines`).
+ * carry a source out of the package. What each source's compile reads then
+ * keys the run cache (`readLinkIncludes`).
  */
 const addLinkRequest = (
   compilation: Compilation,
@@ -2392,7 +2393,6 @@ const addLinkRequest = (
         )
       } else {
         links.addSource(real)
-        links.addHeaderDir(realDir)
       }
     }
     i = i + 1
@@ -2463,6 +2463,49 @@ const runProgram = (
   return status
 }
 
+/**
+ * Into `links.includes`, every file the compile of each of its sources reads,
+ * as `scripts/build.sh --link-depends` lists it with this recipe's flags
+ * (clang -M: headers and included files of any name, the system's too), so an
+ * edit to any of them is another key (docs/security/package-link.md, PL-6).
+ * A source whose list cannot be had or read sets `includesUnlisted`, and the
+ * run links afresh rather than trust a key that may miss a read.
+ */
+const readLinkIncludes = (
+  links: LinkSet,
+  root: string,
+  cacheRoot: string,
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean,
+  debugArena: boolean,
+  arenaRange: boolean
+): void => {
+  for (const source of links.sources) {
+    const scratch = makeScratchFile(cacheRoot, ".d")
+    let paths: string[] | null = null
+    if (scratch.length > 0) {
+      const argv: string[] = ["bash", `${root}/scripts/build.sh`, "--link-depends", source]
+      pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
+      const status = spawnSyncTo(argv, scratch, "/dev/null")
+      const text = readFileSyncOrNull(scratch)
+      if (status === 0 && text !== null) {
+        paths = makeRulePaths(text)
+      }
+      const forget: string[] = ["rm", "-f", "--", scratch]
+      spawnSync(forget)
+    }
+    if (paths === null) {
+      links.includesUnlisted = true
+    } else {
+      for (const path of paths) {
+        links.addInclude(path)
+      }
+    }
+  }
+}
+
 /** A program in the run cache: its binary and entry, or the status a miss failed with. */
 class CachedBinary {
   binary: string = ""
@@ -2499,6 +2542,7 @@ const cachedBinary = (
     return cached
   }
   const file = runBinaryName(name)
+  readLinkIncludes(links, pkg.root, cacheRoot, profile, cpu, debugInfo, threads, debugArena, arenaRange)
   // Hashed once, for this key and for the SQLite entry's below it.
   const sqliteLines = links.sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
   const key = runCacheKey(
@@ -2519,7 +2563,7 @@ const cachedBinary = (
   cached.binary = `${cached.entry}/${file}`
   const keyFile = `${cached.entry}/key`
   const stored = readFileSyncOrNull(keyFile)
-  if (stored === null || stored !== key) {
+  if (stored === null || stored !== key || links.includesUnlisted) {
     cached.status = buildIntoCache(
       emitted,
       pkg,

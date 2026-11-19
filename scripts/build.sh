@@ -173,6 +173,10 @@
 #   --link-source <file.c>   debug, speed and size only: compile the C file, an
 #                            absolute path, with the profile's flags and link
 #                            it with the program. A package's `nish.link.sources`.
+#   --link-depends <file.c>  debug, speed and size only: print, as a make rule
+#                            (clang -M), every file the compile of that source
+#                            with this profile's flags reads, and link nothing.
+#                            `nish run` keys its cache on them.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -197,6 +201,7 @@ wasm_opt=""                            # what the build line says of wasm-opt; s
 inline_to=""                           # --inline <file.mjs>: wasm-host's bytes as an ES module
 link_libs=()                           # --link-lib <name>: -l<name> on the link line (WP66 S7)
 link_sources=()                        # --link-source <file.c>: a package's own C, compiled into the link
+link_depends=""                        # --link-depends <file.c>: print what its compile reads, then stop
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -228,6 +233,12 @@ while [ $# -gt 0 ]; do
         *) echo "error: --link-source takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
       esac
       link_sources+=("$2"); shift 2 ;;
+    --link-depends)
+      case "${2-}" in
+        /*.c) [ -f "$2" ] || { echo "error: --link-depends: $2 is not a file" >&2; exit 2; } ;;
+        *) echo "error: --link-depends takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
+      esac
+      link_depends="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -236,7 +247,7 @@ while [ $# -gt 0 ]; do
     *) inputs+=("$1"); shift ;;
   esac
 done
-[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || { echo "error: no input files" >&2; exit 2; }
+[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: no input files" >&2; exit 2; }
 if [ -n "$cpu" ]; then
   [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
   case "$profile" in
@@ -318,7 +329,7 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
   [ -z "$sqlite_to" ] || [ -z "$sqlite_from" ] || { echo "error: --sqlite-objects and --sqlite-from are two different builds" >&2; exit 2; }
   [ -z "$sqlite_to" ] || [ -z "$objects_to$objects_from" ] || { echo "error: --sqlite-objects compiles runtime/sqlite/ alone, without --runtime-objects or --runtime-from" >&2; exit 2; }
 fi
-[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
+[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
 # The runtime is eighteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-text.c, <dir>/runtime-os.c, <dir>/runtime-parallel.c,
@@ -588,6 +599,19 @@ case "$profile" in
       -ffunction-sections -fdata-sections -fomit-frame-pointer
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
 esac
+
+# --link-depends: the files a package source's compile reads, every header
+# and every included file of any name, as clang -M prints them with the flags
+# the link line compiles that source with (`common` and the profile's
+# `optimise`), so `nish run` keys exactly what the compile would read rather
+# than guessing at it (docs/security/package-link.md, PL-6).
+if [ -n "$link_depends" ]; then
+  case "$profile" in
+    debug) exec "$CC" "${common[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;
+    speed|size) exec "$CC" "${common[@]}" "${optimise[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;
+    *) echo "error: --link-depends takes the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+fi
 
 # The speed link splits full LTO's code generation into one partition per core,
 # run in parallel: lld's --lto-partitions, after the whole program is optimised

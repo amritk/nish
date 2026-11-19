@@ -188,14 +188,17 @@ export const anyCallsSqlite = (modules: EmittedModule[]): boolean => {
 export class LinkSet {
   libraries: string[]
   sources: string[]
-  /** The real directory of each package a source came from, whose headers the key carries. */
-  headerDirs: string[]
+  /** Every file other than a source that a source's compile reads, by `--link-depends`. */
+  includes: string[]
+  /** Whether some source's reads could not be listed, so no cached binary is trusted. */
+  includesUnlisted: boolean
   sqlite: boolean
 
   constructor() {
     this.libraries = []
     this.sources = []
-    this.headerDirs = []
+    this.includes = []
+    this.includesUnlisted = false
     this.sqlite = false
   }
 
@@ -213,45 +216,56 @@ export class LinkSet {
     }
   }
 
-  /** Add the package directory `dir`, whose headers a source of it may include, unless it is there already. */
-  addHeaderDir(dir: string): void {
-    if (this.headerDirs.indexOf(dir) < 0) {
-      this.headerDirs.push(dir)
+  /** Add the file at `path`, one a source's compile reads, unless it is there already. */
+  addInclude(path: string): void {
+    if (this.sources.indexOf(path) < 0 && this.includes.indexOf(path) < 0) {
+      this.includes.push(path)
     }
   }
 }
 
 /**
- * Every `.h` file under the package directory `dir`, the headers a source of
- * that package can include by a relative path: a walk of the whole tree but
- * dot entries and `node_modules`, each directory once by its real path, so a
- * symbolic link cannot loop the walk. Sorted within each directory.
+ * The prerequisites of the make rule `clang -M` prints (`scripts/build.sh
+ * --link-depends`), in its order: what follows the target's `: `, split at
+ * blanks and at a backslash-newline, a backslash-blank kept as a blank and
+ * `$$` as `$`. Null when the text holds no rule or names a path that is not
+ * absolute, which every path is when the source's path is, so a reply this
+ * cannot read keys nothing it would get wrong.
  */
-const packageHeaders = (dir: string): string[] => {
+export const makeRulePaths = (text: string): string[] | null => {
+  // 58 `:`, 32 blank, 9 tab, 10 newline, 13 return, 92 backslash, 36 `$`.
+  let at = 0
+  let found = false
+  while (at < text.length && !found) {
+    const after = at + 1 < text.length ? text.charCodeAt(at + 1) : 10
+    found = text.charCodeAt(at) === 58 && (after === 32 || after === 10)
+    at = at + 1
+  }
+  if (!found) {
+    return null
+  }
   const out: string[] = []
-  const seen: string[] = []
-  const queue: string[] = [dir]
-  let next = 0
-  while (next < queue.length) {
-    const at = queue[next]
-    next = next + 1
-    const real = realpathSync(at)
-    let names: string[] | null = null
-    if (real !== null && seen.indexOf(real) < 0) {
-      names = readdirSync(real)
-    }
-    if (real !== null && names !== null) {
-      seen.push(real)
-      for (const name of names) {
-        // Neither a dot entry nor `node_modules` is the package's own C.
-        const path = `${real}/${name}`
-        const own = !name.startsWith(".") && name !== "node_modules"
-        if (own && isDirectorySync(path)) {
-          queue.push(path)
-        } else if (own && name.endsWith(".h")) {
-          out.push(path)
-        }
+  let word = new StringBuilder()
+  let i = at
+  while (i <= text.length) {
+    const c = i < text.length ? text.charCodeAt(i) : 32
+    const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 32
+    if ((c === 92 && next === 32) || (c === 36 && next === 36)) {
+      word.addChar(next)
+      i = i + 2
+    } else if (c === 32 || c === 9 || c === 10 || c === 13 || c === 92) {
+      const done = word.toText()
+      if (done.length > 0 && !done.startsWith("/")) {
+        return null
       }
+      if (done.length > 0) {
+        out.push(done)
+      }
+      word = new StringBuilder()
+      i = i + 1
+    } else {
+      word.addChar(c)
+      i = i + 1
     }
   }
   return out
@@ -260,11 +274,14 @@ const packageHeaders = (dir: string): string[] => {
 /**
  * The run-cache key's lines for `links`' libraries and sources: one per
  * library, one per source with its path and its bytes' hash, since an edit
- * to a package's C file is a different binary, and one per header under the
- * package that source came from (`packageHeaders`), since an edit to a
- * header the source includes is one too. A header outside the package is
- * not keyed (docs/security/package-link.md, PL-10). Empty for a link that
- * names none, so every key from before WP66 S7 is the bytes it was.
+ * to a package's C file is a different binary, and one per file the
+ * sources' compiles read (`includes`, what clang -M listed: every header
+ * and included file of any name, the system's too), since an edit to any of
+ * them is one too. When some source's reads could not be listed, a line
+ * that says so, and the run links afresh whatever the cache holds rather
+ * than trust a key that may miss a read (docs/security/package-link.md,
+ * PL-6). Empty for a
+ * link that names none, so every key from before WP66 S7 is the bytes it was.
  */
 export const linkSetLines = (links: LinkSet): string => {
   const key = new StringBuilder()
@@ -274,10 +291,11 @@ export const linkSetLines = (links: LinkSet): string => {
   for (const path of links.sources) {
     key.add(`link-source ${path.length} ${path} ${fileFingerprint(path)}\n`)
   }
-  for (const dir of links.headerDirs) {
-    for (const path of packageHeaders(dir)) {
-      key.add(`link-header ${path.length} ${path} ${fileFingerprint(path)}\n`)
-    }
+  for (const path of links.includes) {
+    key.add(`link-include ${path.length} ${path} ${fileFingerprint(path)}\n`)
+  }
+  if (links.includesUnlisted) {
+    key.add("link-include-unlisted\n")
   }
   return key.toText()
 }

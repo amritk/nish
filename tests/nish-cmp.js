@@ -1370,6 +1370,30 @@ const DECLARED = [
     why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
   },
   {
+    program: "tests/link/pkg_link_source_nonascii_raw/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_control/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nul/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_dep_key_nonascii/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
     program: "tests/link/pkg_link_source_not_c/main.ts",
     file: "exit",
     changelog: PACKAGE_LINK,

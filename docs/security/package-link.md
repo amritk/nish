@@ -19,13 +19,13 @@ from an allowlist of characters, or the real path of a `.c` file inside that
 package. Nothing it writes becomes a flag. A dependency adds nothing the root
 does not name, entry by entry, and a key the reader does not know is refused
 rather than skipped. The run cache key holds the link set, each source's
-bytes and each header in that source's package, so a changed source or header
-links again. Each property PL-1 to PL-6 names the tests that pin it; a claim
-with no test beside it is stated from the code alone. One finding was fixed
-before merge (PL-F1, Low). Four limits are accepted: PL-7 (the C runs with
-every power the program has), PL-8 (`-l` takes whatever the system linker
-finds), PL-9 (a source's `#include`s are not confined) and PL-10 (a header
-outside the package does not key the run cache).
+bytes and every file the compile of that source reads, as clang lists them,
+so a changed source, or anything it includes, links again. Each property PL-1
+to PL-6 names the tests that pin it; a claim with no test beside it is stated
+from the code alone. Two findings were fixed before merge (PL-F1 and PL-F2,
+Low). Three limits are accepted: PL-7 (the C runs with every power the
+program has), PL-8 (`-l` takes whatever the system linker finds) and PL-9 (a
+source's `#include`s are not confined).
 
 The link diagnostics (NL3059, NL3060, NL3061) are reported only when the
 program is linked, under `nish run` or `--link`. A compile to IR alone does
@@ -36,9 +36,9 @@ not read the entries of `nish.link` and refuses none of them.
 | File | Functions |
 | --- | --- |
 | `src/manifest.ts` | `manifestNish` (the `link` key), `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem` (NL3059, NL3060) |
-| `src/compile.ts` | `readLinkSet`, `linkPackages`, `refuseUngranted` (NL3061), `addLinkRequest`, `linkProgram` (the `--link-lib` and `--link-source` arguments) |
-| `src/run-cache.ts` | `LinkSet`, `packageHeaders`, `linkSetLines`, `runCacheKey` |
-| `scripts/build.sh` | `--link-lib`, `--link-source` |
+| `src/compile.ts` | `readLinkSet`, `linkPackages`, `refuseUngranted` (NL3061), `addLinkRequest`, `readLinkIncludes`, `linkProgram` (the `--link-lib` and `--link-source` arguments) |
+| `src/run-cache.ts` | `LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey` |
+| `scripts/build.sh` | `--link-lib`, `--link-source`, `--link-depends` |
 
 ## What the check covers
 
@@ -72,7 +72,10 @@ existing `.c` file.
 
 Tests: `link/pkg_link_source_escape` (`..`), `link/pkg_link_source_absolute`,
 `link/pkg_link_source_backslash`, `link/pkg_link_source_not_c`,
-`link/pkg_link_source_nonascii`;
+`link/pkg_link_source_nonascii` (the escape `"c/\u00e9.c"`),
+`link/pkg_link_source_nonascii_raw` (a raw UTF-8 `é`),
+`link/pkg_link_source_control` (`\u0001`), `link/pkg_link_source_nul`
+(`\u0000`);
 `package-link: a granted source that is a symbolic link out of its package is refused, and nothing runs`.
 The empty path and the leading `-` are stated from the code; no test
 provokes them.
@@ -110,10 +113,23 @@ cannot parse at all is refused when its text mentions `link`. Read as
 "nothing linked", it could hide a request. No count or length cap drops a
 distinct entry: each refused entry is its own diagnostic.
 
+A known leniency: `manifestReadList` on its own steps over a missing comma
+(`["a" "b"]` reads as two entries) and a trailing one (`["a",]` as one). It
+is reached only through `manifestNish`, which first checks the whole manifest
+with `manifestMalformedAt`, and a manifest that is not JSON and spells
+`link` (or holds a `\u` escape) is refused where it breaks (NL3059,
+`` `package.json` stops being JSON here ``). Each entry it reads is then
+checked on its own, so the leniency adds no entry the text does not spell. A
+new caller that reads a list without that check would inherit it.
+
 Tests: `link/pkg_link_unknown_key` (`pkgConfig`), `link/pkg_link_wrong_type`,
 `link/pkg_link_repeated_key`, `link/pkg_link_repeated_package`,
 `link/pkg_link_dep_unreadable` (a dependency `nish` field that is an array
-and mentions `link`). That no cap drops an entry is stated from the code.
+and mentions `link`), `link/pkg_link_dep_list_not_json` (a dependency's list
+missing its comma), `link/pkg_link_dep_key_nonascii` (a granted package name
+spelled `"pkg_m\u00fcl"`), `link/pkg_link_dep_source_collision` (the grant
+`"c/\u00e9.c"` against the ask `"c/\u00ea.c"`, both refused). That no cap
+drops an entry is stated from the code.
 
 ### PL-5: SQLite is one entry of the same set
 
@@ -135,15 +151,24 @@ Tests: the existing `sqlite-link:` checks in `tests/run.js`.
 
 `linkSetLines` adds one `link-library` line per library, one
 `link-source <length> <path> <fingerprint>` line per source, and one
-`link-header <length> <path> <fingerprint>` line per `.h` file under the
-package directory each source came from (`packageHeaders`: dot entries and
-`node_modules` skipped, each directory walked once by its real path) to the
-key `runCacheKey` hashes. A program whose IR is unchanged but whose source,
-header or library list changed is a miss and links again.
+`link-include <length> <path> <fingerprint>` line per file the compile of a
+source reads, to the key `runCacheKey` hashes. `readLinkIncludes` asks
+`scripts/build.sh --link-depends` for that list: clang's `-M` make rule for
+the source, under the same profile, CPU and flags the link will compile it
+with, so headers, `.inc` files, an included `.c` file and system headers are
+all in it, wherever they live, by name or not. `makeRulePaths` reads the
+rule; a list that cannot be had (the preprocessor fails) or read (no rule, or
+a path that is not absolute) sets `includesUnlisted`, and `cachedBinary` then
+links again on every run rather than trust a key that misses a file. A
+program whose IR is unchanged but whose source, an included file or library
+list changed is a miss and links again.
 
 Tests: `package-link: \`nish run\` links the package's own source and library, and a change to the source alone links again`;
-`package-link: a change to a header the linked source includes, and nothing else, links again`.
-That a changed library list is a miss is stated from the code.
+`package-link: a change to a header the linked source includes, and nothing else, links again`;
+`package-link: a change to a \`.inc\` file, or a \`.c\` file, the linked source includes, and nothing else, links again`.
+With `addInclude` disabled, the second and third fail and the first passes.
+That a changed library list is a miss, and that an unlisted source links on
+every run, are stated from the code.
 
 ## Findings fixed
 
@@ -158,10 +183,31 @@ the entry checked. `manifestPrintableAscii` now refuses a source path or a
 granted package name holding any character outside 32 to 126 (NL3060), and
 `manifestLinkLibrary`'s allowlist already refused one in a library name.
 
-Before: `link/pkg_link_source_nonascii` was refused only because no file
-`c/<DEL>.c` existed (`is no file inside the package`); with one present, it
-linked. After: the entry is refused as written (expected.err
-`the path holds a character that is not printable ASCII`).
+Before (`manifestPrintableAscii` made to accept everything):
+`link/pkg_link_dep_source_collision`'s ask `"c/\u00ea.c"` matched the grant
+`"c/\u00e9.c"`, so no NL3061 was raised, and it failed only because no file
+`c/<DEL>.c` exists (`is no file inside the package`); a package shipping that
+file would have linked. `link/pkg_link_dep_key_nonascii` linked.
+`link/pkg_link_source_nonascii` was refused only as `is no file inside the
+package`. After: each entry is refused as written (NL3060, `the path holds a
+character that is not printable ASCII`, or for the key `a package name in
+\`dependencies\` holds a character that is not printable ASCII`), and each of
+the three expected.err files fails against the before build.
+`link/pkg_link_source_nonascii_raw` writes the raw character, which the
+decoder keeps as it is and which never collided; it pins the refusal, not the
+finding.
+
+### PL-F2 (Low): an included file that was not a package `.h` did not key the run cache
+
+The first version keyed only the `.h` files under each source's package
+directory, found by walking that tree. An edit to any other file a source
+includes, a `.inc`, a `.hpp`, an included `.c`, a header reached by `..` or
+a system header, was a run-cache hit, and `nish run` ran the old binary. The
+walk was also unbounded in a large package. The key now holds what the
+compile reads, as PL-6 says, and the walk is gone.
+
+Before (`addInclude` disabled): the `.inc`/`.c` check and the header check
+fail, each run printing the first binary's output. After: both pass.
 
 ## Accepted limits
 
@@ -181,11 +227,6 @@ The name is checked; the file it finds is not.
 
 A granted source is compiled with clang's default include paths. Its
 `#include` may read any header the compiler can open, inside or outside the
-package. Only the source file itself is held to the package.
-
-### PL-10: a header outside the package does not key the run cache
-
-`packageHeaders` keys the headers under the source's own package. A header
-included from elsewhere (a system header, or one reached by `..`) is not
-keyed, so an edit to it alone is a run-cache hit and the old binary runs.
-Clearing the cache (`XDG_CACHE_HOME`) or editing the source links again.
+package. Only the source file itself is held to the package. What it reads
+does key the run cache (PL-6), so a file it reads outside the package is
+still rebuilt on.

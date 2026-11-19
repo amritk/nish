@@ -14,7 +14,7 @@
 
 ## Next
 
-S1: [§8, S1](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md#s1-zeroext-on-narrow-foreign-parameters). S2 follows it. S3, S4, S5 and S7 do not depend on one another.
+S1: [§8, S1](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md#s1-zeroext-on-narrow-foreign-parameters). S2 follows it. S3, S4 and S5 do not depend on one another.
 
 ## Open questions
 
