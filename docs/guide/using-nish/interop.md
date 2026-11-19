@@ -919,7 +919,6 @@ A function from the C library links with `nish run` or `--link` as it is.
 Your own C, and any other library, is named in the `nish.link` field of the
 nearest `package.json` above the entry file. `nish run` and `--link` read it:
 
-<!-- nish:ok -->
 ```json package.json
 {
   "name": "app",
@@ -954,7 +953,6 @@ grants it, entry by entry, under `nish.link.dependencies`. Each library or
 source a dependency names that you have not granted is refused (NL3061). The
 dependency still needs the `ffi` capability to call its C:
 
-<!-- nish:ok -->
 ```json package.json
 {
   "name": "app",
