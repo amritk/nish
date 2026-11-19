@@ -326,7 +326,10 @@ const checkMulHigh = (ctx: CheckContext, call: Node, scope: Scope, name: string,
     if (got === T_ERROR) {
       failed = true
     } else if (got !== T_U64) {
-      ctx.error(args.children[i], `\`${name}\` takes u64 operands (convert with toU64), got ${ctx.table.typeName(got)}`)
+      ctx.error(
+        args.children[i],
+        `\`${name}\` takes u64 operands (convert with toU64), got ${ctx.table.typeName(got)}`
+      )
       failed = true
     }
   }

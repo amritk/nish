@@ -3154,21 +3154,6 @@ function jsonTokParseEight(word: u64): u64 -> @nish.jsonTokParseEight
   local +4:9 high: u64 (const)
   callee +4:53 jsonTokW64 -> @nish.jsonTokW64
   callee +5:40 jsonTokW64 -> @nish.jsonTokW64
-function jsonTokMulHigh(a: u64, b: u64): u64 -> @nish.jsonTokMulHigh
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.jsonTokW64
-  stackSites=0 stackLocals=0
-  local +0:9 k32: u64 (const)
-  local +1:9 mask: u64 (const)
-  callee +1:21 jsonTokW64 -> @nish.jsonTokW64
-  local +2:9 aHi: u64 (const)
-  local +3:9 aLo: u64 (const)
-  local +4:9 bHi: u64 (const)
-  local +5:9 bLo: u64 (const)
-  local +6:9 ll: u64 (const)
-  local +7:9 hl: u64 (const)
-  local +8:9 lh: u64 (const)
-  local +9:9 cross: u64 (const)
 function jsonTokLeadingZeros(w: u64): i32 -> @nish.jsonTokLeadingZeros
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ctlz.i32
@@ -3177,7 +3162,7 @@ function jsonTokLeadingZeros(w: u64): i32 -> @nish.jsonTokLeadingZeros
 function jsonTokEiselLemire(w0: u64, q: i32): f64 -> @nish.jsonTokEiselLemire
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: w0
-  calls: nish.jsonTokLeadingZeros nish.jsonTokMulHigh nish.jsonTokPowerOfFive nish.jsonTokW64 nish_panic_overflow
+  calls: nish.jsonTokLeadingZeros nish.jsonTokPowerOfFive nish.jsonTokW64 nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 one: u64 (const)
   local +1:9 infinity: u64 (const)
@@ -3188,14 +3173,12 @@ function jsonTokEiselLemire(w0: u64, q: i32): f64 -> @nish.jsonTokEiselLemire
   local +15:9 five: u64 (const)
   callee +15:21 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
   local +16:7 high: u64 (let)
-  callee +16:19 jsonTokMulHigh -> @nish.jsonTokMulHigh
   local +19:9 allOnes: u64 (const)
   callee +19:24 jsonTokW64 -> @nish.jsonTokW64
   local +20:7 low: u64 (let)
   local +21:9 precisionMask: u64 (const)
   local +23:11 second: u64 (const)
-  callee +23:25 jsonTokMulHigh -> @nish.jsonTokMulHigh
-  callee +23:43 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
+  callee +23:36 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
   local +26:11 room: u64 (const)
   local +34:9 upperbit: i32 (const)
   local +35:9 shift: i32 (const)
