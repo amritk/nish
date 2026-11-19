@@ -20,6 +20,12 @@ runs come from this repository's bench suite; that suite is in
 
 ### The video
 
+<scalar-embed
+  src="https://www.youtube.com/embed/TIyvOtGjnzc?start=1159"
+  caption="Which Programming Language Can Handle the Most Users on 8 Cores? (Arjay McCandless). The #2 Nish chapter starts at 19:19."
+  alt="The organiser's video counting down the top 10 entries of the multicore server challenge">
+</scalar-embed>
+
 The organiser's video walks through the code of the top 10 entries on the
 leaderboard, in Java, F#, Assembly, Swift, C, Zig, Rust and Nish. It
 follows one request through each system down into Postgres, then looks at
