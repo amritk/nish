@@ -181,9 +181,11 @@ the end both stay refused, each with a diagnostic that says why.
 
 ### c1-strings
 
-**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/statements.ts`, `src/emit-control.ts`, `src/emit-strings.ts`, `src/emit-ts-control.ts`, `src/emit-ts-strings.ts`, `src/loop-flow.ts`, `src/program.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_switch_*`, `tests/cases/reject_for_of_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`
+**Owns:** `src/compat.ts`, `src/context.ts`, `src/codes.ts`, `src/statements.ts`, `src/emit-control.ts`, `src/emit-strings.ts`, `src/emit-ts-control.ts`, `src/emit-ts-strings.ts`, `src/loop-flow.ts`, `src/program.ts`, `tests/compat-erasure.js`, `tests/run.js`, `tests/link/compat_*/**`, `tests/cases/compat_*`, `tests/cases/reject_switch_*`, `tests/cases/reject_for_of_*`, `tests/cases/*.err`, `tests/cases/*.json`, `docs/LANGUAGE.md`, `docs/guide/**`, `docs/wp28-compatibility-mode.md`, `src/options.ts`, `tests/nish-cmp.js`, `tests/wordings/**`, `tests/cases/*.ll`, `tests/cases/*.out`, `src/emit-*.ts`, `src/arrays.ts`, `src/validator.ts`, `src/checker.ts`, `src/bounds.ts`, `src/escape.ts`, `src/assignment.ts`, `src/strings.ts`, `tests/link/*/expected.err`, `tests/link/*/expected.json`, `tests/cases/switch_*`, `tests/cases/for_of_*`
 
-**Depends on:** c1-nullish, which must merge before this stage starts. It needs the shared query, the feature-naming note and the erasure list.
+**Depends on:** c1-nullish, which must merge before this stage starts.
+
+**Amended 2026-11-19, pre-flight before spawn:** `emitForOf` lives in `src/emit-arrays.ts`, and `src/validator.ts`, `src/checker.ts`, `src/bounds.ts`, `src/escape.ts`, `src/assignment.ts` and `src/arrays.ts` each walk a `ForOf` on the assumption that it iterates an array. A string iterable may need each of them. A reworded strict refusal moves `tests/link/*/expected.err`/`.json`. c1-nullish needed the same widening three times, so this stage gets it up front. It needs the shared query, the feature-naming note and the erasure list.
 
 ### c1-signatures
 
