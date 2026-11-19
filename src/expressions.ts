@@ -101,7 +101,7 @@ import {
 import { ParentTable } from "./parents"
 import { isOptionalChain, unwrapParens } from "./emit-util"
 import { CheckedProgram, FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
-import { coercesTo, rejectOpaque } from "./structs"
+import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
 import { simdCompareMessage, simdImportMessage } from "./simd"
 import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
@@ -4231,15 +4231,6 @@ const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
     if (isResultConstructor(callee.text)) {
       if (want === T_ERROR) {
         return T_ERROR // typed by its context alone, and the context was refused
-      }
-      // WP66 S3: a `Result` is arena memory, so an opaque class is refused as
-      // either arm where every `Result` value is made, as a `CPtr` is.
-      if (
-        ctx.table.isResult(want) &&
-        (rejectOpaque(ctx, ctx.table.okOf(want), "a `Result` arm", expr) ||
-          rejectOpaque(ctx, ctx.table.errOf(want), "a `Result` arm", expr))
-      ) {
-        return T_ERROR
       }
       return checkResultConstructor(ctx, expr, scope, want) // WP16: `Ok(v)` / `Err(e)`
     }
