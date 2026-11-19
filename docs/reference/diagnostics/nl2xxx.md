@@ -15526,7 +15526,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-`: an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one
+…: an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one
 ```
 
 ## NL2806
