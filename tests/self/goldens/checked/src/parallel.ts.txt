@@ -989,32 +989,34 @@ function captureObstacle(program: CheckedProgram, table: TypeTable, type: i32, s
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureObstacle
   escaping: mode type
-  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.isMaybe TypeTable.isSecret TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.stripNull captureObstacle isThreadsClass isThreadsLayout nish_str_concat
+  calls: CheckedProgram.struct StringSet.add StringSet.has TypeTable.isMaybe TypeTable.isOpaque TypeTable.isSecret TypeTable.kindOf TypeTable.nameOf TypeTable.refOf TypeTable.stripNull captureObstacle isThreadsClass isThreadsLayout nish_str_concat
   pointer program: size=912 writesThrough=false captured=false passedTo=captureObstacle#0 CheckedProgram.struct#0 captureObstacle#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isMaybe#0 TypeTable.isSecret#0 TypeTable.kindOf#0 captureObstacle#1 TypeTable.refOf#0 TypeTable.nameOf#0 captureObstacle#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.isOpaque#0 TypeTable.isMaybe#0 TypeTable.isSecret#0 TypeTable.kindOf#0 captureObstacle#1 TypeTable.refOf#0 TypeTable.nameOf#0 captureObstacle#1
   pointer seen: size=8 writesThrough=false captured=false passedTo=captureObstacle#3 StringSet.has#0 StringSet.add#0 captureObstacle#3
   stackSites=0 stackLocals=0
   local +0:9 task: boolean (const)
   local +1:9 call: boolean (const)
-  callee +2:15 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +5:7 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee +8:7 TypeTable.isSecret -> @TypeTable.isSecret
-  local +11:9 kind: i32 (const)
-  callee +11:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee +16:12 captureObstacle -> @captureObstacle
-  callee +16:44 TypeTable.refOf -> @TypeTable.refOf
-  local +21:9 name: string (const)
-  callee +21:16 TypeTable.nameOf -> @TypeTable.nameOf
-  callee +22:7 StringSet.has -> @StringSet.has
-  callee +25:3 StringSet.add -> @StringSet.add
-  local +26:9 info: StructInfo | null (const)
-  callee +26:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +33:15 isThreadsClass -> @isThreadsClass
-  callee +36:15 isThreadsLayout -> @isThreadsLayout
-  callee +42:7 isThreadsLayout -> @isThreadsLayout
-  local +45:14 field: FieldInfo (const)
-  local +46:11 inner: string (const)
-  callee +46:19 captureObstacle -> @captureObstacle
+  local +2:9 bare: i32 (const)
+  callee +2:16 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +3:35 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +6:7 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee +9:7 TypeTable.isSecret -> @TypeTable.isSecret
+  local +12:9 kind: i32 (const)
+  callee +12:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee +17:12 captureObstacle -> @captureObstacle
+  callee +17:44 TypeTable.refOf -> @TypeTable.refOf
+  local +22:9 name: string (const)
+  callee +22:16 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +23:7 StringSet.has -> @StringSet.has
+  callee +26:3 StringSet.add -> @StringSet.add
+  local +27:9 info: StructInfo | null (const)
+  callee +27:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +34:15 isThreadsClass -> @isThreadsClass
+  callee +37:15 isThreadsLayout -> @isThreadsLayout
+  callee +43:7 isThreadsLayout -> @isThreadsLayout
+  local +46:14 field: FieldInfo (const)
+  local +47:11 inner: string (const)
+  callee +47:19 captureObstacle -> @captureObstacle
 function captureTypeMessage(program: CheckedProgram, table: TypeTable, name: string, type: i32, mode: i32): string -> @captureTypeMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureObstacle

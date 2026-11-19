@@ -78,6 +78,7 @@ import collectMethodSignature from "./structs" -> function @collectMethodSignatu
 import collectStructMembers from "./structs" -> function @collectStructMembers
 import noteStructNames from "./structs" -> function @noteStructNames
 import referencedStructNames from "./structs" -> function @referencedStructNames
+import rejectOpaque from "./structs" -> function @rejectOpaque
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
 import FLAG_REFERENCE_ARROW from "./nodes" -> const FLAG_REFERENCE_ARROW
@@ -635,29 +636,30 @@ function instantiateStruct(ctx: CheckContext, template: StructTemplateInfo, args
 function instantiateStructHere(ctx: CheckContext, template: StructTemplateInfo, args: i32[], at: Node, site: RequestSite): StructInfo | null -> @instantiateStructHere
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.isCollections CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor TypeTable.markSecret adoptArgumentLayouts checkStructConstraints collectInstanceMembers collectionArgumentRefusal expandingStructAncestor instanceStructType instanceSymbol isCollectionTemplate isSecretPayload isSecretTemplate nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingStructMessage rejectForeignPointer rejectHandleArgument rejectStoredMask secretArgumentRefusal secretShapeMessage
+  calls: CheckContext.error CheckedProgram.addStruct CheckedProgram.addStructInstance CheckedProgram.isCollections CheckedProgram.structInstance StringMap.constructor StringMap.set StructInfo.constructor StructInstantiation.constructor TypeTable.markSecret adoptArgumentLayouts checkStructConstraints collectInstanceMembers collectionArgumentRefusal expandingStructAncestor instanceStructType instanceSymbol isCollectionTemplate isSecretPayload isSecretTemplate nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingStructMessage rejectForeignPointer rejectHandleArgument rejectOpaque rejectStoredMask secretArgumentRefusal secretShapeMessage
   pointer ctx: size=448 writesThrough=true captured=true passedTo=adoptArgumentLayouts#0 checkStructConstraints#0 expandingStructAncestor#0 collectInstanceMembers#0
   pointer template: size=64 writesThrough=true captured=true passedTo=isCollectionTemplate#0 collectionArgumentRefusal#1 isSecretTemplate#0 checkStructConstraints#1 expandingStructAncestor#2 nonTerminatingStructMessage#1 StructInstantiation.constructor#1 isSecretTemplate#0
   pointer args: size=0 writesThrough=true captured=true passedTo=collectionArgumentRefusal#2 secretArgumentRefusal#2 adoptArgumentLayouts#1 checkStructConstraints#2 instanceSymbol#2 expandingStructAncestor#3 nonTerminatingStructMessage#3 instanceStructType#2 StructInstantiation.constructor#2
-  pointer at: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkStructConstraints#3 rejectForeignPointer#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
+  pointer at: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkStructConstraints#3 rejectForeignPointer#3 rejectOpaque#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2
   stackSites=0 stackLocals=0
-  callee -67:7 isCollectionTemplate -> @isCollectionTemplate
-  callee -67:42 CheckedProgram.isCollections -> @CheckedProgram.isCollections
-  local -66:11 refusal: string (const)
-  callee -66:21 collectionArgumentRefusal -> @collectionArgumentRefusal
-  callee -64:7 CheckContext.error -> @CheckContext.error
-  callee -58:7 isSecretTemplate -> @isSecretTemplate
-  callee -57:54 isSecretPayload -> @isSecretPayload
-  callee -56:7 CheckContext.error -> @CheckContext.error
-  callee -56:28 secretShapeMessage -> @secretShapeMessage
-  local -52:11 holding: string (const)
-  callee -52:21 secretArgumentRefusal -> @secretArgumentRefusal
-  callee -50:7 CheckContext.error -> @CheckContext.error
-  callee -46:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  callee -43:8 checkStructConstraints -> @checkStructConstraints
-  local -36:14 arg: i32 (const)
-  callee -35:9 rejectForeignPointer -> @rejectForeignPointer
+  callee -70:7 isCollectionTemplate -> @isCollectionTemplate
+  callee -70:42 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  local -69:11 refusal: string (const)
+  callee -69:21 collectionArgumentRefusal -> @collectionArgumentRefusal
+  callee -67:7 CheckContext.error -> @CheckContext.error
+  callee -61:7 isSecretTemplate -> @isSecretTemplate
+  callee -60:54 isSecretPayload -> @isSecretPayload
+  callee -59:7 CheckContext.error -> @CheckContext.error
+  callee -59:28 secretShapeMessage -> @secretShapeMessage
+  local -55:11 holding: string (const)
+  callee -55:21 secretArgumentRefusal -> @secretArgumentRefusal
+  callee -53:7 CheckContext.error -> @CheckContext.error
+  callee -49:3 adoptArgumentLayouts -> @adoptArgumentLayouts
+  callee -46:8 checkStructConstraints -> @checkStructConstraints
+  local -39:14 arg: i32 (const)
+  callee -38:9 rejectForeignPointer -> @rejectForeignPointer
+  callee -35:9 rejectOpaque -> @rejectOpaque
   callee -32:9 rejectStoredMask -> @rejectStoredMask
   callee -29:9 rejectHandleArgument -> @rejectHandleArgument
   local -25:9 name: string (const)
@@ -747,35 +749,36 @@ function instantiateHere(ctx: CheckContext, template: TemplateInfo, args: i32[],
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: functions
-  calls: CaptureSlot.type CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set adoptArgumentLayouts bindFunctionParameters capturesOf chainArguments chainParameters checkConstraints collectFunctionSignature collectMethodSignature expandingAncestor exposeTo functionInstanceDisplayName instanceSymbol internalErrorFor jsonRouteRole mapIntrinsicRole nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingMessage parallelRole receiverOf rejectForeignPointer rejectHandleArgument rejectStoredMask withFunctionArguments
+  calls: CaptureSlot.type CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set adoptArgumentLayouts bindFunctionParameters capturesOf chainArguments chainParameters checkConstraints collectFunctionSignature collectMethodSignature expandingAncestor exposeTo functionInstanceDisplayName instanceSymbol internalErrorFor jsonRouteRole mapIntrinsicRole nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingMessage parallelRole receiverOf rejectForeignPointer rejectHandleArgument rejectOpaque rejectStoredMask withFunctionArguments
   pointer ctx: size=448 writesThrough=true captured=true passedTo=adoptArgumentLayouts#0 adoptArgumentLayouts#0 checkConstraints#1 exposeTo#0 expandingAncestor#0 collectFunctionSignature#0 collectMethodSignature#0
   pointer template: size=64 writesThrough=true captured=true passedTo=expandingAncestor#2 nonTerminatingMessage#1 chainParameters#0 chainArguments#0 Instantiation.constructor#1 receiverOf#0 parallelRole#0 mapIntrinsicRole#0 jsonRouteRole#0
   pointer args: size=0 writesThrough=true captured=true passedTo=adoptArgumentLayouts#1 checkConstraints#5 instanceSymbol#2 expandingAncestor#3 nonTerminatingMessage#3 chainArguments#1 functionInstanceDisplayName#2 Instantiation.constructor#2
   pointer functions: size=0 writesThrough=true captured=true passedTo=withFunctionArguments#1 functionInstanceDisplayName#3 bindFunctionParameters#1
-  pointer at: size=40 writesThrough=false captured=false passedTo=checkConstraints#6 rejectForeignPointer#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
+  pointer at: size=40 writesThrough=false captured=false passedTo=checkConstraints#6 rejectForeignPointer#3 rejectOpaque#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2 adoptArgumentLayouts#2
   stackSites=1 stackLocals=1
-  callee -130:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  local -127:9 captured: i32[] (const)
-  local -126:14 fn: FunctionSig (const)
-  local -125:16 slot: CaptureSlot (const)
-  callee -125:24 capturesOf -> @capturesOf
-  callee -124:21 CaptureSlot.type -> @CaptureSlot.type
-  callee -121:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  callee -107:6 checkConstraints -> @checkConstraints
-  local -93:9 owner: StructInfo | null (const)
-  local -92:9 base: string (const)
-  local -90:14 fn: FunctionSig (const)
-  callee -89:5 exposeTo -> @exposeTo
-  local -87:9 symbol: string (const)
-  callee -87:18 withFunctionArguments -> @withFunctionArguments
-  callee -86:5 instanceSymbol -> @instanceSymbol
-  local -83:9 existing: Instantiation | null (const)
-  callee -83:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
-  local -77:11 minted: TemplateInfo | null (const)
-  callee -74:9 internalErrorFor -> @internalErrorFor
-  local -61:14 arg: i32 (const)
-  callee -60:9 rejectForeignPointer -> @rejectForeignPointer
+  callee -133:3 adoptArgumentLayouts -> @adoptArgumentLayouts
+  local -130:9 captured: i32[] (const)
+  local -129:14 fn: FunctionSig (const)
+  local -128:16 slot: CaptureSlot (const)
+  callee -128:24 capturesOf -> @capturesOf
+  callee -127:21 CaptureSlot.type -> @CaptureSlot.type
+  callee -124:3 adoptArgumentLayouts -> @adoptArgumentLayouts
+  callee -110:6 checkConstraints -> @checkConstraints
+  local -96:9 owner: StructInfo | null (const)
+  local -95:9 base: string (const)
+  local -93:14 fn: FunctionSig (const)
+  callee -92:5 exposeTo -> @exposeTo
+  local -90:9 symbol: string (const)
+  callee -90:18 withFunctionArguments -> @withFunctionArguments
+  callee -89:5 instanceSymbol -> @instanceSymbol
+  local -86:9 existing: Instantiation | null (const)
+  callee -86:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
+  local -80:11 minted: TemplateInfo | null (const)
+  callee -77:9 internalErrorFor -> @internalErrorFor
+  local -64:14 arg: i32 (const)
+  callee -63:9 rejectForeignPointer -> @rejectForeignPointer
+  callee -60:9 rejectOpaque -> @rejectOpaque
   callee -57:9 rejectStoredMask -> @rejectStoredMask
   callee -54:9 rejectHandleArgument -> @rejectHandleArgument
   local -38:9 growing: Expansion | null (const)

@@ -87,7 +87,6 @@ import FunctionSig from "./program" -> struct FunctionSig
 import StructInfo from "./program" -> struct StructInfo
 import TemplateInfo from "./program" -> struct TemplateInfo
 import coercesTo from "./structs" -> function @coercesTo
-import rejectOpaque from "./structs" -> function @rejectOpaque
 import isUndefined from "./validator" -> function @isUndefined
 import isUndefinedType from "./validator" -> function @isUndefinedType
 import undefinedForbidden from "./validator" -> function @undefinedForbidden
@@ -2688,75 +2687,70 @@ function checkCall(ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: outer want
-  calls: CheckContext.capturesOuter CheckContext.compatAllows CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.builtinImport FunctionBindings.get FunctionSig.foreign FunctionSig.isAsync Scope.child Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.errOf TypeTable.isFnRef TypeTable.isResult TypeTable.okOf TypeTable.typeName asyncBuiltinOf checkAsyncBuiltin checkBuiltinCall checkBuiltinFunction checkDirectCall checkEnumString checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkOverloadCall checkReferenceCall checkResultConstructor dateRefusal defaultTarget fitArguments isBuiltinFunction isOptionalChain isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nullableReference outerFunctionMessage outerReference promiseMethodMessage refuseForeignNullable refuseNullableCall refuseOnce refuseSecretArguments refuseUnawaitedCall rejectOpaque simdImportMessage stringCallFix unwrapParens
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.compatAllows#0 checkExpression#0 promiseMethodMessage#0 CheckContext.errorType#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorType#0 checkExpression#0 checkReferenceCall#0 nullableReference#0 refuseNullableCall#0 CheckContext.capturesOuter#0 outerReference#0 checkExpression#0 nullableReference#0 refuseNullableCall#0 checkReferenceCall#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkAsyncBuiltin#0 refuseSecretArguments#0 checkImportedBuiltin#0 rejectOpaque#0 rejectOpaque#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 checkEnumString#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 refuseUnawaitedCall#0 defaultTarget#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0 checkOverloadCall#0
-  pointer expr: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0 CheckContext.errorType#1 checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 checkReferenceCall#1 CheckContext.errorType#1 checkReferenceCall#1 checkReferenceCall#1 checkDirectCall#1 checkGenericCall#1 checkAsyncBuiltin#1 refuseSecretArguments#1 checkImportedBuiltin#1 rejectOpaque#3 rejectOpaque#3 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 checkEnumString#1 CheckContext.errorType#1 CheckContext.errorType#1 stringCallFix#1 refuseUnawaitedCall#1 fitArguments#1 checkOverloadCall#1
+  calls: CheckContext.capturesOuter CheckContext.compatAllows CheckContext.error CheckContext.errorAtProperty CheckContext.errorFix CheckContext.errorType CheckContext.signature CheckContext.template CheckContext.textOf CheckedProgram.builtinImport FunctionBindings.get FunctionSig.foreign FunctionSig.isAsync Scope.child Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.isFnRef TypeTable.typeName asyncBuiltinOf checkAsyncBuiltin checkBuiltinCall checkBuiltinFunction checkDirectCall checkEnumString checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkOverloadCall checkReferenceCall checkResultConstructor dateRefusal defaultTarget fitArguments isBuiltinFunction isOptionalChain isResultConstructor isSimdExport isSimdOp isValueReceiver neverNullMessage nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nullableReference outerFunctionMessage outerReference promiseMethodMessage refuseForeignNullable refuseNullableCall refuseOnce refuseSecretArguments refuseUnawaitedCall simdImportMessage stringCallFix unwrapParens
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.compatAllows#0 checkExpression#0 promiseMethodMessage#0 CheckContext.errorType#0 isValueReceiver#0 checkMethodCall#0 CheckContext.errorAtProperty#0 neverNullMessage#0 refuseSecretArguments#0 checkBuiltinCall#0 checkExpression#0 checkReferenceCall#0 CheckContext.textOf#0 nullableReference#0 refuseNullableCall#0 CheckContext.textOf#0 CheckContext.errorType#0 checkExpression#0 checkReferenceCall#0 nullableReference#0 refuseNullableCall#0 CheckContext.capturesOuter#0 outerReference#0 checkExpression#0 nullableReference#0 refuseNullableCall#0 checkReferenceCall#0 refuseOnce#0 outerFunctionMessage#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkAsyncBuiltin#0 refuseSecretArguments#0 checkImportedBuiltin#0 checkResultConstructor#0 refuseSecretArguments#0 checkBuiltinFunction#0 checkEnumString#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorFix#0 stringCallFix#0 refuseUnawaitedCall#0 defaultTarget#0 fitArguments#0 checkExpression#0 refuseForeignNullable#0 CheckContext.error#0 checkOverloadCall#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0 CheckContext.errorType#1 checkMethodCall#1 refuseSecretArguments#1 checkBuiltinCall#1 checkReferenceCall#1 CheckContext.errorType#1 checkReferenceCall#1 checkReferenceCall#1 checkDirectCall#1 checkGenericCall#1 checkAsyncBuiltin#1 refuseSecretArguments#1 checkImportedBuiltin#1 checkResultConstructor#1 refuseSecretArguments#1 checkBuiltinFunction#1 checkEnumString#1 CheckContext.errorType#1 CheckContext.errorType#1 stringCallFix#1 refuseUnawaitedCall#1 fitArguments#1 checkOverloadCall#1
   pointer outer: size=56 writesThrough=true captured=true passedTo=Scope.child#0
   stackSites=1 stackLocals=1
-  local -159:9 scope: Scope (const)
-  callee -159:17 isOptionalChain -> @isOptionalChain
-  callee -159:42 CheckContext.compatAllows -> @CheckContext.compatAllows
-  callee -159:82 Scope.child -> @Scope.child
-  local -158:9 callee: Node (const)
-  callee -156:12 checkExpression -> @checkExpression
-  local -153:11 promised: string (const)
-  callee -153:22 promiseMethodMessage -> @promiseMethodMessage
-  callee -151:14 CheckContext.errorType -> @CheckContext.errorType
-  callee -147:9 isValueReceiver -> @isValueReceiver
-  callee -146:14 checkMethodCall -> @checkMethodCall
-  callee -143:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee -143:35 neverNullMessage -> @neverNullMessage
-  local -138:11 receiver: Node (const)
-  callee -135:7 refuseSecretArguments -> @refuseSecretArguments
-  callee -131:12 checkBuiltinCall -> @checkBuiltinCall
-  local -127:11 computed: i32 (const)
-  callee -127:22 checkExpression -> @checkExpression
-  callee -123:9 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -122:14 checkReferenceCall -> @checkReferenceCall
-  callee -122:54 CheckContext.textOf -> @CheckContext.textOf
-  callee -120:9 nullableReference -> @nullableReference
-  callee -119:14 refuseNullableCall -> @refuseNullableCall
-  callee -119:46 CheckContext.textOf -> @CheckContext.textOf
-  callee -117:12 CheckContext.errorType -> @CheckContext.errorType
-  local -112:9 local: Local | null (const)
-  callee -112:17 Scope.lookup -> @Scope.lookup
-  callee -110:25 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee -110:43 Scope.typeOf -> @Scope.typeOf
-  local -109:11 held: i32 (const)
-  callee -109:18 checkExpression -> @checkExpression
-  callee -108:41 checkReferenceCall -> @checkReferenceCall
-  callee -106:25 nullableReference -> @nullableReference
-  callee -106:48 Scope.typeOf -> @Scope.typeOf
-  callee -105:12 refuseNullableCall -> @refuseNullableCall
-  callee -102:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee -99:11 outerReference -> @outerReference
-  local -98:15 held: i32 (const)
-  callee -98:22 checkExpression -> @checkExpression
-  callee -97:33 nullableReference -> @nullableReference
-  callee -96:18 refuseNullableCall -> @refuseNullableCall
-  callee -94:45 checkReferenceCall -> @checkReferenceCall
-  callee -92:7 refuseOnce -> @refuseOnce
-  callee -92:31 outerFunctionMessage -> @outerFunctionMessage
-  local -89:11 bound: FunctionSig | null (const)
-  callee -89:19 FunctionBindings.get -> @FunctionBindings.get
-  callee -87:14 checkDirectCall -> @checkDirectCall
-  local -84:9 template: TemplateInfo | null (const)
-  callee -84:20 CheckContext.template -> @CheckContext.template
-  callee -82:12 checkGenericCall -> @checkGenericCall
-  local -80:9 sig: FunctionSig | null (const)
-  callee -80:15 CheckContext.signature -> @CheckContext.signature
-  local -76:11 imported: BuiltinExport | null (const)
-  callee -76:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee -74:11 asyncBuiltinOf -> @asyncBuiltinOf
-  callee -73:16 checkAsyncBuiltin -> @checkAsyncBuiltin
-  callee -71:11 refuseSecretArguments -> @refuseSecretArguments
-  callee -68:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee -66:9 isResultConstructor -> @isResultConstructor
-  callee -59:9 TypeTable.isResult -> @TypeTable.isResult
-  callee -58:10 rejectOpaque -> @rejectOpaque
-  callee -58:28 TypeTable.okOf -> @TypeTable.okOf
-  callee -57:11 rejectOpaque -> @rejectOpaque
-  callee -57:29 TypeTable.errOf -> @TypeTable.errOf
+  local -150:9 scope: Scope (const)
+  callee -150:17 isOptionalChain -> @isOptionalChain
+  callee -150:42 CheckContext.compatAllows -> @CheckContext.compatAllows
+  callee -150:82 Scope.child -> @Scope.child
+  local -149:9 callee: Node (const)
+  callee -147:12 checkExpression -> @checkExpression
+  local -144:11 promised: string (const)
+  callee -144:22 promiseMethodMessage -> @promiseMethodMessage
+  callee -142:14 CheckContext.errorType -> @CheckContext.errorType
+  callee -138:9 isValueReceiver -> @isValueReceiver
+  callee -137:14 checkMethodCall -> @checkMethodCall
+  callee -134:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee -134:35 neverNullMessage -> @neverNullMessage
+  local -129:11 receiver: Node (const)
+  callee -126:7 refuseSecretArguments -> @refuseSecretArguments
+  callee -122:12 checkBuiltinCall -> @checkBuiltinCall
+  local -118:11 computed: i32 (const)
+  callee -118:22 checkExpression -> @checkExpression
+  callee -114:9 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -113:14 checkReferenceCall -> @checkReferenceCall
+  callee -113:54 CheckContext.textOf -> @CheckContext.textOf
+  callee -111:9 nullableReference -> @nullableReference
+  callee -110:14 refuseNullableCall -> @refuseNullableCall
+  callee -110:46 CheckContext.textOf -> @CheckContext.textOf
+  callee -108:12 CheckContext.errorType -> @CheckContext.errorType
+  local -103:9 local: Local | null (const)
+  callee -103:17 Scope.lookup -> @Scope.lookup
+  callee -101:25 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee -101:43 Scope.typeOf -> @Scope.typeOf
+  local -100:11 held: i32 (const)
+  callee -100:18 checkExpression -> @checkExpression
+  callee -99:41 checkReferenceCall -> @checkReferenceCall
+  callee -97:25 nullableReference -> @nullableReference
+  callee -97:48 Scope.typeOf -> @Scope.typeOf
+  callee -96:12 refuseNullableCall -> @refuseNullableCall
+  callee -93:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee -90:11 outerReference -> @outerReference
+  local -89:15 held: i32 (const)
+  callee -89:22 checkExpression -> @checkExpression
+  callee -88:33 nullableReference -> @nullableReference
+  callee -87:18 refuseNullableCall -> @refuseNullableCall
+  callee -85:45 checkReferenceCall -> @checkReferenceCall
+  callee -83:7 refuseOnce -> @refuseOnce
+  callee -83:31 outerFunctionMessage -> @outerFunctionMessage
+  local -80:11 bound: FunctionSig | null (const)
+  callee -80:19 FunctionBindings.get -> @FunctionBindings.get
+  callee -78:14 checkDirectCall -> @checkDirectCall
+  local -75:9 template: TemplateInfo | null (const)
+  callee -75:20 CheckContext.template -> @CheckContext.template
+  callee -73:12 checkGenericCall -> @checkGenericCall
+  local -71:9 sig: FunctionSig | null (const)
+  callee -71:15 CheckContext.signature -> @CheckContext.signature
+  local -67:11 imported: BuiltinExport | null (const)
+  callee -67:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee -65:11 asyncBuiltinOf -> @asyncBuiltinOf
+  callee -64:16 checkAsyncBuiltin -> @checkAsyncBuiltin
+  callee -62:11 refuseSecretArguments -> @refuseSecretArguments
+  callee -59:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee -57:9 isResultConstructor -> @isResultConstructor
   callee -53:14 checkResultConstructor -> @checkResultConstructor
   callee -51:9 isBuiltinFunction -> @isBuiltinFunction
   callee -50:11 refuseSecretArguments -> @refuseSecretArguments

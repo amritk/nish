@@ -418,12 +418,13 @@ function heapTypesIn(programs: CheckedProgram[], table: TypeTable, type: i32, ou
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: type
-  calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isMaybe TypeTable.isNullable TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.variantsOf heapTypesIn isScalarArgument nish_array_grow
+  calls: CheckedProgram.struct TypeTable.errOf TypeTable.isArray TypeTable.isMaybe TypeTable.isNullable TypeTable.isOpaque TypeTable.isRegion TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.nameOf TypeTable.okOf TypeTable.refOf TypeTable.stripNull TypeTable.variantsOf heapTypesIn isScalarArgument nish_array_grow
   pointer programs: size=0 writesThrough=false captured=false passedTo=heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0 heapTypesIn#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isNullable#0 heapTypesIn#1 TypeTable.stripNull#0 TypeTable.isMaybe#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isResult#0 heapTypesIn#1 TypeTable.okOf#0 heapTypesIn#1 TypeTable.errOf#0 TypeTable.isArray#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 heapTypesIn#1 TypeTable.isStruct#0 isScalarArgument#0 TypeTable.nameOf#0 heapTypesIn#1
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isRegion#0 TypeTable.isOpaque#0 TypeTable.isNullable#0 heapTypesIn#1 TypeTable.stripNull#0 TypeTable.isMaybe#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isResult#0 heapTypesIn#1 TypeTable.okOf#0 heapTypesIn#1 TypeTable.errOf#0 TypeTable.isArray#0 heapTypesIn#1 TypeTable.refOf#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 heapTypesIn#1 TypeTable.isStruct#0 isScalarArgument#0 TypeTable.nameOf#0 heapTypesIn#1
   pointer out: size=0 writesThrough=true captured=false passedTo=heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3 heapTypesIn#3
   stackSites=0 stackLocals=0
   callee -19:19 TypeTable.isRegion -> @TypeTable.isRegion
+  callee -19:62 TypeTable.isOpaque -> @TypeTable.isOpaque
   callee -13:7 TypeTable.isNullable -> @TypeTable.isNullable
   callee -12:12 heapTypesIn -> @heapTypesIn
   callee -12:41 TypeTable.stripNull -> @TypeTable.stripNull
