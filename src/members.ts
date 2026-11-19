@@ -311,7 +311,7 @@ const checkStructProperty = (
  * `T h[N]` inside the struct, not an array object, so it has no `length`
  * and cannot be held, passed or copied as a value.
  */
-export const cArrayValueMessage = (text: string, length: i32): string =>
+const cArrayValueMessage = (text: string, length: i32): string =>
   `\`${text}\` is a fixed-length array of ${length} elements inside a \`declare class\`: read and write it by index (\`${text}[i]\`, i from 0 to ${length - 1}), but it cannot be held, passed or measured as a value`
 
 /**
