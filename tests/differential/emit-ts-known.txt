@@ -52,6 +52,8 @@ cases/mem_return_array_scope host  # differ: stdout line 1 differs [arenaUsed]
 cases/mem_scope_dynamic_array host  # differ: stdout line 2 differs [arenaUsed]
 cases/mem_using_arena_tail host  # differ: stdout line 1 differs [arenaUsed]
 cases/mem_wait_pid_scope host  # differ: exit 0 vs 1: throw new Error( [waitPid]
+cases/mul_high_aarch64 host  # differ: stdout line 1 differs [mulHighIsNative]
+cases/mul_high_native host  # differ: stdout line 1 differs [mulHighIsNative]
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
 cases/net_loop_calls refused  # refused: NL4011 under --emit-ts
 cases/net_loop_two refused  # refused: NL4011 under --emit-ts
