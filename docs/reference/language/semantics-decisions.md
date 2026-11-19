@@ -1728,15 +1728,23 @@ allows admits. This compiler has built four features, `nullish`,
 - **`string-switch` admits a `switch` whose discriminant is a `string`**
   (`tests/cases/compat_string_switch`, strict `reject_switch_string`). Each
   `case` label is a string literal, a template with no substitution, or a
-  module constant of type `string`, because a label is compared without being
+  module constant of type `string`, parenthesised or not, because a label is compared without being
   run; any other label is NL2799
   (`tests/link/compat_string_switch_label_not_constant`), a label of another
   type is the strict `` `case` label is f64 but the discriminant is string ``
   (`compat_string_switch_label_type`), and two labels with the same text, a
   constant's included, are `` Duplicate `case` label `` as in an integer
-  switch (`compat_string_switch_duplicate`). Fallthrough, `default` in any
-  place, `break` and a labelled `break` out of an enclosing loop mean what
-  they mean in Node. The switch compares the discriminant with each label in
+  switch (`compat_string_switch_duplicate`): the text is what the label
+  spells once its escapes are read, so `"\u00e9"` and `"é"`, or a template
+  and the literal it spells, are the same label
+  (`compat_string_switch_duplicate_spelling`,
+  `compat_string_switch_duplicate_template`). Fallthrough, into and out of a
+  `default` in any place, an empty case group, `return` from a case, `break`
+  and a labelled `break` out of an enclosing loop, and `continue` of an
+  enclosing loop mean what they mean in Node, and the discriminant is run
+  once, before the first comparison (`tests/cases/compat_string_switch_flow`).
+  A nullable discriminant, `string | null`, is no `string` and keeps the
+  strict refusal, naming no feature. The switch compares the discriminant with each label in
   source order, one `nish_str_eq` call each, and jumps to the first that
   matches, or to `default`: a chain, not a tree bucketed by length, because
   `nish_str_eq` already answers on a length mismatch before it reads a byte.
@@ -1747,7 +1755,20 @@ allows admits. This compiler has built four features, `nullish`,
   a new `string` holding that code point's UTF-8 bytes. `break`, `continue`
   and labels work as they do over an array. A destructuring head,
   `for (const [a] of s)`, keeps the array walk's refusal
-  (`tests/link/compat_for_of_string_destructure`).
+  (`tests/link/compat_for_of_string_destructure`), and so does a nullable
+  iterable, `string | null`, naming no feature. A string that is not valid
+  UTF-8 (`String.fromCharCode(200)`, `String.fromBytes`) is walked a lead
+  byte at a time: a pass takes the lead and only the continuation bytes
+  (`10xxxxxx`) after it, up to the width the lead names, so a lead with none
+  is a pass of one byte and the byte after it starts the next pass, a stray
+  continuation byte is a pass alone, and a sequence cut short by the end is
+  one pass of what is left. The number of passes is then Node's for the same
+  characters (`tests/cases/compat_for_of_string_invalid`), though `c`'s bytes
+  are nish's, not Node's UTF-16. `c` is fresh each pass, and the walk opens
+  no arena pass of its own: each `c` stays until the scope around the loop
+  releases its arena, so a code point kept past the loop, in a variable or
+  returned, is still there (`tests/cases/compat_for_of_string_fresh`), and a
+  walk of `n` code points holds `n` small strings until then.
 - **The dialect only adds.** A strict build of a program the strict dialect
   accepts is unchanged by all of the above, byte for byte; what changed for a
   program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the

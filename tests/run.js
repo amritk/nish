@@ -26846,7 +26846,12 @@ if (dealtHere("releaseChecks")) {
     // The cases whose clauses fall through on purpose, checked in a project
     // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
     // that falls through is added here on purpose and every other keeps the check.
-    const FALLTHROUGH_CASES = new Set(["cf_switch_fallthrough.ts", "cf_label_walks.ts"])
+    const FALLTHROUGH_CASES = new Set([
+      "cf_switch_fallthrough.ts",
+      "cf_label_walks.ts",
+      "compat_string_switch.ts",
+      "compat_string_switch_flow.ts",
+    ])
     const acceptedCases = fs
       .readdirSync(casesDir)
       .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f))

@@ -1864,11 +1864,16 @@ const checkStringCaseLabel = (ctx: CheckContext, clause: Node, scope: Scope, see
     )
     return
   }
+  let duplicate = false
   for (const previous of seen) {
     if (previous === text) {
-      ctx.error(label, `Duplicate \`case\` label \`${ctx.textOf(label)}\` in this \`switch\``)
-      return
+      duplicate = true
+      break
     }
+  }
+  if (duplicate) {
+    ctx.error(label, `Duplicate \`case\` label \`${ctx.textOf(label)}\` in this \`switch\``)
+    return
   }
   seen.push(text)
 }
