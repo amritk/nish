@@ -1304,8 +1304,9 @@ export const main = (): i32 => {
 
 It holds no fields, so it has no members and no `new`: only C makes one and
 only C reads it. Like a `CPtr`, it lives in a local and goes to and from C,
-and is refused as a field, an array element, or a parameter or return type of
-a function your program defines. A `declare function` that returns `FILE`
+and is refused as a field, an array element, a `Result` arm, a type argument
+of a generic, a capture of an arrow you pass to a call, or a parameter or
+return type of a function your program defines. A `declare function` that returns `FILE`
 rather than `FILE | null` promises C never answers `NULL`, and a `NULL`
 stops the program with `` `fopen` returned NULL for a `FILE` result; declare
 it `FILE | null` `` on stderr and exit status 1:

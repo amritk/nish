@@ -5840,9 +5840,12 @@ ffi.null:
   opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in
   a `declare function` signature or on a local bound to one `` (NL2805,
   `tests/link/ffi_opaque_field`, `ffi_opaque_param`), and so is either arm of
-  a `Result` (`ffi_opaque_result`); an array element, an export and module
-  storage are refused as for any `declare class`, above
-  (`ffi_opaque_array`).
+  a `Result`, written or made (`ffi_opaque_result_type`, `ffi_opaque_result`),
+  and a type argument of a generic class or function, written or inferred
+  (`ffi_opaque_type_argument`, `ffi_opaque_template_argument`). An arrow handed
+  to a call does not capture one, as it does not capture a `CPtr`
+  (`ffi_opaque_capture`). An array element, an export and module storage are
+  refused as for any `declare class`, above (`ffi_opaque_array`).
 - **Each one is its own type.** Both lower to `i8*`, but a `Db` passed where a
   `Stmt` is wanted is `` Argument 1 of `stmt_close`: expected Stmt, got Db ``
   (`tests/link/ffi_opaque_mix`), and neither is a `CPtr`: a `Db` is not passed
