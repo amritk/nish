@@ -272,6 +272,10 @@
     }
     input.addEventListener("input", first)
     input.addEventListener("keydown", first)
+    // Text typed into the server's markup before this script ran loads the shell too.
+    if (input.value) {
+      first({ type: "input" })
+    }
   }
 
   /** The heroes given their behaviour, and when the one on the page began: see `fill`. */
