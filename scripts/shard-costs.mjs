@@ -39,7 +39,7 @@
  * - `shardOne` is what only shard 1 runs: each stretch of its own checks
  *   after the link programs (`SHARD_ONE_STARTS`) until the next section or
  *   stretch starts, plus its job's steps after the suite less the ones that
- *   moved to the `smoke` job (`MOVED_STEPS`). A `pinned` section likewise
+ *   moved to the `examples` job (`MOVED_STEPS`). A `pinned` section likewise
  *   takes its shard's steps after the suite, since they are there to read it.
  *   Measured by stretch, a run from before a `tail` group was dealt, when
  *   shard 1 ran it between blocks of its own, gives the same pieces as one
@@ -258,11 +258,12 @@ const SHARD_ONE_STARTS = [
 ]
 /**
  * The steps after the suite that the `test` job's shard 1 ran until they moved
- * to the `smoke` job: the smoke script, the cookbook check and the size
+ * to the `examples` job: the smoke script, the cookbook check and the size
  * report. A run from before the move paid them in shard 1, and they are no
  * longer its cost.
  */
-const MOVED_STEPS = /^##\[group\]Run (bash scripts\/smoke\.sh|bash docs\/cookbook\/regen\.sh --check|build\/nish examples\/add\.ts -o build\/add\.ll)/
+const MOVED_STEPS =
+  /^##\[group\]Run (bash scripts\/smoke\.sh|bash docs\/cookbook\/regen\.sh --check|build\/nish examples\/add\.ts -o build\/add\.ll)/
 /** What a shard that stops prints for every section after the link programs it does not run. */
 const STOPPED = "every section after the tests/link programs that is not dealt"
 

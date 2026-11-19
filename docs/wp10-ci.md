@@ -43,7 +43,8 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for `bench/crc32.mjs --check` and `bench/adler32.mjs --check` |
+| `examples` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | beside the shards, with the compiler from their cache key (linked here on a miss, saved only by shard 1): `scripts/smoke.sh` over every example with a `main`, `docs/cookbook/regen.sh --check`, and the size report in the job summary. They ran after the suite in shard 1 until #1797, about 80 s on the critical path of every run. Not scoped: it runs on every event |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
@@ -265,7 +266,9 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1 says it dealt it. It reads the same spans this paragraph names: the
   costs are the gaps between consecutive programs' last lines in a
   CI shard's log, `shardOne` the span of shard 1's sections after the link
-  programs that are not dealt, plus its steps after the suite, and each dealt
+  programs that are not dealt, plus its steps after the suite (less the
+  smoke, cookbook and size-report steps, which a log from before the
+  `examples` job still holds: `MOVED_STEPS`), and each dealt
   section's entry the span of its lines in the shard that ran it. Runners
   differ in speed by nearly a factor of two (one built stage1 in 34 s where
   its siblings took 57-61 s), so read a span only from a shard whose stage1
