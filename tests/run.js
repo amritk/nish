@@ -26244,7 +26244,7 @@ if (dealtHere("cliChecks")) {
         `compat: \`${flag}\` names a feature this compiler has not built: a usage error that names it, and no IR`,
         refused.r.status === 2 &&
           refused.r.stderr.includes(
-            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, \`string-switch\`, \`for-of-string\`, and a bare \`--compat\` allows every one`
+            `\`${flag}\` names \`${name}\`, which is no feature of the compatibility dialect: the ones this compiler has built are \`nullish\`, \`optional-chaining\`, \`string-switch\`, \`for-of-string\`, \`optional-params\`, \`overloads\`, and a bare \`--compat\` allows every one`
           ) &&
           refused.ir === "",
         shown(refused.r)
@@ -26260,8 +26260,8 @@ if (dealtHere("cliChecks")) {
       checkedStrict.status === 0 &&
         checkedCompat.status === 0 &&
         checkedPinned.status === 0 &&
-        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]\n") &&
-        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining,string-switch,for-of-string]\n${checkedStrict.stdout}` &&
+        checkedCompat.stdout.startsWith("compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]\n") &&
+        checkedPinned.stdout === `compat number=i32 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]\n${checkedStrict.stdout}` &&
         !checkedStrict.stdout.includes("compat "),
       shown(checkedCompat) + shown(checkedPinned)
     )
@@ -26509,6 +26509,35 @@ export const main = (): void => {
       chainedEmit.status === 0 && chainedRun.status === 0 && chainedRun.stdout === "1\n",
       shown(chainedEmit) + shown(chainedRun)
     )
+    // WP28 C1: the wrappers `optional-params` builds in front of a function
+    // with a default that is not a constant are not written: the TypeScript
+    // keeps the default where it was written, and Node evaluates it as the
+    // native program's wrapper does.
+    const liftedOut = path.join(work, "compat_defaults_ts")
+    fs.rmSync(liftedOut, { recursive: true, force: true })
+    const liftedEmit = nish([
+      path.join(root, "tests/cases/compat_optional_params.ts"),
+      "--compat",
+      "--emit-ts",
+      liftedOut,
+    ])
+    const liftedText =
+      liftedEmit.status === 0
+        ? fs.readFileSync(path.join(liftedOut, "compat_optional_params.ts"), "utf8")
+        : ""
+    const liftedRun =
+      liftedEmit.status === 0
+        ? spawnSync("node", [...emitTsNodeFlags, path.join(liftedOut, "entry.ts")], { cwd: root, encoding: "utf8" })
+        : liftedEmit
+    check(
+      "compat: `--emit-ts` writes no `optional-params` wrapper and keeps each default where it was written",
+      liftedEmit.status === 0 &&
+        !liftedText.includes("__default") &&
+        liftedText.includes("height: number = tick(counter, \"height\")") &&
+        liftedRun.status === 0 &&
+        liftedRun.stdout === fs.readFileSync(path.join(root, "tests/cases/compat_optional_params.out"), "utf8"),
+      shown(liftedEmit) + shown(liftedRun)
+    )
     // Strict `--emit-ts` keeps its checked element read inside a chain, byte
     // for byte: only a build that admits `optional-chaining` leaves it to the
     // chain. (Strict's `idx(g?.rows, 0)` throws under Node when `g` is null,
@@ -26633,10 +26662,14 @@ export const main = (): void => {
     // that the strict dialect refuses: each run natively as under Node.
     const admittedRejects = [
       "reject_arr_forof_non_array",
+      "reject_ffi_handle_walk_optional_param",
       "reject_nullish",
       "reject_nullish_nullable",
       "reject_optional_chain_element_inner",
       "reject_optional_chain_statement",
+      "reject_param_default_array",
+      "reject_param_default_expression",
+      "reject_param_default_object",
       "reject_switch_string",
     ].filter((name) => cases.includes(name))
     const admittedDialect = [
@@ -26650,6 +26683,8 @@ export const main = (): void => {
       "compat_optional_chain_loops",
       "compat_optional_chain_skipped_arguments",
       "compat_optional_chain_statement",
+      "compat_optional_params",
+      "compat_overloads",
       "compat_string_switch",
       "compat_string_switch_flow",
     ].filter((name) => cases.includes(name))

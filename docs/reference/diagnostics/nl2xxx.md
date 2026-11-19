@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 791 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 796 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15479,4 +15479,44 @@ The message of an error contains:
 
 ```text
 A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)
+```
+
+## NL2800
+
+The message of an error contains:
+
+```text
+` is not compatible with its implementation: …
+```
+
+## NL2801
+
+The message of an error contains:
+
+```text
+…): a call is held to the signatures written before the implementation, not to the implementation's own
+```
+
+## NL2802
+
+The message of an error contains:
+
+```text
+` has overload signatures and cannot be described to C or Node
+```
+
+## NL2803
+
+The message of an error contains:
+
+```text
+…can only be read as the left operand of `??`
+```
+
+## NL2804
+
+The message of an error contains:
+
+```text
+…which has no `null` to stand for an omitted argument
 ```

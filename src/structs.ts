@@ -15,6 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
+import { attachOverloads } from "./overloads"
 import { admitsSecretField, checkHolderReleaser, secretFieldMessage, secretFieldOf } from "./secret"
 import {
   DISPOSE_METHOD,
@@ -956,6 +957,7 @@ export const collectMethodSignature = (
       )
     }
   }
+  attachOverloads(ctx, sig, owner.type, shownName)
   return sig
 }
 
@@ -1010,6 +1012,7 @@ const collectConstructor = (ctx: CheckContext, owner: StructInfo, decl: Node): v
   sig.role = ROLE_CONSTRUCTOR
   sig.returnType = T_VOID
   collectParams(ctx, sig, decl.children[0], owner.type, false)
+  attachOverloads(ctx, sig, owner.type, `new ${shown}`)
   owner.ctor = sig
   ctx.program.functions.push(sig)
 }

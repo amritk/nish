@@ -166,12 +166,15 @@ spelling; the two compile to identical IR, instruction for instruction
   destructured parameters (`Destructured parameters are not supported`,
   `reject_param_destructured`), optional parameters (`x?: T`,
   `Optional parameters are not supported`, `reject_param_optional`, which names
-  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  `x: T = <default>` instead; the compatibility dialect's `optional-params`
+  feature accepts one read through `??`, [The compatibility
+  dialect](semantics-decisions.md#the-compatibility-dialect)), a default or rest parameter anywhere but the
   declarations [Default and rest parameters](#default-and-rest-parameters)
   lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
-  `Functions must have a body`), an anonymous `export default function ()`
+  `Functions must have a body`; the compatibility dialect's `overloads`
+  feature accepts signatures before the implementation), an anonymous `export default function ()`
   (`Functions must be named`, `reject_fn_anonymous`),
   function expressions, an arrow anywhere but as a top-level `const` or a
   function argument (`reject_fnarg_arrow_value`, `reject_arrow_as_value`),

@@ -5,8 +5,10 @@
 // C1 builds `nullish` (a `??` whose left operand strict refuses for it),
 // `optional-chaining` (a statement `a?.b`, `a?.[i]` and `a?.m()`),
 // `string-switch` (a `switch` over a `string` with constant labels) and
-// `for-of-string` (a `for...of` over a `string`, a code point per pass); a
-// feature a build does not allow leaves the dialect accepting what strict
+// `for-of-string` (a `for...of` over a `string`, a code point per pass),
+// `optional-params` (`x?: T` and a default that is not a constant, evaluated
+// on each call that leaves it out) and `overloads` (bodiless signatures before
+// one implementation, `src/overloads.ts`); a feature a build does not allow leaves the dialect accepting what strict
 // accepts.
 
 import { NUMBER_MODE_F64 } from "./context"
@@ -14,7 +16,14 @@ import { Options } from "./options"
 
 /** Every feature this compiler has built, in the order `--compat` lists them. */
 export const compatFeatureNames = (): string[] => {
-  const names: string[] = ["nullish", "optional-chaining", "string-switch", "for-of-string"]
+  const names: string[] = [
+    "nullish",
+    "optional-chaining",
+    "string-switch",
+    "for-of-string",
+    "optional-params",
+    "overloads",
+  ]
   return names
 }
 

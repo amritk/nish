@@ -1796,12 +1796,15 @@ spelling; the two compile to identical IR, instruction for instruction
   destructured parameters (`Destructured parameters are not supported`,
   `reject_param_destructured`), optional parameters (`x?: T`,
   `Optional parameters are not supported`, `reject_param_optional`, which names
-  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  `x: T = <default>` instead; the compatibility dialect's `optional-params`
+  feature accepts one read through `??`, [The compatibility
+  dialect](#the-compatibility-dialect)), a default or rest parameter anywhere but the
   declarations [Default and rest parameters](#default-and-rest-parameters)
   lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
-  `Functions must have a body`), an anonymous `export default function ()`
+  `Functions must have a body`; the compatibility dialect's `overloads`
+  feature accepts signatures before the implementation), an anonymous `export default function ()`
   (`Functions must be named`, `reject_fn_anonymous`),
   function expressions, an arrow anywhere but as a top-level `const` or a
   function argument (`reject_fnarg_arrow_value`, `reject_arrow_as_value`),
@@ -16308,8 +16311,9 @@ performance warning about the same check is not printed beside the error.
 Nish has two dialects. The strict one is this document. The compatibility
 dialect accepts more of TypeScript, feature by feature: it differs from the
 strict dialect in the number a bare `number` is, and in what each feature it
-allows admits. This compiler has built four features, `nullish`,
-`optional-chaining`, `string-switch` and `for-of-string`.
+allows admits. This compiler has built six features, `nullish`,
+`optional-chaining`, `string-switch`, `for-of-string`, `optional-params` and
+`overloads`.
 
 - **`--compat` selects the dialect with every feature this compiler has
   built; `--compat=<feature>,...` selects it with only the features named.**
@@ -16353,11 +16357,11 @@ allows admits. This compiler has built four features, `nullish`,
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]`, and prints no such
   line for a strict build.
 - **A strict refusal of a construct a feature admits names the feature.** It
   closes with the note ``add `<feature>` to `nish.compat` in package.json to
@@ -16459,6 +16463,60 @@ allows admits. This compiler has built four features, `nullish`,
   releases its arena, so a code point kept past the loop, in a variable or
   returned, is still there (`tests/cases/compat_for_of_string_fresh`), and a
   walk of `n` code points holds `n` small strings until then.
+- **`optional-params` admits an `x?: T` parameter and a default that is not
+  a constant** (`tests/cases/compat_optional_params`, strict
+  `reject_param_default_expression`, `reject_param_default_array`,
+  `reject_param_default_object`). An `x?: T` parameter of a function, an
+  arrow or a method is `T | null` inside, and a call may leave it out. It is
+  read only as the left operand of `??`, parenthesised or not, because a call
+  that leaves it out passes `undefined` in Node and `null` here, and
+  `x ?? <default>` is the one read that gives both the same value; any other
+  read is NL2803 (`tests/link/compat_optional_params_read`,
+  `compat_optional_params_read_paren`). An `x?` whose `T` has no `null`, a
+  bare `number` or a `boolean`, is NL2804
+  (`compat_optional_params_value`): give it a default instead. A default of a
+  top-level function, an arrow `const` included, that is not one the strict
+  dialect accepts as a constant, a call, an array, an object or an
+  arithmetic on earlier parameters, runs in the callee, once per call that
+  leaves its argument out, after the arguments and left to right, as Node
+  runs it: a call that writes the argument does not run it. The build gives
+  the function one wrapper per argument count a call may stop at, and each
+  call goes to the wrapper for the count it writes. Only a function every
+  call to which the module sees and routes takes wrappers: an exported
+  function (`compat_optional_params_exported`), whose callers in another
+  module would pass the default themselves, an overloaded one
+  (`compat_optional_params_overloaded`), whose signatures name the
+  implementation, and one with a required parameter between two such
+  defaults (`compat_optional_params_required_between`) keep the strict
+  refusal, with a note that names the rule. So do a method's or a
+  constructor's default, and a function whose earlier parameter is an `x?`.
+  `--emit-ts` writes no wrapper: the TypeScript keeps each default where it
+  was written. Without the feature, the refusal of such a
+  default names it (`compat_optional_params_default_feature`), and an
+  `x?` stays refused as before (`compat_optional_params_feature`).
+- **`overloads` admits overload signatures**: a function, a method or a
+  constructor written as bodiless signatures of one name followed by its
+  implementation (`tests/cases/compat_overloads`; strict, the signatures are
+  `Functions must have a body`, `tests/link/compat_overloads_feature`). The
+  signatures are checked and then dropped, so the build is the
+  implementation's alone. Each signature is held to the implementation, as
+  `tsc` holds it: it takes no rest parameter, every argument list it takes
+  the implementation takes too, each parameter type is one the
+  implementation's takes, and it writes the return type, which is the
+  implementation's exactly, which is stricter than `tsc`, where a return
+  type the implementation's is assignable to will do; otherwise NL2800
+  (`compat_overloads_incompatible`, `compat_overloads_return`). A call the
+  implementation accepts is then held
+  to the signatures: one that no signature takes is NL2801, because the
+  implementation's own signature is not one a caller may call
+  (`compat_overloads_no_match`, `compat_overloads_method_no_match`,
+  `compat_overloads_constructor_no_match`). Only a call that names the
+  function, the method or the class is held to the signatures: a call
+  through a function value is held to the implementation alone. A
+  function with signatures is refused by `--emit-header`, `--emit-napi` and
+  `--emit-dts`, NL2802, since the file would spell only the implementation
+  (`compat_overloads_emit_header`, `compat_overloads_emit_dts`). A generic function or class keeps the
+  strict refusal.
 - **The dialect only adds.** A strict build of a program the strict dialect
   accepts is unchanged by all of the above, byte for byte; what changed for a
   program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the

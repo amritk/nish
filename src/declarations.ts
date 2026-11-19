@@ -33,6 +33,7 @@ import {
   FLAG_DEFAULT,
   FLAG_EXPORTED,
   FLAG_GATHERED,
+  FLAG_OPTIONAL,
   FLAG_REST,
   FLAG_SIGNATURE,
   FLAG_TYPE_ONLY,
@@ -145,10 +146,16 @@ export const collectParams = (
         owner >= 0 ? "a parameter of an exported class's method" : "a parameter of an exported function"
       deferExportedLayout(ctx, type, where, param.children[1])
     }
+    if (isCompatOptional(ctx, param)) {
+      collectOptional(ctx, sig, param, type)
+      continue
+    }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
     if ((param.flags & FLAG_SIGNATURE) !== 0) {
+      const before = ctx.sink.items.length
       collectParamForm(ctx, sig, param, type, list)
+      nameLiftedFeature(ctx, param, before)
     }
   }
   refuseMixedForms(ctx, sig, list)
@@ -268,6 +275,92 @@ const collectParamForm = (ctx: CheckContext, sig: FunctionSig, param: Node, type
     return
   }
   checkLiteralInitializer(ctx, value, init, `Parameter \`${name}\``, notLiteral, true)
+}
+
+/**
+ * Close a refusal of `param`'s default, reported since the sink held `before`
+ * diagnostics, with the note `errorFeature` gives, when a wrapper of the
+ * `optional-params` feature would evaluate that default (`src/defaults.ts`).
+ */
+const nameLiftedFeature = (ctx: CheckContext, param: Node, before: i32): void => {
+  if (ctx.sink.items.length <= before || ctx.defaultLifted.indexOf(param) < 0) {
+    return
+  }
+  const refusal = ctx.sink.items[ctx.sink.items.length - 1]
+  if (ctx.compatAllows("optional-params")) {
+    refusal.notes.push(
+      "the `optional-params` feature evaluates such a default only on a top-level function that is not exported or overloaded, with a default on every parameter from the first one it evaluates to the last"
+    )
+    return
+  }
+  if (ctx.compat) {
+    refusal.notes.push(`this program's dialect is \`compat=${ctx.compatFeatures.join(",")}\``)
+  }
+  refusal.notes.push("add `optional-params` to `nish.compat` in package.json to accept it")
+}
+
+/**
+ * Whether `param` is `x?: T` on a declaration that may give it a default, in
+ * a build that allows the `optional-params` feature (WP28 C1).
+ */
+export const isCompatOptional = (ctx: CheckContext, param: Node): boolean =>
+  (param.flags & (FLAG_OPTIONAL | FLAG_DEFAULT | FLAG_REST | FLAG_SIGNATURE)) ===
+    (FLAG_OPTIONAL | FLAG_SIGNATURE) &&
+  param.children.length > 2 &&
+  ctx.compatAllows("optional-params")
+
+/** Whether parameter `at` of `sig` was written `x?: T` and collected by `collectOptional`. */
+export const isOptionalParameter = (ctx: CheckContext, sig: FunctionSig, at: i32): boolean => {
+  let i = 0
+  while (i < ctx.optionalSigs.length) {
+    if (ctx.optionalSigs[i] === sig && ctx.optionalAt[i] === at) {
+      return true
+    }
+    i = i + 1
+  }
+  return false
+}
+
+/**
+ * `x?: T` under the `optional-params` feature: a parameter of type
+ * `T | null` whose default is `null`, so that a call that leaves it out
+ * passes `null` where TypeScript passes `undefined`. The two agree only
+ * through `x ?? d`, the one read of it the checker accepts (NL2803), and a
+ * `T` with no `null` is refused with the default to write instead (NL2804).
+ */
+const collectOptional = (ctx: CheckContext, sig: FunctionSig, param: Node, type: i32): void => {
+  const name = param.children[0].text
+  const position = sig.paramNames.length
+  let held = type
+  if (type !== T_ERROR && !ctx.table.isNullable(type)) {
+    if (!ctx.table.isPointer(type) || ctx.table.isResult(type)) {
+      const spelled = param.children[1].kind === NodeKind.Empty ? "T" : spellingOf(ctx, param.children[1])
+      ctx.error(
+        param,
+        `Optional parameter \`${name}\` is \`${spelled}\`, which has no \`null\` to stand for an omitted argument: give it a default instead, \`${name}: ${spelled} = <default>\`, which a call that leaves it out passes`
+      )
+      held = T_ERROR
+    } else {
+      held = ctx.table.nullableOf(type)
+    }
+  }
+  sig.paramNames.push(name)
+  sig.paramTypes.push(held)
+  if (held === T_ERROR) {
+    return
+  }
+  while (sig.defaults.length < position) {
+    const none: FieldInfo | null = null
+    sig.defaults.push(none)
+  }
+  const init = param.children[2]
+  const value = new FieldInfo(name, held, param)
+  value.initializer = init
+  value.index = -1
+  sig.defaults.push(value)
+  ctx.program.nodeTypes[init.id] = held
+  ctx.optionalSigs.push(sig)
+  ctx.optionalAt.push(position)
 }
 
 /**

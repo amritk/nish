@@ -12,6 +12,7 @@
 // carry on instead (D1). The cost is visible — every caller of a checker that
 // can fail has to decide what to do next rather than being unwound past.
 
+import { isOverloadSignature } from "./overloads"
 import {
   addLocals,
   assignsVariable,
@@ -55,7 +56,7 @@ import { recordGuardFusion } from "./fusion"
 import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
-import { optionalParameterMessage, parameterFormHereMessage } from "./declarations"
+import { isCompatOptional, optionalParameterMessage, parameterFormHereMessage } from "./declarations"
 import {
   FLAG_ABSTRACT,
   FLAG_ACCESSOR,
@@ -1138,13 +1139,17 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
       ctx.error(node, parameterFormHereMessage(true))
     } else if (node.children[0].kind === NodeKind.BindingPattern) {
       ctx.error(node, "Destructured parameters are not supported")
-    } else if ((node.flags & FLAG_OPTIONAL) !== 0) {
-      ctx.error(
-        node,
-        (node.flags & FLAG_SIGNATURE) !== 0
-          ? optionalParameterMessage(ctx, node)
-          : parameterFormHereMessage(false)
-      )
+    } else if ((node.flags & FLAG_OPTIONAL) !== 0 && !isCompatOptional(ctx, node)) {
+      if ((node.flags & (FLAG_SIGNATURE | FLAG_DEFAULT)) === FLAG_SIGNATURE) {
+        ctx.errorFeature(node, optionalParameterMessage(ctx, node), "optional-params")
+      } else {
+        ctx.error(
+          node,
+          (node.flags & FLAG_SIGNATURE) !== 0
+            ? optionalParameterMessage(ctx, node)
+            : parameterFormHereMessage(false)
+        )
+      }
     }
   }
 }
@@ -1177,9 +1182,22 @@ const refuseAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node | null
         : `Function \`${node.children[0].text}\` needs an explicit return type annotation`
     )
   } else if (i === 3 && node.children[3].kind === NodeKind.Empty && (node.flags & FLAG_FOREIGN) === 0) {
-    ctx.error(node, "Functions must have a body")
+    bodyMissing(ctx, node, "Functions must have a body")
   } else if (i === 5) {
     ctx.error(node, "A function declaration binds one name")
+  }
+}
+
+/**
+ * A missing body (NL2204, NL2090, NL2091). One that is an overload signature
+ * the `overloads` feature would lift (`src/overloads.ts`) names the feature,
+ * so a strict build says what would accept it.
+ */
+const bodyMissing = (ctx: CheckContext, node: Node, message: string): void => {
+  if (isOverloadSignature(ctx, node)) {
+    ctx.errorFeature(node, message, "overloads")
+  } else {
+    ctx.error(node, message)
   }
 }
 
@@ -1204,11 +1222,11 @@ const refuseMemberAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node)
       `Method \`${node.children[0].text}\` of class \`${cls}\` needs an explicit return type annotation`
     )
   } else if (node.kind === NodeKind.Method && i === 3 && node.children[3].kind === NodeKind.Empty) {
-    ctx.error(node, `Method \`${node.children[0].text}\` of class \`${cls}\` must have a body`)
+    bodyMissing(ctx, node, `Method \`${node.children[0].text}\` of class \`${cls}\` must have a body`)
   } else if (node.kind === NodeKind.Constructor && i === 1 && node.children.length > 2) {
     ctx.error(node.children[2], "Constructors cannot declare a return type")
   } else if (node.kind === NodeKind.Constructor && i === 1 && node.children[1].kind === NodeKind.Empty) {
-    ctx.error(node, `Constructor of class \`${cls}\` must have a body (no overload signatures)`)
+    bodyMissing(ctx, node, `Constructor of class \`${cls}\` must have a body (no overload signatures)`)
   }
 }
 

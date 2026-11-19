@@ -119,10 +119,14 @@ const GOLDEN_FLAGS = [
  */
 const ADMITTED = new Map([
   ["reject_arr_forof_non_array", "for-of-string"],
+  ["reject_ffi_handle_walk_optional_param", "optional-params"],
   ["reject_nullish", "nullish"],
   ["reject_nullish_nullable", "nullish"],
   ["reject_optional_chain_element_inner", "optional-chaining"],
   ["reject_optional_chain_statement", "optional-chaining"],
+  ["reject_param_default_array", "optional-params"],
+  ["reject_param_default_expression", "optional-params"],
+  ["reject_param_default_object", "optional-params"],
   ["reject_switch_string", "string-switch"],
 ])
 

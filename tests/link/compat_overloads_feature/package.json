@@ -1,0 +1,7 @@
+{
+  "name": "compat-overloads-feature",
+  "private": true,
+  "nish": {
+    "compat": ["nullish"]
+  }
+}

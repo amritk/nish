@@ -9,6 +9,7 @@
 // checker and its method checker agree about what it owns — is a thing to
 // keep in mind rather than something the shape enforces.
 
+import { checkOverloadCall } from "./overloads"
 import {
   ARRAY_LEVEL,
   checkArrayMethod,
@@ -593,6 +594,7 @@ const checkMethodArguments = (
   if (!fitArguments(ctx, call, args, callee, 1, what)) {
     return
   }
+  const gotTypes: i32[] = []
   let i = 0
   while (i < args.children.length) {
     const arg = args.children[i]
@@ -602,12 +604,14 @@ const checkMethodArguments = (
     const gathered = isGatheredRest(arg)
     const context = literalContext || gathered || takesDeclaredContext(arg) ? want : -1
     const got = checkExpression(ctx, arg, scope, context)
+    gotTypes.push(got)
     if (got !== T_ERROR && !ctx.table.assignable(got, want)) {
       const spelled = ctx.table.typeName(want)
       ctx.error(arg, `Argument ${i + 1} of \`${what}\`: expected ${spelled}, got ${ctx.table.typeName(got)}`)
     }
     i = i + 1
   }
+  checkOverloadCall(ctx, call, callee, gotTypes, 1, what)
 }
 
 /** `new C(...)`, `new Array<T>(n)`, `new Int32Array(n)`. */

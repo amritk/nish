@@ -203,7 +203,7 @@ rejects. This table is the highest-value part of the page.
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
 | `[a, b] = [b, a]`, `const { x = 0 } = p`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring assignment is not supported` / `A default in a destructuring pattern is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `const { a, b } = config` at module level | `Destructured constants are not supported` | one module `const` per name (a module constant is a compile-time value folded into each use, with nothing at run time for a pattern to read), or destructure inside a function |
-| `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
+| `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body (overload signatures compile under [the compatibility dialect](guide/using-nish/compat.md)'s `overloads` feature) |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
@@ -669,7 +669,9 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
   into a `let` first.
 - A non-`void` function must return on every path.
 - Rejected: generators, a method that is `async`, destructured and optional
-  (`x?: T`) parameters, overloads, nested function declarations. A default
+  (`x?: T`) parameters, overloads, nested function declarations ([the compatibility dialect](guide/using-nish/compat.md)
+  accepts `x?: T` read through `??`, a default that is not a constant and
+  overload signatures). A default
   (`n: i32 = 1`) or a rest parameter (`...ns: i32[]`) is allowed on a
   function, a method, a constructor or a module `const` arrow — see
   "Optional parameters" in [Recipes for what is missing](#recipes-for-what-is-missing). Type parameters *are*
@@ -1839,7 +1841,8 @@ export const main = (): i32 => {
 - Fields need annotations; an initializer must be a **literal** of the field's
   type. Layout is declaration order, exactly as clang lays out the same C
   struct.
-- At most one constructor, no parameter properties, no overloads. **Definite
+- At most one constructor, no parameter properties, no overloads (outside
+  [the compatibility dialect](guide/using-nish/compat.md)). **Definite
   assignment** is checked syntactically: after the constructor returns every
   field holds a value, and reading `this.f` before every field is assigned is
   an error.

@@ -597,4 +597,4 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !19 = !{i32 8, !"branch-target-enforcement", i32 1}
 !20 = !{i32 8, !"sign-return-address", i32 1}
 !21 = !{i32 4, !"probe-stack", !"inline-asm"}
-!22 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}
+!22 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}
