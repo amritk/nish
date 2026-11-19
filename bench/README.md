@@ -2358,6 +2358,68 @@ time drops to 3.68 µs, from 6.30 with Nagle off, while its user time stays
 near 0.9 µs. Its qps is 3.2 % under the twin's. The benchmark keeps Nagle off
 on both sides, as libpq does.
 
+### Against tokio-postgres
+
+`run.mjs` also times `postgres/twin.rs`, the same loop through
+[tokio-postgres](https://crates.io/crates/tokio-postgres), the client most
+Rust programs reach PostgreSQL through, directly or under deadpool-postgres or
+the sync `postgres` crate. It joins the rotation as a fourth side, so timed
+rounds round up to a multiple of 4. `--no-rust` leaves it out, and with no
+cargo it is left out with a note.
+
+- **The loop.** One connection on a current-thread tokio runtime, so the
+  client is one thread as on the other two sides. tokio-postgres pipelines the
+  queries a task has in flight on its own; `buffered(16)` (1 for `insert`)
+  keeps the same number in flight as the other sides. Each query is a
+  `Client::query`, or `execute` for `insert`, on a statement prepared once
+  with `int8` parameters, and it answers a `Vec<Row>`.
+- **The messages.** For a prepared statement tokio-postgres sends Bind,
+  Execute, Sync, as the module does, with no Describe; its connect sets
+  `TCP_NODELAY`. It asks for every result column in binary, which no option
+  changes, so the twin folds each binary value into what the text sides fold.
+  Text columns are the same bytes in both formats. An integer and a bool fold
+  as their value, and a timestamp is written as the same 24 ISO 8601 bytes from
+  its microseconds. The tag array's binary elements are walked as `twin.c`
+  walks the text form. `--validate` checks that all four sides print the same
+  rows and checksums.
+- **The build.** cargo with tokio-postgres 0.7.18, tokio 1.54.1, futures-util
+  0.3.34 and libc 0.2.191 pinned, no TLS, `opt-level=3`, one codegen unit, fat
+  LTO, `panic=abort`, stripped. Its glue is not built with the C twin's
+  hardening flags.
+
+**The figures.** Twelve rounds of the bench code at commit `5aee9afb`, on a
+four-core Intel Xeon virtual machine that reports 2.10 GHz (not the machine of
+the table above), with Ubuntu clang 18.1.3, rustc 1.97.0 and PostgreSQL and
+libpq 18.7, the server on the same machine. CPU is µs per query of the client,
+min / median (IQR); qps is the median.
+
+| Workload | Nish | C (libpq) | Rust (tokio-postgres) | Noise band | System, median, Nish / C / Rust | qps Nish / C / Rust |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 5.84 / 6.26 (0.13) | 7.60 / 7.80 (0.32) | 8.55 / 8.79 (0.30) | 0.16 | 5.12 / 5.06 / 5.18 | 44,582 / 42,938 / 44,708 |
+| `list` | 42.86 / 46.58 (3.28) | 53.77 / 59.04 (3.77) | 52.01 / 58.08 (2.18) | 0.42 | 24.27 / 23.48 / 21.90 | 431 / 427 / 434 |
+| `insert` | 14.08 / 15.86 (1.22) | 14.93 / 16.85 (1.52) | 17.94 / 19.19 (1.43) | 0.34 | 14.79 / 15.29 / 14.86 | 4,946 / 5,317 / 5,011 |
+
+| Workload | Nish − C | Rust − C | Nish − Rust |
+| --- | --- | --- | --- |
+| `pk` | −1.53 (−19.7 %), seen | +1.00 (+12.8 %), seen | −2.53 (−28.8 %), seen |
+| `list` | −12.47 (−21.1 %), seen | −0.96 (−1.6 %), inside the noise | −11.51 (−19.8 %), seen |
+| `insert` | −1.00 (−5.9 %), inside the noise | +2.33 (+13.8 %), seen | −3.33 (−17.4 %), seen |
+
+"Seen" is the rule above: the median difference is larger than the noise band
+and than the IQR of both sides. On this run:
+
+- The module costs the client less CPU than tokio-postgres on every workload.
+- tokio-postgres costs more than libpq on `pk` and `insert`, and the same as
+  libpq on `list`, as far as this machine can see.
+- The system time is within 1.6 µs across the three sides on every workload,
+  so the differences are user time.
+
+Why tokio-postgres's user time is higher was not measured. Its requests pass
+through a channel to the connection task, and each query allocates its
+`Vec<Row>`. A profile would say how much each costs. qps is within 7.0 % on
+every row. The server answers in about the same time for every client, so
+client CPU barely moves throughput at these depths.
+
 ### Over the Unix socket (`--unix`)
 
 `node bench/postgres/run.mjs --unix [--rounds N]` asks what the module saves by
