@@ -188,11 +188,14 @@ export const anyCallsSqlite = (modules: EmittedModule[]): boolean => {
 export class LinkSet {
   libraries: string[]
   sources: string[]
+  /** The real directory of each package a source came from, whose headers the key carries. */
+  headerDirs: string[]
   sqlite: boolean
 
   constructor() {
     this.libraries = []
     this.sources = []
+    this.headerDirs = []
     this.sqlite = false
   }
 
@@ -209,12 +212,58 @@ export class LinkSet {
       this.sources.push(path)
     }
   }
+
+  /** Add the package directory `dir`, whose headers a source of it may include, unless it is there already. */
+  addHeaderDir(dir: string): void {
+    if (this.headerDirs.indexOf(dir) < 0) {
+      this.headerDirs.push(dir)
+    }
+  }
+}
+
+/**
+ * Every `.h` file under the package directory `dir`, the headers a source of
+ * that package can include by a relative path: a walk of the whole tree but
+ * dot entries and `node_modules`, each directory once by its real path, so a
+ * symbolic link cannot loop the walk. Sorted within each directory.
+ */
+const packageHeaders = (dir: string): string[] => {
+  const out: string[] = []
+  const seen: string[] = []
+  const queue: string[] = [dir]
+  let next = 0
+  while (next < queue.length) {
+    const at = queue[next]
+    next = next + 1
+    const real = realpathSync(at)
+    let names: string[] | null = null
+    if (real !== null && seen.indexOf(real) < 0) {
+      names = readdirSync(real)
+    }
+    if (real !== null && names !== null) {
+      seen.push(real)
+      for (const name of names) {
+        // Neither a dot entry nor `node_modules` is the package's own C.
+        const path = `${real}/${name}`
+        const own = !name.startsWith(".") && name !== "node_modules"
+        if (own && isDirectorySync(path)) {
+          queue.push(path)
+        } else if (own && name.endsWith(".h")) {
+          out.push(path)
+        }
+      }
+    }
+  }
+  return out
 }
 
 /**
  * The run-cache key's lines for `links`' libraries and sources: one per
- * library, and one per source with its path and its bytes' hash, since an
- * edit to a package's C file is a different binary. Empty for a link that
+ * library, one per source with its path and its bytes' hash, since an edit
+ * to a package's C file is a different binary, and one per header under the
+ * package that source came from (`packageHeaders`), since an edit to a
+ * header the source includes is one too. A header outside the package is
+ * not keyed (docs/security/package-link.md, PL-10). Empty for a link that
  * names none, so every key from before WP66 S7 is the bytes it was.
  */
 export const linkSetLines = (links: LinkSet): string => {
@@ -224,6 +273,11 @@ export const linkSetLines = (links: LinkSet): string => {
   }
   for (const path of links.sources) {
     key.add(`link-source ${path.length} ${path} ${fileFingerprint(path)}\n`)
+  }
+  for (const dir of links.headerDirs) {
+    for (const path of packageHeaders(dir)) {
+      key.add(`link-header ${path.length} ${path} ${fileFingerprint(path)}\n`)
+    }
   }
   return key.toText()
 }

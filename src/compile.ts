@@ -2357,7 +2357,8 @@ const refuseUngranted = (
  * `grant` is `asked`): each library as written, and each source as its real
  * path, refused (NL3060) unless that path is a file inside `realDir`, the
  * package's real directory (null when it has none), so a symbolic link cannot
- * carry a source out of the package.
+ * carry a source out of the package. That directory's headers then key the
+ * run cache (`linkSetLines`).
  */
 const addLinkRequest = (
   compilation: Compilation,
@@ -2391,6 +2392,7 @@ const addLinkRequest = (
         )
       } else {
         links.addSource(real)
+        links.addHeaderDir(realDir)
       }
     }
     i = i + 1

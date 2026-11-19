@@ -3976,7 +3976,7 @@ function readLinkSet(compilation: Compilation, links: LinkSet): boolean -> @read
   sharedWrite: via Compilation.rootManifest
   calls: Compilation.libraryRoot Compilation.rootManifest DiagnosticSink.hasErrors DiagnosticSink.report LinkManifest.constructor LinkManifest.grantFor SourceFile.constructor addLinkRequest dirname joinPath linkPackages manifestLink manifestNish nish_alloc_struct nish_array_grow nish_read_file_or_null nish_realpath nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from refuseUngranted reportLinkProblems
   pointer compilation: size=224 writesThrough=false captured=false passedTo=Compilation.rootManifest#0 Compilation.libraryRoot#0 reportLinkProblems#0 addLinkRequest#0 linkPackages#0 reportLinkProblems#0 refuseUngranted#0 refuseUngranted#0 addLinkRequest#0
-  pointer links: size=24 writesThrough=false captured=false passedTo=addLinkRequest#6 addLinkRequest#6
+  pointer links: size=32 writesThrough=false captured=false passedTo=addLinkRequest#6 addLinkRequest#6
   stackSites=2 stackLocals=1
   local +0:9 root: SourceFile | null (const)
   callee +0:16 Compilation.rootManifest -> @Compilation.rootManifest
@@ -4053,13 +4053,13 @@ function refuseUngranted(compilation: Compilation, source: SourceFile, name: str
 function addLinkRequest(compilation: Compilation, source: SourceFile, dir: string, realDir: string | null, asked: LinkRequest, grant: LinkRequest, links: LinkSet): void -> @addLinkRequest
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via LinkSet.addLibrary
-  escaping: dir
-  calls: DiagnosticSink.report LinkSet.addLibrary LinkSet.addSource joinPath nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq
+  escaping: dir realDir
+  calls: DiagnosticSink.report LinkSet.addHeaderDir LinkSet.addLibrary LinkSet.addSource joinPath nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq
   pointer compilation: size=224 writesThrough=false captured=false
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
   pointer asked: size=16 writesThrough=false captured=false
   pointer grant: size=16 writesThrough=false captured=false
-  pointer links: size=24 writesThrough=false captured=false passedTo=LinkSet.addLibrary#0 LinkSet.addSource#0
+  pointer links: size=32 writesThrough=false captured=false passedTo=LinkSet.addLibrary#0 LinkSet.addSource#0 LinkSet.addHeaderDir#0
   stackSites=1 stackLocals=0
   local +0:14 name: string (const)
   callee +2:7 LinkSet.addLibrary -> @LinkSet.addLibrary
@@ -4069,6 +4069,7 @@ function addLinkRequest(compilation: Compilation, source: SourceFile, dir: strin
   callee +13:33 joinPath -> @joinPath
   callee +15:9 DiagnosticSink.report -> @DiagnosticSink.report
   callee +22:9 LinkSet.addSource -> @LinkSet.addSource
+  callee +23:9 LinkSet.addHeaderDir -> @LinkSet.addHeaderDir
 function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, links: LinkSet, json: boolean, argsFrom: i32): i32 -> @runProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via cachedBinary
@@ -4076,7 +4077,7 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   calls: cachedBinary nish_array_grow nish_panic_index nish_spawn nish_str_concat reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false passedTo=cachedBinary#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=cachedBinary#1
-  pointer links: size=24 writesThrough=false captured=false passedTo=cachedBinary#9
+  pointer links: size=32 writesThrough=false captured=false passedTo=cachedBinary#9
   stackSites=0 stackLocals=0
   local +0:9 cached: CachedBinary (const)
   callee +0:18 cachedBinary -> @cachedBinary
@@ -4091,7 +4092,7 @@ function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string
   calls: buildIntoCache cCompiler linkSetLines nish_alloc_struct nish_read_file_or_null nish_str_concat nish_str_eq nish_write_file refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex sqliteCflags sqliteFingerprint
   pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=buildIntoCache#1
-  pointer links: size=24 writesThrough=false captured=false passedTo=linkSetLines#0 buildIntoCache#12
+  pointer links: size=32 writesThrough=false captured=false passedTo=linkSetLines#0 buildIntoCache#12
   stackSites=0 stackLocals=0
   local +0:9 cached: CachedBinary (const)
   local +1:9 cacheRoot: string (const)
@@ -4214,7 +4215,7 @@ function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot:
   calls: linkProgram makePrivateRoot makeScratchDirectory missingToolchain nish_array_grow nish_spawn nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   pointer pkg: size=32 writesThrough=false captured=false passedTo=linkProgram#2
-  pointer links: size=24 writesThrough=false captured=false passedTo=linkProgram#10
+  pointer links: size=32 writesThrough=false captured=false passedTo=linkProgram#10
   stackSites=3 stackLocals=2
   local +0:9 problem: string (const)
   callee +0:19 missingToolchain -> @missingToolchain
@@ -4240,7 +4241,7 @@ function linkProgram(outputs: string[], irs: string[], pkg: PackageSearch, link:
   pointer outputs: size=0 writesThrough=true captured=false passedTo=cachedRuntime#1 stageModules#0
   pointer irs: size=0 writesThrough=true captured=false passedTo=stageModules#1
   pointer pkg: size=32 writesThrough=false captured=false passedTo=PackageSearch.where#0
-  pointer links: size=24 writesThrough=false captured=false
+  pointer links: size=32 writesThrough=false captured=false
   pointer pgo: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=0
   local +0:9 root: string (const)

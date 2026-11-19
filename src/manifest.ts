@@ -848,7 +848,7 @@ export class LinkManifest {
 }
 
 /** Whether `name` is a library name `-l` takes and no flag: `[A-Za-z0-9_][A-Za-z0-9_.+-]*`. */
-export const manifestLinkLibrary = (name: string): boolean => {
+const manifestLinkLibrary = (name: string): boolean => {
   if (name.length === 0 || name.length > 255) {
     return false
   }
@@ -866,10 +866,31 @@ export const manifestLinkLibrary = (name: string): boolean => {
   return true
 }
 
+/**
+ * Whether every character of `text` is printable ASCII (space to `~`). The
+ * string decoder turns each character past ASCII into one stand-in, so two
+ * distinct names that are not plain ASCII would read as the same one, and a
+ * grant of either would grant both: such an entry is refused, never compared.
+ */
+const manifestPrintableAscii = (text: string): boolean => {
+  let i = 0
+  while (i < text.length) {
+    const code = text.charCodeAt(i)
+    if (code < 32 || code > 126) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
 /** Why `path` is no `nish.link` source, or `""` when it is one. */
 const manifestLinkSourceProblem = (path: string): string => {
   if (path.length === 0) {
     return "an empty path names no file"
+  }
+  if (!manifestPrintableAscii(path)) {
+    return "the path holds a character that is not printable ASCII"
   }
   if (manifestAbsolutePath(path)) {
     return `\`${path}\` is an absolute path`
@@ -1004,7 +1025,22 @@ const manifestReadLinkGrants = (manifest: string, at: i32, end: i32, out: LinkMa
     return
   }
   let k = 0
-  while (k < members.keys.length && k < members.valueAt.length && k < members.valueEnd.length) {
+  while (
+    k < members.keys.length &&
+    k < members.keyAt.length &&
+    k < members.keyEnd.length &&
+    k < members.valueAt.length &&
+    k < members.valueEnd.length
+  ) {
+    if (!manifestPrintableAscii(members.keys[k])) {
+      out.refuse(
+        `a package name in \`dependencies\` holds a character that is not printable ASCII${LINK_ENTRY}`,
+        members.keyAt[k],
+        members.keyEnd[k]
+      )
+      k = k + 1
+      continue
+    }
     const grant = new LinkRequest()
     manifestReadLinkObject(
       manifest,

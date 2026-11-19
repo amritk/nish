@@ -414,7 +414,7 @@ function LinkManifest.grantFor(this: LinkManifest, name: string): LinkRequest ->
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +1:67 new LinkRequest -> @LinkRequest.constructor
-function manifestLinkLibrary(name: string): boolean -> @manifestLinkLibrary [exported]
+function manifestLinkLibrary(name: string): boolean -> @manifestLinkLibrary
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isDigit
   stackSites=0 stackLocals=0
@@ -423,13 +423,19 @@ function manifestLinkLibrary(name: string): boolean -> @manifestLinkLibrary [exp
   local +3:11 plain: boolean (const)
   callee +4:7 isDigit -> @isDigit
   local +5:11 inner: boolean (const)
+function manifestPrintableAscii(text: string): boolean -> @manifestPrintableAscii
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 code: i32 (const)
 function manifestLinkSourceProblem(path: string): string -> @manifestLinkSourceProblem
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: path
-  calls: manifestAbsolutePath manifestLeavesRoot nish_panic_index nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from
+  calls: manifestAbsolutePath manifestLeavesRoot manifestPrintableAscii nish_panic_index nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
-  callee +0:7 manifestAbsolutePath -> @manifestAbsolutePath
-  callee +3:7 manifestLeavesRoot -> @manifestLeavesRoot
+  callee +0:8 manifestPrintableAscii -> @manifestPrintableAscii
+  callee +3:7 manifestAbsolutePath -> @manifestAbsolutePath
+  callee +6:7 manifestLeavesRoot -> @manifestLeavesRoot
 function manifestReadLinkList(manifest: string, at: i32, end: i32, kind: string, into: ManifestList, out: LinkManifest): void -> @manifestReadLinkList
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -486,16 +492,18 @@ function manifestReadLinkGrants(manifest: string, at: i32, end: i32, out: LinkMa
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at end manifest
-  calls: LinkManifest.refuse LinkRequest.constructor manifestMembers manifestReadLinkObject manifestRepeatedMember nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
-  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 manifestReadLinkObject#6
+  calls: LinkManifest.refuse LinkRequest.constructor manifestMembers manifestPrintableAscii manifestReadLinkObject manifestRepeatedMember nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0 manifestReadLinkObject#6
   stackSites=0 stackLocals=0
-  local -26:9 members: ManifestMembers (const)
-  callee -26:19 manifestMembers -> @manifestMembers
-  callee -24:5 LinkManifest.refuse -> @LinkManifest.refuse
-  local -21:9 repeated: i32 (const)
-  callee -21:20 manifestRepeatedMember -> @manifestRepeatedMember
-  callee -19:5 LinkManifest.refuse -> @LinkManifest.refuse
-  local -12:7 k: i32 (let)
+  local -41:9 members: ManifestMembers (const)
+  callee -41:19 manifestMembers -> @manifestMembers
+  callee -39:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local -36:9 repeated: i32 (const)
+  callee -36:20 manifestRepeatedMember -> @manifestRepeatedMember
+  callee -34:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local -27:7 k: i32 (let)
+  callee -19:10 manifestPrintableAscii -> @manifestPrintableAscii
+  callee -18:7 LinkManifest.refuse -> @LinkManifest.refuse
   local -10:11 grant: LinkRequest (const)
   callee -10:19 new LinkRequest -> @LinkRequest.constructor
   callee -9:5 manifestReadLinkObject -> @manifestReadLinkObject

@@ -25989,6 +25989,75 @@ if (dealtHere("cliChecks")) {
         before.stdout + before.stderr + after.stdout + after.stderr
       )
 
+      // A header the source includes keys the cache too: an edit to `add.h` alone
+      // leaves the IR and `add.c` as they were, and must still link again.
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "add.h"), "#define PKG_LINK_SCALE 1\n")
+      fs.writeFileSync(
+        path.join(pkgDir, "app", "c", "add.c"),
+        '#include "add.h"\nint pkg_link_add(int a, int b) { return a * PKG_LINK_SCALE + b; }\n'
+      )
+      const headerBefore = pkgRun()
+      fs.writeFileSync(path.join(pkgDir, "app", "c", "add.h"), "#define PKG_LINK_SCALE 10\n")
+      const headerAfter = pkgRun()
+      check(
+        "package-link: a change to a header the linked source includes, and nothing else, links again",
+        headerBefore.status === 0 &&
+          headerBefore.stdout === "5\ntrue\n" &&
+          headerAfter.status === 0 &&
+          headerAfter.stdout === "23\ntrue\n",
+        headerBefore.stdout + headerBefore.stderr + headerAfter.stdout + headerAfter.stderr
+      )
+
+      // `libraries` reaches the linker: the symbol lives only in a shared library
+      // this check builds with clang, found by `-l<name>` on LIBRARY_PATH and at
+      // run time on LD_LIBRARY_PATH. Without the entry the same program does not
+      // link, so `-lm` from build.sh proves nothing here.
+      const libDir = path.join(pkgDir, "lib")
+      fs.mkdirSync(libDir, { recursive: true })
+      fs.writeFileSync(path.join(libDir, "triple.c"), "int pkg_link_triple(int x) { return x * 3; }\n")
+      const shared = spawnSync(
+        "clang",
+        ["-shared", "-fPIC", "-o", path.join(libDir, "libnishpkglinktriple.so"), path.join(libDir, "triple.c")],
+        { encoding: "utf8" }
+      )
+      const libApp = path.join(pkgDir, "libapp")
+      fs.mkdirSync(libApp, { recursive: true })
+      fs.writeFileSync(
+        path.join(libApp, "lib.ts"),
+        "declare function pkg_link_triple(x: i32): i32\n\nexport function triple(x: i32): i32 {\n  return pkg_link_triple(x)\n}\n"
+      )
+      fs.writeFileSync(
+        path.join(libApp, "main.ts"),
+        'import { triple } from "./lib"\n\nexport const main = (): i32 => {\n  console.log(triple(14))\n  return 0\n}\n'
+      )
+      const libRun = (libraries) => {
+        fs.writeFileSync(
+          path.join(libApp, "package.json"),
+          JSON.stringify({ name: "pkg-link-libapp", private: true, nish: { link: { libraries } } })
+        )
+        return spawnSync(NISH, ["run", "main.ts"], {
+          cwd: libApp,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            XDG_CACHE_HOME: path.join(pkgDir, "cache"),
+            LIBRARY_PATH: libDir,
+            LD_LIBRARY_PATH: libDir,
+          },
+        })
+      }
+      const unnamed = libRun([])
+      const named = libRun(["nishpkglinktriple"])
+      check(
+        "package-link: a library named in `libraries` is passed to the linker, and the program does not link without it",
+        shared.status === 0 &&
+          unnamed.status !== 0 &&
+          unnamed.stdout === "" &&
+          named.status === 0 &&
+          named.stdout === "42\n",
+        shared.stderr + unnamed.stdout + unnamed.stderr + named.stdout + named.stderr
+      )
+
       // A granted source that is a symbolic link out of its package is refused by
       // its real path, though the path as written is inside the package.
       const depDir = path.join(pkgDir, "dep")

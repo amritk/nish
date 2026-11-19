@@ -8,13 +8,15 @@ import EmittedModule from "./compilation" -> struct EmittedModule
 import dirname from "./paths" -> function @dirname
 import hexDigitLower from "./strings" -> function @hexDigitLower
 import StringBuilder from "./strings" -> struct StringBuilder
-struct LinkSet (class) size=24 align=8 exported
+struct LinkSet (class) size=32 align=8 exported
   field libraries: string[] index=0 offset=0
   field sources: string[] index=1 offset=8
-  field sqlite: boolean index=2 offset=16
+  field headerDirs: string[] index=2 offset=16
+  field sqlite: boolean index=3 offset=24
   constructor -> @LinkSet.constructor
   method addLibrary -> @LinkSet.addLibrary
   method addSource -> @LinkSet.addSource
+  method addHeaderDir -> @LinkSet.addHeaderDir
 function runCacheRoot(): string -> @runCacheRoot [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -70,27 +72,50 @@ function anyCallsSqlite(modules: EmittedModule[]): boolean -> @anyCallsSqlite [e
   callee +1:9 callsSqlite -> @callsSqlite
 function LinkSet.constructor(this: LinkSet): void -> @LinkSet.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=24 writesThrough=true captured=false
+  pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function LinkSet.addLibrary(this: LinkSet, name: string): void -> @LinkSet.addLibrary [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: name
   calls: nish_array_grow nish_str_eq
-  pointer this: size=24 writesThrough=false captured=false
+  pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function LinkSet.addSource(this: LinkSet, path: string): void -> @LinkSet.addSource [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: path
   calls: nish_array_grow nish_str_eq
-  pointer this: size=24 writesThrough=false captured=false
+  pointer this: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function LinkSet.addHeaderDir(this: LinkSet, dir: string): void -> @LinkSet.addHeaderDir [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: dir
+  calls: nish_array_grow nish_str_eq
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function packageHeaders(dir: string): string[] -> @packageHeaders
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_realpath
+  escaping: dir
+  calls: nish_array_grow nish_is_dir nish_readdir nish_realpath nish_str_at nish_str_concat nish_str_eq
+  stackSites=2 stackLocals=2
+  local +0:9 out: string[] (const)
+  local +1:9 seen: string[] (const)
+  local +2:9 queue: string[] (const)
+  local +3:7 next: i32 (let)
+  local +5:11 at: string (const)
+  local +7:11 real: string | null (const)
+  local +8:9 names: string[] | null (let)
+  local +14:18 name: string (const)
+  local +16:15 path: string (const)
+  local +17:15 own: boolean (const)
 function linkSetLines(links: LinkSet): string -> @linkSetLines [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fileFingerprint
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32
-  pointer links: size=24 writesThrough=false captured=false
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32 packageHeaders
+  pointer links: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
@@ -99,7 +124,12 @@ function linkSetLines(links: LinkSet): string -> @linkSetLines [exported]
   local +4:14 path: string (const)
   callee +5:5 StringBuilder.add -> @StringBuilder.add
   callee +5:51 fileFingerprint -> @fileFingerprint
-  callee +7:10 StringBuilder.toText -> @StringBuilder.toText
+  local +7:14 dir: string (const)
+  local +8:16 path: string (const)
+  callee +8:24 packageHeaders -> @packageHeaders
+  callee +9:7 StringBuilder.add -> @StringBuilder.add
+  callee +9:53 fileFingerprint -> @fileFingerprint
+  callee +12:10 StringBuilder.toText -> @StringBuilder.toText
 function runBinaryName(name: string): string -> @runBinaryName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name

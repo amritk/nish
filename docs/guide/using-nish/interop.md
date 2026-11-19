@@ -917,7 +917,7 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 
 A function from the C library links with `nish run` or `--link` as it is.
 Your own C, and any other library, is named in the `nish.link` field of the
-`package.json` beside your program. `nish run` and `--link` read it:
+nearest `package.json` above the entry file. `nish run` and `--link` read it:
 
 <!-- nish:ok -->
 ```json package.json
@@ -930,16 +930,22 @@ Your own C, and any other library, is named in the `nish.link` field of the
 ```
 
 - `libraries` are passed to the linker as `-l<name>`, so `"z"` links
-  `libz`. A name is letters, digits, `_`, `.`, `+` and `-`, and does not
-  start with `-`. Nothing in it can become a flag. There is no pkg-config, so
+  `libz`. A name is printable ASCII letters, digits, `_`, `.`, `+` and `-`,
+  and starts with a letter, digit or `_` (so not with `-`, `.` or `+`).
+  Nothing in it can become a flag. There is no pkg-config, so
   a library outside the linker's default search path is not found.
 - `sources` are `.c` files inside the package, by their path relative to
   `package.json`. Each is compiled with clang beside the runtime. A path that
-  is absolute, climbs out with `..`, or resolves outside the package through a
-  symbolic link is refused (NL3060).
+  is absolute, holds a backslash or a character outside printable ASCII,
+  climbs out with `..`, or resolves outside the package through a symbolic
+  link is refused (NL3060).
 - Any other key in `link` is refused (NL3059), not skipped.
-- The run cache key holds the link set and each source's bytes, so editing
-  `c/mylib.c` makes the next `nish run` link again.
+- The run cache key holds the link set, each source's bytes and each `.h`
+  file in the source's package, so editing `c/mylib.c` or a header beside it
+  makes the next `nish run` link again. A header outside the package is not
+  keyed.
+- These refusals (NL3059, NL3060, NL3061) come only from `nish run` and
+  `--link`. A compile to IR alone does not read the link entries.
 - Only the native profiles (`speed`, `size`, `debug`) link it. `--link
   --profile wasi` with a `nish.link` fails the link (exit 3).
 
