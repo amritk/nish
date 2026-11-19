@@ -6,8 +6,8 @@
 // for this one.
 export const main = (): i32 => {
   const p: string | null = "x";
-  console.log(p);
   if (p !== null) {
+    console.log(p);
     return (p ?? "y").length;
   }
   return 0;

@@ -26182,6 +26182,10 @@ class Grid {
 }
 
 export const first = (g: Grid | null): number => g?.rows[0].n ?? -1
+
+export const main = (): void => {
+  console.log(first(new Grid()))
+}
 `
     )
     const strictChainLine = (flags) => {
