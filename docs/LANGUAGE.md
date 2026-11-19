@@ -16421,7 +16421,7 @@ allows admits. This compiler has built four features, `nullish`,
   module constant of type `string`, because a label is compared without being
   run; any other label is NL2799
   (`tests/link/compat_string_switch_label_not_constant`), a label of another
-  type is the strict `` `case` label is i32 but the discriminant is string ``
+  type is the strict `` `case` label is f64 but the discriminant is string ``
   (`compat_string_switch_label_type`), and two labels with the same text, a
   constant's included, are `` Duplicate `case` label `` as in an integer
   switch (`compat_string_switch_duplicate`). Fallthrough, `default` in any

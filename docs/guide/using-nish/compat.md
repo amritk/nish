@@ -84,7 +84,7 @@ export const main = (): void => {
 ```
 
 ```text
-package.json:5:16: error: `asnyc` is no feature of the compatibility dialect: `nish.compat` is `true` or an array of feature names, and the ones this compiler has built are `nullish`, `optional-chaining`
+package.json:5:16: error: `asnyc` is no feature of the compatibility dialect: `nish.compat` is `true` or an array of feature names, and the ones this compiler has built are `nullish`, `optional-chaining`, `string-switch`, `for-of-string`
 ```
 
 ## Numbers are doubles
