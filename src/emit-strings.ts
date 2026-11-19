@@ -769,7 +769,9 @@ export const emitForeignBuffers = (
       // so `count` always names an argument.
       if (count >= 0 && count < values.length) {
         const conversion = foreignCountConversion(callee, count)
-        if (!foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, conversion)) {
+        if (
+          !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, conversion)
+        ) {
           const counted = foreignCountValue(emitter, callee.paramTypes[count], values[count])
           const len = loadLength(emitter, buffer)
           const fits = fn.emitValue(`icmp ule i64 ${counted}, ${len}`)

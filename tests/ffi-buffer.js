@@ -156,9 +156,10 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       ].join("\n")
     )
     const countedSites = sitesOf(counted)
-    const countedLength = countedSites.report === null
-      ? []
-      : fnSites(countedSites.report, "main").filter((p) => p.kind === "ffi-length")
+    const countedLength =
+      countedSites.report === null
+        ? []
+        : fnSites(countedSites.report, "main").filter((p) => p.kind === "ffi-length")
     check(
       "ffi_buffer: a `CountedBy` count of the buffer's own length is proved at u8, u16 and u32",
       countedLength.length === 3 && countedLength.every((p) => p.proven === true),
@@ -191,9 +192,10 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       ].join("\n")
     )
     const unprovedSites = sitesOf(unproved)
-    const unprovedLength = unprovedSites.report === null
-      ? []
-      : fnSites(unprovedSites.report, "main").filter((p) => p.kind === "ffi-length")
+    const unprovedLength =
+      unprovedSites.report === null
+        ? []
+        : fnSites(unprovedSites.report, "main").filter((p) => p.kind === "ffi-length")
     check(
       "ffi_buffer: a literal `CountedBy` count and an out-class count stay checked",
       unprovedLength.length === 2 && unprovedLength.every((p) => p.proven !== true),

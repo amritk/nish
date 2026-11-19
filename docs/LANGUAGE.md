@@ -7190,8 +7190,9 @@ declare function compress(
   override file write it.** Clang spells the same fact `__counted_by(n)` on
   the pointer, and the override JSON `nish c-import` reads writes it as
   `"dest": {"buffer": "destLen"}`. `CountedBy<T, N>` is a type alias for `T`
-  to TypeScript, so a declaration still type-checks under `tsc` once it
-  declares `type CountedBy<T, N extends string> = T`. A count-side spelling,
+  to TypeScript, so a declaration still type-checks under `tsc` once a
+  `.d.ts` only `tsc` reads declares `type CountedBy<T, N extends string> = T`
+  (Nish refuses a generic type alias in its own source). A count-side spelling,
   a naming convention (`bufLength`) and a `typeof buf["length"]` type were
   considered and not taken: the first puts the fact on the side C does not,
   the second is implicit, and the third loses the count's width.

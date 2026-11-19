@@ -652,20 +652,20 @@ function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, o
   pointer operands: size=0 writesThrough=true captured=false passedTo=emitHostString#2 emitHostWindow#4
   pointer values: size=0 writesThrough=true captured=false passedTo=emitHostString#3 emitHostWindow#5
   stackSites=0 stackLocals=0
-  local -31:9 fn: IRFunction (const)
-  local -30:7 i: i32 (let)
-  callee -28:9 hostFunction -> @hostFunction
-  callee -27:7 emitHostString -> @emitHostString
-  callee -26:16 hostFunction -> @hostFunction
-  callee -26:40 lentBuffer -> @lentBuffer
-  callee -25:7 emitHostWindow -> @emitHostWindow
-  callee -24:16 isForeignBuffer -> @isForeignBuffer
-  local -23:13 buffer: string (const)
-  local -22:13 count: i32 (const)
-  callee -22:21 foreignBufferCount -> @foreignBufferCount
-  local -18:15 conversion: string (const)
-  callee -18:28 foreignCountConversion -> @foreignCountConversion
-  callee -17:14 foreignBufferCountProven -> @foreignBufferCountProven
+  local -33:9 fn: IRFunction (const)
+  local -32:7 i: i32 (let)
+  callee -30:9 hostFunction -> @hostFunction
+  callee -29:7 emitHostString -> @emitHostString
+  callee -28:16 hostFunction -> @hostFunction
+  callee -28:40 lentBuffer -> @lentBuffer
+  callee -27:7 emitHostWindow -> @emitHostWindow
+  callee -26:16 isForeignBuffer -> @isForeignBuffer
+  local -25:13 buffer: string (const)
+  local -24:13 count: i32 (const)
+  callee -24:21 foreignBufferCount -> @foreignBufferCount
+  local -20:15 conversion: string (const)
+  callee -20:28 foreignCountConversion -> @foreignCountConversion
+  callee -18:12 foreignBufferCountProven -> @foreignBufferCountProven
   local -16:17 counted: string (const)
   callee -16:27 foreignCountValue -> @foreignCountValue
   local -15:17 len: string (const)

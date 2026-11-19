@@ -6955,7 +6955,8 @@ export const foreignCountConversion = (sig: FunctionSig, count: i32): string => 
  * Whether the `ffi-length` check of buffer argument `index` of the foreign
  * call `call` is proven, so that neither the attribute pass records it as a
  * panic nor the emitter writes it (WP53 B1.2, §3a). The count is spelled
- * `toU64(x.length)` in the call, where `x` is the buffer argument itself, a
+ * `toU64(x.length)` in the call (`conversion`, `toU8` to `toU64` by the
+ * count's width under WP66 S5), where `x` is the buffer argument itself, a
  * `const` local or a parameter named alone, so the count is the length it was
  * when the count ran; and no argument after the count can move an array's
  * `len` (`bodyMayExtend`, with any receiver, since aliases are not tracked),

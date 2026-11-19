@@ -1043,7 +1043,7 @@ export const layoutClass = (program: CheckedProgram, table: TypeTable, type: i32
 
 /**
  * The unsigned width a buffer's named count is read at (WP66 S5,
- * `docs/LANGUAGE.md` "Naming a buffer's count"): `u8`, `u16`, `u32` or `u64`
+ * `docs/LANGUAGE.md` "`CountedBy`"): `u8`, `u16`, `u32` or `u64`
  * itself, or the one field of a `declare class` that holds nothing else, the
  * out class C's `uLongf *destLen` is declared as. -1 for any other type.
  */
@@ -1052,7 +1052,9 @@ export const foreignCountWidth = (program: CheckedProgram, table: TypeTable, typ
     return type
   }
   const info = layoutClass(program, table, type)
-  return info !== null && info.fields.length === 1 && isUnsignedScalar(info.fields[0].type) ? info.fields[0].type : -1
+  return info !== null && info.fields.length === 1 && isUnsignedScalar(info.fields[0].type)
+    ? info.fields[0].type
+    : -1
 }
 
 const isUnsignedScalar = (t: i32): boolean => t === T_U8 || t === T_U16 || t === T_U32 || t === T_U64

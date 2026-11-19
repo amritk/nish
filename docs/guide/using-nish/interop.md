@@ -1083,7 +1083,8 @@ export const main = (): i32 => {
 ```
 
 `CountedBy` is only for a `declare function`, and `nish c-import` does not
-write it yet. To check such a file with `tsc`, declare the alias yourself:
+write it yet. To check such a file with `tsc`, declare the alias in a
+`.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
 `type CountedBy<T, N extends string> = T`.
 
 C borrows the bytes for the length of the call, and may write a `u8[]` (not a
