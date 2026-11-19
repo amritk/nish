@@ -51,6 +51,7 @@ specified.
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 5 of 9 |
 | [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 22 of 29 |
+| [WP41: A 64×64→128 high product](wp41-mul-high.md) | In progress | 1 of 3 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
 | [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 4 of 9 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
@@ -118,7 +119,6 @@ specified.
 
 ## Not built
 
-- WP41, a 64×64→128 multiply: measured on Poly1305, 14% to 21% faster natively but 19% to 27% slower on wasm32, so it was declined.
 - WP48's first design, a whole-program 32-bit mode or an `i32` pool: measured and declined on 2026-11-11; ports use a tree's first-child and next-sibling links instead, which took about half the memory. WP48 is reopened above for linked classes the compiler picks.
 
 WP-P, the pipeline prep, landed without a note, and WP11, documentation, is

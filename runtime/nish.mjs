@@ -251,6 +251,10 @@ provide("f32ToBits", shim.f32ToBits);
 // agree with a native run; the timing does not, and is not claimed here.
 provide("ctSelect", shim.ctSelect);
 provide("ctEq", shim.ctEq);
+// `mulHigh` (WP41): exact on BigInts. `mulHighIsNative` is `false`, so std
+// takes its narrow-limb path here.
+provide("mulHigh", shim.mulHigh);
+provide("mulHighIsNative", shim.mulHighIsNative);
 // `secureZero` (#385): the bytes are zero afterwards here too, though what a
 // collector may have copied before is out of reach.
 provide("secureZero", shim.secureZero);

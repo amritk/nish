@@ -179,6 +179,8 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "bitsToF64" ||
     name === "ctSelect" ||
     name === "ctEq" ||
+    name === "mulHigh" ||
+    name === "mulHighIsNative" ||
     name === "parseInt" ||
     name === "parseFloat" ||
     name === "Number" ||
@@ -305,6 +307,31 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
     T_U64,
     "u32 or u64 operands (convert with toU32 or toU64)"
   )
+
+/**
+ * `mulHigh(a, b)` (WP41): the high 64 bits of the 128-bit product of two
+ * `u64`s, and a `u64` itself. Only `u64`, because the high half is a fact of
+ * one width: a `u32` product already fits in a `u64`, and a signed high half
+ * is a different answer. Each operand is checked against `u64`, so a bare
+ * literal takes that type, and one that does not fit is the literal's own
+ * refusal.
+ */
+const checkMulHigh = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 => {
+  if (!checkBuiltinArity(ctx, call, name, args, 2)) {
+    return T_ERROR
+  }
+  let failed = false
+  for (let i = 0; i < 2; i++) {
+    const got = checkExpression(ctx, args.children[i], scope, T_U64)
+    if (got === T_ERROR) {
+      failed = true
+    } else if (got !== T_U64) {
+      ctx.error(args.children[i], `\`${name}\` takes u64 operands (convert with toU64), got ${ctx.table.typeName(got)}`)
+      failed = true
+    }
+  }
+  return failed ? T_ERROR : T_U64
+}
 
 /**
  * `wrappingAdd(a, b)`, `wrappingSub(a, b)` and `wrappingMul(a, b)`, from
@@ -1003,6 +1030,13 @@ export const checkBuiltinFunctionNamed = (
   }
   if (name === "ctSelect" || name === "ctEq") {
     return checkConstantTime(ctx, call, scope, name, args)
+  }
+  if (name === "mulHigh") {
+    return checkMulHigh(ctx, call, scope, name, args)
+  }
+  if (name === "mulHighIsNative") {
+    checkBuiltinArity(ctx, call, name, args, 0)
+    return T_BOOL
   }
   // Reached only through a `nish:unsafe` import (`checkBuiltinFunction`), so
   // every call here is a site the module chose; each is recorded for the

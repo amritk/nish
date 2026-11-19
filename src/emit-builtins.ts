@@ -466,6 +466,53 @@ const emitCtEq = (emitter: Emitter, expr: Node): string => {
   return emitValueBarrier(emitter, ty, mask)
 }
 
+/**
+ * `mulHigh(a, b)` (WP41): the high 64 bits of the 128-bit product.
+ *
+ * On a 64-bit target both operands are widened to `i128`, multiplied, and the
+ * top half is shifted down; LLVM selects one `mul` (x86-64), `mulx` (with
+ * BMI2) or `umulh` (AArch64) for it, and calls nothing.
+ *
+ * wasm32 has no wide multiply, and an `i128` there becomes a call to
+ * compiler-rt's `__multi3`, which a wasm link does not carry. So the product
+ * is built from four 32×32→64 products, in the order std's hand-written
+ * helpers used (`a0 a1 b0 b1`, then `p00 p01 p10 p11`, then the middle
+ * column), so a wasm build computes the same operations it did before. Every
+ * step is a mask, shift, multiply or add, with no branch on either operand.
+ */
+const emitMulHigh = (emitter: Emitter, expr: Node): string => {
+  const args = expr.children[1].children
+  const a = emitter.emitExpression(args[0])
+  const b = emitter.emitExpression(args[1])
+  const fn = emitter.fn
+  if (!isWasmBuild(emitter.opts)) {
+    const wideA = fn.emitValue(`zext i64 ${a} to i128`)
+    const wideB = fn.emitValue(`zext i64 ${b} to i128`)
+    const product = fn.emitValue(`mul i128 ${wideA}, ${wideB}`)
+    const high = fn.emitValue(`lshr i128 ${product}, 64`)
+    return fn.emitValue(`trunc i128 ${high} to i64`)
+  }
+  const a0 = fn.emitValue(`and i64 ${a}, 4294967295`)
+  const a1 = fn.emitValue(`lshr i64 ${a}, 32`)
+  const b0 = fn.emitValue(`and i64 ${b}, 4294967295`)
+  const b1 = fn.emitValue(`lshr i64 ${b}, 32`)
+  const p00 = fn.emitValue(`mul i64 ${a0}, ${b0}`)
+  const p01 = fn.emitValue(`mul i64 ${a0}, ${b1}`)
+  const p10 = fn.emitValue(`mul i64 ${a1}, ${b0}`)
+  const p11 = fn.emitValue(`mul i64 ${a1}, ${b1}`)
+  const carry00 = fn.emitValue(`lshr i64 ${p00}, 32`)
+  const low01 = fn.emitValue(`and i64 ${p01}, 4294967295`)
+  const low10 = fn.emitValue(`and i64 ${p10}, 4294967295`)
+  const midPart = fn.emitValue(`add i64 ${carry00}, ${low01}`)
+  const mid = fn.emitValue(`add i64 ${midPart}, ${low10}`)
+  const high01 = fn.emitValue(`lshr i64 ${p01}, 32`)
+  const high10 = fn.emitValue(`lshr i64 ${p10}, 32`)
+  const midCarry = fn.emitValue(`lshr i64 ${mid}, 32`)
+  const sum1 = fn.emitValue(`add i64 ${p11}, ${high01}`)
+  const sum2 = fn.emitValue(`add i64 ${sum1}, ${high10}`)
+  return fn.emitValue(`add i64 ${sum2}, ${midCarry}`)
+}
+
 // ---- Process, files and the arena ------------------------------------------------------
 
 /** Every argument as an `i8*`, which is what the file and stream builtins take. */
@@ -845,6 +892,14 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   }
   if (name === "ctEq") {
     return emitCtEq(emitter, expr)
+  }
+  if (name === "mulHigh") {
+    return emitMulHigh(emitter, expr)
+  }
+  // A constant by target, so a branch on it folds away and the build keeps one
+  // algorithm (WP41).
+  if (name === "mulHighIsNative") {
+    return isWasmBuild(emitter.opts) ? "false" : "true"
   }
   // `nish:unsafe`: an element access with no bounds check, and `+ - *` with no
   // `nsw`. Neither calls anything.
@@ -1542,6 +1597,11 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   if (name === "ctSelect" || name === "ctEq") {
+    return out
+  }
+  // `mulHigh` is an `i128` multiply natively and four `i64` ones on wasm32;
+  // `mulHighIsNative` is a constant. Neither calls anything.
+  if (name === "mulHigh" || name === "mulHighIsNative") {
     return out
   }
   if (name === "uncheckedGet" || name === "uncheckedSet") {
