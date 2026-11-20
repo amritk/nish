@@ -137,6 +137,7 @@
 
 import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
+import { builtinAnswerTop } from "./members"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
@@ -156,8 +157,10 @@ import {
   T_STRING,
   T_U16,
   T_U32,
+  T_U64,
   T_U8,
   TypeTable,
+  intBits,
   isInteger,
   isNumeric,
   isUnsigned,
@@ -1244,16 +1247,66 @@ export const isBuiltinConversion = (program: CheckedProgram, call: Node, name: s
  * `i32` (WP31 §8), or `null`. `u8` and `u16` widen with `zext`, and a ranged
  * value is already the `i32` it converts to, so the declaration bounds the
  * result. `u32` and `u64` declare a range past `INT_MAX`, where the
- * conversion keeps the low 32 bits and reads them signed, so they state
- * nothing here.
+ * conversion keeps the low 32 bits and reads them signed, so their declared
+ * range states nothing here. An unsigned value whose shape bounds it below
+ * 2^31 (`unsignedRange`) converts to itself, though: `toI32(w & 16777215)`
+ * is in `[0, 16777215]` whatever `w` is. A builtin whose answer is documented
+ * to land in `[0, top]` (`builtinAnswerTop`) converts to itself in either
+ * number mode: `toI32(s.charCodeAt(i))` is a byte.
  */
 const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
   const e = unwrapBoundsParens(expr)
   if (e.kind !== NodeKind.Call || !isBuiltinToI32(walk.ctx.program, e)) {
     return null
   }
-  const declared = walk.ctx.table.declaredRange(walk.ctx.program.nodeTypes[e.children[1].children[0].id])
+  const arg = e.children[1].children[0]
+  const top = builtinAnswerTop(walk.ctx.program, walk.ctx.table, unwrapBoundsParens(arg))
+  if (top >= 0) {
+    return new DeclaredRange(toI64(0), toI64(top))
+  }
+  const declared = unsignedRange(walk, arg)
   return declared !== null && declared.hi <= I32_MAX ? declared : null
+}
+
+/**
+ * The range an unsigned expression's shape bounds it to whatever its operands
+ * hold, or its type's declared range, or `null` for a value of any other type.
+ * A constant (`constantValue`) is the one value it is, `x & y` is at most the
+ * smaller of the two sides' tops — so `x & C` is in `[0, C]` —, `x >>> k` is
+ * below `2^(bits - k)` and `x % C` below `C`. A `u64`'s declared range stops
+ * at 2^63 - 1 (`TypeTable.declaredRange`) where the type does not, so it
+ * bounds nothing here.
+ */
+const unsignedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
+  const ctx = walk.ctx
+  const e = unwrapBoundsParens(expr)
+  const c = constantValue(walk, e)
+  if (c >= 0) {
+    return new DeclaredRange(toI64(c), toI64(c))
+  }
+  const type = ctx.program.nodeTypes[e.id]
+  if (type < 0 || !isUnsigned(type)) {
+    return type < 0 ? null : ctx.table.declaredRange(type)
+  }
+  if (e.kind === NodeKind.Binary && e.text === "&") {
+    const a = unsignedRange(walk, e.children[0])
+    const b = unsignedRange(walk, e.children[1])
+    if (a !== null && (b === null || a.hi <= b.hi)) {
+      return new DeclaredRange(toI64(0), a.hi)
+    }
+    if (b !== null) {
+      return new DeclaredRange(toI64(0), b.hi)
+    }
+  }
+  const k = e.kind === NodeKind.Binary ? constantValue(walk, e.children[1]) : -1
+  // A count past 62 bits wide would leave `2^(bits - k)` outside an `i64`.
+  if (e.text === ">>>" && k >= 1 && k < intBits(type) && intBits(type) - k <= 62) {
+    return new DeclaredRange(toI64(0), (toI64(1) << toI64(intBits(type) - k)) - toI64(1))
+  }
+  if (e.text === "%" && k >= 1) {
+    return new DeclaredRange(toI64(0), toI64(k - 1))
+  }
+  return type === T_U64 ? null : ctx.table.declaredRange(type)
 }
 
 /**
@@ -3464,6 +3517,21 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
     const top = maxIndexOf(state, offset.v)
     return top >= 0 && toI64(top) + toI64(offset.c) < I32_MAX && knownMinLength(state, holder, top + offset.c)
   }
+  // `w[v - c]`: a floor of at least `c` keeps the difference non-negative, so
+  // it cannot wrap, and with `c >= 1` a `v <= w.length` puts it below the
+  // length. `const j = v - c; w[j]` is proved the same way (`differenceFacts`).
+  const e = unwrapBoundsParens(index)
+  if (e.kind === NodeKind.Binary && e.text === "-") {
+    const c = literalValue(e.children[1])
+    const v = indexLocal(ctx, e.children[0])
+    if (c < 1 || v === null || minValueOf(state, v) < c) {
+      return false
+    }
+    return (
+      knownAtMost(state, v, holder) ||
+      (maxIndexOf(state, v) >= 0 && knownMinLength(state, holder, maxIndexOf(state, v) - c))
+    )
+  }
   const i = indexLocal(ctx, index)
   if (i === null || !knownNonNegative(state, i)) {
     return false
@@ -4764,7 +4832,8 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
   }
   forgetLocal(walk, state, v)
   addFacts(state, facts)
-  const value = v.mutable || !isInteger(v.type) || init.kind === NodeKind.Empty ? -1 : constantValue(walk, init)
+  const value =
+    v.mutable || !isInteger(v.type) || init.kind === NodeKind.Empty ? -1 : constantValue(walk, init)
   if (value >= 0) {
     walk.constLocals.push(v)
     walk.constValues.push(value)
@@ -5172,9 +5241,10 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     const a = valueRange(walk, state, e.children[0], type)
     return combinedRange("neg", a, a, type)
   }
-  const counted = bitCountRange(ctx.program, e, type)
-  if (counted !== null) {
-    return counted
+  // `s.charCodeAt(i)` and `Math.clz32(x)` answer a documented `[0, top]`.
+  const top = builtinAnswerTop(ctx.program, ctx.table, e)
+  if (top >= 0 && ctx.table.baseOf(ctx.program.nodeTypes[e.id]) === type) {
+    return new Interval(toI64(0), toI64(top))
   }
   if (e.kind === NodeKind.Call) {
     const returned = callRange(walk, state, e, type)
@@ -5188,29 +5258,6 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     return new Interval(declared.lo, declared.hi)
   }
   return new Interval(typeMin(type), typeMax(type))
-}
-
-/**
- * `Math.clz32(x)` counts bits, so it lands in `[0, 32]`. The checker gives the
- * call `integer<0, 32>`, but an operand is recorded as the base it is read as
- * (`readAsBase` in src/expressions.ts), so the range reaches the prover here
- * rather than through the node's type: `31 - Math.clz32(b)`, the index of a
- * bit, then needs no overflow check. A user function called `clz32` on a value
- * named `Math` is not this, which `nodeCallees` and the receiver's type say.
- */
-const bitCountRange = (program: CheckedProgram, e: Node, type: i32): Interval | null => {
-  if (type !== T_I32 || e.kind !== NodeKind.Call || program.nodeCallees[e.id] !== null) {
-    return null
-  }
-  const callee = e.children[0]
-  if (callee.kind !== NodeKind.Member || callee.text !== "clz32") {
-    return null
-  }
-  const receiver = callee.children[0]
-  if (receiver.kind !== NodeKind.Ident || receiver.text !== "Math" || program.nodeTypes[receiver.id] >= 0) {
-    return null
-  }
-  return new Interval(toI64(0), toI64(32))
 }
 
 // ---- Return ranges ----------------------------------------------------------------

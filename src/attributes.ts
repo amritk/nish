@@ -3818,7 +3818,9 @@ class FactCollector {
       if (node.kind === NodeKind.New) {
         const length = node.children[2].children[0]
         const constant = program.nodeConstants[unwrapParens(length).id]
-        if (newArrayLengthChecked(length, program.nodeTypes[length.id], constant, this.opts.numberMode, table)) {
+        if (
+          newArrayLengthChecked(length, program.nodeTypes[length.id], constant, this.opts.numberMode, table)
+        ) {
           const tail: string[] = []
           panicTailCallees(tail)
           // A panic's tail, not output (`FunctionFacts.writesOutput`).
