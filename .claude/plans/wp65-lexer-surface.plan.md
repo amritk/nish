@@ -65,7 +65,7 @@ stages:
 # WP65 — the surface a lexer port asked for
 
 ## Context
-Landed: array module constants for a byte-class table, as [constant tables](../../docs/LANGUAGE.md#constant-tables). See [the roadmap page](../../docs/roadmap/wp65-lexer-surface.md). Spec: [design note](../../docs/wp65-lexer-surface.md). S1 to S3 do not depend on one another. Not planned: an array whose `length` covers uninitialised slots, `memchr` for elements wider than a byte, `toString` on arrays or classes. Issues #1629 and #1630 (items of the formatter tracker #1633) are the same work as S1 and S2 and are carried as stages of the language-gaps plan, so they are not linked here.
+Landed: array module constants for a byte-class table, as [constant tables](../../docs/LANGUAGE.md#constant-tables). See [the roadmap page](../../docs/roadmap/wp65-lexer-surface.md). Spec: [design note](../../docs/wp65-lexer-surface.md). S1 to S3 do not depend on one another. Not planned: an array whose `length` covers uninitialised slots, `memchr` for elements wider than a byte, `toString` on arrays or classes. Issues #1629 and #1630, items of the formatter tracker #1633, are S1's and S2's issues.
 
 ## WP65 S1 — byte search on u8[]
 Spec: [§2](../../docs/wp65-lexer-surface.md#2-byte-search-on-u8-s1). Reported as #1629: programs write byte loops or build a string with `String.fromBytes` to compare a token. Check that `u8[].indexOf(byte, from)` is a scalar loop and lower it to `memchr` (the string path already does for a one-byte needle, `src/emit-strings.ts`); add a non-allocating sub-range compare on `memcmp`; possibly a multi-byte `memmem`. Every new libc call is reserved in `src/c-symbols.ts`.
@@ -83,13 +83,3 @@ Spec: [§5](../../docs/wp65-lexer-surface.md#5-tostring-on-a-number-s4-open-ques
 
 ### Decision needed
 Record that D1b stands (the refusal names the template literal; `String(n)` keeps its refusal) so the open-question label can be dropped. Alternative D1a, building `n.toString()`, was the original recommendation but the owner chose D1b.
-
-## Issues carried from the language-gaps tracker
-
-### Issue 1629 (WP65 S1) — fast byte search and compare on u8[] with memchr, memcmp and memmem
-Issue #1629. Programs write manual byte loops or build a string with `String.fromBytes` to compare a token, which allocates on the hot path. Wanted: `memchr` for `indexOf(byte, from)` if it is a scalar loop today, a non-allocating sub-range compare on `memcmp`, possibly a multi-byte `memmem`. Tracker: #1633. Spec: [WP65 §2](../../docs/wp65-lexer-surface.md#2-byte-search-on-u8-s1). Likely files: `src/emit-strings.ts`, `std/bytes.ts`, `src/c-symbols.ts`.
-
-
-### Issue 1630 (WP65 S2) — array allocation without zero-fill, and a grow helper that reallocs
-Issue #1630. Growing parallel token tables allocates, zero-fills and copies. Wanted: an array written before read with no zero-fill, or `grow(arr, n)` as one `realloc`. Soundness first: nothing readable before written may expose stale memory. Spec: [WP65 §3](../../docs/wp65-lexer-surface.md#3-allocation-without-the-zero-fill-and-grow-s2). Likely files: `std/array.ts`, `src/`.
-

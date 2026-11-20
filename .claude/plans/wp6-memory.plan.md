@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp6-memory.md
 spec: docs/wp6-memory.md
 priority: 80
 labels: [deferred]
+issue: 1993
 stages:
   - id: s2-branch-assigned-stack
     title: WP6 S2 — a stack rule for branch-assigned locals and objects stored into a local container
@@ -12,6 +13,7 @@ stages:
     verification: node tests/run.js escape && node tests/run.js performance && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1994
     todos:
       - id: s2-fact
         content: Add a captured-only-into-one-binding fact (allocEscapes already approximates it) in src/escape.ts — see WP6 S2
@@ -25,6 +27,7 @@ stages:
     verification: node tests/run.js performance && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1995
     todos:
       - id: s3-exits
         content: Track scope exits in the emitter so a precise end can be placed on each hoisted alloca — see WP6 S3

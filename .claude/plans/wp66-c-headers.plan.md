@@ -4,6 +4,7 @@ overview: nish c-import, opaque classes, array fields, named buffer pairs and pa
 roadmap: docs/roadmap/wp66-c-headers.md
 spec: docs/wp66-c-headers.md
 priority: 80
+issue: 1996
 stages:
   - id: s6-callbacks
     title: WP66 S6 — C callbacks, a top-level function passed as a C function pointer
@@ -11,6 +12,7 @@ stages:
     verification: node tests/run.js ffi && node tests/run.js c-import && node tests/run.js link && node tests/run.js wasi && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1997
     todos:
       - id: s6-decide
         content: Record the owner's answers to what C may do with a callback in section 8 S6 and decisions D1 to D7 in section 9 of docs/wp66-c-headers.md — see WP66 S6 — C callbacks
