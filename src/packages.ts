@@ -27,6 +27,14 @@
 // emits is spelled exactly as it was, every golden is byte-identical, and
 // every exported name keeps the C ABI it had.
 //
+// **WP57 S1 adds a module qualifier below the package prefix**, and only where
+// it is needed: a private free function or function template whose bare
+// symbol would clash with another in its package is spelled
+// `<prefix><qualifier>$.<name>` (`symbolSpelling`), the qualifier being the
+// module's path from its package directory (or the entry's) with `.ts`
+// dropped (`moduleSymbolQualifier`). A program with no clash keeps every
+// symbol it had, which is why that stage moved no IR either.
+//
 // **How a module says which package it is in.** It does not: the path says it.
 // A module under `<...>/node_modules/<name>/` (or `.../@scope/<name>/`) is in
 // that package; everything sharing the entry's own package directory is the

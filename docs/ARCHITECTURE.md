@@ -680,9 +680,17 @@ ordinary class.
   within the package that declares it — which is what lets two dependencies
   each keep a private `helper()`. The root package's prefix is empty, so for a
   single-package program the symbol, the rule and the message are all exactly
-  what they were. [wp57-module-scoped-names.md](wp57-module-scoped-names.md)
-  proposes a module qualifier for a private symbol that would clash; it is not
-  built.
+  what they were. Since WP57 S1 ([wp57-module-scoped-names.md](wp57-module-scoped-names.md))
+  the default mode goes one step further: a private free function or function
+  template whose bare symbol would clash is spelled
+  `<package prefix><module qualifier>$.<name>` (`qualifyClashingSymbols` in
+  `src/compilation.ts`, `templateSymbol` in `src/generics.ts`, the qualifier
+  from `moduleSymbolQualifier` in `src/packages.ts`), and the clash checks run
+  over those qualified symbols, so two modules may each keep a private
+  `add()`. A program with no clash keeps every symbol it had. Two exported
+  functions or templates still clash, as does any clash under
+  `--no-strict-exports` (every symbol stays bare) and a residual collision of
+  two qualified symbols.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
   `src/target.ts` (strings copied from `clang --target=<triple> -S

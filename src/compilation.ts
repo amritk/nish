@@ -3896,6 +3896,13 @@ export class Compilation {
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
    *
+   * WP57 S1 did the same one level down: `qualifyClashingSymbols` has already
+   * given a clashing private function its module-qualified symbol, so two
+   * modules' private `add` arrive here as `helper$.add` and `main$.add` and do
+   * not clash. What still does is two exported functions, anything under
+   * `--no-strict-exports` (nothing is qualified there) and two qualified
+   * symbols that come out alike (`clashMessage` words each).
+   *
    * A `declare function` is not a package's symbol but C's, so it keeps its
    * name in every package and two packages can make one key of it. That is
    * accepted when the two declarations agree on their types, because a foreign
@@ -4006,7 +4013,8 @@ export class Compilation {
             previousSig,
             previousModule.name,
             unit.name,
-            unit.packageName
+            unit.packageName,
+            this.opts.strictExports
           )
         }
         // Reported, not thrown: every clash is listed.
@@ -4849,7 +4857,8 @@ const clashMessage = (
   previous: FunctionSig,
   previousFile: string,
   file: string,
-  packageName: string
+  packageName: string,
+  strictExports: boolean
 ): string => {
   const owner = sig.owner
   if (owner !== null) {
@@ -4870,10 +4879,22 @@ const clashMessage = (
     }
     return `Exported function ${where}; exported names must be unique within the package that declares them`
   }
-  if (packageName === ROOT_PACKAGE) {
-    return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
+  // Under `--strict-exports` a private function that clashes is qualified by
+  // its module's path (WP57 S1), so a clash left over is two paths that spell
+  // one qualifier (`lib/util.ts` and `lib_util.ts`). Without it every function
+  // keeps its bare name, so the name itself has to be unique.
+  let why = ""
+  if (strictExports) {
+    why = `, and both modules' paths qualify it to one symbol, \`${sig.name}\`, so rename one of the modules or the function`
+  } else if (packageName === ROOT_PACKAGE) {
+    why = ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported"
+  } else {
+    why = ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported"
   }
-  return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+  if (packageName === ROOT_PACKAGE) {
+    return `Function ${where}${why}; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name`
+  }
+  return `Function ${where}${why}; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol`
 }
 
 /**

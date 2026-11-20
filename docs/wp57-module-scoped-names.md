@@ -1,10 +1,11 @@
 # WP57: Module-scoped names
 
-**Status: proposed, design only.** Nothing here is built, and the rule it
-would change still holds:
-[LANGUAGE.md](LANGUAGE.md#export-and-import) says a function name is unique
-across the whole program, and where this note and LANGUAGE.md disagree,
-LANGUAGE.md wins. The stages are in §8 and on
+**Status: S1 built; S2 and S3 not.** Two modules may each keep a private
+function or generic template of one name: a clashing one's symbol is
+qualified by its module path (§4), as
+[LANGUAGE.md](LANGUAGE.md#export-and-import) states. Exported names and
+class and interface names are still unique across the program, and where
+this note and LANGUAGE.md disagree, LANGUAGE.md wins. The stages are in §8 and on
 [the roadmap page](roadmap/wp57-module-scoped-names.md). S2 waits on a
 decision (§6).
 

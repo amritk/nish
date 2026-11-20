@@ -339,7 +339,9 @@ export const isGenericFunction = (decl: Node): boolean => {
  * mangling of each type argument in order (`docs/wp18-generics.md` §3c). The
  * mangling is prefix-coded, so the arguments are self-delimiting and the whole
  * name splits again at the first `$` — which is why `$` may not appear in a
- * declared name.
+ * declared name. The base is the template's own symbol (`templateSymbol`), so
+ * a private template WP57 S1 qualified carries its `$.` too (`helper$.id$i32`);
+ * the base symbols are already distinct, so the instances are as well.
  */
 const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => {
   let out = base
@@ -1906,7 +1908,9 @@ const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionB
  * arrow the caller wrote, calls a function another module defines. Such a
  * function would be `internal`, so it becomes `hidden` instead: in the final
  * link, and exported from nothing. A function's symbol is already unique across
- * the program whether or not it is exported (`rejectSymbolClashes`), and a
+ * the program whether or not it is exported (`rejectSymbolClashes`, which runs
+ * after WP57 S1 has given a clashing private function its module-qualified
+ * symbol, `helper$.add`), and a
  * lifted arrow's is its enclosing function's with a `$` no declared name can
  * spell. The module that calls it gets a `declare`, the way an instantiation it
  * calls and another module defines does.

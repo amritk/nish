@@ -547,7 +547,10 @@ export class Checker {
    *
    * `main` needs no exception: only the entry module may declare it, and the
    * entry module is the root package by construction (`Compilation` derives
-   * every other module's package by comparing it with the entry's own).
+   * every other module's package by comparing it with the entry's own). Nor
+   * does WP57 S1's module qualifier need one here: it is applied separately,
+   * by `qualifyClashing`, only to a private free function whose bare symbol
+   * clashes, and the entry's exported `main` is never one.
    *
    * A `declare function` is the exception that is not a symbol of the package
    * at all: it names a C function, and C has one namespace, so it keeps the
