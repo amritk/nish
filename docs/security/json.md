@@ -293,6 +293,7 @@ three bodies (below).
 | `src/attributes.ts`, `src/inline-arrays.ts` | `markJsonRoute`, the facts every call is given; `spoilJsonRoutes`, which keeps the arrays the code reaches out of the inline layout |
 | `std/json-typed.ts`, `std/json-tokenizer.ts` | tagged unions (JSON-17; anchored on `feature/json-tagged-unions/json-tagged-unions`, #1389): `JsonDecoder.unionTag`, `unknownTag`, `enterUnion`, `tagValue`, `unionReread`; `JsonTokenizer.rewindObject` |
 | `src/json-typed.ts`, `src/emit-json.ts` | tagged unions, same anchor: `jsonVariantsOf`, `jsonUnionRefusal`, `jsonTagField`, `jsonWireTag`, `jsonReadTag`; `emitJsonDecodeUnionBody`, `emitJsonDecodeUnionArrayBody`, `emitJsonDecodeUnionInto`, `emitJsonEncodeUnionBody` |
+| `std/json-typed.ts`, `src/emit-json.ts` | string enums (anchored at `936ba0b1`, after #1627): `JsonDecoder.enumString`; `emitJsonEnumRead`, `emitJsonEncodeEnum` |
 
 ### Threat model
 
@@ -379,11 +380,12 @@ A `readonly` field is refused for decoding (`json_reject_readonly`), and so is
 a class the decoder makes whose constructor takes parameters
 (`json_reject_constructor`, `json_reject_constructor_nullable`), a class a
 `Map` holds included (`json_reject_map_value_readonly`,
-`json_reject_map_value_constructor`). An enum the language does not declare
-never reaches the rule (`json_reject_enum_string`, `json_reject_enum_mixed`,
-`json_reject_const_enum`), and neither does `Level | null`, which the checker
-refuses as a field and as a map's value (NL2010, `json_reject_enum_nullable`,
-`json_reject_map_value_enum_nullable`).
+`json_reject_map_value_constructor`). An enum the language refuses never
+reaches the rule: one that mixes numbers and strings (`json_reject_enum_mixed`)
+and a `const enum` (`json_reject_const_enum`). Neither does `Level | null`,
+which the checker refuses as a field and as a map's value (NL2010,
+`json_reject_enum_nullable`, `json_reject_map_value_enum_nullable`). A string
+enum is read, by the path below.
 
 **The kinds after the first.** A `u64` is read through
 the tokenizer's `numberU64`, so it is exact to 2^64 - 1 and every number past
@@ -396,6 +398,27 @@ An enum's number is stored only when it is a member's value, so no enum field
 or element holds a value its type cannot ("enum: 1 names no member: code",
 "enum: and the field keeps the member it held", "enum array: the members before
 it are kept").
+
+**A string enum is read without allocating** (anchored at `936ba0b1`, after
+#1627). `JsonDecoder.enumString` (`std/json-typed.ts:701`) takes one token
+and answers `true` only at a string; any other value is `JSON_DECODE_TYPE`.
+The code the compiler writes then matches the string's decoded bytes against
+the members' strings with the key dispatch a class's keys use
+(`emitJsonEnumRead`, `src/emit-json.ts:1070`, through `emitJsonDispatch`):
+by length, then by a byte, then with `keyIs`. Nothing is copied, an escaped
+string matches as its unescaped bytes, and a string that is no member's,
+a prefix of one or one byte longer, is `JSON_DECODE_TYPE` with the field,
+element or map value keeping what it held. The member's string is written
+back from the constant table `String(r)` reads (`emitJsonEncodeEnum`,
+`:1051`), escaped by `w.string`. `tests/link/json_enum_string` pins it for a
+field, an array, a `| null` array, a `Map` value and a union tag: a
+non-member, a prefix (`"admi"`), a longer string (`"admins"`), a number,
+another case (`"Admin"`) and a non-member element each answer `-20` at the
+byte the value starts, and the field, the array or the map keeps what it held; a member whose string
+needs escaping, `"a\"b\\c\n\u0001"`, is written escaped and read back as
+itself; and one document holding a field, an array, a `| null` array and a
+union tag at once decodes and encodes to the same bytes ("link/json_enum_string:
+exits with 0 and stdout matches expected.out").
 
 A `Map`'s duplicate key is refused raw and through an escape ("map: a duplicate
 key: code", "map: a duplicate key through an escape: code", "map: é and \u00e9
