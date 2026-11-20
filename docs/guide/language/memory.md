@@ -268,6 +268,19 @@ explain-layout: 0 of 1 classes compact
 pointers. The flag changes no byte of what is built; `--compact off` turns the
 rule off.
 
+Where the rule does pick a node, as it does for a tree built in a recursive
+function, the node takes half the memory or a little more, and the program
+is faster when its nodes do not fit in the cache: a 24-byte tree node of an
+`i32` and two links becomes 12 bytes, and a 33-million-node tree built and
+walked eight times ran in two thirds of the time. The price is one extra step
+on every link read. A small graph that stays in the cache and is mostly a
+loop that chases one link after another, such as a climb from a node to the
+root, gains nothing from the smaller node and pays that step on each hop:
+write `implements Wide` on that class. The opposite case, a class under
+24 bytes that the rule leaves alone, is better left alone unless you have
+measured your program both ways
+([Compact classes](compact-classes.md#when-to-override-the-rule)).
+
 Where some pass needs to reach a node's children by index, keep a count of
 them on the node, and fill its `Node[]` once, when the node is complete,
 rather than pushing to it as each child arrives.
