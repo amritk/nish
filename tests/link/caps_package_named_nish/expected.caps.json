@@ -23,8 +23,7 @@
                 ]
               },
               "panics": [
-                { "kind": "overflow", "at": "main.ts:10:32", "proven": false },
-                { "kind": "call", "at": "main.ts:10:38", "callee": "trim", "via": "index" }
+                { "kind": "overflow", "at": "main.ts:10:32", "proven": false }
               ]
             }
           ]
@@ -258,7 +257,7 @@
                 { "kind": "call", "at": "std/text.ts:502:5", "callee": "fixedDigitsAdd", "via": "overflow" },
                 { "kind": "overflow", "at": "std/text.ts:503:5", "proven": true },
                 { "kind": "call", "at": "std/text.ts:512:15", "callee": "fixedDigitsHalve", "via": "overflow" },
-                { "kind": "index", "at": "std/text.ts:513:59", "proven": false },
+                { "kind": "index", "at": "std/text.ts:513:59", "proven": true },
                 { "kind": "overflow", "at": "std/text.ts:513:67", "proven": true },
                 { "kind": "overflow", "at": "std/text.ts:514:7", "proven": true },
                 { "kind": "overflow", "at": "std/text.ts:516:5", "proven": true },
@@ -283,9 +282,7 @@
               "exported": true,
               "capabilities": [],
               "witnesses": {},
-              "panics": [
-                { "kind": "call", "at": "std/text.ts:246:47", "callee": "trimEnd", "via": "index" }
-              ]
+              "panics": []
             },
             {
               "name": "trimEnd",
@@ -293,7 +290,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/text.ts:232:43", "proven": false },
+                { "kind": "index", "at": "std/text.ts:232:43", "proven": true },
                 { "kind": "overflow", "at": "std/text.ts:232:59", "proven": true },
                 { "kind": "overflow", "at": "std/text.ts:233:5", "proven": true },
                 { "kind": "oom", "at": "std/text.ts:235:10", "allowed": true }

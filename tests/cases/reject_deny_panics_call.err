@@ -1,2 +1,2 @@
-error: This call to `trim` may panic: it reaches the `index`
+error: This call to `split` may panic: it reaches the `panic`
 outside the no-panic scope this call is in
