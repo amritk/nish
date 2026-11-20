@@ -160,22 +160,32 @@ function checkConstantTime(ctx: CheckContext, call: Node, scope: Scope, name: st
   stackSites=0 stackLocals=0
   callee +0:3 checkOneWordType -> @checkOneWordType
 function checkMulHigh(ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 -> @checkMulHigh
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   escaping: name
-  calls: CheckContext.error TypeTable.typeName checkBuiltinArity checkExpression nish_panic_index nish_str_concat
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0
+  calls: checkBuiltinArity checkMulHighOperand nish_panic_index
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkMulHighOperand#0 checkMulHighOperand#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1
-  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkMulHighOperand#2 checkMulHighOperand#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   stackSites=0 stackLocals=0
   callee +0:8 checkBuiltinArity -> @checkBuiltinArity
-  local +3:7 failed: boolean (let)
-  local +4:12 i: i32 (let)
-  local +5:11 got: i32 (const)
-  callee +5:17 checkExpression -> @checkExpression
-  callee +9:7 CheckContext.error -> @CheckContext.error
-  callee +9:95 TypeTable.typeName -> @TypeTable.typeName
+  local +3:9 first: boolean (const)
+  callee +3:17 checkMulHighOperand -> @checkMulHighOperand
+  local +4:9 second: boolean (const)
+  callee +4:18 checkMulHighOperand -> @checkMulHighOperand
+function checkMulHighOperand(ctx: CheckContext, arg: Node, scope: Scope, name: string): boolean -> @checkMulHighOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  calls: CheckContext.error TypeTable.typeName checkExpression nish_str_concat
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  stackSites=0 stackLocals=0
+  local +0:9 got: i32 (const)
+  callee +0:15 checkExpression -> @checkExpression
+  callee +5:5 CheckContext.error -> @CheckContext.error
+  callee +5:80 TypeTable.typeName -> @TypeTable.typeName
 function checkWrapping(ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 -> @checkWrapping
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkOneWordType
