@@ -244,16 +244,29 @@ static int options(const char *path) {
   return 0;
 }
 
+/* A decimal argument of `twin seed` in [0, max], or exits with a message. */
+static int64_t seed_arg(const char *s, int64_t max) {
+  char *end = NULL;
+  unsigned long long v = strtoull(s, &end, 10);
+  if (s[0] < '0' || s[0] > '9' || *end != '\0' || v > (unsigned long long)max) {
+    fprintf(stderr, "twin seed: %s is not a number from 0 to %lld\n", s, (long long)max);
+    exit(2);
+  }
+  return (int64_t)v;
+}
+
 int main(int argc, char **argv) {
   if (argc == 4 && strcmp(argv[1], "seed") == 0) return seed(argv[2], argv[3], USERS, POSTS, LIKES);
   if (argc == 8 && strcmp(argv[1], "seed") == 0) {
-    int users = atoi(argv[5]), posts = atoi(argv[6]), likes = atoi(argv[7]);
+    uint32_t state = (uint32_t)seed_arg(argv[4], UINT32_MAX);
+    int users = (int)seed_arg(argv[5], INT32_MAX), posts = (int)seed_arg(argv[6], INT32_MAX),
+        likes = (int)seed_arg(argv[7], INT32_MAX);
     /* At most half of the user-post pairs, so the draw of distinct pairs ends soon. */
     if (users < 1 || posts < 1 || likes < 0 || (int64_t)likes > (int64_t)users * posts / 2) {
       fprintf(stderr, "twin seed: sizes out of range\n");
       return 2;
     }
-    mul_state = (uint32_t)strtoul(argv[4], NULL, 10);
+    mul_state = state;
     return seed(argv[2], argv[3], users, posts, likes);
   }
   if (argc == 3 && strcmp(argv[1], "options") == 0) return options(argv[2]);

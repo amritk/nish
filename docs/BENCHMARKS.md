@@ -3601,7 +3601,7 @@ Each comparison's noise band is the binary it varies (the build, or for `c-nativ
 - **CPU:** this container, `Intel(R) Xeon(R) Processor @ 2.10GHz`, 4 CPUs (one thread a core), Linux 6.18.44.
   - `lscpu` lists `fma`, `movbe`, `avx2` and `bmi2`, which x86-64-v3 needs. It also lists `avx512f`, `avx512dq`, `avx512cd`, `avx512bw`, `avx512vl`, `avx512_vnni`, `avx512_bf16` and `avx512_fp16`.
   - `clang -march=native` picks `sapphirerapids`.
-- **Toolchain:** Ubuntu clang 18.1.3 and LLVM 18's `llvm-profdata`.
+- **Toolchain:** Ubuntu clang 18.1.3. `LLVM_PROFDATA` was unset, so run.mjs found `llvm-profdata` on PATH: `/usr/bin/llvm-profdata`, a link to LLVM 18's `/usr/lib/llvm-18/bin/llvm-profdata`.
 - **SQLite:** 3.54.1.
 
 ```bash
@@ -3632,7 +3632,7 @@ node bench/sqlite/run.mjs --rounds 12 --variant c-native   # five binaries, so r
 
 In the C row, "base" is the C twin and "copy" is the twin's byte-identical copy. In every other row, "base" is the Nish build and "copy" is its copy.
 
-**PGO: the build is faster on `feed`, 4,142 ns a call at the median (−20.8 %).** That is larger than the band (789) and both IQRs (3,254 and 1,752).
+**PGO: the build is faster on `feed`, 4,142 ns a call at the median (−20.8 %).** That is larger than the band (789) and both IQRs (3,254 and 1,752). This verdict rests on a single 12-round run; the other two Nish comparisons each have a 12- and a 24-round run.
 
 **`--cpu x86-64-v3` alone: no measurable change.** At 12 rounds, +889 ns is outside the band (730) but inside both IQRs (2,898 and 2,052). At 24 rounds, −363 ns is inside the band (607). The two runs also disagree on the sign.
 

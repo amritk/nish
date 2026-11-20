@@ -112,6 +112,9 @@ for (let i = 2; i < argv.length; i++) {
     rust = false
   } else if (argv[i] === "--variant") {
     variant = argv[++i]
+    if (variant === undefined) {
+      fail("--variant needs a value")
+    }
   } else {
     fail(`unknown option ${argv[i]}`)
   }
