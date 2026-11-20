@@ -1,3 +1,8 @@
+// Opt-out from `--deny-panics`: `ThreadScope.spawn` reaches the `panic` in
+// `slotOutOfRange` (std/threads.ts), which fires when a task's destination slot is
+// not in its array. Follow-up: make `spawn`'s slot store in `std/threads.ts`
+// panic-free, then build this file with `--deny-panics`.
+//
 // Four different questions about one series, asked at once (docs/wp29-thread-surface.md
 // §4.2): a scope from `nish/threads` runs each `spawn` on a thread of its own when
 // the block that declares it ends, and stores each answer in its slot of `answers`
@@ -12,12 +17,18 @@
 //     --import ./runtime/nish.mjs -e 'import("./examples/tasks.ts").then((m) => m.main())'
 import { scope } from "nish/threads"
 
+// Each answer is a `u32`, whose arithmetic wraps where an `i32`'s panics, so no
+// task keeps an overflow check; every value the tasks reach is far below
+// 4294967295, so nothing wraps and the answers are the ones an `i32` gives.
+
 /** How many of `[2, n)` are prime, by trial division. */
-const primesBelow = (n: i32): i32 => {
-  let count: i32 = 0
-  for (let k: i32 = 2; k < n; k++) {
+const primesBelow = (n: i32): u32 => {
+  let count: u32 = 0
+  for (let k: u32 = 2; k < toU32(n); k++) {
     let prime = true
-    for (let d: i32 = 2; d * d <= k; d++) {
+    // `d > 0` is never false, but it is the test that proves `k % d` divides by
+    // no zero, so the division keeps no check.
+    for (let d: u32 = 2; d > 0 && d * d <= k; d++) {
       if (k % d === 0) {
         prime = false
         break
@@ -35,11 +46,11 @@ const primesBelow = (n: i32): i32 => {
  * in `f64`, which holds every value it reaches exactly, so it means the same
  * in either number mode and under Node.
  */
-const longestCollatz = (n: i32): i32 => {
-  let best: i32 = 0
+const longestCollatz = (n: i32): u32 => {
+  let best: u32 = 0
   for (let start: i32 = 1; start < n; start++) {
     let x: f64 = toF64(start)
-    let steps: i32 = 0
+    let steps: u32 = 0
     while (x !== 1.0) {
       x = x % 2.0 === 0.0 ? x / 2.0 : x * 3.0 + 1.0
       steps = steps + 1
@@ -52,12 +63,12 @@ const longestCollatz = (n: i32): i32 => {
 }
 
 /** The sum of the decimal digits of every number below `n`, modulo 1,000,003. */
-const digitSum = (n: i32): i32 => {
-  let total: i32 = 0
-  for (let k: i32 = 1; k < n; k++) {
-    let rest: i32 = k
+const digitSum = (n: i32): u32 => {
+  let total: u32 = 0
+  for (let k: u32 = 1; k < toU32(n); k++) {
+    let rest: u32 = k
     while (rest > 0) {
-      const digit: i32 = rest % 10
+      const digit: u32 = rest % 10
       total = (total + digit) % 1000003
       rest = (rest - digit) / 10
     }
@@ -66,9 +77,9 @@ const digitSum = (n: i32): i32 => {
 }
 
 /** A multiplicative checksum of `[0, n)`, kept below 1,000,003. */
-const checksum = (n: i32): i32 => {
-  let acc: i32 = 1
-  for (let i: i32 = 0; i < n; i++) {
+const checksum = (n: i32): u32 => {
+  let acc: u32 = 1
+  for (let i: u32 = 0; i < toU32(n); i++) {
     acc = (acc * 31 + i) % 1000003
   }
   return acc
@@ -82,7 +93,7 @@ const DIGITS: i32 = 18000000
 const CHECKSUM: i32 = 120000000
 
 export const main = (): i32 => {
-  const answers: i32[] = [0, 0, 0, 0]
+  const answers: u32[] = [0, 0, 0, 0]
   const args = process.argv
   if (args.length > 1 && args[1] === "--sequential") {
     answers[0] = primesBelow(PRIMES)
@@ -96,9 +107,13 @@ export const main = (): i32 => {
     s.spawn(digitSum, DIGITS, answers, 2)
     s.spawn(checksum, CHECKSUM, answers, 3)
   }
-  console.log(`primes below ${PRIMES}: ${answers[0]}`)
-  console.log(`longest Collatz trajectory below ${COLLATZ}: ${answers[1]} steps`)
-  console.log(`digit sum below ${DIGITS}, modulo 1000003: ${answers[2]}`)
-  console.log(`checksum of ${CHECKSUM}: ${answers[3]}`)
+  // The tasks store into `answers` without changing its length, which a guard
+  // states where the compiler can read it: the four reads below keep no check.
+  if (answers.length === 4) {
+    console.log(`primes below ${PRIMES}: ${answers[0]}`)
+    console.log(`longest Collatz trajectory below ${COLLATZ}: ${answers[1]} steps`)
+    console.log(`digit sum below ${DIGITS}, modulo 1000003: ${answers[2]}`)
+    console.log(`checksum of ${CHECKSUM}: ${answers[3]}`)
+  }
   return 0
 }

@@ -36100,7 +36100,7 @@ function usage(error: string): i32 -> @usage
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via usage
-  calls: App.constructor appRoutes configure nish.HandlerLimits.constructor nish.HttpHandler.connections nish.HttpHandler.constructor nish.HttpHandler.drain nish.HttpHandler.fired nish.HttpHandler.watch nish_alloc_struct nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_close nish_panic_overflow nish_print nish_read_signal nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_tcp_listen nish_write serveTurn usage
+  calls: App.constructor appRoutes configure nish.HandlerLimits.constructor nish.HttpHandler.connections nish.HttpHandler.constructor nish.HttpHandler.drain nish.HttpHandler.fired nish.HttpHandler.watch nish_alloc_struct nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_close nish_print nish_read_signal nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_tcp_listen nish_write serveTurn usage
   stackSites=2 stackLocals=1
   local +0:9 config: Config (const)
   callee +0:18 configure -> @configure
@@ -36120,9 +36120,9 @@ function main(): i32 -> @nish_main [exported entry]
   callee +25:9 HttpHandler.fired -> @nish.HttpHandler.fired
   callee +30:47 HttpHandler.connections -> @nish.HttpHandler.connections
   callee +31:3 HttpHandler.drain -> @nish.HttpHandler.drain
-  local +32:9 deadline: i64 (const)
-  local +33:7 forced: boolean (let)
-  callee +34:10 HttpHandler.connections -> @nish.HttpHandler.connections
-  callee +35:5 serveTurn -> @serveTurn
-  callee +36:9 HttpHandler.fired -> @nish.HttpHandler.fired
-  callee +42:41 HttpHandler.connections -> @nish.HttpHandler.connections
+  local +35:9 deadline: i64 (const)
+  local +36:7 forced: boolean (let)
+  callee +37:10 HttpHandler.connections -> @nish.HttpHandler.connections
+  callee +38:5 serveTurn -> @serveTurn
+  callee +39:9 HttpHandler.fired -> @nish.HttpHandler.fired
+  callee +45:41 HttpHandler.connections -> @nish.HttpHandler.connections

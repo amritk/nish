@@ -23,11 +23,14 @@ class Body {
   }
 }
 
+// Under `--number-mode f64` a `number` is an f64, which cannot index an array.
+// The counters are `i32`s against `toI32(bodies.length)`, a bound the compiler
+// reads, so every `bodies[i]` below is proven in range and keeps no check.
 const advance = (bodies: Body[], dt: number): void => {
-  const n = bodies.length
-  for (let i = 0; i < n; i++) {
+  const n: i32 = toI32(bodies.length)
+  for (let i: i32 = 0; i < n; i++) {
     const bi = bodies[i]
-    for (let j = i + 1; j < n; j++) {
+    for (let j: i32 = i + 1; j < n; j++) {
       const bj = bodies[j]
       const dx = bi.x - bj.x
       const dy = bi.y - bj.y
@@ -42,7 +45,7 @@ const advance = (bodies: Body[], dt: number): void => {
       bj.vz = bj.vz + dz * bi.mass * mag
     }
   }
-  for (let i = 0; i < n; i++) {
+  for (let i: i32 = 0; i < n; i++) {
     const b = bodies[i]
     b.x = b.x + dt * b.vx
     b.y = b.y + dt * b.vy
@@ -52,11 +55,11 @@ const advance = (bodies: Body[], dt: number): void => {
 
 const energy = (bodies: Body[]): number => {
   let e = 0
-  const n = bodies.length
-  for (let i = 0; i < n; i++) {
+  const n: i32 = toI32(bodies.length)
+  for (let i: i32 = 0; i < n; i++) {
     const bi = bodies[i]
     e = e + 0.5 * bi.mass * (bi.vx * bi.vx + bi.vy * bi.vy + bi.vz * bi.vz)
-    for (let j = i + 1; j < n; j++) {
+    for (let j: i32 = i + 1; j < n; j++) {
       const bj = bodies[j]
       const dx = bi.x - bj.x
       const dy = bi.y - bj.y
@@ -113,7 +116,7 @@ export const main = (): i32 => {
   let px = 0
   let py = 0
   let pz = 0
-  for (let i = 0; i < bodies.length; i++) {
+  for (let i: i32 = 0; i < toI32(bodies.length); i++) {
     px = px + bodies[i].vx * bodies[i].mass
     py = py + bodies[i].vy * bodies[i].mass
     pz = pz + bodies[i].vz * bodies[i].mass

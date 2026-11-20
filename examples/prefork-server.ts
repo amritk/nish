@@ -1,3 +1,8 @@
+// Opt-out from `--deny-panics`: calls into `std/net/http1-codec`,
+// `std/net/http1-server` and `std/net/prefork` reach their panic sites; this
+// file keeps none of its own. Follow-up: make those modules panic-free, then
+// build this file with `--deny-panics`.
+//
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker
 // process per core, each binds its own SO_REUSEPORT listener on the port, and
 // the kernel spreads connections across them. Every response names the worker
@@ -33,9 +38,9 @@ const REUSE_PORT: i32 = 1
 const OK: i32 = 200
 
 const bytesOf = (s: string): u8[] => {
-  const out: u8[] = new Array<u8>(s.length)
-  for (let k: i32 = 0; k < toI32(s.length) && k < toI32(out.length); k++) {
-    out[k] = toU8(s.charCodeAt(k))
+  const out: u8[] = []
+  for (let k: i32 = 0; k < toI32(s.length); k++) {
+    out.push(toU8(s.charCodeAt(k)))
   }
   return out
 }
@@ -56,8 +61,12 @@ const serve = (index: i32, port: i32): i32 => {
   pollAdd(loop, listener, H1_WANT_READ, LISTENER)
   while (true) {
     const n: i32 = pollWait(loop, ready, -1)
-    for (let k: i32 = 0; k < n; k++) {
-      const slot: i32 = ready[2 * k]
+    // Event `j / 2` is the pair at `ready[j]`: its token, then its readiness.
+    // `pollWait` reports at most 64 pairs and no more than `ready` holds, so
+    // the bounds on `j` end no loop that `n` would not.
+    for (let j: i32 = 0; j / 2 < n && j < 128 && j + 1 < toI32(ready.length); j += 2) {
+      const slot: i32 = ready[j]
+      const events: i32 = ready[j + 1]
       if (slot === LISTENER) {
         let next: i32 = server.accept()
         while (next >= 0 || next === H1_POOL_FULL) {
@@ -67,7 +76,7 @@ const serve = (index: i32, port: i32): i32 => {
           next = server.accept()
         }
       } else if (server.holds(slot)) {
-        let wants: i32 = (ready[2 * k + 1] & 5) !== 0 ? server.readable(slot) : server.writable(slot)
+        let wants: i32 = (events & 5) !== 0 ? server.readable(slot) : server.writable(slot)
         let event: i32 = server.next(slot)
         while (event !== H1_NEED_MORE && event !== H1_ERROR) {
           if (event === H1_END) {

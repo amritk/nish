@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: calls into `std/json`, `std/net/fetch` and
+// `std/net/tls/record-client` reach their panic sites, and the
+// `String.fromBytes` slice of the body keeps a range check the checker cannot
+// yet discharge. Follow-up: make those modules panic-free and teach the prover
+// that slice's bound, then build this file with `--deny-panics`.
+//
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when
 // none are named:
@@ -67,16 +73,16 @@ export const main = (): i32 => {
     console.log(text)
     return 0
   }
-  let missing: i32 = 0
+  let missing = false
   for (let i: i32 = 2; i < toI32(args.length); i += 1) {
     const name: string = args[i]
     const value: string | null = jsonField(text, name)
     if (value === null) {
       console.log(`${name}: (absent)`)
-      missing += 1
+      missing = true
     } else {
       console.log(`${name}: ${value}`)
     }
   }
-  return missing > 0 ? 1 : 0
+  return missing ? 1 : 0
 }
