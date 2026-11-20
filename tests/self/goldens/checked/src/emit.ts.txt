@@ -963,12 +963,12 @@ function Emitter.emitRuntimePrelude(this: Emitter): void -> @Emitter.emitRuntime
   local +36:13 group: string (const)
   callee +36:21 IRModule.attrGroupFor -> @IRModule.attrGroupFor
   callee +36:46 inlineAllocatorAttrs -> @inlineAllocatorAttrs
-  callee +40:9 IRModule.addGlobal -> @IRModule.addGlobal
-  callee +42:18 StringSet.has -> @StringSet.has
-  callee +43:9 IRModule.addRawDefinition -> @IRModule.addRawDefinition
-  callee +43:38 inlineAllocator -> @inlineAllocator
-  callee +47:9 IRModule.addRawDefinition -> @IRModule.addRawDefinition
-  callee +47:38 inlineRefAllocator -> @inlineRefAllocator
+  callee +41:9 IRModule.addGlobal -> @IRModule.addGlobal
+  callee +43:18 StringSet.has -> @StringSet.has
+  callee +44:9 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  callee +44:38 inlineAllocator -> @inlineAllocator
+  callee +48:9 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  callee +48:38 inlineRefAllocator -> @inlineRefAllocator
 function Emitter.emitBlock(this: Emitter, block: Node): void -> @Emitter.emitBlock [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitStatement

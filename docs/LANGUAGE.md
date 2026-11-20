@@ -10512,8 +10512,8 @@ class Cell implements Compact {
   it, and an instantiation such as `Box<Cell>`. An export takes and returns
   one as a full `struct Cell *`. The C host links the range runtime
   (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
-  default runtime every module whose links are offsets fails to link, an
-  8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
+  default runtime a program fails to link as soon as one of its modules
+  allocates, an 8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
   shared library another process loads is not supported.
 - **A compact class is refused where Node or the runtime would read its
   layout as full pointers**, each with its own code: in a build with `--emit-napi` or

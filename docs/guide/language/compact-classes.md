@@ -112,7 +112,8 @@ int main(void) {
 ```
 
 Build the runtime with `--arena-range`, the runtime that reserves the range
-the links count from:
+the links count from. `$NISH` is the directory that holds `scripts/build.sh`
+and `runtime/`, as on [Calling Nish from other languages](../using-nish/interop.md):
 
 ```sh
 nish cells.ts -o cells.ll --emit-header cells.h

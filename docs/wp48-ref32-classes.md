@@ -86,9 +86,10 @@ A class `R` is compact when all of these hold:
    whose C host is the process is not refused: the header keeps every class
    holding a link opaque (§4), the host holds an instance as a `struct X *`
    handle, the runtime is the range runtime (`-DNISH_ARENA_RANGE`), and a
-   runtime built without it lacks `nish_arena_range_abi`, so a module whose
-   links are offsets fails to link: both inline bumps name the symbol there,
-   so an 8-aligned compact class does too. A busy range address
+   runtime built without it lacks `nish_arena_range_abi`, so a program fails
+   to link as soon as a module whose links are offsets allocates: both
+   inline bumps name the symbol there, so an 8-aligned compact class does
+   too. A module that allocates nothing names nothing. A busy range address
    is the start-up panic every range build has. The automatic rule
    (`src/compact-rule.ts`, test 1) still leaves a header build alone.
 2. **Something links to `R`**: some class, `R` itself included, has a field

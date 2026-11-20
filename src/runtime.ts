@@ -1793,7 +1793,8 @@ const bumpAllocator = (name: string, align: i32, realign: boolean, attrGroup: st
   lines.push("slow:")
   if (name === "nish_alloc_ref" || realign) {
     // Stage 1's ABI symbol, which only the range runtime defines: a module
-    // whose links are offsets cannot link against the default runtime. Both
+    // whose links are offsets and that allocates cannot link against the
+    // default runtime. Both
     // bumps name it in such a module, because an 8-aligned compact class (a
     // wide field beside its links) comes from `nish_alloc_struct`.
     lines.push("  %abi = load volatile i32, i32* @nish_arena_range_abi, align 4")

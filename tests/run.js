@@ -17439,6 +17439,11 @@ if (dealtHere("runtimeChecks")) {
         "",
       ].join("\n")
     )
+    // Defines only the symbol the range runtime adds, as `runtime/runtime.c`
+    // spells it, so a default link with it beside the objects isolates that
+    // symbol without reading the linker's message.
+    const abiStub = path.join(dir, "range-abi-stub.c")
+    fs.writeFileSync(abiStub, "const int nish_arena_range_abi = 1;\n")
     const link = (defines, exe, host = hostC, module = ll) =>
       spawnSync(
         "clang",
@@ -17468,11 +17473,14 @@ if (dealtHere("runtimeChecks")) {
         run !== null && run.status === 0 && run.stdout === "10 10\n",
         run === null ? shown(built) : shown(run)
       )
+      // The default link fails, and the same link plus a stub defining only
+      // `nish_arena_range_abi` passes: that one symbol is the whole difference.
       const plain = link([], path.join(dir, "host-default"))
+      const stubbed = link([abiStub], path.join(dir, "host-stubbed"))
       check(
-        "compact header: the same host linked against the default runtime fails to link",
-        plain.status !== 0 && plain.status !== null,
-        shown(plain)
+        "compact header: the same host linked against the default runtime fails to link, on the range ABI symbol alone",
+        plain.status !== 0 && plain.status !== null && stubbed.status === 0,
+        `${shown(plain)}\n${shown(stubbed)}`
       )
     }
     // An 8-aligned compact class (an `f64` beside its link) comes from
@@ -17551,10 +17559,11 @@ if (dealtHere("runtimeChecks")) {
         run === null ? shown(built) : shown(run)
       )
       const plain = link([], path.join(dir, "spans-host-default"), wideHost, wideLl)
+      const stubbed = link([abiStub], path.join(dir, "spans-host-stubbed"), wideHost, wideLl)
       check(
-        "compact header: the 8-aligned module linked against the default runtime fails to link",
-        plain.status !== 0 && plain.status !== null && `${plain.stderr}`.includes("nish_arena_range_abi"),
-        shown(plain)
+        "compact header: the 8-aligned module linked against the default runtime fails to link, on the range ABI symbol alone",
+        plain.status !== 0 && plain.status !== null && stubbed.status === 0,
+        `${shown(plain)}\n${shown(stubbed)}`
       )
     }
   }

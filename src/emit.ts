@@ -1374,7 +1374,8 @@ export class Emitter {
     if (wantsAlloc) {
       const group = this.module.attrGroupFor(inlineAllocatorAttrs())
       // WP48: either bump names the range runtime's ABI symbol in a module
-      // whose links are offsets, whichever one its compact classes use.
+      // whose links are offsets and that allocates, whichever one its compact
+      // classes use. A module that allocates nothing names nothing.
       if (wantsRef || this.opts.compactLinks) {
         this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
       }
