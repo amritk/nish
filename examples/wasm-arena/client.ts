@@ -39,6 +39,12 @@ export const STEPPED = new Int32Array(1 + MAX_STEPS)
 const CLOCK = new Float64Array(1)
 const HELD = new Int32Array(1)
 
+// The functions below take the storage as parameters, lent from the exports:
+// the checker proves an index into a parameter under a test of its length,
+// not an index into module storage, so each opens with one. The storage is
+// always as long as those tests ask, so they never return early. `BODIES` and
+// `SHOTS` hold records, which storage never lends, so they are indexed in place.
+
 /**
  * Resets the arena from `seed` and hands the page its shaders: WGSL, or the
  * GLSL pair when the page has no WebGPU.
@@ -48,9 +54,7 @@ const HELD = new Int32Array(1)
  */
 export const init = (seed: u32): i32 => {
   simReset(seed)
-  CLOCK[0] = 0.0
-  HELD[0] = 0
-  STEPPED[0] = 0
+  clear(CLOCK, HELD, STEPPED)
   // The shader text is built here, in the call, so it lives in the call's
   // scratch and is released when the call returns.
   const webgpu: i32 = gpuCreateShader(
@@ -106,24 +110,71 @@ void main() {
   return webgpu
 }
 
-/** The bits held once the ring's words are applied, in the order they were put. */
-const drain = (): i32 => {
-  let held: i32 = HELD[0]
+/** No time pending, no bits held, no ticks stepped. */
+const clear = (clock: Float64Array, held: Int32Array, stepped: Int32Array): void => {
+  if (clock.length <= 0 || held.length <= 0 || stepped.length <= 0) {
+    return
+  }
+  clock[0] = 0.0
+  held[0] = 0
+  stepped[0] = 0
+}
+
+/** The bits held once the ring's words are applied to `held`, in the order they were put. */
+const drain = (held: i32): i32 => {
+  let bits: i32 = held
   while (ringSize(INPUT) > 0) {
     const word: i32 = ringShift(INPUT)
-    held = (held | (word & 255)) & ~((word >> 8) & 255)
+    bits = (bits | (word & 255)) & ~((word >> 8) & 255)
   }
-  HELD[0] = held
-  return held
+  return bits
+}
+
+/**
+ * Steps as many fixed ticks as `dtMs` and the time in `clock` cover, at most
+ * `MAX_STEPS`, keeping the bits held in `held` and each tick's word in `stepped`.
+ */
+const advance = (clock: Float64Array, held: Int32Array, stepped: Int32Array, dtMs: f64): void => {
+  if (clock.length <= 0 || held.length <= 0 || stepped.length <= 0) {
+    return
+  }
+  const tickMs: f64 = TICK_SECONDS * 1000.0
+  let pending: f64 = clock[0] + (dtMs > 0.0 ? dtMs : 0.0)
+  let steps: i32 = 0
+  while (pending >= tickMs && steps < MAX_STEPS) {
+    const word: i32 = drain(held[0])
+    held[0] = word
+    simStep(word)
+    steps++
+    // `stepped` holds `1 + MAX_STEPS` words, so the test always holds.
+    if (steps < toI32(stepped.length)) {
+      stepped[steps] = word
+    }
+    pending = pending - tickMs
+  }
+  stepped[0] = steps
+  clock[0] = pending >= tickMs ? 0.0 : pending
 }
 
 /** One instance: four floats at slot `n`, below `INSTANCE_CAP` (321). */
-const put = (n: integer<0, 320>, x: f64, y: f64, r: f64, heat: f64): void => {
+const put = (instances: Float32Array, n: integer<0, 320>, x: f64, y: f64, r: f64, heat: f64): void => {
   const at: i32 = n * INSTANCE_FLOATS
-  INSTANCES[at] = toF32(x)
-  INSTANCES[at + 1] = toF32(y)
-  INSTANCES[at + 2] = toF32(r)
-  INSTANCES[at + 3] = toF32(heat)
+  // `instances` holds `INSTANCE_CAP` slots, so this never returns.
+  if (at + 3 >= toI32(instances.length)) {
+    return
+  }
+  instances[at] = toF32(x)
+  instances[at + 1] = toF32(y)
+  instances[at + 2] = toF32(r)
+  instances[at + 3] = toF32(heat)
+}
+
+/** The ship's instance, at slot `n`. */
+const putShip = (instances: Float32Array, n: integer<0, 320>, ship: Float64Array): void => {
+  if (ship.length < 2) {
+    return
+  }
+  put(instances, n, ship[0], ship[1], 6.0, 0.0)
 }
 
 /**
@@ -135,32 +186,21 @@ const put = (n: integer<0, 320>, x: f64, y: f64, r: f64, heat: f64): void => {
  * @returns the number of instances in `INSTANCES`
  */
 export const frame = (dtMs: f64): i32 => {
-  const tickMs: f64 = TICK_SECONDS * 1000.0
-  let pending: f64 = CLOCK[0] + (dtMs > 0.0 ? dtMs : 0.0)
-  let steps: i32 = 0
-  while (pending >= tickMs && steps < MAX_STEPS) {
-    const word: i32 = drain()
-    simStep(word)
-    steps++
-    STEPPED[steps] = word
-    pending = pending - tickMs
-  }
-  STEPPED[0] = steps
-  CLOCK[0] = pending >= tickMs ? 0.0 : pending
+  advance(CLOCK, HELD, STEPPED, dtMs)
   let n: i32 = 0
   // The loops count to `BODY_CAP` and `SHOT_CAP` as literals: the checker bounds `n` by
   // a literal loop bound, where it does not read a constant's value.
   for (let i = 0; i < 256; i++) {
-    put(n, BODIES[i].x, BODIES[i].y, BODIES[i].r, BODIES[i].heat)
+    put(INSTANCES, n, BODIES[i].x, BODIES[i].y, BODIES[i].r, BODIES[i].heat)
     n++
   }
   for (let k = 0; k < 64; k++) {
     if (SHOTS[k].life > 0.0) {
-      put(n, SHOTS[k].x, SHOTS[k].y, 1.5, 200.0)
+      put(INSTANCES, n, SHOTS[k].x, SHOTS[k].y, 1.5, 200.0)
       n++
     }
   }
-  put(n, SHIP[0], SHIP[1], 6.0, 0.0)
+  putShip(INSTANCES, n, SHIP)
   return n + 1
 }
 
