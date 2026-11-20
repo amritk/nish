@@ -25354,6 +25354,37 @@ if (dealtHere("cliChecks")) {
         `${shown(plain)}\n${shown(explained)}`
       )
     }
+    // The holder-only benches of §5.5 (tests/layout/compact-bench/): #1736's
+    // rule picked each `std/` class for a holder's saving alone, and test 3
+    // refuses it because the class itself does not shrink, so the default
+    // build's IR is `--compact off`'s byte for byte.
+    const holderWant = {
+      "json-doc":
+        "std/json-tokenizer.ts:569:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 128 → 128 bytes",
+      "zlib-each":
+        "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
+      "request-slot":
+        "std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 152 → 152 bytes",
+    }
+    for (const [base, want] of Object.entries(holderWant)) {
+      const file = `tests/layout/compact-bench/${base}.ts`
+      const onLl = path.join(layoutDir, `${base}.on.ll`)
+      const offLl = path.join(layoutDir, `${base}.off.ll`)
+      const exe = path.join(layoutDir, base)
+      const on = spawnSync(NISH, [file, "-o", onLl, "--link", exe, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      const off = spawnSync(NISH, [file, "-o", offLl, "--link", exe, "--compact", "off"], { cwd: root, encoding: "utf8" })
+      const report = layoutOf(on.stderr).split("\n")
+      check(
+        `explain layout: ${file} refuses its holder-only pick at test 3`,
+        on.status === 0 && report.includes(want) && /^explain-layout: 0 of \d+ classes compact$/.test(report.at(-1)),
+        `--- expected line\n${want}\n--- actual\n${report.join("\n")}\n${shown(on)}`
+      )
+      check(
+        `explain layout: ${file} builds the same IR as --compact off`,
+        on.status === 0 && off.status === 0 && fs.readFileSync(onLl, "utf8") === fs.readFileSync(offLl, "utf8"),
+        `${shown(on)}\n${shown(off)}`
+      )
+    }
     // A linked class the program makes in a loop, so only test 1 and the
     // class's own shape can refuse it.
     const loopNode = [

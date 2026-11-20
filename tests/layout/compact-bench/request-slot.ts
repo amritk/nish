@@ -5,7 +5,7 @@
 // through the link. The holder-only rule of #1736 picks `HttpServerRequest`
 // for that one link; the stage-3 rule leaves it alone.
 //
-//   build/nish tests/compact-bench/request-slot.ts --link build/cb-req && build/cb-req <rounds>
+//   build/nish tests/layout/compact-bench/request-slot.ts --link build/cb-req && build/cb-req <rounds>
 import { HttpServerRequest } from "nish/net/http-server"
 
 class Slot {

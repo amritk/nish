@@ -6,7 +6,7 @@
 // made in the loop, so the holder-only rule of #1736 picks `Deflater` here;
 // the stage-3 rule leaves it alone.
 //
-//   build/nish tests/compact-bench/zlib-each.ts --link build/cb-zlib && build/cb-zlib <rounds>
+//   build/nish tests/layout/compact-bench/zlib-each.ts --link build/cb-zlib && build/cb-zlib <rounds>
 import { compressBound, Deflater } from "nish/compress/deflate"
 import { ZlibCompressor } from "nish/compress/zlib"
 

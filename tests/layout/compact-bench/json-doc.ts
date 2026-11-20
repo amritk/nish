@@ -5,7 +5,7 @@
 // the loop, so the holder-only rule of #1736 picks `JsonTokenizer` here; the
 // stage-3 rule leaves it alone.
 //
-//   build/nish tests/compact-bench/json-doc.ts --link build/cb-json && build/cb-json <rounds>
+//   build/nish tests/layout/compact-bench/json-doc.ts --link build/cb-json && build/cb-json <rounds>
 import { JSON_TOK_END, JsonLimits, JsonTokenizer } from "nish/json-tokenizer"
 import { JsonDocument } from "nish/json-value"
 
