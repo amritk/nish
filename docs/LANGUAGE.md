@@ -8773,7 +8773,8 @@ an integer division is neither `willreturn` nor `readnone`, exactly like one
 containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
 locals, fields, and elements. **A divisor the checker proves is left
 unchecked**, as a proven index is: one that is neither 0 nor -1 — a constant
-(`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor
+(`a / 2`, `a % -3`, a folded module constant, a `const` bound to a literal or
+a fitting conversion of one), a ranged or unsigned divisor
 whose declared range leaves both out, a local behind `d > 0` or behind
 `d !== 0 && d !== -1` — or one that is not 0 against a dividend known to be
 non-negative, which cannot be the minimum. Such a division is the bare
@@ -8837,7 +8838,7 @@ divide with overflow` is simply unreachable on an unsigned type.
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
   under `f64`, a negative `i32` or `i64` (a ranged integer is read as an
   `i32`, so it is checked as one), or a NaN. A narrower unsigned length and a
-  literal up to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
+  literal or named integer `const` from 0 to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
   `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1 and CG-2).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
@@ -16389,7 +16390,12 @@ are not all in `[0, length)`; and the second check of a compound store
 
 - *What proves it away:* the bounds proof of [Element
   access](#element-access): a dominating guard, a loop bounded by the length,
-  or every call site proving the argument (`tests/cases/panics_index`);
+  or every call site proving the argument (`tests/cases/panics_index`). A
+  down-counting loop keeps its variable's upper bound: in
+  `while (end > 0 && t.charCodeAt(end - 1) === 32) end--`, with `end` starting
+  at `t.length`, `end - 1` stays below the length, but only while nothing else
+  writes `end` and nothing reassigns `t` (`tests/cases/deny_panics_trim_end`,
+  `reject_deny_panics_downcount_write`, `reject_deny_panics_downcount_reassign`);
   nothing removes the second check of a compound store, which is made after
   the call however the first was proved (`tests/cases/panics_index_recheck`).
   A `nish:simd` access is proven exactly where its check is left out (the
@@ -16422,10 +16428,17 @@ when signed
 
 - *What proves it away:* a divisor that is not 0, and not -1 unless the
   dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded
-  module constant), a ranged or unsigned divisor whose declared range leaves
+  module constant, or a `const` binding at module or function level whose
+  initializer is an integer literal, a folded constant, or a conversion such
+  as `toU64(0)` of a literal that fits — never a `let`, a field, a call, or a
+  conversion that wraps), a ranged or unsigned divisor whose declared range leaves
   those values out, or a guard on a local divisor —
   `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned
-  one. A float division is not a site (`tests/cases/panics_divide`)
+  one, or the other arm of an equality test against a named zero,
+  `b === zero ? a : a % b`. A float division is not a site
+  (`tests/cases/panics_divide`, `deny_panics_const_names`;
+  `reject_deny_panics_const_let`, `reject_deny_panics_const_call` and
+  `reject_deny_panics_const_overflowing_conversion` stay refused)
 
 **`overflow`**: a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or
 `op=` whose result does not fit: `attempt to add with overflow` and its
@@ -16433,7 +16446,12 @@ siblings
 
 - *What proves it away:* the overflow proof of [Semantics
   decisions](#semantics-decisions): an operation the bounds walk proves fits
-  is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other
+  is `nsw` with no check (`tests/cases/panics_overflow_proven`). The proof
+  reads `x & C` as `[0, C]`, `x >>> k` as `[0, 2^(bits - k) - 1]`, `toI32` of
+  a `u32` whose range fits as that range, and the builtins with a documented
+  range: `s.charCodeAt(i)` as `[0, 255]` (it answers a byte) and
+  `Math.clz32(x)` as `[0, 32]` (`tests/cases/deny_panics_mask`,
+  `deny_panics_charcode`); every other
   one is checked (`tests/cases/panics_overflow`). A `nish:unsafe`
   `wrappingAdd`, `wrappingSub` or `wrappingMul` is checked nowhere and is not
   a site
@@ -16451,8 +16469,10 @@ entry
 header or a negative byte count (an `i64`, a float, an `i32` or a ranged
 integer, a `u32` under `--number-mode i32`)
 
-- *What proves it away:* a narrower unsigned length or a literal up to 2^31 -
-  1, which is not checked and not a site (`tests/cases/panics_array_length`)
+- *What proves it away:* a narrower unsigned length, or a literal or named
+  integer constant (as for `divide`) from 0 to 2^31 - 1, which is not checked
+  and not a site (`tests/cases/panics_array_length`, `deny_panics_const_names`;
+  a negative constant stays refused, `reject_deny_panics_const_negative_length`)
 
 **`panic`**: `panic(message)`
 
