@@ -130,6 +130,11 @@ are one node per line, which is to say diffable.
 
 ## A whole program
 
+This program divides by a value it does not test, so it builds with
+`--allow-panics` ([Proving it cannot panic](#proving-it-cannot-panic)); a
+guard that the divisor is not zero would let it build under the default. Other
+examples below that do integer arithmetic nothing bounds build the same way.
+
 <!-- allow-panics: divides by a value it does not test -->
 <!-- nish:ok --allow-panics -->
 ```ts
@@ -293,7 +298,7 @@ compatible only when their types are identical.
 | Type | Is | Notes |
 | --- | --- | --- |
 | `number` | `i32`, or `f64` under `--number-mode f64` | the mode's default width |
-| `i32`, `i64` | signed integers | overflow **panics** (exit 1) unless proven to fit; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
+| `i32`, `i64` | signed integers | overflow not proven to fit is a compile error by default, and **panics** (exit 1) under `--allow-panics`; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
 | `u8`, `u16`, `u32`, `u64` | unsigned integers | arithmetic **always** wraps; `>>` is logical |
 | `f32`, `f64` | IEEE-754 | `f32` is never the lowering of `number` |
 | `boolean` | `i1` | no truthiness anywhere |
@@ -336,7 +341,9 @@ export const hash = (bytes: u8[]): i32 => {
 `u32 + i32` (same LLVM type, different signedness) are rejected. Convert
 explicitly: `toI32` `toI64` `toU8` `toU16` `toU32` `toU64` `toF32` `toF64`.
 
-**Signed overflow panics.** `+ - *`, unary `-`, `++`, `--` and `op=` on an
+**Signed overflow panics.** By default an operation the compiler cannot
+prove fits is a compile error (NL2457). Under `--allow-panics`, `+ - *`,
+unary `-`, `++`, `--` and `op=` on an
 `i32` or `i64` stop the program with `attempt to add with overflow` (or
 `subtract`, `multiply`, `negate`) and exit 1 when the result leaves the type;
 it is never a silent wrap and never undefined. The compiler drops the check
@@ -376,8 +383,9 @@ const good = (a: i32, b: i64): i64 => {
 **`integer<Lo, Hi>` is an `i32` that stays in `[Lo, Hi]`.** The bounds are two
 integer literals (a sign allowed) inside `i32`, and it is an `i32` everywhere
 the machine can see. Putting a value *into* one is checked: an `i32` or
-another range is compared once and the program panics (exit 1) outside the
-range, a literal outside it is a compile error, and a literal inside it or a
+another range is compared once (a check the default refuses unless it is
+proven; under `--allow-panics` the program panics, exit 1, outside the
+range), a literal outside it is a compile error, and a literal inside it or a
 narrower range costs nothing. So does a value a loop condition or a guard
 already bounds (`b` below), and `toI32` of a `u8`; a check left inside a loop
 is a performance warning (NL9013) naming the guard that removes it. A range

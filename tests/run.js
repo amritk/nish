@@ -2558,9 +2558,13 @@ if (dealtHere("termIo")) {
     fs.mkdirSync(ioDir, { recursive: true })
     const { relay, KITTY_REPLY } = await import("./term-io/relay.mjs")
     const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
-    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/^<!-- nish:ok -->\n```ts\n([\s\S]*?)```/gm)]
-      .map((m) => m[1])
-      .find((block) => block.includes("runTerminal"))
+    // The fence's marker may carry flags (`<!-- nish:ok --allow-panics -->`),
+    // which the build passes as the docs harness does.
+    const guideFence = [
+      ...fs.readFileSync(guidePage, "utf8").matchAll(/^<!-- nish:ok((?: --?[\w-]+)*) -->\n```ts\n([\s\S]*?)```/gm),
+    ].find((m) => m[2].includes("runTerminal"))
+    const guideSrc = guideFence?.[2]
+    const guideFlags = guideFence === undefined ? [] : guideFence[1].trim().split(/\s+/).filter(Boolean)
     const build = (name, src, extra = []) => {
       const dir = path.join(ioDir, name)
       fs.mkdirSync(dir, { recursive: true })
@@ -2574,7 +2578,7 @@ if (dealtHere("termIo")) {
     } else {
       fs.writeFileSync(guideTs, guideSrc)
     }
-    const guideExe = guideSrc === undefined ? null : build("guide", guideTs)
+    const guideExe = guideSrc === undefined ? null : build("guide", guideTs, guideFlags)
     const loopExe = build("loop", path.join(root, "tests", "link", "std_term_io_relay", "loop.ts"))
     const probeExe = build("term-probe", path.join(root, "examples", "term-probe.ts"), [ALLOW_PANICS])
     const at = (name) => path.join(ioDir, "runs", name)

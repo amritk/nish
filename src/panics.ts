@@ -791,7 +791,7 @@ const calledName = (program: CheckedProgram, call: Node): string => {
  * moves a module out.
  */
 const OUT_OF_SCOPE: string =
-  "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
+  "make the call from a module `noPanic` does not list, and build with `" + ALLOW_PANICS_FLAG + "`"
 
 /**
  * What fails at `site`, and what removes it. The index, range and divisor
