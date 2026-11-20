@@ -329,6 +329,10 @@ know, so the helper reads the compiler's `--help` first.
 - **Shell**: `. scripts/nish-compiler.sh`, then `nish_allow_panics <cmd...>`
   sets the array `allow_panics`; expand it as
   `${allow_panics[@]+"${allow_panics[@]}"}` (macOS's bash 3.2).
+- **npm scripts**: `bash scripts/nish-harness.sh <program.ts> <exe>` builds a
+  harness written in Nish with `build/nish` through `nish_allow_panics` and
+  runs it (`test:nish`, `test:cli`); `tests/run.js` refuses an npm script
+  that builds a non-example program any other way.
 
 ## Testing a Nish program in Nish
 

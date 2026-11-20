@@ -1994,6 +1994,7 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
     ].join("\n")
   );
 
+  // strict: a one-line program with no panic site, refused before it compiles.
   const link = spawnSyncTo(
     inDirectory(planted, [`${lone}/nish`, "main.ts", "-o", "out/", "--link", "out/main"]),
     `${WORK}/sec_planted_link.out`,
@@ -2006,6 +2007,7 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
   );
   t.eqI32("CLI-2: and is refused with the toolchain band, since there is no package", link, 3);
 
+  // strict: a one-line program with no panic site, refused before it compiles.
   const std = spawnSyncTo(
     inDirectory(planted, [`${lone}/nish`, "uses-std.ts", "-o", "out/"]),
     `${WORK}/sec_planted_std.out`,
@@ -2196,6 +2198,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   const linkArgs: string[] = [source, "-o", `${abs}/sec-shared.ll`, "--link", `${abs}/sec-shared`];
 
   chmodTo("777", pkg);
+  // strict: FIXTURE_OK has no panic site, and this build is refused before it compiles.
   const shared = spawnSyncTo(
     inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)),
     `${WORK}/sec_shared.out`,
@@ -2229,6 +2232,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
       "",
     ].join("\n")
   );
+  // strict: a one-line program with no panic site, refused before it compiles.
   const std = spawnSyncTo(
     inDirectory("/", [`${pkg}/bin/nish`, usesStd, "-o", `${abs}/sec-shared-std.ll`]),
     `${WORK}/sec_shared_std.out`,
@@ -2242,6 +2246,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   );
 
   chmodTo("775", pkg);
+  // strict: FIXTURE_OK has no panic site, so it builds with or without the flag.
   spawnSyncTo(inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)), `${WORK}/sec_group.out`, `${WORK}/sec_group.err`);
   t.eqBool(
     "CLI-9: a package root only its group can write is still the package",
@@ -2280,6 +2285,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   writeFileSync(`${decoy}/bin/nish`, "#!/bin/sh\nexit 0\n");
   writeFileSync(`${decoy}/scripts/build.sh`, `touch '${decoyMarker}'\nexit 1\n`);
   writeFileSync(`${dirDecoy}/scripts/build.sh`, `touch '${dirDecoyMarker}'\nexit 1\n`);
+  // strict: FIXTURE_OK has no panic site, so it builds with or without the flag.
   spawnSyncTo(
     inDirectory("/", followedBy(["env", `PATH=${dirDecoy}/bin:${decoy}/bin:${pkg}/bin:${path}`, "nish"], linkArgs)),
     `${WORK}/sec_path.out`,

@@ -28303,14 +28303,21 @@ if (dealtHere("releaseChecks")) {
     for (const file of dockerfiles) {
       const lines = fs.readFileSync(path.join(root, file), "utf8").split("\n")
       let run = -1
+      // `nish_allow_panics` sets a bash array, so the RUN that calls it must
+      // run under a `SHELL` that selects bash.
+      let bash = false
       lines.forEach((line, i) => {
+        if (/^SHELL\b/.test(line)) bash = /\bbash\b/.test(line)
         if (/^RUN\b/.test(line)) run = i
         if (run < 0) return
         const command = lines.slice(run, i + 1).join("\n")
         const continues = /\\\s*$/.test(line)
         if (!continues) {
-          if (/\bnish\b[^\n]*\.ts\b/.test(command) && !command.includes("nish_allow_panics") && !/^# strict: \S/.test(lines[run - 1] ?? "")) {
+          const routed = command.includes("nish_allow_panics")
+          if (/\bnish\b[\s\S]*\.ts\b/.test(command) && !routed && !/^# strict: \S/.test(lines[run - 1] ?? "")) {
             strictImages.push(`${file}:${run + 1}`)
+          } else if (routed && !bash) {
+            strictImages.push(`${file}:${run + 1} (nish_allow_panics without a bash SHELL)`)
           }
           run = -1
         }
@@ -28320,6 +28327,19 @@ if (dealtHere("releaseChecks")) {
       "allow-panics: every Dockerfile build of a Nish program goes through nish_allow_panics or says why it stays strict",
       dockerfiles.length > 0 && strictImages.length === 0,
       `route these through scripts/nish-compiler.sh, or mark one \`# strict: <why>\` on the line directly above:\n${strictImages.join("\n")}`
+    )
+    // The npm scripts: one that builds a Nish program outside `examples/` and
+    // `docs/` goes through scripts/nish-harness.sh, which asks nish_allow_panics.
+    const npmScripts = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).scripts ?? {}
+    const strictScripts = Object.entries(npmScripts)
+      .filter(([, command]) => /\bbuild\/nish\s/.test(command))
+      .filter(([, command]) => [...command.matchAll(/\S+\.ts\b/g)].some(([file]) => !/^(?:examples|docs)\//.test(file)))
+      .map(([name, command]) => `${name}: ${command}`)
+    const harnessScripts = Object.values(npmScripts).filter((command) => command.startsWith("bash scripts/nish-harness.sh ")).length
+    check(
+      "allow-panics: every npm script that builds a non-example Nish program goes through scripts/nish-harness.sh",
+      harnessScripts >= 2 && strictScripts.length === 0,
+      `harness scripts: ${harnessScripts}\n${strictScripts.join("\n")}`
     )
     // The seed, whatever release it is: the helper asks it, and a seed that does
     // not list the flag builds a case through the helper as it would without it.
