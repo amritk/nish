@@ -17715,6 +17715,236 @@ if (dealtHere("runtimeChecks")) {
     )
   }
 
+  // ---- A compact class behind --emit-header (WP48 stage 2c) ---------------------------
+  // A C host is a process Nish starts, so the range runtime reserves the range
+  // there as it does for `nish build`. The header keeps every class holding a
+  // link opaque -- the compact class and an instantiation that holds one -- and
+  // the host only holds the handle an export returns and passes it back. The
+  // same link against the default runtime fails: the module names
+  // `nish_arena_range_abi`, which only the range runtime defines.
+  if (!only || "compact header".includes(only)) {
+    const dir = path.join(buildDir, "compact-header")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const ts = path.join(dir, "cells.ts")
+    fs.writeFileSync(
+      ts,
+      [
+        'import { Compact } from "nish:compact"',
+        "",
+        "export class Cell implements Compact {",
+        "  value: i32",
+        "  next: Cell | null",
+        "  constructor(value: i32, next: Cell | null) {",
+        "    this.value = value",
+        "    this.next = next",
+        "  }",
+        "}",
+        "",
+        "class Box<T> {",
+        "  item: T",
+        "  constructor(item: T) {",
+        "    this.item = item",
+        "  }",
+        "}",
+        "",
+        "export const push = (value: i32, head: Cell | null): Cell => new Cell(value, head)",
+        "",
+        "export const total = (head: Cell | null): i32 => {",
+        "  let sum = 0",
+        "  let at = head",
+        "  while (at !== null) {",
+        "    sum = sum + at.value",
+        "    at = at.next",
+        "  }",
+        "  return sum",
+        "}",
+        "",
+        "export const boxed = (head: Cell): i32 => total(new Box<Cell>(head).item)",
+        "",
+        "export interface Holder {",
+        "  cell: Cell",
+        "}",
+        "",
+        "export const hold = (head: Cell): Holder => ({ cell: head })",
+        "",
+        "export const many = (head: Cell): Cell[] => [head, head]",
+        "",
+        "export const holders = (head: Cell): Holder[] => [{ cell: head }]",
+        "",
+      ].join("\n")
+    )
+    const ll = path.join(dir, "cells.ll")
+    const h = path.join(dir, "cells.h")
+    const c = spawnSync(NISH, [ts, "-o", ll, "--emit-header", h], { cwd: root, encoding: "utf8" })
+    const ir = c.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+    const header = c.status === 0 ? fs.readFileSync(h, "utf8") : ""
+    check(
+      "compact header: --emit-header narrows the links to i32 and keeps every class holding one opaque",
+      c.status === 0 &&
+        ir.includes("%struct.Cell = type { i32, i32 }") &&
+        ir.includes("%struct.Box$$Cell = type { i32 }") &&
+        header.includes("typedef struct Cell Cell;") &&
+        header.includes("typedef struct nish_gen_Box__Cell nish_gen_Box__Cell;") &&
+        !header.includes("struct Cell {") &&
+        header.includes("struct Cell *push(int32_t value, struct Cell *head);") &&
+        // A record holding a link is opaque, and so are its array's elements.
+        ir.includes("%struct.Holder = type { i32 }") &&
+        header.includes("typedef struct Holder Holder;") &&
+        !header.includes("struct Holder {") &&
+        header.includes("struct Holder *hold(struct Cell *head);") &&
+        header.includes("-- returns struct Cell * elements") &&
+        header.includes("nish_array *many(struct Cell *head);") &&
+        header.includes("struct Holder elements, inline, opaque: each holds a compact link") &&
+        header.includes("-DNISH_ARENA_RANGE=1"),
+      c.status !== 0 ? shown(c) : header
+    )
+    const hostC = path.join(dir, "host.c")
+    fs.writeFileSync(
+      hostC,
+      [
+        "#include <stdio.h>",
+        '#include "cells.h"',
+        "int main(void) {",
+        "  Cell *head = NULL;",
+        "  for (int32_t i = 1; i <= 4; i++) {",
+        "    head = push(i, head);",
+        "  }",
+        '  printf("%d %d\\n", total(head), boxed(head));',
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    )
+    // Defines only the symbol the range runtime adds, as `runtime/runtime.c`
+    // spells it, so a default link with it beside the objects isolates that
+    // symbol without reading the linker's message.
+    const abiStub = path.join(dir, "range-abi-stub.c")
+    fs.writeFileSync(abiStub, "const int nish_arena_range_abi = 1;\n")
+    const link = (defines, exe, host = hostC, module = ll) =>
+      spawnSync(
+        "clang",
+        [
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-Wno-override-module",
+          ...defines,
+          `-I${dir}`,
+          "-Iruntime",
+          host,
+          module,
+          ...RUNTIME_C,
+          "-o",
+          exe,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    if (c.status === 0) {
+      const exe = path.join(dir, "host")
+      const built = link(["-DNISH_ARENA_RANGE=1"], exe)
+      const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "compact header: a C host holds a compact instance as a handle and passes it back through the exports",
+        run !== null && run.status === 0 && run.stdout === "10 10\n",
+        run === null ? shown(built) : shown(run)
+      )
+      // The default link fails, and the same link plus a stub defining only
+      // `nish_arena_range_abi` passes: that one symbol is the whole difference.
+      const plain = link([], path.join(dir, "host-default"))
+      const stubbed = link([abiStub], path.join(dir, "host-stubbed"))
+      check(
+        "compact header: the same host linked against the default runtime fails to link, on the range ABI symbol alone",
+        plain.status !== 0 && plain.status !== null && stubbed.status === 0,
+        `${shown(plain)}\n${shown(stubbed)}`
+      )
+    }
+    // An 8-aligned compact class (an `f64` beside its link) comes from
+    // `nish_alloc_struct`, not `nish_alloc_ref`; its module names the ABI
+    // symbol all the same, so it too fails to link without the range runtime.
+    const wideTs = path.join(dir, "spans.ts")
+    fs.writeFileSync(
+      wideTs,
+      [
+        'import { Compact } from "nish:compact"',
+        "",
+        "export class Span implements Compact {",
+        "  weight: f64",
+        "  count: i32",
+        "  next: Span | null",
+        "  constructor(weight: f64, count: i32, next: Span | null) {",
+        "    this.weight = weight",
+        "    this.count = count",
+        "    this.next = next",
+        "  }",
+        "}",
+        "",
+        "export const grow = (count: i32, head: Span | null): Span => new Span(0.5, count, head)",
+        "",
+        "export const counted = (head: Span | null): i32 => {",
+        "  let sum = 0",
+        "  let at = head",
+        "  while (at !== null) {",
+        "    sum = sum + at.count",
+        "    at = at.next",
+        "  }",
+        "  return sum",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const wideLl = path.join(dir, "spans.ll")
+    const wideH = path.join(dir, "spans.h")
+    const w = spawnSync(NISH, [wideTs, "-o", wideLl, "--emit-header", wideH], { cwd: root, encoding: "utf8" })
+    const wideIr = w.status === 0 ? fs.readFileSync(wideLl, "utf8") : ""
+    const wideHeader = w.status === 0 ? fs.readFileSync(wideH, "utf8") : ""
+    check(
+      "compact header: an 8-aligned compact class narrows its link, stays opaque and names nish_arena_range_abi without nish_alloc_ref",
+      w.status === 0 &&
+        wideIr.includes("%struct.Span = type { double, i32, i32 }") &&
+        !wideIr.includes("@nish_alloc_ref") &&
+        wideIr.includes("load volatile i32, i32* @nish_arena_range_abi") &&
+        wideHeader.includes("typedef struct Span Span;") &&
+        !wideHeader.includes("struct Span {"),
+      w.status !== 0 ? shown(w) : wideHeader
+    )
+    if (w.status === 0) {
+      const wideHost = path.join(dir, "spans-host.c")
+      fs.writeFileSync(
+        wideHost,
+        [
+          "#include <stdio.h>",
+          '#include "spans.h"',
+          "int main(void) {",
+          "  Span *head = NULL;",
+          "  for (int32_t i = 1; i <= 4; i++) {",
+          "    head = grow(i, head);",
+          "  }",
+          '  printf("%d\\n", counted(head));',
+          "  return 0;",
+          "}",
+          "",
+        ].join("\n")
+      )
+      const exe = path.join(dir, "spans-host")
+      const built = link(["-DNISH_ARENA_RANGE=1"], exe, wideHost, wideLl)
+      const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : null
+      check(
+        "compact header: a C host round-trips an 8-aligned compact instance as a handle",
+        run !== null && run.status === 0 && run.stdout === "10\n",
+        run === null ? shown(built) : shown(run)
+      )
+      const plain = link([], path.join(dir, "spans-host-default"), wideHost, wideLl)
+      const stubbed = link([abiStub], path.join(dir, "spans-host-stubbed"), wideHost, wideLl)
+      check(
+        "compact header: the 8-aligned module linked against the default runtime fails to link, on the range ABI symbol alone",
+        plain.status !== 0 && plain.status !== null && stubbed.status === 0,
+        `${shown(plain)}\n${shown(stubbed)}`
+      )
+    }
+  }
+
   // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
   // A link is a 32-bit offset in the struct, so `-g` describes the member as
   // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a

@@ -3865,35 +3865,35 @@ function commandMain(): i32 -> @commandMain
   callee +987:22 acceptsSidecars -> @acceptsSidecars
   callee +987:56 cDeclared -> @cDeclared
   callee +988:5 report -> @report
-  local +992:7 hostFlag: string (let)
-  callee +1000:31 refuseCompactSidecars -> @refuseCompactSidecars
-  callee +1001:5 report -> @report
-  local +1004:9 emitted: EmittedModule[] (const)
-  callee +1004:19 Compilation.emit -> @Compilation.emit
-  local +1005:9 arenaRange: boolean (const)
-  callee +1005:22 hasCompactClass -> @hasCompactClass
-  local +1006:9 links: LinkSet (const)
-  callee +1006:17 new LinkSet -> @LinkSet.constructor
-  callee +1007:18 anyCallsSqlite -> @anyCallsSqlite
-  callee +1011:8 readLinkSet -> @readLinkSet
-  callee +1012:5 report -> @report
-  local +1016:11 cached: CachedBinary (const)
-  callee +1016:20 cachedBinary -> @cachedBinary
-  callee +1019:7 basenameWithout -> @basenameWithout
-  callee +1030:37 watchState -> @watchState
-  callee +1030:76 isCheckout -> @isCheckout
-  callee +1035:12 runProgram -> @runProgram
-  callee +1038:7 basenameWithout -> @basenameWithout
-  local +1050:9 stems: string[] (const)
-  local +1051:9 paths: string[] (const)
-  local +1054:14 module: EmittedModule (const)
-  local +1058:9 outputs: string[] (const)
-  callee +1058:19 planOutputs -> @planOutputs
-  local +1063:7 i: i32 (let)
-  local +1065:11 file: string (const)
-  callee +1066:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +1075:22 writeSidecars -> @writeSidecars
-  callee +1081:10 linkProgram -> @linkProgram
+  local +995:7 hostFlag: string (let)
+  callee +1001:31 refuseCompactSidecars -> @refuseCompactSidecars
+  callee +1002:5 report -> @report
+  local +1005:9 emitted: EmittedModule[] (const)
+  callee +1005:19 Compilation.emit -> @Compilation.emit
+  local +1006:9 arenaRange: boolean (const)
+  callee +1006:22 hasCompactClass -> @hasCompactClass
+  local +1007:9 links: LinkSet (const)
+  callee +1007:17 new LinkSet -> @LinkSet.constructor
+  callee +1008:18 anyCallsSqlite -> @anyCallsSqlite
+  callee +1012:8 readLinkSet -> @readLinkSet
+  callee +1013:5 report -> @report
+  local +1017:11 cached: CachedBinary (const)
+  callee +1017:20 cachedBinary -> @cachedBinary
+  callee +1020:7 basenameWithout -> @basenameWithout
+  callee +1031:37 watchState -> @watchState
+  callee +1031:76 isCheckout -> @isCheckout
+  callee +1036:12 runProgram -> @runProgram
+  callee +1039:7 basenameWithout -> @basenameWithout
+  local +1051:9 stems: string[] (const)
+  local +1052:9 paths: string[] (const)
+  local +1055:14 module: EmittedModule (const)
+  local +1059:9 outputs: string[] (const)
+  callee +1059:19 planOutputs -> @planOutputs
+  local +1064:7 i: i32 (let)
+  local +1066:11 file: string (const)
+  callee +1067:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +1076:22 writeSidecars -> @writeSidecars
+  callee +1082:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv

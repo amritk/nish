@@ -887,6 +887,9 @@ export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest
 Give the host the member's text instead, a `string` from `String(r)`, or an
 `i32` of your own choosing.
 
+A compact class crosses as an opaque handle, and its host links the range
+runtime: see [A compact class in a C host](../language/compact-classes.md#a-compact-class-in-a-c-host).
+
 ## Calling C from Nish: `declare function`
 
 `declare function` names a C function the program calls but does not define.

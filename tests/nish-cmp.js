@@ -9046,6 +9046,19 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  // WP48 stage 2c: in a program with a compact class, `nish_alloc_struct`'s
+  // slow block loads `nish_arena_range_abi` as `nish_alloc_ref`'s already did,
+  // so an 8-aligned compact class fails to link against the default runtime
+  // too. Compared only under `--no-sidecars`: with the WP8 sidecars on, both
+  // compilers refuse a compact class beside `--emit-napi`.
+  ...byFinding("compact class crosses --emit-header as an opaque handle")(
+    "the program has a compact class, so every module of it that allocates gains a volatile load of `nish_arena_range_abi` in `nish_alloc_struct`'s slow block, so every line after it moves down one",
+    {
+      "tests/cases/perf_padding_compact.ts": ["perf_padding_compact.ll"],
+      "tests/link/compact_json/main.ts": ["json-tokenizer.ll", "json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/compact_threads/main.ts": ["main.ll", "threads.ll"],
+    }
+  ),
   // `reserve` splits its growth into `grow`, so a program whose own module
   // declares the connection's put methods declares one more.
   ...[

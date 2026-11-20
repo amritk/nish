@@ -1779,11 +1779,12 @@ const commandMain = (): number => {
     report(compilation, json)
     return 1
   }
-  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link.
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link,
+  // and `--emit-header` hands a C host compact classes as opaque handles. Only
+  // an N-API addon is refused, also beside `--emit-header`: it runs in Node's
+  // process, which Nish does not own.
   let hostFlag = ""
-  if (opts.emitHeader.length > 0) {
-    hostFlag = "--emit-header"
-  } else if (opts.emitNapi.length > 0) {
+  if (opts.emitNapi.length > 0) {
     hostFlag = "--emit-napi"
   } else if (opts.emitNapiAsync.length > 0) {
     hostFlag = "--emit-napi-async"
