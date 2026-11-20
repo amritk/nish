@@ -195,7 +195,10 @@ const isClassReserved = (name: string): boolean =>
   name === "Map" ||
   name === "Set" ||
   name === "Promise" ||
-  name === "Error"
+  name === "Error" ||
+  name === "Record" ||
+  name === "integer" ||
+  name === "CountedBy"
 
 /** A C parameter name as a Nish identifier: a reserved word gets a trailing `_`. */
 const nishName = (name: string): string => (isNameReserved(name) ? `${name}_` : name)
@@ -550,11 +553,56 @@ class CType {
   nonnull: boolean = false
   /** A typedef with its own `aligned` attribute, held by value: not the scalar's natural layout. */
   aligned: boolean = false
+  /** For `BASE_ARRAY`: the element count of `T [N]`, or -1 when it is not one plain length. */
+  length: i32 = -1
+  /** For `BASE_ARRAY` with a `length`: the element's spelling, `T`. */
+  element: string = ""
 
   constructor() {
     this.base = BASE_REFUSED
     this.sign = CHAR_PLAIN
   }
+}
+
+/**
+ * `T [N]`, clang's spelling of an array, split into its element and length.
+ * Any other shape (`T []`, `T [2][3]`, a length that is not a plain decimal)
+ * keeps `length` at -1 and says why in `reason`, which `fieldType` gives.
+ */
+const arrayType = (spelling: string, open: i32): CType => {
+  const array = new CType()
+  array.base = BASE_ARRAY
+  const close = spelling.indexOf("]", open)
+  if (close < 0 || spelling.indexOf("[", open + 1) >= 0 || close !== spelling.length - 1) {
+    array.reason = "an array of arrays"
+    return array
+  }
+  const digits = trimSpaces(spelling.slice(open + 1, close))
+  if (digits.length === 0) {
+    array.reason = "a flexible array member, whose length C does not fix"
+    return array
+  }
+  let length: i32 = 0
+  for (let i = 0; i < digits.length; i++) {
+    const c = digits.charCodeAt(i)
+    if (c < 48 || c > 57) {
+      array.reason = "an array whose length is not a plain number"
+      return array
+    }
+    // Past the limit the digits are still read, so the reason stays true.
+    length = length > 16777216 ? length : length * 10 + (c - 48)
+  }
+  if (length === 0) {
+    array.reason = "a zero-length array"
+    return array
+  }
+  if (length > 16777216) {
+    array.reason = "an array of more than 16777216 elements, the most an array field holds"
+    return array
+  }
+  array.length = length
+  array.element = trimSpaces(spelling.slice(0, open))
+  return array
 }
 
 /** A refused type with its reason. */
@@ -1432,10 +1480,9 @@ class Importer {
       fn.base = BASE_FUNC
       return fn
     }
-    if (spelling.indexOf("[") >= 0) {
-      const array = new CType()
-      array.base = BASE_ARRAY
-      return array
+    const open = spelling.indexOf("[")
+    if (open >= 0) {
+      return arrayType(spelling, open)
     }
     const words = typeWords(spelling)
     let pointers = 0
@@ -1766,11 +1813,54 @@ class Importer {
       }
       return `!a struct that is not a declare class (\`${t.tag}\`)`
     }
+    if (t.base === BASE_ARRAY) {
+      return this.arrayField(t)
+    }
     const value = this.valueType(t)
     if (value === "boolean") {
       return "!a `_Bool`, which a declare class cannot hold"
     }
     return value
+  }
+
+  /**
+   * `T name[N]` as a field: `Record<integer<0, N - 1>, T>`, laid out inline
+   * as C lays it out, for exactly the elements an array field holds.
+   */
+  arrayField(t: CType): string {
+    if (t.length < 0) {
+      return `!${t.reason}`
+    }
+    const e = this.resolve(t.element)
+    if (e.pointers > 0 || e.base === BASE_FNPTR) {
+      return "!an array of pointers"
+    }
+    if (e.aligned) {
+      return "!an array of a typedef with its own `aligned` attribute"
+    }
+    if (e.base === BASE_RECORD) {
+      return "!an array of structs"
+    }
+    if (e.base === BASE_ARRAY) {
+      return "!an array of arrays"
+    }
+    const value = this.valueType(e)
+    if (value.startsWith("!")) {
+      return `!an array of ${value.slice(1)}`
+    }
+    if (
+      value !== "i32" &&
+      value !== "i64" &&
+      value !== "u8" &&
+      value !== "u16" &&
+      value !== "u32" &&
+      value !== "u64" &&
+      value !== "f32" &&
+      value !== "f64"
+    ) {
+      return `!an array of \`${value === "boolean" ? "_Bool" : value}\` (an array field holds only i32, i64, u8, u16, u32, u64, f32 and f64)`
+    }
+    return `Record<integer<0, ${t.length - 1}>, ${value}>`
   }
 
   /** The out class for a pointer to a scalar, noting that the module needs it. */
