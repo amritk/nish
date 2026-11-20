@@ -2773,17 +2773,20 @@ const isSimdCall = (program: CheckedProgram, call: Node): boolean =>
  * record of the imported name is the whole test (`isVectorAccess` in
  * `src/emit-arrays.ts`).
  */
-const vectorAccessLanes = (ctx: CheckContext, call: Node): i32 => {
-  const args = call.children[1].children
-  if (call.kind !== NodeKind.Call || args.length < 2) {
+export const vectorAccessLanes = (program: CheckedProgram, table: TypeTable, call: Node): i32 => {
+  if (call.kind !== NodeKind.Call) {
     return 0
   }
-  const name = ctx.program.nodeBuiltins[call.id]
+  const args = call.children[1].children
+  if (args.length < 2) {
+    return 0
+  }
+  const name = program.nodeBuiltins[call.id]
   if (name === "store" && args.length === 3) {
-    return ctx.table.laneCount(ctx.program.nodeTypes[args[0].id])
+    return table.laneCount(program.nodeTypes[args[0].id])
   }
   if (simdTypeLane(simdSuffix(name, "load")).length > 0) {
-    return ctx.table.laneCount(ctx.program.nodeTypes[call.id])
+    return table.laneCount(program.nodeTypes[call.id])
   }
   return 0
 }
@@ -3512,7 +3515,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
-    const lanes = vectorAccessLanes(ctx, e)
+    const lanes = vectorAccessLanes(ctx.program, ctx.table, e)
     if (lanes > 0) {
       judgeVectorAccess(walk, state, e, lanes)
     }

@@ -41008,6 +41008,32 @@ if (selects("ci-scope", "ci.yml")) {
       carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
     JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
   )
+  // The why= line names the lanes that are off, in LANES order, and says so
+  // when none is; a full-run reason replaces both. The partial case is pinned
+  // to its literal text so the names come from the test, not the output.
+  const someOff = runScope(["tests/postgres/x.sql"], { PR_LABELS: "[]" })
+  const allOn = runScope(["src/x.ts"], { PR_LABELS: "[]" })
+  const whyOf = (run) => run.lines.find((l) => l.startsWith("why="))
+  const unread = "every changed path of each is on its allowlist of paths it does not read"
+  check(
+    "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off",
+    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}`,
+    JSON.stringify(someOff.lines)
+  )
+  check(
+    "ci-scope: the why= output of a docs-only change names every lane as off",
+    whyOf(goodLabels) === `why=lanes off: ${lanes.join(", ")}; ${unread}`,
+    JSON.stringify(goodLabels.lines)
+  )
+  check(
+    "ci-scope: the why= output says every lane runs when none is off, and a full-run reason replaces it",
+    allOn.ran.status === 0 &&
+      laneLines(allOn.lines).length === lanes.length &&
+      laneLines(allOn.lines).every((l) => l.endsWith("=true")) &&
+      whyOf(allOn) === "why=every lane reads a changed path" &&
+      whyOf(badLabels) === "why=the pull request has the `ci:full` label",
+    JSON.stringify({ allOn: allOn.lines, badLabels: whyOf(badLabels) })
+  )
   fs.rmSync(scopeDir, { recursive: true, force: true })
 
   // The replay passes with no miss and excuses exactly the flakes the data
