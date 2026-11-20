@@ -40,10 +40,11 @@ release-note words) in the same PR; run nish-cmp before pushing.
 removes lines in a `std/*.ts` file moves every `std/<file>.ts:LINE:COL` in
 `tests/link/*/expected.caps.json`, `tests/wordings/*.err` and
 `docs/reference/diagnostics/`: grep `std/<file>.ts:[0-9]` and regenerate them
-from the compiler's output in the same PR. A `nish:simd` load is always
-recorded as an unproven index site (`src/attributes.ts`), so `std/` code a
-`--deny-panics` caller can reach does not use one; lane-wise helpers for test
-tooling live under `tests/`.
+from the compiler's output in the same PR. A `nish:simd` access whose
+lanes `bounds.ts` proves in range is recorded as a proven index site and an
+unguarded one as unproven (`src/attributes.ts`), so `std/` code a
+`--deny-panics` caller can reach uses only guarded ones; lane-wise helpers for
+test tooling live under `tests/`.
 
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every

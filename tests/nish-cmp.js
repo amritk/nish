@@ -2012,6 +2012,15 @@ const DECLARED = [
     changelog: "io_uring slot handles in nish:net",
     why: "`NET_LISTEN_RING` is new to `nish:net` in this release, so the 0.41.0 seed has no such export and refuses the program (WP63 S2)",
   },
+  // #1778 stage A: a guarded `nish:simd` access is a proven index site, so the
+  // `--deny-panics` program that calls one compiles; the 0.42.0 seed records
+  // it as unproven and stops while it words the advice.
+  {
+    program: "tests/link/simd_deny_panics_guarded/main.ts",
+    file: "exit",
+    changelog: "a guarded nish:simd access as a proven panic site",
+    why: "the program is built with --deny-panics and the `loadU8x16` and `store` in its `simd_mask` dependency are guarded, which the candidate records as proven sites; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
+  },
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
   {

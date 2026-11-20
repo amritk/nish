@@ -1,6 +1,6 @@
 # WP37: The OS sandbox
 
-**State:** In progress · **Done:** 5 of 9 · **Design note:** [`docs/wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md)
+**State:** Landed · **Done:** 5 of 9 · **Design note:** [`docs/wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md)
 
 ## Stages
 

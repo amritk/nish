@@ -486,7 +486,12 @@ const backtest = (file) => {
  * @returns {void}
  */
 const emit = ({ full, lanes }) => {
-  const why = full ?? "every changed path of a skipped lane is on its allowlist of paths it does not read"
+  const off = Object.keys(lanes).filter((k) => !lanes[k])
+  const why =
+    full ??
+    (off.length > 0
+      ? `lanes off: ${off.join(", ")}; every changed path of each is on its allowlist of paths it does not read`
+      : "every lane reads a changed path")
   const lines = [...Object.entries(lanes).map(([k, v]) => `${k}=${v}`), `why=${why.replace(/[\r\n]+/g, " ")}`]
   if (process.env.GITHUB_OUTPUT) {
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`)
