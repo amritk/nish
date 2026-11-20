@@ -3861,22 +3861,7 @@ export class Compilation {
   qualifyClashingSymbols(peers: CheckContext[]): void {
     const entryName = this.entry().name
     for (const unit of this.modules) {
-      const ctx = unit.checker.ctx
-      const names = new StringSet()
-      for (const sig of unit.checker.program.functions) {
-        if (
-          sig.owner === null &&
-          sig.instance === null &&
-          !sig.foreign() &&
-          sig.definedIn(unit.source) &&
-          qualifiesClashing(peers, ctx, sig.sourceName, sig.exported)
-        ) {
-          names.add(sig.sourceName)
-        }
-      }
-      if (names.size() > 0) {
-        unit.checker.qualifyClashing(moduleSymbolQualifier(unit.name, entryName), names)
-      }
+      unit.checker.qualifyClashing(peers, unit.name, entryName)
     }
   }
 

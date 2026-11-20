@@ -51,11 +51,13 @@ import {
   isTemplateFunction,
   refuseNestedFunctionTypes,
   parameterOrigin,
+  qualifiesClashing,
   refuseUninferable,
   rejectDollarInSymbolName,
   resolveStructTemplateConstraints,
   resolveTemplateConstraints,
 } from "./generics"
+import { moduleSymbolQualifier } from "./packages"
 import {
   FLAG_ABSTRACT,
   FLAG_COMPUTED,
@@ -582,29 +584,38 @@ export class Checker {
   }
 
   /**
-   * Give each free function this module defines whose source name is in
-   * `names` its module-qualified symbol, `<prefix><qualifier>$.<name>` (WP57
-   * S1, `docs/wp57-module-scoped-names.md` §4). `Compilation` chooses the
-   * names (`qualifiesClashing`, in `src/generics.ts`) and runs this before any
-   * import is bound, so an importer copies the final symbol. A method or
-   * constructor is named after its class and is never in `names`' reach, and a
-   * template's instantiations are named when they are minted (`templateSymbol`).
+   * Give each free function this module defines whose bare symbol would clash
+   * (`qualifiesClashing`, in `src/generics.ts`) its module-qualified symbol,
+   * `<prefix><qualifier>$.<name>` (WP57 S1, `docs/wp57-module-scoped-names.md`
+   * §4). `Compilation.qualifyClashingSymbols` runs this for every module
+   * before any import is bound, so an importer copies the final symbol. A
+   * method or constructor is named after its class and is never in reach, and
+   * a template's instantiations are named when they are minted
+   * (`templateSymbol`). The qualifier is spelled only once a function needs it,
+   * so a module with no clash allocates nothing here.
+   *
+   * `qualifiesClashing` reads each peer's functions by source name, so
+   * renaming one here does not change the answer for the next.
    *
    * `$` cannot appear in a declared name and `.` cannot appear in a qualifier,
    * so `lib_util$.helper` is spelled like no declared function, method or
    * instantiation; the clash check still runs over the result, which is what
    * refuses two modules whose paths reduce to one qualifier.
    */
-  qualifyClashing(qualifier: string, names: StringSet): void {
+  qualifyClashing(peers: CheckContext[], modulePath: string, entryPath: string): void {
     const prefix = this.program.symbolPrefix
+    let qualifier = ""
     for (const sig of this.program.functions) {
       if (
         sig.owner === null &&
         sig.instance === null &&
         !sig.foreign() &&
         sig.definedIn(this.program.source) &&
-        names.has(sig.sourceName)
+        qualifiesClashing(peers, this.ctx, sig.sourceName, sig.exported)
       ) {
+        if (qualifier.length === 0) {
+          qualifier = moduleSymbolQualifier(modulePath, entryPath)
+        }
         sig.name = `${prefix}${qualifier}$.${sig.sourceName}`
       }
     }
