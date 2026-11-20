@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 994
+export const RULE_COUNT: i32 = 995
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -539,6 +539,8 @@ const diagnosticRules = (): string[] => [
   "NL2604",
   "` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker",
   "NL2795",
+  ": a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build",
+  "NL3062",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
   "NL2442",
   "` names no directory: a grant's directory is resolved from the root package's directory and exists when the program is built",
