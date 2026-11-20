@@ -21,7 +21,11 @@ nish run --sandbox app.ts
 nish app.ts --sandbox          # IR only: the .ll carries the sandbox
 ```
 
-Take a program that reads one file and does nothing else:
+Take a program that reads one file and does nothing else. It builds with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do) because
+`readFileSync` ends the program when the file cannot be read; call
+`readFileSyncOrNull`, which answers `null` instead, and test for it to build
+it under the default:
 
 <!-- allow-panics: calls a file or entropy builtin that exits on failure -->
 <!-- nish:ok --allow-panics -->

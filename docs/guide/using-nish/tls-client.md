@@ -24,6 +24,14 @@ so resolve a name first with [`nish/net/dns`](networking.md#names-nishnetdns).
 `serverName` is what the server is checked against and is sent as SNI unless
 it is an IP literal; it is always yours, never taken from the address.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): nothing bounds the
+byte counts they add up, so the compiler cannot prove the sums fit, and the
+later ones call TLS code in the standard library that keeps panic sites no
+proof removes yet. Bounding each count, for example by stopping once it
+passes a limit you test, builds your own code under the default; the library
+calls will build under it once the standard library is made panic-free.
+
 <!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts

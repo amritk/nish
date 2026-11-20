@@ -11,7 +11,14 @@ and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 ## Arrays
 
 `T[]` (or `Array<T>`) is an array of `T`. A literal's elements must all have
-one type, and an empty literal `[]` needs a type to take from its context:
+one type, and an empty literal `[]` needs a type to take from its context.
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): they
+index, pop and add without the guards the compiler reads, and `sort`, `map`,
+`filter`, `slice` and `String.fromBytes` keep checks no proof removes yet.
+Testing `i < xs.length` before an index and `xs.length > 0` before a `pop`,
+and bounding the arithmetic, builds the rest under the default; the others
+will once the standard library is made panic-free and a range can be proved:
 
 <!-- allow-panics: pops an array it does not test for empty; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
@@ -94,8 +101,9 @@ Nish cannot follow:
   may ([Functions](functions.md)): `xs.sort((a, b) => rank[a] - rank[b])` with
   a `const rank`. Bind a `let` to a `const` before the call.
 
-`(a, b) => a - b` is checked `i32` arithmetic: on elements more than
-`2^31 - 1` apart, such as `[2147483647, -1]`, it panics with
+`(a, b) => a - b` is checked `i32` arithmetic: nothing bounds it, so the
+compiler refuses it by default, and under `--allow-panics`, on elements more
+than `2^31 - 1` apart, such as `[2147483647, -1]`, it panics with
 `attempt to subtract with overflow`. When the values may span the whole range,
 compare instead: `(a, b) => (a > b ? 1 : a < b ? -1 : 0)`. An array holding
 `NaN`, or a comparator that is not a consistent order, sorts to some
@@ -138,8 +146,10 @@ its own loop that calls it directly. Three things differ from JavaScript:
   `const i = xs.findIndex(f); if (i >= 0) { ... xs[i] ... }`.
 - **A callback takes at most two parameters.** JavaScript passes the array as
   a third; read the array you called the method on instead.
-- **`slice` stops the program on a bad range**, as string `slice` does:
-  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. A negative
+- **`slice` checks its range**, as string `slice` does:
+  `xs.slice(start, end)` needs `0 <= start <= end <= xs.length`. No guard
+  proves that to the compiler yet, so a call is refused by default; under
+  `--allow-panics` a bad range stops the program. A negative
   index does not count from the end, and an end past the length is not
   clamped. `xs.slice()` copies the whole array, and `xs.slice(start)` copies
   from `start` to the end.
@@ -203,12 +213,13 @@ export const main = (): i32 => {
 
 ### Bounds
 
-Every `xs[i]` is checked: an index outside `0 … xs.length - 1` — a negative
-one included — stops the program with `index out of range` on stderr and
-exit status 1, where JavaScript would answer `undefined`. `pop()` on an
-empty array stops the program the same way. The compiler removes the check
-wherever it can prove the index is in range, as in the `i < xs.length` loop
-above.
+Every `xs[i]` is checked. The compiler must prove the index is in range, as
+in the `i < xs.length` loop above, and by default it refuses the program
+where it cannot; `pop()` needs an `xs.length > 0` test the same way. Under
+`--allow-panics` the check is built in instead: an index outside
+`0 … xs.length - 1` — a negative one included — stops the program with
+`index out of range` on stderr and exit status 1, where JavaScript would
+answer `undefined`, and `pop()` on an empty array stops it the same way.
 
 <!-- allow-panics: indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
@@ -349,11 +360,11 @@ content, and these are its methods, all of them:
 | `s.length` | the length in **bytes** |
 | `s.charCodeAt(i)` | the byte at `i`, bounds-checked |
 | `s.substring(start, end?)` | the bytes from `start` up to `end`, clamped into range as in JavaScript |
-| `s.slice(start, end?)` | the same, but an out-of-range or reversed pair stops the program instead of being clamped |
+| `s.slice(start, end?)` | the same, but checked instead of clamped: refused by default, and under `--allow-panics` an out-of-range or reversed pair stops the program |
 | `s.indexOf(sub, from?)` | the first byte offset of `sub` at or after `from` (default `0`), or `-1` |
 | `s.startsWith(sub)`, `s.endsWith(sub)` | a `boolean` |
 | `String.fromCharCode(c)` | the one-byte string of `c` |
-| `String.fromBytes(bytes, start, end)` | the bytes of a `u8[]` from `start` up to `end` as one string; an out-of-range or reversed pair stops the program, as `slice`'s does |
+| `String.fromBytes(bytes, start, end)` | the bytes of a `u8[]` from `start` up to `end` as one string, checked as `slice` is |
 
 `toUpperCase`, `split`, `trim`, `replace` and the rest do not exist;
 build them from these, or look in the

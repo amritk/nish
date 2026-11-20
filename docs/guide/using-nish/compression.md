@@ -12,6 +12,14 @@ read.
 
 ## Compressing a buffer
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do):
+`nish/compress/deflate` and `nish/compress/gzip` keep panic sites no proof
+removes yet, so a call to them is refused by default until the standard library
+is made panic-free. In your own code, an array whose length is a literal, an
+index tested against `length`, a sum a guard bounds and an error answer in
+place of `panic` each build under the default.
+
 Every call works on buffers you own: the input is a window `src[off .. off +
 len)`, the output goes into `out` from `at`, and the answer is where the output
 ends. Build the compressor once and keep it — it holds its tables, about

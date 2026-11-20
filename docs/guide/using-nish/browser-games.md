@@ -58,6 +58,14 @@ pixels, rounded to whole ones, once at start and whenever the size or the
 display's pixel ratio changes, for a game that fits its framebuffer to the
 window (with `gameSetSize`, in framebuffer pixels).
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/host/game`,
+`nish/raster`, `nish/synth` and the other standard modules they call keep panic
+sites no proof removes yet, so a call to them is refused by default until the
+standard library is made panic-free, and the indexes and sums in the game's own
+code build under the default once a guard proves each, such as `i < xs.length`
+before an index.
+
 The game's state lives in module storage: typed arrays declared at the top of
 the module, which keep their values from call to call. This game moves a
 square with the arrow keys and beeps when space is pressed:

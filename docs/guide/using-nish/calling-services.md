@@ -14,6 +14,12 @@ the [HTTP client](http-client.md) instead.
 
 ## A proxying route
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/upstream`,
+`nish/net/handler`, `nish/net/router`, `nish/net/outbound` and the JSON reads
+keep panic sites no proof removes yet, so a call to them is refused by default
+until the standard library is made panic-free.
+
 An `Upstream` is a pool of kept-alive connections to one origin, registered on
 the handler's loop. Make it once at start-up, beside the handler:
 

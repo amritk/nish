@@ -12,6 +12,13 @@ library module ([`export` and `import`](https://github.com/amritk/nish/blob/main
 
 ## Fetching a URL
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/fetch` and
+`nish/net/outbound` keep panic sites no proof removes yet, and so does the
+range check of `String.fromBytes`, so those calls are refused by default for
+now. The sums and the `panic` call in your own code build under the default
+once a guard bounds each sum and the `panic` becomes an error answer.
+
 <!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

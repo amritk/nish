@@ -24,7 +24,13 @@ unchanged.
 
 `createRegion(name, bytes)` makes a region of `bytes` zero bytes and maps it;
 `openRegion(name)` maps one that exists, in any process of the same user;
-`unlinkRegion(name)` removes the name. Each answers a `Result`:
+`unlinkRegion(name)` removes the name. Each answers a `Result`, which the
+examples on this page unwrap with `expect`. They build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `expect` stops the
+program on an error, and `nish/sync/shm` and `nish/sync/ring` keep panic sites
+no proof removes yet. Test `r.isErr()` before reading `r.value`, and put a
+guard such as `i < xs.length` before an index, and the rest builds under the
+default once the standard library is made panic-free:
 
 <!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
@@ -87,8 +93,10 @@ export const main = (): i32 => {
 ```
 
 - **Offsets are checked, as array indexes are.** A slot must lie inside the
-  region and at a multiple of its width (4 for `I32`, 8 for `I64`); anything
-  else stops the program with a message naming the offset, such as
+  region and at a multiple of its width (4 for `I32`, 8 for `I64`). The
+  module keeps this check at run time, which is why a call to it needs
+  `--allow-panics` for now, and anything else stops the program there with a
+  message naming the offset, such as
   `nish/sync/shm: slot offset 4 is not a multiple of 8, the slot's width`.
   Lay a region out with constants, a 64-bit slot at a multiple of 8.
 - **Bytes go through `read` and `write`**, which copy a window between the

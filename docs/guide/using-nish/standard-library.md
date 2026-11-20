@@ -228,6 +228,16 @@ code. A function cannot be a value in Nish, so there is no
 `test("name", () => ...)`: you call one assertion per check, and each answers
 whether it passed.
 
+Most examples from here on build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do). Most of the library
+keeps panic sites no proof removes yet, so a call into it is refused by
+default until the library is made panic-free. Many examples also index
+arrays, add numbers or size new arrays without a guard the compiler reads,
+which a test such as `i < xs.length` before an index, or a bound on a sum or
+a length, proves in your own code; a few copy a range of bytes (`set`,
+`String.fromBytes`), which no proof covers yet, or call `panic`, which no
+proof removes.
+
 <!-- allow-panics: does integer arithmetic nothing bounds; calls `std/testing.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
@@ -2756,11 +2766,12 @@ export const main = (): i32 => {
 };
 ```
 
-Every access is an ordinary index. An offset whose bytes do not all lie in the
-array panics with `index out of range`, naming the first byte that is not
-there. A guard in your own loop, such as `off + 3 < b.length`, does not yet
-remove these checks, so a hot loop that needs them gone indexes the bytes
-itself.
+Every access is an ordinary index, checked inside the module, so a call
+builds only with `--allow-panics` for now. There, an offset whose bytes do
+not all lie in the array panics with `index out of range`, naming the first
+byte that is not there. A guard in your own loop, such as
+`off + 3 < b.length`, does not yet remove these checks, so a hot loop that
+needs them gone indexes the bytes itself.
 
 Natively every function answers for every value. Under Node the `u16` and
 `u32` functions are expected to answer the same, but the 64-bit ones, the
@@ -3536,7 +3547,9 @@ does for valid UTF-8; where it replaces an invalid sequence with U+FFFD,
 A buffer as long as the input is always big enough; one shorter than the
 decoded result answers `URL_DECODE_ERR_SPACE`, with the bytes before it
 written. Test every answer before you read `out`: a peer's `%zz` makes it
-negative, and `String.fromBytes(out, 0, n)` with a negative `n` panics.
+negative, and `String.fromBytes(out, 0, n)` checks its range while the
+program runs (no proof covers it yet, so it needs `--allow-panics`) and
+panics on a negative `n`.
 `percentDecodeErrorAt`, called with the same arguments, answers the offset of
 the byte an error is at, or -1.
 

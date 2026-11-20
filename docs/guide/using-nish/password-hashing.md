@@ -18,6 +18,15 @@ bytes, fresh for every password, from `crypto.getRandomValues`, and the hash
 carries it, so you store only the hash. `bcryptVerify(password, hash)` answers
 whether the password is the one the hash was made from.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do).
+`nish/crypto/bcrypt` keeps panic sites no proof removes yet, so a call to it
+is refused by default until the standard library is made panic-free, and
+`crypto.getRandomValues` exits the program when the system has no random
+bytes to give, a check no proof removes. The indexes and sums in the later
+examples build under the default once a guard proves each, such as
+`i < xs.length` before an index.
+
 <!-- allow-panics: calls a file or entropy builtin that exits on failure; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

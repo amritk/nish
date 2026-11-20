@@ -9,6 +9,11 @@ sections.
 
 ## Classes
 
+Several examples on this page do `i32` arithmetic nothing bounds, so the
+compiler cannot prove it fits and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
+as the compile error suggests, builds them under the default.
+
 <!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts

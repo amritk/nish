@@ -12,6 +12,12 @@ and [Generic methods](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#
 
 ## Generic functions
 
+Several examples on this page index and add with nothing bounding them, so the
+compiler cannot prove them safe and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); testing `i < xs.length`
+before an index and bounding the operands, as the compile error suggests,
+builds them under the default.
+
 Both ways of writing a function take type parameters:
 
 <!-- allow-panics: indexes an array without a guard the checker reads -->

@@ -55,7 +55,13 @@ nothing to hand back on success returns `Result<void, E>` and succeeds with
 | `r.error` | the `E`, only where a test proved `r` is a failure |
 | `r.orReturn()` | the `T`, or else return the failure from the current function |
 | `r.unwrapOr(d)` | the `T`, or `d` if `r` is a failure |
-| `r.expect(message)` | the `T`, or else print `message` and exit with status 1 |
+| `r.expect(message)` | the `T`, or else print `message` and exit with status 1; refused by default, built under `--allow-panics` |
+
+An `expect` can end the program and no proof removes it, so by default the
+compiler refuses it, and this example builds with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do). Testing `r.isOk()` before
+`r.value`, or `unwrapOr`, as the example's other lines do, builds under the
+default:
 
 <!-- allow-panics: unwraps a `Result` with `expect` -->
 <!-- nish:ok --allow-panics -->
@@ -285,7 +291,9 @@ it prints the message on stderr and ends the process with status 1. `panic`
 never returns, so a function may end with it where it would otherwise need a
 `return`. `r.expect(message)` is the same ending for a `Result` you are
 certain succeeded, and it insists on a reason, which is why there is no
-`unwrap()`.
+`unwrap()`. No proof removes a `panic` or an `expect`, so by default the
+compiler refuses both, and the program builds only with `--allow-panics`;
+return a `Result` instead where the program should build under the default.
 
 <!-- allow-panics: calls `panic` -->
 <!-- nish:ok --allow-panics -->

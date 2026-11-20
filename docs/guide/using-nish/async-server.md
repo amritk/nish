@@ -19,6 +19,14 @@ The rules for `async`, `await` and `spawn` are in
 
 ## A first server
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/serve`,
+`nish/net/router`, `nish/net/handler` and `nish/net/postgres` keep panic sites
+no proof removes yet, so a call to them is refused by default until the
+standard library is made panic-free. The sums, indexes and `panic` call in your
+own code build under the default once a guard proves each, such as `i <
+xs.length` before an index, and the `panic` becomes an error answer.
+
 <!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts`, `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

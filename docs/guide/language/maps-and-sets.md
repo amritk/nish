@@ -5,8 +5,9 @@ They behave as JavaScript's do: entries come back in the order they were
 inserted, and keys are compared as `===` compares them, except that every
 `NaN` is the same key. Both are always available, with no import. Their code
 in `std/collections.ts` keeps checks no proof removes yet, so a program that
-uses either builds with `--allow-panics`, as every program on this page that
-compiles does. The full rules are in the reference under [`Map` and `Set`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#map-and-set).
+uses either builds with [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do),
+as every program on this page that compiles does; it will build under the
+default once that code is made panic-free. The full rules are in the reference under [`Map` and `Set`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#map-and-set).
 
 ## Making and filling one
 

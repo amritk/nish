@@ -17,6 +17,13 @@ native only.
 
 ## A first server
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/router` and
+the JSON reads keep panic sites no proof removes yet, so a call to them is
+refused by default until the standard library is made panic-free. The indexes
+and the `panic` call in your own code build under the default once a guard such
+as `i < xs.length` proves each index and the `panic` becomes an error answer.
+
 <!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/json.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

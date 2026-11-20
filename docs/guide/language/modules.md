@@ -27,6 +27,12 @@ export const distance2 = (a: Point, b: Point): i32 => {
 };
 ```
 
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): most do `i32` arithmetic
+nothing bounds, which bounding the operands would fix, and the `nish/text` one
+calls standard-library code that keeps panic sites no proof removes yet, which
+will build under the default once that code is made panic-free.
+
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 

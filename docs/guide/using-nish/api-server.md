@@ -16,6 +16,12 @@ of its own, in a task that may await, uses [an async server](async-server.md).
 
 ## A first server
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/handler`,
+`nish/net/router` and the JSON reads keep panic sites no proof removes yet, so
+a call to them is refused by default until the standard library is made
+panic-free.
+
 <!-- allow-panics: calls `std/json.ts`, `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

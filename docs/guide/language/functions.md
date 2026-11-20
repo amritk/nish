@@ -8,6 +8,12 @@ reference's [Functions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 
 ## Declaring a function
 
+Several examples on this page add and index with nothing bounding them, so the
+compiler cannot prove them safe and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands and
+testing `i < xs.length` before an index, as the compile error suggests, builds
+them under the default.
+
 <!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts

@@ -60,7 +60,11 @@ Both arms of `c ? a : b` must have the same type.
 ## Loops
 
 `while`, `do … while`, `for (init; cond; update)` and `for (const x of xs)`
-are all there, with `break` and `continue`:
+are all there, with `break` and `continue`. Several examples on this page do
+`i32` arithmetic nothing bounds, so they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); why, and the guard that
+builds them under the default, are in [Checked arithmetic](#checked-arithmetic)
+below:
 
 <!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
@@ -282,9 +286,11 @@ has the exact rules.
 ## Checked arithmetic
 
 On `i32` and `i64`, `+`, `-`, `*`, unary `-`, `++`, `--` and the compound
-assignments are **checked**: a result that does not fit stops the program
-with a message on stderr and exit status 1. It never wraps silently, and it
-is never undefined behaviour:
+assignments are **checked**: the compiler must prove a result fits, and by
+default it refuses the program where it cannot, naming the guard that would
+prove it. Under `--allow-panics` the check is built in instead, and a result
+that does not fit stops the program with a message on stderr and exit
+status 1. It never wraps silently, and it is never undefined behaviour:
 
 <!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
@@ -298,9 +304,11 @@ export const main = (): i32 => {
 };
 ```
 
-Run it and the second line never prints: the program writes
+Nothing bounds `n`, so by default this is a compile error. Run it with
+`--allow-panics` and the second line never prints: the program writes
 `attempt to multiply with overflow` to stderr and exits with status 1.
-Integer `/` and `%` are checked the same way — a zero divisor prints
+Integer `/` and `%` are checked the same way: refused by default unless the
+divisor is proved safe, and under `--allow-panics` a zero divisor prints
 `attempt to divide by zero`. The check costs a compare and a branch, and the
 compiler removes it wherever it can prove the result fits, such as a loop
 counter under `i < n`.

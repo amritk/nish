@@ -26,6 +26,11 @@ Every value is immutable: `add` answers a new date rather than changing the one
 it was called on. The calendar is ISO 8601, the proleptic Gregorian one that
 `toString` writes.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/temporal` keeps
+panic sites no proof removes yet, so a call to it is refused by default until
+the standard library is made panic-free.
+
 <!-- allow-panics: calls `std/temporal.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

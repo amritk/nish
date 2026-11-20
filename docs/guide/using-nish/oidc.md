@@ -23,7 +23,12 @@ It does three things:
 ## Verifying a provider's tokens
 
 Discover once at start-up, make the `OidcKeys`, take the first key set, and
-then verify each request's token:
+then verify each request's token. The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/oidc` and
+the modules it uses keep panic sites no proof removes yet, so a call to them
+is refused by default until the standard library is made panic-free, and the
+division by `toI64(1000)` builds under the default once its divisor is a
+local that a guard such as `if (d > 0)` tests:
 
 <!-- allow-panics: divides by a value it does not test; calls `std/crypto/jwt.ts`, `std/net/oidc.ts`, `std/net/url.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->

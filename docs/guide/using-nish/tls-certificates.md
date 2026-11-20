@@ -19,6 +19,12 @@ the time to check validity at, in milliseconds since the epoch. It answers a
 `PkiResult`: `code` is `PKI_OK` or the reason it was refused, and `path` is
 the chain it accepted, the server's certificate first and the root last.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/crypto/pki` and
+the collections code it uses keep panic sites no proof removes yet, and
+they will build under the default once the standard library is made
+panic-free.
+
 <!-- allow-panics: calls `std/collections.ts`, `std/crypto/pki.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

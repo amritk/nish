@@ -25,6 +25,13 @@ The reference is
 the file when it is missing. The path `:memory:` is a database of its own that
 lives as long as the connection. `close()` closes it.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): they unwrap each
+`Result` with `expect`, which stops the program on an error, and `nish/sqlite`
+keeps panic sites no proof removes yet. Test `r.isErr()` before reading
+`r.value` instead of calling `expect`, and the rest builds under the default
+once the standard library is made panic-free.
+
 <!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sqlite.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
@@ -97,7 +104,9 @@ call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
 `NULL`. A parameter index the statement does not have (they count from 1) answers
 `SQLITE_RANGE`; an `off` and `len` that do not fit inside `buf` answer
 `SQLITE_MISUSE`. A `string` passed to `bindText`, `exec`, `prepare` or
-`openDatabase` that holds a NUL byte stops the program with the
+`openDatabase` that holds a NUL byte is a check the module keeps at run time,
+one reason a call to it needs `--allow-panics` for now; there it stops the
+program with the
 [`ffi-nul` panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) rather than cutting the SQL
 short; bind text with NUL bytes in it through `bindTextBytes`.
 

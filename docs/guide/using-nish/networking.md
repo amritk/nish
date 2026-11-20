@@ -48,6 +48,15 @@ To wait, make a loop with `pollCreate()`, watch each socket with
 `pollWait(loop, ready, timeoutMs)`. It fills `ready` with pairs, a token and
 its events, and answers how many, `0` when the timeout passed.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do). The range of a
+`u8[]` that `netRead` and `netWrite` take is checked while the program runs,
+a check no proof removes yet; the servers built on `nish/net/prefork`, the
+HTTP handlers and `nish/net/dns` call standard-library code that keeps
+panic sites until the standard library is made panic-free;
+and some examples index arrays or add numbers without a guard, which a test
+such as `i < xs.length` before an index, or a bound on a sum, proves.
+
 <!-- allow-panics: slices with bounds it does not test -->
 <!-- nish:ok --allow-panics -->
 ```ts

@@ -10,6 +10,13 @@ one `free` gives all of it back. The functions come from the built-in module
 
 ## Making, using and freeing a region
 
+Several examples on this page build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): `nish:region`'s code in the
+standard library keeps panic sites no proof removes yet, and they will build
+under the default once it is made panic-free. Some also add, index or size an
+array with nothing bounding it, which a bound or an `i < xs.length` test before
+the index would fix.
+
 `region(f)` makes a region and runs `f` in it: every object `f` allocates
 lands in the region, and what `f` answers is the region's *root*. You get back
 a `Region<T>` handle, which is a number, not a pointer. `enter(r, f)` runs

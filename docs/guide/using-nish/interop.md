@@ -6,6 +6,15 @@ the parsing, the maths, the data transforms — with Nish, and call it from
 Node, from a WebAssembly host or from C. In the opposite direction, a Nish
 program can call a C function you declare.
 
+The examples on this page that keep a check build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do), which tests it as the
+program runs and stops the program if it fails. Under the default each is a
+compile error: an `i32` sum that may overflow, an index the compiler cannot
+prove in range, a string passed to C that may hold a NUL, a C pointer that may
+be `NULL`. A guard removes most of them: a bound on the sum's inputs, a test of
+the index against `length`, a string literal, a C result declared `| null` and
+narrowed.
+
 Each direction starts from an ordinary module that `export`s the functions to
 call. This one is used throughout the page:
 
@@ -581,14 +590,16 @@ export const tick = (): void => {
   without `at: u32, n: u32` after it (NL2682), or with them of another type
   (NL2683). Module storage and a local array both lend; a storage of records
   does not.
-- **The module checks the window before the page runs.** A window that
-  reaches past the end of the array panics, naming your parameters:
+- **The module checks the window before the page runs.** A window the
+  compiler cannot prove in bounds is a compile error under the default; under
+  `--allow-panics`, one that reaches past the end of the array panics, naming
+  your parameters:
   `` `scale`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``.
   `at + n` is added in 64 bits, so huge values cannot wrap around the check.
   Lending `0, toU32(xs.length)` of a local array `xs` is proven in bounds
   and costs no check. A window of module storage, such as `DATA` here,
-  always keeps the check, even `0, toU32(DATA.length)`: the compiler proves
-  facts about locals, not about storage.
+  always keeps the check, even `0, toU32(DATA.length)`, so lending one needs
+  `--allow-panics`: the compiler proves facts about locals, not about storage.
 - **The page is handed a view of all of memory and an index**, so its
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory
@@ -665,8 +676,9 @@ A native program that panics prints a message and stops. A module in a page
 cannot stop the page, so under `--profile wasm-host` a program that keeps
 [module storage](#sharing-memory-with-the-page) or imports a
 [host module](#functions-the-page-supplies-host-modules) reports every panic
-(an index out of range, an overflow, a `panic(...)`, an allocation
-`--memory` cannot hold, a `process.exit`): it unwinds out of the module and
+(a check `--allow-panics` left to run time, such as an index out of range, an
+overflow or a `panic(...)`; an allocation `--memory` cannot hold; a
+`process.exit`): it unwinds out of the module and
 the call that started it throws `NishPanic`, exported by the generated
 loader. A program with neither gets a plainer loader: a panic is the bare
 `RuntimeError` a trap is, what the call allocated is released, and the next
@@ -1023,7 +1035,9 @@ take a `CPtr` instead, and handed memory C allocated. A `string | null`
 parameter passes `NULL` for `null`.
 
 A Nish string can hold a NUL byte, and C would stop reading at it, so a string
-that holds one stops the program before the call instead:
+that is not a literal is a compile error under the default, and under
+`--allow-panics` one that holds a NUL stops the program before the call
+instead:
 
 ```console
 `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
@@ -1055,8 +1069,10 @@ export const main = (): i32 => {
 };
 ```
 
-A result declared `string` that is `NULL` after all stops the program, because
-a `string` cannot hold it, and `--emit-panics` lists the call as an `ffi-null`
+Under `--allow-panics`, a result declared `string` that is `NULL` after all
+stops the program, because a `string` cannot hold it (the default refuses the
+call, since no proof removes the test), and `--emit-panics` lists the call as
+an `ffi-null`
 site:
 
 ```console
@@ -1102,7 +1118,8 @@ as the third argument, so the one count is the whole size. A buffer with no
 the declaration, is named with `CountedBy` (below).
 
 A call passes the array's bytes, and checks the count against each buffer
-first: a count larger than the array stops the program before C runs, with
+first: under `--allow-panics`, a count larger than the array stops the
+program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
 and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
 proves the count, so the call carries no check and compiles in a module
@@ -1391,8 +1408,10 @@ export const main = (): i32 => {
 ```
 
 Every index is checked against the length. A constant outside it, such as
-`name.sysname[65]`, does not compile; any other index outside it panics
-before it reads or writes; and an index the compiler can prove is inside it,
+`name.sysname[65]`, does not compile; any other index the compiler cannot
+prove inside it is a compile error under the default and, under
+`--allow-panics`, panics before it reads or writes outside it; and an index
+the compiler can prove is inside it,
 like a constant or a counter the loop keeps below 65, costs no check:
 `--emit-panics` lists the `name.sysname[length]` read above as `proven`. The
 field is part of the struct, not a Nish array: you cannot hold it in a

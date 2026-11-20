@@ -43,6 +43,13 @@ whichever function the field holds at that moment.
 
 ## Arrays, returns and comparison
 
+The examples from here on build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): some add and index with
+nothing bounding them, and bounding the operands and testing `i < xs.length`
+before an index builds those under the default; the `Map` one calls
+standard-library code that keeps panic sites no proof removes yet, and will
+build under the default once that code is made panic-free.
+
 A reference goes anywhere a value of its type can: a local, a field of a
 class or an interface, an array element, a return value, and a parameter
 whose type is the alias, of a function, a method or a constructor. You call

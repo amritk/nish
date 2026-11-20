@@ -119,8 +119,9 @@ Write `main(): i32` or `main(): void` instead. Types that spell their width
 
 A program whose arithmetic was written for 32-bit integers can keep them:
 `--compat --number-mode i32` is honoured. The compiler says once what that
-costs, as a performance warning (`NL9020`), because arithmetic that leaves 32
-bits panics there where a double would carry on. `--no-warn-performance`
+costs, as a performance warning (`NL9020`), because arithmetic that may leave
+32 bits is a compile error there, or a panic under `--allow-panics`, where a
+double would carry on. `--no-warn-performance`
 silences it.
 
 ```text
@@ -174,12 +175,13 @@ compiled program's would part. An element read the chain would carry on past
 is refused (`NL1067`): a `?.[i]` that ends a `??` chain or a statement, and,
 in a statement, any element read that ends it, `h?.xs[i];`, or that a `?.`
 tests, `xs[i]?.bump();` or `(xs[i])?.bump();`. Past the end of the array Node answers `undefined`
-and goes on, where Nish's bounds check panics. Test the index against
-`length` instead. (With a `??` default, `xs[i]?.n ?? 0` is the strict
+and goes on, where Nish refuses an index it cannot prove in range, and its
+bounds check panics under `--allow-panics`. Test the index against `length`
+instead. (With a `??` default, `xs[i]?.n ?? 0` is the strict
 dialect's own: the `?.` tests a nullable element, and the read is
 bounds-checked as every element read is. So is a plain element read that
-ends a `??` chain, `h?.xs[5] ?? 0`: it panics past the end where Node gives
-`0`, exactly as the strict build does.) (A `?.[i]` that ends a chain anywhere else, as in
+ends a `??` chain, `h?.xs[5] ?? 0`: under `--allow-panics` it panics past the
+end where Node gives `0`, exactly as the strict build does.) (A `?.[i]` that ends a chain anywhere else, as in
 `const x = xs?.[0]`, is refused as a chain with no default.) And an optional
 call `f?.()` is refused (`NL1068`): narrow `f` with `!== null` and call it.
 

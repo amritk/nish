@@ -35,6 +35,14 @@ splits the array across as many threads as the machine has and the length is
 worth. `f` is a top-level function named at the call, or an arrow written
 there.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/threads` keeps
+panic sites no proof removes yet, among them `parallelMapInto`'s check that
+`dst` is long enough, and the examples index arrays and add numbers without a
+guard the compiler reads. A test such as `i < xs.length` before an index, or
+a bound on a sum, proves those in your own code; the library calls will build
+under the default once the standard library is made panic-free.
+
 <!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto`, whose length check no proof removes yet; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
@@ -71,16 +79,19 @@ export const main = (): i32 => {
   With a checksum the compiler vectorises, or four times the work per
   element, the same map is above 3x. The figures are in
   [BENCHMARKS.md](../../BENCHMARKS.md#scheduling-a-divided-region).
-- **`dst` must be at least as long as `src`**, or the call panics before it
-  writes anything. `src` and `dst` may be the same array.
+- **`dst` must be at least as long as `src`.** No proof removes that check
+  yet, so a call is refused by default; under `--allow-panics` a shorter
+  `dst` panics before the call writes anything. `src` and `dst` may be the
+  same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
   and no output: not `console.log`, `console.error`, `write`, `writeError` or
   `process.exit` — and **answers a number, a `boolean`, an enum, a `string`, or
   an array of numbers, booleans or enums** (a reduce's `f` only the first
   three; see below). It may
   look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
-  but not change or iterate one, and it may `panic`: if several elements panic at once, only the first
-  prints its message, and the program exits 1.
+  but not change or iterate one, and in a program built with
+  `--allow-panics` it may `panic`: if several elements panic at once, only
+  the first prints its message, and the program exits 1.
 
   It may
   build strings and arrays on the way to its answer; they are freed after each
@@ -451,8 +462,9 @@ export const main = (): i32 => {
   in a shared `Map` or `Set` (`get`, `has`, `size`) is a read, so tasks may
   share a table that way; changing it, or walking it with `for...of`, is a
   write. Handing a helper a string from a shared array (`check(hashes[k])`)
-  is a read too: a string has nothing to write into. A task may `panic`: if several threads panic at once, only the first
-  prints its message, and the program exits 1.
+  is a read too: a string has nothing to write into. In a program built with
+  `--allow-panics`, a task may `panic`: if several threads panic at once, only
+  the first prints its message, and the program exits 1.
 - **A task may `wipe` what it made.** An array the task, or a function it
   calls, allocates itself (`const buf = new Array<u8>(n)`) is its own, so
   `wipe(buf)` before it returns is not a write another thread can see.
@@ -614,8 +626,9 @@ If the system cannot start one, out of threads or of
 memory for the stack, the program ends with exit 1 and
 `nish: cannot start a thread for scopeWithStack: out of threads or of memory for its stack`.
 The smallest size is 131072 bytes (128 KiB). Below it,
-a number written at the call is refused ([below](#a-stack-below-the-minimum))
-and a computed one panics with
+a number written at the call is refused ([below](#a-stack-below-the-minimum)),
+and a computed one is checked while the program runs and, under
+`--allow-panics`, panics with
 `scopeWithStack: a stack of 65536 bytes is below the minimum of 131072`.
 
 The size is for a scope's tasks only. `parallelMap`, `parallelFrom` and the
@@ -989,8 +1002,10 @@ route 3: 1 hits, 64 bytes
   `compareExchange(i, expected, desired)`, each doing to element `i` what
   `AtomicI32`'s does to its counter. `length` says how many elements there
   are; it is fixed when the array is made.
-- **An index out of range stops the program**, as it does for any array:
-  `index out of range: 16 >= 16`, exit status 1.
+- **An index out of range is never used**, as for any array: by default the
+  compiler refuses an index it cannot prove in range, and under
+  `--allow-panics` the index is checked while the program runs and one out
+  of range stops it: `index out of range: 16 >= 16`, exit status 1.
 - **The rules are the atomic's.** Only call its methods; don't touch it in the
   scope's block once the first task is spawned; scopes opened by one `using`
   don't share one; make the updates commute. An `AtomicI64Array` holds `i64`s

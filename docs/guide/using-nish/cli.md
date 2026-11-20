@@ -277,6 +277,11 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
+This example builds with [`--allow-panics`](#asking-what-a-program-can-do): a
+`string` result from C is tested for `NULL` as the program runs, a check no
+proof removes. Declare the result `string | null` and test it for `null` to
+build it under the default.
+
 <!-- allow-panics: reads a C pointer that may be `NULL` -->
 <!-- nish:ok --allow-panics -->
 ```ts
@@ -289,7 +294,7 @@ export const main = (): i32 => {
 ```
 
 ```console
-$ nish run version.ts
+$ nish run --allow-panics version.ts
 3.54.1
 ```
 
@@ -729,7 +734,8 @@ must be freed), and `--target <triple>` writes the module for another target.
 
 `nish run` answers these codes until the program starts, and the program's own
 exit status after that — the value `main` returns, `1` for a panic such as an
-index out of range, or `128 + n` for a signal.
+index out of range in a program built with `--allow-panics`, or `128 + n` for a
+signal.
 
 ## Asking what a program can do
 

@@ -23,6 +23,15 @@ the slot's `next()` answers `H1_WS_MESSAGE` (the message in `conn.data`,
 `conn.sendFrame(fin, opcode, buf, off, len)` and end with
 `conn.closeWebSocket(code)`.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/websocket`
+keeps panic sites no proof removes yet, so a call to it is refused by default
+until the standard library is made panic-free, and the examples add up
+numbers nothing bounds, which a guard that bounds them, such as a test
+against a limit, proves. The client also calls `crypto.getRandomValues`, which
+exits the program when the system has no random bytes to give, and calls
+`panic` itself; a proof removes neither.
+
 <!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

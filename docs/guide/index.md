@@ -94,7 +94,8 @@ export const main = (): i32 => {
 `i32` is a 32-bit integer, `export const main` is where the program starts and
 its return value is the exit status. Nothing bounds `total + i * i`, so the
 compiler cannot prove it fits an `i32`, and by default it refuses a program
-that could panic. `--allow-panics` builds it with the addition checked
+that could panic; the error names the guard that would prove it, such as a
+bound on `limit`. `--allow-panics` builds it with the addition checked
 instead: if it overflowed, the program would stop with a message rather than
 wrap round. Save it as `squares.ts` and
 `nish run --allow-panics squares.ts` prints `1² + … + 10² = 385`.

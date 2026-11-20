@@ -27,6 +27,11 @@ wherever it can prove that nothing allocated inside them is still reachable
 afterwards, and whatever is left in the arena is released when `main`
 returns.
 
+Several examples on this page do `i32` arithmetic nothing bounds, so the
+compiler cannot prove it fits and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
+as the compile error suggests, builds them under the default.
+
 <!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts
@@ -83,7 +88,9 @@ None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 
 - you never free anything but a [region](regions.md), and freeing one twice
-  stops the program with a message rather than corrupting memory;
+  is caught rather than corrupting memory: a program that uses regions
+  builds with `--allow-panics` for now, and the second free stops it with a
+  message;
 - a value you can still reach is never released under you;
 - there are no lifetimes or ownership annotations to write.
 
@@ -296,7 +303,7 @@ referred to by its index, with `-1` for none. On the same tree that took
 then an index into a column, which is harder to follow than a field, so keep
 it to the tables that are hot. `uncheckedGet` and `uncheckedSet` from
 `nish:unsafe` skip the bounds check there; an index out of range is then
-undefined behaviour rather than a stopped program, so they belong in that
+undefined behaviour rather than a compile error or a stopped program, so they belong in that
 table's code and nowhere else. The programs and the full measurements are in
 [the benchmark](https://github.com/amritk/nish/tree/main/bench/wp48-refs).
 

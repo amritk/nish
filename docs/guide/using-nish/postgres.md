@@ -20,6 +20,15 @@ and every request gets its rows, or word that there were none. The connection
 asks for nothing a round trip does not need: the statement is prepared, bound
 and executed in one write.
 
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do).
+`nish/net/postgres` keeps panic sites no proof removes yet, so a call to it is
+refused by default until the standard library is made panic-free;
+`crypto.getRandomValues` exits the program when the system has no random bytes
+to give, and buffer slices are checked at run time, neither of which a proof
+removes yet. The sums and array sizes in your own code build under the default
+once a guard bounds them, such as a test that a count is below a limit.
+
 <!-- allow-panics: calls a file or entropy builtin that exits on failure; slices with bounds it does not test; does integer arithmetic nothing bounds; calls `std/net/postgres.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts

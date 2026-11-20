@@ -95,7 +95,13 @@ too.
 class over it, `Box<Shape>` or `Stack<Shape>`, holds the union in each `T`
 slot, a generic function called with one binds its type parameter to the
 union, and a `Result` can carry one on either side. A variant converts here
-too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast:
+too, so `new Box<Shape>(new Circle())` and `Ok(new Square())` need no cast.
+The examples from here on build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): some add and index with
+nothing bounding them, which bounding the operands and testing
+`i < xs.length` before an index would fix, and the JSON one calls
+standard-library code that keeps panic sites no proof removes yet, which will
+build under the default once that code is made panic-free:
 
 <!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
