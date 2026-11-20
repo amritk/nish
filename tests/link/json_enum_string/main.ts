@@ -1,12 +1,14 @@
 // Typed JSON over a string enum: a field, an array, a `| null` array, a
-// `Map` value and a union tag read the member's string and write it back.
+// `Map` value and a union tag read the member's string and write it back,
+// and one document in `shapes.ts` holds a field, an array, a `| null` array and
+// a union tag at once.
 // A string that is no member's value, and a value that is not a string, are
 // `JSON_DECODE_TYPE` (-20), and the field keeps the member it held. Each line
 // that ends in `true`/`false` says whether the encoding is the input again.
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
-import { Shape, figure } from "./shapes.ts";
+import { Shape, account, figure } from "./shapes.ts";
 
 enum Role {
   Admin = "admin",
@@ -85,6 +87,8 @@ export const main = (): i32 => {
   figure(`{"kind":"amoeba"}`);
   figure(`{"kind":"blob"}`);
   figure(`{"kind":"Circle","r":1}`);
+  account(`{"shape":"blob","shapes":["square","circle"],"past":["circle"],"figure":{"kind":"amoeba"}}`);
+  account(`{"shape":"circle","shapes":[],"past":null,"figure":{"kind":"square","side":2}}`);
   // The enum's strings cross the module boundary with its type.
   console.log(String(Shape.Blob));
   return 0;

@@ -2669,6 +2669,21 @@
                           ]
                         }
                       },
+                      "/scram": {
+                        "type": "page",
+                        "title": "scram",
+                        "filepath": "docs/reference/crypto/scram.md",
+                        "head": {
+                          "title": "scram · Nish",
+                          "meta": [{ "property": "og:title", "content": "scram" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/crypto/scram"
+                            }
+                          ]
+                        }
+                      },
                       "/sha1": {
                         "type": "page",
                         "title": "sha1",
