@@ -326,8 +326,8 @@ its rows are binary too. `PgBinaryArray` walks a one-dimensional `int2[]`,
 
 <scalar-detail title="Authentication">
 
-SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`). The
-password arrives as a `Secret<u8[]>`; the connection keeps a copy in a holder
+SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`), the
+key derivation and proofs from `nish/crypto/scram`. The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a holder
 that is wiped as soon as the proof is computed, or when the connection fails
 or is disposed. The server's signature is checked in constant time before
 `AuthenticationOk` is believed, and an `AuthenticationOk` that skips the end

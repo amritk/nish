@@ -834,7 +834,11 @@ leaves the IR unchanged.
   `nish run`. Every other build refuses every class at the first test: IR
   alone (`-o` with no `--link`), which a host may link; a wasm32 target;
   `--emit-ts`, `--emit-header`, `--emit-napi`, `--emit-napi-async` and
-  `--emit-dts`; and a program that declares a C function. The report is
+  `--emit-dts`; and a program that declares a C function. Under
+  `--emit-header` the line is the automatic rule's verdict
+  (`native: --emit-header`), not the layout an explicit `implements Compact`
+  class gets in the header build: that class still narrows its links
+  ([Compact classes](../language/compact-classes.md)). The report is
   printed once the program checks cleanly and passes the build's own
   refusals, so a program with errors prints none, and nor does one with no
   `main` under `--link`, `--emit-ts`, `--sandbox` or `nish run`.

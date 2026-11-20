@@ -1450,14 +1450,19 @@ class Cell implements Compact {
   one as a full `struct Cell *`. The C host links the range runtime
   (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
   default runtime a program fails to link as soon as one of its modules
-  allocates, an 8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
   shared library another process loads is not supported.
 - **A compact class is refused where Node or the runtime would read its
   layout as full pointers**, each with its own code: in a build with `--emit-napi` or
-  `--emit-napi-async`, also beside `--emit-header`, at the class (NL4021,
-  `compact_reject_napi`, `compact_reject_header_napi`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`), because
-  the addon runs in Node's process, which Nish does not own; as a
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and the constructor
+  of each exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
