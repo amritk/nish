@@ -25800,6 +25800,22 @@ if (dealtHere("cliChecks")) {
           fs.readFileSync(plainLl, "utf8") === fs.readFileSync(explainedLl, "utf8"),
         `${shown(plain)}\n${shown(explained)}`
       )
+      // A class the rule picks gets the same `ref32` TBAA node as one marked
+      // `implements Compact` (stage 2b): some load or store in the IR carries
+      // an access tag whose type is that node. The refused 16-byte node gets
+      // no `ref32` node at all.
+      const ir = plain.status === 0 ? fs.readFileSync(plainLl, "utf8") : ""
+      const ref32 = /^(![0-9]+) = !\{!"ref32", /m.exec(ir)
+      const tags = ref32 === null ? [] : [...ir.matchAll(new RegExp(`^(![0-9]+) = !\\{![0-9]+, ${ref32[1]}, i64 [0-9]+\\}$`, "gm"))].map((m) => m[1])
+      const linkAccess = tags.some((tag) => new RegExp(`^\\s+(?:%[^ ]+ = load|store) [^\\n]*!tbaa ${tag}$`, "m").test(ir))
+      const picked = want[0].includes(": compact, ")
+      check(
+        picked
+          ? `explain layout: the link loads and stores of ${file}'s picked class carry the ref32 TBAA node`
+          : `explain layout: ${file}'s refused class has no ref32 TBAA node`,
+        plain.status === 0 && (picked ? linkAccess : ref32 === null),
+        `ref32 node: ${ref32 === null ? "none" : ref32[1]}, link tags: ${tags.join(" ") || "none"}\n${shown(plain)}`
+      )
     }
     // The holder-only benches of §5.5 (tests/layout/compact-bench/): #1736's
     // rule picked each `std/` class for a holder's saving alone, and test 3
