@@ -428,8 +428,14 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     // Against the method name, as `errorAtProperty` reports it, so that the
     // fix can carry the whole call.
     const name = new Node(NodeKind.Ident, access.end - access.text.length, access.end)
-    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`
-    ctx.errorFix(name, message, toStringFix(ctx, expr, receiver))
+    const fix = toStringFix(ctx, expr, receiver)
+    // A number's `toString()` names the spelling its fix writes (#1632).
+    const hint =
+      fix.length > 0 && isNumeric(receiver)
+        ? `; use a template literal: \`\${${ctx.textOf(unwrapParens(receiverExpr))}}\``
+        : ""
+    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}${hint}`
+    ctx.errorFix(name, message, fix)
     return T_ERROR
   }
   const info = structOf(ctx, receiver)
