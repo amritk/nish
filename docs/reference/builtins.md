@@ -1633,7 +1633,7 @@ nanoseconds since an arbitrary origin.
 
 The high 64 bits of the 128-bit product of `a` and `b`, the half a `u64`
 `a * b` drops (WP41). Both operands are `u64`. Any other type is refused as
-`` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2805):
+`` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2819):
 `u32`, `i64`, `number` and a ranged integer included. A bare numeric
 literal is read as a `u64`, so `mulHigh(x, 3)` works, and one that does not
 fit is the literal's own refusal. The call takes exactly two arguments, and
