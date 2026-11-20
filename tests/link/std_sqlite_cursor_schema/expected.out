@@ -1,0 +1,58 @@
+PASS  beginRead
+PASS  a table by its columns opens
+PASS    in another order is refused
+PASS    one column short
+PASS    one column over
+PASS    the rowid named again
+PASS    an empty list
+PASS    in another case
+PASS  an index by its key and rowid opens
+PASS    without the rowid is refused
+PASS    key columns swapped
+PASS    a table's column over
+PASS    `desc` in lower case
+PASS  a partial index opens
+PASS  a NOCASE index is refused
+PASS    as by NOCASE
+PASS  an index on an expression is refused
+PASS  a TEXT PRIMARY KEY table opens
+PASS    and its primary-key index
+PASS  a WITHOUT ROWID table is refused
+PASS    and an index on one
+PASS    and its primary key
+PASS  a virtual generated column is refused
+PASS    as is one less it
+PASS  a stored generated column is refused
+PASS  a NOCASE column of a table opens
+PASS  a view is refused
+PASS  the schema table is refused
+PASS  a temp table is refused
+PASS    beginRead
+PASS    is not in main
+PASS    nor is temp.tt
+PASS  endRead
+PASS  without rtree, CREATE VIRTUAL TABLE fails
+PASS  short record: ADD COLUMN with a DEFAULT and without
+PASS  short record: beginRead
+PASS  short record: the old row
+PASS    reads its own column
+PASS    the DEFAULT column answers SQLITE_SCHEMA
+PASS    and columnI64 0 there, not the DEFAULT
+PASS    the column without a DEFAULT answers SQLITE_SCHEMA
+PASS    and columnInto there SQLITE_SCHEMA
+PASS  short record: the row written after the ALTER
+PASS    reads the DEFAULT column's own value
+PASS    reads the other new column
+PASS  short record: endRead
+PASS  names: a comma and a trailing DESC
+PASS  names: beginRead
+PASS    a column name with a comma is SQLITE_SCHEMA
+PASS    an index on a column named ... DESC is SQLITE_SCHEMA
+PASS    a descending index on a plain name opens
+PASS  names: endRead
+PASS  close
+PASS  a UTF-16 database
+PASS    beginRead
+PASS    is refused
+PASS    close
+std_sqlite_cursor_schema: 57 passed, 0 failed, 0 skipped

@@ -35,6 +35,9 @@ const OPEN_BRACKET: i32 = 91
 const CLOSE_BRACKET: i32 = 93
 const HOST_SHAPE: string = ": `nish.host` is an array of strings, each the path of a host module relative to `package.json`"
 const HOST_PATH: string = ": a `nish.host` entry is a host module's path relative to the directory `package.json` is in"
+const LINK_SHAPE: string = ": `nish.link` is an object whose `libraries` and `sources` are arrays of strings, and only the root package's may grant a dependency's under `dependencies`" [exported]
+const LINK_ENTRY: string = ": a `nish.link` library is a name `-l` takes, of letters, digits, `_`, `.`, `+` and `-` and not starting with `-`, and a source is a `.c` file inside the package, by its path relative to `package.json`" [exported]
+const LINK_UNGRANTED: string = ", which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it" [exported]
 const MANIFEST_FOUND: i32 = 0 [exported]
 const MANIFEST_NO_FILE: i32 = 1
 const MANIFEST_OTHER_MODE: i32 = 2 [exported]
@@ -58,7 +61,7 @@ struct ManifestMembers (class) size=48 align=8
   field valueEnd: i32[] index=4 offset=32
   field broken: i32 index=5 offset=40
   constructor -> @ManifestMembers.constructor
-struct NishManifest (class) size=48 align=8 exported
+struct NishManifest (class) size=56 align=8 exported
   field problem: string index=0 offset=0
   field problemStart: i32 index=1 offset=8
   field problemEnd: i32 index=2 offset=12
@@ -69,6 +72,8 @@ struct NishManifest (class) size=48 align=8 exported
   field compatAt: i32 index=7 offset=32
   field netRingsAt: i32 index=8 offset=36
   field netRingsEnd: i32 index=9 offset=40
+  field linkAt: i32 index=10 offset=44
+  field linkEnd: i32 index=11 offset=48
   constructor -> @NishManifest.constructor
 struct ManifestCompat (class) size=16 align=8 exported
   field all: boolean index=0 offset=0
@@ -84,6 +89,18 @@ struct HostManifest (class) size=16 align=8 exported
   field problems: ManifestProblem[] index=1 offset=8
   constructor -> @HostManifest.constructor
   method refuse -> @HostManifest.refuse
+struct LinkRequest (class) size=16 align=8 exported
+  field libraries: ManifestList index=0 offset=0
+  field sources: ManifestList index=1 offset=8
+  constructor -> @LinkRequest.constructor
+struct LinkManifest (class) size=32 align=8 exported
+  field own: LinkRequest index=0 offset=0
+  field grantees: string[] index=1 offset=8
+  field grants: LinkRequest[] index=2 offset=16
+  field problems: ManifestProblem[] index=3 offset=24
+  constructor -> @LinkManifest.constructor
+  method refuse -> @LinkManifest.refuse
+  method grantFor -> @LinkManifest.grantFor
 struct CapabilityManifest (class) size=72 align=8 exported
   field problem: string index=0 offset=0
   field problemStart: i32 index=1 offset=8
@@ -235,14 +252,14 @@ function manifestRepeatedMember(members: ManifestMembers): i32 -> @manifestRepea
   local +2:9 j: i32 (let)
 function NishManifest.constructor(this: NishManifest): void -> @NishManifest.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=48 writesThrough=true captured=false
+  pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function manifestSpanEnd(start: i32, end: i32): i32 -> @manifestSpanEnd
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end start
   stackSites=0 stackLocals=0
 function manifestNishProblem(problem: string, start: i32, end: i32): NishManifest -> @manifestNishProblem
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
   escaping: end problem start
   calls: NishManifest.constructor manifestSpanEnd nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -250,7 +267,7 @@ function manifestNishProblem(problem: string, start: i32, end: i32): NishManifes
   callee +0:15 new NishManifest -> @NishManifest.constructor
   callee +3:20 manifestSpanEnd -> @manifestSpanEnd
 function manifestNish(manifest: string, condition: string): NishManifest -> @manifestNish [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
   escaping: manifest
   calls: NishManifest.constructor manifestMalformedAt manifestMembers manifestNishProblem manifestRepeatedMember manifestSkipBlank nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
@@ -277,7 +294,7 @@ function manifestNish(manifest: string, condition: string): NishManifest -> @man
   callee +50:16 manifestNishProblem -> @manifestNishProblem
   local +61:11 shaped: boolean (let)
   callee +68:16 manifestNishProblem -> @manifestNishProblem
-  callee +75:14 manifestNishProblem -> @manifestNishProblem
+  callee +80:14 manifestNishProblem -> @manifestNishProblem
 function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNoPanic [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: at manifest
@@ -368,6 +385,147 @@ function manifestHost(manifest: string, at: i32, end: i32): HostManifest -> @man
   callee +20:7 HostManifest.refuse -> @HostManifest.refuse
   callee +21:16 manifestLeavesRoot -> @manifestLeavesRoot
   callee +22:7 HostManifest.refuse -> @HostManifest.refuse
+function LinkRequest.constructor(this: LinkRequest): void -> @LinkRequest.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: ManifestList.constructor nish_alloc_struct
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:22 new ManifestList -> @ManifestList.constructor
+  callee +1:20 new ManifestList -> @ManifestList.constructor
+function LinkManifest.constructor(this: LinkManifest): void -> @LinkManifest.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: LinkRequest.constructor nish_alloc_struct
+  pointer this: size=32 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:16 new LinkRequest -> @LinkRequest.constructor
+function LinkManifest.refuse(this: LinkManifest, message: string, start: i32, end: i32): void -> @LinkManifest.refuse [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: end message start
+  calls: ManifestProblem.constructor manifestSpanEnd nish_alloc_struct nish_array_grow
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:24 new ManifestProblem -> @ManifestProblem.constructor
+  callee +0:60 manifestSpanEnd -> @manifestSpanEnd
+function LinkManifest.grantFor(this: LinkManifest, name: string): LinkRequest -> @LinkManifest.grantFor [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: LinkRequest.constructor nish_alloc_struct nish_str_eq
+  pointer this: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 at: i32 (const)
+  callee +1:67 new LinkRequest -> @LinkRequest.constructor
+function manifestLinkLibrary(name: string): boolean -> @manifestLinkLibrary
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isDigit
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 code: i32 (const)
+  local +3:11 plain: boolean (const)
+  callee +4:7 isDigit -> @isDigit
+  local +5:11 inner: boolean (const)
+function manifestPrintableAscii(text: string): boolean -> @manifestPrintableAscii
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 code: i32 (const)
+function manifestLinkSourceProblem(path: string): string -> @manifestLinkSourceProblem
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: path
+  calls: manifestAbsolutePath manifestLeavesRoot manifestPrintableAscii nish_panic_index nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+  callee +0:8 manifestPrintableAscii -> @manifestPrintableAscii
+  callee +3:7 manifestAbsolutePath -> @manifestAbsolutePath
+  callee +6:7 manifestLeavesRoot -> @manifestLeavesRoot
+function manifestKeepLinkEntries(manifest: string, kind: string, read: ManifestList, at: i32, into: ManifestList, out: LinkManifest): void -> @manifestKeepLinkEntries
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at kind manifest
+  calls: LinkManifest.refuse manifestJsonKind manifestKeepLinkEntries manifestLinkLibrary manifestLinkSourceProblem nish_array_grow nish_str_concat nish_str_eq
+  pointer read: size=24 writesThrough=false captured=false passedTo=manifestKeepLinkEntries#2
+  pointer into: size=24 writesThrough=false captured=false passedTo=manifestKeepLinkEntries#4
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0 manifestKeepLinkEntries#5
+  stackSites=0 stackLocals=0
+  local -15:9 entry: string (const)
+  local -14:9 start: i32 (const)
+  local -13:9 stop: i32 (const)
+  local -12:9 problem: string (const)
+  callee -12:40 manifestLinkSourceProblem -> @manifestLinkSourceProblem
+  callee -10:5 LinkManifest.refuse -> @LinkManifest.refuse
+  callee -9:10 manifestJsonKind -> @manifestJsonKind
+  callee -5:39 manifestLinkLibrary -> @manifestLinkLibrary
+  callee -4:5 LinkManifest.refuse -> @LinkManifest.refuse
+  callee -2:5 LinkManifest.refuse -> @LinkManifest.refuse
+  callee +4:3 manifestKeepLinkEntries -> @manifestKeepLinkEntries
+function manifestReadLinkList(manifest: string, at: i32, end: i32, kind: string, into: ManifestList, out: LinkManifest): void -> @manifestReadLinkList
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via LinkManifest.refuse
+  escaping: at end kind manifest
+  calls: LinkManifest.refuse ManifestList.constructor manifestKeepLinkEntries manifestReadList manifestSkipBlank nish_panic_index nish_panic_overflow nish_str_concat
+  pointer into: size=24 writesThrough=false captured=false passedTo=manifestKeepLinkEntries#4
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 manifestKeepLinkEntries#5 LinkManifest.refuse#0
+  stackSites=1 stackLocals=1
+  callee +0:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local +3:9 read: ManifestList (const)
+  callee +3:16 new ManifestList -> @ManifestList.constructor
+  callee +4:3 manifestReadList -> @manifestReadList
+  callee +5:3 manifestKeepLinkEntries -> @manifestKeepLinkEntries
+  local +8:9 last: i32 (const)
+  local +9:9 close: i32 (const)
+  callee +9:17 manifestSkipBlank -> @manifestSkipBlank
+  local +10:9 comma: boolean (const)
+  local +11:9 closeAt: i32 (const)
+  callee +11:27 manifestSkipBlank -> @manifestSkipBlank
+  callee +13:5 LinkManifest.refuse -> @LinkManifest.refuse
+function manifestReadLinkObject(manifest: string, at: i32, end: i32, what: string, grants: boolean, into: LinkRequest, out: LinkManifest): void -> @manifestReadLinkObject
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via LinkManifest.refuse
+  escaping: at end manifest
+  calls: LinkManifest.refuse manifestMembers manifestReadLinkGrants manifestReadLinkList manifestRepeatedMember nish_panic_index nish_str_concat nish_str_eq
+  pointer into: size=16 writesThrough=false captured=false
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 manifestReadLinkList#5 manifestReadLinkList#5 manifestReadLinkGrants#3 LinkManifest.refuse#0
+  stackSites=0 stackLocals=0
+  local +0:9 members: ManifestMembers (const)
+  callee +0:19 manifestMembers -> @manifestMembers
+  callee +2:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local +5:9 repeated: i32 (const)
+  callee +5:20 manifestRepeatedMember -> @manifestRepeatedMember
+  callee +7:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local +14:7 k: i32 (let)
+  local +22:11 key: string (const)
+  local +23:11 valueAt: i32 (const)
+  local +24:11 valueEnd: i32 (const)
+  callee +26:7 manifestReadLinkList -> @manifestReadLinkList
+  callee +28:7 manifestReadLinkList -> @manifestReadLinkList
+  callee +30:7 manifestReadLinkGrants -> @manifestReadLinkGrants
+  callee +32:7 LinkManifest.refuse -> @LinkManifest.refuse
+function manifestReadLinkGrants(manifest: string, at: i32, end: i32, out: LinkManifest): void -> @manifestReadLinkGrants
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at end manifest
+  calls: LinkManifest.refuse LinkRequest.constructor manifestMembers manifestPrintableAscii manifestReadLinkObject manifestRepeatedMember nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  pointer out: size=32 writesThrough=false captured=false passedTo=LinkManifest.refuse#0 LinkManifest.refuse#0 LinkManifest.refuse#0 manifestReadLinkObject#6
+  stackSites=0 stackLocals=0
+  local -41:9 members: ManifestMembers (const)
+  callee -41:19 manifestMembers -> @manifestMembers
+  callee -39:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local -36:9 repeated: i32 (const)
+  callee -36:20 manifestRepeatedMember -> @manifestRepeatedMember
+  callee -34:5 LinkManifest.refuse -> @LinkManifest.refuse
+  local -27:7 k: i32 (let)
+  callee -19:10 manifestPrintableAscii -> @manifestPrintableAscii
+  callee -18:7 LinkManifest.refuse -> @LinkManifest.refuse
+  local -10:11 grant: LinkRequest (const)
+  callee -10:19 new LinkRequest -> @LinkRequest.constructor
+  callee -9:5 manifestReadLinkObject -> @manifestReadLinkObject
+function manifestLink(manifest: string, at: i32, end: i32, root: boolean): LinkManifest -> @manifestLink [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
+  sharedWrite: via manifestReadLinkObject
+  escaping: at end manifest root
+  calls: LinkManifest.constructor manifestReadLinkObject nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local +0:9 out: LinkManifest (const)
+  callee +0:15 new LinkManifest -> @LinkManifest.constructor
+  callee +4:3 manifestReadLinkObject -> @manifestReadLinkObject
 function CapabilityManifest.constructor(this: CapabilityManifest): void -> @CapabilityManifest.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: ManifestList.constructor nish_alloc_struct

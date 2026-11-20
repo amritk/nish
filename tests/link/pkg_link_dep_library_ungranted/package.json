@@ -1,0 +1,8 @@
+{
+  "name": "pkg-link-dep-library-ungranted",
+  "private": true,
+  "nish": {
+    "capabilities": { "dependencies": { "pkg_mul": ["ffi"] } },
+    "link": { "dependencies": { "pkg_mul": { "sources": ["c/mul.c"] } } }
+  }
+}

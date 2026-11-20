@@ -15,6 +15,7 @@ usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
        nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
        nish upgrade [<version>] [--check]     install a newer release
+       nish c-import <header> -o <file.ts>    write declarations from a C header
        nish -v, --version | -h, --help
 ```
 
@@ -703,6 +704,15 @@ A cache another user could have written is ignored and replaced, so nobody
 else chooses what the line says. What the check trusts is in the
 [security record](../../security/release.md).
 
+## Binding a C header: `nish c-import`
+
+`nish c-import <header> -o <file.ts>` reads a C header through `clang` and
+writes a Nish module of `declare function`s, `declare class`es and constants
+for it, with a comment listing what it could not bind. `--overrides <file>`
+adds what the header cannot say (which pointers may be `NULL`, which results
+must be freed), and `--target <triple>` writes the module for another target.
+[Binding a C library](c-import.md) is the whole story.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -710,7 +720,7 @@ else chooses what the line says. What the check trusts is in the
 | 0 | success |
 | 1 | the program was rejected: a compile error, or an input file that does not exist |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
-| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed |
+| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed; for `nish c-import`, `clang` cannot run |
 | 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own
@@ -786,10 +796,11 @@ leaves the IR unchanged.
 
   Use it for a simulation a server and a browser both run and must agree on
   ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
-- **`--compat`** selects the compatibility dialect, which will accept more of
-  TypeScript than Nish does by default. It has no feature yet, so today it
-  means one thing: a bare `number` is a 64-bit float, as `--number-mode f64`
-  makes it. `--compat=<feature>,...` allows only the features it names, and a
+- **`--compat`** selects the compatibility dialect, which accepts more of
+  TypeScript than Nish does by default: a bare `number` is a 64-bit float, as
+  `--number-mode f64` makes it, and its features (`nullish`,
+  `optional-chaining`, `string-switch`, `for-of-string`) admit forms the strict dialect refuses.
+  `--compat=<feature>,...` allows only the features it names, and a
   name that is no feature is a usage error (exit 2). `"compat"` in your
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too

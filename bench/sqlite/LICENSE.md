@@ -19,7 +19,8 @@ challenge's copyright notice:
   differ, so its rows are not the challenge's rows. Its workloads' SQL is the
   challenge's `SPEC.md` queries (a post with its author and like count, the
   feed, the insert with `RETURNING`); the loops around them are written here.
-- `main.ts` uses the same table sizes and the same `SPEC.md` queries.
+- `main.ts` and `twin.rs` use the same table sizes and the same `SPEC.md`
+  queries.
 
 `run.mjs` and `README.md` copy nothing; they only name the sizes.
 

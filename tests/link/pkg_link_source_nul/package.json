@@ -1,0 +1,5 @@
+{
+  "name": "pkg-link-source-nul",
+  "private": true,
+  "nish": { "link": { "sources": ["c/add.c\u0000.h"] } }
+}

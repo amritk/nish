@@ -607,7 +607,8 @@ value, so nothing is boxed; `null` takes its type from context. A
   (`reject_nullish_element`). A left operand that cannot be `null` (a scalar,
   or a nullable already narrowed to `T`) keeps Phase 0's refusal,
   `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-  (`reject_nullish`, `reject_nullish_nullable`).
+  (`reject_nullish`, `reject_nullish_nullable`); the `nullish` feature of
+  [the compatibility dialect](semantics-decisions.md#the-compatibility-dialect) admits it.
 - **An optional chain**: `a?.b?.c ?? d` reads each link only where the
   receiver before its `?.` is not `null`, and answers `d` where one is, as
   TypeScript does. A `?.` is allowed only in a chain whose value is the left
@@ -617,7 +618,9 @@ value, so nothing is boxed; `null` takes its type from context. A
   `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` ``
   (`reject_optional_chain`, `reject_optional_chain_paren`,
   `reject_optional_chain_argument`, `reject_optional_chain_assign`,
-  `reject_optional_chain_template`). A link reads a field, a string's or an
+  `reject_optional_chain_template`); the `optional-chaining` feature of
+  [the compatibility dialect](semantics-decisions.md#the-compatibility-dialect) admits a chain that
+  is a statement of its own. A link reads a field, a string's or an
   array's `length`, or calls a method, and its receiver is read as `T`
   (`optional_chain_field`, `optional_chain_order`,
   `optional_chain_generic`, `tests/link/optional_chain_modules`). The chain's value is its last link's, typed with
@@ -630,8 +633,14 @@ value, so nothing is boxed; `null` takes its type from context. A
   `` `a` is never `null` here, so `?.` has nothing to skip: write `.` ``
   (`reject_optional_chain_never_null`, `reject_optional_chain_narrowed`,
   `reject_optional_chain_this`, `reject_optional_chain_namespace`). `?.[i]`
-  and `f?.()` stay refused (`reject_optional_chain_element`,
-  `reject_optional_call`), a chain that ends in an element read is the
+  and `f?.()` stay refused: an element read inside a chain is
+  `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) ``
+  (`reject_optional_chain_element_inner`, which `optional-chaining` admits),
+  one that ends the chain is
+  `` An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
+  (NL1067, `reject_optional_chain_element`), and an optional call is
+  `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first ``
+  (NL1068, `reject_optional_call`), in both dialects. A chain that ends in an element read is the
   element-read refusal above (`reject_optional_chain_element_last`), and one
   that ends in `get` is
   `` `h?.counts.get("a")` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers ``

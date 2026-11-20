@@ -80,6 +80,7 @@ import {
 import {
   checksArgumentRange,
   emitBuiltinCall,
+  emitFfiNullTest,
   emitIdentifierBuiltinCall,
   emitNamespaceProperty,
   emitParamRangeChecks,
@@ -124,6 +125,7 @@ import {
 } from "./emit-result"
 import {
   emitFusedCall,
+  emitChainStatement,
   emitChainTest,
   emitLibraryCopies,
   emitMapIntrinsic,
@@ -173,7 +175,13 @@ import {
   emitTemplate,
   isEnumStringCall,
 } from "./emit-strings"
-import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
+import {
+  dottedName,
+  intrinsicType,
+  isAssignmentOperator,
+  isOptionalChain,
+  receiverIsValue,
+} from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {
@@ -1502,7 +1510,11 @@ export class Emitter {
         }
         return
       case NodeKind.ExprStmt:
-        this.emitExpression(stmt.children[0])
+        if (isOptionalChain(stmt.children[0])) {
+          emitChainStatement(this, stmt.children[0]) // WP28 C1
+        } else {
+          this.emitExpression(stmt.children[0])
+        }
         return
       case NodeKind.Block:
         this.emitBlock(stmt)
@@ -2158,6 +2170,16 @@ export class Emitter {
     // (`emitForeignStringResult`).
     if (sig.foreign() && this.table.stripNull(sig.returnType) === T_STRING) {
       answer = emitForeignStringResult(this, sig, answer)
+    } else if (sig.foreign() && this.table.isOpaque(sig.returnType)) {
+      // WP66 S3: a non-null opaque class is C's promise of a pointer, and a
+      // `NULL` that broke it would pass every `!== null` test unseen, so it
+      // panics here as a `string` result does; `Name | null` takes it as null.
+      const name = this.table.typeName(sig.returnType)
+      emitFfiNullTest(
+        this,
+        answer,
+        `\`${sig.sourceName}\` returned NULL for a \`${name}\` result; declare it \`${name} | null\``
+      )
     }
     if (keepSize >= 0) {
       return keepElement(this, this.llvmAbi(sig.returnType, calleePrivate), answer, keepSize, mark)

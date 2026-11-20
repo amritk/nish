@@ -125,11 +125,13 @@
 # passes it through.
 #
 # SQLite: an input .ll that declares an `sqlite3_*` or `nishsqlite_*` function
-# also compiles and links every runtime/sqlite/*.c, the vendored amalgamation
-# (runtime/sqlite/README.md). Any other program compiles none of it. sqlite3.c
-# is compiled to native code at the profile's level, even where the profile
-# compiles to LTO bitcode. The options are most of SQLite's recommended set
-# (see the defaults below), with THREADSAFE=0 (=2 under --threads).
+# also compiles and links runtime/sqlite/nish-sqlite.c, the adapter, which
+# includes sqlite3.c, the vendored amalgamation (runtime/sqlite/README.md), so
+# it can call SQLite's internal B-tree functions (docs/sqlite-cursor.md): every
+# *.c there but sqlite3.c is a unit. Any other program compiles none of it.
+# The unit is compiled to native code at the profile's level, even where the
+# profile compiles to LTO bitcode. The options are most of SQLite's recommended
+# set (see the defaults below), with THREADSAFE=0 (=2 under --threads).
 # NISH_SQLITE_CFLAGS is appended to them: its first line, split on whitespace
 # with no quoting, and a relative -I in it names a directory below
 # runtime/sqlite/, where each unit is compiled. A -D or -U in it for one of
@@ -150,7 +152,7 @@
 #                            runtime.c input, after compiling every other input
 #                            with its own $CC -c, all at once. The link line is
 #                            the one the profile always uses.
-#   --sqlite-objects <dir>   compile runtime/sqlite/*.c alone, into
+#   --sqlite-objects <dir>   compile runtime/sqlite/'s units alone, into
 #                            <dir>/<unit>.o, as a link of a program that calls
 #                            SQLite would, and link nothing. Takes no inputs and
 #                            no -o, and prints nothing on success.
@@ -163,6 +165,19 @@
 #                            not, so the caller keeps every object it compiled
 #                            (`nish run`'s module cache, src/build-cache.ts).
 #                            The inputs' file names must differ.
+#   --link-lib <name>        debug, speed and size only: link the C library
+#                            <name> (-l<name>, after the inputs and before -lm);
+#                            <name> is [A-Za-z0-9_][A-Za-z0-9_.+-]*, so it is
+#                            never a flag. A package's `nish.link.libraries`
+#                            (WP66 S7, docs/security/package-link.md).
+#   --link-source <file.c>   debug, speed and size only: compile the C file, an
+#                            absolute path, with the profile's flags and link
+#                            it with the program. A package's `nish.link.sources`.
+#   --link-depends <file.c>  debug, speed and size only: print, as a make rule
+#                            (clang -M), the files it lists for the compile of
+#                            that source with this profile's flags, and link
+#                            nothing.
+#                            `nish run` keys its cache on them.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -185,6 +200,9 @@ modules_at=""                          # --module-objects <dir>: each X.ll's obj
 memory_mib=""                          # --memory <MiB>: wasm-host's fixed memory (WP50 stage 1)
 wasm_opt=""                            # what the build line says of wasm-opt; set only by wasm-host
 inline_to=""                           # --inline <file.mjs>: wasm-host's bytes as an ES module
+link_libs=()                           # --link-lib <name>: -l<name> on the link line (WP66 S7)
+link_sources=()                        # --link-source <file.c>: a package's own C, compiled into the link
+link_depends=""                        # --link-depends <file.c>: print what its compile reads, then stop
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -207,6 +225,21 @@ while [ $# -gt 0 ]; do
     --inline)
       [ -n "${2-}" ] || { echo "error: --inline needs a file to write" >&2; exit 2; }
       inline_to="$2"; shift 2 ;;
+    --link-lib)
+      [[ "${2-}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.+-]*$ ]] || { echo "error: --link-lib takes a library name of letters, digits, _ . + and -, not '${2-}'" >&2; exit 2; }
+      link_libs+=("-l$2"); shift 2 ;;
+    --link-source)
+      case "${2-}" in
+        /*.c) [ -f "$2" ] || { echo "error: --link-source: $2 is not a file" >&2; exit 2; } ;;
+        *) echo "error: --link-source takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
+      esac
+      link_sources+=("$2"); shift 2 ;;
+    --link-depends)
+      case "${2-}" in
+        /*.c) [ -f "$2" ] || { echo "error: --link-depends: $2 is not a file" >&2; exit 2; } ;;
+        *) echo "error: --link-depends takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
+      esac
+      link_depends="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -215,7 +248,7 @@ while [ $# -gt 0 ]; do
     *) inputs+=("$1"); shift ;;
   esac
 done
-[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || { echo "error: no input files" >&2; exit 2; }
+[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: no input files" >&2; exit 2; }
 if [ -n "$cpu" ]; then
   [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
   case "$profile" in
@@ -297,7 +330,7 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
   [ -z "$sqlite_to" ] || [ -z "$sqlite_from" ] || { echo "error: --sqlite-objects and --sqlite-from are two different builds" >&2; exit 2; }
   [ -z "$sqlite_to" ] || [ -z "$objects_to$objects_from" ] || { echo "error: --sqlite-objects compiles runtime/sqlite/ alone, without --runtime-objects or --runtime-from" >&2; exit 2; }
 fi
-[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
+[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
 # The runtime is eighteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-text.c, <dir>/runtime-os.c, <dir>/runtime-parallel.c,
@@ -337,8 +370,8 @@ done
 
 # SQLite (runtime/sqlite/) is an optional unit, and the IR selects it. A module
 # that declares a function of SQLite's C API (`sqlite3_*`) or of the adapter
-# beside it (`nishsqlite_*`) gets every runtime/sqlite/*.c compiled and
-# linked. Any other program compiles none of it, so its link line and binary
+# beside it (`nishsqlite_*`) gets runtime/sqlite/'s units (`sqlite_units`)
+# compiled and linked. Any other program compiles none of it, so its link line and binary
 # stay as they were. The test reads `declare` lines, and only before the first
 # `"` on one, rather than any `@sqlite3_` in the file, because a string
 # constant or a quoted name may hold one. It is one rule with `callsSqlite` in
@@ -568,6 +601,20 @@ case "$profile" in
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
 esac
 
+# --link-depends: the files clang -M lists for a package source's compile,
+# every header and every #included file of any name, with the flags the link
+# line compiles that source with (`common` and the profile's `optimise`), so
+# `nish run` keys those rather than guessing at them by name. clang -M does
+# not list a file an assembler `.incbin` reads, nor a header that would shadow
+# a listed one if it appeared later (docs/security/package-link.md, PL-6, PL-10).
+if [ -n "$link_depends" ]; then
+  case "$profile" in
+    debug) exec "$CC" "${common[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;
+    speed|size) exec "$CC" "${common[@]}" "${optimise[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;
+    *) echo "error: --link-depends takes the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+fi
+
 # The speed link splits full LTO's code generation into one partition per core,
 # run in parallel: lld's --lto-partitions, after the whole program is optimised
 # as one module, so inlining does not change. But a partition boundary promotes
@@ -674,29 +721,40 @@ for d in -DSQLITE_DQS=0 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHR
 done
 sqlite_defs+=(${sqlite_extra[@]+"${sqlite_extra[@]}"})
 
-# Compiles every runtime/sqlite/*.c with the flags given, all at once, into
-# $1/<unit>.o. Each unit is compiled from inside runtime/sqlite/ by its bare
-# name, as the runtime is, so -g's DWARF names no directory the link was
-# started in. sqlite3.c, the 9.6 MB amalgamation, is compiled to native code
-# even where the profile compiles to LTO bitcode. As bitcode, every link of a
-# program that uses it would generate its code again: measured on a program
-# that opens a database and runs a query, that is 10.6 s a link at -O3,
-# against 0.04 s for the native object. The adapter beside it stays LTO, and
-# it is what inlines into the program. So `-flto` comes off for that one unit
-# alone.
+# The units of runtime/sqlite/: every *.c but sqlite3.c, the amalgamation,
+# which nish-sqlite.c compiles by including it. SQLite's B-tree and record
+# functions are static there, and the cursor adapter calls them, so the two
+# must be one translation unit (docs/sqlite-cursor.md, "The build decision").
+# One name a line; callers read them with `while read`, so a name is never
+# split on spaces.
+sqlite_unit_names() {
+  local unit
+  for unit in "$sqlite_dir"/*.c; do
+    unit=${unit##*/}
+    [ "$unit" = sqlite3.c ] || printf '%s\n' "$unit"
+  done
+}
+# Compiles every unit of runtime/sqlite/ with the flags given, all at once,
+# into $1/<unit>.o. Each unit is compiled from inside runtime/sqlite/ by its
+# bare name, as the runtime is, so -g's DWARF names no directory the link was
+# started in. Each is compiled to native code even where the profile compiles
+# to LTO bitcode, because nish-sqlite.c holds the 9.6 MB amalgamation. As
+# bitcode, every link of a program that uses it would generate its code
+# again: measured on a program that opens a database and runs a query, that
+# is 10.6 s a link at -O3, against 0.04 s for the native object. So `-flto`
+# comes off.
 sqlite_units() {
   local to=$1 unit flag
   local -a flags
   shift
-  for unit in "$sqlite_dir"/*.c; do
-    unit=${unit##*/}
+  while IFS= read -r unit; do
     flags=()
     for flag in "$@"; do
-      case "$unit:$flag" in sqlite3.c:-flto) ;; *) flags+=("$flag") ;; esac
+      case "$flag" in -flto) ;; *) flags+=("$flag") ;; esac
     done
     (cd -- "$sqlite_dir" && exec "$CC" "${flags[@]}" "${sqlite_defs[@]}" -I. -c "$unit" -o "$to/${unit%.c}.o") &
     pids+=("$!")
-  done
+  done < <(sqlite_unit_names)
   join_jobs || { echo "error: runtime/sqlite/ did not compile" >&2; exit 1; }
 }
 # Adds the objects of runtime/sqlite/ to this link, in the order of the units.
@@ -712,11 +770,10 @@ sqlite_objects() {
     mkdir -p -- "$from"
     sqlite_units "$from" "$@"
   fi
-  for unit in "$sqlite_dir"/*.c; do
-    unit=${unit##*/}
+  while IFS= read -r unit; do
     [ -f "$from/${unit%.c}.o" ] || { echo "error: --sqlite-from: $from/${unit%.c}.o is missing" >&2; exit 2; }
     inputs+=("$from/${unit%.c}.o")
-  done
+  done < <(sqlite_unit_names)
 }
 
 if [ -n "$sqlite_to" ]; then
@@ -798,12 +855,22 @@ fi
 # why Linux never noticed. `pgo`, `elf`, `strip_flag` and `libs` are all empty on
 # ordinary builds, so please do not simplify these back.
 case "$profile" in debug|speed|size) sqlite_objects "${compile[@]}" ;; esac
+# A package's own C sources join the inputs here, after the runtime's halves
+# and SQLite were decided from the IR alone, so a source can neither stand in
+# for runtime.c nor be taken for one of its siblings. clang compiles each by
+# its .c name on the one link line, with the profile's flags.
+if [ ${#link_libs[@]} -gt 0 ] || [ ${#link_sources[@]} -gt 0 ]; then
+  case "$profile" in
+    debug|speed|size) inputs+=(${link_sources[@]+"${link_sources[@]}"}) ;;
+    *) echo "error: --link-lib and --link-source take the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+fi
 case "$profile" in
   debug)
-    "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
+    "$CC" "${common[@]}" "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
   speed|size)
     "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
-      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
+      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
   wasm|wasm-host)
     # A region's chunks come from malloc, and the freestanding wasm runtime
     # (runtime-wasm.c) has none, so IR that makes or enters one is refused here
