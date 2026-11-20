@@ -80,6 +80,18 @@ serialized URL that reads back as a different one.
 | URL-7 | Low | `std/net/url.ts` (`urlParse`, `urlResolve`) | No length cap: the work and the `Url` allocated are linear in the string, and a host is not checked against DNS's 253-byte or 63-byte-label limits. | **Accepted.** The string is already in memory when it is parsed, so the program that read it set its size (an HTTP header's cap, a config file's); every scan is linear and none repeats. A host longer than DNS allows fails at resolution. |
 | URL-8 | Low | `std/net/url.ts` (`urlParse`, `urlOrigin`) | A reg-name with a trailing dot is accepted and kept: `http://a.com./` has host `a.com.` and origin `http://a.com.:80`, where `http://a.com/` has `http://a.com:80`, though DNS resolves both to one name. A program that compares hosts or origins as strings sees two. | **Accepted.** The split errs toward "different origin", the safe side for dropping credentials or refusing a redirect; a program that must treat the two as one strips the dot before comparing. `urlOrigin`'s doc and the guide say hosts compare as written. Pinned in `net_url_parse`. |
 
+## Fuzzing
+
+Fuzzed by `tests/fuzz/targets/url.ts`.
+
+| Target | What it drives | Executions |
+| --- | --- | ---: |
+| `url` | `percentDecode` under all eight combinations of `URL_DECODE_FORM`, `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL`, into room for every byte and for half, and as a path segment; `UrlPathSegments` and `UrlQuery` over the input, each segment, key and value decoded; `urlDecode` and `urlQueryGet`; the answers checked against each other and against `percentDecodeErrorAt` | 36,117,400 |
+
+The target ran for 30 minutes (`-max_total_time=1800`, one libFuzzer process on its own GitHub-hosted runner) in the scheduled `fuzz.yml` run of 2026-11-14 on commit `55fbb2d2`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, built with `-fsanitize=fuzzer,address,undefined` and run with libFuzzer's `-timeout=1 -rss_limit_mb=2048` and its default 4,096-byte cap on an input; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (the target's own contract check fails by panicking, so it counts too). The three earlier scheduled runs (2026-10-30, 10-31 and 11-07) found none either.
+
+`urlParse`, `urlResolve`, `urlSerialize` and `urlOrigin` are not in the target; the 4,000 seeded strings of `net_url_parse`, under [Properties verified](#properties-verified) drive them.
+
 ## Properties verified
 
 Each property below is pinned by a test that fails if it stops holding.
