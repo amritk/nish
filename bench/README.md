@@ -2048,6 +2048,55 @@ ns per call.
   Compare the fractions, not cycles. Both binaries are stripped, so callgrind
   cannot say which functions the extra instructions are in.
 
+### Variants: PGO and the CPU level
+
+`--variant V` adds one binary to the rounds and sets it against what it
+varies. The noise band for that comparison is the varied binary against its
+byte-identical copy.
+
+```bash
+node bench/sqlite/run.mjs --validate --variant pgo   # the variant must read what every side reads
+node bench/sqlite/run.mjs --rounds 12 --variant pgo
+```
+
+| `V` | The extra binary | Set against |
+| --- | --- | --- |
+| `pgo` | `main.ts` linked with `--pgo-use` on a trained profile | the build and its copy |
+| `x86-64-v3` | `main.ts` linked with `--cpu x86-64-v3` | the build and its copy |
+| `pgo-x86-64-v3` | both: trained and linked with `--cpu x86-64-v3` | the build and its copy |
+| `c-native` | `twin.c` compiled and linked with `-march=native` | the C twin and a copy of it |
+
+`c-native` is C only, because `nish` refuses `--cpu native`.
+
+**PGO's training.** The profile is made fresh on every run:
+
+1. An instrumented build (`--link --pgo-generate`, with the variant's `--cpu`)
+   is made in a temp directory.
+2. `twin seed` fills a training database there: seed 7, 45,000 users, 510,000
+   posts and 1,800,000 likes. The timed database uses another seed and other
+   sizes, so the profile is not fitted to the rows the timed runs read. It has
+   more posts than `lookup`'s ids reach, so every lookup finds its post.
+3. The instrumented build runs `lookup` (50,000 calls), `feed` (2,000),
+   `insert` (5,000) and `insert-txn` (20,000) on it, one `.profraw` each.
+4. `llvm-profdata merge` writes `build/bench/sqlite/<V>.profdata`, and the
+   variant is linked with `--pgo-use` on it. `LLVM_PROFDATA` names another
+   `llvm-profdata`.
+
+The temp directory is removed afterwards, and no profile is kept in the
+repository. The cursor workloads are not in the training.
+
+**What changes.**
+
+- The THREADSAFE=2 group (rusqlite) is left out, so the rounds stay short.
+- The report adds a row for the variant, and a line with its difference from
+  what it varies: min and median, and the median as a percentage.
+- For `c-native`, it also adds the C twin's noise band.
+- The verdict is read as above, but against the variant's own band and the
+  IQRs of both binaries it compares.
+
+The figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#pgo-and-the-cpu-level-on-the-sqlite-feed).
+
 **Before the adapter fix.** The same protocol, before this measurement's fixes,
 put `feed` at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two
 causes made up the difference:
