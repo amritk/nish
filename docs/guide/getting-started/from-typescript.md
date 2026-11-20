@@ -11,7 +11,8 @@ write instead.
 
 Most everyday TypeScript compiles as it is:
 
-<!-- nish:ok -->
+<!-- allow-panics: its counter and sums are not bounded, which the text below explains -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Point {
   x: i32;
@@ -140,9 +141,12 @@ const total = (n: i32, r: f64): f64 => {
 };
 ```
 
-Integer arithmetic is also checked: an `i32` or `i64` that overflows stops the
-program instead of wrapping round, as
-[Your first program](first-program.md#exit-codes) shows. `--number-mode f64`
+Integer arithmetic is also checked. By default the compiler must prove that
+an `i32` or `i64` result fits, and it refuses the program where it cannot;
+with `--allow-panics` it builds a check instead, and an overflow stops the
+program rather than wrap round, as
+[Your first program](first-program.md#exit-codes) shows. The first example on
+this page adds up a counter nothing bounds, so it builds with that flag. `--number-mode f64`
 makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 `i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's
@@ -284,7 +288,7 @@ Seven is odd, so this program prints `odd` on stderr and exits with 1.
 A `Result` cannot be ignored: a call that returns one cannot stand on its own
 as a statement, and reading `r.value` before checking `r.isErr()` or
 `r.isOk()` is an error. For a state the program cannot recover from, call
-`panic("message")`, which ends the program the way an overflow does. [Errors and `Result`](../language/errors.md) covers the rest,
+`panic("message")`, which ends the program the way a failed overflow check does. [Errors and `Result`](../language/errors.md) covers the rest,
 including `orReturn()`, which passes an error up to the caller like Rust's
 `?`. The reference is
 [Result and error handling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#result-and-error-handling).

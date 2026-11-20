@@ -12,7 +12,8 @@ section.
 An object pattern reads fields of a class or interface value. Write a field's
 name to bind it under that name, or `field: name` to rename it:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Point {
   x: i32;
@@ -46,7 +47,8 @@ side once.
 An array pattern reads elements by their position. Leave a position empty to
 skip it:
 
-<!-- nish:ok-body -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const xs: i32[] = [10, 20, 30];
 let [a, , c] = xs;
@@ -61,7 +63,8 @@ of its type.
 
 ## In a `for...of`
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Point {
   x: i32;

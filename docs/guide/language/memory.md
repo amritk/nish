@@ -27,7 +27,8 @@ wherever it can prove that nothing allocated inside them is still reachable
 afterwards, and whatever is left in the arena is released when `main`
 returns.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const describe = (name: string, score: i32): i32 => {
   const line = `${name} scored ${score}`;
@@ -52,7 +53,8 @@ A `Result` held in a `let` that you assign again does not cost a function its
 bracket. The `Ok` and the `Err` below live on `pick`'s stack frame, so calling
 it in a loop leaves the arena where it was:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const pick = (n: i32): i32 => {
   let r: Result<i32, string> = Ok(n);
@@ -199,7 +201,8 @@ pointers for each child where a sibling link follows one. On a tree of four
 million nodes, the linked layout took **0.52x the memory and 0.68x the time**
 of an array per node.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Node {
   kind: i32;
@@ -306,7 +309,8 @@ When you know a block's allocations are temporary, say so with
 released when the block ends, on every way out of it: the closing brace, a
 `return`, a `break` or a `continue`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const checksum = (lines: string[]): i32 => {
   let total = 0;

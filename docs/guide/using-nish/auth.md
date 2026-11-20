@@ -31,7 +31,8 @@ for each request. It answers `JWT_OK` or one `JWT_ERR_*` code, and after
 `JWT_OK` the payload's JSON is `v.claims[0 .. v.claimsLen)` and its times are
 `v.exp`, `v.nbf` and `v.iat`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls a file or entropy builtin that exits on failure; divides by a value it does not test; calls `std/crypto/hmac.ts`, `std/crypto/jwt.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import {
   JWT_ALG_HS256,
@@ -164,7 +165,8 @@ object. Claims outside ASCII are refused too: escape such text in the JSON
 `jwtSignKid(key, kid, bytes)` adds a `kid`. The claims are signed as given,
 so put the `exp` in yourself.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls a file or entropy builtin that exits on failure; divides by a value it does not test; does integer arithmetic nothing bounds; calls `std/crypto/jwt.ts`, `std/crypto/sha512.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { JWT_OK, JWT_MAX_TOKEN, JwtKey, JwtVerifier, jwtEd25519SigningKey, jwtSignKid } from "nish/crypto/jwt";
 import { Secret, secret, wipe } from "nish:secret";

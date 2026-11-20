@@ -248,7 +248,7 @@ refuse a program that reaches these
 
 <scalar-field name="--deny-panics">
 
-refuse an unproven panic in your package (default)
+refuse an unproven panic site (the default)
 
 </scalar-field>
 

@@ -43,7 +43,8 @@ export const main = async (): Promise<i32> => {
 
 An answer that cannot fail is a plain `Promise<T>`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const double = async (x: i32): Promise<i32> => {
   return x * 2;
@@ -118,7 +119,8 @@ available only through the import:
   Nothing reads its answer, so `f` answers `void`, or a `Result` it reports
   itself.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { awaitAll, spawn } from "nish:async";
 
@@ -222,7 +224,8 @@ copied for the task. An object, an array, a `Map` or a `Set` is shared: the
 task works on the spawner's own, and the spawner keeps it alive for as long
 as any task holds it.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { sleep, spawn } from "nish:async";
 
@@ -317,7 +320,8 @@ of anything else, such as a `string`, is refused (NL2690): pass it to the task
 as an argument of its own. Any other argument, such as an `Item | null`, is
 refused (NL2673); pass the value itself.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { sleep, spawn } from "nish:async";
 
@@ -433,7 +437,8 @@ arrow or an `async` function, and the function that receives it awaits each
 call. A plain function cannot go there, and an `async` arrow cannot go where
 the type answers a plain value.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const twice = async (f: (n: i32) => Promise<i32>): Promise<i32> => {
   const a = await f(1);

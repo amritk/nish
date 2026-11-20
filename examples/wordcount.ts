@@ -9,7 +9,7 @@
 // twice, and the compiler keeps the first probe's answer and writes through
 // it; `getOrInsert` is one probe by construction; and `reserve` sizes the
 // table once, so counting never has to grow it.
-//   nish examples/wordcount.ts --link build/wordcount && ./build/wordcount
+//   nish --allow-panics examples/wordcount.ts --link build/wordcount && ./build/wordcount
 // Under Node the same file runs on Node's own `Map`, where `reserve` does
 // nothing and `getOrInsert` is a `get` and a `set`, and prints the same lines:
 //   node --experimental-strip-types --import ./runtime/nish.mjs \

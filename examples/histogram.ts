@@ -14,7 +14,7 @@
 // Taking the lock once per task rather than once per value is the shape to
 // copy: four threads contending for the lock on every value run their critical
 // sections one at a time, and end up slower than one thread.
-//   nish examples/histogram.ts --link build/histogram && ./build/histogram
+//   nish --allow-panics examples/histogram.ts --link build/histogram && ./build/histogram
 //   ./build/histogram --sequential     the same four calls, one after another
 // Adding to a bin commutes, so the bins are the same whatever order the tasks
 // took the lock in, and Node, which runs each task at its `spawn`, prints the

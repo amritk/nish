@@ -693,8 +693,9 @@ export const reportDeniedPanics = (
   let p = 0
   while (p < programs.length) {
     const program = programs[p]
+    const isListed = p < programListed.length && programListed[p]
     for (const site of program.panicSites) {
-      if (refuseSite(program, programListed[p], facts, table, scoped, site, sink)) {
+      if (refuseSite(program, isListed, facts, table, scoped, site, sink)) {
         refused.push(site)
       }
     }
@@ -785,6 +786,13 @@ const calledName = (program: CheckedProgram, call: Node): string => {
 }
 
 /**
+ * The way out for a site no proof removes: the scope's edge. With no flag
+ * every module of the package is inside it, so the advice names the flag that
+ * moves a module out.
+ */
+const OUT_OF_SCOPE: string = "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
+
+/**
  * What fails at `site`, and what removes it. The index, range and divisor
  * guards are the ones `src/bounds.ts` reads, worded as the WP15 section 8
  * warnings word them, so an author is told one way of writing each; a kind
@@ -823,8 +831,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return ioExitAdvice(program, node)
     case PANIC_PARALLEL_LENGTH:
       return (
-        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: make " +
-        "the call from a module outside the scope"
+        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: " +
+        OUT_OF_SCOPE
       )
     case PANIC_OVERFLOW:
       return overflowAdvice(program, table, node)
@@ -836,10 +844,7 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_FFI_NULL: {
       const reader = calledName(program, node)
       if (reader === "readStruct" || reader === "readCString") {
-        return (
-          `\`${reader}\` panics on a NULL pointer, and no proof removes that check: ` +
-          "make the call from a module outside the scope"
-        )
+        return `\`${reader}\` panics on a NULL pointer, and no proof removes that check: ` + OUT_OF_SCOPE
       }
       return (
         "a C function's `const char *` result may be NULL, which a `string` cannot hold: " +
@@ -855,7 +860,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
-        "already or another thread's, and no proof removes that check: make the call from a module outside the scope"
+        "already or another thread's, and no proof removes that check: " +
+        OUT_OF_SCOPE
       )
     default:
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.
@@ -929,9 +935,12 @@ const sliceAdvice = (program: CheckedProgram, node: Node): string => {
   }
   // A user method cannot be a slice site, so the member name alone is `String.fromBytes`.
   if (name === "fromBytes") {
-    return "`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: make the call from a module outside the scope"
+    return (
+      "`String.fromBytes` panics when `[start, end)` is outside its array, and no proof removes that check yet: " +
+      OUT_OF_SCOPE
+    )
   }
-  return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: make the call from a module outside the scope`
+  return `\`${name}\` panics when its range is outside its buffer, and no proof removes that check yet: ${OUT_OF_SCOPE}`
 }
 
 /**

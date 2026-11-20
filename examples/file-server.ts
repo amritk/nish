@@ -10,7 +10,7 @@
 // connection reads through the same 64 KiB window. So memory follows the
 // window and not the file: a 4 GiB video costs what a 64 KiB one does.
 //
-//     build/nish examples/file-server.ts --link build/file-server
+//     build/nish --allow-panics examples/file-server.ts --link build/file-server
 //     build/file-server big.mp4 8080 &
 //     curl -s http://127.0.0.1:8080/ | cmp - big.mp4
 //     kill %1

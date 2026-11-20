@@ -2,7 +2,7 @@
 // `Float64Array` and `BigInt64Array` are the Nish spellings of i32[],
 // f64[] and i64[]: one layout, and the name a Node host sees in the typings.
 //
-//   nish examples/arrays.ts -o build/arrays.ll \
+//   nish --allow-panics examples/arrays.ts -o build/arrays.ll \
 //     --emit-header build/arrays.h --emit-dts build/arrays.d.ts --emit-napi build/arrays_napi.c
 //   scripts/build.sh build/arrays.ll runtime/runtime-wasm.c -o build/arrays.wasm --profile wasm
 //   node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(...) = 2, 4, 6
@@ -86,3 +86,5 @@ export const sumI64 = (xs: BigInt64Array): i64 => {
   }
   return total
 }
+
+// smoke: args --allow-panics

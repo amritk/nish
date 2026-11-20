@@ -277,7 +277,8 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function sqlite3_libversion(): string;
 

@@ -16,7 +16,8 @@ of its own, in a task that may await, uses [an async server](async-server.md).
 
 ## A first server
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/json.ts`, `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
 import { Router, RouterLimits } from "nish/net/router";

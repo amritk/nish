@@ -23,7 +23,8 @@ called whenever a frame may go out, and draws into the frame's `screen` (text
 cells) and `framebuffer` (pixels, when the options ask for one). This program
 bounces a square across the screen until you press `q`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/term.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
 import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term-io";
@@ -326,7 +327,8 @@ This program prints the number of each key you press. It stops on `q`, on
 Ctrl-D, or when stdin ends or fails. Run it in a terminal and press an arrow key to see
 its three bytes.
 
-<!-- nish:ok -->
+<!-- allow-panics: slices with bounds it does not test -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { isTerminal, readStdin, setRawMode, waitStdin } from "nish:term";
 
@@ -396,7 +398,8 @@ undone them all itself. It answers `0`, `-25` when stdout is not a terminal
 `terminalSize()` answers a new pair each time you call it. Call it again on
 each frame to notice when the window is resized.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { isTerminal, terminalSize } from "nish:term";
 

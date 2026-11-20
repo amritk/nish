@@ -2363,7 +2363,7 @@ may still answer `NULL`, so the call tests `p` first and panics with
 The copy is new on every call and is the calling function's allocation, and
 it is refused inside a `using a = arena()` block that would release one held
 outside it (`` `readCString(p)` may be allocated inside the `using arena()`
-block ``). Under `--deny-panics` its `NULL` test is an `ffi-null` site no
+block ``). In the no-panic scope its `NULL` test is an `ffi-null` site no
 proof removes, so the scope refuses the call (the copy's `oom` beside it is
 allowed), and the pointer it reads is `ffi`. It lowers the same
 on wasm32, where whether the program links is the `declare function`'s
@@ -2573,7 +2573,7 @@ unnarrowed `CPtr | null` is refused and `if (p !== null)` comes first.
 
 A `NULL` `p` is tested before the copy and panics with the `ffi-null` kind,
 naming the layout, since a `declare function` declared to answer `CPtr` may
-still answer `NULL`. No proof removes that test, so `--deny-panics` refuses
+still answer `NULL`. No proof removes that test, so the no-panic scope refuses
 the call; `--emit-panics` lists it as an `ffi-null` site, with the copy's
 `oom` beside it.
 
@@ -4011,7 +4011,7 @@ array may be read.
 
 To the bounds proof it is the load `xs[i]` is, less the check: it moves no
 length, and it records no passed check, so a checked `xs[i]` after it keeps
-its check. Under `--deny-panics` it is an allowed `unchecked` site. Under
+its check. In the no-panic scope it is an allowed `unchecked` site. Under
 Node the runtime shim reads `xs[i]`. Capability: unsafe.
 
 ```ts
@@ -4052,7 +4052,7 @@ to it is a value and is not stored inline.
 The store is a write of the array for every rule that asks, the rule for a
 parallel body included. To the bounds proof it is the store `xs[i] = v` is,
 less the check, and a resize in the value stored still takes the length away.
-Under `--deny-panics` it is an allowed `unchecked` site. Under Node the
+In the no-panic scope it is an allowed `unchecked` site. Under Node the
 runtime shim stores `xs[i] = v`. Capability: unsafe.
 
 ```ts
@@ -4395,7 +4395,7 @@ operand's type, wherever it stands. `wrappingAdd(2147483647, 1)` is
 
 In a module constant's initialiser the call folds, wrapping, where
 `2147483647 + 1` is refused; it is the one call such an initialiser may make.
-It is not a site under `--deny-panics`, as it cannot panic. Under Node the
+It is not a site in the no-panic scope, as it cannot panic. Under Node the
 runtime shim computes `(a + b) | 0` on an `i32` and `BigInt.asIntN(64, ...)`
 on the BigInt an `i64` is there. Capability: unsafe.
 

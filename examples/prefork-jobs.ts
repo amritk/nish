@@ -12,7 +12,7 @@
 // it starts the workers, which open it by name; when they have all exited the
 // supervisor reads the totals out of the region and unlinks it.
 //
-//     build/nish examples/prefork-jobs.ts --link build/prefork-jobs
+//     build/nish --allow-panics examples/prefork-jobs.ts --link build/prefork-jobs
 //     build/prefork-jobs           # 4 workers sent 40000 jobs, ...
 //     build/prefork-jobs my-name   # the region is /dev/shm/my-name
 //

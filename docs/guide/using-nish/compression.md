@@ -17,7 +17,8 @@ len)`, the output goes into `out` from `at`, and the answer is where the output
 ends. Build the compressor once and keep it — it holds its tables, about
 330 KB — and a call allocates nothing:
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `std/compress/deflate.ts`, `std/compress/gzip.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST, compressBound } from "nish/compress/deflate";
 import { GzipCompressor, GzipDecompressor } from "nish/compress/gzip";
@@ -82,7 +83,8 @@ negative error code and never panics:
 | `GZIP_ERR_HEADER`, `GZIP_ERR_CRC`, `GZIP_ERR_SIZE` | gzip's header, CRC-32 or length is wrong, or something other than another gzip member follows one |
 | `ZLIB_ERR_HEADER`, `ZLIB_ERR_ADLER`, `ZLIB_ERR_DICTIONARY` | zlib's header or Adler-32 is wrong, or the stream needs a preset dictionary |
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/compress/deflate.ts`, `std/compress/gzip.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_ERR_OUTPUT_LIMIT, DEFLATE_FAST } from "nish/compress/deflate";
 import { GzipCompressor, GzipDecompressor } from "nish/compress/gzip";
@@ -113,7 +115,8 @@ nothing yet, since it compresses 64 KB at a time — then `flush` (everything so
 far becomes decodable) and `finish` (the last block and the trailer). Give each
 call at least `bound(len)` bytes of output room.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/compress/deflate.ts`, `std/compress/gzip.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { GzipReader, GzipWriter, GZIP_END, GZIP_NEED_INPUT } from "nish/compress/gzip";
 
@@ -191,7 +194,8 @@ output has no room for it yet (`H1_WRITE` says when to call again) and
 hold. On HTTP/2 and HTTP/3, read the field yourself and add the fields the
 compressor builds:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
 import { HTTP_CODING_GZIP, HTTP_OFFER_GZIP, HttpCompressor, httpAcceptEncoding } from "nish/net/http-compress";
@@ -261,7 +265,8 @@ about a third larger. Larger bodies use the level you gave. To force one
 encoder for every size, set `encoder` to `HTTP_ENCODER_FIXED` or
 `HTTP_ENCODER_LEVEL`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { DEFLATE_FAST } from "nish/compress/deflate";
 import {

@@ -8,7 +8,7 @@
 // the kernel spreads connections across them. Every response names the worker
 // that answered it, so a few `curl`s show the spread:
 //
-//     build/nish examples/prefork-server.ts --link build/prefork-server
+//     build/nish --allow-panics examples/prefork-server.ts --link build/prefork-server
 //     build/prefork-server 8080 &
 //     curl -s http://127.0.0.1:8080/   # worker 2
 //     curl -s http://127.0.0.1:8080/   # worker 0

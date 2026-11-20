@@ -8,7 +8,7 @@
 // through `nish/net/router`, one log line a request, and a graceful stop on
 // SIGINT or SIGTERM.
 //
-//     build/nish examples/http-app/main.ts --link build/http-app
+//     build/nish --allow-panics examples/http-app/main.ts --link build/http-app
 //     build/http-app 8080 --max-notes 100 &
 //     curl -s localhost:8080/health                          # {"status":"ok","notes":0}
 //     curl -s -d '{"text":"milk"}' localhost:8080/notes      # {"id":1,"text":"milk"}

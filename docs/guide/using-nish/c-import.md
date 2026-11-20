@@ -151,7 +151,8 @@ library is linked the way any other C your program calls is, as
 [Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
 shows:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare class OutI64 {
   value: i64;

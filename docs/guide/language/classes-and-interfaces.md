@@ -9,7 +9,8 @@ sections.
 
 ## Classes
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Counter {
   name: string;
@@ -116,7 +117,8 @@ with an object literal, which takes its type from where it is written (an
 annotation, a parameter, a return type) and must set every field exactly
 once:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Point {
   x: i32;
@@ -253,7 +255,8 @@ them. A `C` is then accepted anywhere an `I` is expected. This is the only
 widening between class and interface types, and it goes one way: nothing
 turns an `I` back into a `C`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 interface Shape {
   width: i32;

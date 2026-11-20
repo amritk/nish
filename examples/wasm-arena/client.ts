@@ -218,3 +218,5 @@ export const hashHi = (): u32 => simHashHi()
 
 /** The low 32 bits of the state's hash. */
 export const hashLo = (): u32 => simHashLo()
+
+// smoke: args --allow-panics

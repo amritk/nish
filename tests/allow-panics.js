@@ -9,10 +9,10 @@
  * default, and the flag (`ALLOW_PANICS_FLAG` in `src/options.ts`) relaxes that
  * to the `noPanic` list, so the suite's cases, fixtures and fuzz targets, which
  * panic on purpose, keep building. An example or a docs program a user would
- * copy is the exception: the helper leaves it strict, so it proves the default,
- * unless its own source opts out with the `OPT_OUT` header, which also names
- * the reason and the follow-up. The IR cookbook's snippets (`docs/cookbook/`)
- * are listings that show a check's IR, often a panic's, so they get the flag.
+ * copy is the exception: the helper leaves it strict, so it proves the
+ * default. One that keeps a panic site on purpose says so where it is built:
+ * the call passes `--allow-panics` itself, as its header's recipe or its docs
+ * marker does, and the helper probes that literal flag like its own.
  *
  * It is a probe, not "the seed never gets it": the last release exits 2 on a
  * flag it does not know, and `NISH_BOOTSTRAP` or `--seed` can name any release
@@ -20,7 +20,6 @@
  * path. `scripts/nish-compiler.sh` (`nish_allow_panics`) asks the same
  * question for the shell scripts.
  */
-import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 
@@ -37,35 +36,16 @@ const NOT_A_COMPILE = new Set(["upgrade", "c-import", "break"])
 const ROOT = path.resolve(import.meta.dirname, "..")
 
 /**
- * A program under the repository's own `examples/`, relative to `ROOT`: a user
- * copies it, so its build stays strict and proves the default rather than the
- * harness. A directory merely named `examples` elsewhere (a fixture, a scratch
- * copy under `build/`) is not one. A relative path is read from the process's
- * working directory, as the suite runs from the root.
+ * A program under the repository's own `examples/` or `docs/`, relative to
+ * `ROOT`: a user copies it, so its build stays strict and proves the default
+ * rather than the harness. A directory merely named `examples` elsewhere (a
+ * fixture, a scratch copy under `build/`) is not one. A relative path is read
+ * from the process's working directory, as the suite runs from the root.
  */
-const EXAMPLE = /^examples[\\/]/
+const EXAMPLE = /^(?:examples|docs)[\\/]/
 
-/**
- * The header line an example that keeps a panic site on purpose opens with;
- * `scripts/smoke.sh` reads its `// smoke: args --allow-panics` instead.
- */
-const OPT_OUT = "// Opt-out (`--allow-panics`):"
-
-/**
- * Whether `file` is one of the repository's examples that is held to the
- * default: it does not carry `OPT_OUT`. A file that cannot be read
- * is held to it, and the compile reports why.
- */
-const isStrictExample = (file) => {
-  if (!EXAMPLE.test(path.relative(ROOT, path.resolve(file)))) {
-    return false
-  }
-  try {
-    return !fs.readFileSync(file, "utf8").includes(OPT_OUT)
-  } catch {
-    return true
-  }
-}
+/** Whether `file` is one of the repository's examples or docs programs. */
+const isExample = (file) => EXAMPLE.test(path.relative(ROOT, path.resolve(file)))
 
 /** Flags that already decide the panic scope, or ask for no compile at all. */
 const DECIDES = new Set(["--deny-panics", ALLOW_PANICS, "-h", "--help", "-v", "--version"])
@@ -97,12 +77,14 @@ const listsAllowPanics = (compiler) => {
 /**
  * `args` with `--allow-panics` added when `compiler` lists it and the call is
  * a compile or a `run` whose own flags leave the scope open: it names a `.ts`
- * file that is not a strict example (`isStrictExample`), is not `upgrade`,
- * `c-import` or `break`, and passes none of
+ * file outside the repository's `examples/` and `docs/`, is not `upgrade`, `c-import` or `break`, and passes none of
  * `--deny-panics`, `--allow-panics`, `--help` or `--version` before the
  * program. The flag goes first, or right after `run`, where the compiler's
- * flags are; a `run`'s program arguments are never read. Otherwise `args`
- * itself is returned.
+ * flags are; a `run`'s program arguments are never read. A literal
+ * `--allow-panics` among the compiler's own flags (a program's `.args` or
+ * `// smoke: args`, an opt-out example's recipe) is kept for a compiler that
+ * lists it and dropped for one that does not, which has no default to relax.
+ * Otherwise `args` itself is returned.
  */
 const withAllowPanics = (compiler, args) => {
   if (args.length === 0 || NOT_A_COMPILE.has(args[0])) {
@@ -110,11 +92,15 @@ const withAllowPanics = (compiler, args) => {
   }
   const run = args[0] === "run" ? 1 : 0
   const program = args.findIndex((arg, i) => i >= run && arg.endsWith(".ts"))
-  if (program < 0 || isStrictExample(args[program])) {
+  // A `run`'s own flags end at its program; a compile's run the whole line.
+  const own = (i) => i >= run && (run === 0 || program < 0 || i < program)
+  if (args.some((arg, i) => arg === ALLOW_PANICS && own(i))) {
+    return listsAllowPanics(compiler) ? args : args.filter((arg, i) => arg !== ALLOW_PANICS || !own(i))
+  }
+  if (program < 0 || isExample(args[program])) {
     return args
   }
-  const ownFlags = run === 1 ? args.slice(1, program) : args
-  if (ownFlags.some((arg) => DECIDES.has(arg)) || !listsAllowPanics(compiler)) {
+  if (args.some((arg, i) => own(i) && DECIDES.has(arg)) || !listsAllowPanics(compiler)) {
     return args
   }
   return [...args.slice(0, run), ALLOW_PANICS, ...args.slice(run)]

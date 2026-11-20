@@ -328,7 +328,9 @@ know, so the helper reads the compiler's `--help` first.
   names a `.ts` program outside `examples/` and none of its own flags
   already decides the scope. In `tests/run.js`, `spawnNish(args, options)` is
   `spawnSync(NISH, ...)` through it; a check that must build without the flag
-  calls `spawnSync(NISH, ...)` directly.
+  calls `spawnSync(NISH, ...)` directly. A `tests/link/<name>/` program that
+  tests the default itself holds a `strict` file beside its `main.ts`, and the
+  link runner builds it with no flag added (`no_panic_default`).
 - **Shell**: `. scripts/nish-compiler.sh`, then `nish_allow_panics <cmd...>`
   sets the array `allow_panics`; expand it as
   `${allow_panics[@]+"${allow_panics[@]}"}` (macOS's bash 3.2).

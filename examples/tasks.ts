@@ -10,7 +10,7 @@
 // once all four have finished. The tasks are heterogeneous — a prime count, a
 // Collatz search, a digit sum and a checksum — which is the shape `parallelMapInto`
 // cannot take.
-//   nish examples/tasks.ts --link build/tasks && ./build/tasks
+//   nish --allow-panics examples/tasks.ts --link build/tasks && ./build/tasks
 //   ./build/tasks --sequential     the same four calls, one after another
 // Under Node the same file runs each task at its `spawn`, one at a time, and prints
 // the same lines (`using` needs `--js-explicit-resource-management` before Node 24):

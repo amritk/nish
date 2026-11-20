@@ -334,3 +334,5 @@ export const simHashLo = (): u32 => {
   const low: u64 = 4294967295
   return toU32(simHash() & low)
 }
+
+// smoke: args --allow-panics

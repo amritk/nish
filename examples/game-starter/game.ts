@@ -255,3 +255,5 @@ const paint = (ball: Float64Array, score: Int32Array, alpha: f64): void => {
     rasterText(GAME_FRAME, w, h, centre, 90, 1, hint, 0xf0f0f0)
   }
 }
+
+// smoke: args --allow-panics

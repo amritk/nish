@@ -16,7 +16,8 @@ a `Region<T>` handle, which is a number, not a pointer. `enter(r, f)` runs
 `f(root)` in the region again and answers what `f` answers. `free(r)` gives
 the memory back:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enter, free, region } from "nish:region";
 
@@ -49,7 +50,8 @@ region captures nothing.
 `f(arg)` and `f(root, arg)`. Numbers that `f` copies out of the region, into an
 array it was given, are yours to keep after `free`:
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, enterWith, free, regionWith } from "nish:region";
 
@@ -156,7 +158,8 @@ Inside the `f` an `enter` runs, `child(f)` and `childWith(arg, f)` make a
 that was there before this `enter`, so it can use the parent's strings and
 objects without copying them, and `free` of the parent frees every child too:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/region.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Region, childWith, enter, free, region } from "nish:region";
 

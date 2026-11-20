@@ -62,7 +62,8 @@ Both arms of `c ? a : b` must have the same type.
 `while`, `do … while`, `for (init; cond; update)` and `for (const x of xs)`
 are all there, with `break` and `continue`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   let steps = 0;
@@ -168,7 +169,8 @@ export const main = (): i32 => {
 A clause with statements falls through the same way, so leaving out a
 `break` runs the next clause as well:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const points = (stars: i32): i32 => {
   let total = 0;
@@ -257,7 +259,8 @@ never reported unread, which is how a loop that only counts its turns is
 written. Copy a value to a second `const` to compare it with itself. On
 `f32` and `f64`, `x !== x` stays the test for NaN:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   let turns = 0;
@@ -283,7 +286,8 @@ assignments are **checked**: a result that does not fit stops the program
 with a message on stderr and exit status 1. It never wraps silently, and it
 is never undefined behaviour:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const square = (n: i32): i32 => n * n;
 

@@ -40,6 +40,7 @@ const PANIC_FFI_NUL: i32 = 14 [exported]
 const PANIC_FFI_NULL: i32 = 15 [exported]
 const PANIC_FFI_LENGTH: i32 = 16 [exported]
 const PANIC_REGION: i32 = 17 [exported]
+const OUT_OF_SCOPE: string = "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
 struct PanicSite (class) size=56 align=8 exported
   field node: Node index=0 offset=0
   field source: SourceFile index=1 offset=8
@@ -340,7 +341,7 @@ function siteReportEntry(site: PanicSite, path: string, facts: FactsTable): stri
 function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], listed: boolean[], facts: FactsTable, table: TypeTable, sink: DiagnosticSink): PanicSite[] -> @reportDeniedPanics [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseSite
-  calls: StringSet.add StringSet.constructor listedFacts nish_array_grow nish_panic_index nish_panic_overflow refuseSite
+  calls: StringSet.add StringSet.constructor listedFacts nish_array_grow nish_panic_overflow refuseSite
   pointer units: size=0 writesThrough=false captured=false
   pointer inScope: size=0 writesThrough=false captured=false
   pointer listed: size=0 writesThrough=false captured=false
@@ -361,8 +362,9 @@ function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], listed: b
   callee +16:9 StringSet.add -> @StringSet.add
   local +20:7 p: i32 (let)
   local +22:11 program: CheckedProgram (const)
-  local +23:16 site: PanicSite (const)
-  callee +24:11 refuseSite -> @refuseSite
+  local +23:11 isListed: boolean (const)
+  local +24:16 site: PanicSite (const)
+  callee +25:11 refuseSite -> @refuseSite
 function refuseSite(program: CheckedProgram, listed: boolean, facts: FactsTable, table: TypeTable, scoped: StringSet, site: PanicSite, sink: DiagnosticSink): boolean -> @refuseSite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report

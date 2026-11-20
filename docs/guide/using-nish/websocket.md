@@ -23,7 +23,8 @@ the slot's `next()` answers `H1_WS_MESSAGE` (the message in `conn.data`,
 `conn.sendFrame(fin, opcode, buf, off, len)` and end with
 `conn.closeWebSocket(code)`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Http1Connection } from "nish/net/http1-server";
 import { websocketOfferedProtocols } from "nish/net/websocket";
@@ -68,7 +69,8 @@ ASCII case. Write each origin as a browser sends it: scheme, host and a port
 that is not the scheme's default, with no path or trailing slash
 (`https://example.com`, `http://localhost:8080`). Refuse the rest with a 403.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Http1Connection } from "nish/net/http1-server";
 import { websocketOriginAllowed } from "nish/net/websocket";
@@ -125,7 +127,8 @@ The client's side is six steps over a connection you opened:
 
 Over TLS, with `tlsConnect`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls a file or entropy builtin that exits on failure; calls `panic`; calls `std/crypto/base64url.ts`, `std/net/websocket.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { netAddress } from "nish:net";
 import { HTTP1_HEAD, HTTP1_NEED_MORE } from "nish/net/http1-codec";

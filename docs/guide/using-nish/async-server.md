@@ -19,7 +19,8 @@ The rules for `async`, `await` and `spawn` are in
 
 ## A first server
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts`, `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
 import { Router, RouterLimits } from "nish/net/router";
@@ -108,7 +109,8 @@ shares those objects with `main`, in place, so a handler reads and updates
 their numbers and awaits a pooled query, and builds its answer in its own
 memory:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/net/handler.ts`, `std/net/postgres.ts`, `std/net/router.ts`, `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
 import { Router, RouterLimits } from "nish/net/router";
@@ -223,7 +225,8 @@ so does every one it makes later, so the handler runs on to its end, its
 `using` bindings are disposed and its region is freed. Check `cancelled()`
 from `nish:async` after an `await` that failed, and answer:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/serve.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { cancelled, sleep } from "nish:async";
 import { Request, Response } from "nish/net/serve";

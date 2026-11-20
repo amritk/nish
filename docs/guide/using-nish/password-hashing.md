@@ -18,7 +18,8 @@ bytes, fresh for every password, from `crypto.getRandomValues`, and the hash
 carries it, so you store only the hash. `bcryptVerify(password, hash)` answers
 whether the password is the one the hash was made from.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls a file or entropy builtin that exits on failure; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt";
 import { Secret, secret, wipe } from "nish:secret";
@@ -112,7 +113,8 @@ the thread that opened the scope waits for the slowest hash rather than for
 all of them in turn. Here three sign-ups that arrived together are hashed side
 by side, given a free core for each:
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls a file or entropy builtin that exits on failure; indexes an array without a guard the checker reads; does integer arithmetic nothing bounds; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptHash } from "nish/crypto/bcrypt";
 import { Secret, secret, wipe } from "nish:secret";
@@ -205,7 +207,8 @@ each width from one to six on throwaway passwords and returns the fastest. It
 takes a few tens of milliseconds and keeps nothing, so call it once, at
 startup, and keep the answer:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptCalibrate } from "nish/crypto/bcrypt";
 
@@ -244,7 +247,8 @@ itself. `nish/crypto/bcrypt-batch` holds them until it can:
   for one that was an `Err`. A run is due when `width` requests are queued or
   the oldest has waited `holdNanos`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/crypto/bcrypt.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { bcryptCalibrate, bcryptHash } from "nish/crypto/bcrypt";
 import { BcryptAnswer, BcryptBatchConfig, BcryptBatcher, bcryptBatcher } from "nish/crypto/bcrypt-batch";

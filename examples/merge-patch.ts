@@ -6,7 +6,7 @@
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's
 // `presence` option telling a key that was left out from one that was given:
 //
-//     build/nish examples/merge-patch.ts --link build/merge-patch
+//     build/nish --allow-panics examples/merge-patch.ts --link build/merge-patch
 //     build/merge-patch
 //
 // The patch is its own class: every field optional, so a missing key is no

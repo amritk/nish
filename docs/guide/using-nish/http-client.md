@@ -12,7 +12,8 @@ library module ([`export` and `import`](https://github.com/amritk/nish/blob/main
 
 ## Fetching a URL
 
-<!-- nish:ok -->
+<!-- allow-panics: slices with bounds it does not test; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HttpOptions, HttpRequest, HttpResponse, fetchSync } from "nish/net/fetch";
 
@@ -67,7 +68,8 @@ parse is not echoed at all. The URL is named as it parses: in
 `http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
 path, which is echoed, so put credentials in a header, not in a URL:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/fetch";
 
@@ -107,7 +109,8 @@ an https URL, writes and waits for the answer, the program's other tasks run
 ([Async functions](../language/async.md)). Two fetches under
 `awaitAll` are in flight together:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { awaitAll } from "nish:async";
 import { FetchPool, RequestInit, fetch } from "nish/net/fetch";
@@ -274,7 +277,8 @@ credentials in it; `http://127.0.0.1:6379/` reaches a database that trusts
 local callers; a name that resolves to either does the same. Give such a
 client an `OutboundPolicy`, from `nish/net/outbound`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/net/fetch.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP_E_BLOCKED, FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch";
 import { OutboundPolicy } from "nish/net/outbound";
@@ -353,7 +357,8 @@ constants are shared with the server side and come from `nish/net/http1-codec`.
 
 ### A first request
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; slices with bounds it does not test; calls `panic` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HTTP1_BODY, HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, HTTP1_NO_BODY } from "nish/net/http1-codec";
 import { Http1ResponseParser, http1RequestHead } from "nish/net/http1-client-codec";

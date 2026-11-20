@@ -8,7 +8,7 @@
 // flags that may stand before, between or after the verbs. It sends no
 // requests: each command prints, as JSON, the call it would make, so the
 // parse is what it shows.
-//   nish examples/api-cli/main.ts --link build/api-cli
+//   nish --allow-panics examples/api-cli/main.ts --link build/api-cli
 //   ./build/api-cli users keys list 42 --limit 5 -t ci -t deploy
 //   ./build/api-cli --help; ./build/api-cli users kyes
 // smoke: args --allow-panics

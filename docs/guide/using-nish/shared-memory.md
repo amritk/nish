@@ -26,7 +26,8 @@ unchanged.
 `openRegion(name)` maps one that exists, in any process of the same user;
 `unlinkRegion(name)` removes the name. Each answers a `Result`:
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { ACQUIRE, createRegion, openRegion, RELEASE, unlinkRegion } from "nish/sync/shm";
 
@@ -67,7 +68,8 @@ A region is read and written through **slots** at byte offsets: `loadI32`,
 five for `I64`. Each is one atomic access, with the ordering you name:
 `RELAXED`, `ACQUIRE`, `RELEASE`, `ACQ_REL` or `SEQ_CST`.
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { ACQ_REL, createRegion, SEQ_CST, unlinkRegion } from "nish/sync/shm";
 
@@ -105,7 +107,8 @@ consumer, in slots of a fixed size. The process that makes the region writes
 the ring's header with `initSpscRing` or `initMpscRing`; every other process
 finds it with `attachSpscRing` or `attachMpscRing`:
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts`, `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, unlinkRegion } from "nish/sync/shm";
 import { attachSpscRing, initSpscRing, RING_EMPTY, spscRingBytes } from "nish/sync/ring";
@@ -154,7 +157,8 @@ record's bytes where they lie in the ring, as `lend` does a region's.
 and `commit(len)` publishes its first `len`; `peek()` answers the next record
 as a `readonly u8[]`, and `release()` frees it:
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; indexes an array without a guard the checker reads; calls `std/sync/ring.ts`, `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, unlinkRegion } from "nish/sync/shm";
 import { attachSpscRing, initSpscRing, spscRingBytes } from "nish/sync/ring";
@@ -228,7 +232,8 @@ a push rings the doorbell only when the consumer is asleep, so a busy ring
 makes no system call at all. On Linux, that is. Elsewhere `popWait` answers
 `SHM_UNSUPPORTED`, so a portable consumer falls back to polling:
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect`; calls `std/sync/ring.ts`, `std/sync/shm.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { createRegion, SHM_UNSUPPORTED, unlinkRegion } from "nish/sync/shm";
 import { initMpscRing, mpscRingBytes, MpscRing, RING_EMPTY } from "nish/sync/ring";

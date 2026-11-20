@@ -16,7 +16,7 @@
 // compiler's: an update that does not commute (a `store`, an `exchange`) would
 // leave an answer that depends on the schedule.
 //
-//   nish examples/histogram-atomic.ts --link build/histogram-atomic
+//   nish --allow-panics examples/histogram-atomic.ts --link build/histogram-atomic
 //   ./build/histogram-atomic              four tasks, local counts, one add per bin
 //   ./build/histogram-atomic --per-value  four tasks, one atomic add per value
 //   ./build/histogram-atomic --lock       four tasks, one Mutex taken per value

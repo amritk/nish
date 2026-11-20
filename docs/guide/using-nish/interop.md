@@ -9,7 +9,8 @@ program can call a C function you declare.
 Each direction starts from an ordinary module that `export`s the functions to
 call. This one is used throughout the page:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const add = (a: i32, b: i32): i32 => a + b;
 
@@ -471,7 +472,8 @@ world, a document, a list — declare module storage whose element is a class
 or `null`. Each slot is a *root*: the object in it, and everything that
 object reaches, outlives the call that built it.
 
-<!-- nish:ok --target wasm32 -->
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- nish:ok --target wasm32 --allow-panics -->
 ```ts
 class Node {
   value: i32
@@ -1000,7 +1002,8 @@ the rest), `boolean` and `void`. A `u8`, `u16` and `boolean` are C's
 as the C ABI expects, so `toU8(511)` reaches C as 255. So does a `string` *parameter*, which C reads
 as a NUL-terminated `const char *`:
 
-<!-- nish:ok -->
+<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function puts(s: string): i32;
 declare function strlen(s: string): u64;
@@ -1038,7 +1041,8 @@ like any other string the function makes, in a loop as anywhere else. A C
 function that may answer `NULL` is declared `string | null`, and `NULL` arrives
 as `null`:
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function strerror(errnum: i32): string;
 declare function getenv(name: string): string | null;
@@ -1189,7 +1193,8 @@ it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
 yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
 how `realpath` is asked to allocate:
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { readCString } from "nish:unsafe";
 
@@ -1245,7 +1250,8 @@ its `[Symbol.dispose]` is exactly the call that closes it. Open one with
 block — falling off its end, an early `return`, `break`, `continue`, or an
 `orReturn()` that propagates:
 
-<!-- nish:ok -->
+<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- nish:ok --allow-panics -->
 ```ts
 declare function fopen(path: string, mode: string): CPtr | null;
 declare function fclose(p: CPtr): i32;
@@ -1410,7 +1416,8 @@ program owns, so a later call that overwrites C's buffer leaves the copy
 alone. The type to copy into comes from the context, an annotation or a
 return type, and the copy is the class's size in bytes:
 
-<!-- nish:ok -->
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { readCString, readStruct } from "nish:unsafe";
 

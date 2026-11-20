@@ -329,3 +329,5 @@ export const draw = (alpha: f64, frameMs: f64): void => {
   }
   run.turned = turn
 }
+
+// smoke: args --allow-panics

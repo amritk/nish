@@ -35,7 +35,8 @@ splits the array across as many threads as the machine has and the length is
 worth. `f` is a top-level function named at the call, or an arrow written
 there.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto`, whose length check no proof removes yet; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
@@ -116,7 +117,8 @@ not reach an array `dst` could be, but a table's own arrays are private to it:
 a `Map<string, i32>` beside an `i32[]` `dst` is fine, and a
 `Map<string, i32[]>` is refused, because one of its values could be `dst`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `parallelMapInto`, whose length check no proof removes yet; indexes an array without a guard the checker reads; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto } from "nish/threads";
 
@@ -206,7 +208,8 @@ way `Array.from({ length: n }, (_, i) => f(i))` builds one. Each allocates the
 array before it starts and then runs exactly the map above, under the same
 rules for `f`. There is no `dst` to get wrong.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
 
@@ -221,7 +224,8 @@ export const main = (): i32 => {
 The answer may be a string or an array of numbers, too; each one is copied out
 of the thread that built it, so it lives as long as the array you get back:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelFrom, parallelMap } from "nish/threads";
 
@@ -268,7 +272,8 @@ An arrow passed to one of these four forms may read the `const` locals and the
 parameters of the function it is written in, which is how a scale, an offset
 or a lookup table reaches the body:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMap } from "nish/threads";
 
@@ -313,7 +318,8 @@ export const main = (): i32 => {
   next pass's call comes after it; a loop that declares its own `dst` each pass
   is fine.
 
-<!-- nish:ok -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto`, whose length check no proof removes yet; does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMap, parallelMapInto } from "nish/threads";
 
@@ -349,7 +355,8 @@ Answer the value from the body instead, and fold the answers with
 `parallelReduce` after the call. Here the body answers `x` itself, so the
 fold reads the array the call was given:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelReduce } from "nish/threads";
 
@@ -367,7 +374,8 @@ A scope runs different functions side by side, each on a thread. Open it with
 `using`, hand it tasks with `s.spawn(entry, arg, dst, at)`, and when the block
 ends every task has run and `entry(arg)` is stored in `dst[at]`:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { scope } from "nish/threads";
 
@@ -481,7 +489,8 @@ no destination: `s.spawn(entry, arg)` runs `entry(arg)`, and
 `s.spawn(() => work(a, b))` runs an arrow that reads the `const` locals and
 the parameters of the function it is written in. Either one answers `void`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
@@ -578,7 +587,8 @@ deeper than that faults. A type checker walking a deep tree is the usual
 case. `scopeWithStack(bytes)` is a scope whose tasks each run on a thread with
 at least `bytes` of stack:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { scopeWithStack } from "nish/threads";
 
@@ -623,7 +633,8 @@ When tasks must update one value, put it in a `Mutex`. The value lives inside
 the lock, and the only way to it is the guard that `using g = m.lock()`
 binds, which holds the lock until its block ends:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
@@ -685,7 +696,8 @@ export const main = (): i32 => {
 A helper that takes the guard does the block's work under the block's lock,
 so the work can be split into functions without taking the lock twice:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Mutex, MutexGuard, scope } from "nish/threads";
 
@@ -784,7 +796,8 @@ lost when two threads make one at the same moment. The fast pattern is the one
 below: each task counts into its own local array, then adds each count to the
 shared atomic once, at its end:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `parallelMapInto`, whose length check no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { AtomicI32, parallelMapInto, scope } from "nish/threads";
 
@@ -889,7 +902,8 @@ export const main = (): i32 => {
 
 Read it once the block has closed, when every task has finished:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { AtomicI32, scope } from "nish/threads";
 
@@ -937,7 +951,8 @@ element's index first, so `hits.add(r, 1)` adds 1 to counter `r` in one
 indivisible step. This counts requests and bytes per route from a parallel
 function:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { AtomicI32Array, AtomicI64Array, parallelFrom } from "nish/threads";
 
@@ -1003,7 +1018,8 @@ the channel with `for...of`, which waits for values and ends once every task
 that may send has returned. Nobody closes a channel, so nobody can close one
 too early.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Channel, scope } from "nish/threads";
 
@@ -1110,7 +1126,8 @@ export const main = (): i32 => {
 Each task has memory of its own, freed when the scope joins, so a value that
 leaves a task is copied into the memory of whoever receives it:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Mutex, scope } from "nish/threads";
 
@@ -1185,7 +1202,8 @@ export const main = (): i32 => {
 `nish --fix main.ts` snapshots it in a `const` just before the `spawn`, which
 the task may read:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { scope } from "nish/threads";
 
@@ -1259,7 +1277,8 @@ export const main = (): i32 => {
 
 Snapshot it in a `const` before the call, as `nish --fix` does:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMap } from "nish/threads";
 
@@ -1337,7 +1356,8 @@ export const main = (): i32 => {
 Give the answer a one-slot destination above the scope, as `nish --fix` does,
 and read it after the block:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { scope } from "nish/threads";
 
@@ -1360,7 +1380,8 @@ The [NL2516 example](#counting-without-a-lock-atomici32-and-atomici64) opens two
 scopes in one `using`. Give each scope its own block, so the first one's tasks
 have finished before the second one's start, natively and under Node alike:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { AtomicI32, scope } from "nish/threads";
 
@@ -1408,7 +1429,8 @@ The refusal writes the arrow out as a module function, named for the function
 it was in, `mainTask`; put it above `main` and name it in the `spawn`, as
 `nish --fix` does:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Channel, scope } from "nish/threads";
 

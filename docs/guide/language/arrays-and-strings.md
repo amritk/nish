@@ -13,7 +13,8 @@ and [Template literals](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 `T[]` (or `Array<T>`) is an array of `T`. A literal's elements must all have
 one type, and an empty literal `[]` needs a type to take from its context:
 
-<!-- nish:ok -->
+<!-- allow-panics: pops an array it does not test for empty; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const primes = [2, 3, 5, 7];          // i32[]
@@ -51,7 +52,8 @@ how two elements compare: a negative number puts `a` first, a positive one
 puts `b` first, and zero keeps them in the order they had — the sort is
 stable, so the result is exactly the one Node gives.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/sort.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 class Score {
   name: string;
@@ -110,7 +112,8 @@ memory.
 which gets the element, or the element and its index, as in TypeScript.
 `slice` copies a range into a new array.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/array.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 8, 1, 6];
@@ -146,7 +149,8 @@ its own loop that calls it directly. Three things differ from JavaScript:
 `for (const x of xs)` visits each element in order; use an index loop when
 you need the position:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const sum = (xs: f64[]): f64 => {
   let total: f64 = 0.0;
@@ -182,7 +186,8 @@ function around it. To add up, write the `for...of` loop of `sum` above: a
 `forEach` callback that assigns a total is refused (NL2586), and the message
 says to use `for...of`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const xs: i32[] = [3, 8, 1];
@@ -205,7 +210,8 @@ empty array stops the program the same way. The compiler removes the check
 wherever it can prove the index is in range, as in the `i < xs.length` loop
 above.
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const xs = [10, 20, 30];
@@ -230,7 +236,8 @@ elements are worked out when the program compiles and kept as read-only
 data in the binary: nothing runs to build it, and nothing can write it
 ([Constant tables](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#constant-tables)).
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const LIMIT: i32 = 100;
 const SCALE: readonly i32[] = [1, 10, LIMIT, LIMIT * 10];
@@ -275,7 +282,8 @@ keeps its values from one call to the next. It is the one piece of state a
 module keeps, and no code runs to set it up.
 ([Module storage](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#module-storage)).
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const SCORES = new Int32Array(4);
 
@@ -354,7 +362,8 @@ build them from these, or look in the
 **Lengths and offsets count bytes, not characters.** An ASCII character is
 one byte, but `é` is two and most emoji are four:
 
-<!-- nish:ok-body -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const word = "café";
 console.log(`${word.length}`);              // 5
@@ -372,7 +381,8 @@ Bytes become text the other way with `String.fromBytes`: the range of a
 way to turn what a file or a socket handed you into a string, where a
 `String.fromCharCode` per byte joined together allocates once per byte:
 
-<!-- nish:ok-body -->
+<!-- allow-panics: slices with bounds it does not test -->
+<!-- nish:ok-body --allow-panics -->
 ```ts
 const bytes: u8[] = [99, 97, 102, 195, 169];
 console.log(String.fromBytes(bytes, 0, 5));   // café

@@ -25,7 +25,8 @@ It does three things:
 Discover once at start-up, make the `OidcKeys`, take the first key set, and
 then verify each request's token:
 
-<!-- nish:ok -->
+<!-- allow-panics: divides by a value it does not test; calls `std/crypto/jwt.ts`, `std/net/oidc.ts`, `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import {
   OIDC_ERR_STALE,
@@ -190,7 +191,8 @@ server's own loop or timer, never inside a request. `refresh(now)` answers
 `OIDC_SKIPPED` and does nothing while the set is fresh and no token has
 asked for a new one, so calling it on every turn of the loop is cheap:
 
-<!-- nish:ok -->
+<!-- allow-panics: divides by a value it does not test; calls `std/net/oidc.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OIDC_OK, OIDC_SKIPPED, OidcKeys } from "nish/net/oidc";
 
@@ -221,7 +223,8 @@ key set you already hold, for a test or for a set you fetch yourself.
 A provider running on your own machine over plain http (Keycloak in a
 container, say) is refused unless you allow it:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { OidcMetadata, OidcOptions, oidcDiscover } from "nish/net/oidc";
 

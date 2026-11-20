@@ -1231,7 +1231,8 @@ by the caller.
   locals with types, callees) (`tests/cases/dump_checked`).
 - **`--emit-panics <file.json>`** writes every panic site of the program,
   function by function, beside the IR, and changes no byte of it; see
-  [Panic sites](#panic-sites) below.
+  [Panic sites](#panic-sites) below. A build the no-panic scope refuses
+  writes no file: pass `--allow-panics` to list the sites it refused.
 - **`--deny-retention`** refuses a program whose own code keeps arena memory
   that nothing can reach, for a long-running program that cannot afford it; see
   [Retention as an error](#retention-as-an-error) below.
@@ -1582,9 +1583,12 @@ performance warning about the same check is not printed beside the error.
   panic names the callee and the site it reaches (`reject_deny_panics_call`,
   `tests/link/no_panic_transitive`). A call into a function that is itself in
   the scope is not refused again: its own sites are.
-- **A module the list does not name keeps its checks**: the same unproven index
-  is refused in a listed module and compiles in an unlisted one
-  (`tests/link/no_panic_module`, `tests/link/no_panic_unlisted`).
+- **Under `--allow-panics`, a module the list does not name keeps its
+  checks**: the same unproven index is refused in a listed module and compiles
+  in an unlisted one (`tests/link/no_panic_module`,
+  `tests/link/no_panic_unlisted`). With no flag the list changes nothing,
+  since every module of the package is in the scope already
+  (`tests/link/no_panic_empty_list`).
 - **An entry that names no module of the program is an error** (NL3031),
   reported in `package.json` where the entry is written: a typo would
   otherwise leave the module it meant outside the scope without a word

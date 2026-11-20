@@ -64,7 +64,8 @@ module held to no panic may call a function that uses one. One that
 keeps its check is refused, with advice that names the guard to add:
 `if (i >= 0 && i <= xs.length - 16)` for a `u8x16` read of `xs`.
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { loadU8x16, store } from "nish:simd";
 

@@ -91,7 +91,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.section("Policy")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
-  menu.row("--deny-panics", "", "refuse an unproven panic in your package (default)")
+  menu.row("--deny-panics", "", "refuse an unproven panic site (the default)")
   menu.row("--allow-panics", "", "hold only the noPanic list to no panic")
   menu.row("--deny-retention", "", "refuse retained arena memory in your package")
   menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")

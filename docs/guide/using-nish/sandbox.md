@@ -23,7 +23,8 @@ nish app.ts --sandbox          # IR only: the .ll carries the sandbox
 
 Take a program that reads one file and does nothing else:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls a file or entropy builtin that exits on failure -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { readFileSync } from "nish:fs"
 

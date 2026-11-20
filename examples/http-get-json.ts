@@ -8,7 +8,7 @@
 // prints the fields named on the command line, or the whole document when
 // none are named:
 //
-//     build/nish examples/http-get-json.ts --link build/http-get-json
+//     build/nish --allow-panics examples/http-get-json.ts --link build/http-get-json
 //     build/http-get-json https://api.github.com/repos/amritk/nish full_name stargazers_count
 //
 // It follows a redirect on the same origin, refuses a body past 4 MiB, and

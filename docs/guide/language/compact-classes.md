@@ -14,7 +14,8 @@ built-in module `nish:compact`. The rules are in the reference under
 Import `Compact` and add it to the class's `implements` clause. Nothing else
 in the program changes:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Compact } from "nish:compact";
 
@@ -150,7 +151,8 @@ itself, a class with a field of it, and an instantiation such as `Box<Cell>`.
 C holds an instance as a handle, passes it back to an exported function, and
 never reads its fields:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { Compact } from "nish:compact";
 

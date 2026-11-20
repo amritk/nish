@@ -20,7 +20,8 @@ and every request gets its rows, or word that there were none. The connection
 asks for nothing a round trip does not need: the statement is prepared, bound
 and executed in one write.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls a file or entropy builtin that exits on failure; slices with bounds it does not test; does integer arithmetic nothing bounds; calls `std/net/postgres.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import {
   PG_BATCH_MISSING,
@@ -393,7 +394,8 @@ nothing. When `failure` is `PG_TARGET_OK`, a `unix` target is
 `netAddress(addr, target.host, target.port)` and `tcpConnect(addr)`. Either
 way the connection is the same `PgConnection`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/net/url.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { PG_TARGET_OK, pgTargetUrl } from "nish/net/postgres";
 import { netAddress, tcpConnect, unixConnect } from "nish:net";
@@ -1102,7 +1104,8 @@ waits for its turn and reads its answer. Up to `depth` (8 by default, at most
 16) statements from different tasks are in flight on one connection at once,
 and each is parsed once a connection, then only bound and executed:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; does integer arithmetic nothing bounds; builds an array whose length it does not bound -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { spawn } from "nish:async"
 import {

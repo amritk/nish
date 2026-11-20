@@ -52,7 +52,8 @@ const total = (a: i32, b: i64): i64 => {
 Convert explicitly with `toI32`, `toI64`, `toF64` (and `toU8`, `toU16`,
 `toU32`, `toU64`, `toF32`):
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const total = (a: i32, b: i64): i64 => {
   return toI64(a) + b;
@@ -93,7 +94,8 @@ JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
 `std/math.ts` rather than called from the C library, so they answer the same
 on every target, WebAssembly included, within one unit in the last place.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/math.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 export const main = (): i32 => {
   const angle: f64 = Math.atan2(1.0, 1.0);

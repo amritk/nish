@@ -17,7 +17,8 @@ native only.
 
 ## A first server
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/json.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";
 import { Http1Config } from "nish/net/http1-server";

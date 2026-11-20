@@ -16,7 +16,7 @@
  * about the game. README.md beside this file says what it does, how it is
  * tested, and what is still open.
  *
- *     nish examples/relay/main.ts --link build/relay
+ *     nish --allow-panics examples/relay/main.ts --link build/relay
  *     build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/relay/relay.json
  *
  * The command line and the environment are main.rs's: `--port`

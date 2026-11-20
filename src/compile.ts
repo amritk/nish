@@ -1049,6 +1049,9 @@ const commandMain = (): number => {
       // The opposite of `--deny-panics`, and the last of the two wins: neither
       // moves a byte of the IR, so either reading builds the same binary,
       // unlike two `--sandbox` modes. A `noPanic` list still holds under it.
+      // Nothing else relaxes the default: `nish run`, `--emit-ts` and
+      // `--compat` refuse what a plain compile refuses, since each is a way
+      // to run the same program.
       opts.denyPanics = false
       opts.denyPanicsFlag = false
     } else if (value === "--deny-retention") {

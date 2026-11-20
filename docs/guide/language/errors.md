@@ -57,7 +57,8 @@ nothing to hand back on success returns `Result<void, E>` and succeeds with
 | `r.unwrapOr(d)` | the `T`, or `d` if `r` is a failure |
 | `r.expect(message)` | the `T`, or else print `message` and exit with status 1 |
 
-<!-- nish:ok -->
+<!-- allow-panics: unwraps a `Result` with `expect` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const checkAge = (age: i32): Result<i32, string> => {
   if (age < 0) {
@@ -286,7 +287,8 @@ never returns, so a function may end with it where it would otherwise need a
 certain succeeded, and it insists on a reason, which is why there is no
 `unwrap()`.
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `panic` -->
+<!-- nish:ok --allow-panics -->
 ```ts
 const daysIn = (month: i32): i32 => {
   if (month === 2) {

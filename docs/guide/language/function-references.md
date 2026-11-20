@@ -50,7 +50,8 @@ it with the usual syntax, `h(3)` or `this.op(4)`, or call an element in place
 as below, and `===` and `!==` tell you whether two references name the same
 function:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 type Step = (x: i32) => i32;
 
@@ -199,7 +200,8 @@ A `Map` value can be a reference, an array of them, or a nullable of either.
 A call through what `get` returns can reach every function of that type that
 any `Map` or array in the program holds, so it is a choice among all of them:
 
-<!-- nish:ok -->
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
 ```ts
 type Op = (x: i32) => i32;
 
@@ -231,7 +233,8 @@ A reference cannot sit directly in a `Result`, in either arm, nullable or not:
 `Result<Op, string>` is refused (`NL2762`). Return an array of references
 (`Result<Op[], string>`), or a class with a reference field, instead:
 
-<!-- nish:ok -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
 ```ts
 type Op = (x: i32) => i32;
 
@@ -254,7 +257,8 @@ A parameter whose function type is written out in the parameter list, as in
 `apply` below, takes a function's name, an arrow, or a variable holding a
 reference. The call passes an arrow that calls the reference:
 
-<!-- nish:ok -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
 ```ts
 type F = (x: i32) => i32;
 
