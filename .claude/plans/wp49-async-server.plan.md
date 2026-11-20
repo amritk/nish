@@ -1,6 +1,6 @@
 ---
 name: WP49 — async/await on the server, and the TechEmpower top
-overview: Stage 6's gate is still unmet, since the async TechEmpower entries sit outside the explicit ones' noise band on plaintext and json. Two further items are left, awaitAll lane costs recorded open in the security record and the owner's decision on whether to submit to TechEmpower.
+overview: Stage 6's gate is still unmet, since the async TechEmpower entries sit outside the explicit ones' noise band on plaintext and json. The awaitAll lane costs recorded open in the security record are left too; submitting to TechEmpower is retired, since TechEmpower takes no entries.
 spec: docs/wp49-async-server.md
 priority: 10
 labels: [ready]
@@ -49,23 +49,12 @@ stages:
       - id: update-record
         content: Move ASYNC-16 and ASYNC-17 from open to fixed in docs/security/async.md with before and after figures — see WP49 S7 awaitAll lanes
         status: pending
-  - id: submit-techempower
-    title: WP49 S8 — submit to TechEmpower
-    goal: The owner has decided whether and when to submit the TechEmpower entry, and the decision is recorded in WP49 D6 and WP39 E9.
-    verification: node docs/check-links.mjs && npm run lint
-    status: pending
-    labels: [needs-decision]
-    issue: 1905
-    todos:
-      - id: submit-decide
-        content: Record the owner's answer on submitting in docs/wp49-async-server.md section 9 D6 and docs/wp39-http-server.md E9 — see WP49 S8 Decision needed
-        status: pending
 ---
 
 # WP49 — async/await on the server, and the TechEmpower top
 
 ## Context
-Stages 1 to 5 and the measured async entries of stage 6 have landed; see [the design note](../../docs/wp49-async-server.md). Left are the stage 6 gate, two recorded-open costs of `awaitAll`, and the submission question. Spec: [the design note](../../docs/wp49-async-server.md), section 10 holds the stage table and section 9 the decisions.
+Stages 1 to 5 and the measured async entries of stage 6 have landed; see [the design note](../../docs/wp49-async-server.md). Left are the stage 6 gate and two recorded-open costs of `awaitAll`; the gate is this repository's own and stands without a submission (D6). Spec: [the design note](../../docs/wp49-async-server.md), section 10 holds the stage table and section 9 the decisions.
 
 ## WP49 S6 — the async entries within the explicit ones' noise band on plaintext, json and db
 Spec: [design note §6](../../docs/wp49-async-server.md#6-tfb-what-the-top-takes) (the gate) and [§10](../../docs/wp49-async-server.md#10-stages).
@@ -87,8 +76,6 @@ Issue #1327. #1320 gave each `awaitAll` member a region of its own (HF-13); two 
 - ASYNC-17: a loop with no per-pass release keeps about 1.3 KB per joined call against about 0.43 KB of answer; 30k rounds peak at 76 MB, 150k at 386 MB, because adoption keeps the region's first chunk with its unused tail.
 Measure each fix with the instructions ratchet and an RSS test. Likely files: `runtime/runtime-async.c`, `std/async.ts`, `docs/security/async.md`, `tests/runtime-budgets.js`.
 
-## WP49 S8 — submit to TechEmpower
-Spec: [design note §9, D6](../../docs/wp49-async-server.md#9-decisions) (shared with WP39 E9). D6 says submission waits for every test type to pass the verifier with numbers from a separate client machine, and a public number is the owner's call each time. The stage-6 gate still stands.
-
-### Decision needed
-Whether and when to submit. An open, unmerged PR (#1809) proposes retiring the TechEmpower submission in favour of HttpArena (WP71 to WP73): it records that TechEmpower archived its Framework Benchmarks on 2026-03-24 and takes no entries, moves WP39 E9 to not planned and calls D6 moot. Options: (1) accept #1809 and close this stage as not planned; (2) keep it open until the owner rules on #1809; (3) submit anyway, which #1809's premise says is not possible. Recommended: resolve #1809 first, since if it merges this stage is moot.
+## Out of scope
+- **S8, submitting to TechEmpower (D6).** TechEmpower archived TechEmpower/FrameworkBenchmarks on 2026-03-24 and takes no entries; #1905 is closed as not planned, as WP39 E9 (#1859) is. Stage 6's gate is this repository's own and stands; a public number goes through [WP71](https://github.com/amritk/nish/pull/1809)'s HttpArena entry.
+- Promises as values and `for await`; `async` on the wasm profile is WP54's.
