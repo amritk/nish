@@ -1,0 +1,7 @@
+{
+  "name": "compat-string-switch-duplicate-template",
+  "private": true,
+  "nish": {
+    "compat": ["string-switch"]
+  }
+}

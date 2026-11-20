@@ -1,0 +1,7 @@
+{
+  "name": "compat-string-switch-label-type",
+  "private": true,
+  "nish": {
+    "compat": ["string-switch"]
+  }
+}

@@ -1518,7 +1518,8 @@ export const isThreadsLayout = (info: StructInfo): boolean => {
  * channel and a scope it may not, since each is shared only by its own rules.
  * An arrow given to an ordinary function's parameter may capture none of them,
  * since its callee may hand it on to a parallel form or a `spawn`, nor a
- * foreign handle or its pointer, whose every name the handle rules keep inside
+ * foreign handle or its pointer (a `CPtr` or an opaque `declare class`, WP66
+ * S3), whose every name the handle rules keep inside
  * the `using` block that opens it (WP53 §4). The parallel forms and `spawn`
  * meet a handle by the handle rules' own refusal, as before.
  */
@@ -1531,7 +1532,8 @@ const captureObstacle = (
 ): string => {
   const task = mode === CAPTURE_TASK
   const call = mode === CAPTURE_CALL
-  if (call && table.stripNull(type) === T_CPTR) {
+  const bare = table.stripNull(type)
+  if (call && (bare === T_CPTR || table.isOpaque(bare))) {
     return "a foreign pointer is named only where the handle rules can follow it, never in an arrow"
   }
   if (table.isMaybe(type)) {

@@ -41,12 +41,12 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isOptionalChain, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
 import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./parallel"
-import { emitSliceCheck, guardKeep } from "./emit-strings"
+import { emitSliceCheck, emitStringWalk, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
@@ -1927,12 +1927,16 @@ const isUnitStep = (node: Node, name: string): boolean => {
   )
 }
 
-/** The single expression statement a loop body is, or `null`. */
+/**
+ * The single expression statement a loop body is, or `null`. A `?.` chain
+ * (`dst?.push(x)`, WP28 C1) is `null` too: it skips its call when a link is
+ * missing, which no range written for the whole loop can.
+ */
 const soleExpression = (body: Node): Node | null => {
   if (body.kind === NodeKind.Block) {
     return body.children.length === 1 ? soleExpression(body.children[0]) : null
   }
-  return body.kind === NodeKind.ExprStmt ? body.children[0] : null
+  return body.kind === NodeKind.ExprStmt && !isOptionalChain(body.children[0]) ? body.children[0] : null
 }
 
 /**
@@ -2528,6 +2532,10 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const local = emitter.program.nodeLocals[decl.id]
   if (local === null) {
     process.exit(internalErrorFor("emitter: a `for...of` variable with no local recorded", emitter.opts.json))
+  }
+  if (emitter.typeOf(stmt.children[1]) === T_STRING) {
+    emitStringWalk(emitter, stmt, local) // WP28 C1: `for-of-string`, a code point per pass
+    return
   }
   const elem = local.type
   const ty = emitter.llvm(elem)

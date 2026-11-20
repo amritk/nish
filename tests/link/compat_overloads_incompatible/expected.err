@@ -1,0 +1,1 @@
+main.ts:2:15: error: This overload signature of `show` is not compatible with its implementation: parameter 1 is string, which the implementation's f64 does not take

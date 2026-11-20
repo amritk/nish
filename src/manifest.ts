@@ -446,10 +446,10 @@ const manifestRepeatedMember = (members: ManifestMembers): i32 => {
 
 /**
  * The root package's `"nish"` field, read strictly (docs/wp36-capability-policy.md
- * §3): where its `noPanic`, `capabilities`, `host`, `compat` and `netRings` values start, or -1 for one it
+ * §3): where its `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link` values start, or -1 for one it
  * does not write. `problem` is the opening of the NL3036 message when the
  * field is not one object, written once, whose only keys are `noPanic`,
- * `capabilities`, `host` (WP50 stage 2's host modules), `compat` (WP28) and `netRings` (WP63 S3), each written once, with the span it is reported at; both
+ * `capabilities`, `host` (WP50 stage 2's host modules), `compat` (WP28), `netRings` (WP63 S3) and `link` (WP66 S7), each written once, with the span it is reported at; both
  * positions are then -1, so nothing in a field the reader cannot vouch for is
  * honoured. Keys are decoded as JSON.parse decodes them, so an escaped
  * spelling is the key it spells.
@@ -470,6 +470,10 @@ export class NishManifest {
   netRingsAt: i32
   /** One past the end of the `netRings` value. */
   netRingsEnd: i32
+  /** WP66 S7: where the `link` value starts, or -1; its value is read by `manifestLink`. */
+  linkAt: i32
+  /** One past the end of the `link` value. */
+  linkEnd: i32
 
   constructor() {
     this.problem = ""
@@ -482,6 +486,8 @@ export class NishManifest {
     this.compatAt = -1
     this.netRingsAt = -1
     this.netRingsEnd = -1
+    this.linkAt = -1
+    this.linkEnd = -1
   }
 }
 
@@ -580,6 +586,11 @@ export const manifestNish = (manifest: string, condition: string): NishManifest 
     } else if (key === "netRings") {
       out.netRingsAt = valueAt
       out.netRingsEnd = fields.valueEnd[f]
+    } else if (key === "link") {
+      // Its shape is judged where it is read (`manifestLink`, NL3059), for the
+      // root and for every dependency alike.
+      out.linkAt = valueAt
+      out.linkEnd = fields.valueEnd[f]
     } else {
       return manifestNishProblem(
         `\`${key}\` is no key of \`${condition}\``,
@@ -770,6 +781,309 @@ export const manifestHost = (manifest: string, at: i32, end: i32): HostManifest 
     }
     i = i + 1
   }
+  return out
+}
+
+/** What every NL3059 says: the shape `nish.link` has to be. */
+export const LINK_SHAPE: string =
+  ": `nish.link` is an object whose `libraries` and `sources` are arrays of strings, and only the root package's may grant a dependency's under `dependencies`"
+
+/** What every NL3060 says: the form a library name and a source path take. */
+export const LINK_ENTRY: string =
+  ": a `nish.link` library is a name `-l` takes, of letters, digits, `_`, `.`, `+` and `-` and not starting with `-`, and a source is a `.c` file inside the package, by its path relative to `package.json`"
+
+/**
+ * NL3061: what a dependency's `nish.link` asked for that the root's
+ * `nish.link.dependencies` does not grant it (WP40's rule, for C libraries).
+ */
+export const LINK_UNGRANTED: string =
+  ", which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it"
+
+/**
+ * One `{ "libraries": [...], "sources": [...] }` object of `nish.link`: the
+ * names and paths as written, each beside its span. An entry is here only once
+ * it passed `manifestLinkLibrary` or `manifestLinkSourceProblem`.
+ */
+export class LinkRequest {
+  libraries: ManifestList
+  sources: ManifestList
+
+  constructor() {
+    this.libraries = new ManifestList()
+    this.sources = new ManifestList()
+  }
+}
+
+/**
+ * A package's `"nish": { "link": ... }` (WP66 S7): the C libraries it links
+ * and the C files it compiles beside the runtime, and, in the root package
+ * only, what it grants each dependency under `dependencies` (the WP40 rule: a
+ * dependency's link takes effect only once the root names it). `problems`
+ * holds every refusal, none dropped and none capped: NL3059 for a shape this
+ * reader does not know -- an unknown key included, since a key it cannot read
+ * might ask for something -- and NL3060 for a name or path that is not one.
+ */
+export class LinkManifest {
+  own: LinkRequest
+  grantees: string[]
+  grants: LinkRequest[]
+  problems: ManifestProblem[]
+
+  constructor() {
+    this.own = new LinkRequest()
+    this.grantees = []
+    this.grants = []
+    this.problems = []
+  }
+
+  refuse(message: string, start: i32, end: i32): void {
+    this.problems.push(new ManifestProblem(message, start, manifestSpanEnd(start, end)))
+  }
+
+  /** What the root grants the dependency `name`: an empty request when it grants nothing. */
+  grantFor(name: string): LinkRequest {
+    const at = this.grantees.indexOf(name)
+    return at >= 0 && at < this.grants.length ? this.grants[at] : new LinkRequest()
+  }
+}
+
+/** Whether `name` is a library name `-l` takes and no flag: `[A-Za-z0-9_][A-Za-z0-9_.+-]*`. */
+const manifestLinkLibrary = (name: string): boolean => {
+  if (name.length === 0 || name.length > 255) {
+    return false
+  }
+  let i = 0
+  while (i < name.length) {
+    const code = name.charCodeAt(i)
+    const plain =
+      isDigit(code) || (code >= UPPER_A && code <= 90) || (code >= LOWER_A && code <= LOWER_Z) || code === 95
+    const inner = code === DOT || code === PLUS || code === MINUS
+    if (!plain && !(inner && i > 0)) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/**
+ * Whether every character of `text` is printable ASCII (space to `~`). The
+ * string decoder turns each character past ASCII into one stand-in, so two
+ * distinct names that are not plain ASCII would read as the same one, and a
+ * grant of either would grant both: such an entry is refused, never compared.
+ */
+const manifestPrintableAscii = (text: string): boolean => {
+  let i = 0
+  while (i < text.length) {
+    const code = text.charCodeAt(i)
+    if (code < 32 || code > 126) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/** Why `path` is no `nish.link` source, or `""` when it is one. */
+const manifestLinkSourceProblem = (path: string): string => {
+  if (path.length === 0) {
+    return "an empty path names no file"
+  }
+  if (!manifestPrintableAscii(path)) {
+    return "the path holds a character that is not printable ASCII"
+  }
+  if (manifestAbsolutePath(path)) {
+    return `\`${path}\` is an absolute path`
+  }
+  if (manifestLeavesRoot(path)) {
+    return `\`${path}\` climbs out of the package's directory`
+  }
+  if (path.indexOf("\\") >= 0 || path.charCodeAt(0) === MINUS) {
+    return `\`${path}\` is not a plain relative path`
+  }
+  if (!path.endsWith(".c")) {
+    return `\`${path}\` is not a \`.c\` file`
+  }
+  return ""
+}
+
+/**
+ * Each of `read`'s entries from `at` on kept in `into`, or refused into `out`
+ * when it is no string or no `kind` entry. Recursive rather than a loop, so
+ * each entry's refusal text is given back when its call returns (NL9011).
+ */
+const manifestKeepLinkEntries = (
+  manifest: string,
+  kind: string,
+  read: ManifestList,
+  at: i32,
+  into: ManifestList,
+  out: LinkManifest
+): void => {
+  if (at < 0 || at >= read.entries.length || at >= read.offsets.length || at >= read.ends.length) {
+    return
+  }
+  const entry = read.entries[at]
+  const start = read.offsets[at]
+  const stop = read.ends[at]
+  const problem = kind === "sources" ? manifestLinkSourceProblem(entry) : ""
+  if (start < 0 || start >= manifest.length || manifest.charCodeAt(start) !== QUOTE) {
+    out.refuse(
+      `${manifestJsonKind(manifest, start)} in \`${kind}\` is not a string${LINK_SHAPE}`,
+      start,
+      stop
+    )
+  } else if (kind === "libraries" && !manifestLinkLibrary(entry)) {
+    out.refuse(`\`${entry}\` is not a library name${LINK_ENTRY}`, start, stop)
+  } else if (problem.length > 0) {
+    out.refuse(`${problem}${LINK_ENTRY}`, start, stop)
+  } else {
+    into.entries.push(entry)
+    into.offsets.push(start)
+    into.ends.push(stop)
+  }
+  manifestKeepLinkEntries(manifest, kind, read, at + 1, into, out)
+}
+
+/** The array at `manifest[at]` (`kind` is `libraries` or `sources`) read into `into`, each bad entry refused. */
+const manifestReadLinkList = (
+  manifest: string,
+  at: i32,
+  end: i32,
+  kind: string,
+  into: ManifestList,
+  out: LinkManifest
+): void => {
+  if (at < 0 || at >= manifest.length || manifest.charCodeAt(at) !== OPEN_BRACKET) {
+    out.refuse(`\`${kind}\` is not an array${LINK_SHAPE}`, at, end)
+    return
+  }
+  const read = new ManifestList()
+  manifestReadList(manifest, at, read)
+  manifestKeepLinkEntries(manifest, kind, read, 0, into, out)
+  // A list the walk could not finish might hold more than it read: refuse it
+  // rather than link part of it.
+  const last = read.ends.length > 0 ? read.ends[read.ends.length - 1] : at + 1
+  const close = manifestSkipBlank(manifest, last)
+  const comma = close >= 0 && close < manifest.length && manifest.charCodeAt(close) === COMMA
+  const closeAt = comma ? manifestSkipBlank(manifest, close + 1) : close
+  if (closeAt < 0 || closeAt >= manifest.length || manifest.charCodeAt(closeAt) !== CLOSE_BRACKET) {
+    out.refuse(`\`${kind}\` could not be read to its end${LINK_SHAPE}`, at, end)
+  }
+}
+
+/**
+ * The object at `manifest[at]` read into `into`: `libraries` and `sources`,
+ * and `dependencies` only when `grants` (the root's top level). Anything else
+ * is refused, since a key this reader does not know may be asking for something.
+ */
+const manifestReadLinkObject = (
+  manifest: string,
+  at: i32,
+  end: i32,
+  what: string,
+  grants: boolean,
+  into: LinkRequest,
+  out: LinkManifest
+): void => {
+  const members = manifestMembers(manifest, at)
+  if (members.broken >= 0) {
+    out.refuse(`${what} is not an object${LINK_SHAPE}`, at, end)
+    return
+  }
+  const repeated = manifestRepeatedMember(members)
+  if (repeated >= 0 && repeated < members.keyAt.length && repeated < members.keyEnd.length) {
+    out.refuse(
+      `\`${members.keys[repeated]}\` is written twice in ${what}${LINK_SHAPE}`,
+      members.keyAt[repeated],
+      members.keyEnd[repeated]
+    )
+    return
+  }
+  let k = 0
+  while (
+    k < members.keys.length &&
+    k < members.keyAt.length &&
+    k < members.keyEnd.length &&
+    k < members.valueAt.length &&
+    k < members.valueEnd.length
+  ) {
+    const key = members.keys[k]
+    const valueAt = members.valueAt[k]
+    const valueEnd = members.valueEnd[k]
+    if (key === "libraries") {
+      manifestReadLinkList(manifest, valueAt, valueEnd, key, into.libraries, out)
+    } else if (key === "sources") {
+      manifestReadLinkList(manifest, valueAt, valueEnd, key, into.sources, out)
+    } else if (key === "dependencies" && grants) {
+      manifestReadLinkGrants(manifest, valueAt, valueEnd, out)
+    } else {
+      out.refuse(`\`${key}\` is no key of ${what}${LINK_SHAPE}`, members.keyAt[k], members.keyEnd[k])
+    }
+    k = k + 1
+  }
+}
+
+/** The root's `nish.link.dependencies` at `manifest[at]`: each package named once, granted one link object. */
+const manifestReadLinkGrants = (manifest: string, at: i32, end: i32, out: LinkManifest): void => {
+  const members = manifestMembers(manifest, at)
+  if (members.broken >= 0) {
+    out.refuse(`\`dependencies\` is not an object${LINK_SHAPE}`, at, end)
+    return
+  }
+  const repeated = manifestRepeatedMember(members)
+  if (repeated >= 0 && repeated < members.keyAt.length && repeated < members.keyEnd.length) {
+    out.refuse(
+      `\`${members.keys[repeated]}\` is named twice in \`dependencies\`${LINK_SHAPE}`,
+      members.keyAt[repeated],
+      members.keyEnd[repeated]
+    )
+    return
+  }
+  let k = 0
+  while (
+    k < members.keys.length &&
+    k < members.keyAt.length &&
+    k < members.keyEnd.length &&
+    k < members.valueAt.length &&
+    k < members.valueEnd.length
+  ) {
+    if (!manifestPrintableAscii(members.keys[k])) {
+      out.refuse(
+        `a package name in \`dependencies\` holds a character that is not printable ASCII${LINK_ENTRY}`,
+        members.keyAt[k],
+        members.keyEnd[k]
+      )
+      k = k + 1
+      continue
+    }
+    const grant = new LinkRequest()
+    manifestReadLinkObject(
+      manifest,
+      members.valueAt[k],
+      members.valueEnd[k],
+      `the grant of \`${members.keys[k]}\``,
+      false,
+      grant,
+      out
+    )
+    out.grantees.push(members.keys[k])
+    out.grants.push(grant)
+    k = k + 1
+  }
+}
+
+/**
+ * A package's `nish.link`, from the position `manifestNish` found it at (-1
+ * for none), which ends at `end`. `root` says whether it may grant its
+ * dependencies (`LinkManifest`).
+ */
+export const manifestLink = (manifest: string, at: i32, end: i32, root: boolean): LinkManifest => {
+  const out = new LinkManifest()
+  if (at < 0 || at >= manifest.length) {
+    return out
+  }
+  manifestReadLinkObject(manifest, at, end, "`link`", root, out.own, out)
   return out
 }
 

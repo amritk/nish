@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_nullish_never_missing/main.ts","line":7,"column":37,"endLine":7,"endColumn":43,"severity":"error","code":"NL2370","message":"The right operand of `??` stands in for a missing value, so it must be `i32`, the type of the value on its left; got `string`"}

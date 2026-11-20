@@ -1,0 +1,1 @@
+main.ts:3:29: error: Optional parameters are not supported: give `suffix` a default instead, `suffix: string = <default>`, which a call that leaves it out passes

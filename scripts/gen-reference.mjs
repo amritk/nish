@@ -1509,7 +1509,14 @@ const configText = (text, pages) => {
   // The references first, then the hand-written pages: the overview of std/,
   // running under Node, then release material. A hand-written page this list
   // does not name keeps its place after them.
-  const after = ["/standard-library", "/run-under-node", "/install", "/benchmarks", "/changelog"]
+  const after = [
+    "/standard-library",
+    "/run-under-node",
+    "/install",
+    "/benchmarks",
+    "/leaderboards",
+    "/changelog",
+  ]
   const written = Object.keys(reference.children).filter((k) => !(k in made))
   if (!written.includes("/standard-library")) {
     throw new Error(

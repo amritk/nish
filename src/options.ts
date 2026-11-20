@@ -319,8 +319,10 @@ export class Options {
    * decides it before the first module loads: `--compat` (`compatFlag`), or
    * else `nish.compat` in the root `package.json`. It implies
    * `--number-mode f64` unless the command line names a mode
-   * (`numberModeFlag`), and no feature is built yet, so beyond that it
-   * changes no diagnostic and no instruction (`tests/compat-erasure.js`).
+   * (`numberModeFlag`). Beyond that it marks each module it writes and
+   * accepts what the features in `compatFeatures` admit (`src/compat.ts`); a
+   * program strict already answers gets the same answer
+   * (`tests/compat-erasure.js`).
    */
   compat: boolean
   /** The command line gave `--compat` or `--compat=<list>`, which the root manifest does not override. */
