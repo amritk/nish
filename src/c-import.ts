@@ -1741,7 +1741,11 @@ class Importer {
    * function writes (an out class). `CountedBy` takes no other type.
    */
   isCountType(t: CType): boolean {
-    if (t.pointers > 1 || (t.pointers === 1 && t.constPointee) || (t.base !== BASE_SCALAR && t.base !== BASE_CHAR)) {
+    if (
+      t.pointers > 1 ||
+      (t.pointers === 1 && t.constPointee) ||
+      (t.base !== BASE_SCALAR && t.base !== BASE_CHAR)
+    ) {
       return false
     }
     const s = this.valueType(t)
