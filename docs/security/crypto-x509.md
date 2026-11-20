@@ -35,7 +35,7 @@ or a peer's certificate (`x509ParseCertificate`, `x509ParseChain`,
 the mint.
 
 Since X509-10 that includes every extension the parser decodes: a
-path validator (none is in `std/` yet; one is planned under #987) takes its answers — the CA bit, path length, key
+path validator (`pkiVerifyServer` in `std/crypto/pki.ts`, [its record](crypto-pki.md)) takes its answers — the CA bit, path length, key
 usage, the names a leaf is for and the subtrees a CA may issue under — as the
 certificate's, so a reader that answers more than the bytes say, or answers
 for a second spelling of an extension, moves a trust decision. The attacker does not control the private key or the serial a caller
