@@ -4,11 +4,11 @@
 
 ## Stages
 
-- [ ] S1: JSON parsed into a `JsonDocument` with every value's and key's source range, as jsonc-parser gives them, in the tokenizer's one pass
+- [ ] S1: the value and key ranges `JsonDocument.parseRanged` records, checked against jsonc-parser 2.2's as `@stoplight/json` drives it
 - [ ] S2: jsonc-parser 2.2's error recovery as `@stoplight/json` drives it: the same errors at the same offsets and the same partial tree, comments accepted, duplicate keys reported, a depth limit
 - [ ] S3: two `YamlJsonLoader` options: `.inf`, `-.inf` and `.nan` load as numbers with JavaScript's comparisons and equality and are written as `null`; non-string keys spelled as JavaScript's `String()` of their resolved value
 - [ ] S4: zero-based lines and UTF-16 columns in `YamlLineIndex`
-- [ ] S5: `std/collate.ts`: `collateCompare` (CLDR root collation, pinned to `en`, what `localeCompare` answers) and `compareCodePoints` (Go's byte order, the same natively and under Node)
+- [ ] S5: `std/collate.ts`: `collateCompare` (CLDR root collation, pinned to `en`, what `localeCompare` answers)
 - [ ] S6: `std/glob.ts`: fast-glob 3.2's and minimatch 3's dialects, `matchBase`, linear matching, and expansion with `readdirSync`
 
 ## Next

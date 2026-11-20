@@ -20,11 +20,11 @@ to build.
 | # | Asked for | State at `d0f446d1` | Stage |
 | --- | --- | --- | --- |
 | 1 | JSON Schema validation against a schema read at run time, with external `$ref`s | Missing | [WP69](wp69-json-schema-runtime.md) |
-| 2 | JSON parsed with every value's and key's source range | Missing | S1 |
+| 2 | JSON parsed with every value's and key's source range, as jsonc-parser gives them | Built (`parseRanged`); not checked against jsonc-parser | S1 |
 | 3 | JSON error recovery: jsonc-parser's errors, its partial tree, comments accepted, duplicate keys reported | Missing | S2 |
 | 4 | YAML: `.inf` and `.nan` as numbers, and keys spelled as Spectral spells them | Refused / different | S3 |
 | 5 | Zero-based lines and UTF-16 columns | Missing | S4 |
-| 6 | String order: Unicode collation, and code point order | Missing | S5 |
+| 6 | String order: Unicode collation | Missing | S5 |
 | 7 | Globs: fast-glob's for document arguments, minimatch's for `overrides` | Missing | S6 |
 | 8 | Regex lookaround, backreferences and JavaScript's Annex B syntax | Refused by design | Not planned (§7) |
 
@@ -34,20 +34,27 @@ Every finding is reported at a range in the source text, and a rule's
 `given` path is matched against the parsed tree, so the parser has to keep,
 for every value and every key, where it was written.
 
-`JsonDocument.parse` keeps none: "A plain `parse` writes nothing for them"
-(`std/json-value.ts:82` to `:85`). The ranges exist — `setRange` and
-`setKeyRange` (`:1462`), which `YamlJsonLoader` fills from YAML nodes — but
-only a loader that builds the document itself writes them.
+`JsonDocument` keeps them already. `parseRanged` and `parseTextRanged` parse
+as `parse` does and record, in the same pass, each value's byte range (`start`,
+`end`) and each member key's, its quotes included (`keyStart`, `keyEnd`)
+(`std/json-value.ts:66` to `:93`, `:546`, `:669`). Their cost against a plain
+`parse` is recorded: 4.1% to 10.4% more retired instructions on four documents
+(`docs/BENCHMARKS.md:632` to `:652`). Offsets are UTF-8 bytes natively and
+UTF-16 code units under Node (`std/json-value.ts:74` to `:76`); §4's index
+turns them into lines and columns.
 
-**Build** a loader that parses JSON text into a `JsonDocument` and calls
-`setRange` and `setKeyRange` for every value and key as it goes, in the
-tokenizer's one pass. The tokenizer already has each offset, and storing it
-is two `i32`s per value. Ranges are byte offsets; §4's index turns them into
-lines and columns. Each value's and key's range is the one jsonc-parser
-gives the same node (`@stoplight/json` reads them from its visitor), so a
-finding lands where Spectral puts it. Measure the loader against a plain `parse`; if keeping the
-ranges is measurably slower, record the figure and keep the plain path for
-callers that do not want them.
+What nothing checks is that they are the ranges Spectral reports.
+`@stoplight/json` builds its tree from jsonc-parser's visitor
+(`src/parseWithPointers.ts:89` to `:218`), and a finding lands at that tree's
+node. `tests/link/std_json_value_ranges` checks each range against the bytes it
+covers, not against jsonc-parser.
+
+**Build** a differential: every value's and key's range from `parseRanged`
+against the offset and length jsonc-parser 2.2 gives the same node, driven as
+`@stoplight/json` drives it, over valid documents with every value kind,
+nesting, whitespace, escapes, and non-ASCII and astral text, compared in UTF-16
+code units. A range that differs is fixed in `parseRanged`, or recorded with
+the reason when no finding is placed at that node.
 
 ## 2. JSON error recovery, as Spectral sees it (S2)
 
@@ -74,7 +81,15 @@ behaviours follow, and each is part of the output:
 error sets `failed`" (`std/json-tokenizer.ts:2`, `:33` to `:35`). It has no
 comment handling at all.
 
-**Build**, on top of S1's loader:
+Two more behaviours of `@stoplight/json`'s tree follow from its visitor. A
+member whose value jsonc-parser could not read is left out of the data: the key
+is set as the pending property (`parseWithPointers.ts:143`) and only a value
+stores it (`:70` to `:76`). And with `preserveKeyOrder` a repeated key moves to
+the end of the object's key order (`swapKey`, `:138` to `:141`, `:282` to
+`:291`), where `JSON.parse`, and `JsonDocument` under
+`JSON_VALUE_DUPLICATE_LAST`, keep it where it was first written.
+
+**Build**, on top of `parseRanged`'s ranges:
 
 - a recovering mode that answers the list of errors jsonc-parser 2.2 reports
   for the same text, at the same offsets and lengths, and the same partial
@@ -146,12 +161,14 @@ continuation byte (`std/yaml-lines.ts:12` to `:13`, `:22` to `:26`), or
 `byteColumn`. The two agree until a line holds a character outside the Basic
 Multilingual Plane, which is one character and two UTF-16 units.
 
-**Build** `utf16Column(offset)` and zero-based `line0`/`utf16Column0` (or the
-names the stage settles), each no costlier than `column` is today. The index
-is not YAML-specific — S1's JSON loader uses it too — but it keeps its module
+**Build** `utf16Column(offset)` and zero-based `line0` and `utf16Column0`,
+each no costlier than `column` is today. A caller that wants both reads
+`line0` once and counts from its line start; there is no call that returns an
+object. The index
+is not YAML-specific — `parseRanged`'s ranges need it too — but it keeps its module
 and name: moving it would move every pointer to it, for no reader's benefit.
 
-## 5. String order: collation, and code points (S5)
+## 5. String order: collation (S5)
 
 Spectral's `alphabetical` compares text with `a.localeCompare(b)`
 (`packages/functions/src/alphabetical.ts:21`), in whatever locale the machine
@@ -176,10 +193,11 @@ two outside ASCII.
   non-ignorable variable weighting, which is what Node with full ICU answers
   for `a.localeCompare(b, "en")`. The locale is pinned, so the linter's
   output does not depend on the machine it runs on, which Spectral's does.
-- **`compareCodePoints(a, b)`**: code point order, which is UTF-8 byte order
-  and Go's, answering the same natively and under Node. It is vacuum's
-  default order, and it is the order a program wants for a deterministic
-  sort.
+
+Code point order, vacuum's default, is not built: the linter follows
+Spectral, and a program that wants a byte order already has one in the
+encoded UTF-8. Invalid UTF-8 reads as U+FFFD for each maximal subpart, as
+Node's decoder reads it.
 
 The tables are generated by a script from a pinned CLDR release, as
 `scripts/gen-regex-unicode.mjs` generates the regex tables and checks their
@@ -198,7 +216,12 @@ agrees; invalid UTF-8 neither panics nor recurses.
 Spectral reads two glob dialects:
 
 - **Document arguments** are expanded by fast-glob 3.2
-  (`packages/cli/package.json`, `"fast-glob": "~3.2.12"`).
+  (`packages/cli/package.json`, `"fast-glob": "~3.2.12"`) with
+  `{ absolute: true, dot: true }`
+  (`packages/cli/src/services/linter/utils/listFiles.ts:6` to `:9`). An
+  argument that names an existing file is taken as it is, not as a pattern
+  (`:25`), and the list is deduplicated and sorted with `localeCompare`
+  (`:37`, `:40`, `:81`), so fast-glob's own order never reaches the output.
 - **`overrides[].files`** are matched by minimatch 3 with `matchBase: true`
   (`packages/core/src/ruleset/utils/minimatch.ts:3` to `:7`, called at
   `packages/core/src/ruleset/ruleset.ts:209`), so a pattern with no slash
@@ -210,11 +233,16 @@ Nish has `readdirSync` (`docs/LANGUAGE.md:11049`) and no glob.
 **Build** `std/glob.ts`: a pattern compiled once and matched against paths,
 in either dialect — `*`, `**`, `?`, `[...]` and `[!...]`, nested `{a,b}`,
 `{1..3}` where the dialect takes it, the extglobs `!(…)`, `?(…)`, `+(…)`,
-`*(…)` and `@(…)`, a leading `!`, backslash escapes, dotfiles as each
-dialect's defaults treat them, and minimatch's `matchBase`. Matching is
+`*(…)` and `@(…)`, a leading `!`, backslash escapes, dotfiles as Spectral's options leave them
+(fast-glob's `dot: true`, minimatch's default), and minimatch's `matchBase`. Matching is
 linear in the path. Expansion walks from the pattern's static prefix with
-`readdirSync`, never loops on a symlink cycle, answers paths in fast-glob's
-order, and reaches only `fs.read`.
+`readdirSync`, never loops on a symlink cycle, and reaches only `fs.read`. It
+answers paths in walk order, deduplicated: `readdirSync` sorts each directory
+by bytes, so the order is the same on every machine, and the stage adds no
+sort of its own (Spectral's `localeCompare` sort is the caller's to add).
+Braces compile to an alternation, not an expansion, so `{a,b}` repeated does
+not multiply the pattern, and an argument that names an existing file with no
+glob syntax is taken without a walk.
 
 **Done:** differentials against fast-glob 3.2.12 and minimatch 3.1 over a
 generated directory tree and a pattern corpus.
@@ -256,14 +284,13 @@ rewrite as its pattern translation.
 
 ## 8. Stages
 
-- **S1:** JSON parsed into a `JsonDocument` with every value's and key's
-  range (§1).
+- **S1:** `parseRanged`'s ranges checked against jsonc-parser's (§1).
 - **S2:** jsonc-parser's recovery, comments accepted, duplicate keys reported,
   a depth limit (§2).
 - **S3:** the two `YamlJsonLoader` options: non-finite numbers, and keys
   spelled as resolved (§3).
 - **S4:** zero-based lines and UTF-16 columns in `YamlLineIndex` (§4).
-- **S5:** `std/collate.ts`, collation and code point order (§5).
+- **S5:** `std/collate.ts`, Unicode collation (§5).
 - **S6:** `std/glob.ts`, both dialects, and expansion (§6).
 
 S1 comes before S2. The others depend on nothing here, and none waits on
