@@ -95,6 +95,10 @@ export const declareResultTypes = (emitter: Emitter, type: i32): void => {
   emitter.declareType(resultTypeDecl(emitter.table, type))
 }
 
+/** The layout `emitter` writes `type` in, at the target's pointer width. */
+const resultLayoutOf = (emitter: Emitter, type: i32): ResultLayout =>
+  resultLayout(emitter.table, type, emitter.pointerBytes())
+
 const slotPointer = (emitter: Emitter, layout: ResultLayout, receiver: string, index: i32): string => {
   const ty = resultTypeName(layout)
   return emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${index}`)
@@ -156,7 +160,7 @@ const construct = (
   site: Node | null
 ): string => {
   declareResultTypes(emitter, type)
-  const layout = resultLayout(emitter.table, type, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, type)
   const object = allocateResult(emitter, layout, site)
   const flag = isOk ? "true" : "false"
   storeSlot(emitter, layout, object, layout.okIndex, T_BOOL, flag)
@@ -261,7 +265,7 @@ const packArm = (
  * `select` discards it either way, which is cheaper than a branch.
  */
 const packObject = (emitter: Emitter, type: i32, object: string): string => {
-  const layout = resultLayout(emitter.table, type, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, type)
   const ok = loadOk(emitter, layout, object)
   const error = payloadToWord(
     emitter,
@@ -326,7 +330,7 @@ export const packResultObject = (emitter: Emitter, type: i32, object: string, is
  */
 const unpackResult = (emitter: Emitter, type: i32, word: string, stack: boolean): string => {
   declareResultTypes(emitter, type)
-  const layout = resultLayout(emitter.table, type, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, type)
   const object = allocateResultIn(emitter, layout, stack)
   const ok = emitter.fn.emitValue(`trunc i64 ${word} to i1`)
   storeSlot(emitter, layout, object, layout.okIndex, T_BOOL, ok)
@@ -428,7 +432,7 @@ const armsForArm = (
  * each where it belongs and the dead one is discarded by whoever ignores it.
  */
 const armsForObject = (emitter: Emitter, type: i32, object: string): string => {
-  const layout = resultLayout(emitter.table, type, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, type)
   const ok = loadOk(emitter, layout, object)
   let arms = emitter.fn.emitValue(`insertvalue ${RESULT_ARMS} undef, i1 ${ok}, 0`)
   const error = payloadToSlot(
@@ -455,7 +459,7 @@ const armsForObject = (emitter: Emitter, type: i32, object: string): string => {
  */
 const unpackArms = (emitter: Emitter, type: i32, arms: string, stack: boolean): string => {
   declareResultTypes(emitter, type)
-  const layout = resultLayout(emitter.table, type, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, type)
   const object = allocateResultIn(emitter, layout, stack)
   const ok = emitter.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 0`)
   storeSlot(emitter, layout, object, layout.okIndex, T_BOOL, ok)
@@ -515,7 +519,7 @@ export const emitResultReturningCall = (
 
 export const emitResultProperty = (emitter: Emitter, expr: Node, receiver: i32): string => {
   declareResultTypes(emitter, receiver)
-  const layout = resultLayout(emitter.table, receiver, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, receiver)
   const object = emitter.emitExpression(expr.children[0])
   if (expr.text === "ok") {
     return loadOk(emitter, layout, object)
@@ -544,7 +548,7 @@ const emitOrReturn = (emitter: Emitter, expr: Node, receiver: i32): string => {
   const returnType = sig.returnType
   declareResultTypes(emitter, receiver)
   declareResultTypes(emitter, returnType)
-  const layout = resultLayout(emitter.table, receiver, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, receiver)
   const access = expr.children[0]
   const object = emitter.emitExpression(access.children[0])
   const okBlock = emitter.fn.newBlock("res.ok")
@@ -576,7 +580,7 @@ const emitOrReturn = (emitter: Emitter, expr: Node, receiver: i32): string => {
 /** `r.unwrapOr(d)`: the fallback is evaluated only where it is needed. */
 const emitUnwrapOr = (emitter: Emitter, expr: Node, receiver: i32): string => {
   declareResultTypes(emitter, receiver)
-  const layout = resultLayout(emitter.table, receiver, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, receiver)
   const access = expr.children[0]
   const object = emitter.emitExpression(access.children[0])
   const endBlock = emitter.fn.newBlock("res.end")
@@ -607,7 +611,7 @@ const emitUnwrapOr = (emitter: Emitter, expr: Node, receiver: i32): string => {
  */
 const emitExpect = (emitter: Emitter, expr: Node, receiver: i32): string => {
   declareResultTypes(emitter, receiver)
-  const layout = resultLayout(emitter.table, receiver, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, receiver)
   const access = expr.children[0]
   const object = emitter.emitExpression(access.children[0])
   const okBlock = emitter.fn.newBlock("res.ok")
@@ -628,7 +632,7 @@ const emitExpect = (emitter: Emitter, expr: Node, receiver: i32): string => {
 /** `r.isOk()` / `r.isErr()`: the discriminant, inverted for `isErr`. */
 const emitDiscriminantTest = (emitter: Emitter, expr: Node, receiver: i32, positive: boolean): string => {
   declareResultTypes(emitter, receiver)
-  const layout = resultLayout(emitter.table, receiver, emitter.pointerBytes())
+  const layout = resultLayoutOf(emitter, receiver)
   const access = expr.children[0]
   const flag = loadOk(emitter, layout, emitter.emitExpression(access.children[0]))
   if (positive) {

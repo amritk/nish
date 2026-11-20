@@ -62,6 +62,7 @@ struct DebugInfo (class) size=104 align=8 exported
   method referenceEnumeration -> @DebugInfo.referenceEnumeration
   method arraySlice -> @DebugInfo.arraySlice
   method arrayHeader -> @DebugInfo.arrayHeader
+  method memberBits -> @DebugInfo.memberBits
   method resultComposite -> @DebugInfo.resultComposite
   method unionComposite -> @DebugInfo.unionComposite
   method resultWord -> @DebugInfo.resultWord
@@ -290,8 +291,8 @@ function DebugInfo.member(this: DebugInfo, name: string, scope: string, type: st
 function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @DebugInfo.composite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
-  calls: DebugInfo.arrayHeader DebugInfo.arraySlice DebugInfo.byValue DebugInfo.fileOf DebugInfo.lineOf DebugInfo.member DebugInfo.pointerTo DebugInfo.setTypeRef DebugInfo.typeRef FieldInfo.inline IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata TypeTable.isPointerValue TypeTable.mangle TypeTable.refOf TypeTable.typeName bitsOfIn nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 quote
-  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.setTypeRef#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.member#0 DebugInfo.arraySlice#0 DebugInfo.member#0 DebugInfo.arrayHeader#0 DebugInfo.member#0 DebugInfo.byValue#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.member#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.lineOf#0
+  calls: DebugInfo.arrayHeader DebugInfo.arraySlice DebugInfo.byValue DebugInfo.fileOf DebugInfo.lineOf DebugInfo.member DebugInfo.memberBits DebugInfo.pointerTo DebugInfo.setTypeRef DebugInfo.typeRef FieldInfo.inline IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata TypeTable.mangle TypeTable.refOf TypeTable.typeName bitsOfIn nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 quote
+  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.setTypeRef#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.member#0 DebugInfo.arraySlice#0 DebugInfo.member#0 DebugInfo.arrayHeader#0 DebugInfo.member#0 DebugInfo.byValue#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.member#0 DebugInfo.typeRef#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.memberBits#0 DebugInfo.lineOf#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 ref: string (const)
@@ -332,16 +333,14 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   callee +44:47 DebugInfo.typeRef -> @DebugInfo.typeRef
   local +47:13 base: string (const)
   callee +47:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  local +48:13 bits: i32 (const)
-  callee +48:20 TypeTable.isPointerValue -> @TypeTable.isPointerValue
-  callee +48:75 bitsOfIn -> @bitsOfIn
-  callee +49:20 DebugInfo.member -> @DebugInfo.member
-  local +51:11 elements: string (const)
-  callee +51:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +52:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee +54:70 quote -> @quote
-  callee +54:76 TypeTable.typeName -> @TypeTable.typeName
-  callee +54:133 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee +48:20 DebugInfo.member -> @DebugInfo.member
+  callee +48:51 DebugInfo.memberBits -> @DebugInfo.memberBits
+  local +50:11 elements: string (const)
+  callee +50:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +51:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee +53:70 quote -> @quote
+  callee +53:76 TypeTable.typeName -> @TypeTable.typeName
+  callee +53:133 DebugInfo.lineOf -> @DebugInfo.lineOf
 function DebugInfo.enumeration(this: DebugInfo, info: EnumInfo): string -> @DebugInfo.enumeration [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DebugInfo.fileOf
@@ -421,11 +420,19 @@ function DebugInfo.arrayHeader(this: DebugInfo, elem: i32, name: string): string
   callee +6:22 IRModule.addMetadata -> @IRModule.addMetadata
   callee +7:5 IRModule.setMetadata -> @IRModule.setMetadata
   callee +9:70 quote -> @quote
+function DebugInfo.memberBits(this: DebugInfo, type: i32): i32 -> @DebugInfo.memberBits [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: TypeTable.isPointerValue bitsOfIn
+  pointer this: size=104 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 TypeTable.isPointerValue -> @TypeTable.isPointerValue
+  callee +0:65 bitsOfIn -> @bitsOfIn
 function DebugInfo.resultComposite(this: DebugInfo, layout: ResultLayout): string -> @DebugInfo.resultComposite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
-  calls: DebugInfo.member DebugInfo.typeRef IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata TypeTable.isPointerValue bitsOfIn nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 quote
-  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.member#0
+  calls: DebugInfo.member DebugInfo.memberBits DebugInfo.typeRef IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 quote
+  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.memberBits#0
   pointer layout: size=56 writesThrough=false captured=false
   stackSites=4 stackLocals=4
   local +0:11 ref: string (const)
@@ -437,14 +444,12 @@ function DebugInfo.resultComposite(this: DebugInfo, layout: ResultLayout): strin
   local +16:9 i: i32 (let)
   local +18:13 base: string (const)
   callee +18:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  local +19:13 bits: i32 (const)
-  callee +19:20 TypeTable.isPointerValue -> @TypeTable.isPointerValue
-  callee +19:77 bitsOfIn -> @bitsOfIn
-  callee +20:20 DebugInfo.member -> @DebugInfo.member
-  local +23:11 elements: string (const)
-  callee +23:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +24:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee +26:70 quote -> @quote
+  callee +19:20 DebugInfo.member -> @DebugInfo.member
+  callee +19:53 DebugInfo.memberBits -> @DebugInfo.memberBits
+  local +22:11 elements: string (const)
+  callee +22:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +23:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee +25:70 quote -> @quote
 function DebugInfo.unionComposite(this: DebugInfo, type: i32): string -> @DebugInfo.unionComposite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
