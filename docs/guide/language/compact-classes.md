@@ -217,8 +217,8 @@ compact class may not cross into it:
 - A build with `--emit-napi` or `--emit-napi-async` refuses a compact class
   in one of two places, each with its own code:
   - NL4020, at the name of each exported function (every function, under
-    `--no-strict-exports`), and at the constructor of each exported class,
-    whose signature holds a compact class. The signature is
+    `--no-strict-exports`), and at each constructor and method of an
+    exported class, whose signature holds a compact class. The signature is
     read return type first, then each parameter in order, and the message
     names the first compact class found. Change the signature to fix it.
   - NL4021, at the name of each compact class no NL4020 named, naming the
