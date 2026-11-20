@@ -78,7 +78,7 @@ const ITERATOR_ARGUMENT: string = " cannot be passed as an argument: an iterator
 const ITERATOR_RETURNED: string = " cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used"
 const ITERATOR_ELSEWHERE: string = " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version"
 const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith"
-const CHAR_CODE_TOP: i32 = 255 [exported]
+const CHAR_CODE_TOP: i32 = 255
 const CLZ32_TOP: i32 = 32 [exported]
 function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope): boolean -> @isValueReceiver [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

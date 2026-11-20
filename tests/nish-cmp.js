@@ -10019,6 +10019,12 @@ const proverReadsDeclared = () => [
     why: "the program checks under --deny-panics that a divisor converted from a literal and a function-level `const` mask or shift bound their results, which the reference cannot prove and refuses",
   },
   {
+    program: "tests/cases/deny_panics_downcount_step2.ts",
+    file: "exit",
+    changelog: PROVER_READS,
+    why: "the program checks under --deny-panics that a count stepping down by two, guarded at two, reads `end - 2` in range, which the reference cannot prove and refuses",
+  },
+  {
     program: "tests/cases/deny_panics_const_names.ts",
     file: "exit",
     changelog: PROVER_READS,
