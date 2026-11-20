@@ -2691,13 +2691,23 @@ class Importer {
     o.nullables.push(nullable)
   }
 
-  /** The count parameter of buffer `i` of `f` under `o`, as an index of `f`'s parameters, or -1. */
+  /** The count parameter of buffer `param` of `f` under `o`, as an index of `f`'s parameters, or -1. */
   countOf(f: CFunc, o: FnOverride | null, param: string): i32 {
     const p = this.paramOverride(o, param)
     if (o === null || p < 0 || p >= o.buffers.length || o.buffers[p].length === 0) {
       return -1
     }
     return f.paramNames.indexOf(o.buffers[p])
+  }
+
+  /** Whether `param` of `f` is the count of a buffer in `named`, one `CountedBy` names. */
+  isNamedCount(f: CFunc, o: FnOverride | null, param: string, named: StringSet): boolean {
+    for (let i = 0; i < f.paramNames.length; i++) {
+      if (named.has(f.paramNames[i]) && this.countOf(f, o, f.paramNames[i]) === f.paramNames.indexOf(param)) {
+        return true
+      }
+    }
+    return false
   }
 
   /** The override of `name`'s parameter `param`, as an index into its lists, or -1. */
@@ -2784,6 +2794,22 @@ class Importer {
       }
       outNames.push(out)
     }
+    // A `u64` straight after its buffer is WP53's positional pair; any other
+    // count is named by its buffer and keeps its own type. A named count the
+    // function reads through a pointer is that pointer's out class, never
+    // `| null`: the call loads the count from it, as the override says.
+    const named = new StringSet()
+    for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
+      const countAt = this.countOf(f, o, f.paramNames[i])
+      if (countAt >= 0 && countAt < f.paramTypes.length) {
+        const count = this.resolve(f.paramTypes[countAt])
+        if (countAt === i + 1 && count.pointers === 0 && count.scalar === "u64") {
+          counts.add(f.paramNames[countAt])
+        } else {
+          named.add(f.paramNames[i])
+        }
+      }
+    }
     for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
       const name = f.paramNames[i]
       const p = this.paramOverride(o, name)
@@ -2791,19 +2817,14 @@ class Importer {
       let type = ""
       if (o !== null && countAt >= 0 && countAt < outNames.length) {
         type = o.readonlys[p] ? "readonly u8[]" : "u8[]"
-        // A `u64` straight after its buffer is WP53's positional pair; any
-        // other count is named by the buffer and keeps its own type.
-        const count = this.resolve(f.paramTypes[countAt])
-        if (countAt === i + 1 && count.pointers === 0 && count.scalar === "u64") {
-          counts.add(o.buffers[p])
-        } else {
+        if (named.has(name)) {
           type = `CountedBy<${type}, "${this.word(outNames[countAt], AS_IDENT)}">`
         }
       } else if (counts.has(name)) {
         type = "u64"
       } else {
         const nullable = o !== null && p >= 0 && p < o.nullables.length && o.nullables[p]
-        type = this.paramType(this.resolve(f.paramTypes[i]), nullable, false)
+        type = this.paramType(this.resolve(f.paramTypes[i]), nullable, this.isNamedCount(f, o, name, named))
       }
       if (type.startsWith("!")) {
         return `!parameter \`${name}\` is ${type.slice(1)}`
