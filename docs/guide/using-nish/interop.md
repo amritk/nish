@@ -1154,9 +1154,10 @@ export const main = (): i32 => {
 };
 ```
 
-`CountedBy` is only for a `declare function`, and `nish c-import` does not
-write it yet. To check such a file with `tsc`, declare the alias in a
-`.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
+`CountedBy` is only for a `declare function`. `nish c-import` writes it for
+a buffer the overrides file pairs with a count
+([Binding a C library](c-import.md)). To check such a file with `tsc`,
+declare the alias in a `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
 `type CountedBy<T, N extends string> = T`.
 
 The one exception is `CPtr`, an address that C owns. A declared function can

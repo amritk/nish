@@ -195,7 +195,10 @@ const isClassReserved = (name: string): boolean =>
   name === "Map" ||
   name === "Set" ||
   name === "Promise" ||
-  name === "Error"
+  name === "Error" ||
+  name === "Record" ||
+  name === "integer" ||
+  name === "CountedBy"
 
 /** A C parameter name as a Nish identifier: a reserved word gets a trailing `_`. */
 const nishName = (name: string): string => (isNameReserved(name) ? `${name}_` : name)
@@ -550,11 +553,83 @@ class CType {
   nonnull: boolean = false
   /** A typedef with its own `aligned` attribute, held by value: not the scalar's natural layout. */
   aligned: boolean = false
+  /** For `BASE_ARRAY`: the element count of `T [N]`, or -1 when it is not one plain length. */
+  length: i32 = -1
+  /** For `BASE_ARRAY` with a `length`: the element's spelling, `T`. */
+  element: string = ""
 
   constructor() {
     this.base = BASE_REFUSED
     this.sign = CHAR_PLAIN
   }
+}
+
+/**
+ * `T [N]`, clang's spelling of an array, split into its element and length.
+ * Any other shape (`T []`, `T [2][3]`, a length that is not a plain decimal)
+ * keeps `length` at -1 and says why in `reason`, which `fieldType` gives.
+ */
+const arrayType = (spelling: string, open: i32): CType => {
+  const array = new CType()
+  array.base = BASE_ARRAY
+  const close = spelling.indexOf("]", open)
+  if (close < 0 || spelling.indexOf("[", open + 1) >= 0 || close !== spelling.length - 1) {
+    array.reason = "an array of arrays"
+    return array
+  }
+  const digits = trimSpaces(spelling.slice(open + 1, close))
+  if (digits.length === 0) {
+    array.reason = "a flexible array member, whose length C does not fix"
+    return array
+  }
+  let length: i32 = 0
+  for (let i = 0; i < digits.length; i++) {
+    const c = digits.charCodeAt(i)
+    if (c < 48 || c > 57) {
+      array.reason = "an array whose length is not a plain number"
+      return array
+    }
+    // Past the limit the digits are still read, so the reason stays true.
+    length = length > 16777216 ? length : length * 10 + (c - 48)
+  }
+  if (length === 0) {
+    array.reason = "a zero-length array"
+    return array
+  }
+  if (length > 16777216) {
+    array.reason = "an array of more than 16777216 elements, the most an array field holds"
+    return array
+  }
+  array.length = length
+  array.element = trimSpaces(spelling.slice(0, open))
+  return array
+}
+
+/** Where the first `(*` or `(^` group of a spelling opens, or -1. */
+const firstDeclarator = (spelling: string): i32 => {
+  const star = spelling.indexOf("(*")
+  const caret = spelling.indexOf("(^")
+  if (star < 0) {
+    return caret
+  }
+  return caret >= 0 && caret < star ? caret : star
+}
+
+/** The `)` that closes the `(` at `open` in `spelling`, or -1. */
+const closingParen = (spelling: string, open: i32): i32 => {
+  let depth = 0
+  for (let i = open; i < spelling.length; i++) {
+    const c = spelling.charCodeAt(i)
+    if (c === 40) {
+      depth++
+    } else if (c === 41) {
+      depth--
+      if (depth === 0) {
+        return i
+      }
+    }
+  }
+  return -1
 }
 
 /** A refused type with its reason. */
@@ -585,6 +660,14 @@ class CRecord {
   inHeader: boolean = false
   /** Named by a `typedef struct { ... } name;`, not by a tag of its own. */
   typedefNamed: boolean = false
+  /** Some declaration of it, complete or not, is in the header's own file. */
+  declaredInHeader: boolean = false
+  /** The header line of its first declaration there, for the report. */
+  headerLine: i32 = 0
+  /** An incomplete struct the module writes as an opaque `declare class`. */
+  opaque: boolean = false
+  /** For an incomplete struct a bound declaration names: why it stays a `CPtr`, or empty. */
+  opaqueWhy: string = ""
 
   constructor() {
     this.fieldNames = []
@@ -778,6 +861,10 @@ class Importer {
   usedOut: StringSet
   /** The out classes the function being declared needs, kept only if it is bound. */
   pendingOut: string[]
+  /** The class names `decideNames` gave out, which an opaque class may not take. */
+  classNames: StringSet
+  /** The functions that may claim their name in the module. */
+  fnNames: StringSet
   /** The status `failure` exits with. */
   failureStatus: i32 = 1
   curLine: i32 = 0
@@ -786,6 +873,8 @@ class Importer {
   hasAllow: boolean = false
   /** Whether `decideNames` has run: every struct's name is settled before any `fits`. */
   namesDecided: boolean = false
+  /** Whether `decideOpaque` has run, after the overrides it reads. */
+  opaqueDecided: boolean = false
   /** Set when `word` met text the module cannot hold: `cImport` then writes nothing. */
   refusedEmit: boolean = false
 
@@ -809,6 +898,8 @@ class Importer {
     this.varNames = []
     this.varLines = []
     this.usedOut = new StringSet()
+    this.classNames = new StringSet()
+    this.fnNames = new StringSet()
     this.pendingOut = []
     this.doc = new CJson()
     this.triple = triple
@@ -1133,6 +1224,12 @@ class Importer {
     }
     this.recordIds.set(this.text(node, "id"), index)
     const r = this.records[index]
+    // Every redeclaration counts: `struct x;` in the header after an included
+    // header's makes `struct x` the header's to name.
+    if (inHeader && !r.declaredInHeader) {
+      r.declaredInHeader = true
+      r.headerLine = this.curLine
+    }
     if (!complete || r.complete) {
       return
     }
@@ -1171,11 +1268,11 @@ class Importer {
     const seen = name.length > 0 ? this.enumTags.get(`enum ${name}`, -1) : -1
     if (seen >= 0 && seen < this.enums.length && !this.hasEnumerators(node)) {
       // `enum e;` after the definition names the same enum: its values
-      // stay the definition's, so its width does too.
+      // stay the definition's, so its width does too. Whether its
+      // enumerators are exported stays the definition's as well: a bare
+      // `enum e;` in the header after an included definition does not
+      // bring the other file's values (or their line numbers) in.
       this.enumIds.set(this.text(node, "id"), seen)
-      if (inHeader) {
-        this.enums[seen].inHeader = true
-      }
       this.trackRest(node)
       return
     }
@@ -1422,7 +1519,31 @@ class Importer {
     if (spelling.indexOf("(unnamed") >= 0 || spelling.indexOf("(anonymous") >= 0) {
       return refusedType("an unnamed struct, union or enum")
     }
-    if (spelling.indexOf("(*") >= 0 || spelling.indexOf("(^") >= 0) {
+    const star = firstDeclarator(spelling)
+    if (star >= 0) {
+      // Clang writes the declarator inside the first `(*` group, and what
+      // follows the group says what the pointer is to: `void (*[4])(int)` is
+      // an array of function pointers, `int (*)[4]` a pointer to an array.
+      // Either read as one function pointer would get the layout wrong.
+      const close = closingParen(spelling, star)
+      if (close < 0) {
+        return refusedType("a type whose parentheses do not match")
+      }
+      const after = trimSpaces(spelling.slice(close + 1))
+      if (spelling.slice(star, close).indexOf("[") >= 0) {
+        const array = new CType()
+        array.base = BASE_ARRAY
+        array.reason = after.startsWith("(") ? "an array of function pointers" : "an array of pointers"
+        return array
+      }
+      if (after.startsWith("[")) {
+        // `int (*(*)(void))[4]`: a group inside the first is a function
+        // pointer whose result is the pointer to an array.
+        if (spelling.slice(star + 2, close).indexOf("(") >= 0) {
+          return refusedType("a function pointer whose result is a pointer to an array")
+        }
+        return refusedType("a pointer to an array")
+      }
       const fn = new CType()
       fn.base = BASE_FNPTR
       return fn
@@ -1432,10 +1553,9 @@ class Importer {
       fn.base = BASE_FUNC
       return fn
     }
-    if (spelling.indexOf("[") >= 0) {
-      const array = new CType()
-      array.base = BASE_ARRAY
-      return array
+    const open = spelling.indexOf("[")
+    if (open >= 0) {
+      return arrayType(spelling, open)
     }
     const words = typeWords(spelling)
     let pointers = 0
@@ -1666,6 +1786,23 @@ class Importer {
     return index >= 0 && index < this.records.length ? index : -1
   }
 
+  /**
+   * Whether a value of type `t` can be a buffer's count: a `u8`, `u16`, `u32`
+   * or `u64` (an `unsigned char` included) by value, or through a pointer the
+   * function writes (an out class). `CountedBy` takes no other type.
+   */
+  isCountType(t: CType): boolean {
+    if (
+      t.pointers > 1 ||
+      (t.pointers === 1 && t.constPointee) ||
+      (t.base !== BASE_SCALAR && t.base !== BASE_CHAR)
+    ) {
+      return false
+    }
+    const s = this.valueType(t)
+    return s === "u8" || s === "u16" || s === "u32" || s === "u64"
+  }
+
   /** The Nish type of a value of type `t` (no pointer), or `!` and the reason it has none. */
   valueType(t: CType): string {
     if (t.base === BASE_VOID) {
@@ -1766,11 +1903,54 @@ class Importer {
       }
       return `!a struct that is not a declare class (\`${t.tag}\`)`
     }
+    if (t.base === BASE_ARRAY) {
+      return this.arrayField(t)
+    }
     const value = this.valueType(t)
     if (value === "boolean") {
       return "!a `_Bool`, which a declare class cannot hold"
     }
     return value
+  }
+
+  /**
+   * `T name[N]` as a field: `Record<integer<0, N - 1>, T>`, laid out inline
+   * as C lays it out, for exactly the elements an array field holds.
+   */
+  arrayField(t: CType): string {
+    if (t.length < 0) {
+      return `!${t.reason}`
+    }
+    const e = this.resolve(t.element)
+    if (e.pointers > 0 || e.base === BASE_FNPTR) {
+      return "!an array of pointers"
+    }
+    if (e.aligned) {
+      return "!an array of a typedef with its own `aligned` attribute"
+    }
+    if (e.base === BASE_RECORD) {
+      return "!an array of structs"
+    }
+    if (e.base === BASE_ARRAY) {
+      return "!an array of arrays"
+    }
+    const value = this.valueType(e)
+    if (value.startsWith("!")) {
+      return `!an array of ${value.slice(1)}`
+    }
+    if (
+      value !== "i32" &&
+      value !== "i64" &&
+      value !== "u8" &&
+      value !== "u16" &&
+      value !== "u32" &&
+      value !== "u64" &&
+      value !== "f32" &&
+      value !== "f64"
+    ) {
+      return `!an array of \`${value === "boolean" ? "_Bool" : value}\` (an array field holds only i32, i64, u8, u16, u32, u64, f32 and f64)`
+    }
+    return `Record<integer<0, ${this.word(`${t.length - 1}`, AS_INTEGER)}>, ${value}>`
   }
 
   /** The out class for a pointer to a scalar, noting that the module needs it. */
@@ -1807,6 +1987,11 @@ class Importer {
       return this.outClass("ptr")
     }
     if (t.base === BASE_CHAR) {
+      if (nonnull && !t.constPointee && this.valueType(t) === "u8") {
+        // A named count the function writes through an `unsigned char *`
+        // (or a plain `char *` where `char` is unsigned): its out class.
+        return this.outClass("u8")
+      }
       if (t.sign === CHAR_PLAIN) {
         return t.constBase ? `string${orNull}` : `CPtr${orNull}`
       }
@@ -1827,7 +2012,7 @@ class Importer {
     }
     if (t.base === BASE_RECORD) {
       const index = this.recordOf(t.tag)
-      if (this.fits(index)) {
+      if (this.fits(index) || (index >= 0 && this.records[index].opaque)) {
         return `${this.word(this.records[index].className, AS_IDENT)}${orNull}`
       }
       return `CPtr${orNull}`
@@ -1853,6 +2038,10 @@ class Importer {
     const nonnull = mode === RETURN_NONNULL || (mode === RETURN_DEFAULT && (headerNonNull || t.nonnull))
     if (t.pointers === 1 && t.base === BASE_CHAR && t.sign === CHAR_PLAIN && t.constBase) {
       return nonnull ? "string" : "string | null"
+    }
+    const index = t.pointers === 1 && t.base === BASE_RECORD ? this.recordOf(t.tag) : -1
+    if (index >= 0 && this.records[index].opaque) {
+      return `${this.word(this.records[index].className, AS_IDENT)}${nonnull ? "" : " | null"}`
     }
     return nonnull ? "CPtr" : "CPtr | null"
   }
@@ -2241,6 +2430,21 @@ class Importer {
       this.fail(`overrides: \`${o.name}\` is not bound (${unbound}), so an override cannot change it`, 1)
       return
     }
+    let pairedBuffer = -1
+    for (let i = 0; i < o.params.length && i < o.buffers.length && pairedBuffer < 0; i++) {
+      const p = this.paramOverride(o, o.buffers[i])
+      if (o.buffers[i].length > 0 && p >= 0 && p < o.buffers.length && o.buffers[p].length > 0) {
+        pairedBuffer = i
+      }
+    }
+    if (pairedBuffer >= 0 && pairedBuffer < o.params.length && pairedBuffer < o.buffers.length) {
+      const count = o.buffers[pairedBuffer]
+      this.fail(
+        `overrides: ${this.paramWhere(f, o.params[pairedBuffer])}'s count \`${count}\` is a buffer itself, not a count`,
+        1
+      )
+      return
+    }
     if (this.functionDecl(f, true) === this.functionDecl(f, false)) {
       this.fail(`overrides: \`${o.name}\`'s override changes nothing in its declaration`, 1)
       return
@@ -2519,11 +2723,21 @@ class Importer {
         )
         return
       }
-      const count = at + 1 < f.paramNames.length && at + 1 < f.paramTypes.length ? f.paramNames[at + 1] : ""
-      const countType = count === buffer ? this.resolve(f.paramTypes[at + 1]) : new CType()
-      if (count !== buffer || countType.pointers > 0 || countType.scalar !== "u64") {
+      const countAt = f.paramNames.indexOf(buffer)
+      if (countAt < 0 || countAt >= f.paramTypes.length) {
         this.fail(
-          `overrides: ${this.paramWhere(f, param)}'s count \`${buffer}\` must be the next parameter, an unsigned 64-bit integer passed by value (other pairings are not bound yet)`,
+          `overrides: ${this.paramWhere(f, param)}'s count \`${buffer}\` is not a parameter of \`${f.name}\``,
+          1
+        )
+        return
+      }
+      if (countAt === at) {
+        this.fail(`overrides: ${this.paramWhere(f, param)} cannot be its own count`, 1)
+        return
+      }
+      if (!this.isCountType(this.resolve(f.paramTypes[countAt]))) {
+        this.fail(
+          `overrides: ${this.paramWhere(f, param)}'s count \`${buffer}\` must be a \`u8\`, \`u16\`, \`u32\` or \`u64\`, passed by value or through a pointer the function writes`,
           1
         )
         return
@@ -2537,6 +2751,25 @@ class Importer {
     o.buffers.push(buffer)
     o.readonlys.push(readonly)
     o.nullables.push(nullable)
+  }
+
+  /** The count parameter of buffer `param` of `f` under `o`, as an index of `f`'s parameters, or -1. */
+  countOf(f: CFunc, o: FnOverride | null, param: string): i32 {
+    const p = this.paramOverride(o, param)
+    if (o === null || p < 0 || p >= o.buffers.length || o.buffers[p].length === 0) {
+      return -1
+    }
+    return f.paramNames.indexOf(o.buffers[p])
+  }
+
+  /** Whether `param` of `f` is the count of a buffer in `named`, one `CountedBy` names. */
+  isNamedCount(f: CFunc, o: FnOverride | null, param: string, named: StringSet): boolean {
+    for (let i = 0; i < f.paramNames.length; i++) {
+      if (named.has(f.paramNames[i]) && this.countOf(f, o, f.paramNames[i]) === f.paramNames.indexOf(param)) {
+        return true
+      }
+    }
+    return false
   }
 
   /** The override of `name`'s parameter `param`, as an index into its lists, or -1. */
@@ -2605,31 +2838,15 @@ class Importer {
     const o: FnOverride | null = oi >= 0 && oi < this.overrides.length ? this.overrides[oi] : null
     const params = new StringBuilder()
     const counts = new StringSet()
+    // A reserved name gains `_`, then `_1`, `_2`, ... until it is no other
+    // parameter's name, so `int f(int in, int in_)` stays two parameters.
+    // Every name is settled first: a `CountedBy` names a later parameter.
     const outNames: string[] = []
     for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
       const name = f.paramNames[i]
       if (!isIdent(name)) {
         return `!parameter ${i + 1}'s name is not an ASCII identifier`
       }
-      const p = this.paramOverride(o, name)
-      let type = ""
-      if (o !== null && p >= 0 && p < o.buffers.length && o.buffers[p].length > 0) {
-        type = o.readonlys[p] ? "readonly u8[]" : "u8[]"
-        counts.add(o.buffers[p])
-      } else if (counts.has(name)) {
-        type = "u64"
-      } else {
-        const nullable = o !== null && p >= 0 && p < o.nullables.length && o.nullables[p]
-        type = this.paramType(this.resolve(f.paramTypes[i]), nullable, false)
-      }
-      if (type.startsWith("!")) {
-        return `!parameter \`${name}\` is ${type.slice(1)}`
-      }
-      if (i > 0) {
-        params.add(", ")
-      }
-      // A reserved name gains `_`, then `_1`, `_2`, ... until it is no other
-      // parameter's name, so `int f(int in, int in_)` stays two parameters.
       const base = nishName(name)
       let out = base
       let k = 0
@@ -2638,7 +2855,47 @@ class Importer {
         out = `${base}${k}`
       }
       outNames.push(out)
-      params.add(`${this.word(out, AS_IDENT)}: ${type}`)
+    }
+    // A `u64` straight after its buffer is WP53's positional pair; any other
+    // count is named by its buffer and keeps its own type. A named count the
+    // function reads through a pointer is that pointer's out class, never
+    // `| null`: the call loads the count from it, as the override says.
+    const named = new StringSet()
+    for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
+      const countAt = this.countOf(f, o, f.paramNames[i])
+      if (countAt >= 0 && countAt < f.paramTypes.length) {
+        const count = this.resolve(f.paramTypes[countAt])
+        if (countAt === i + 1 && count.pointers === 0 && count.scalar === "u64") {
+          counts.add(f.paramNames[countAt])
+        } else {
+          named.add(f.paramNames[i])
+        }
+      }
+    }
+    for (let i = 0; i < f.paramNames.length && i < f.paramTypes.length; i++) {
+      const name = f.paramNames[i]
+      const p = this.paramOverride(o, name)
+      const countAt = this.countOf(f, o, name)
+      let type = ""
+      if (o !== null && countAt >= 0 && countAt < outNames.length) {
+        type = o.readonlys[p] ? "readonly u8[]" : "u8[]"
+        if (named.has(name)) {
+          type = `CountedBy<${type}, "${this.word(outNames[countAt], AS_IDENT)}">`
+        }
+      } else if (counts.has(name)) {
+        type = "u64"
+      } else {
+        const nullable = o !== null && p >= 0 && p < o.nullables.length && o.nullables[p]
+        type = this.paramType(this.resolve(f.paramTypes[i]), nullable, this.isNamedCount(f, o, name, named))
+      }
+      if (type.startsWith("!")) {
+        return `!parameter \`${name}\` is ${type.slice(1)}`
+      }
+      if (i > 0) {
+        params.add(", ")
+      }
+      const shown = i >= 0 && i < outNames.length ? outNames[i] : name
+      params.add(`${this.word(shown, AS_IDENT)}: ${type}`)
     }
     const ret = this.functionReturn(f, o)
     if (ret.startsWith("!")) {
@@ -2659,6 +2916,11 @@ class Importer {
 
   /** The Nish type of `f`'s result, read from the part of its type before its parameter list. */
   functionReturn(f: CFunc, o: FnOverride | null): string {
+    // `int (*f(void))[4]` is spelled `int (*(void))[4]`: what precedes the
+    // parameter list is not the whole result, which is a pointer to an array.
+    if (trimSpaces(f.qualType).endsWith("]")) {
+      return "!a pointer to an array"
+    }
     const spelling = this.returnSpelling(f)
     if (spelling.indexOf("(") >= 0) {
       return "!a function pointer"
@@ -2751,14 +3013,14 @@ class Importer {
       return
     }
     this.namesDecided = true
-    const candidates = new StringSet()
+    const candidates = this.fnNames
     for (let i = 0; i < this.funcs.length; i++) {
       const f = this.funcs[i]
       if (this.selected(f) && !f.noSymbol && !f.variadic && !isNameReserved(f.name) && !isOutName(f.name)) {
         candidates.add(f.name)
       }
     }
-    const classNames = new StringSet()
+    const classNames = this.classNames
     for (let i = 0; i < this.records.length; i++) {
       const r = this.records[i]
       if (!r.inHeader || !r.complete || r.className.length === 0 || r.isUnion || r.nameClash.length > 0) {
@@ -2780,6 +3042,136 @@ class Importer {
     for (let i = 0; i < this.records.length; i++) {
       this.records[i].fit = FIT_UNKNOWN
       this.records[i].why = ""
+    }
+  }
+
+  /** Notes that struct `index` stays a `CPtr`, with the first reason found. */
+  keepCPtr(index: i32, why: string): void {
+    if (index >= 0 && index < this.records.length && this.records[index].opaqueWhy.length === 0) {
+      this.records[index].opaqueWhy = why
+    }
+  }
+
+  /** The struct a pointer of type `t` points to, or -1. */
+  pointee(t: CType): i32 {
+    return t.base === BASE_RECORD && t.pointers > 0 ? this.recordOf(t.tag) : -1
+  }
+
+  /**
+   * Decides which incomplete structs of the header become an opaque
+   * `declare class`: one that a bound function returns by single pointer,
+   * that no bound function reaches through a pointer to a pointer (an
+   * `OutPtr` or `CPtr` holds that, and gives back a `CPtr`), that no owned
+   * result returns (freed by handle, a `CPtr`), and that no class's field
+   * points to (a field holds only a `CPtr`). Any of those would hand the
+   * caller a `CPtr` where the class is wanted, so the struct stays a `CPtr`.
+   */
+  decideOpaque(): void {
+    if (this.opaqueDecided) {
+      return
+    }
+    this.opaqueDecided = true
+    this.decideNames()
+    const returned: boolean[] = []
+    const named: boolean[] = []
+    for (let i = 0; i < this.records.length; i++) {
+      returned.push(false)
+      named.push(false)
+    }
+    for (let i = 0; i < this.funcs.length; i++) {
+      const f = this.funcs[i]
+      if (!this.selected(f) || isNameReserved(f.name) || isOutName(f.name)) {
+        continue
+      }
+      const decl = this.functionDecl(f, true)
+      this.pendingOut = []
+      if (decl.startsWith("!")) {
+        continue
+      }
+      const oi = this.overrideIndex.get(f.name, -1)
+      const o: FnOverride | null = oi >= 0 && oi < this.overrides.length ? this.overrides[oi] : null
+      for (let j = 0; j < f.paramNames.length && j < f.paramTypes.length; j++) {
+        const p = this.paramOverride(o, f.paramNames[j])
+        if (o !== null && p >= 0 && p < o.buffers.length && o.buffers[p].length > 0) {
+          continue
+        }
+        const t = this.resolve(f.paramTypes[j])
+        const at = this.pointee(t)
+        if (at >= 0 && at < named.length) {
+          named[at] = true
+        }
+        if (t.pointers >= 2) {
+          this.keepCPtr(
+            this.pointee(t),
+            `\`${f.name}\` takes a pointer to a pointer to it, which only a \`CPtr\` can stand for`
+          )
+        }
+      }
+      const spelling = this.returnSpelling(f)
+      const t = spelling.indexOf("(") >= 0 ? new CType() : this.resolve(spelling)
+      const index = this.pointee(t)
+      if (index >= 0 && index < named.length) {
+        named[index] = true
+      }
+      if (t.pointers >= 2) {
+        this.keepCPtr(
+          index,
+          `\`${f.name}\` returns a pointer to a pointer to it, which only a \`CPtr\` can stand for`
+        )
+      } else if (o !== null && o.returnMode === RETURN_OWNED) {
+        this.keepCPtr(index, `\`${f.name}\` returns it owned, and an owned result is a \`CPtr\``)
+      } else if (index >= 0 && index < returned.length) {
+        returned[index] = true
+      }
+    }
+    for (let i = 0; i < this.records.length; i++) {
+      const r = this.records[i]
+      if (!r.inHeader || !r.complete || !this.fits(i)) {
+        continue
+      }
+      for (let j = 0; j < r.fieldTypes.length && j < r.fieldNames.length; j++) {
+        const index = this.pointee(this.resolve(r.fieldTypes[j]))
+        if (index >= 0 && index < named.length) {
+          named[index] = true
+        }
+        this.keepCPtr(
+          index,
+          `the field \`${r.fieldNames[j]}\` of \`${r.key}\` points to it, and a field holds only a \`CPtr\``
+        )
+      }
+    }
+    for (let i = 0; i < this.records.length && i < named.length && i < returned.length; i++) {
+      const r = this.records[i]
+      if (
+        !named[i] ||
+        !r.declaredInHeader ||
+        r.complete ||
+        r.isUnion ||
+        r.className.length === 0 ||
+        r.nameClash.length > 0
+      ) {
+        // Only an incomplete struct of the header that the module names is reported.
+        r.opaqueWhy = ""
+        continue
+      }
+      if (r.opaqueWhy.length > 0) {
+        continue
+      }
+      if (!returned[i]) {
+        r.opaqueWhy =
+          "no function the module binds returns it, so the module could make no value of a class for it"
+      } else if (!isIdent(r.className)) {
+        r.opaqueWhy = "its name is not an ASCII identifier"
+      } else if (isClassReserved(r.className)) {
+        r.opaqueWhy = `its name \`${r.className}\` is a word or type Nish reserves`
+      } else if (this.fnNames.has(r.className)) {
+        r.opaqueWhy = `the module gives \`${r.className}\` to the function \`${r.className}\``
+      } else if (this.classNames.has(r.className)) {
+        r.opaqueWhy = `the module already gives \`${r.className}\` to another struct`
+      } else {
+        this.classNames.add(r.className)
+        r.opaque = true
+      }
     }
   }
 
@@ -2806,7 +3198,7 @@ class Importer {
     // then classes, then constants, so a constant never shadows a declaration.
     const names = new StringMap()
     const owners: string[] = []
-    this.decideNames()
+    this.decideOpaque()
 
     const functions = new StringBuilder()
     for (let i = 0; i < this.funcs.length; i++) {
@@ -2872,6 +3264,13 @@ class Importer {
           report.push(reportLine(r.key, r.why))
           reportLines.push(r.line)
         }
+      } else if (r.opaque) {
+        out.add(`declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
+        names.set(r.className, owners.length)
+        owners.push(`the struct \`${r.key}\``)
+      } else if (r.opaqueWhy.length > 0) {
+        report.push(reportLine(r.key, `stays a \`CPtr\`: ${r.opaqueWhy}`))
+        reportLines.push(r.headerLine)
       } else if (r.nameClash.length > 0 && r.className.length > 0) {
         report.push(reportLine(r.key.length > 0 ? r.key : r.className, r.nameClash))
         reportLines.push(r.line)

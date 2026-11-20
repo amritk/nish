@@ -5612,9 +5612,10 @@ declare function compress(
   `CountedBy` on a parameter, so a program's own type of that name is not
   reachable there: on a `declare function` the annotation is read as this
   form, and elsewhere it is refused as above.
-- **`runtime/nish.d.ts` does not declare `CountedBy` yet,** and `nish
-  c-import` does not write it: a module that uses it under `tsc` declares the
-  alias itself.
+- **`runtime/nish.d.ts` does not declare `CountedBy` yet:** a module that
+  uses it under `tsc` declares the alias itself. `nish c-import` writes it on
+  a buffer whose override names a count that is not a `u64` straight after
+  it.
 
 ### A handle class: a class that owns a `CPtr`
 
