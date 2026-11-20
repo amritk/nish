@@ -121,6 +121,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { withAllowPanics } from "../allow-panics.js"
 import { hasAsanRuntime, runtimeObjects as asanRuntime } from "./asan.js"
 import { generateProgram } from "./fuzz.js"
 import { buildDir, hasClang, root } from "./lib.js"
@@ -373,9 +374,13 @@ const build = async (compiler, prog, dir, reference) => {
   const ir = path.join(dir, "ir")
   fs.mkdirSync(ir, { recursive: true })
   const flags = reference ? [...prog.args.filter((a) => !GATES.includes(a)), "--no-elision"] : prog.args
-  const cc = await run(compiler, [prog.entry, "-o", `${ir}${path.sep}`, ...flags], {
-    timeout: BUILD_TIMEOUT_MS,
-  })
+  const cc = await run(
+    compiler,
+    withAllowPanics(compiler, [prog.entry, "-o", `${ir}${path.sep}`, ...flags]),
+    {
+      timeout: BUILD_TIMEOUT_MS,
+    }
+  )
   if (cc.timedOut) {
     return TIMED_OUT
   }

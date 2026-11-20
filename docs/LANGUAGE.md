@@ -1932,8 +1932,14 @@ having no top-level code and therefore no initialisation order.
   [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
-  There is deliberately no second, larger language inside `const`: a constant
-  can compute exactly what a runtime expression can.
+  There is deliberately no second, larger language inside `const`: what a
+  constant computes, it computes as the runtime expression would, but it
+  computes less.
+  "Arithmetic" here is `+ - * / %`, the comparisons, `!`, `&&`, `||`, unary
+  minus and string `+`. The shift and bitwise operators (`<< >> >>> & | ^ ~`)
+  are refused in a constant and in a [constant table](#constant-tables)'s
+  element alike, whatever their operands' type, not folded. Write the
+  value out (`8`, not `1 << 3`), or compute it at run time.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
   replaces computes. By default that instruction is checked, so a fold that
@@ -3184,15 +3190,40 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     (`tests/link/package_hidden_class_import`), and naming it in an annotation
     is `` Unsupported type reference `Space` ``
     (`tests/link/package_hidden_class_annotation`).
-- **A function name is unique across the whole program**, exported or not, in
-  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
-  `internal` linkage keeps a name out of the linker's way but it does not buy a
-  second namespace: the whole-program attribute analysis is keyed by symbol
-  name, so two functions sharing one would be emitted with each other's
-  attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag. A proposal to qualify a private function's
-  symbol by its module when it would clash is
-  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
+- **Two modules may each keep a private function of one name** (WP57 S1).
+  A non-exported free function or generic function whose name another
+  function of its package also defines — in another module, exported or not —
+  is emitted under a symbol qualified by its module's path:
+  `<package prefix><module>$.<name>`, where `<module>` is the module's path
+  from its package's root (the entry's directory, for the program's own
+  package) without `.ts`, every character outside `[A-Za-z0-9_]` spelled `_`.
+  So `helper.ts` and `main.ts` may each keep a private `add`, emitted as
+  `@helper$.add` and `@main$.add` (`tests/link/duplicate_internal`,
+  `module_private_helpers`); a private generic's instantiations are
+  `@a$.identity$i32` (`module_private_generic`); a task's arrow follows the
+  function it is written in (`@m$.work$arrow0`, `module_private_spawn`); and
+  a private `helper` beside an imported, exported `helper` is `@main$.helper`
+  while the exported one keeps `@helper` (`module_private_mixed`). The
+  qualifier is the module's path relative to its package root (the entry's
+  directory for the program's own modules), so a module outside that
+  directory keeps its `..` steps: `../shared/u.ts` gives
+  `@___shared_u$.helper` however the entry is named. A name no
+  other function shares keeps its bare symbol, so a program that built before
+  emits exactly what it did, and the entry's `main` is never qualified.
+- **Everything else still needs a unique symbol.** Two exported functions of
+  one name are refused (`tests/link/duplicate_export`), and so are two
+  exported generic functions. Under `--no-strict-exports` every function is
+  external and keeps its bare name, so there a function name is unique across
+  the program, exported or not
+  (`` under `--no-strict-exports` every function keeps its bare name as its symbol ``,
+  `tests/link/module_private_no_strict`). Two module paths that spell one
+  qualifier (`lib/util.ts` and `lib_util.ts`) are refused too, naming both
+  files: `` both modules' paths qualify it to one symbol ``. Each refusal is
+  the same reason: `internal` linkage keeps a name out of the linker's way but
+  the whole-program attribute analysis is keyed by symbol, so two functions
+  sharing one would be emitted with each other's attributes — a miscompile
+  rather than a link error. The design is
+  [`docs/wp57-module-scoped-names.md`](wp57-module-scoped-names.md).
 
 ### `main`
 
@@ -3242,9 +3273,36 @@ class Point {
 ```
 
 - **Fields** need a type annotation (`` Field `x` of class `Point` needs a type annotation ``,
-  `tests/cases/reject_cls_field_no_type`). An initializer must be a literal
-  (a number, a negated number, a string, or a boolean) of the field's type
-  (`initializers must be literals` *(CLI only)*; `tests/cases/cls_initializers`).
+  `tests/cases/reject_cls_field_no_type`). An initializer is one of
+  (`tests/cases/cls_initializers`, `cls_field_init`):
+  - a literal (a number, a negated number, a string, or a boolean) of the
+    field's type, or `null`, or an enum member;
+  - `[]` when the field's type is an array (`kind: i32[] = []`): a fresh,
+    empty array of the declared element type, one per object;
+  - `new C(args)` (`child: Leaf = new Leaf(0)`) where `C` is a class with no
+    type parameters and the field's type is `C` or `C | null` (not a union or
+    interface `C` converts to), and each argument is itself a literal or enum
+    member of its parameter's type.
+
+  **An initializer reads nothing.** It may not name `this`, a constructor
+  parameter, another field, a local or a module constant; an argument of its
+  `new` is a literal too. Anything else, a call that is not `new` included,
+  is `initializers must be literals` *(CLI only)*
+  (`reject_cls_field_init_call`, `reject_cls_field_init_new_arg`), and a `new`
+  of a generic, handle or layout class is refused the same way
+  (`reject_cls_field_init_new_generic`). Assign a value computed from those
+  in the constructor. The constructor stores every initializer before the
+  first statement of its body, in declaration order; a class without a
+  constructor stores them at its `new`. So a class whose initializers
+  construct the class itself, directly or through another class's
+  initializers, would construct forever, and is refused
+  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`),
+  once per loop however many classes are on it (`tests/link/cls_field_init_cycle`).
+  An exported class with no constructor, and an exported generic class, has
+  its initializers run in the module that builds it, so a class they
+  construct is exported too (`` `Pin` is not exported, but this class's
+  initializers run in the module that builds it ``,
+  `tests/link/cls_field_init_private`, `reject_cls_field_init_private`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
 - **Constructor**: at most one, with a body
@@ -5059,8 +5117,10 @@ export const main = (): i32 => {
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
   reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
-  named after the one it is written in and a counter (`main$arrow0`), which
-  is the name a debugger or a profiler shows for the task's thread.
+  named after the symbol of the one it is written in and a counter
+  (`nish_main$arrow0` in the entry's `main`, `m$.work$arrow0` in a private
+  `work` that WP57 S1 qualified by its module `m.ts`), which is the name a
+  debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -7236,9 +7296,10 @@ declare function compress(
   `CountedBy` on a parameter, so a program's own type of that name is not
   reachable there: on a `declare function` the annotation is read as this
   form, and elsewhere it is refused as above.
-- **`runtime/nish.d.ts` does not declare `CountedBy` yet,** and `nish
-  c-import` does not write it: a module that uses it under `tsc` declares the
-  alias itself.
+- **`runtime/nish.d.ts` does not declare `CountedBy` yet:** a module that
+  uses it under `tsc` declares the alias itself. `nish c-import` writes it on
+  a buffer whose override names a count that is not a `u64` straight after
+  it.
 
 #### A handle class: a class that owns a `CPtr`
 
@@ -7433,6 +7494,82 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   compiler could promise. A struct cannot embed
   itself, directly or through another (NL2749, `reject_ffi_struct_self`,
   `reject_ffi_struct_cycle`).
+- **A field typed `Record<integer<0, Hi>, T>` is a fixed-length array, C's
+  `T name[Hi + 1]`, laid out inline at `T`'s alignment**, as OpenSSL's
+  `SHA_CTX` holds `unsigned int h[5]` (`tests/cases/ffi_array_field`, whose C
+  driver fills and checks a `SHA_CTX`-shaped struct; `tests/ffi-struct.js`,
+  where clang gives that shape the offsets and size Nish's build has, natively
+  and under `--profile wasi`):
+
+  ```ts
+  declare class ShaCtx {
+    tag: u8
+    h: Record<integer<0, 4>, u32>
+  }
+  const c = new ShaCtx()
+  c.h[i] = 7
+  ```
+
+  ```llvm
+  %struct.ShaCtx = type { i8, [5 x i32] }
+    %2 = sext i32 %i to i64
+    %3 = icmp ult i64 %2, 5
+    br i1 %3, label %bounds.ok, label %bounds.fail
+  bounds.fail:
+    call void @nish_panic_index(i64 %2, i64 5)
+    unreachable
+  bounds.ok:
+    %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+    store i32 7, i32* %4, align 4
+  ```
+
+  The spelling is TypeScript's own: `tsc` checks it against
+  `runtime/nish.d.ts` with no new declaration, its key type is the index
+  type every in-range index already has, and a `Record` over a finite key
+  says every key from 0 to `Hi` is present, as every element of a C array is.
+  A `CArray<T, N>` type would need a declaration in `runtime/nish.d.ts`, a
+  tuple has no parser here, and `T[]` cannot carry its length, because `tsc`
+  refuses an initializer in a `declare class`. (A `T[]` field of a Nish
+  class is a different rule: see "Fixed-length array fields are stored
+  inline".)
+  - **It takes `(Hi + 1) × sizeof(T)` bytes**, elements back to back with no
+    padding between them, and the struct pads around the array as C pads
+    around `T name[Hi + 1]`: the array starts at `T`'s alignment, and the
+    field after it starts at its own (`tests/ffi-struct.js` holds 8-byte
+    elements after a byte, a one-element array and two arrays in a row
+    against clang).
+  - **The key is `integer<0, Hi>`**, a range from 0, with `Hi` below
+    16777216: `` its key must be `integer<0, Hi>` `` (NL2813,
+    `tests/link/ffi_array_field_key`: a range from 1, a `string` key, a
+    length past the limit).
+  - **An element is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or
+    `f64`**: `` which has no C element layout `` (NL2814,
+    `ffi_array_field_element`: a `CPtr` and a `declare class` element).
+  - **An index is checked.** The index is any value an array index takes,
+    widened to `i64` before it is compared. A constant index outside 0 to `Hi` is refused at
+    compile time: `` its indices are 0 to 4 `` (NL2818,
+    `ffi_array_field_oob`, past the end and below zero). Any other index is
+    compared, unsigned, with the length, and one outside it panics with
+    `index out of range` before memory is touched (`readH(5)`, `readH(-1)`,
+    `poke(3)` in `ffi_array_field`). An index the prover keeps inside the
+    range — a constant, an `integer<0, Hi>` value, a `for` loop's counter
+    below the length — emits no check, and `--emit-panics` lists it as proven
+    (`sumH` and `written`, pinned by `ffi_array_field.panics`, which lists
+    `readH`'s, `readData`'s and `store`'s indices as unproven). Element loads and stores carry no TBAA tag, as the struct's
+    other fields do not.
+  - **It is read and written by index and nothing else.** It is not a Nish
+    array: holding it, passing it, reading its `.length` or walking it with
+    `for...of` is `` it cannot be held, passed or measured as a value ``
+    (NL2817, `ffi_array_field_value`), replacing it whole is
+    `` is written element by element `` (NL2816, `ffi_array_field_assign`),
+    and a spread of its object is `` which a spread cannot copy `` (NL2815,
+    `ffi_array_field_spread`).
+  - **It opens no other C shape.** A union field and a bitfield stay refused:
+    `` Union types other than `T | null` are forbidden `` (NL1053,
+    `ffi_array_field_union`) and `` has type `integer<0, 7>`, which has no C
+    layout `` (NL2752, `ffi_array_field_bitfield`).
+  - Under `-g` a debugger sees C's array type, with the element count
+    (`tests/ffi-struct.js`).
 - **A field is plain and has no initializer, and a class with fields has
   nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
@@ -7511,7 +7648,7 @@ return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
 what it adds is a name, so one C pointer type is never passed where another is
 wanted** (`tests/cases/ffi_opaque_handle`,
 [cookbook](IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
-`docs/roadmap/wp66-c-headers.md` S3):
+`docs/wp66-c-headers.md` S3):
 
 ```ts
 declare class Db {}
@@ -7702,7 +7839,9 @@ or a private one whose name is not reserved to C:
 rename the defined function `` (`tests/link/ffi_package_declare_root_clash`).
 A private function named like a C library function is emitted as `abs$`, and a
 generic one's instantiations as `labs$i32`, so neither takes the C symbol and
-both are accepted (`tests/link/ffi_package_declare_apart`). The two refusals
+both are accepted (`tests/link/ffi_package_declare_apart`). A private function
+qualified by its module because another module defines its name (WP57 S1,
+`helper$.add`) holds a `$` already, so it is never one of these. The two refusals
 are refused rather than linked because the whole-program analysis keeps one
 set of facts per symbol, and the two would share it.
 
@@ -10678,18 +10817,53 @@ class Cell implements Compact {
 - **A generic field instantiated as exactly a compact class is narrowed.**
   `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
   interface view of the field and its implementer agree on the layout.
-- **A compact class is refused where C, Node or the runtime would read its
-  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
-  `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`); as a
+- **A C host reaches a compact class only through a handle.** A
+  `--emit-header` build keeps every class that holds a link opaque
+  (`typedef struct Cell Cell;`): the compact class, a class with a field of
+  it, and an instantiation such as `Box<Cell>`. An export takes and returns
+  one as a full `struct Cell *`. The C host links the range runtime
+  (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
+  default runtime a program fails to link as soon as one of its modules
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
+  shared library another process loads is not supported.
+- **A compact class is refused where Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-napi` or
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and each
+  constructor and method of an exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
   class, whose instantiations keep full-pointer links (NL2798,
   `compact_reject_generic`).
 
-`Wide` is accepted and changes nothing yet; it is reserved for a class to
-refuse a compact layout the compiler would pick on its own.
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2819, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
 
 Reference: [`nish:compact`](reference/nish-compact.md).
 
@@ -14125,7 +14299,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program
@@ -15322,7 +15497,8 @@ by the caller.
 ### The CPU level
 
 - **`--cpu x86-64-v3`** links the program for one CPU level above the
-  baseline: the module and the runtime are both compiled, and linked, with
+  baseline: the module, the runtime and, when the program calls it, SQLite
+  (each `runtime/sqlite/*.c` unit) are all compiled, and linked, with
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
@@ -15346,6 +15522,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+  `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
+  check refuses: clang keeps a loop counter or overflow flag in a stack slot
+  there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ### Profile-guided builds
 
@@ -16197,14 +16383,22 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](#element-access): a dominating guard, a loop bounded by the length,
   or every call site proving the argument (`tests/cases/panics_index`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
+  program may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 

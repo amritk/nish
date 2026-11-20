@@ -1,7 +1,7 @@
 # WP66: C libraries from their headers
 
-**Status: proposed, design only.** Nothing here is built. The stages are in
-§11 and on [the roadmap page](roadmap/wp66-c-headers.md). S6 waits on the
+**Status: S1 to S5, S7 and S8 are built; S6 is open.** The stages are in
+§11 and on [its open-work issue](https://github.com/amritk/nish/issues/1996). S6 waits on the
 owner (§9). [LANGUAGE.md](LANGUAGE.md#calling-c) stays normative.
 
 Every claim about today's code is anchored at commit `1673f40e`, on `main`,
@@ -508,7 +508,63 @@ unions, bitfields, `long double`, C++ headers, and a compile-time
 | S5 | buffers paired by name, any unsigned count width | — |
 | S6 | callbacks *(open question)* | S3 |
 | S7 | a package links a library or its own C | D6 |
+| S8 | `nish c-import` writes S3's opaque classes, S4's array fields and S5's named buffer pairs *(done)* | S2, S3, S4, S5 |
 
 S3, S4, S5 and S7 do not depend on one another. Each one that lands
 re-runs §4's four headers and records how many functions moved from "via
 `CPtr`" or "not expressible" to "exact".
+
+### 11.1 S8, measured
+
+S3, S4 and S5 changed the language; S8 is the stage where the generator
+writes them, so its re-run is the one that moves §4's figures. Each column
+is a count in the module `nish c-import` writes for the header, before S8
+→ after it. "Exact" is a `declare function` with no `CPtr` in it, "via
+`CPtr`" one with at least one, and "not bound" a function the module's
+not-bound list names; the three count only functions declared in the
+header itself. "Classes" counts every `declare class` but the out classes;
+"struct lines" counts the not-bound list's `struct` and `union` entries,
+which after S8 also name each struct that stays a `CPtr` and why.
+
+| Header | Exact | Via `CPtr` | Not bound | Classes | Of those: opaque / with an array field | Struct lines |
+| --- | --- | --- | --- | --- | --- | --- |
+| `sqlite3.h` (vendored, `runtime/sqlite/`) | 52 → 72 | 190 → 170 | 58 → 58 | 22 → 26 | 0 → 3 / 0 → 1 | 1 → 5 |
+| `zlib.h` 1.3 | 57 → 57 | 21 → 21 | 3 → 3 | 3 → 3 | 0 → 0 / 0 → 0 | 0 → 1 |
+| `png.h` 1.6.43 | 6 → 6 | 222 → 222 | 18 → 18 | 8 → 9 | 0 → 0 / 0 → 1 | 2 → 3 |
+| `openssl/sha.h` 3.0.13 | 0 → 3 | 23 → 20 | 0 → 0 | 0 → 2 | 0 → 0 / 0 → 2 | 3 → 1 |
+
+What moved, and what did not:
+
+- `sqlite3.h`: `sqlite3_mutex`, `sqlite3_str` and `sqlite3_backup` became
+  opaque classes, and `sqlite3_snapshot` a class with an array field; the
+  20 functions that take or return only those, and no other pointer,
+  moved to exact. `sqlite3`,
+  `sqlite3_stmt`, `sqlite3_value` and `sqlite3_blob` stay `CPtr`: each is
+  handed out through a `T **` out-parameter, which only a `CPtr` can stand
+  for. `sqlite3_context` stays `CPtr` because no function returns one.
+- `openssl/sha.h`: `SHA_CTX` and `SHA256_CTX` are classes with array
+  fields, so `SHA1_Init`, `SHA224_Init` and `SHA256_Init` are exact; the
+  rest still take a `const void *` or `unsigned char *` as `CPtr`.
+  `SHA512_CTX` holds an unnamed union, which stays refused.
+- `png.h`: `png_unknown_chunk_t` gained its class; `png_image`'s array is
+  of plain `char`, signed on this target, which has no Nish type. libpng's
+  handles come through `T **` too, so no function moved.
+- `zlib.h`: unchanged. Its one incomplete struct, `internal_state`, is
+  pointed to by a field of `z_stream`, and a field holds only a `CPtr`.
+- No module uses `CountedBy`: a header names no count clang 18 reports on
+  a parameter, so a named pair comes only from an override file, and these
+  runs pass none.
+
+Before is `main` at 1d6311f8, after is this branch at b28937b3, each built
+with `bash scripts/bootstrap.sh -o build/<name> --stages 1`. Each module was
+written with
+`build/<name> c-import <header> --target x86_64-unknown-linux-gnu -o <name>.ts`,
+`<header>` being `runtime/sqlite/sqlite3.h`, `/usr/include/zlib.h`,
+`/usr/include/png.h` and `/usr/include/openssl/sha.h`, and counted against
+the functions clang's JSON AST lists for the same header. The three system
+headers are Ubuntu 24.04's packages in the cloud container the run used:
+`zlib1g-dev` 1.3.dfsg-3.1ubuntu2.3, `libpng-dev` 1.6.43-5ubuntu0.7 and
+`libssl-dev` 3.0.13-0ubuntu3.16; a machine without them cannot repeat those
+three rows. The "before" figures differ from §4.1's (52 exact `sqlite3.h`
+functions here, 44 there) because §4.1 counts with the Node prototype's
+simplified mapping, not with `nish c-import`.

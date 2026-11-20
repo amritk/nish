@@ -169,6 +169,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types"
+import { isWasmBuild } from "./visibility"
 import {
   fusedCalleesOf,
   isMapRoute,
@@ -178,7 +179,7 @@ import {
   walkMethodsOf,
 } from "./emit-map"
 import { isCollectionStruct } from "./generics"
-import { isSimdLoad } from "./simd"
+import { isSimdAccess, isSimdLoad } from "./simd"
 import {
   builtinPanicKind,
   PANIC_ARRAY_LENGTH,
@@ -1150,7 +1151,9 @@ export class FactsTable {
   set(name: string, facts: FunctionFacts): void {
     const at = this.index.get(name, -1)
     if (at >= 0) {
-      // A symbol is unique across a program (the driver rejects clashes), so
+      // A symbol is unique across a program (the driver qualifies a clashing
+      // private function by its module, WP57 S1, and rejects what still
+      // clashes), so
       // this only happens on the second collection round, which replaces the
       // first round's facts in place.
       this.list[at] = facts
@@ -1402,7 +1405,8 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
     return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE)
   }
   // An inline array field's slots are bytes of the object itself, so writing
-  // an element of `p.f` writes through `p` (`src/inline-arrays.ts`). The
+  // an element of `p.f` writes through `p` (`src/inline-arrays.ts`), as does
+  // writing an element of a `declare class`'s fixed-length array. The
   // pointer layout's slots are an allocation of their own, and there the
   // same store is only a read of `p`.
   if (
@@ -1422,7 +1426,10 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
   return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ)
 }
 
-/** Whether `access` reads an array field stored inside its object (`FieldInfo.inlineCapacity`). */
+/**
+ * Whether `access` reads an array field stored inside its object: an inline
+ * one (`FieldInfo.inlineCapacity`) or a fixed-length one (`FieldInfo.cLength`).
+ */
 const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
   const receiver = program.nodeTypes[access.children[0].id]
   if (receiver < 0) {
@@ -1437,7 +1444,7 @@ const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node):
     return false
   }
   const field = info.field(access.text)
-  return field !== null && field.inline()
+  return field !== null && (field.inline() || field.cLength >= 0)
 }
 
 /**
@@ -1950,12 +1957,12 @@ const isStringPassthrough = (program: CheckedProgram, template: Node): boolean =
  * to claim. A `Result` layout is derived from the type, not declared (WP16),
  * so it is computed rather than looked up.
  */
-const structSize = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
+const structSize = (program: CheckedProgram, table: TypeTable, opts: Options, type: i32): i32 => {
   if (type < 0) {
     return 0
   }
   if (table.isResult(type)) {
-    return resultLayout(table, type).size
+    return resultLayout(table, type, isWasmBuild(opts) ? 4 : 8).size
   }
   if (!table.isStruct(type)) {
     return 0
@@ -3321,6 +3328,34 @@ class FactCollector {
   }
 
   /**
+   * What the initializers of `info` call when they allocate (`[]`, `new
+   * C(...)`): the allocator, and each `new`'s constructor, or the
+   * initializers of a class that has none, which run in its place
+   * (`initializerValue`). `site` is where they run: a constructor's first
+   * allocating initializer, or the `new` of a class without one.
+   */
+  noteInitializers(info: StructInfo, site: Node): void {
+    for (const field of info.fields) {
+      const init = field.initializer
+      const made = field.initNew
+      if (init === null || (init.kind !== NodeKind.Array && made === null)) {
+        continue
+      }
+      this.facts.effect = EFFECT_WRITE
+      this.facts.callees.add("nish_alloc_struct")
+      if (made === null) {
+        continue
+      }
+      const ctor = made.ctor
+      if (ctor !== null) {
+        this.addComposedCallee(ctor.name, site)
+      } else {
+        this.noteInitializers(made, site)
+      }
+    }
+  }
+
+  /**
    * WP53 H1.2: a `new` of a handle class is a `using`'s initialiser, and every
    * exit of its block calls the close the class's dispose names, which is C's:
    * `ffi` is exercised there, named at the `using`, as a call written there
@@ -3655,6 +3690,12 @@ class FactCollector {
         this.addComposedCallee(ctor.name, node)
         this.noteArguments(node, ctor)
         this.noteCall(node, ctor)
+      } else {
+        // No constructor: the initializers run here (`constructObject`).
+        const info = program.struct(table.nameOf(type))
+        if (info !== null) {
+          this.noteInitializers(info, node)
+        }
       }
       this.noteHandleClose(node)
       return
@@ -3976,11 +4017,16 @@ class FactCollector {
     }
   }
 
-  /** The site a builtin call is, by the name the analysis resolved it to (`builtinPanicKind`). */
+  /**
+   * The site a builtin call is, by the name the analysis resolved it to
+   * (`builtinPanicKind`). A `nish:simd` access is proven exactly when
+   * `bounds.ts` discharged its bound, the fact `emitVectorAccess` reads to
+   * drop the check, so the table and the IR agree.
+   */
   noteBuiltinSite(call: Node, name: string): void {
     const kind = builtinPanicKind(name)
     if (kind >= 0) {
-      this.noteSite(call, kind, false, "")
+      this.noteSite(call, kind, isSimdAccess(name) && this.unit.program.nodeProvenIndex[call.id], "")
     }
   }
 
@@ -4149,7 +4195,7 @@ const collectStatedFacts = (
   // none of its own; `isStackSite` reads past the end as false.
   const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
-  facts.returnDeref = structSize(program, table, sig.returnType)
+  facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)
   if (memory !== null && ownMemory) {
     facts.stackSites = memory.stackSites
@@ -4190,7 +4236,7 @@ const collectStatedFacts = (
       facts.pointerParams.push(
         new PointerParamFacts(
           sig.paramNames[i],
-          structSize(program, table, table.stripNull(type)),
+          structSize(program, table, opts, table.stripNull(type)),
           pointerAlign(program, table, type)
         )
       )
@@ -4321,6 +4367,14 @@ const collectStatedFacts = (
     if (self !== null) {
       self.writesThrough = true
       self.writesShared = true
+    }
+    // An initializer that allocates calls what `this.f = []` or `new C(...)`
+    // written first in the body would; the escape analysis already counted
+    // the allocation (`analyzeEscapes`).
+    const owner = sig.owner
+    const site: Node | null = owner !== null ? owner.allocatingInitializer() : null
+    if (owner !== null && site !== null) {
+      collector.noteInitializers(owner, site)
     }
   }
   // WP31 §9: the prologue that checks a host's arguments may take the panic

@@ -36,6 +36,7 @@ import spellAnnotation from "./arrays" -> function @spellAnnotation
 import typedArraySpelling from "./arrays" -> function @typedArraySpelling
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
+import moduleSymbolQualifier from "./packages" -> function @moduleSymbolQualifier
 import CAPTURE_CALL from "./parallel" -> const CAPTURE_CALL
 import CAPTURE_NONE from "./parallel" -> const CAPTURE_NONE
 import CAPTURE_PARALLEL from "./parallel" -> const CAPTURE_PARALLEL
@@ -76,8 +77,8 @@ import secretRoleOf from "./secret" -> function @secretRoleOf
 import secretShapeMessage from "./secret" -> function @secretShapeMessage
 import collectMethodSignature from "./structs" -> function @collectMethodSignature
 import collectStructMembers from "./structs" -> function @collectStructMembers
-import noteStructNames from "./structs" -> function @noteStructNames
-import referencedStructNames from "./structs" -> function @referencedStructNames
+import noteStructTypes from "./structs" -> function @noteStructTypes
+import referencedStructTypes from "./structs" -> function @referencedStructTypes
 import rejectOpaque from "./structs" -> function @rejectOpaque
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_FOREIGN from "./nodes" -> const FLAG_FOREIGN
@@ -200,13 +201,13 @@ function mapIntrinsicRole(template: TemplateInfo): i32 -> @mapIntrinsicRole
 function isMapOwner(info: StructInfo): boolean -> @isMapOwner [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
 function isCollectionStruct(info: StructInfo): boolean -> @isCollectionStruct [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isCollectionTemplate
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   callee +1:31 isCollectionTemplate -> @isCollectionTemplate
@@ -265,6 +266,34 @@ function instanceSymbol(table: TypeTable, base: string, args: i32[]): string -> 
   local +0:7 out: string (let)
   local +1:14 arg: i32 (const)
   callee +2:21 TypeTable.mangle -> @TypeTable.mangle
+function qualifiesClashing(peers: CheckContext[], home: CheckContext, name: string, exported: boolean): boolean -> @qualifiesClashing [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: CheckContext.signature CheckContext.template FunctionSig.definedIn FunctionSig.foreign nish_panic_index nish_panic_overflow nish_str_eq
+  pointer peers: size=0 writesThrough=false captured=false
+  pointer home: size=448 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 entry: CheckContext (const)
+  local +4:9 prefix: string (const)
+  local +5:7 parties: i32 (let)
+  local +9:14 peer: CheckContext (const)
+  local +13:11 sig: FunctionSig | null (const)
+  callee +13:17 CheckContext.signature -> @CheckContext.signature
+  callee +18:8 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +19:7 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +24:11 template: TemplateInfo | null (const)
+  callee +24:22 CheckContext.template -> @CheckContext.template
+function templateSymbol(peers: CheckContext[], template: TemplateInfo): string -> @templateSymbol [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: moduleSymbolQualifier nish_panic_index nish_str_concat qualifiesClashing
+  pointer peers: size=0 writesThrough=false captured=false passedTo=qualifiesClashing#0
+  pointer template: size=64 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 home: CheckContext (const)
+  local +1:9 prefix: string (const)
+  callee +2:8 qualifiesClashing -> @qualifiesClashing
+  local +5:9 qualifier: string (const)
+  callee +5:21 moduleSymbolQualifier -> @moduleSymbolQualifier
 function instanceDisplayName(table: TypeTable, base: string, args: i32[]): string -> @instanceDisplayName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
@@ -540,21 +569,24 @@ function RequestSite.constructor(this: RequestSite, asker: CheckContext): void -
 function reachForeignLayout(ctx: CheckContext, info: StructInfo, symbols: boolean): boolean -> @reachForeignLayout
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: CheckedProgram.addStruct StringMap.has nish_array_grow reachForeignSymbols
+  calls: CheckedProgram.addStruct CheckedProgram.structByType nish_array_grow reachForeignSymbols
   pointer ctx: size=448 writesThrough=false captured=false passedTo=reachForeignSymbols#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
+  pointer info: size=184 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
   stackSites=0 stackLocals=0
-  callee -7:7 StringMap.has -> @StringMap.has
+  local -8:9 held: StructInfo | null (const)
+  callee -8:16 CheckedProgram.structByType -> @CheckedProgram.structByType
   callee -5:7 reachForeignSymbols -> @reachForeignSymbols
-  callee +2:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
-function reachForeignSymbols(ctx: CheckContext, name: string): void -> @reachForeignSymbols
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee +4:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+function reachForeignSymbols(ctx: CheckContext, held: StructInfo): void -> @reachForeignSymbols
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish_array_grow nish_panic_index nish_str_eq
+  calls: CheckedProgram.structIndex nish_array_grow
   pointer ctx: size=448 writesThrough=false captured=false
+  pointer held: size=184 writesThrough=false captured=false passedTo=CheckedProgram.structIndex#1
   stackSites=0 stackLocals=0
-  local -13:9 program: CheckedProgram (const)
-  local -12:7 index: i32 (let)
+  local -10:9 program: CheckedProgram (const)
+  local -9:9 index: i32 (const)
+  callee -9:17 CheckedProgram.structIndex -> @CheckedProgram.structIndex
   local -5:14 reached: i32 (const)
 function reachForeignMember(ctx: CheckContext, info: StructInfo, symbols: boolean, walked: StringSet, pending: StructInfo[]): void -> @reachForeignMember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -562,7 +594,7 @@ function reachForeignMember(ctx: CheckContext, info: StructInfo, symbols: boolea
   escaping: info symbols
   calls: StringSet.add nish_array_grow reachForeignLayout
   pointer ctx: size=448 writesThrough=false captured=false passedTo=reachForeignLayout#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=reachForeignLayout#1
+  pointer info: size=184 writesThrough=true captured=true passedTo=reachForeignLayout#1
   pointer walked: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   pointer pending: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -572,9 +604,9 @@ function registerForeignLayouts(ctx: CheckContext, root: StructInfo, from: Check
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachForeignMember
   escaping: symbols
-  calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size reachForeignMember referencedStructNames
+  calls: CheckedProgram.structByType StringSet.constructor reachForeignMember referencedStructTypes
   pointer ctx: size=448 writesThrough=false captured=false passedTo=reachForeignMember#0 reachForeignMember#0
-  pointer root: size=176 writesThrough=true captured=true passedTo=reachForeignMember#1
+  pointer root: size=184 writesThrough=true captured=true passedTo=reachForeignMember#1
   pointer from: size=448 writesThrough=false captured=false
   stackSites=3 stackLocals=3
   local +0:9 pending: StructInfo[] (const)
@@ -583,33 +615,27 @@ function registerForeignLayouts(ctx: CheckContext, root: StructInfo, from: Check
   callee +2:3 reachForeignMember -> @reachForeignMember
   local +10:7 at: i32 (let)
   local +12:11 info: StructInfo (const)
-  local +14:11 names: StringSet (const)
-  callee +14:19 new StringSet -> @StringSet.constructor
-  callee +15:5 referencedStructNames -> @referencedStructNames
-  local +16:9 i: i32 (let)
-  callee +17:16 StringSet.size -> @StringSet.size
-  local +18:13 next: StructInfo | null (const)
-  callee +18:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +18:40 StringSet.at -> @StringSet.at
-  callee +20:9 reachForeignMember -> @reachForeignMember
+  local +14:11 types: i32[] (const)
+  callee +15:5 referencedStructTypes -> @referencedStructTypes
+  local +16:16 type: i32 (const)
+  local +17:13 next: StructInfo | null (const)
+  callee +17:20 CheckedProgram.structByType -> @CheckedProgram.structByType
+  callee +19:9 reachForeignMember -> @reachForeignMember
 function adoptArgumentLayouts(ctx: CheckContext, args: i32[], site: RequestSite): void -> @adoptArgumentLayouts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via registerForeignLayouts
-  calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size noteStructNames registerForeignLayouts
+  calls: CheckedProgram.structByType noteStructTypes registerForeignLayouts
   pointer ctx: size=448 writesThrough=false captured=false passedTo=registerForeignLayouts#0
   pointer args: size=0 writesThrough=false captured=false
   pointer site: size=24 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local +0:9 names: StringSet (const)
-  callee +0:17 new StringSet -> @StringSet.constructor
+  local +0:9 types: i32[] (const)
   local +1:14 arg: i32 (const)
-  callee +2:5 noteStructNames -> @noteStructNames
-  local +4:7 i: i32 (let)
-  callee +5:14 StringSet.size -> @StringSet.size
-  local +6:11 info: StructInfo | null (const)
-  callee +6:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +6:44 StringSet.at -> @StringSet.at
-  callee +8:7 registerForeignLayouts -> @registerForeignLayouts
+  callee +2:5 noteStructTypes -> @noteStructTypes
+  local +4:14 type: i32 (const)
+  local +5:11 info: StructInfo | null (const)
+  callee +5:18 CheckedProgram.structByType -> @CheckedProgram.structByType
+  callee +7:7 registerForeignLayouts -> @registerForeignLayouts
 function useExternalInstance(ctx: CheckContext, sig: FunctionSig): void -> @useExternalInstance
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -706,8 +732,8 @@ function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation
   local +16:9 prefix: string (const)
   local +17:7 i: i32 (let)
   local +19:11 sig: FunctionSig (const)
-  local +31:11 member: Instantiation (const)
-  callee +31:20 new Instantiation -> @Instantiation.constructor
+  local +32:11 member: Instantiation (const)
+  callee +32:20 new Instantiation -> @Instantiation.constructor
 function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], functions: FunctionSig[], at: Node): FunctionSig | null -> @instantiate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via instantiateHere
@@ -729,49 +755,49 @@ function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], fun
 function adoptInstanceLayouts(ctx: CheckContext, home: CheckContext, sig: FunctionSig): void -> @adoptInstanceLayouts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via registerForeignLayouts
-  calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size noteStructNames registerForeignLayouts
+  calls: CheckedProgram.structByType noteStructTypes registerForeignLayouts
   pointer ctx: size=448 writesThrough=false captured=false passedTo=registerForeignLayouts#0
   pointer home: size=448 writesThrough=false captured=false passedTo=registerForeignLayouts#2
   pointer sig: size=224 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local +0:9 names: StringSet (const)
-  callee +0:17 new StringSet -> @StringSet.constructor
-  callee +1:3 noteStructNames -> @noteStructNames
+  local +0:9 types: i32[] (const)
+  callee +1:3 noteStructTypes -> @noteStructTypes
   local +2:14 type: i32 (const)
-  callee +3:5 noteStructNames -> @noteStructNames
-  local +5:7 i: i32 (let)
-  callee +6:14 StringSet.size -> @StringSet.size
-  local +7:11 info: StructInfo | null (const)
-  callee +7:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +7:38 StringSet.at -> @StringSet.at
-  callee +9:7 registerForeignLayouts -> @registerForeignLayouts
+  callee +3:5 noteStructTypes -> @noteStructTypes
+  local +5:14 type: i32 (const)
+  local +6:11 info: StructInfo | null (const)
+  callee +6:18 CheckedProgram.structByType -> @CheckedProgram.structByType
+  callee +8:7 registerForeignLayouts -> @registerForeignLayouts
 function instantiateHere(ctx: CheckContext, template: TemplateInfo, args: i32[], functions: FunctionSig[], at: Node, site: RequestSite): FunctionSig | null -> @instantiateHere
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: functions
-  calls: CaptureSlot.type CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set adoptArgumentLayouts bindFunctionParameters capturesOf chainArguments chainParameters checkConstraints collectFunctionSignature collectMethodSignature expandingAncestor exposeTo functionInstanceDisplayName instanceSymbol internalErrorFor jsonRouteRole mapIntrinsicRole nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingMessage parallelRole receiverOf rejectForeignPointer rejectHandleArgument rejectOpaque rejectStoredMask withFunctionArguments
+  calls: CaptureSlot.type CheckContext.error CheckedProgram.addInstantiation CheckedProgram.instantiation Instantiation.constructor StringMap.constructor StringMap.set adoptArgumentLayouts bindFunctionParameters capturesOf chainArguments chainParameters checkConstraints collectFunctionSignature collectMethodSignature expandingAncestor exposeTo functionInstanceDisplayName instanceSymbol internalErrorFor jsonRouteRole mapIntrinsicRole nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nonTerminatingMessage parallelRole receiverOf rejectForeignPointer rejectHandleArgument rejectOpaque rejectStoredMask templateSymbol withFunctionArguments
   pointer ctx: size=448 writesThrough=true captured=true passedTo=adoptArgumentLayouts#0 adoptArgumentLayouts#0 checkConstraints#1 exposeTo#0 expandingAncestor#0 collectFunctionSignature#0 collectMethodSignature#0
-  pointer template: size=64 writesThrough=true captured=true passedTo=expandingAncestor#2 nonTerminatingMessage#1 chainParameters#0 chainArguments#0 Instantiation.constructor#1 receiverOf#0 parallelRole#0 mapIntrinsicRole#0 jsonRouteRole#0
+  pointer template: size=64 writesThrough=true captured=true passedTo=templateSymbol#1 expandingAncestor#2 nonTerminatingMessage#1 chainParameters#0 chainArguments#0 Instantiation.constructor#1 receiverOf#0 parallelRole#0 mapIntrinsicRole#0 jsonRouteRole#0
   pointer args: size=0 writesThrough=true captured=true passedTo=adoptArgumentLayouts#1 checkConstraints#5 instanceSymbol#2 expandingAncestor#3 nonTerminatingMessage#3 chainArguments#1 functionInstanceDisplayName#2 Instantiation.constructor#2
   pointer functions: size=0 writesThrough=true captured=true passedTo=withFunctionArguments#1 functionInstanceDisplayName#3 bindFunctionParameters#1
   pointer at: size=40 writesThrough=false captured=false passedTo=checkConstraints#6 rejectForeignPointer#3 rejectOpaque#3 rejectStoredMask#3 rejectHandleArgument#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer site: size=24 writesThrough=false captured=false passedTo=adoptArgumentLayouts#2 adoptArgumentLayouts#2
   stackSites=1 stackLocals=1
+  callee -142:3 adoptArgumentLayouts -> @adoptArgumentLayouts
+  local -139:9 captured: i32[] (const)
+  local -138:14 fn: FunctionSig (const)
+  local -137:16 slot: CaptureSlot (const)
+  callee -137:24 capturesOf -> @capturesOf
+  callee -136:21 CaptureSlot.type -> @CaptureSlot.type
   callee -133:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  local -130:9 captured: i32[] (const)
-  local -129:14 fn: FunctionSig (const)
-  local -128:16 slot: CaptureSlot (const)
-  callee -128:24 capturesOf -> @capturesOf
-  callee -127:21 CaptureSlot.type -> @CaptureSlot.type
-  callee -124:3 adoptArgumentLayouts -> @adoptArgumentLayouts
-  callee -110:6 checkConstraints -> @checkConstraints
-  local -96:9 owner: StructInfo | null (const)
+  callee -119:6 checkConstraints -> @checkConstraints
+  local -105:9 owner: StructInfo | null (const)
+  local -104:9 home: CheckContext (const)
+  callee -101:7 internalErrorFor -> @internalErrorFor
   local -95:9 base: string (const)
-  local -93:14 fn: FunctionSig (const)
-  callee -92:5 exposeTo -> @exposeTo
-  local -90:9 symbol: string (const)
-  callee -90:18 withFunctionArguments -> @withFunctionArguments
-  callee -89:5 instanceSymbol -> @instanceSymbol
+  callee -93:9 templateSymbol -> @templateSymbol
+  local -90:14 fn: FunctionSig (const)
+  callee -89:5 exposeTo -> @exposeTo
+  local -87:9 symbol: string (const)
+  callee -87:18 withFunctionArguments -> @withFunctionArguments
+  callee -87:40 instanceSymbol -> @instanceSymbol
   local -86:9 existing: Instantiation | null (const)
   callee -86:20 CheckedProgram.instantiation -> @CheckedProgram.instantiation
   local -80:11 minted: TemplateInfo | null (const)
@@ -1018,7 +1044,7 @@ function spellCSymbolsApart(programs: CheckedProgram[], strictExports: boolean):
 function noteJsonRoute(ctx: CheckContext, home: CheckContext, sig: FunctionSig): void -> @noteJsonRoute
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonRouteCallees
-  calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size exposeTo jsonRouteCallees noteStructNames registerForeignLayouts
+  calls: CheckedProgram.structByType exposeTo jsonRouteCallees noteStructTypes registerForeignLayouts
   pointer ctx: size=448 writesThrough=false captured=false passedTo=exposeTo#0 registerForeignLayouts#0
   pointer home: size=448 writesThrough=false captured=false passedTo=registerForeignLayouts#2
   pointer sig: size=224 writesThrough=false captured=false passedTo=jsonRouteCallees#2
@@ -1026,16 +1052,13 @@ function noteJsonRoute(ctx: CheckContext, home: CheckContext, sig: FunctionSig):
   local +0:14 fn: FunctionSig (const)
   callee +0:20 jsonRouteCallees -> @jsonRouteCallees
   callee +1:5 exposeTo -> @exposeTo
-  local +3:9 names: StringSet (const)
-  callee +3:17 new StringSet -> @StringSet.constructor
+  local +3:9 types: i32[] (const)
   local +4:14 type: i32 (const)
-  callee +5:5 noteStructNames -> @noteStructNames
-  local +7:7 i: i32 (let)
-  callee +8:14 StringSet.size -> @StringSet.size
-  local +9:11 info: StructInfo | null (const)
-  callee +9:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee +9:38 StringSet.at -> @StringSet.at
-  callee +11:7 registerForeignLayouts -> @registerForeignLayouts
+  callee +5:5 noteStructTypes -> @noteStructTypes
+  local +7:14 type: i32 (const)
+  local +8:11 info: StructInfo | null (const)
+  callee +8:18 CheckedProgram.structByType -> @CheckedProgram.structByType
+  callee +10:7 registerForeignLayouts -> @registerForeignLayouts
 function functionTypeText(table: TypeTable, names: string[], types: i32[], returnType: i32): string -> @functionTypeText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: returnType
@@ -1761,8 +1784,8 @@ function satisfiesConstraint(asker: CheckContext, home: CheckContext, arg: i32, 
 function implementsDeclaration(cls: StructInfo, iface: StructInfo): boolean -> @implementsDeclaration [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer cls: size=176 writesThrough=false captured=false
-  pointer iface: size=176 writesThrough=false captured=false
+  pointer cls: size=184 writesThrough=false captured=false
+  pointer iface: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 name: string (const)
 function checkConstraints(asker: CheckContext, home: CheckContext, templateName: string, typeParams: string[], constraints: ConstraintList, args: i32[], at: Node): boolean -> @checkConstraints

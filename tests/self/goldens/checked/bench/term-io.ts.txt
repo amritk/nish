@@ -1939,6 +1939,10 @@ function TermProbe.result(this: TermProbe): TermCaps -> @nish.TermProbe.result [
   local +81:11 forced: string (const)
   local +86:13 answeredFor: boolean (const)
 module std/text.ts [package nish]
+import bitmask from "nish:simd" -> builtin bitmask
+import eq from "nish:simd" -> builtin eq
+import loadU8x16 from "nish:simd" -> builtin loadU8x16
+import splatU8x16 from "nish:simd" -> builtin splatU8x16
 const NEWLINE: i32 = 10
 const CARRIAGE_RETURN: i32 = 13
 const SPACE: i32 = 32
@@ -1966,13 +1970,23 @@ function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function splitLines(text: string): string[] -> @nish.splitLines [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_str_new
-  stackSites=0 stackLocals=0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32 nish_array_grow nish_panic_index nish_str_new
+  stackSites=1 stackLocals=1
   local +0:9 length: i32 (const)
   local +1:9 lines: string[] (const)
   local +2:7 start: i32 (let)
-  local +3:7 i: i32 (let)
+  local +3:7 base: i32 (let)
+  local +9:11 flags: u8[] (const)
+  local +10:11 one: u8x16 (const)
+  local +14:11 n: i32 (let)
+  local +15:11 end: i32 (let)
+  local +21:11 i: i32 (let)
+  local +28:13 bits: i32 (let)
+  local +33:17 zeros: i32 (const)
+  local +34:17 lane: i32 (const)
+  local +35:17 at: i32 (const)
+  local +51:17 at: i32 (const)
 function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.isTextBlankByte nish_array_grow nish_str_new

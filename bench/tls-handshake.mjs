@@ -36,6 +36,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, relative, resolve } from "node:path"
+import { withAllowPanics } from "../tests/allow-panics.js"
 
 const root = resolve(import.meta.dirname, "..")
 const build = join(root, "build")
@@ -116,12 +117,18 @@ const buildServer = (dir, out) => {
     }
     console.error(`building ${nish}`)
     mkdirSync(join(dir, "build"), { recursive: true })
-    run(seed, ["src/compile.ts", "--link", nish], dir)
+    run(seed, withAllowPanics(seed, ["src/compile.ts", "--link", nish]), dir)
   }
   console.error(`building ${out}`)
   run(
     nish,
-    ["tests/link/net_interop_server/main.ts", "-o", `${join(dir, "build", "interop")}/`, "--link", out],
+    withAllowPanics(nish, [
+      "tests/link/net_interop_server/main.ts",
+      "-o",
+      `${join(dir, "build", "interop")}/`,
+      "--link",
+      out,
+    ]),
     dir
   )
 }

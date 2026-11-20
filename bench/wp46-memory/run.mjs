@@ -26,6 +26,7 @@
 // Linux only (/proc), run from the repository root.
 import { execFileSync } from "node:child_process"
 import { copyFileSync, mkdirSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
@@ -55,8 +56,14 @@ const cc = process.env.CC ?? "clang"
 run(cc, ["-O2", "-c", "runtime/runtime.c", "-o", `${out}/runtime.o`])
 run(cc, ["-O2", "bench/wp46-memory/options.c", `${out}/runtime.o`, "-o", `${out}/options`])
 run(cc, ["-O2", "bench/wp46-memory/rc-tax.c", `${out}/runtime.o`, "-o", `${out}/rc-tax`])
-run("build/nish", ["bench/wp46-memory/sessions.ts", "--link", `${out}/sessions`])
-run("build/nish", ["bench/wp46-memory/sessions-region.ts", "--link", `${out}/sessions-region`])
+run(
+  "build/nish",
+  withAllowPanics("build/nish", ["bench/wp46-memory/sessions.ts", "--link", `${out}/sessions`])
+)
+run(
+  "build/nish",
+  withAllowPanics("build/nish", ["bench/wp46-memory/sessions-region.ts", "--link", `${out}/sessions-region`])
+)
 copyFileSync(`${out}/sessions`, `${out}/sessions2`)
 
 const median = (xs) => {

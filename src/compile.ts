@@ -85,7 +85,7 @@ import {
   manifestLink,
   manifestNish,
 } from "./manifest"
-import { Options } from "./options"
+import { ALLOW_PANICS_FLAG, Options } from "./options"
 import { packageDirOf, packageNameOf } from "./packages"
 import { basenameWithout, dirname, joinPath } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
@@ -100,6 +100,7 @@ import {
   simulatedUnlabelledBuiltin,
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { cImport } from "./c-import"
 import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
@@ -157,10 +158,21 @@ const isProfile = (name: string): boolean =>
 /**
  * The one CPU level `--cpu` accepts (docs/LANGUAGE.md, "The CPU level"): the
  * link compiles the program and the runtime for it, and the constant-time
- * check reads its assembly (CT-16). Every other level, `native` included, is
- * refused rather than passed to clang unread.
+ * check reads its assembly (CT-16). Every other level is refused rather than
+ * passed to clang unread. `native` is refused for a measured reason, which
+ * `NATIVE_REFUSED` gives: the check does not pass at every CPU it names.
  */
 const CPU_LEVEL: string = "x86-64-v3"
+
+/**
+ * Why `--cpu native` is refused (docs/security/ct-verification.md, CT-16):
+ * read under clang 18 at `-march=znver2`, `znver3`, `znver4` and
+ * `sapphirerapids`, the `ct_asm_chacha20poly1305` fixture holds a branch the
+ * checker refuses, so a native build on those CPUs could ship assembly the
+ * check does not pass.
+ */
+const NATIVE_REFUSED: string =
+  "under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids)"
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one
@@ -807,6 +819,10 @@ const commandMain = (): number => {
   if (process.argv[1] === "upgrade") {
     return upgrade()
   }
+  // `nish c-import` writes a module from a C header (src/c-import.ts).
+  if (process.argv[1] === "c-import") {
+    return cImport(process.argv)
+  }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
   opts.statelessInstance = simulatedStatelessInstance()
@@ -925,6 +941,10 @@ const commandMain = (): number => {
         return 2
       }
       cpu = process.argv[arg]
+      if (cpu === "native") {
+        console.error(`compile: --cpu native is refused: ${NATIVE_REFUSED}; the one accepted is ${CPU_LEVEL}`)
+        return 2
+      }
       if (cpu !== CPU_LEVEL) {
         console.error(`compile: unknown cpu level \`${cpu}\`; the one accepted is ${CPU_LEVEL}`)
         return 2
@@ -1023,12 +1043,25 @@ const commandMain = (): number => {
       opts.emitPanics = process.argv[arg]
     } else if (value === "--deny-panics") {
       opts.denyPanics = true
+    } else if (value === ALLOW_PANICS_FLAG) {
+      // The opposite of `--deny-panics`, and the last of the two wins: neither
+      // moves a byte of the IR, so either reading builds the same binary,
+      // unlike two `--sandbox` modes. A `noPanic` list still holds under it.
+      opts.denyPanics = false
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {
       opts.explainMemory = true
     } else if (value === "--explain-layout") {
       opts.explainLayout = true
+    } else if (value === "--compact") {
+      arg = arg + 1
+      const mode = arg < process.argv.length ? process.argv[arg] : ""
+      if (mode !== "on" && mode !== "off") {
+        console.error("compile: --compact needs on or off")
+        return 2
+      }
+      opts.compact = mode === "on"
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -1774,11 +1807,12 @@ const commandMain = (): number => {
     report(compilation, json)
     return 1
   }
-  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link.
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link,
+  // and `--emit-header` hands a C host compact classes as opaque handles. Only
+  // an N-API addon is refused, also beside `--emit-header`: it runs in Node's
+  // process, which Nish does not own.
   let hostFlag = ""
-  if (opts.emitHeader.length > 0) {
-    hostFlag = "--emit-header"
-  } else if (opts.emitNapi.length > 0) {
+  if (opts.emitNapi.length > 0) {
     hostFlag = "--emit-napi"
   } else if (opts.emitNapiAsync.length > 0) {
     hostFlag = "--emit-napi-async"

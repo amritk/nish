@@ -24,7 +24,12 @@ export class Notes {
       return -1
     }
     const id: i32 = this.nextId
-    this.nextId += 1
+    // Ids are never reused, so once they run out the store is as full as it
+    // gets, and says so the way it does at `capacity`.
+    if (id < 0 || id >= 2147483647) {
+      return -1
+    }
+    this.nextId = id + 1
     this.ids.push(id)
     this.texts.push(text)
     return id
@@ -55,8 +60,13 @@ export class Notes {
       this.ids[k] = this.ids[k + 1]
       this.texts[k] = this.texts[k + 1]
     }
-    this.ids.pop()
-    this.texts.pop()
+    // `find` met `id` in `ids`, and `texts` grows with it, so both hold one.
+    if (this.ids.length > 0) {
+      this.ids.pop()
+    }
+    if (this.texts.length > 0) {
+      this.texts.pop()
+    }
     return true
   }
 }

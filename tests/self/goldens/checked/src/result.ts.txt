@@ -36,11 +36,11 @@ function ResultLayout.constructor(this: ResultLayout, name: string): void -> @Re
   escaping: name
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function resultLayout(table: TypeTable, type: i32): ResultLayout -> @resultLayout [exported]
+function resultLayout(table: TypeTable, type: i32, pointer: i32): ResultLayout -> @resultLayout [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=56
-  escaping: type
-  calls: ResultLayout.constructor TypeTable.alignOf TypeTable.errOf TypeTable.okOf TypeTable.resultStructName nish_alloc_struct nish_panic_overflow roundUpTo
-  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.resultStructName#0 TypeTable.okOf#0 TypeTable.errOf#0 TypeTable.alignOf#0 TypeTable.alignOf#0
+  escaping: pointer type
+  calls: ResultLayout.constructor TypeTable.alignWithPointer TypeTable.errOf TypeTable.okOf TypeTable.resultStructName nish_alloc_struct nish_panic_overflow roundUpTo
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.resultStructName#0 TypeTable.okOf#0 TypeTable.errOf#0 TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0
   stackSites=0 stackLocals=0
   local +0:9 layout: ResultLayout (const)
   callee +0:18 new ResultLayout -> @ResultLayout.constructor
@@ -53,10 +53,10 @@ function resultLayout(table: TypeTable, type: i32): ResultLayout -> @resultLayou
   local +5:7 align: i32 (let)
   local +6:7 index: i32 (let)
   local +8:11 valueAlign: i32 (const)
-  callee +8:24 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +8:24 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
   callee +9:14 roundUpTo -> @roundUpTo
   local +20:9 errAlign: i32 (const)
-  callee +20:20 TypeTable.alignOf -> @TypeTable.alignOf
+  callee +20:20 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
   callee +21:12 roundUpTo -> @roundUpTo
   callee +29:17 roundUpTo -> @roundUpTo
 function isResultConstructor(name: string): boolean -> @isResultConstructor [exported]
@@ -301,7 +301,7 @@ function rejectUnreadOverwrites(ctx: CheckContext, node: Node, declarations: Nod
 function declarationIndex(program: CheckedProgram, declarations: Node[], local: Local | null): i32 -> @declarationIndex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer program: size=912 writesThrough=false captured=false
+  pointer program: size=928 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -312,7 +312,7 @@ function collectResultLocals(program: CheckedProgram, table: TypeTable, node: No
   sharedWrite: +0:7
   escaping: node
   calls: TypeTable.isResult collectResultLocals nish_array_grow nish_panic_index
-  pointer program: size=912 writesThrough=false captured=false passedTo=collectResultLocals#0
+  pointer program: size=928 writesThrough=false captured=false passedTo=collectResultLocals#0
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.isResult#0 collectResultLocals#1
   pointer node: size=40 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false passedTo=collectResultLocals#3
@@ -325,7 +325,7 @@ function markResultReads(program: CheckedProgram, node: Node, declarations: Node
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: declarationIndex markResultReads nish_panic_index nish_panic_overflow nish_str_eq
-  pointer program: size=912 writesThrough=false captured=false passedTo=declarationIndex#0 markResultReads#0
+  pointer program: size=928 writesThrough=false captured=false passedTo=declarationIndex#0 markResultReads#0
   pointer node: size=40 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false passedTo=declarationIndex#1 markResultReads#2
   pointer read: size=0 writesThrough=true captured=false passedTo=markResultReads#3

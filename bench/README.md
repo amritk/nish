@@ -1794,8 +1794,7 @@ sends that many messages a run. An unknown option, or a value out of
 range, exits 2 before anything builds. Each round runs every size and mode
 twice in a seeded shuffled order. The table gives the consumer's p50 and
 p99 per message (its wait for the producer left out), the consumer's wait
-for the producer's record a message (how much of the pipeline the producer
-paces), the pipeline's ns a message, and the body bytes copied in user
+for the producer's record a message, the pipeline's ns a message, and the body bytes copied in user
 space a message, to two decimals. For `sendBody`, that count is only the
 tails it keeps when the socket does not take a body whole; the table gives
 how many messages had one. The kernel's copy into the socket, the output's
@@ -1821,7 +1820,10 @@ ring sizes. Stalls do happen in full runs (the first full default run
 stalled in place at 10 KB, message 25,298); how often there is unmeasured,
 and they could account for part of the in-place pipeline cost. The sums
 are one byte at a time on the producer's and the reader's cores, so they
-raise the pipeline and p99 figures.
+add work there; no run without them was recorded, so how much they raise
+the pipeline and p99 figures is not measured. The waiting column also came
+after the full runs, and the tables below do not have it: how much of the
+pipeline the producer paces is not measured there.
 
 On 2026-11-07, 5 rounds × 2 runs × 50,000 messages, on an Intel Xeon
 Processor @ 2.30 GHz (4 cores; 48 KiB L1d and 2 MiB L2 a core, 260 MiB L3
@@ -1921,6 +1923,8 @@ statement prepared once. Text is copied into one reused buffer, with
 | --- | --- | --- |
 | `lookup` | 200,000 | Reads one post by a random id, with its author and its like count. |
 | `feed` | 10,000 | Reads the 20 newest posts: 20 rows of five columns. |
+| `feed-cursor-walk` | 10,000 | Reads the same 20 posts, authors and like counts through four cursors opened once, before the timed loop. Nish only. |
+| `feed-cursor` | 10,000 | Does the same walk, but opens the read transaction and the four cursors on every call. Nish only. |
 | `insert` | 20,000 | Runs `INSERT … RETURNING id, created_at` in autocommit. |
 | `insert-txn` | 100,000 | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
 
@@ -1928,6 +1932,21 @@ The inserts run with `synchronous=NORMAL`. Every value read is folded into a
 checksum inside the timed loop on both sides, so the optimiser cannot drop a
 read. Each side's fold keeps its sum in a local variable across a column's
 bytes.
+
+**`feed-cursor-walk` and `feed-cursor`** read `feed`'s rows through the
+[cursor API](../docs/sqlite-cursor.md) instead of a statement.
+`feed-cursor-walk` takes one read transaction with `beginRead` and opens the
+four cursors before the timed loop, and calls `endRead` after it, so a call is
+the seeks and steps alone. `feed-cursor` is the shape of a request: each call
+takes a read transaction and opens the four cursors, each checking its schema,
+and `endRead` closes them. Both walk `posts_created_at_id_idx` newest first.
+For each post they seek `posts` and `users` by rowid, then count the post's
+entries in `likes_post_id_idx`. They fold each row in `POST_SQL`'s order, so
+each must print `feed`'s row count and checksum, and `--validate` checks that.
+Neither twin has a cursor path, so `run.mjs` runs both on the build and its
+copy only. Its report sets each against
+`feed`'s build times from the same rounds, not against C. Its figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#the-feed-through-cursors-against-sql).
 
 **The builds.**
 
@@ -1963,10 +1982,13 @@ database with the same flags and PRAGMAs.
 **The protocol.**
 
 - A warm-up round runs first and is not counted. Then come `--rounds` rounds,
-  rounded up to a multiple of 3.
-- Each round runs every workload on the build, its copy and the C twin. The
-  order rotates by round, so over a multiple of 3 rounds each binary goes
-  first, second and third equally often.
+  rounded up to a multiple of 6.
+- Each round runs every workload on the build, its copy and the C twin (and
+  the THREADSAFE=2 group's three binaries when it runs). The order rotates by
+  round, so over a multiple of the number of binaries each goes first equally
+  often. `feed-cursor-walk` and `feed-cursor` run on the build and its copy
+  only, and they alternate, which balances only over an even count: hence the
+  multiple of 6, a multiple of 3, 6 and 2.
 - A run times its own loop. Every run of a workload must print the same row
   count and checksum.
 - The report is ns per call: min, median and interquartile range over the
@@ -2027,6 +2049,55 @@ ns per call.
   6 instructions a cycle on both sides, so the core runs faster than that.
   Compare the fractions, not cycles. Both binaries are stripped, so callgrind
   cannot say which functions the extra instructions are in.
+
+### Variants: PGO and the CPU level
+
+`--variant V` adds one binary to the rounds and sets it against what it
+varies: the build, or for `c-native` the C twin. The noise band for that
+comparison is that binary against its byte-identical copy.
+
+```bash
+node bench/sqlite/run.mjs --validate --variant pgo   # the variant must read what every side reads
+node bench/sqlite/run.mjs --rounds 12 --variant pgo
+```
+
+| `V` | The extra binary | Set against |
+| --- | --- | --- |
+| `pgo` | `main.ts` linked with `--pgo-use` on a trained profile | the build and its copy |
+| `x86-64-v3` | `main.ts` linked with `--cpu x86-64-v3` | the build and its copy |
+| `pgo-x86-64-v3` | both: trained and linked with `--cpu x86-64-v3` | the build and its copy |
+| `c-native` | `twin.c` compiled and linked with `-march=native` | the C twin and a copy of it |
+
+`c-native` is C only, because `nish` refuses `--cpu native`.
+
+**PGO's training.** The profile is made fresh on every run:
+
+1. An instrumented build (`--link --pgo-generate`, with the variant's `--cpu`)
+   is made in a temp directory.
+2. `twin seed` fills a training database there: seed 7, 45,000 users, 510,000
+   posts and 1,800,000 likes. The timed database uses another seed and other
+   sizes, so the profile is not fitted to the rows the timed runs read. It has
+   more posts than `lookup`'s ids reach, so every lookup finds its post.
+3. The instrumented build runs `lookup` (50,000 calls), `feed` (2,000),
+   `insert` (5,000) and `insert-txn` (20,000) on it, one `.profraw` each.
+4. `llvm-profdata merge` writes `build/bench/sqlite/<V>.profdata`, and the
+   variant is linked with `--pgo-use` on it. `LLVM_PROFDATA` names another
+   `llvm-profdata`.
+
+The temp directory is removed afterwards, and no profile is kept in the
+repository. The cursor workloads are not in the training.
+
+**What changes.**
+
+- The THREADSAFE=2 group (rusqlite) is left out, so the rounds stay short.
+- The report adds a row for the variant, and a line with its difference from
+  what it varies: min and median, and the median as a percentage.
+- For `c-native`, it also adds the C twin's noise band.
+- The verdict is read as above, but against the variant's own band and the
+  IQRs of both binaries it compares.
+
+The figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#pgo-and-the-cpu-level-on-the-sqlite-feed).
 
 **Before the adapter fix.** The same protocol, before this measurement's fixes,
 put `feed` at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two

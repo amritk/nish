@@ -18,6 +18,7 @@ import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "../tests/allow-panics.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(root, "build", "bench", "temporal")
@@ -56,7 +57,7 @@ for (const c of columns) {
   c.exe = path.join(dir, "temporal")
   execFileSync(
     c.nish,
-    [
+    withAllowPanics(c.nish, [
       path.join(root, "bench", "temporal.ts"),
       "-o",
       `${dir}/`,
@@ -65,7 +66,7 @@ for (const c of columns) {
       "--profile",
       "speed",
       "--no-warn-performance",
-    ],
+    ]),
     { stdio: ["ignore", "ignore", "inherit"] }
   )
 }

@@ -42,7 +42,9 @@ const decimal = (text: string): i32 => {
   let value: i32 = 0
   for (let k: i32 = 0; k < toI32(text.length); k++) {
     const c: i32 = toI32(text.charCodeAt(k))
-    if (c < 48 || c > 57) {
+    // Nine digits at most, so `value` never passes 99999999 before the last
+    // one: the second test never holds, and bounds the step below.
+    if (c < 48 || c > 57 || value < 0 || value > 99999999) {
       return -1
     }
     value = value * 10 + (c - 48)
@@ -71,6 +73,10 @@ export const configure = (args: string[]): Config => {
       config.port = decimal(arg)
     } else {
       config.error = `unexpected argument: ${arg}`
+    }
+    // The loop's own test would end it here anyway; this one bounds the step.
+    if (k >= toI32(args.length) - 1) {
+      break
     }
     k += 1
   }
@@ -133,7 +139,7 @@ export class App {
       case LIST: {
         const w = h.json()
         w.beginArray()
-        for (let k: i32 = 0; k < this.notes.count() && k < toI32(this.notes.texts.length); k++) {
+        for (let k: i32 = 0; k < toI32(this.notes.ids.length) && k < toI32(this.notes.texts.length); k++) {
           writeNote(w, this.notes.ids[k], this.notes.texts[k])
         }
         w.endArray()
@@ -162,7 +168,7 @@ export class App {
       }
       case SHOW: {
         const at: i32 = this.notes.find(req.paramDecimal(ZERO))
-        if (at < 0 || at >= toI32(this.notes.texts.length)) {
+        if (at < 0 || at >= toI32(this.notes.ids.length) || at >= toI32(this.notes.texts.length)) {
           h.problem(req, NOT_FOUND, "Not Found", "there is no note with that id")
           return NOT_FOUND
         }

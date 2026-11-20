@@ -100,6 +100,9 @@ case "$seed_given" in
 esac
 
 cd "$(dirname "$0")/.."
+# `nish_allow_panics`: src/ panics on purpose, so each stage is built with
+# `--allow-panics` when the compiler building it lists the flag.
+. scripts/nish-compiler.sh
 
 out=build/nish
 work=build/selfhost
@@ -295,7 +298,8 @@ survey_ir() {
 link_stage() {
   local by="$1" name="$2"
   rm -rf "$stages/stage" "$stages/stage.modules"
-  "$by" src/compile.ts --link "$stages/stage" --profile "$profile" >/dev/null
+  nish_allow_panics "$by"
+  "$by" src/compile.ts ${allow_panics[@]+"${allow_panics[@]}"} --link "$stages/stage" --profile "$profile" >/dev/null
   rm -rf "${stages:?}/${name:?}" "${stages:?}/${name:?}.modules"
   mv "$stages/stage" "$stages/$name"
   mv "$stages/stage.modules" "$stages/$name.modules"
@@ -333,7 +337,8 @@ rm -rf "$stages/stage1.modules"
 # This is the step the rolling freeze is enforced by, so it says so when it
 # fails rather than leaving a reader with the compiler's own diagnostic and no
 # idea which rule it just met.
-if ! run_seed src/compile.ts --link "$stages/stage1" --profile "$profile" >/dev/null; then
+nish_allow_panics run_seed
+if ! run_seed src/compile.ts ${allow_panics[@]+"${allow_panics[@]}"} --link "$stages/stage1" --profile "$profile" >/dev/null; then
   echo "bootstrap: $seed_label could not build stage1 from src/ (its output is above)" >&2
   echo "bootstrap: if it refused the source, that is the freeze doing its job: a construct" >&2
   echo "bootstrap: added in 0.N cannot be used by src/ until 0.(N+1) (docs/wp12-release.md," >&2

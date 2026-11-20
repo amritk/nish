@@ -31,6 +31,7 @@
 // the repository root.
 import { execFileSync, spawnSync } from "node:child_process"
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
@@ -85,7 +86,7 @@ for (const f of [...shapes, "throw", "nounwind"]) {
 }
 
 mkdirSync(`${out}/result`, { recursive: true })
-run("build/nish", [`${here}/main.ts`, "-o", `${out}/result/`])
+run("build/nish", withAllowPanics("build/nish", [`${here}/main.ts`, "-o", `${out}/result/`]))
 
 // `noinline` on every named function of one kernel's IR, or a throw: a define
 // line this misses would leave the two sides pinned differently.

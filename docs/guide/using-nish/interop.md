@@ -870,9 +870,11 @@ A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
 [Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
-A numeric enum crosses as its number. A string enum has no spelling in C or
-in the typings yet, so a function that takes or returns one is refused under
-`--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
+An enum does not cross. A function that takes or returns a numeric enum is
+left out of the header and the typings, and each writes a comment naming
+the signature where the declaration would be. A string enum has no spelling in C or in the typings yet either,
+and a function that takes or returns one is refused under `--emit-header`,
+`--emit-dts`, `--emit-napi` and `--emit-napi-async`:
 
 <!-- nish:err NL4019 --emit-header build/docs-ai/nl4019.h -->
 ```ts
@@ -886,6 +888,9 @@ export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest
 
 Give the host the member's text instead, a `string` from `String(r)`, or an
 `i32` of your own choosing.
+
+A compact class crosses as an opaque handle, and its host links the range
+runtime: see [A compact class in a C host](../language/compact-classes.md#a-compact-class-in-a-c-host).
 
 ## Calling C from Nish: `declare function`
 
@@ -914,6 +919,9 @@ A build that makes a page module, `--target wasm32` or `--emit-dts` with no
 through a [host module](#functions-the-page-supplies-host-modules) instead. A
 `--target wasm32-wasi` build links C, so it keeps `declare function` even with
 `--emit-dts`.
+
+For a whole library, `nish c-import` writes these declarations from its
+header: see [Binding a C library](c-import.md).
 
 A function from the C library links with `nish run` or `--link` as it is.
 Your own C, and any other library, is named in the `nish.link` field of the
@@ -1151,9 +1159,10 @@ export const main = (): i32 => {
 };
 ```
 
-`CountedBy` is only for a `declare function`, and `nish c-import` does not
-write it yet. To check such a file with `tsc`, declare the alias in a
-`.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
+`CountedBy` is only for a `declare function`. `nish c-import` writes it for
+a buffer the overrides file pairs with a count
+([Binding a C library](c-import.md)). To check such a file with `tsc`,
+declare the alias in a `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
 `type CountedBy<T, N extends string> = T`.
 
 The one exception is `CPtr`, an address that C owns. A declared function can
@@ -1341,6 +1350,50 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+A C struct that holds an array, such as OpenSSL's `SHA_CTX` with its
+`unsigned int h[5]`, or Linux's `struct utsname` with its `char` arrays, spells
+that field `Record<integer<0, Hi>, T>`: `T name[Hi + 1]`, laid out inside the
+struct as C lays it out. `T` is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`
+or `f64`. Read and write it by index:
+
+<!-- nish:ok -->
+```ts
+// glibc's `struct utsname`: six `char` arrays of 65 bytes.
+declare class Utsname {
+  sysname: Record<integer<0, 64>, u8>;
+  nodename: Record<integer<0, 64>, u8>;
+  release: Record<integer<0, 64>, u8>;
+  version: Record<integer<0, 64>, u8>;
+  machine: Record<integer<0, 64>, u8>;
+  domainname: Record<integer<0, 64>, u8>;
+}
+declare function uname(buf: Utsname): i32;
+
+export const main = (): i32 => {
+  const name = new Utsname();
+  if (uname(name) !== 0) {
+    return 1;
+  }
+  let length = 0;
+  while (length < 65 && name.sysname[length] !== 0) {
+    length++;
+  }
+  console.log(length); // 5, for "Linux"
+  return 0;
+};
+```
+
+Every index is checked against the length. A constant outside it, such as
+`name.sysname[65]`, does not compile; any other index outside it panics
+before it reads or writes; and an index the compiler can prove is inside it,
+like a constant or a counter the loop keeps below 65, costs no check:
+`--emit-panics` lists the `name.sysname[length]` read above as `proven`. The
+field is part of the struct, not a Nish array: you cannot hold it in a
+variable, pass it to a function, read its `.length` or walk it with
+`for...of`, and you write it one element at a time. Unions and bitfields
+still have no spelling, so a struct with one stays out of reach. The rules
+are in [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A

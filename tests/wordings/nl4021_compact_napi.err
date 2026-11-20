@@ -1,0 +1,1 @@
+`Cell` implements `Compact`, and `--emit-napi` builds an addon Node loads into its own process, which Nish does not own, so nothing keeps free the range its 32-bit links count from; build a C host with `--emit-header`, or drop the marker

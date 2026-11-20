@@ -5,6 +5,10 @@
  *
  *   twin seed <db> <schema.sql>    the challenge's 50,000 users, 500,000 posts
  *                                  and 2,000,000 likes, in WAL mode
+ *   twin seed <db> <schema.sql> <seed> <users> <posts> <likes>
+ *                                  the same generator from another seed and at
+ *                                  other sizes: run.mjs trains a --variant pgo
+ *                                  build on such a database, not the timed one
  *   twin <workload> <db> <count>   lookup | feed | insert | insert-txn
  *   twin options <db>              SQLite's compile options, one a line, which
  *                                  run.mjs holds twin.rs's against
@@ -58,7 +62,8 @@ static sqlite3_stmt *prepare(sqlite3 *db, const char *sql) {
 
 /* ---- The seed ----------------------------------------------------------- */
 
-/* mulberry32, the challenge's generator, seeded with its 42: a value in [0, 1). */
+/* mulberry32, the challenge's generator, seeded with its 42 unless `twin seed`
+ * is given another: a value in [0, 1). */
 static uint32_t mul_state = 42;
 static double rnd(void) {
   uint32_t t = mul_state += 0x6d2b79f5u;
@@ -110,7 +115,7 @@ static int body(char *out) {
   return n;
 }
 
-static int seed(const char *path, const char *schema_path) {
+static int seed(const char *path, const char *schema_path, int users, int posts, int likes) {
   remove(path);
   FILE *f = fopen(schema_path, "rb");
   if (f == NULL) {
@@ -132,7 +137,7 @@ static int seed(const char *path, const char *schema_path) {
   char ts[32], text[640];
 
   sqlite3_stmt *u = prepare(db, "INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)");
-  for (int i = 1; i <= USERS; i++) {
+  for (int i = 1; i <= users; i++) {
     /* Drawn in two statements: C leaves the order of a call's arguments open. */
     const char *adjective = ADJECTIVES[pick(COUNT(ADJECTIVES))];
     const char *noun = NOUNS[pick(COUNT(NOUNS))];
@@ -149,9 +154,9 @@ static int seed(const char *path, const char *schema_path) {
   /* Posts spread evenly over 2025 in id order, authorship skewed toward low
    * user ids, as the challenge's generator spreads them. */
   sqlite3_stmt *p = prepare(db, "INSERT INTO posts (id, user_id, body, created_at) VALUES (?, ?, ?, ?)");
-  const double step = 365.0 * day / POSTS;
-  for (int i = 0; i < POSTS; i++) {
-    int user = 1 + (int)(USERS * rnd() * rnd());
+  const double step = 365.0 * day / posts;
+  for (int i = 0; i < posts; i++) {
+    int user = 1 + (int)(users * rnd() * rnd());
     int n = body(text);
     iso(end - 365 * day + (int64_t)(i * step + rnd() * step * 0.9), ts);
     sqlite3_bind_int(p, 1, i + 1);
@@ -164,11 +169,11 @@ static int seed(const char *path, const char *schema_path) {
   sqlite3_finalize(p);
 
   /* Likes on uniformly random posts by uniformly random users, one per pair,
-   * until there are LIKES of them: four a post on average. */
+   * until there are `likes` of them: four a post on average. */
   sqlite3_stmt *l = prepare(db, "INSERT OR IGNORE INTO likes (user_id, post_id, created_at) VALUES (?, ?, ?)");
-  for (int have = 0; have < LIKES;) {
-    int user = 1 + pick(USERS);
-    int post = 1 + pick(POSTS);
+  for (int have = 0; have < likes;) {
+    int user = 1 + pick(users);
+    int post = 1 + pick(posts);
     iso(end - 365 * day + (int64_t)((post - 1) * step + rnd() * 7 * day), ts);
     sqlite3_bind_int(l, 1, user);
     sqlite3_bind_int(l, 2, post);
@@ -182,7 +187,7 @@ static int seed(const char *path, const char *schema_path) {
   exec(db, "ANALYZE");
   exec(db, "PRAGMA journal_mode=WAL");
   if (sqlite3_close(db) != SQLITE_OK) die(db, "close");
-  printf("seeded %s: %d users, %d posts, %d likes\n", path, USERS, POSTS, LIKES);
+  printf("seeded %s: %d users, %d posts, %d likes\n", path, users, posts, likes);
   return 0;
 }
 
@@ -239,11 +244,34 @@ static int options(const char *path) {
   return 0;
 }
 
+/* A decimal argument of `twin seed` in [0, max], or exits with a message. */
+static int64_t seed_arg(const char *s, int64_t max) {
+  char *end = NULL;
+  unsigned long long v = strtoull(s, &end, 10);
+  if (s[0] < '0' || s[0] > '9' || *end != '\0' || v > (unsigned long long)max) {
+    fprintf(stderr, "twin seed: %s is not a number from 0 to %lld\n", s, (long long)max);
+    exit(2);
+  }
+  return (int64_t)v;
+}
+
 int main(int argc, char **argv) {
-  if (argc == 4 && strcmp(argv[1], "seed") == 0) return seed(argv[2], argv[3]);
+  if (argc == 4 && strcmp(argv[1], "seed") == 0) return seed(argv[2], argv[3], USERS, POSTS, LIKES);
+  if (argc == 8 && strcmp(argv[1], "seed") == 0) {
+    uint32_t state = (uint32_t)seed_arg(argv[4], UINT32_MAX);
+    int users = (int)seed_arg(argv[5], INT32_MAX), posts = (int)seed_arg(argv[6], INT32_MAX),
+        likes = (int)seed_arg(argv[7], INT32_MAX);
+    /* At most half of the user-post pairs, so the draw of distinct pairs ends soon. */
+    if (users < 1 || posts < 1 || likes < 0 || (int64_t)likes > (int64_t)users * posts / 2) {
+      fprintf(stderr, "twin seed: sizes out of range\n");
+      return 2;
+    }
+    mul_state = state;
+    return seed(argv[2], argv[3], users, posts, likes);
+  }
   if (argc == 3 && strcmp(argv[1], "options") == 0) return options(argv[2]);
   if (argc != 4) {
-    fprintf(stderr, "usage: twin seed <db> <schema.sql> | twin options <db> | twin <lookup|feed|insert|insert-txn> <db> <count>\n");
+    fprintf(stderr, "usage: twin seed <db> <schema.sql> [<seed> <users> <posts> <likes>] | twin options <db> | twin <lookup|feed|insert|insert-txn> <db> <count>\n");
     return 2;
   }
   const char *mode = argv[1];

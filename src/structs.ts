@@ -36,7 +36,7 @@ import {
   instantiateWritten,
   isGenericFunction,
 } from "./generics"
-import { isExported, collectParams } from "./declarations"
+import { isExported, collectParams, fitArguments } from "./declarations"
 import { checkNumericLiteral, memberSlotMessage } from "./expressions"
 import {
   FLAG_DEFINITE,
@@ -134,6 +134,9 @@ const fieldAlign = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   if (nested !== null) {
     return nested.align
   }
+  if (field.cLength >= 0) {
+    return table.alignWithPointer(field.type, pointer) // WP66 S4: C aligns `T h[N]` as one `T`
+  }
   if (field.boxed) {
     return 8
   }
@@ -156,6 +159,9 @@ const fieldWidth = (table: TypeTable, field: FieldInfo, pointer: i32): i32 => {
   const nested = field.nested
   if (nested !== null) {
     return nested.size
+  }
+  if (field.cLength >= 0) {
+    return field.cLength * table.alignWithPointer(field.type, pointer) // WP66 S4: `N` elements, no padding between
   }
   if (field.boxed) {
     return SLICE_BYTES
@@ -541,7 +547,7 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
     return null
   }
-  const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source)
+  const info = new StructInfo(name, kind, ctx.table.declaredStructOf(name, name), decl, ctx.source)
   info.exported = isExported(decl)
   // WP27 S4.1: a `declare class` is a C struct layout, never a handle: its
   // `CPtr` fields are C's to own (docs/wp27-ffi.md §9).
@@ -810,7 +816,16 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   const initializer = decl.children[2]
   if (initializer.kind !== NodeKind.Empty) {
     const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
-    checkLiteralInitializer(ctx, field, initializer, what, notLiteral, false)
+    if (initializer.kind === NodeKind.Array) {
+      // `[]`: a fresh empty array per object, of the element type the field
+      // declares, so a filled one would be a literal of no element type yet.
+      if (type !== T_ERROR && (initializer.children.length > 0 || !ctx.table.isArray(type))) {
+        ctx.error(initializer, notLiteral)
+      }
+    } else if (initializer.kind !== NodeKind.New) {
+      checkLiteralInitializer(ctx, field, initializer, what, notLiteral, false)
+    }
+    // A `new` waits for every constructor's signature (`resolveNewInitializers`).
     // The field keeps its initializer even when that initializer was refused.
     // What it is worth is nothing; what it *says* is that the programmer wrote
     // one, and the definite-assignment pass would otherwise follow the first
@@ -822,6 +837,202 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   }
   owner.fieldIndex.set(name, owner.fields.length)
   owner.fields.push(field)
+}
+
+/**
+ * The `new C(args)` initializers of `owner`'s fields, held to the rule now
+ * that every constructor's signature is known (`collectField` only kept them):
+ * `C` is a plain class, not generic, a handle or a layout, whose objects the
+ * field's type accepts, and each argument a literal or enum member of its
+ * parameter's type, so the emitter writes the call from constants alone
+ * (`initializerValue` in `src/emit-classes.ts`). A refused one leaves
+ * `initNew` null and keeps its `initializer`, as `collectField` does.
+ */
+export const resolveNewInitializers = (ctx: CheckContext, owner: StructInfo): void => {
+  for (const field of owner.fields) {
+    const init = field.initializer
+    // A field whose type was refused has said its one thing already.
+    if (init !== null && init.kind === NodeKind.New && field.type !== T_ERROR) {
+      ctx.errored = false
+      resolveNewInitializer(ctx, owner, field, init)
+    }
+  }
+  ctx.errored = false
+}
+
+/**
+ * One field's `new` initializer, for `resolveNewInitializers`: a function of
+ * its own, so the messages it builds belong to one field's call rather than
+ * to every pass of the loop over the fields.
+ */
+const resolveNewInitializer = (ctx: CheckContext, owner: StructInfo, field: FieldInfo, init: Node): void => {
+  const what = `Field \`${field.name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``
+  const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
+  const callee = init.children[0]
+  const name = callee.kind === NodeKind.Ident ? callee.text : ""
+  const made: StructInfo | null = name === "" ? null : ctx.program.struct(name)
+  if (
+    made === null ||
+    ctx.program.structTemplate(name) !== null ||
+    init.children[1].children.length > 0 ||
+    made.kind !== STRUCT_CLASS ||
+    made.handle ||
+    made.layout ||
+    ctx.table.isOpaque(made.type)
+  ) {
+    ctx.error(init, notLiteral)
+    return
+  }
+  if (!ctx.table.assignable(made.type, field.type)) {
+    ctx.error(
+      init,
+      `${what} is ${ctx.table.typeName(field.type)} but its initializer is ${ctx.table.typeName(made.type)}`
+    )
+    return
+  }
+  const args = init.children[2]
+  const ctor = made.ctor
+  if (ctor === null) {
+    if (args.children.length > 0) {
+      ctx.error(
+        init,
+        `\`new ${name}\` expects 0 argument(s) (the class has no constructor), got ${args.children.length}`
+      )
+      return
+    }
+  } else if (ctor.restIndex >= 0 || ctor.captures.length > 0) {
+    ctx.error(init, notLiteral)
+    return
+  } else if (!fitArguments(ctx, init, args, ctor, 1, `new ${name}`)) {
+    return
+  }
+  const carried: FieldInfo[] = []
+  let refused = false
+  let i = 0
+  while (i < args.children.length && ctor !== null) {
+    const arg = args.children[i]
+    const type = ctor.paramTypes[i + 1]
+    const slot = `Argument ${i + 1} of \`new ${name}\` in ${what}`
+    const carrier = new FieldInfo(ctor.paramNames[i + 1], type, field.decl)
+    carrier.initializer = arg
+    carrier.index = -1
+    if (ctor.isCompileTime(i + 1) || arg.kind === NodeKind.Array || arg.kind === NodeKind.New) {
+      ctx.error(arg, notLiteral)
+    } else {
+      checkLiteralInitializer(ctx, carrier, arg, slot, notLiteral, false)
+    }
+    if (ctx.errored) {
+      refused = true
+      break
+    }
+    ctx.program.nodeTypes[arg.id] = type
+    if (arg.kind === NodeKind.Unary && arg.children.length > 0) {
+      ctx.program.nodeTypes[arg.children[0].id] = type
+    }
+    carried.push(carrier)
+    i = i + 1
+  }
+  // An exported class with no constructor, or an instance of an exported
+  // generic class, has its initializers emitted where it is built, which
+  // may be another module: a private class's constructor is `internal`
+  // there and would not link.
+  const instance = owner.instance
+  const runsElsewhere = instance !== null ? instance.template.exported : owner.exported && owner.ctor === null
+  if (!refused && runsElsewhere && !made.exported) {
+    ctx.error(
+      init,
+      `${what}: \`${name}\` is not exported, but this class's initializers run in the module that builds it (export \`${name}\`)`
+    )
+    refused = true
+  }
+  if (!refused) {
+    field.initNew = made
+    field.initArgs = carried
+    ctx.program.nodeTypes[init.id] = made.type
+  }
+}
+
+/**
+ * Whether the initializers of `at`, or of a class one of them constructs,
+ * construct `target`: `seen` holds the classes already walked, so a cycle
+ * that does not pass through `target` ends the walk instead of looping.
+ */
+const constructs = (at: StructInfo, target: StructInfo, seen: StringSet): boolean => {
+  for (const field of at.fields) {
+    const made = field.initNew
+    if (made === null) {
+      continue
+    }
+    if (made === target) {
+      return true
+    }
+    if (!seen.has(made.name)) {
+      seen.add(made.name)
+      if (constructs(made, target, seen)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Adds to `reported` every class `at`'s initializers reach that constructs
+ * `owner` again: the other members of `owner`'s cycle.
+ */
+const markCycle = (at: StructInfo, owner: StructInfo, reported: StringSet, seen: StringSet): void => {
+  for (const field of at.fields) {
+    const made = field.initNew
+    if (made === null || seen.has(made.name)) {
+      continue
+    }
+    seen.add(made.name)
+    const back = new StringSet()
+    back.add(made.name)
+    if (made === owner || constructs(made, owner, back)) {
+      reported.add(made.name)
+    }
+    markCycle(made, owner, reported, seen)
+  }
+}
+
+/** Refuse `field` of `owner`, whose initializers construct `owner` again. */
+const reportInitializerCycle = (ctx: CheckContext, owner: StructInfo, field: FieldInfo): void => {
+  const init = field.initializer
+  if (init !== null) {
+    ctx.error(
+      init,
+      `Field \`${field.name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\`: initializers construct \`${spelled(ctx, owner)}\` again, which never ends (assign it in the constructor)`
+    )
+  }
+}
+
+/**
+ * A class whose initializers construct the class again, directly or through
+ * another class's initializers, would construct forever: each object's
+ * initializers run before its constructor's body, with no condition to stop
+ * them. The first field that starts such a chain is refused.
+ */
+export const checkInitializerCycle = (ctx: CheckContext, owner: StructInfo, reported: StringSet): void => {
+  if (reported.has(owner.name)) {
+    return
+  }
+  for (const field of owner.fields) {
+    const made = field.initNew
+    if (made === null) {
+      continue
+    }
+    const seen = new StringSet()
+    seen.add(made.name)
+    if (made === owner || constructs(made, owner, seen)) {
+      reportInitializerCycle(ctx, owner, field)
+      // One report per cycle: every class on it would say the same thing.
+      reported.add(owner.name)
+      markCycle(owner, owner, reported, new StringSet())
+      ctx.errored = false
+      return
+    }
+  }
 }
 
 /**
@@ -1069,6 +1280,44 @@ export const layoutClass = (program: CheckedProgram, table: TypeTable, type: i32
   return info !== null && info.layout ? info : null
 }
 
+/** The most elements a fixed-length array field holds: its bytes stay well inside an `i32` offset. */
+const C_ARRAY_MAX: i32 = 16777216
+
+/**
+ * WP66 S4: the two type arguments of `Record<K, T>` written as a field's
+ * annotation, or `null` for any other annotation. A `declare class` field so
+ * spelled is a fixed-length array, which TypeScript reads as the object it
+ * indexes by `K`, and which tsc accepts against `runtime/nish.d.ts` as it
+ * stands: the spelling needs no declaration of its own.
+ */
+const cArrayArguments = (annotation: Node): Node | null => {
+  if (annotation.kind !== NodeKind.TypeRef || annotation.text !== "Record") {
+    return null
+  }
+  const args = annotation.children[0]
+  return args.kind === NodeKind.List && args.children.length === 2 ? args : null
+}
+
+/**
+ * The element count a fixed-length array's key `integer<0, Hi>` spells,
+ * `Hi + 1`, or -1 once the key is refused: a range from 0, as C indexes, and
+ * no longer than `C_ARRAY_MAX`.
+ */
+const cArrayLength = (ctx: CheckContext, what: string, keyNode: Node): i32 => {
+  const key = resolveType(keyNode, ctx)
+  if (key === T_ERROR) {
+    return -1
+  }
+  if (ctx.table.isRanged(key) && ctx.table.rangeLo(key) === 0 && ctx.table.rangeHi(key) < C_ARRAY_MAX) {
+    return ctx.table.rangeHi(key) + 1
+  }
+  ctx.error(
+    keyNode,
+    `${what} is a fixed-length array, \`Record<integer<0, Hi>, T>\` for C's \`T name[Hi + 1]\`: its key must be \`integer<0, Hi>\`, a range from 0 with Hi below ${C_ARRAY_MAX}, got \`${ctx.table.typeName(key)}\``
+  )
+  return -1
+}
+
 /**
  * The unsigned width a buffer's named count is read at (WP66 S5,
  * `docs/LANGUAGE.md` "`CountedBy`"): `u8`, `u16`, `u32` or `u64`
@@ -1111,10 +1360,20 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
     ctx.error(decl.children[2], `${what} cannot have an initializer: \`new\` zero-fills a C struct`)
     return
   }
+  // WP66 S4: `Record<integer<0, Hi>, T>` is C's `T name[Hi + 1]`, laid out
+  // inline; the field's type is then the element's (`FieldInfo.cLength`).
+  const elements = cArrayArguments(decl.children[1])
+  let length = -1
+  if (elements !== null) {
+    length = cArrayLength(ctx, what, elements.children[0])
+    if (length < 0) {
+      return
+    }
+  }
   // `number` is i32 or f64 as `--number-mode` says, and a C struct has one
   // layout whatever flag the program is built with. The resolver counts every
   // spelling that reaches it (parentheses, an alias chain, an imported alias).
-  const annotation = decl.children[1]
+  const annotation = elements !== null ? elements.children[1] : decl.children[1]
   const before = ctx.numberSpellings
   const type = resolveType(annotation, ctx)
   if (type === T_ERROR) {
@@ -1125,6 +1384,21 @@ const collectLayoutField = (ctx: CheckContext, owner: StructInfo, decl: Node): v
       annotation,
       `${what} has type \`number\`, whose width \`--number-mode\` chooses: a C struct field has one layout, so spell it \`i32\` or \`f64\``
     )
+    return
+  }
+  if (length >= 0) {
+    if (!isLayoutScalar(type)) {
+      ctx.error(
+        annotation,
+        `${what} is a fixed-length array of \`${ctx.table.typeName(type)}\`, which has no C element layout: an element of a fixed-length array is i32, i64, u8, u16, u32, u64, f32 or f64`
+      )
+      return
+    }
+    const array = new FieldInfo(name, type, decl)
+    array.index = owner.fields.length
+    array.cLength = length
+    owner.fieldIndex.set(name, owner.fields.length)
+    owner.fields.push(array)
     return
   }
   if (rejectOpaque(ctx, type, "a field", decl.children[1])) {
@@ -1174,7 +1448,7 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
     const clause = decl.children[1].kind !== NodeKind.Empty ? decl.children[1] : decl.children[2].children[0]
     ctx.error(
       clause,
-      namesCompact(ctx, clause)
+      namesMarker(ctx, clause, "Compact")
         ? compactLayoutMessage(info.name)
         : `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
     )
@@ -1220,26 +1494,33 @@ const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
   )
 }
 
-/** Whether the class `decl` writes `implements Compact` (WP48). `Wide` marks nothing yet. */
-export const declaresCompact = (ctx: CheckContext, decl: Node): boolean => {
+/** Whether the class `decl` writes `implements Compact` (WP48). */
+export const declaresCompact = (ctx: CheckContext, decl: Node): boolean =>
+  declaresMarker(ctx, decl, "Compact")
+
+/** Whether the class `decl` writes `implements Wide` (WP48), which the compact-class rule never picks. */
+export const declaresWide = (ctx: CheckContext, decl: Node): boolean => declaresMarker(ctx, decl, "Wide")
+
+/** Whether the class `decl` names the `nish:compact` export `marker` in its heritage. */
+const declaresMarker = (ctx: CheckContext, decl: Node, marker: string): boolean => {
   if (decl.kind !== NodeKind.Class) {
     return false
   }
   for (const iface of decl.children[2].children) {
-    if (namesCompact(ctx, iface)) {
+    if (namesMarker(ctx, iface, marker)) {
       return true
     }
   }
   return false
 }
 
-/** Whether the heritage entry `iface` names `Compact` itself, not `Wide`. */
-const namesCompact = (ctx: CheckContext, iface: Node): boolean => {
+/** Whether the heritage entry `iface` names the `nish:compact` export `marker` itself. */
+const namesMarker = (ctx: CheckContext, iface: Node, marker: string): boolean => {
   if (!namesCompactMarker(ctx, iface)) {
     return false
   }
   const imported = ctx.program.importNamed(iface.text)
-  return imported !== null && imported.importedName === "Compact"
+  return imported !== null && imported.importedName === marker
 }
 
 /**
@@ -1249,6 +1530,10 @@ const namesCompact = (ctx: CheckContext, iface: Node): boolean => {
  * `collectLayoutField`, where the C-layout checks would otherwise answer first.
  */
 export const checkCompactClass = (ctx: CheckContext, info: StructInfo): void => {
+  if (info.wide && info.compact) {
+    ctx.error(info.decl.children[0], compactWideMessage(info.name))
+    return
+  }
   if (!info.compact) {
     return
   }
@@ -1278,6 +1563,9 @@ const compactLayoutMessage = (name: string): string =>
 
 const compactLayoutFieldMessage = (owner: string, field: string, target: string): string =>
   `Field \`${field}\` of \`declare class\` \`${owner}\` holds the compact class \`${target}\`, whose links C would read as pointers; a \`declare class\` holds no object of a class that implements \`Compact\``
+
+const compactWideMessage = (name: string): string =>
+  `\`${name}\` implements both \`Compact\` and \`Wide\`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker`
 
 const compactSecretMessage = (owner: string, field: string): string =>
   `\`${owner}\` implements \`Compact\` and holds the \`Secret\` field \`${field}\`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement \`Compact\`; keep the secret in a class of its own that does not`
@@ -1488,65 +1776,78 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
 const describeField = (ctx: CheckContext, field: FieldInfo): string =>
   `\`${field.name}: ${ctx.table.typeName(field.type)}\``
 
+/** Append the struct type `type` to `out` unless it is there already, keeping first-seen order. */
+const addStructType = (out: i32[], type: i32): void => {
+  for (const seen of out) {
+    if (seen === type) {
+      return
+    }
+  }
+  out.push(type)
+}
+
 /**
- * The struct names a type mentions, following `T[]` and `T | null` inwards.
- * A name reached this way is a *layout* this module needs even though it
- * never wrote the name.
+ * The struct types a type mentions, following `T[]` and `T | null` inwards,
+ * in the order first met. A struct reached this way is a *layout* this module
+ * needs even though it never wrote the name. It answers types, not names
+ * (WP57 S3a): a walk across modules finds each struct by its identity, which
+ * stays one struct when two modules use one source name.
  */
-export const noteStructNames = (table: TypeTable, type: i32, out: StringSet): void => {
+export const noteStructTypes = (table: TypeTable, type: i32, out: i32[]): void => {
   if (table.isStruct(type)) {
-    out.add(table.nameOf(type))
+    addStructType(out, type)
     return
   }
   // A `Result<Config, IoError>` hands the importer both payload layouts
   // without either name appearing in its source (WP16), so both arms count.
   if (table.isResult(type)) {
-    noteStructNames(table, table.okOf(type), out)
-    noteStructNames(table, table.errOf(type), out)
+    noteStructTypes(table, table.okOf(type), out)
+    noteStructTypes(table, table.errOf(type), out)
     return
   }
   // A union is laid out as each of its variants.
   if (table.isUnion(type)) {
     for (const variant of table.variantsOf(type)) {
-      noteStructNames(table, variant, out)
+      noteStructTypes(table, variant, out)
     }
     return
   }
   const inner = table.refOf(type)
   if (inner >= 0) {
-    noteStructNames(table, inner, out)
+    noteStructTypes(table, inner, out)
   }
 }
 
 /**
- * The struct names a signature mentions. `this` is skipped: it is the owner or
+ * The struct types a signature mentions. `this` is skipped: it is the owner or
  * its base, which is reached through the `StructInfo` itself rather than by
- * name, and noting it would pull an inherited constructor's `%struct.Base` in
- * behind a derived class.
+ * its type, and noting it would pull an inherited constructor's
+ * `%struct.Base` in behind a derived class.
  */
-export const signatureStructNames = (table: TypeTable, sig: FunctionSig, out: StringSet): void => {
+export const signatureStructTypes = (table: TypeTable, sig: FunctionSig, out: i32[]): void => {
   let i = sig.owner === null ? 0 : 1
   while (i < sig.paramTypes.length) {
-    noteStructNames(table, sig.paramTypes[i], out)
+    noteStructTypes(table, sig.paramTypes[i], out)
     i = i + 1
   }
-  noteStructNames(table, sig.returnType, out)
+  noteStructTypes(table, sig.returnType, out)
 }
 
 /**
- * The struct names `info` mentions through its fields and its members, its
- * inherited ones included. Its own name is not one of them.
+ * The struct types `info` mentions through its fields and its members, its
+ * inherited ones included. Its own type is among them only through a
+ * self-referential field.
  */
-export const referencedStructNames = (table: TypeTable, info: StructInfo, out: StringSet): void => {
+export const referencedStructTypes = (table: TypeTable, info: StructInfo, out: i32[]): void => {
   for (const field of info.fields) {
-    noteStructNames(table, field.type, out)
+    noteStructTypes(table, field.type, out)
   }
   for (const method of info.methodSigs) {
-    signatureStructNames(table, method, out)
+    signatureStructTypes(table, method, out)
   }
   const ctor = info.ctor
   if (ctor !== null) {
-    signatureStructNames(table, ctor, out)
+    signatureStructTypes(table, ctor, out)
   }
 }
 

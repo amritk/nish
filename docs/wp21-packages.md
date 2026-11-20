@@ -120,9 +120,11 @@ closed or mostly closed; §9–§11 say how.
 Two modules defining the same name — exported or not — was an error, because
 `analyzeFunctions` keys the whole-program fact fixpoint by symbol, so a
 duplicate would hand each function the other's attributes: a miscompile, not a
-link failure (`tests/link/duplicate_internal`). Two unrelated packages that
-both kept a private `helper()` could not have compiled together. Symbols became
-package-scoped (§9).
+link failure. Two unrelated packages that both kept a private `helper()`
+could not have compiled together. Symbols became package-scoped (§9). Inside
+one package the same rule held until WP57 S1, which qualifies a clashing
+private function by its module (`tests/link/duplicate_internal`,
+[wp57-module-scoped-names.md](wp57-module-scoped-names.md) §4).
 
 ### 5b. `import` has no bare specifiers
 

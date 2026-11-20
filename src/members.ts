@@ -159,6 +159,9 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   // WP27 S4.1: whether the caller admits this read of a nested layout field.
   const embedded = ctx.embeddedRead === expr.id
   ctx.embeddedRead = -1
+  // WP66 S4: whether an index is about to read this member as its receiver.
+  const indexed = ctx.program.indexReceiver === expr.id
+  ctx.program.indexReceiver = -1
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
     if ((expr.flags & FLAG_OPTIONAL) !== 0) {
       ctx.errorAtProperty(expr, neverNullMessage(ctx, receiverExpr))
@@ -203,7 +206,7 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
     return checkArrayProperty(ctx, expr, receiver)
   }
   if (ctx.table.isStruct(receiver)) {
-    return checkStructProperty(ctx, expr, receiver, embedded)
+    return checkStructProperty(ctx, expr, receiver, embedded, indexed)
   }
   if (ctx.table.isUnion(receiver)) {
     return checkUnionTag(ctx, expr, receiver)
@@ -254,7 +257,13 @@ const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => 
   return info.type
 }
 
-const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32, embedded: boolean): i32 => {
+const checkStructProperty = (
+  ctx: CheckContext,
+  expr: Node,
+  receiver: i32,
+  embedded: boolean,
+  indexed: boolean
+): i32 => {
   const info = structOf(ctx, receiver)
   if (info === null) {
     return T_ERROR
@@ -288,8 +297,26 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32, embed
     )
     return T_ERROR
   }
+  if (field.cLength >= 0) {
+    // WP66 S4: a fixed-length array is `[N x T]` inside its object, with no
+    // array header, so it is only ever indexed: `checkIndex` reads it as a
+    // `T[]` and the emitter addresses the element in place.
+    if (!indexed) {
+      ctx.errorAtProperty(expr, cArrayValueMessage(ctx.textOf(expr), field.cLength))
+      return T_ERROR
+    }
+    return ctx.table.arrayOf(field.type)
+  }
   return field.type
 }
+
+/**
+ * WP66 S4: a fixed-length array field read other than by index. It is C's
+ * `T h[N]` inside the struct, not an array object, so it has no `length`
+ * and cannot be held, passed or copied as a value.
+ */
+const cArrayValueMessage = (text: string, length: i32): string =>
+  `\`${text}\` is a fixed-length array of ${length} elements inside a \`declare class\`: read and write it by index (\`${text}[i]\`, i from 0 to ${length - 1}), but it cannot be held, passed or measured as a value`
 
 /**
  * `nish:secret`: what a `Secret` holds is read, written and called on only by
@@ -401,8 +428,14 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     // Against the method name, as `errorAtProperty` reports it, so that the
     // fix can carry the whole call.
     const name = new Node(NodeKind.Ident, access.end - access.text.length, access.end)
-    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`
-    ctx.errorFix(name, message, toStringFix(ctx, expr, receiver))
+    const fix = toStringFix(ctx, expr, receiver)
+    // A number's `toString()` names the spelling its fix writes (#1632).
+    const hint =
+      fix.length > 0 && isNumeric(receiver)
+        ? `; use a template literal: \`\${${ctx.textOf(unwrapParens(receiverExpr))}}\``
+        : ""
+    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}${hint}`
+    ctx.errorFix(name, message, fix)
     return T_ERROR
   }
   const info = structOf(ctx, receiver)
@@ -874,16 +907,19 @@ const checkSpreadSource = (
   let embedded: FieldInfo | null = null
   if (source.layout) {
     for (const field of source.fields) {
-      if (field.nested !== null) {
+      if (field.nested !== null || field.cLength >= 0) {
         embedded = field
         break
       }
     }
   }
   if (embedded !== null) {
+    const head = `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\``
     ctx.error(
       value,
-      `Spread of \`${ctx.table.typeName(got)}\` into \`${ctx.table.typeName(info.type)}\`: field \`${embedded.name}\` is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
+      embedded.cLength >= 0
+        ? `${head} is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index`
+        : `${head} is a \`declare class\` embedded in its object, which a spread cannot copy, so set each field by name`
     )
     return null
   }
@@ -1192,6 +1228,13 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
     return ctx.errorType(
       target,
       `Cannot assign to \`${ctx.textOf(target)}\`: a \`declare class\` embedded in its object is written field by field`
+    )
+  }
+  if (field.cLength >= 0) {
+    // WP66 S4: C has no array assignment either; the elements are written one by one.
+    return ctx.errorType(
+      target,
+      `Cannot assign to \`${ctx.textOf(target)}\`: a fixed-length array inside a \`declare class\` is written element by element (\`${ctx.textOf(target)}[i] = ...\`)`
     )
   }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {

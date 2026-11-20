@@ -55,7 +55,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 import { variantOf } from "./variants.mjs"
 
@@ -156,8 +156,7 @@ fs.mkdirSync(outDir, { recursive: true })
 const buildMain = (cmd, prefix, irDir, out, flags, what) =>
   run(
     cmd,
-    [
-      ...prefix,
+    compileArgv({ cmd, prefix }, [
       "bench/sha256-block/main.ts",
       "-o",
       `${rel(irDir)}/`,
@@ -166,7 +165,7 @@ const buildMain = (cmd, prefix, irDir, out, flags, what) =>
       "--profile",
       "speed",
       ...flags,
-    ],
+    ]),
     what
   )
 const exe = path.join(outDir, "sha256-block")

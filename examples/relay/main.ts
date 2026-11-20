@@ -1,3 +1,12 @@
+// Opt-out from `--deny-panics`: relay keeps four deliberate `panic`s its link
+// tests pin (relay.ts, peers.ts), I/O calls that exit on failure
+// (`getRandomValues`, `writeFileSync`), UDP slices the checker cannot yet
+// bound, and index and overflow sites in its frame, grant and JSON parsers
+// that need real bounds rather than fallback values; its `std/net` and
+// `std/crypto` calls reach their own sites too. Follow-up: rework those parsers
+// and the pinned panics into `Result`s, then build this program with
+// `--deny-panics`.
+//
 /**
  * The WebTransport relay: a game's `services/relay` (Rust, over `wtransport`
  * 0.7) written in Nish on `std/net`. Its whole job is to get game traffic off

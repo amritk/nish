@@ -7,12 +7,16 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /**
  * Runs the checks, each under `tests/run.js`'s filter: `only`, when set, is
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, buildDir }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   // WP53 B1.2: a `u8[]` handed to a `declare function` is lowered as its data
   // pointer, and its length is checked against the count after every argument
   // is evaluated (`ffi-length`, docs/wp53-ffi-buffers-handles.md §3a). Only
@@ -33,7 +37,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       return file
     }
     const compileBuf = (file, extra) =>
-      spawnSync(nish, [file, "-o", path.join(bufDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
+      nishSync([file, "-o", path.join(bufDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
         cwd: root,
         encoding: "utf8",
       })
@@ -48,11 +52,10 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
 
     const exported = path.join(root, "tests", "cases", "ffi_buffer_export_written.ts")
     const exportOut = path.join(bufDir, "export_written")
-    const exportBuilt = spawnSync(
-      nish,
-      [exported, "-o", `${exportOut}.ll`, "--emit-header", `${exportOut}.h`],
-      { cwd: root, encoding: "utf8" }
-    )
+    const exportBuilt = nishSync([exported, "-o", `${exportOut}.ll`, "--emit-header", `${exportOut}.h`], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const exportText = (ext) =>
       exportBuilt.status === 0 && fs.existsSync(`${exportOut}.${ext}`)
         ? fs.readFileSync(`${exportOut}.${ext}`, "utf8")
@@ -81,7 +84,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       ].join("\n")
     )
     const pageOut = path.join(bufDir, "page_written")
-    const pageBuilt = spawnSync(nish, [pageWritten, "-o", `${pageOut}.ll`, "--emit-dts", `${pageOut}.d.ts`], {
+    const pageBuilt = nishSync([pageWritten, "-o", `${pageOut}.ll`, "--emit-dts", `${pageOut}.d.ts`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -226,8 +229,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
         "",
       ].join("\n")
     )
-    const countedHostBuilt = spawnSync(
-      nish,
+    const countedHostBuilt = nishSync(
       [
         countedHostMain,
         "--target",
@@ -456,7 +458,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.mkdirSync(wasmBufDir, { recursive: true })
     const bufCase = path.join(root, "tests", "cases", "ffi_buffer_write.ts")
     const w32Dir = path.join(wasmBufDir, "wasm32")
-    const w32 = spawnSync(nish, [bufCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
+    const w32 = nishSync([bufCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -480,7 +482,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
         /i64\.le_u/.test(asm),
       shown(w32Llc)
     )
-    const free = spawnSync(nish, [bufCase, "--target", "wasm32", "-o", path.join(wasmBufDir, "refused.ll")], {
+    const free = nishSync([bufCase, "--target", "wasm32", "-o", path.join(wasmBufDir, "refused.ll")], {
       cwd: root,
       encoding: "utf8",
     })
@@ -496,7 +498,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
 
     if (has("wasm-ld")) {
       const freeDir = path.join(wasmBufDir, "freestanding")
-      const hostBuilt = spawnSync(nish, [bufCase, "-o", `${freeDir}${path.sep}`], {
+      const hostBuilt = nishSync([bufCase, "-o", `${freeDir}${path.sep}`], {
         cwd: root,
         encoding: "utf8",
       })

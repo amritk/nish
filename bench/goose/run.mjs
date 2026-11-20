@@ -25,7 +25,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -125,7 +125,7 @@ const build = (prog) => {
   const ts = path.join(outDir, `${prog.name}.ts`)
   sized(path.join(here, `${prog.name}.ts`), ts, n, /bench:n/)
   const nish = path.join(outDir, `${prog.name}-nish`)
-  run(nishc.cmd, [...nishc.prefix, ts, "--link", nish, "--profile", "speed"], `${prog.name}/nish`)
+  run(nishc.cmd, compileArgv(nishc, [ts, "--link", nish, "--profile", "speed"]), `${prog.name}/nish`)
 
   const gsrc = path.join(outDir, `${prog.name}.goose`)
   sized(path.join(GOOSE_BENCH, prog.goose), gsrc, n, /^\s*let\s+\w+\s*=\s*\d+\s*;.*\/\/\s*BENCH_N/)

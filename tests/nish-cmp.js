@@ -105,6 +105,7 @@ import path from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
+import { seedArgs } from "./self/seed.js"
 
 /** The two `--emit-header` comment lines the 0.37.0 seed writes. */
 const SEED_HEADER_LINES = [
@@ -1316,11 +1317,194 @@ const RECURSION_ARENA_WHY =
 
 const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
+/** The changelog words of the pull request that proposes WP68 and adds its `bench/wp68-*` programs. */
+const WP68_BENCH = "WP68, shared libraries layered like atomic design"
+const WP68_BENCH_WHY =
+  "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
+
+/** The changelog line of the stage that adds nish/crypto/scram. */
+const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
+// nish/net/postgres reaches its SCRAM arithmetic through the new
+// nish/crypto/scram, so every program that links it writes scram.ll, which
+// the seed's standard library has no module for.
+const SCRAM_LINKERS = [
+  "bench/pg-batch-clock.ts",
+  "bench/pg-decode/main.ts",
+  "tests/link/net_serve_pg/main.ts",
+  "tests/link/std_postgres/main.ts",
+  "tests/link/std_postgres_array_bindend_panic/main.ts",
+  "tests/link/std_postgres_array_element_panic/main.ts",
+  "tests/link/std_postgres_array_end_panic/main.ts",
+  "tests/link/std_postgres_array_int_panic/main.ts",
+  "tests/link/std_postgres_array_param_bytes_panic/main.ts",
+  "tests/link/std_postgres_array_param_int_array_panic/main.ts",
+  "tests/link/std_postgres_array_param_null_panic/main.ts",
+  "tests/link/std_postgres_array_param_panic/main.ts",
+  "tests/link/std_postgres_array_param_text_array_panic/main.ts",
+  "tests/link/std_postgres_array_start_panic/main.ts",
+  "tests/link/std_postgres_array_window_panic/main.ts",
+  "tests/link/std_postgres_async/main.ts",
+  "tests/link/std_postgres_async_cancel/main.ts",
+  "tests/link/std_postgres_async_caps_panic/main.ts",
+  "tests/link/std_postgres_async_depth_panic/main.ts",
+  "tests/link/std_postgres_async_double_release_panic/main.ts",
+  "tests/link/std_postgres_async_flat/main.ts",
+  "tests/link/std_postgres_async_pipeline/main.ts",
+  "tests/link/std_postgres_async_release_closed_panic/main.ts",
+  "tests/link/std_postgres_async_release_panic/main.ts",
+  "tests/link/std_postgres_async_seat_statement_panic/main.ts",
+  "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
+  "tests/link/std_postgres_async_size_panic/main.ts",
+  "tests/link/std_postgres_batch/main.ts",
+  "tests/link/std_postgres_batch_add_int_panic/main.ts",
+  "tests/link/std_postgres_batch_add_text_panic/main.ts",
+  "tests/link/std_postgres_batch_add_text_window_panic/main.ts",
+  "tests/link/std_postgres_batch_clock/main.ts",
+  "tests/link/std_postgres_batch_clock_config_panic/main.ts",
+  "tests/link/std_postgres_batch_clock_started_panic/main.ts",
+  "tests/link/std_postgres_batch_clock_take_due_panic/main.ts",
+  "tests/link/std_postgres_batch_clock_turns_panic/main.ts",
+  "tests/link/std_postgres_batch_config_cap_panic/main.ts",
+  "tests/link/std_postgres_batch_config_empty_panic/main.ts",
+  "tests/link/std_postgres_batch_config_key_panic/main.ts",
+  "tests/link/std_postgres_batch_config_name_empty_panic/main.ts",
+  "tests/link/std_postgres_batch_config_name_nul_panic/main.ts",
+  "tests/link/std_postgres_batch_config_query_panic/main.ts",
+  "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts",
+  "tests/link/std_postgres_batch_config_queue_size_panic/main.ts",
+  "tests/link/std_postgres_batch_config_requests_panic/main.ts",
+  "tests/link/std_postgres_batch_config_runs_panic/main.ts",
+  "tests/link/std_postgres_batch_config_select_nul_panic/main.ts",
+  "tests/link/std_postgres_batch_pending_panic/main.ts",
+  "tests/link/std_postgres_batch_row_pending_panic/main.ts",
+  "tests/link/std_postgres_batch_run_negative_panic/main.ts",
+  "tests/link/std_postgres_batch_run_range_panic/main.ts",
+  "tests/link/std_postgres_batch_scale/main.ts",
+  "tests/link/std_postgres_batch_unsorted/main.ts",
+  "tests/link/std_postgres_binary_array_element_panic/main.ts",
+  "tests/link/std_postgres_binary_array_int_none_panic/main.ts",
+  "tests/link/std_postgres_binary_array_int_panic/main.ts",
+  "tests/link/std_postgres_binary_array_null_none_panic/main.ts",
+  "tests/link/std_postgres_binary_array_oid_panic/main.ts",
+  "tests/link/std_postgres_binary_array_start_panic/main.ts",
+  "tests/link/std_postgres_binary_array_text_element_panic/main.ts",
+  "tests/link/std_postgres_binary_int4_range_panic/main.ts",
+  "tests/link/std_postgres_binary_window_count_panic/main.ts",
+  "tests/link/std_postgres_binary_window_panic/main.ts",
+  "tests/link/std_postgres_binary_window_start_panic/main.ts",
+  "tests/link/std_postgres_caps/main.ts",
+  "tests/link/std_postgres_carrier/main.ts",
+  "tests/link/std_postgres_carrier_attach_panic/main.ts",
+  "tests/link/std_postgres_carrier_batcher_panic/main.ts",
+  "tests/link/std_postgres_carrier_connection_panic/main.ts",
+  "tests/link/std_postgres_carrier_limits_panic/main.ts",
+  "tests/link/std_postgres_carrier_next_panic/main.ts",
+  "tests/link/std_postgres_carrier_request_panic/main.ts",
+  "tests/link/std_postgres_carrier_send_panic/main.ts",
+  "tests/link/std_postgres_config_panic/main.ts",
+  "tests/link/std_postgres_decimal/main.ts",
+  "tests/link/std_postgres_int_array_range_panic/main.ts",
+  "tests/link/std_postgres_nonce_panic/main.ts",
+  "tests/link/std_postgres_nul_panic/main.ts",
+  "tests/link/std_postgres_pool/main.ts",
+  "tests/link/std_postgres_pool_connect_dispose_panic/main.ts",
+  "tests/link/std_postgres_pool_connect_panic/main.ts",
+  "tests/link/std_postgres_pool_connect_range_panic/main.ts",
+  "tests/link/std_postgres_pool_connection_panic/main.ts",
+  "tests/link/std_postgres_pool_connection_range_panic/main.ts",
+  "tests/link/std_postgres_pool_inflight_panic/main.ts",
+  "tests/link/std_postgres_pool_next_panic/main.ts",
+  "tests/link/std_postgres_pool_queue_panic/main.ts",
+  "tests/link/std_postgres_pool_size_panic/main.ts",
+  "tests/link/std_postgres_receive_panic/main.ts",
+  "tests/link/std_postgres_replay/main.ts",
+  "tests/link/std_postgres_tls/main.ts",
+  "tests/link/std_postgres_tls_connection_panic/main.ts",
+  "tests/link/std_postgres_tls_pool_panic/main.ts",
+  "tests/link/std_postgres_tls_roots_panic/main.ts",
+  "tests/link/std_postgres_tls_unix_panic/main.ts",
+  "tests/link/std_postgres_unix_target/main.ts",
+  "tests/link/std_postgres_user_panic/main.ts",
+  "tests/link/tfb_async_db/main.ts",
+  "tests/link/tfb_db/main.ts",
+]
+// Of those, the programs that also link chacha20poly1305.ll: scram.ll now
+// instantiates `wipe` on `u8[]` first, so chacha20poly1305.ll, which wipes
+// both `u32[]` and `u8[]`, writes the two instantiations in the other order.
+const SCRAM_CHACHA_LINKERS = [
+  "tests/link/net_serve_pg/main.ts",
+  "tests/link/std_postgres_async/main.ts",
+  "tests/link/std_postgres_async_cancel/main.ts",
+  "tests/link/std_postgres_async_caps_panic/main.ts",
+  "tests/link/std_postgres_async_depth_panic/main.ts",
+  "tests/link/std_postgres_async_double_release_panic/main.ts",
+  "tests/link/std_postgres_async_flat/main.ts",
+  "tests/link/std_postgres_async_pipeline/main.ts",
+  "tests/link/std_postgres_async_release_closed_panic/main.ts",
+  "tests/link/std_postgres_async_release_panic/main.ts",
+  "tests/link/std_postgres_async_seat_statement_panic/main.ts",
+  "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
+  "tests/link/std_postgres_async_size_panic/main.ts",
+  "tests/link/tfb_async_db/main.ts",
+  "tests/link/tfb_db/main.ts",
+]
+const scramModule = () => [
+  {
+    program: "tests/link/std_scram/main.ts",
+    file: "exit",
+    changelog: SCRAM_MODULE,
+    why: "the program tests nish/crypto/scram, which is new in this release, so the seed's standard library has no such module and refuses it",
+  },
+  ...SCRAM_LINKERS.map((program) => ({
+    program,
+    file: "scram.ll",
+    changelog: SCRAM_MODULE,
+    why: "nish/net/postgres computes its SCRAM proof and signature through the new nish/crypto/scram, so the program writes scram.ll and the seed does not",
+  })),
+  ...SCRAM_CHACHA_LINKERS.map((program) => ({
+    program,
+    file: "chacha20poly1305.ll",
+    changelog: SCRAM_MODULE,
+    why: "scram.ll instantiates `wipe` on `u8[]` before chacha20poly1305.ll does, so chacha20poly1305.ll writes its `u8[]` and `u32[]` wipes in the other order",
+  })),
+]
+
 const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overload signatures under --compat"
 
 const PACKAGE_LINK = "A package links a C library or its own C sources"
 
 const DECLARED = [
+  ...scramModule(),
+  {
+    program: "tests/cases/cls_field_init.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` or `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "docs/cookbook/cls-field-init.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` or `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "tests/link/cls_field_init_import/main.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` or `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "tests/cases/cls_field_init_arena.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses a `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "tests/link/cls_field_init_json/main.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
   {
     program: "tests/link/pkg_link_flag_library/main.ts",
     file: "exit",
@@ -1423,6 +1607,16 @@ const DECLARED = [
     changelog: FFI_ZEROEXT,
     why: "a call to a narrow host import now carries the `zeroext` its declaration already did, on the `i8` argument and result (#1755)",
   },
+  // src/c-import-json.ts reads clang's JSON AST and the overrides file with
+  // counted loops that add a loop-invariant value to the counter.
+  ...loopGuard(
+    "src/c-import-json.ts, which nish c-import reads clang's JSON AST through, adds a loop-invariant value to a counted loop's counter, so its module gains that loop's pre-loop overflow test, its unchecked and checked additions, and renumbered values",
+    {
+      "src/c-import-json.ts": ["c-import-json.ll"],
+      "src/c-import.ts": ["c-import-json.ll"],
+      "src/compile.ts": ["c-import-json.ll"],
+    }
+  ),
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
   ...ecnEcho(
@@ -1955,6 +2149,45 @@ const DECLARED = [
     changelog: APPEND_RANGE,
     why: "tests/link/net_http3/peer.ts copies a byte range with a push loop, so the peer module this program imports gains the guarded memcpy before the loop and renumbered values",
   })),
+  // WP57 S1: a private function or generic whose bare symbol would clash is
+  // qualified by its module, so the 0.42.0 seed refuses these programs with
+  // its whole-program uniqueness rule and only the candidate compiles them.
+  {
+    program: "tests/link/duplicate_internal/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts and helper.ts each keep a private `add`, which the candidate spells `@main$.add` and `@helper$.add`; the 0.42.0 seed refuses the second definition ("Function `add` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_generic/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'a.ts and b.ts each keep a private generic `identity<T>`, whose instantiations the candidate prefixes with each module\'s qualifier; the 0.42.0 seed refuses the second template ("Generic function `identity` is also defined in a.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_helpers/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts, up.ts and down.ts each keep a private `step`, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `step` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_mixed/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: "main.ts keeps a private `helper` beside lib.ts's exported one, which the candidate spells `@main$.helper` while `@helper` stays lib's; the 0.42.0 seed refuses the pair (\"Function `helper` is also defined in main.ts\"), so only the candidate compiles it (WP57 S1)",
+  },
+  {
+    program: "tests/link/module_private_spawn/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts and m.ts each keep a private `work` that a spawn names, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `work` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_outside/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts keeps a private `helper` and imports ../module_private_shared/u.ts, which keeps one too; the candidate spells them `@main$.helper` and `@___module_private_shared_u$.helper`, and the 0.42.0 seed refuses the pair ("Function `helper` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
@@ -1962,6 +2195,15 @@ const DECLARED = [
     file: "exit",
     changelog: "io_uring slot handles in nish:net",
     why: "`NET_LISTEN_RING` is new to `nish:net` in this release, so the 0.41.0 seed has no such export and refuses the program (WP63 S2)",
+  },
+  // #1778 stage A: a guarded `nish:simd` access is a proven index site, so the
+  // `--deny-panics` program that calls one compiles; the 0.42.0 seed records
+  // it as unproven and stops while it words the advice.
+  {
+    program: "tests/link/simd_deny_panics_guarded/main.ts",
+    file: "exit",
+    changelog: "a guarded nish:simd access as a proven panic site",
+    why: "the program is built with --deny-panics and the `loadU8x16` and `store` in its `simd_mask` dependency are guarded, which the candidate records as proven sites; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
   },
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.
@@ -2978,6 +3220,13 @@ const DECLARED = [
     file: "text.ll",
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
+  },
+  // std/text.ts's splitLines scans with nish:simd, a lane-wise compare over a
+  // 4096-position flag buffer, instead of one position at a time.
+  {
+    file: "text.ll",
+    changelog: "split lines in std/text sixteen positions at a time",
+    why: "std/text.ts's splitLines copies newline flags into a 4096-byte buffer and compares sixteen at a time with nish:simd, so the module every importer of nish/text writes declares the vector load, compare and bitmask and has a longer splitLines; no importer's own module moves",
   },
   // H1-3: the WebSocket accept key is written into storage the connection
   // owns, so nish/crypto/sha1 gains Sha1 and digestInto and
@@ -9036,6 +9285,62 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  {
+    program: "bench/wp68-be-load.ts",
+    file: "wp68-be-load.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-decimal.ts",
+    file: "wp68-decimal.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-hex.ts",
+    file: "wp68-hex.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "wp68-json-escape.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "wp68-utf8.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+
+  // WP48 stage 2c: in a program with a compact class, `nish_alloc_struct`'s
+  // slow block loads `nish_arena_range_abi` as `nish_alloc_ref`'s already did,
+  // so an 8-aligned compact class fails to link against the default runtime
+  // too. Compared only under `--no-sidecars`: with the WP8 sidecars on, both
+  // compilers refuse a compact class beside `--emit-napi`.
+  ...byFinding("compact class crosses --emit-header as an opaque handle")(
+    "the program has a compact class, so every module of it that allocates gains a volatile load of `nish_arena_range_abi` in `nish_alloc_struct`'s slow block, so every line after it moves down one",
+    {
+      "tests/cases/perf_padding_compact.ts": ["perf_padding_compact.ll"],
+      "tests/link/compact_json/main.ts": ["json-tokenizer.ll", "json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/compact_threads/main.ts": ["main.ll", "threads.ll"],
+    }
+  ),
   // `reserve` splits its growth into `grow`, so a program whose own module
   // declares the connection's put methods declares one more.
   ...[
@@ -9631,8 +9936,13 @@ const resolvePair = (referenceSpec, candidateSpec) => {
   return { reference, candidate }
 }
 
+/**
+ * Each side is asked on its own whether it takes `--allow-panics`: the
+ * reference is often the release that exits 2 on it, and the flag moves no
+ * IR, so the two still compare byte for byte.
+ */
 const compile = (compiler, args) =>
-  spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
+  spawnSync(compiler.cmd, seedArgs(compiler, args), {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -9641,7 +9951,7 @@ const compile = (compiler, args) =>
 /** `compile` as a promise, answering the same `{ status, stdout, stderr }` shape `spawnSync` does. */
 const compileAsync = (compiler, args) =>
   new Promise((resolve) => {
-    const child = spawn(compiler.cmd, [...compiler.prefix, ...args], { cwd: root })
+    const child = spawn(compiler.cmd, seedArgs(compiler, args), { cwd: root })
     const stdout = []
     const stderr = []
     child.stdout.on("data", (chunk) => stdout.push(chunk))

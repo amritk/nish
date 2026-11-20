@@ -12,7 +12,7 @@
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
 import { bufferSignature, isNetWrittenLetter } from "./nish-modules"
-import { CheckedProgram, inlineElementStruct } from "./program"
+import { CheckedProgram, FieldInfo, inlineElementStruct } from "./program"
 import { FLAG_OPTIONAL, Node, NodeKind } from "./nodes"
 import { Local } from "./symbols"
 import { T_STRING, TypeTable } from "./types"
@@ -24,6 +24,34 @@ export const unwrapParens = (expr: Node): Node => {
     inner = inner.children[0]
   }
   return inner
+}
+
+/**
+ * WP66 S4: the fixed-length array field (`FieldInfo.cLength`) the expression
+ * `receiver` names, `ctx.h` for `unsigned h[5]` in a `declare class`, or
+ * `null`. The checker, the bounds prover and the emitter all ask it of an
+ * index's receiver, so they agree on which `a[i]` is an element inside a C
+ * struct rather than an element of an array object.
+ */
+export const cArrayField = (program: CheckedProgram, table: TypeTable, receiver: Node): FieldInfo | null => {
+  const member = unwrapParens(receiver)
+  if (member.kind !== NodeKind.Member) {
+    return null
+  }
+  const holder = program.nodeTypes[member.children[0].id]
+  if (holder < 0) {
+    return null
+  }
+  const inner = table.stripNull(holder)
+  if (!table.isStruct(inner)) {
+    return null
+  }
+  const info = program.struct(table.nameOf(inner))
+  if (info === null || !info.layout) {
+    return null
+  }
+  const field = info.field(member.text)
+  return field !== null && field.cLength >= 0 ? field : null
 }
 
 /**

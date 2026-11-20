@@ -1,0 +1,1 @@
+its key must be `integer<0, Hi>`, a range from 0 with Hi below 16777216, got `integer<1, 4>`

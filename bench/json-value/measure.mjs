@@ -49,7 +49,7 @@ import fs from "node:fs"
 import net from "node:net"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { CACHE, fetchAll } from "../json-compare/fetch.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
@@ -88,7 +88,7 @@ const build = (compiler, program, name, label) => {
   const app = path.join(dir, "app")
   execFileSync(
     compiler.cmd,
-    [...compiler.prefix, program, "-o", `${dir}/`, "--link", app, "--profile", "speed"],
+    compileArgv(compiler, [program, "-o", `${dir}/`, "--link", app, "--profile", "speed"]),
     {
       cwd: root,
       stdio: ["ignore", "ignore", "inherit"],

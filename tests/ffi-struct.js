@@ -6,6 +6,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /** A layout with a pointer in it and one embedded, lent to C by an internal function. */
 const LAYOUTS = [
@@ -90,10 +91,76 @@ const measureOuter = (types) =>
   ].join("\n")
 
 /**
+ * WP66 S4: OpenSSL's `SHA_CTX` shape, a fixed-length array after a narrower
+ * field and one before a wider field, then 8-byte elements after a byte, a
+ * one-element array, two arrays back to back and `f64` elements after `u16`
+ * ones, lent to C so its layout is emitted.
+ */
+const SHA_LAYOUT = [
+  "declare class ShaCtx {",
+  "  tag: u8",
+  "  h: Record<integer<0, 4>, u32>",
+  "  total: u64",
+  "  num: u16",
+  "  data: Record<integer<0, 2>, u8>",
+  "  last: f64",
+  "  pad: u8",
+  "  wide: Record<integer<0, 2>, u64>",
+  "  one: Record<integer<0, 0>, u16>",
+  "  halves: Record<integer<0, 1>, u16>",
+  "  doubles: Record<integer<0, 1>, f64>",
+  "}",
+  "",
+  "declare function sha_fill(c: ShaCtx): i32",
+  "",
+  "export const main = (): number => {",
+  "  const c = new ShaCtx()",
+  "  return sha_fill(c)",
+  "}",
+  "",
+].join("\n")
+
+/** The fields of `SHA_LAYOUT` after the first, in order: each one's offset is measured. */
+const SHA_FIELDS = ["h", "total", "num", "data", "last", "pad", "wide", "one", "halves", "doubles"]
+
+/** The same struct in C, asserting the offsets and size `llc` gave Nish's. */
+const cShaLayout = (measured) =>
+  [
+    "struct ShaCtx {",
+    "  unsigned char tag; unsigned int h[5]; unsigned long long total;",
+    "  unsigned short num; unsigned char data[3]; double last;",
+    "  unsigned char pad; unsigned long long wide[3]; unsigned short one[1];",
+    "  unsigned short halves[2]; double doubles[2];",
+    "};",
+    ...SHA_FIELDS.map(
+      (f, i) => `_Static_assert(__builtin_offsetof(struct ShaCtx, ${f}) == ${measured[i]}, "${f}");`
+    ),
+    `_Static_assert(sizeof(struct ShaCtx) == ${measured[SHA_FIELDS.length]}, "size");`,
+    "",
+  ].join("\n")
+
+/** An LLVM module holding `%struct.ShaCtx`'s field offsets as `llc` lays it out, then its size. */
+const measureSha = (types) =>
+  [
+    types,
+    `@layout = global [${SHA_FIELDS.length + 1} x i64] [`,
+    ...SHA_FIELDS.map(
+      (_, i) =>
+        `  i64 ptrtoint (%struct.ShaCtx* getelementptr (%struct.ShaCtx, %struct.ShaCtx* null, i32 0, i32 ${i + 1}) to i64),`
+    ),
+    "  i64 ptrtoint (%struct.ShaCtx* getelementptr (%struct.ShaCtx, %struct.ShaCtx* null, i32 1) to i64)",
+    "]",
+    "",
+  ].join("\n")
+
+/**
  * Runs the checks, each under `tests/run.js`'s filter: `only`, when set, is
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, buildDir }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   const dir = path.join(buildDir, "ffi-struct")
   const write = (name, text) => {
     fs.mkdirSync(dir, { recursive: true })
@@ -101,12 +168,14 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.writeFileSync(file, text)
     return file
   }
-  const compile = (file, out, extra) =>
-    spawnSync(nish, [file, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+  const compile = (file, out, extra) => nishSync([file, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
 
-  /** Nish's struct as `llc` lays it out for `triple`: three offsets and a size, or null. */
-  const measure = (types, triple) => {
-    const probe = write(`measure-${triple}.ll`, measureOuter(types))
+  /**
+   * Nish's struct as `llc` lays it out for `triple`: `count` constants (the
+   * offsets, then the size) from the module `module` builds, or null.
+   */
+  const measure = (types, triple, module = measureOuter, count = 4) => {
+    const probe = write(`measure-${triple}.ll`, module(types))
     const asm = spawnSync("llc", [`-mtriple=${triple}`, "-o", "-", probe], { encoding: "utf8" })
     if (asm.status !== 0) {
       return null
@@ -114,7 +183,7 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
     const values = [...asm.stdout.matchAll(/^\s*\.(?:quad|int64)\s+(?:0\+)?(\d+)\s*$/gm)].map((m) =>
       Number(m[1])
     )
-    return values.length === 4 ? values : null
+    return values.length === count ? values : null
   }
 
   // `--deny ffi` refuses a program whose only C use is a layout lent to a
@@ -318,7 +387,7 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         denyUnsafe.stderr.includes("calls readStruct"),
       shown(denyUnsafe)
     )
-    const checked = spawnSync(nish, [read, "--emit-checked"], { cwd: root, encoding: "utf8" })
+    const checked = nishSync([read, "--emit-checked"], { cwd: root, encoding: "utf8" })
     check(
       "ffi_struct_read: --emit-checked records the `readStruct` import and its call",
       checked.status === 0 &&
@@ -402,6 +471,78 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
       "ffi_struct: the wasm32 struct is smaller than the native one, its CPtr four bytes",
       sizes[1] > 0 && sizes[1] < sizes[0],
       `native ${sizes[0]}, wasm32 ${sizes[1]}`
+    )
+  }
+
+  // WP66 S4: a fixed-length array field is C's `T name[N]` inline, at `T`'s
+  // alignment. Nish's `%struct.ShaCtx` is measured by `llc` for each target,
+  // and clang must give OpenSSL's `SHA_CTX` shape those offsets and that
+  // size, which must be the size `new` zero-fills.
+  if (!only || ["ffi_struct checks", "ffi_array_field checks", "wasi"].some((name) => name.includes(only))) {
+    const sha = write("sha.ts", SHA_LAYOUT)
+    for (const [name, flags, triple] of [
+      ["native", [], "x86_64-unknown-linux-gnu"],
+      ["wasm32", ["--profile", "wasi"], "wasm32"],
+    ]) {
+      const ll = path.join(dir, `sha-${name}.ll`)
+      const built = compile(sha, ll, flags)
+      const ir = built.status === 0 ? fs.readFileSync(ll, "utf8") : ""
+      const filled =
+        /call void @llvm\.memset\.p0i8\.i64\(i8\* align 8 %[\w.]+, i8 0, i64 (\d+), i1 false\)/.exec(ir)
+      const types = ir
+        .split("\n")
+        .filter((line) => /^%struct\.ShaCtx = type /.test(line))
+        .join("\n")
+      const inline = ["[5 x i32]", "[3 x i8]", "[3 x i64]", "[1 x i16]", "[2 x i16]", "[2 x double]"].every(
+        (array) => types.includes(array)
+      )
+      check(
+        `ffi_array_field: a ${name} build lays each fixed-length array inline, and new zero-fills it whole`,
+        built.status === 0 && inline && filled !== null,
+        built.status === 0 ? ir : shown(built)
+      )
+      if (!has("llc") || !has("clang")) {
+        skip(`skipped: ffi_array_field: no llc or clang: the ${name} SHA_CTX layout is not compared with C's`)
+        continue
+      }
+      const measured = inline ? measure(types, triple, measureSha, SHA_FIELDS.length + 1) : null
+      const c =
+        measured === null
+          ? null
+          : spawnSync("clang", [`--target=${triple}`, "-fsyntax-only", "-x", "c", "-"], {
+              input: cShaLayout(measured),
+              encoding: "utf8",
+            })
+      check(
+        `ffi_array_field: clang gives SHA_CTX's shape the ${name} offsets and size Nish's build has`,
+        c !== null && c.status === 0 && filled !== null && measured[SHA_FIELDS.length] === Number(filled[1]),
+        `llc: ${measured}\n${c === null ? ir : shown(c)}`
+      )
+    }
+
+    // Under `-g`, a debugger sees each fixed-length array as C's array type:
+    // a member of the whole array's size whose type counts its elements.
+    const debugLl = path.join(dir, "sha-g.ll")
+    const debug = compile(sha, debugLl, ["-g"])
+    const dwarf = debug.status === 0 ? fs.readFileSync(debugLl, "utf8") : ""
+    const arrayMember = (field, bits, count) => {
+      const member = new RegExp(
+        `DW_TAG_member, name: "${field}", [^\\n]*baseType: (![0-9]+), size: ${bits}, `
+      ).exec(dwarf)
+      if (member === null) {
+        return false
+      }
+      const array = new RegExp(
+        `^${member[1]} = !DICompositeType\\(tag: DW_TAG_array_type, [^\\n]*size: ${bits}, elements: (![0-9]+)\\)$`,
+        "m"
+      ).exec(dwarf)
+      const range = array === null ? null : new RegExp(`^${array[1]} = !\\{(![0-9]+)\\}$`, "m").exec(dwarf)
+      return range !== null && new RegExp(`^${range[1]} = !DISubrange\\(count: ${count}\\)$`, "m").test(dwarf)
+    }
+    check(
+      "ffi_array_field: under -g each fixed-length array field is a DWARF array of its length",
+      arrayMember("h", 160, 5) && arrayMember("data", 24, 3),
+      debug.status === 0 ? dwarf : shown(debug)
     )
   }
 }

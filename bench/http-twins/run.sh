@@ -18,9 +18,12 @@ cd "$root"
 
 nish=${NISH:-build/nish}
 [ -x "$nish" ] || npm run build
+# A bench program, so its build takes `--allow-panics` from a compiler that lists it.
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$nish"
 mkdir -p build/bench
-"$nish" bench/http1-server.ts --link build/bench/h1 --profile speed
-"$nish" bench/http1-server.ts --link build/bench/h1-copy --profile speed
+"$nish" ${allow_panics[@]+"${allow_panics[@]}"} bench/http1-server.ts --link build/bench/h1 --profile speed
+"$nish" ${allow_panics[@]+"${allow_panics[@]}"} bench/http1-server.ts --link build/bench/h1-copy --profile speed
 cmp build/bench/h1 build/bench/h1-copy || {
   echo "run.sh: two builds of bench/http1-server.ts differ, so there is no noise band" >&2
   exit 1

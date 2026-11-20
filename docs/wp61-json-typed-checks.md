@@ -955,7 +955,7 @@ The repair log's default (§5.6) is not a question: the measurement decides it.
 
 ## 11. Stages
 
-Each stage is a PR, ticked on [the roadmap page](roadmap/wp61-json-typed-checks.md)
+Each stage is a PR that closes its sub-issue of [the open-work issue](https://github.com/amritk/nish/issues/1869)
 when it lands. A stage that adds a construct follows
 [ARCHITECTURE.md → "How to add a construct"](ARCHITECTURE.md):
 

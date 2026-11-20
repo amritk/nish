@@ -656,6 +656,13 @@ the end. A `\r\n` line ending keeps its `\r`: stripping it would make this
 function guess at the file's provenance, and a caller that needs it gone can
 `trimEnd` each line.
 
+The scan runs sixteen positions at a time with `nish:simd`. The text is
+copied, 4096 positions at a time, as one flag byte per position into a
+buffer the lane-wise compare reads sixteen flags at a time: a string has no
+lane-wise load of its own. A flag rather than the character, so that a UTF-16
+unit under Node whose low byte is 10 is not taken for a newline. Text under
+sixteen positions is scanned one position at a time, with no buffer.
+
 ```ts
 const splitLines: (text: string) => string[]
 ```

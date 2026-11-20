@@ -1,7 +1,6 @@
 ---
 name: WP71 — an HttpArena entry, and what it asks of std/net
 overview: TechEmpower is archived and HttpArena took its place. This package builds the entry in bench/httparena/ on the 10 scored profiles that wait on nothing, joins the nine that wait on other packages as each lands, and checks io_uring under the façade, before the owner decides whether to enter it. It runs nothing HttpArena-specific of its own; HttpArena's validate.sh is the entry's check.
-roadmap: docs/roadmap/wp71-httparena.md
 spec: docs/wp71-httparena.md
 priority: 90
 labels: [ready]

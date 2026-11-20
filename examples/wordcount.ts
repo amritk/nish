@@ -1,3 +1,7 @@
+// Opt-out from `--deny-panics`: the `Map` calls reach panic sites in
+// `std/collections`; this file keeps none of its own. Follow-up: make
+// `std/collections` panic-free, then build this file with `--deny-panics`.
+//
 // Word count on the global `Map`, and the two calls `nish/map` adds to it
 // (docs/wp32-map.md §9). Each count below is one hash and one probe of the
 // table per word: `counts.set(w, (counts.get(w) ?? 0) + 1)` asks about `w`
@@ -15,16 +19,19 @@ import { getOrInsert, reserve } from "nish/map"
 const splitWords = (text: string): string[] => {
   const out: string[] = []
   let start: i32 = -1
-  const n: i32 = toI32(text.length)
-  for (let i: i32 = 0; i <= n; i++) {
-    const c: i32 = i < n ? toI32(text.charCodeAt(i)) : 32
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    const c: i32 = toI32(text.charCodeAt(i))
     const letter = c >= 97 && c <= 122
     if (letter && start < 0) {
       start = i
-    } else if (!letter && start >= 0 && start <= i && i <= n) {
-      out.push(text.slice(start, i))
+    } else if (!letter && start >= 0 && start < i) {
+      out.push(text.substring(start, i))
       start = -1
     }
+  }
+  // A word that runs to the end of the text ends there.
+  if (start >= 0) {
+    out.push(text.substring(start))
   }
   return out
 }
@@ -32,17 +39,17 @@ const splitWords = (text: string): string[] => {
 export const main = (): void => {
   const text = "the cat sat on the mat and the dog sat on the log by the cat"
   const all = splitWords(text)
-  const counts = new Map<string, number>()
+  // A count is a `u32`, which cannot overflow-panic: it stays below the
+  // number of words.
+  const counts = new Map<string, u32>()
   reserve(counts, all.length)
   for (const w of all) {
     counts.set(w, (counts.get(w) ?? 0) + 1)
   }
   // Where each word first appears: the insert happens only the first time.
-  const first = new Map<string, number>()
-  let at = 0
-  for (const w of all) {
-    getOrInsert(first, w, at)
-    at = at + 1
+  const first = new Map<string, i32>()
+  for (let at: i32 = 0; at < toI32(all.length); at++) {
+    getOrInsert(first, all[at], at)
   }
   console.log(`${all.length} words, ${counts.size} distinct`)
   for (const w of counts.keys()) {

@@ -1,0 +1,12 @@
+{
+  "header": "buffers.h",
+  "allow": ["db_*"],
+  "functions": {
+    "db_error": { "return": { "owned": "db_free_error" } },
+    "db_path": { "return": { "owned": "db_free_error" } },
+    "db_name": { "return": "nonnull" },
+    "db_write": { "data": { "buffer": "len" } },
+    "db_read": { "into": { "buffer": "cap" } },
+    "db_rename": { "name": { "nullable": true } }
+  }
+}

@@ -71,7 +71,14 @@ import {
   isMapEntry,
   isSpawnEntry,
 } from "./parallel"
-import { CheckedProgram, elementStride, FunctionSig, ROLE_CONSTRUCTOR, ROLE_FUNCTION } from "./program"
+import {
+  CheckedProgram,
+  elementStride,
+  FunctionSig,
+  ROLE_CONSTRUCTOR,
+  ROLE_FUNCTION,
+  StructInfo,
+} from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -548,11 +555,18 @@ class EscapeAnalysis {
     return info !== null && info.compact
   }
 
+  /** `node` is a `new` of a class with no constructor whose initializers allocate (`[]`, `new`). */
+  initializerAllocates(node: Node): boolean {
+    return noCtorInitializerAllocates(this.unit.program, this.table, node)
+  }
+
   visitNew(node: Node): void {
     // A `new` checked into a union is recorded as the union; it allocates its class.
     const type = intrinsicType(this.unit.program, node)
     if (type >= 0 && this.table.isStruct(type)) {
-      this.sites.push(new Site(node, !this.compactType(type)))
+      // A class with no constructor runs its initializers here, and one that
+      // allocates stores into the object what outlives a stack slot.
+      this.sites.push(new Site(node, !this.compactType(type) && !this.initializerAllocates(node)))
       return
     }
     if (type < 0 || !this.table.isArray(type)) {
@@ -1579,6 +1593,14 @@ class EscapeAnalysis {
           // The constructor stored `this` somewhere the caller may reach.
           escapes = true
         }
+        // A class with no constructor runs its initializers here: one that
+        // allocates stores into the object what `analyzeEscapes` charges a
+        // constructor for, and a field read (`o.child`) hands it on unseen,
+        // so it leaks and escapes as the constructor's would.
+        if (ctor === null && this.initializerAllocates(site.node)) {
+          flow = FLOW_LEAKS
+          escapes = true
+        }
       }
       if (escapes) {
         this.result.noteEscape(site.node)
@@ -1990,6 +2012,16 @@ export const analyzeEscapes = (
   }
   analysis.visit(body)
   analysis.decide()
+  // The prologue stores the initializers before the body runs
+  // (`emitConstructorPrologue`), and the walk above sees only the body. One
+  // that allocates is `this.f = []` written first: stored into the object the
+  // caller holds, so it leaks and escapes.
+  const owner: StructInfo | null = sig.role === ROLE_CONSTRUCTOR ? sig.owner : null
+  const initializer: Node | null = owner !== null ? owner.allocatingInitializer() : null
+  if (initializer !== null) {
+    analysis.result.allocLeaks = true
+    analysis.result.noteEscape(initializer)
+  }
   // An arrow's written parameters keep the conservative answer. Its captures
   // are decided, because the function that wrote the arrow reads each one as
   // an argument to it (`captureTarget`), and a capture this proves nothing
@@ -2365,6 +2397,11 @@ class PassWalk {
       const ctor = constructorOf(program, this.table, intrinsicType(program, node))
       if (ctor !== null) {
         this.visitCallee(ctor, node)
+      } else if (noCtorInitializerAllocates(program, this.table, node)) {
+        // The initializers' allocation is stored into the object, which a
+        // field read (`isOld`) hands out of the pass unseen.
+        this.allocates = true
+        this.refuse(LOOP_STORED, node, "")
       }
     } else if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
       const target = unwrapParens(node.children[0])
@@ -2549,6 +2586,16 @@ const leavesMemory = (program: CheckedProgram, table: TypeTable, facts: FactsTab
   // A callee with no facts may allocate, as `PassWalk.visitCallee` refuses it.
   const g = facts.get(callee.name)
   return g === null || g.netAllocates
+}
+
+/** `node` is a `new` of a class with no constructor whose initializers allocate (`[]`, `new`). */
+const noCtorInitializerAllocates = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
+  const type = intrinsicType(program, node)
+  if (node.kind !== NodeKind.New || type < 0 || !table.isStruct(type)) {
+    return false
+  }
+  const info = program.struct(table.nameOf(type))
+  return info !== null && info.ctor === null && info.allocatingInitializer() !== null
 }
 
 /** The function `node` itself runs: a call's callee, or a `new`'s constructor; null for anything else. */

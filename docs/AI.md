@@ -211,7 +211,7 @@ rejects. This table is the highest-value part of the page.
 | `{ [k]: v }`, `[k]: i32` in a class or interface | `Computed property names are forbidden in Nish (member names are fixed at compile time)` | a `Map` for a keyed table |
 | `type Pair = { a: i32 }` (inline object type) | `` Unsupported type `{ a: i32 }` `` | declare an `interface` |
 | `A \| B` unions of anything but tagged classes and interfaces | `` Union types other than `T \| null` are forbidden `` | a [discriminated union](#discriminated-unions): a tag field first in each variant |
-| `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
+| `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32; use a template literal: `${n}` `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported; use a named `export function` `` | `export const f = …` |
@@ -2373,9 +2373,10 @@ export const main = (): i32 => {
 - Functions and enums may be renamed on import; classes and interfaces may
   not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
-- **A function name is unique across the whole program**, exported or not
-  (a proposal to relax this for private functions is
-  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); it has not shipped).
+- **An exported function name is unique across the whole program**; two
+  modules may each keep a *private* function or generic of one name (its
+  symbol becomes `<module>$.<name>`, e.g. `helper$.add`), except under
+  `--no-strict-exports`, where every function name is unique.
 - An `export`ed function is an external C-ABI symbol; every other function gets
   `internal` linkage so LLVM may inline or drop it.
 - **So an exported function is not named after a C library function**
@@ -3241,7 +3242,9 @@ for (const x of doubled) {
 console.log(`${sum}`);
 ```
 
-**Convert a number to a string** — there is no `toString` and no `String()`:
+**Convert a number to a string** — a number has no `toString`, and
+`String()` converts only a [string enum](#type-aliases-and-enums)'s value;
+write a template literal:
 
 <!-- nish:ok-body -->
 ```ts

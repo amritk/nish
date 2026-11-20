@@ -137,7 +137,7 @@ struct Http1OutputPool (class) size=24 align=8 exported
   constructor -> @nish.Http1OutputPool.constructor
   method take -> @nish.Http1OutputPool.take
   method give -> @nish.Http1OutputPool.give
-struct Http1Connection (class) size=288 align=8 exported
+struct Http1Connection (class) size=296 align=8 exported
   field parser: Http1Parser index=0 offset=0
   field output: u8[] index=1 offset=8
   field noOutput: u8[] index=2 offset=16
@@ -192,7 +192,8 @@ struct Http1Connection (class) size=288 align=8 exported
   field headFormats: i64 index=51 offset=256 initialized
   field headMisses: i32 index=52 offset=264 initialized
   field headOff: i64 index=53 offset=272 initialized
-  field headCopies: i64 index=54 offset=280 initialized
+  field keptFor: i64 index=54 offset=280 initialized
+  field headCopies: i64 index=55 offset=288 initialized
   constructor -> @nish.Http1Connection.constructor
   method restart -> @nish.Http1Connection.restart
   method park -> @nish.Http1Connection.park
@@ -209,6 +210,8 @@ struct Http1Connection (class) size=288 align=8 exported
   method wantsWrite -> @nish.Http1Connection.wantsWrite
   method isDone -> @nish.Http1Connection.isDone
   method betweenRequests -> @nish.Http1Connection.betweenRequests
+  method lendTo -> @nish.Http1Connection.lendTo
+  method rests -> @nish.Http1Connection.rests
   method room -> @nish.Http1Connection.room
   method bodyRoom -> @nish.Http1Connection.bodyRoom
   method next -> @nish.Http1Connection.next
@@ -247,22 +250,28 @@ struct Http1Connection (class) size=288 align=8 exported
   method lingerLate -> @nish.Http1Connection.lingerLate
   method expired -> @nish.Http1Connection.expired
   method expiresNoSooner -> @nish.Http1Connection.expiresNoSooner
-struct Http1Server (class) size=112 align=8 exported
+struct Http1Server (class) size=160 align=8 exported
   field config: Http1Config index=0 offset=0
   field connections: Http1Connection[] index=1 offset=8
-  field date: HttpDate index=2 offset=16
-  field fds: i32[] index=3 offset=24
-  field armed: i32[] index=4 offset=32
-  field outputs: Http1OutputPool index=5 offset=40
-  field inputs: Http1OutputPool index=6 offset=48
-  field heads: Http1OutputPool index=7 offset=56
-  field free: i32[] index=8 offset=64
-  field scratch: u8[] index=9 offset=72
-  field peer: u8[] index=10 offset=80
-  field slots: i32 index=11 offset=88 initialized
-  field listener: i32 index=12 offset=92 initialized
-  field expireAfter: i64 index=13 offset=96 initialized
-  field expireScans: i32 index=14 offset=104 initialized
+  field at: i32[] index=2 offset=16
+  field spare: i32[] index=3 offset=24
+  field rested: i64[] index=4 offset=32
+  field restedMss: i32[] index=5 offset=40
+  field owner: i64[] index=6 offset=48
+  field accepts: i64 index=7 offset=56 initialized
+  field date: HttpDate index=8 offset=64
+  field fds: i32[] index=9 offset=72
+  field armed: i32[] index=10 offset=80
+  field outputs: Http1OutputPool index=11 offset=88
+  field inputs: Http1OutputPool index=12 offset=96
+  field heads: Http1OutputPool index=13 offset=104
+  field free: i32[] index=14 offset=112
+  field scratch: u8[] index=15 offset=120
+  field peer: u8[] index=16 offset=128
+  field slots: i32 index=17 offset=136 initialized
+  field listener: i32 index=18 offset=140 initialized
+  field expireAfter: i64 index=19 offset=144 initialized
+  field expireScans: i32 index=20 offset=152 initialized
   constructor -> @nish.Http1Server.constructor
   method build -> @nish.Http1Server.build
   method size -> @nish.Http1Server.size
@@ -270,6 +279,10 @@ struct Http1Server (class) size=112 align=8 exported
   method holds -> @nish.Http1Server.holds
   method fd -> @nish.Http1Server.fd
   method connection -> @nish.Http1Server.connection
+  method resting -> @nish.Http1Server.resting
+  method spares -> @nish.Http1Server.spares
+  method attach -> @nish.Http1Server.attach
+  method rest -> @nish.Http1Server.rest
   method accept -> @nish.Http1Server.accept
   method readable -> @nish.Http1Server.readable
   method writable -> @nish.Http1Server.writable
@@ -469,7 +482,7 @@ function Http1Connection.constructor(this: Http1Connection, config: Http1Config,
   sharedWrite: +0:5
   escaping: config date
   calls: nish.Http1Connection.restart nish.Http1Parser.constructor nish.HttpDate.constructor nish.http1ServerCheckCap nish_alloc_struct nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.restart#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.restart#0
   pointer config: size=48 writesThrough=true captured=true
   pointer date: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -497,18 +510,18 @@ function Http1Connection.restart(this: Http1Connection): void -> @nish.Http1Conn
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.park nish.Http1Connection.release nish.Http1Parser.restart nish.WsDecoder.reset
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0 nish.Http1Connection.park#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0 nish.Http1Connection.park#0
   stackSites=0 stackLocals=0
   callee -5:5 Http1Parser.restart -> @nish.Http1Parser.restart
   local -4:11 ws: WsDecoder | null (const)
   callee -2:7 WsDecoder.reset -> @nish.WsDecoder.reset
-  callee +33:5 Http1Connection.release -> @nish.Http1Connection.release
-  callee +34:5 Http1Connection.park -> @nish.Http1Connection.park
+  callee +34:5 Http1Connection.release -> @nish.Http1Connection.release
+  callee +35:5 Http1Connection.park -> @nish.Http1Connection.park
 function Http1Connection.park(this: Http1Connection): void -> @nish.Http1Connection.park [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1OutputPool.give nish.Http1Parser.resting
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -8:11 inputs: Http1OutputPool | null (const)
   local -7:11 heads: Http1OutputPool | null (const)
@@ -520,7 +533,7 @@ function Http1Connection.unpark(this: Http1Connection): void -> @nish.Http1Conne
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1OutputPool.take
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:11 inputs: Http1OutputPool | null (const)
   local -4:11 heads: Http1OutputPool | null (const)
@@ -531,12 +544,12 @@ function Http1Connection.unpark(this: Http1Connection): void -> @nish.Http1Conne
 function Http1Connection.inputLimit(this: Http1Connection): i32 -> @nish.Http1Connection.inputLimit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.inputRoom(this: Http1Connection): i32 -> @nish.Http1Connection.inputRoom [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.inputLimit nish.Http1Parser.buffered nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Http1Connection.inputLimit#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.Http1Connection.inputLimit#0
   stackSites=0 stackLocals=0
   local +0:9 room: i32 (let)
   local +4:13 ws: WsDecoder | null (const)
@@ -548,7 +561,7 @@ function Http1Connection.feed(this: Http1Connection, buf: u8[], off: i32, len: i
   sharedWrite: via nish.WsDecoder.feed
   escaping: len off
   calls: nish.Http1Connection.decoder nish.Http1Connection.inputRoom nish.Http1Connection.unpark nish.Http1Parser.feed nish.WsDecoder.feed nish.http1ServerCheckWindow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.inputRoom#0 nish.Http1Connection.decoder#0 nish.Http1Connection.unpark#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.inputRoom#0 nish.Http1Connection.decoder#0 nish.Http1Connection.unpark#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.WsDecoder.feed#1 nish.Http1Parser.feed#1
   stackSites=0 stackLocals=0
   callee +0:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -562,24 +575,24 @@ function Http1Connection.feed(this: Http1Connection, buf: u8[], off: i32, len: i
 function Http1Connection.endInput(this: Http1Connection): void -> @nish.Http1Connection.endInput [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.ended(this: Http1Connection): boolean -> @nish.Http1Connection.ended [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.abort(this: Http1Connection): void -> @nish.Http1Connection.abort [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.release
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.release#0
   stackSites=0 stackLocals=0
   callee +7:5 Http1Connection.release -> @nish.Http1Connection.release
 function Http1Connection.acquire(this: Http1Connection): void -> @nish.Http1Connection.acquire [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1OutputPool.take nish_panic
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 pool: Http1OutputPool | null (const)
   local -1:11 output: u8[] (const)
@@ -588,7 +601,7 @@ function Http1Connection.release(this: Http1Connection): void -> @nish.Http1Conn
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1OutputPool.give
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 pool: Http1OutputPool | null (const)
   callee -1:5 Http1OutputPool.give -> @nish.Http1OutputPool.give
@@ -596,30 +609,42 @@ function Http1Connection.consume(this: Http1Connection, n: i32): void -> @nish.H
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 pending: i32 (const)
 function Http1Connection.wantsWrite(this: Http1Connection): boolean -> @nish.Http1Connection.wantsWrite [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.isDone(this: Http1Connection): boolean -> @nish.Http1Connection.isDone [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.wantsWrite
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
   stackSites=0 stackLocals=0
   callee +0:71 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
 function Http1Connection.betweenRequests(this: Http1Connection): boolean -> @nish.Http1Connection.betweenRequests [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.wantsWrite
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.Http1Connection.wantsWrite#0
   stackSites=0 stackLocals=0
   callee +0:81 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+function Http1Connection.lendTo(this: Http1Connection, owner: i64): void -> @nish.Http1Connection.lendTo [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: owner
+  pointer this: size=296 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Http1Connection.rests(this: Http1Connection): boolean -> @nish.Http1Connection.rests [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.Http1Parser.resting
+  pointer this: size=296 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:7 Http1Parser.resting -> @nish.Http1Parser.resting
 function Http1Connection.room(this: Http1Connection): i32 -> @nish.Http1Connection.room [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Connection.acquire nish.copyBytes nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.acquire#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.acquire#0
   stackSites=0 stackLocals=0
   callee -8:7 Http1Connection.acquire -> @nish.Http1Connection.acquire
   local -6:11 output: u8[] (const)
@@ -629,7 +654,7 @@ function Http1Connection.bodyRoom(this: Http1Connection): i32 -> @nish.Http1Conn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.room
   calls: nish.Http1Connection.room nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   local +0:11 r: i32 (const)
   callee +0:20 Http1Connection.room -> @nish.Http1Connection.room
@@ -637,7 +662,7 @@ function Http1Connection.next(this: Http1Connection): i32 -> @nish.Http1Connecti
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Connection.bodyRoom nish.Http1Connection.nextFrame nish.Http1Connection.nextRequest nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.nextRequest#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.nextRequest#0
   stackSites=0 stackLocals=0
   callee -3:11 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
   callee +7:14 Http1Connection.nextFrame -> @nish.Http1Connection.nextFrame
@@ -646,7 +671,7 @@ function Http1Connection.nextRequest(this: Http1Connection): i32 -> @nish.Http1C
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: nish.Http1Connection.decoder nish.Http1Connection.fail nish.Http1Connection.headArrived nish.Http1Connection.nextFrame nish.Http1Parser.buffered nish.Http1Parser.declineUpgrade nish.Http1Parser.next nish.WsDecoder.feed nish.WsDecoder.reset
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.decoder#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.headArrived#0 nish.Http1Connection.fail#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.decoder#0 nish.Http1Connection.nextFrame#0 nish.Http1Connection.headArrived#0 nish.Http1Connection.fail#0
   stackSites=0 stackLocals=0
   local -2:15 counted: boolean (const)
   local +10:17 p: Http1Parser (const)
@@ -666,7 +691,7 @@ function Http1Connection.fail(this: Http1Connection, status: i32): i32 -> @nish.
   sharedWrite: +0:5
   escaping: status
   calls: nish.Http1Connection.room nish.HttpDate.current nish.http1ServerReason nish.http1WriteResponseHead
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   callee +3:7 Http1Connection.room -> @nish.Http1Connection.room
   local +4:13 end: i32 (const)
@@ -677,7 +702,7 @@ function Http1Connection.decoder(this: Http1Connection): WsDecoder -> @nish.Http
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=96
   sharedWrite: +0:5
   calls: nish.WsDecoder.constructor nish_alloc_struct
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 ws: WsDecoder | null (const)
   local -1:11 made: WsDecoder (const)
@@ -686,7 +711,7 @@ function Http1Connection.nextFrame(this: Http1Connection): i32 -> @nish.Http1Con
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.Http1Connection.decoder nish.Http1Connection.sendClose nish.Http1Connection.sendPong nish.WsDecoder.next nish_panic
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.sendPong#0 nish.Http1Connection.decoder#0 nish.Http1Connection.sendClose#0 nish.Http1Connection.sendClose#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.sendPong#0 nish.Http1Connection.decoder#0 nish.Http1Connection.sendClose#0 nish.Http1Connection.sendClose#0
   stackSites=0 stackLocals=0
   callee -6:32 Http1Connection.sendPong -> @nish.Http1Connection.sendPong
   local -3:13 ws: WsDecoder (const)
@@ -701,7 +726,7 @@ function Http1Connection.sendPong(this: Http1Connection): boolean -> @nish.Http1
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Http1Connection.room nish.websocketWriteFrame
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   callee -14:5 Http1Connection.room -> @nish.Http1Connection.room
   local -13:11 end: i32 (const)
@@ -711,7 +736,7 @@ function Http1Connection.sendClose(this: Http1Connection, code: i32): void -> @n
   sharedWrite: +0:7
   escaping: code
   calls: nish.Http1Connection.room nish.websocketClosePayload nish.websocketWriteFrame
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.room#0
   stackSites=0 stackLocals=0
   callee -17:5 Http1Connection.room -> @nish.Http1Connection.room
   local -16:11 payload: u8[] | null (const)
@@ -722,14 +747,14 @@ function Http1Connection.sendClose(this: Http1Connection, code: i32): void -> @n
   callee -11:22 websocketWriteFrame -> @nish.websocketWriteFrame
 function Http1Connection.answerable(this: Http1Connection): boolean -> @nish.Http1Connection.answerable [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.respond(this: Http1Connection, status: i32, names: u8[][], values: u8[][], bodyLength: i32): i32 -> @nish.Http1Connection.respond [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: bodyLength status
   calls: nish.Http1Connection.answerable nish.Http1Connection.begin nish.Http1Connection.bodyRoom nish.Http1Connection.keepHead nish.Http1Connection.sameHead nish.Http1Parser.methodIs nish.HttpDate.current nish.HttpDate.formats nish.copyBytes nish.http1ServerReason nish.http1ServerReserved nish.http1WriteResponseHead nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.sameHead#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.begin#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.keepHead#0 nish.Http1Connection.begin#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.sameHead#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.begin#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.keepHead#0 nish.Http1Connection.begin#0
   pointer names: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#2 nish.http1WriteResponseHead#4 nish.Http1Connection.keepHead#5
   pointer values: size=0 writesThrough=true captured=false passedTo=nish.Http1Connection.sameHead#3 nish.http1WriteResponseHead#5 nish.Http1Connection.keepHead#6
   stackSites=0 stackLocals=0
@@ -766,12 +791,12 @@ function Http1Connection.begin(this: Http1Connection, close: boolean, framing: i
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: close empty framing
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.sameHead(this: Http1Connection, status: i32, names: u8[][], values: u8[][], framing: i32, connection: i32): boolean -> @nish.Http1Connection.sameHead [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.HttpDate.formats nish.http1ServerKept nish_panic_index nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -791,7 +816,7 @@ function Http1Connection.keepHead(this: Http1Connection, start: i32, end: i32, s
   sharedWrite: +0:5
   escaping: connection framing start status
   calls: nish.HttpDate.formats nish.copyBytes nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -806,7 +831,7 @@ function Http1Connection.write(this: Http1Connection, buf: readonly u8[], off: i
   sharedWrite: +0:7
   escaping: len off
   calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.http1ServerCopy nish.http1WriteChunk nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.http1WriteChunk#2 nish.http1ServerCopy#2
   stackSites=0 stackLocals=0
   callee -21:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -821,7 +846,7 @@ function Http1Connection.sendBody(this: Http1Connection, buf: readonly u8[], off
   sharedWrite: +0:7
   escaping: len off
   calls: nish.Http1Connection.abort nish.Http1Connection.consume nish.Http1Connection.release nish.Http1Connection.write nish.http1ServerCheckWindow nish_monotonic_nanos nish_net_write2 nish_panic_overflow nish_panic_slice
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.consume#0 nish.Http1Connection.write#0 nish.Http1Connection.release#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.consume#0 nish.Http1Connection.write#0 nish.Http1Connection.release#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.Http1Connection.write#1 nish.Http1Connection.write#1
   stackSites=0 stackLocals=0
   callee -22:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -838,27 +863,27 @@ function Http1Connection.end(this: Http1Connection): i32 -> @nish.Http1Connectio
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Http1Connection.bodyRoom nish.http1WriteLastChunk
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
   stackSites=0 stackLocals=0
   callee +8:11 Http1Connection.bodyRoom -> @nish.Http1Connection.bodyRoom
   callee +12:24 http1WriteLastChunk -> @nish.http1WriteLastChunk
 function Http1Connection.acceptEncoding(this: Http1Connection): i32 -> @nish.Http1Connection.acceptEncoding [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.acceptEncodingOf
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Http1Connection.acceptEncodingOf#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.Http1Connection.acceptEncodingOf#0
   stackSites=0 stackLocals=0
   callee +0:12 Http1Connection.acceptEncodingOf -> @nish.Http1Connection.acceptEncodingOf
 function Http1Connection.identityRefused(this: Http1Connection): boolean -> @nish.Http1Connection.identityRefused [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.Http1Connection.acceptEncodingOf
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Http1Connection.acceptEncodingOf#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.Http1Connection.acceptEncodingOf#0
   stackSites=0 stackLocals=0
   callee +0:12 Http1Connection.acceptEncodingOf -> @nish.Http1Connection.acceptEncodingOf
 function Http1Connection.acceptEncodingOf(this: Http1Connection, offered: i32): i32 -> @nish.Http1Connection.acceptEncodingOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: offered
   calls: nish.Http1Parser.headerIndex nish.httpAcceptEncoding nish_panic_index nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 parser: Http1Parser (const)
   local +1:11 i: i32 (const)
@@ -869,7 +894,7 @@ function Http1Connection.acceptEncodingOf(this: Http1Connection, offered: i32): 
   callee +11:12 httpAcceptEncoding -> @nish.httpAcceptEncoding
 function Http1Connection.segmentMss(this: Http1Connection, enc: HttpCompressor): i32 -> @nish.Http1Connection.segmentMss [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   pointer enc: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.respondEncoded(this: Http1Connection, status: i32, names: u8[][], values: u8[][], body: u8[], off: i32, len: i32, enc: HttpCompressor, coding: i32): i32 -> @nish.Http1Connection.respondEncoded [exported method]
@@ -877,7 +902,7 @@ function Http1Connection.respondEncoded(this: Http1Connection, status: i32, name
   sharedWrite: +0:7
   escaping: coding len off status
   calls: nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.Http1Connection.end nish.Http1Connection.identityRefused nish.Http1Connection.respond nish.Http1Connection.room nish.Http1Connection.segmentMss nish.Http1Connection.unrespond nish.Http1Connection.write nish.HttpCompressor.addFields nish.HttpCompressor.compress nish.HttpCompressor.compressAnyway nish.HttpCompressor.fewerSegments nish.HttpCompressor.http1IdentityHead nish.HttpCompressor.identityFields nish.HttpCompressor.oneSegment nish.HttpCompressor.segmentSize nish.http1ServerCheckWindow nish_panic nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.identityRefused#0 nish.Http1Connection.room#0 nish.Http1Connection.segmentMss#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.identityRefused#0 nish.Http1Connection.room#0 nish.Http1Connection.segmentMss#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.respond#0 nish.Http1Connection.bodyRoom#0 nish.Http1Connection.unrespond#0 nish.Http1Connection.write#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.identityFields#1 nish.HttpCompressor.addFields#1 nish.HttpCompressor.identityFields#1 nish.HttpCompressor.identityFields#1
   pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpCompressor.identityFields#2 nish.HttpCompressor.addFields#2 nish.HttpCompressor.identityFields#2 nish.HttpCompressor.identityFields#2
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.HttpCompressor.compressAnyway#2 nish.HttpCompressor.compress#2 nish.Http1Connection.write#1
@@ -924,14 +949,14 @@ function Http1Connection.unrespond(this: Http1Connection, outputEnd: i32, closeA
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: closeAfter outputEnd
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.acceptWebSocket(this: Http1Connection, protocol: string): i32 -> @nish.Http1Connection.acceptWebSocket [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: protocol
   calls: nish.Http1Connection.acceptStorage nish.Http1Connection.answerable nish.Http1Connection.bodyRoom nish.WsAcceptKey.compute nish.websocketRequestKeyField nish.websocketWriteUpgradeResponse nish_panic_index nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.acceptStorage#0 nish.Http1Connection.bodyRoom#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.answerable#0 nish.Http1Connection.acceptStorage#0 nish.Http1Connection.bodyRoom#0
   stackSites=0 stackLocals=0
   callee -21:10 Http1Connection.answerable -> @nish.Http1Connection.answerable
   local -18:11 p: Http1Parser (const)
@@ -949,7 +974,7 @@ function Http1Connection.acceptStorage(this: Http1Connection): WsAcceptKey -> @n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: +0:5
   calls: nish.WsAcceptKey.constructor nish_alloc_struct
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 made: WsAcceptKey | null (const)
   local -1:11 fresh: WsAcceptKey (const)
@@ -959,7 +984,7 @@ function Http1Connection.sendFrame(this: Http1Connection, fin: boolean, opcode: 
   sharedWrite: +0:7
   escaping: fin len off opcode
   calls: nish.Http1Connection.bodyRoom nish.http1ServerCheckWindow nish.websocketFrameSize nish.websocketWriteFrame nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.bodyRoom#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.http1ServerCheckWindow#1 nish.websocketWriteFrame#4
   stackSites=0 stackLocals=0
   callee -8:5 http1ServerCheckWindow -> @nish.http1ServerCheckWindow
@@ -972,25 +997,25 @@ function Http1Connection.closeWebSocket(this: Http1Connection, code: i32): i32 -
   sharedWrite: +0:5
   escaping: code
   calls: nish.Http1Connection.sendClose nish.websocketClosePayload
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.sendClose#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.sendClose#0
   stackSites=0 stackLocals=0
   callee -4:9 websocketClosePayload -> @nish.websocketClosePayload
   callee -1:5 Http1Connection.sendClose -> @nish.Http1Connection.sendClose
 function Http1Connection.isWebSocket(this: Http1Connection): boolean -> @nish.Http1Connection.isWebSocket [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.idle(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.idle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.headArrived(this: Http1Connection, now: i64): void -> @nish.Http1Connection.headArrived [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.headAwaited
   escaping: now
   calls: nish.Http1Connection.headAwaited nish.Http1Parser.buffered
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.headAwaited#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.headAwaited#0
   stackSites=0 stackLocals=0
   callee +0:9 Http1Parser.buffered -> @nish.Http1Parser.buffered
   callee +1:7 Http1Connection.headAwaited -> @nish.Http1Connection.headAwaited
@@ -998,41 +1023,41 @@ function Http1Connection.headAwaited(this: Http1Connection, now: i64): void -> @
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: now
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.headLate(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.headLate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.lingerStart(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.lingerStart [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now
   calls: nish.Http1Connection.isDone
-  pointer this: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.isDone#0
+  pointer this: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.isDone#0
   stackSites=0 stackLocals=0
   callee -4:8 Http1Connection.isDone -> @nish.Http1Connection.isDone
 function Http1Connection.lingering(this: Http1Connection): boolean -> @nish.Http1Connection.lingering [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.drained(this: Http1Connection, n: i32): boolean -> @nish.Http1Connection.drained [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=true captured=false
+  pointer this: size=296 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.lingerLate(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.lingerLate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Connection.expired(this: Http1Connection, now: i64): boolean -> @nish.Http1Connection.expired [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.Http1Connection.headLate nish.Http1Connection.idle nish.Http1Connection.lingerLate
-  pointer this: size=288 writesThrough=false captured=false passedTo=nish.Http1Connection.idle#0 nish.Http1Connection.headLate#0 nish.Http1Connection.lingerLate#0
+  pointer this: size=296 writesThrough=false captured=false passedTo=nish.Http1Connection.idle#0 nish.Http1Connection.headLate#0 nish.Http1Connection.lingerLate#0
   stackSites=0 stackLocals=0
   callee +0:12 Http1Connection.idle -> @nish.Http1Connection.idle
   callee +0:30 Http1Connection.headLate -> @nish.Http1Connection.headLate
@@ -1041,7 +1066,7 @@ function Http1Connection.expiresNoSooner(this: Http1Connection, now: i64): i64 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish_panic_overflow
-  pointer this: size=288 writesThrough=false captured=false
+  pointer this: size=296 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 idle: i64 (const)
   local +1:9 start: i64 (let)
@@ -1059,7 +1084,7 @@ function Http1Server.constructor(this: Http1Server, config: Http1Config, listene
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: config listener size
   calls: nish.Http1OutputPool.constructor nish.HttpDate.constructor nish_alloc_struct nish_panic
-  pointer this: size=112 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   pointer config: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:20 new Http1OutputPool -> @nish.Http1OutputPool.constructor
@@ -1067,66 +1092,99 @@ function Http1Server.constructor(this: Http1Server, config: Http1Config, listene
   callee +2:18 new Http1OutputPool -> @nish.Http1OutputPool.constructor
   callee +3:17 new HttpDate -> @nish.HttpDate.constructor
 function Http1Server.build(this: Http1Server): Http1Connection -> @nish.Http1Server.build [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
   sharedWrite: +0:5
   calls: nish.Http1Connection.constructor nish_alloc_struct nish_array_grow
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -6:11 conn: Http1Connection (const)
   callee -6:35 new Http1Connection -> @nish.Http1Connection.constructor
 function Http1Server.size(this: Http1Server): i32 -> @nish.Http1Server.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Server.busy(this: Http1Server): i32 -> @nish.Http1Server.busy [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (let)
   local +1:16 fd: i32 (const)
 function Http1Server.holds(this: Http1Server, slot: i32): boolean -> @nish.Http1Server.holds [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
-  pointer this: size=112 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Http1Server.fd(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.fd [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.Http1Server.holds nish_panic_index
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
   stackSites=0 stackLocals=0
   callee +0:12 Http1Server.holds -> @nish.Http1Server.holds
 function Http1Server.connection(this: Http1Server, slot: i32): Http1Connection -> @nish.Http1Server.connection [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
-  sharedWrite: via nish.Http1Server.build
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
+  sharedWrite: via nish.Http1Server.attach
   escaping: slot
-  calls: nish.Http1Server.build
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.build#0
+  calls: nish.Http1Server.attach nish.Http1Server.build nish.Http1Server.holds
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.attach#0 nish.Http1Server.build#0
   stackSites=0 stackLocals=0
-  callee +0:64 Http1Server.build -> @nish.Http1Server.build
+  callee +0:9 Http1Server.holds -> @nish.Http1Server.holds
+  callee +1:14 Http1Server.attach -> @nish.Http1Server.attach
+  callee +3:64 Http1Server.build -> @nish.Http1Server.build
+function Http1Server.resting(this: Http1Server, slot: i32): boolean -> @nish.Http1Server.resting [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: slot
+  calls: nish.Http1Server.holds nish_panic_index
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
+  stackSites=0 stackLocals=0
+  callee +0:12 Http1Server.holds -> @nish.Http1Server.holds
+function Http1Server.spares(this: Http1Server): i32 -> @nish.Http1Server.spares [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=160 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Http1Server.attach(this: Http1Server, slot: i32): Http1Connection -> @nish.Http1Server.attach [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
+  sharedWrite: +0:7
+  escaping: slot
+  calls: nish.Http1Connection.lendTo nish.Http1Server.build nish_panic_index
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.build#0
+  stackSites=0 stackLocals=0
+  local -6:11 k: i32 (const)
+  local -2:11 j: i32 (const)
+  local +2:11 conn: Http1Connection (const)
+  callee +2:66 Http1Server.build -> @nish.Http1Server.build
+  callee +7:5 Http1Connection.lendTo -> @nish.Http1Connection.lendTo
+function Http1Server.rest(this: Http1Server, slot: i32): void -> @nish.Http1Server.rest [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: slot
+  calls: nish.Http1Connection.rests nish_array_grow nish_panic_index
+  pointer this: size=160 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -8:11 k: i32 (const)
+  local -4:11 conn: Http1Connection (const)
+  callee -3:10 Http1Connection.rests -> @nish.Http1Connection.rests
 function Http1Server.accept(this: Http1Server): i32 -> @nish.Http1Server.accept [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:21
-  calls: nish.Http1Connection.restart nish.Http1Server.build nish_array_grow nish_monotonic_nanos nish_net_close nish_net_mss nish_panic_index nish_tcp_accept
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.build#0
+  calls: nish_array_grow nish_monotonic_nanos nish_net_close nish_net_mss nish_panic_index nish_panic_overflow nish_tcp_accept
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 fd: i32 (const)
   local +7:9 k: i32 (let)
-  local +20:11 conn: Http1Connection (const)
-  callee +20:94 Http1Server.build -> @nish.Http1Server.build
-  callee +23:5 Http1Connection.restart -> @nish.Http1Connection.restart
-  local +27:11 mss: i32 (const)
+  local +41:11 mss: i32 (const)
 function Http1Server.readable(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.readable [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
   escaping: slot
-  calls: nish.Http1Connection.abort nish.Http1Connection.endInput nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Server.holds nish.Http1Server.settle nish.HttpDate.hold nish_monotonic_nanos nish_net_read nish_panic_index nish_panic_slice
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.settle#0
+  calls: nish.Http1Connection.abort nish.Http1Connection.endInput nish.Http1Connection.feed nish.Http1Connection.headArrived nish.Http1Connection.inputRoom nish.Http1Server.attach nish.Http1Server.holds nish.Http1Server.settle nish.HttpDate.hold nish_monotonic_nanos nish_net_read nish_panic_index nish_panic_slice
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.attach#0 nish.Http1Server.settle#0
   stackSites=0 stackLocals=0
   callee -13:10 Http1Server.holds -> @nish.Http1Server.holds
   callee -10:5 HttpDate.hold -> @nish.HttpDate.hold
   local -9:11 conn: Http1Connection (const)
+  callee -9:35 Http1Server.attach -> @nish.Http1Server.attach
   local -8:11 fd: i32 (const)
   local -7:9 moved: boolean (let)
   local -5:13 room: i32 (const)
@@ -1144,7 +1202,7 @@ function Http1Server.writable(this: Http1Server, slot: i32): i32 -> @nish.Http1S
   sharedWrite: via nish.HttpDate.hold
   escaping: slot
   calls: nish.Http1Server.holds nish.Http1Server.settle nish.HttpDate.hold
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.settle#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.settle#0
   stackSites=0 stackLocals=0
   callee +0:10 Http1Server.holds -> @nish.Http1Server.holds
   callee +3:5 HttpDate.hold -> @nish.HttpDate.hold
@@ -1154,38 +1212,41 @@ function Http1Server.next(this: Http1Server, slot: i32): i32 -> @nish.Http1Serve
   sharedWrite: via nish.Http1Server.send
   escaping: slot
   calls: nish.Http1Connection.lingering nish.Http1Connection.next nish.Http1Server.holds nish.Http1Server.send nish_panic_index
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.send#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.send#0
   stackSites=0 stackLocals=0
   callee +0:10 Http1Server.holds -> @nish.Http1Server.holds
-  local +3:11 conn: Http1Connection (const)
-  callee +4:9 Http1Connection.lingering -> @nish.Http1Connection.lingering
-  callee +9:7 Http1Server.send -> @nish.Http1Server.send
-  callee +11:12 Http1Connection.next -> @nish.Http1Connection.next
+  local +7:11 conn: Http1Connection (const)
+  callee +8:9 Http1Connection.lingering -> @nish.Http1Connection.lingering
+  callee +13:7 Http1Server.send -> @nish.Http1Server.send
+  callee +15:12 Http1Connection.next -> @nish.Http1Connection.next
 function Http1Server.flush(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.flush [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: slot
-  calls: nish.Http1Connection.expiresNoSooner nish.Http1Connection.lingerStart nish.Http1Server.drain nish.Http1Server.holds nish.Http1Server.settle nish.HttpDate.unhold nish_monotonic_nanos nish_net_shutdown nish_panic_index
-  pointer this: size=112 writesThrough=true captured=false passedTo=nish.Http1Server.settle#0 nish.Http1Server.holds#0 nish.Http1Server.drain#0
+  calls: nish.Http1Connection.expiresNoSooner nish.Http1Connection.lingerStart nish.Http1Server.attach nish.Http1Server.drain nish.Http1Server.holds nish.Http1Server.rest nish.Http1Server.settle nish.HttpDate.unhold nish_monotonic_nanos nish_net_shutdown nish_panic_index
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Http1Server.settle#0 nish.Http1Server.holds#0 nish.Http1Server.rest#0 nish.Http1Server.attach#0 nish.Http1Server.drain#0
   stackSites=0 stackLocals=0
-  callee -16:5 HttpDate.unhold -> @nish.HttpDate.unhold
-  local -15:11 wants: i32 (const)
-  callee -15:24 Http1Server.settle -> @nish.Http1Server.settle
-  callee -14:31 Http1Server.holds -> @nish.Http1Server.holds
+  callee -20:5 HttpDate.unhold -> @nish.HttpDate.unhold
+  local -19:11 wants: i32 (const)
+  callee -19:24 Http1Server.settle -> @nish.Http1Server.settle
+  callee -18:10 Http1Server.holds -> @nish.Http1Server.holds
+  callee -14:7 Http1Server.rest -> @nish.Http1Server.rest
   local -7:11 now: i64 (const)
   local -6:11 conn: Http1Connection (const)
+  callee -6:35 Http1Server.attach -> @nish.Http1Server.attach
   callee -5:10 Http1Connection.lingerStart -> @nish.Http1Connection.lingerStart
   local -2:11 deadline: i64 (const)
   callee -2:27 Http1Connection.expiresNoSooner -> @nish.Http1Connection.expiresNoSooner
   callee +2:12 Http1Server.drain -> @nish.Http1Server.drain
 function Http1Server.drain(this: Http1Server, slot: i32): i32 -> @nish.Http1Server.drain [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:22
   escaping: slot
-  calls: nish.Http1Connection.drained nish_net_read nish_panic_index nish_panic_slice
-  pointer this: size=112 writesThrough=false captured=false
+  calls: nish.Http1Connection.drained nish.Http1Server.attach nish_net_read nish_panic_index nish_panic_slice
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.attach#0
   stackSites=0 stackLocals=0
   local -3:11 conn: Http1Connection (const)
+  callee -3:35 Http1Server.attach -> @nish.Http1Server.attach
   local -2:11 fd: i32 (const)
   local +0:13 n: i32 (const)
   callee +4:22 Http1Connection.drained -> @nish.Http1Connection.drained
@@ -1194,26 +1255,27 @@ function Http1Server.settle(this: Http1Server, slot: i32): i32 -> @nish.Http1Ser
   sharedWrite: via nish.Http1Server.drain
   escaping: slot
   calls: nish.Http1Connection.inputRoom nish.Http1Connection.isDone nish.Http1Connection.lingering nish.Http1Connection.park nish.Http1Connection.wantsWrite nish.Http1Server.drain nish.Http1Server.holds nish.Http1Server.send nish_panic_index
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.drain#0 nish.Http1Server.send#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0 nish.Http1Server.drain#0 nish.Http1Server.send#0
   stackSites=0 stackLocals=0
   callee +0:10 Http1Server.holds -> @nish.Http1Server.holds
-  local +3:11 conn: Http1Connection (const)
-  callee +4:9 Http1Connection.lingering -> @nish.Http1Connection.lingering
-  callee +5:14 Http1Server.drain -> @nish.Http1Server.drain
-  callee +7:5 Http1Server.send -> @nish.Http1Server.send
-  callee +8:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
-  callee +11:5 Http1Connection.park -> @nish.Http1Connection.park
-  local +12:9 wants: i32 (let)
-  callee +13:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
-  callee +16:9 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
+  local +7:11 conn: Http1Connection (const)
+  callee +8:9 Http1Connection.lingering -> @nish.Http1Connection.lingering
+  callee +9:14 Http1Server.drain -> @nish.Http1Server.drain
+  callee +11:5 Http1Server.send -> @nish.Http1Server.send
+  callee +12:9 Http1Connection.isDone -> @nish.Http1Connection.isDone
+  callee +15:5 Http1Connection.park -> @nish.Http1Connection.park
+  local +16:9 wants: i32 (let)
+  callee +17:9 Http1Connection.inputRoom -> @nish.Http1Connection.inputRoom
+  callee +20:9 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
 function Http1Server.send(this: Http1Server, slot: i32): void -> @nish.Http1Server.send [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: slot
-  calls: nish.Http1Connection.abort nish.Http1Connection.consume nish.Http1Connection.release nish.Http1Connection.wantsWrite nish_monotonic_nanos nish_net_write nish_panic_index nish_panic_overflow nish_panic_slice
-  pointer this: size=112 writesThrough=false captured=false
+  calls: nish.Http1Connection.abort nish.Http1Connection.consume nish.Http1Connection.release nish.Http1Connection.wantsWrite nish.Http1Server.attach nish_monotonic_nanos nish_net_write nish_panic_index nish_panic_overflow nish_panic_slice
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.attach#0
   stackSites=0 stackLocals=0
   local -14:11 conn: Http1Connection (const)
+  callee -14:35 Http1Server.attach -> @nish.Http1Server.attach
   local -13:11 fd: i32 (const)
   local -12:11 pending: i32 (const)
   callee -11:12 Http1Connection.wantsWrite -> @nish.Http1Connection.wantsWrite
@@ -1226,7 +1288,7 @@ function Http1Server.rearm(this: Http1Server, slot: i32, wants: i32): boolean ->
   sharedWrite: +0:5
   escaping: slot
   calls: nish.Http1Server.holds nish_panic_index
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
   stackSites=0 stackLocals=0
   local -4:11 interest: i32 (const)
   callee -3:10 Http1Server.holds -> @nish.Http1Server.holds
@@ -1234,27 +1296,35 @@ function Http1Server.close(this: Http1Server, slot: i32): void -> @nish.Http1Ser
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: slot
-  calls: nish.Http1Connection.abort nish.Http1Server.holds nish_array_grow nish_net_close nish_panic_index
-  pointer this: size=112 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
+  calls: nish.Http1Connection.abort nish.Http1Connection.restart nish.Http1Server.holds nish_array_grow nish_net_close nish_panic_index
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Http1Server.holds#0
   stackSites=0 stackLocals=0
   callee -4:10 Http1Server.holds -> @nish.Http1Server.holds
-  callee +3:7 Http1Connection.abort -> @nish.Http1Connection.abort
+  local +3:13 k: i32 (const)
+  local +4:13 conn: Http1Connection (const)
+  callee +5:7 Http1Connection.abort -> @nish.Http1Connection.abort
+  callee +6:7 Http1Connection.restart -> @nish.Http1Connection.restart
 function Http1Server.expire(this: Http1Server, now: i64): i32 -> @nish.Http1Server.expire [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: now
-  calls: nish.Http1Connection.expired nish.Http1Connection.expiresNoSooner nish.Http1Server.close nish.http1ExpireFloor nish_panic_overflow
-  pointer this: size=112 writesThrough=true captured=false passedTo=nish.Http1Server.close#0
+  calls: nish.Http1Connection.expired nish.Http1Connection.expiresNoSooner nish.Http1Server.close nish.http1ExpireFloor nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Http1Server.close#0 nish.Http1Server.close#0
   stackSites=0 stackLocals=0
   local +1:9 soonest: i64 (let)
   callee +1:24 http1ExpireFloor -> @nish.http1ExpireFloor
   local +2:9 n: i32 (let)
-  local +3:14 k: i32 (let)
-  local +5:15 conn: Http1Connection (const)
-  callee +6:13 Http1Connection.expired -> @nish.Http1Connection.expired
-  callee +7:11 Http1Server.close -> @nish.Http1Server.close
-  callee +9:20 Http1Connection.expiresNoSooner -> @nish.Http1Connection.expiresNoSooner
-  callee +10:21 Http1Connection.expiresNoSooner -> @nish.Http1Connection.expiresNoSooner
+  local +3:11 idle: i64 (const)
+  local +4:11 head: i64 (const)
+  local +6:11 k: i32 (let)
+  local +11:15 j: i32 (const)
+  local +15:17 since: i64 (const)
+  callee +17:13 Http1Server.close -> @nish.Http1Server.close
+  local +20:19 quiet: i64 (const)
+  callee +25:20 Http1Connection.expired -> @nish.Http1Connection.expired
+  callee +26:11 Http1Server.close -> @nish.Http1Server.close
+  callee +28:20 Http1Connection.expiresNoSooner -> @nish.Http1Connection.expiresNoSooner
+  callee +29:21 Http1Connection.expiresNoSooner -> @nish.Http1Connection.expiresNoSooner
 function Http1TlsServer.constructor(this: Http1TlsServer, tlsConfig: TlsServerConfig, config: Http1Config, listener: i32, size: i32): void -> @nish.Http1TlsServer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.TlsTcpServer.constructor
@@ -1270,7 +1340,7 @@ function Http1TlsServer.constructor(this: Http1TlsServer, tlsConfig: TlsServerCo
   callee +4:18 new Http1OutputPool -> @nish.Http1OutputPool.constructor
   callee +5:17 new HttpDate -> @nish.HttpDate.constructor
 function Http1TlsServer.build(this: Http1TlsServer): Http1Connection -> @nish.Http1TlsServer.build [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
   sharedWrite: +0:5
   calls: nish.Http1TlsServer.make nish_array_grow
   pointer this: size=88 writesThrough=false captured=false passedTo=nish.Http1TlsServer.make#0
@@ -1278,7 +1348,7 @@ function Http1TlsServer.build(this: Http1TlsServer): Http1Connection -> @nish.Ht
   local -1:11 conn: Http1Connection (const)
   callee -1:35 Http1TlsServer.make -> @nish.Http1TlsServer.make
 function Http1TlsServer.make(this: Http1TlsServer): Http1Connection -> @nish.Http1TlsServer.make [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
   sharedWrite: via nish.Http1Connection.constructor
   calls: nish.Http1Connection.constructor nish_alloc_struct
   pointer this: size=88 writesThrough=false captured=false
@@ -1319,7 +1389,7 @@ function Http1TlsServer.live(this: Http1TlsServer, slot: i32): boolean -> @nish.
   stackSites=0 stackLocals=0
   callee +0:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
 function Http1TlsServer.connection(this: Http1TlsServer, slot: i32): Http1Connection -> @nish.Http1TlsServer.connection [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=288
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=296
   sharedWrite: +0:5
   escaping: slot
   calls: nish.Http1TlsServer.make nish.TlsTcpServer.size
@@ -33847,15 +33917,15 @@ struct Served (class) size=40 align=8
   field values: u8[][] index=4 offset=32
   constructor -> @Served.constructor
 function bytesOf(s: string): u8[] -> @bytesOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 k: i32 (let)
 function Served.constructor(this: Served, file: i32, size: i64): void -> @Served.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: file size
-  calls: bytesOf nish_panic
+  calls: bytesOf
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:19 bytesOf -> @bytesOf
@@ -33864,16 +33934,16 @@ function pump(conn: Http1Connection, served: Served, at: i64): i64 -> @pump
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:20
   escaping: at
-  calls: nish.Http1Connection.abort nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.methodIs nish_file_read_at nish_panic_overflow nish_panic_slice
-  pointer conn: size=288 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0 nish.Http1Connection.abort#0 nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0
+  calls: nish.Http1Connection.abort nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.methodIs nish_file_read_at nish_panic_slice
+  pointer conn: size=296 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0 nish.Http1Connection.abort#0 nish.Http1Connection.write#0 nish.Http1Connection.abort#0 nish.Http1Connection.end#0
   pointer served: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -19:7 pos: i64 (let)
-  local -17:11 head: i32 (const)
-  callee -17:23 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee -12:7 Http1Connection.abort -> @nish.Http1Connection.abort
-  callee -9:9 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  callee -8:7 Http1Connection.end -> @nish.Http1Connection.end
+  local -21:7 pos: i64 (let)
+  local -19:11 head: i32 (const)
+  callee -19:23 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee -14:7 Http1Connection.abort -> @nish.Http1Connection.abort
+  callee -11:9 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee -10:7 Http1Connection.end -> @nish.Http1Connection.end
   local -2:11 left: i64 (const)
   local -1:11 want: i32 (const)
   local +0:11 n: i32 (const)
@@ -33886,39 +33956,40 @@ function serve(served: Served, listener: i32): i32 -> @serve
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_create
   escaping: listener
-  calls: nish.Http1Server.accept nish.Http1Server.close nish.Http1Server.connection nish.Http1Server.constructor nish.Http1Server.fd nish.Http1Server.flush nish.Http1Server.holds nish.Http1Server.next nish.Http1Server.readable nish.Http1Server.rearm nish.Http1Server.size nish.Http1Server.writable nish_alloc_struct nish_panic nish_panic_index nish_panic_overflow nish_poll_add nish_poll_create nish_poll_modify nish_poll_wait pump
+  calls: nish.Http1Server.accept nish.Http1Server.close nish.Http1Server.connection nish.Http1Server.constructor nish.Http1Server.fd nish.Http1Server.flush nish.Http1Server.holds nish.Http1Server.next nish.Http1Server.readable nish.Http1Server.rearm nish.Http1Server.size nish.Http1Server.writable nish_alloc_struct nish_array_grow nish_poll_add nish_poll_create nish_poll_modify nish_poll_wait pump
   pointer served: size=40 writesThrough=false captured=false passedTo=pump#1 pump#1
-  stackSites=2 stackLocals=2
+  stackSites=3 stackLocals=3
   local +0:9 server: Http1Server (const)
   callee +0:18 new Http1Server -> @nish.Http1Server.constructor
   local +1:9 at: i64[] (const)
-  callee +1:36 Http1Server.size -> @nish.Http1Server.size
   local +2:12 k: i32 (let)
+  callee +2:28 Http1Server.size -> @nish.Http1Server.size
   local +5:9 loop: i32 (const)
   local +6:9 ready: i32[] (const)
   local +11:11 n: i32 (const)
-  local +12:14 k: i32 (let)
-  local +13:13 slot: i32 (const)
-  local +15:13 next: i32 (let)
-  callee +15:25 Http1Server.accept -> @nish.Http1Server.accept
-  callee +19:27 Http1Server.fd -> @nish.Http1Server.fd
-  callee +21:18 Http1Server.accept -> @nish.Http1Server.accept
-  callee +23:18 Http1Server.holds -> @nish.Http1Server.holds
-  callee +26:11 Http1Server.readable -> @nish.Http1Server.readable
-  callee +28:11 Http1Server.writable -> @nish.Http1Server.writable
-  local +30:13 pos: i64 (let)
-  local +34:13 event: i32 (let)
-  callee +34:26 Http1Server.next -> @nish.Http1Server.next
-  callee +37:19 pump -> @pump
-  callee +37:24 Http1Server.connection -> @nish.Http1Server.connection
-  callee +39:19 pump -> @pump
-  callee +39:24 Http1Server.connection -> @nish.Http1Server.connection
-  callee +41:19 Http1Server.next -> @nish.Http1Server.next
-  local +46:15 wants: i32 (const)
-  callee +46:28 Http1Server.flush -> @nish.Http1Server.flush
-  callee +48:11 Http1Server.close -> @nish.Http1Server.close
-  callee +49:20 Http1Server.rearm -> @nish.Http1Server.rearm
-  callee +50:28 Http1Server.fd -> @nish.Http1Server.fd
+  local +14:14 k: i32 (let)
+  local +15:13 word: i32 (const)
+  local +19:13 slot: i32 (const)
+  local +21:13 next: i32 (let)
+  callee +21:25 Http1Server.accept -> @nish.Http1Server.accept
+  callee +25:27 Http1Server.fd -> @nish.Http1Server.fd
+  callee +27:18 Http1Server.accept -> @nish.Http1Server.accept
+  callee +29:18 Http1Server.holds -> @nish.Http1Server.holds
+  callee +32:11 Http1Server.readable -> @nish.Http1Server.readable
+  callee +34:11 Http1Server.writable -> @nish.Http1Server.writable
+  local +36:13 pos: i64 (let)
+  local +40:13 event: i32 (let)
+  callee +40:26 Http1Server.next -> @nish.Http1Server.next
+  callee +43:19 pump -> @pump
+  callee +43:24 Http1Server.connection -> @nish.Http1Server.connection
+  callee +45:19 pump -> @pump
+  callee +45:24 Http1Server.connection -> @nish.Http1Server.connection
+  callee +47:19 Http1Server.next -> @nish.Http1Server.next
+  local +52:15 wants: i32 (const)
+  callee +52:28 Http1Server.flush -> @nish.Http1Server.flush
+  callee +54:11 Http1Server.close -> @nish.Http1Server.close
+  callee +55:20 Http1Server.rearm -> @nish.Http1Server.rearm
+  callee +56:28 Http1Server.fd -> @nish.Http1Server.fd
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print

@@ -51,7 +51,7 @@ function holdsPointer(emitter: Emitter, type: i32): boolean -> @holdsPointer
   callee +2:48 TypeTable.isUnion -> @TypeTable.isUnion
   callee +2:68 TypeTable.isStruct -> @TypeTable.isStruct
 function rootStructOf(emitter: Emitter, type: i32): StructInfo -> @rootStructOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: via nish_exit
   escaping: type
   calls: CheckedProgram.struct TypeTable.nameOf TypeTable.typeName internalErrorFor nish_exit nish_str_concat
