@@ -25671,9 +25671,16 @@ if (dealtHere("cliChecks")) {
     const onIr = compactIr("on", loopNode, [])
     const offIr = compactIr("off", loopNode, ["--compact", "off"])
     const wideIr = compactIr("wide", wideNode, [])
+    // The narrowed `L` is three `i32`s, 12 bytes; under `--compact off` its
+    // two links are full pointers again. `W` is wide in both.
     check(
       "explain layout: the default build narrows loopNode's L, and --compact off does not",
-      onIr.ir !== null && offIr.ir !== null && onIr.ir !== offIr.ir,
+      onIr.ir !== null &&
+        offIr.ir !== null &&
+        onIr.ir.includes("%struct.L = type { i32, i32, i32 }") &&
+        offIr.ir.includes("%struct.L = type { %struct.L*, %struct.L*, i32 }") &&
+        onIr.ir.includes("%struct.W = type { i64, i64, %struct.W* }") &&
+        offIr.ir.includes("%struct.W = type { i64, i64, %struct.W* }"),
       `${shown(onIr.r)}\n${shown(offIr.r)}`
     )
     check(
@@ -25745,6 +25752,34 @@ if (dealtHere("cliChecks")) {
         layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
       shown(layoutRun)
     )
+    // `nish run --compact off` builds the same program wide: the output is the
+    // same and the report refuses its one class before test 1.
+    const offRun = spawnSync(NISH, ["run", "--compact", "off", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "explain layout: `nish run --compact off` runs the program with no class compact",
+      offRun.status === 0 &&
+        offRun.stdout === "2097151\n8377899684\n" &&
+        offRun.stderr.includes(": off: --compact off, ") &&
+        offRun.stderr.includes("explain-layout: 0 of 1 classes compact"),
+      shown(offRun)
+    )
+    // `--compact` takes `on` or `off` and nothing else, under `nish run` too,
+    // and a missing word is the same usage error.
+    for (const args of [
+      [refusedSource, "--compact", "wide"],
+      [refusedSource, "--compact"],
+      ["run", "--compact", "maybe", refusedSource],
+    ]) {
+      const refused = spawnSync(NISH, args, { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: \`${args.filter((a) => a !== refusedSource).join(" ")}\` is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes("compile: --compact needs on or off"),
+        shown(refused)
+      )
+    }
     // The capability line stays the last thing on stderr (WP35): the report is
     // printed ahead of it.
     const layoutCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-layout", "bench/goose/tree.ts"], {

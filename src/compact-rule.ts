@@ -534,13 +534,6 @@ export class LayoutReport {
 }
 
 /**
- * The rule over `modules`, and the `--explain-layout` report of it: one line
- * per class, in module order and each module's source order, saying `compact`
- * or the first test that refuses it, with its size unnarrowed and narrowed,
- * and a summary line. `pointers` is why this build keeps every link a full
- * pointer though it is native (a page module, `NISH_ASAN`), or `""`.
- */
-/**
  * The smallest class test 3 narrows, in bytes. A 16-byte cell already packs
  * four to a cache line, and narrowed it measured slower, not faster: the
  * `bench/awfy` List cells by a median 27% and the `bench/goose/bintrees`
@@ -578,6 +571,19 @@ const madeInLoop = (graph: CallGraph, key: string): boolean => {
   return false
 }
 
+/**
+ * The rule over `modules`, and the `--explain-layout` report of it: one line
+ * per class, in module order and each module's source order, saying `compact`
+ * or the first test that refuses it, with its size unnarrowed and narrowed,
+ * and a summary line.
+ *
+ * @param opts the build's options, for `--compact off` and the target
+ * @param table the type table the classes' names and sizes are read from
+ * @param modules every checked module of the program
+ * @param pointers why this build keeps every link a full pointer though it is
+ *   native (a page module, `NISH_ASAN`), or `""`
+ * @returns the report's text, the count of classes and of those picked, and the picked classes
+ */
 export const explainLayout = (
   opts: Options,
   table: TypeTable,

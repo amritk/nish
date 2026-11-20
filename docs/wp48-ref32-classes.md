@@ -513,7 +513,7 @@ The rule (§3.1) run with `--explain-layout` over the nish-cmp corpus, every
 `tests/link` program, `bench/goose` and `bench/wp48-refs`, as `--link`
 builds. Before stage 3 no class was compact without `implements Compact`.
 
-| program | class | first rule (a quarter, `R` or a holder) | final rule |
+| program | class | #1736's rule (any saving, `R` or a holder) | final rule |
 | --- | --- | --- | --- |
 | `bench/goose/tree.ts` | `TNode` | 24 → 12 | 24 → 12 |
 | `bench/treesum.ts` | `TreeNode` | 24 → 12 | 24 → 12 |
@@ -524,7 +524,10 @@ builds. Before stage 3 no class was compact without `implements Compact`.
 | `tests/link/alias_export_nullable` | `Node` | 16 → 8 | refused, under 24 bytes |
 | `tests/link/std_json_typed` `keys.ts` | `Link` | 8 → 4 | refused, under 24 bytes |
 | `tests/link/std_compress*` | `Deflater` (held by `ZlibCompressor`) | holder 8 → 4 | refused, not `R` itself |
-| the compiler (`src/compile.ts`) | any | 0 of 291 | 0 of 291 |
+| `tests/link/std_json_value` | `JsonTokenizer` (held by `JsonDocument`) | holder 248 → 240 | refused, not `R` itself |
+| `tests/link/net_http_server*` | `HttpServerRequest` (held by `Taken`) | holder 24 → 16 | refused, not `R` itself |
+| `tests/link/net_http_server*` | `P256ProjectivePoint`, `QuicKeysSlot` (held by `P256PointScratch`, `QuicListener`) | holders only | refused, not `R` itself |
+| the compiler (`src/compile.ts`) | any | 19 of 291, all holder-only but `FunctionSig` 200 → 192 and `PanicSite` 56 → 48 | 0 of 291 |
 
 No `std/` class is picked, `std/crypto` included (ECC-9 in
 `docs/security/crypto-ecc.md`), so the compiler and every program that picks
@@ -543,12 +546,16 @@ per-round on/off ratio; its median and range are the noise band.
 | `treesum` | 11 | 0.5181 | 0.3974 | −23.8% | −31.4 .. −6.7% | 25.8 → 13.6 MB |
 | `wp48-refs/sibling` (1M, 4) | 11 | 0.0934 | 0.1003 | +5.6% | −18.0 .. +31.2% | 32.7 → 20.9 MB |
 | `wp48-refs/sibling` (4M, 4) | 9 | 0.4132 | 0.4132 | +0.4% | −10.4 .. +9.4% | 126.6 → 79.7 MB |
-| `awfy` List (20 × 1500), first rule | 11 + 9 | 0.4447 | 0.5507 | +26.9% | +5.5 .. +48.8% | 1.5 → 1.5 MB |
-| `goose/bintrees` (depth 17), first rule | 11 | 0.1175 | 0.1396 | +18.3% | −14.5 .. +64.1% | 9.4 → 5.4 MB |
-| `goose/bintrees` (depth 19), first rule | 9 | 0.5727 | 0.6446 | +18.8% | +1.8 .. +25.5% | 34.0 → 17.7 MB |
-| `awfy` Towers (20 × 600), first rule | 11 | 0.2912 | 0.2958 | +1.5% | −14.3 .. +56.5% | 1.6 → 1.5 MB |
+| `awfy` List (20 × 1500), #1736's rule | 11 + 9 | 0.4447 | 0.5507 | +26.9% | +5.5 .. +48.8% | 1.5 → 1.5 MB |
+| `goose/bintrees` (depth 17), #1736's rule | 11 | 0.1175 | 0.1396 | +18.3% | −14.5 .. +64.1% | 9.4 → 5.4 MB |
+| `goose/bintrees` (depth 19), #1736's rule | 9 | 0.5727 | 0.6446 | +18.8% | +1.8 .. +25.5% | 34.0 → 17.7 MB |
+| `awfy` Towers (20 × 600), #1736's rule | 11 | 0.2912 | 0.2958 | +1.5% | −14.3 .. +56.5% | 1.6 → 1.5 MB |
+| self-build (`src/compile.ts -o dir/`), #1736's rule | 9 | 2.660 | 2.574 | −2.7% | −10.3 .. +4.5% | 2026.9 → 2025.5 MB |
+| `compact-bench/json-doc` (700000), #1736's rule | 9 | 0.977 | 0.987 | +0.4% | −8.2 .. +3.9% | 86.7 → 172.4 MB |
+| `compact-bench/zlib-each` (2500), #1736's rule | 9 | 0.571 | 0.576 | +1.0% | −13.8 .. +8.2% | 865.2 → 856.6 MB |
+| `compact-bench/request-slot` (80000000), #1736's rule | 9 | 0.938 | 0.950 | +1.3% | −7.8 .. +26.2% | 1222.6 → 1222.4 MB |
 
-The first rule failed the gate: the `awfy` List cells ran slower in every
+#1736's rule failed the gate: the `awfy` List cells ran slower in every
 round, and `bintrees` at depth 19 in every round. Both are 16-byte cells,
 four to a cache line already: List's lists are short enough to stay in L1,
 so the widening on each hop is all cost, and `bintrees` frees each tree
@@ -557,11 +564,27 @@ before the next, so halving its nodes saves little traffic. Every 24- and
 24 bytes; the programs it refuses now build the same IR as `--compact off`,
 and of the three it keeps, `sibling`'s 1M run sits inside its band (which
 crosses zero) and its 4M run is even, while `treesum` gains 24% and `tree`
-43%, and both halve their peak RSS. A holder-only saving is not
-counted (§3.1): the one the corpus has, `Deflater`'s link in the 256-byte
-`ZlibCompressor`, is 8 bytes of one object per stream. The self-build,
-unchanged by either rule, ran 2.740 s with `--compact off` and 2.673 s with
-the rule on: identical IR, so that 2.5% is the run's own noise.
+43%, and both halve their peak RSS. A holder-only saving is not counted
+(§3.1), and the last four rows are why.
+They time #1736's rule (any saving, `R`'s own or a holder's) against
+`--compact off`, in nine rounds that alternate which side runs first, on the
+head compiler with test 3 set back to #1736's. No `bench/` program picks a
+class under that rule, so the three `tests/compact-bench/` programs are minimal
+benches written for this measurement, one per `std/` class the survey found
+holder-only: `json-doc` makes a `JsonTokenizer` each round and parses into one
+reused `JsonDocument`, `zlib-each` makes a `Deflater` each round beside one
+reused `ZlibCompressor`, and `request-slot` keeps a ring of 64 slots of its own
+(`Taken`'s shape) over `HttpServerRequest`s. Each prints the same checksum both
+ways, and the self-build writes the same 141 modules byte for byte. Every gap's
+range crosses zero: the self-build's −2.7% (19 classes picked, two of them
+shrinking themselves by 4% and 14%) and the three benches' +0.4% to +1.3% are
+noise. The memory goes the wrong way: `JsonTokenizer` in the loose build is
+heap-allocated (`nish_alloc_struct(i64 128)` in `json-doc`'s loop), where with
+`--compact off` the same `new` is an `alloca`, so `json-doc` keeps 128 more
+bytes a round and its peak RSS doubles. `ZlibCompressor`'s 4 bytes and
+`JsonDocument`'s 8 are one object each; the compiler's peak RSS moves by
+1.4 MB of 2 GB. The figures support the tightened test 3 (`R`'s own saving,
+at least 24 bytes, at least a quarter) as it stands.
 
 ## 6. Where the emitter changes
 
