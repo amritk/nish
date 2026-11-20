@@ -12,7 +12,8 @@ section.
 An object pattern reads fields of a class or interface value. Write a field's
 name to bind it under that name, or `field: name` to rename it:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Point {
   x: i32;
   y: i32;
@@ -45,7 +46,8 @@ side once.
 An array pattern reads elements by their position. Leave a position empty to
 skip it:
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const xs: i32[] = [10, 20, 30];
 let [a, , c] = xs;
 a = a + 1;
@@ -59,7 +61,8 @@ of its type.
 
 ## In a `for...of`
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Point {
   x: i32;
   y: i32;
@@ -108,7 +111,8 @@ to write it instead:
   A module constant is a compile-time value the compiler folds into each
   use, so there is no receiver at run time for a pattern to read.
 
-```ts nish:err-body NL2775
+<!-- nish:err-body NL2775 -->
+```ts
 const [first, ...rest] = [1, 2, 3];
 console.log(`${first}`);
 ```

@@ -130,7 +130,8 @@ are one node per line, which is to say diffable.
 
 ## A whole program
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const gcd = (a: i32, b: i32): i32 => {
   let x = a;
   let y = b;
@@ -202,7 +203,7 @@ rejects. This table is the highest-value part of the page.
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
 | `[a, b] = [b, a]`, `const { x = 0 } = p`, `({ x }: Point) =>`, `(n?: i32)`, `(n = 1)`, `f(...xs)` | `Destructuring assignment is not supported` / `A default in a destructuring pattern is not supported` / `Destructured parameters are not supported` / `Optional parameters are not supported` / `` Parameter `n` has a default and no type annotation `` / `Spread arguments are not supported` | one name per binding; `n: i32 = 1` (a constant or an earlier parameter) for a default, `o: Opts | null = null` for an options argument; `...ns: i32[]` as the last parameter, or pass the array itself |
 | `const { a, b } = config` at module level | `Destructured constants are not supported` | one module `const` per name (a module constant is a compile-time value folded into each use, with nothing at run time for a pattern to read), or destructure inside a function |
-| `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body |
+| `function f(): void;` (an overload), `export default function ()` | `Functions must have a body` / `Functions must be named` | one named function, with its body (overload signatures compile under [the compatibility dialect](guide/using-nish/compat.md)'s `overloads` feature) |
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, a `declare class` with methods, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class Point` cannot have a method or accessor `` (a `declare class` is a C struct: fields only) / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
@@ -225,14 +226,16 @@ rejects. This table is the highest-value part of the page.
 
 A worked pair. This is the single most common rejection:
 
-```ts nish:err-body NL2188
+<!-- nish:err-body NL2188 -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length) {
   console.log("non-empty");
 }
 ```
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length !== 0) {
   console.log("non-empty");
@@ -256,7 +259,8 @@ only once the program has no other error, so they show up last.
 | `if (c) … else if (c) …`, the same condition again | NL2716 | the condition you meant for the second branch |
 | `u < 0` or `u >= 0` on a `u8`, `u16`, `u32`, `u64` | NL2717 | test before the subtraction that would wrap, or use a signed type |
 
-```ts nish:err-body NL2712
+<!-- nish:err-body NL2712 -->
+```ts
 const xs = [3, 4];
 let total = 0;
 for (const x of xs) {
@@ -266,7 +270,8 @@ const average = total / 2;
 console.log(`${total}`);
 ```
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const xs = [3, 4];
 let total = 0;
 for (const x of xs) {
@@ -311,7 +316,8 @@ left ([Calling C](#calling-c)). Calling one without the import is NL2456. No fla
 whole program: `--unchecked-indexing` and `--wrapping` were removed before 1.0
 and are refused with exit 2.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { uncheckedGet, wrappingAdd, wrappingMul } from "nish:unsafe";
 
 export const hash = (bytes: u8[]): i32 => {
@@ -337,7 +343,8 @@ that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64
 which always wrap and are never checked; convert back with `toI32` (free), or
 call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 // FNV-1a: the multiply overflows on purpose, so the state is a `u32`.
 export const fnv1a = (bytes: u8[]): u32 => {
   let h: u32 = 2166136261;
@@ -348,13 +355,15 @@ export const fnv1a = (bytes: u8[]): u32 => {
 };
 ```
 
-```ts nish:err NL2231
+<!-- nish:err NL2231 -->
+```ts
 const bad = (a: i32, b: i64): i64 => {
   return a + b;
 };
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const good = (a: i32, b: i64): i64 => {
   return toI64(a) + b;
 };
@@ -375,7 +384,8 @@ not an `integer<0, 255>` (convert with `toI32`), and a `declare function` may
 not mention a range. Put the range on the value you use, not on a loop
 counter, which has to leave the range to end the loop.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i];
 
 const sumAll = (buf: u8[]): i32 => {
@@ -388,7 +398,8 @@ const sumAll = (buf: u8[]): i32 => {
 };
 ```
 
-```ts nish:err-body NL2384
+<!-- nish:err-body NL2384 -->
+```ts
 const digit: integer<0, 9> = 12;
 ```
 
@@ -396,7 +407,8 @@ Declaring a type alias, enum, class, interface or function named `integer` is
 refused, because the name is the type. A value named `integer` (a local or a
 module constant) is fine.
 
-```ts nish:err NL2332
+<!-- nish:err NL2332 -->
+```ts
 class integer {
   value: i32 = 0;
 }
@@ -418,7 +430,8 @@ Everything else leaves the literal at the default, however obvious the intent.
 The three that catch you out: an **object-literal property**, a `Result`
 payload, and a **method's** argument.
 
-```ts nish:err NL2269
+<!-- nish:err NL2269 -->
+```ts
 interface Pixel { r: u8; g: u8; b: u8; }
 
 export const main = (): i32 => {
@@ -428,7 +441,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Pixel { r: u8; g: u8; b: u8; }
 
 export const main = (): i32 => {
@@ -446,7 +460,8 @@ literals, not a literal in a `u8` context. Name the value first, or convert.
 There is no `throw`, no `try`, and no unwinding anywhere in the language. A
 function that can fail says so in its return type.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
@@ -490,7 +505,8 @@ reference cannot hold.
    is no implicit error conversion — convert by hand with
    `if (r.isErr()) { return Err(…); }`.
 
-```ts nish:err NL2044
+<!-- nish:err NL2044 -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   return Ok(n / 2);
 };
@@ -520,7 +536,8 @@ reference — never a scalar, which has no null value. It is the same pointer
 (or, for a function reference, the same tag) with `null` as one more value, so
 nothing is boxed.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   value: i32;
   next: Node | null = null;
@@ -556,7 +573,8 @@ export const main = (): i32 => {
   refused, because Node answers `d` past the end where Nish panics. `??` also
   defaults a `Map.get` result (see [Map and Set](#map-and-set)).
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   value: i32;
   next: Node | null = null;
@@ -575,7 +593,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err-body NL2489
+<!-- nish:err-body NL2489 -->
+```ts
 const names = new Array<string | null>(2);
 console.log(names[2] ?? "none");
 ```
@@ -590,7 +609,8 @@ console.log(names[2] ?? "none");
   `next` needs `a?.next?.v`. `?.` on something that cannot be `null` is
   NL2490; `?.[i]` and `f?.()` are refused.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Order {
   id: i32;
   next: Order | null = null;
@@ -609,7 +629,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err-body NL1062
+<!-- nish:err-body NL1062 -->
+```ts
 const s: string | null = "x";
 const n = s?.length;
 ```
@@ -625,7 +646,8 @@ const n = s?.length;
 
 ### Functions
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const add = (a: i32, b: i32): i32 => {
   return a + b;
 };
@@ -647,7 +669,9 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
   into a `let` first.
 - A non-`void` function must return on every path.
 - Rejected: generators, a method that is `async`, destructured and optional
-  (`x?: T`) parameters, overloads, nested function declarations. A default
+  (`x?: T`) parameters, overloads, nested function declarations ([the compatibility dialect](guide/using-nish/compat.md)
+  accepts `x?: T` read through `??`, a default that is not a constant and
+  overload signatures). A default
   (`n: i32 = 1`) or a rest parameter (`...ns: i32[]`) is allowed on a
   function, a method, a constructor or a module `const` arrow — see
   "Optional parameters" in [Recipes for what is missing](#recipes-for-what-is-missing). Type parameters *are*
@@ -659,7 +683,8 @@ A function may declare type parameters, and **each instantiation is compiled to
 its own specialised function** — no boxing, no dictionary, no runtime type
 information. The IR is what somebody would have written by hand at that type.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const identity = <T>(x: T): T => x;
 
 export const main = (): i32 => {
@@ -696,7 +721,8 @@ export const main = (): i32 => {
   It is where the value came from that counts — a local copied from a `T`, an
   element of a `T[]` and a narrowed `T | null` are all a `T` — never its type.
 
-```ts nish:err NL2329
+<!-- nish:err NL2329 -->
+```ts
 interface Point { x: i32; y: i32; }
 
 const getX = <T>(p: T): i32 => p.x;
@@ -722,7 +748,8 @@ export const main = (): i32 => {
   same fields, so implementing your own is refused the same way; import the
   template's `Shape` instead.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Shape { area: i32; }
 
 class Circle implements Shape {
@@ -761,7 +788,8 @@ export const main = (): i32 => areaOf(new Circle(2)) - 12;
   identifier, such as a method `Point.shifted` and a function `Point_shifted`
   (NL4008).
 
-```ts nish:err NL4007 --emit-dts build/docs-ai/nl4007.d.ts
+<!-- nish:err NL4007 --emit-dts build/docs-ai/nl4007.d.ts -->
+```ts
 export const identity = <T>(x: T): T => x;   // exported, never called
 
 export const main = (): i32 => 0;
@@ -773,7 +801,8 @@ A `class` or an `interface` may take type parameters too, and an instantiation
 is **an ordinary struct**: `Box<i32>` is `%struct.Box$i32` with `Box`'s fields
 at `T = i32`, and everything the language does to a struct works on it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Box<T> {
   value: T;
   constructor(v: T) { this.value = v; }
@@ -836,7 +865,8 @@ They are inferred from the arguments like a generic function's, and each
 (receiver, method type arguments) pair is its own `define`:
 `@Chooser.pick$i32`, `@Box$i32.keep$str`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Chooser {
   flip: boolean = false;
   pick<T>(a: T, b: T): T { return this.flip ? b : a; }
@@ -867,7 +897,8 @@ export const main = (): i32 => {
   included.
 - **A constructor takes none**; its class's are written after `new`.
 
-```ts nish:err NL2331
+<!-- nish:err NL2331 -->
+```ts
 class Box<T> {
   value: T;
   constructor(v: T) { this.value = v; }
@@ -884,7 +915,8 @@ is a top-level function named at the call, or an arrow written right there, and
 each one is compiled into its **own copy** of the function, with a direct call
 where the parameter is called — there is no function pointer at run time.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
   const out: U[] = [];
   for (const x of xs) {
@@ -936,7 +968,8 @@ export const main = (): i32 => {
   or element is refused, NL2759: read it into a `const`); the runners that check their body (`parallelMap`,
   `parallelReduce`, `spawn`, `expose`, `region`, ...) refuse one (NL2734).
 
-```ts nish:err NL2585
+<!-- nish:err NL2585 -->
+```ts
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {
@@ -953,7 +986,8 @@ through an alias. It can sit in a local, a field, an array element or a
 return value, be passed for an alias-typed parameter, called and compared
 with `===` / `!==`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -1039,14 +1073,15 @@ that can fail answers `Promise<Result<T, E>>`: test the `Result` after the
   before it returns; Node runs `f` only to its first `await` and the rest
   after the spawning task yields. Do not rely on either order.
 
-```ts nish:err NL2642
-async function load(id: i32): Promise<i32> {
+<!-- nish:err NL2642 -->
+```ts
+const load = async (id: i32): Promise<i32> => {
   return id;
-}
+};
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   console.log(await load(1));
-}
+};
 
 export const main = (): i32 => 0;
 ```
@@ -1061,7 +1096,8 @@ else to switch on and no thread count to choose. `parallelMap(src, f)` and
 `parallelFrom(n, f)` answer a new array instead (`f(src[i])`, `f(i)`), under
 the same rules for `f`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
 const square = (x: f64): f64 => x * x;
@@ -1075,7 +1111,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { parallelFrom, parallelMap } from "nish/threads";
 
 export const main = (): i32 => {
@@ -1120,7 +1157,8 @@ export const main = (): i32 => {
   costs: a body estimated at 3, such as `(x) => x + 1`, is divided only past
   about 700,000 elements, a cheaper one later, one with a loop far sooner.
 
-```ts nish:err NL2350
+<!-- nish:err NL2350 -->
+```ts
 import { parallelReduce } from "nish/threads";
 
 export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   // `+` folds from 0
@@ -1132,7 +1170,8 @@ Different functions at once, one thread each: open a scope with `using`, give
 it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
 `entry(arg)` into `dst[at]` when the block ends.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { scope } from "nish/threads";
 
 const sumOf = (xs: f64[]): f64 => xs[0] + xs[1];
@@ -1183,7 +1222,8 @@ export const main = (): i32 => {
 - **Any argument will do** — an array, an object — because nothing writes
   memory while the tasks run. There is no thread count: one task, one thread.
 
-```ts nish:err NL2388
+<!-- nish:err NL2388 -->
+```ts
 import { scope } from "nish/threads";
 
 const one = (n: i32): i32 => n + 1;
@@ -1201,7 +1241,8 @@ export const main = (): i32 => {
 When tasks must update one value, put it in a `Mutex` and reach it only through
 `using g = m.lock()`: the lock is held until that block ends, on every exit.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Mutex, scope } from "nish/threads";
 
 class Tally {
@@ -1275,7 +1316,8 @@ export const main = (): i32 => {
   not an `f64` sum): the critical sections run in the scheduler's order
   natively and in spawn order under Node.
 
-```ts nish:err NL2467
+<!-- nish:err NL2467 -->
+```ts
 import { Mutex } from "nish/threads";
 
 class Counter {
@@ -1290,7 +1332,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Mutex, MutexGuard } from "nish/threads";
 
 class Stats {
@@ -1315,7 +1358,8 @@ A shared counter, minimum, maximum or flag is an atomic: `new AtomicI32(0)`,
 `new AtomicI64(toI64(0))`, updated from any task or parallel `f` by one
 indivisible method call.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { AtomicI32, parallelMapInto } from "nish/threads";
 
 export const main = (): i32 => {
@@ -1348,7 +1392,8 @@ export const main = (): i32 => {
   to an `AtomicI32[]`, whose counters are separate objects on separate cache
   lines. Same rules as above.
 
-```ts nish:err NL2513
+<!-- nish:err NL2513 -->
+```ts
 import { AtomicI32, scope } from "nish/threads";
 
 const bump = (a: AtomicI32): i32 => a.add(1);
@@ -1373,7 +1418,8 @@ When one task produces values and another consumes them, give both a
 `for...of`, which waits for values and ends once every producer has returned.
 Nobody closes a channel.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Channel, scope } from "nish/threads";
 
 class Pipe {
@@ -1445,7 +1491,8 @@ export const main = (): i32 => {
   the scheduler's order natively and in spawn order under Node, so a count or an
   integer sum prints the same both ways.
 
-```ts nish:err NL2481
+<!-- nish:err NL2481 -->
+```ts
 import { Channel, scope } from "nish/threads";
 
 const one = (ch: Channel<i32>): i32 => {
@@ -1498,7 +1545,8 @@ export const main = (): i32 => {
   [refusal table](guide/using-nish/threads.md#refused-and-what-to-write-instead)
   pairs each code with an example that compiles.
 
-```ts nish:err NL2506
+<!-- nish:err NL2506 -->
+```ts
 import { scope } from "nish/threads";
 
 export const main = (): i32 => {
@@ -1520,7 +1568,8 @@ does not define. The symbol is the identifier, unmangled, in any package
 call is an ordinary call. Two declarations of one name must have the same
 types.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function abs(n: i32): i32;
 
 export const main = (): i32 => {
@@ -1545,7 +1594,8 @@ export const main = (): i32 => {
   holds one, however deep (NL2746, NL2756), and a page module (freestanding
   wasm, `--emit-dts`) refuses one (NL2757).
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare class Timespec {
   sec: i64;
   nsec: i64;
@@ -1560,7 +1610,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2755
+<!-- nish:err NL2755 -->
+```ts
 type Coord = number;
 
 declare class Point {
@@ -1583,7 +1634,8 @@ export const main = (): i32 => {
   borrows the bytes for the call and may write a `u8[]`; a spawned task may
   not make the call.
 
-```ts nish:err NL2549
+<!-- nish:err NL2549 -->
+```ts
 declare function SHA256(d: readonly u8[], n: u64, md: u8[]): CPtr;
 
 export const main = (): i32 => {
@@ -1598,7 +1650,8 @@ export const main = (): i32 => {
   panics (`ffi-nul`) before the call, because C would read only up to it; a
   literal with no NUL is not checked.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function puts(s: string): i32;
 
 export const main = (): i32 => {
@@ -1613,7 +1666,8 @@ export const main = (): i32 => {
   `NULL` panics (`ffi-null`). The copy never frees: a result the caller must
   `free` (`strdup`) is declared `CPtr | null` instead.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function strerror(errnum: i32): string;
 declare function getenv(name: string): string | null;
 
@@ -1647,7 +1701,8 @@ export const main = (): i32 => {
   `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
   is NL2539, so C is never handed a `NULL` by accident.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { readCString } from "nish:unsafe";
 
 declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
@@ -1692,7 +1747,8 @@ export const main = (): i32 => {
 
 ### Module constants
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const TOKEN_NAME: i32 = 1;
 const TOKEN_END: i32 = TOKEN_NAME + 1;
 export const PROMPT: string = "> ";
@@ -1714,7 +1770,8 @@ emitted and no initialiser runs** — every use lowers to the value itself.
 
 ### Module storage
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const SCORES = new Int32Array(4);
 
 const sum = (xs: Int32Array): i32 => {
@@ -1753,7 +1810,8 @@ state a module keeps (there is no top-level `let`).
 
 ### Classes and interfaces
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Shape { width: i32; height: i32; }
 
 class Rect implements Shape {
@@ -1783,7 +1841,8 @@ export const main = (): i32 => {
 - Fields need annotations; an initializer must be a **literal** of the field's
   type. Layout is declaration order, exactly as clang lays out the same C
   struct.
-- At most one constructor, no parameter properties, no overloads. **Definite
+- At most one constructor, no parameter properties, no overloads (outside
+  [the compatibility dialect](guide/using-nish/compat.md)). **Definite
   assignment** is checked syntactically: after the constructor returns every
   field holds a value, and reading `this.f` before every field is assigned is
   an error.
@@ -1807,7 +1866,8 @@ and `push` may move the whole block to grow it. **Holding an element across a
 `push` on the same array is therefore refused**, because the write would land
 in the old storage:
 
-```ts nish:err NL2290
+<!-- nish:err NL2290 -->
+```ts
 interface Point { x: i32; }
 
 export const main = (): i32 => {
@@ -1821,7 +1881,8 @@ export const main = (): i32 => {
 
 Index again after the `push` instead of holding the element across it:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Point { x: i32; }
 
 export const main = (): i32 => {
@@ -1841,7 +1902,8 @@ grows, and the blocks it outgrows stay in the arena; a walk over `kids`
 follows two pointers per child where the links follow one. On a 4M-node
 tree the links took 0.52x the memory and 0.68x the time of `kids`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   kind: i32;
   parent: Node | null;
@@ -1896,7 +1958,8 @@ export const main = (): i32 => {
 - `uncheckedGet` / `uncheckedSet` belong in that table's code only: an index
   out of range there is undefined behaviour, not a panic.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
 // One column per field, each allocated once at its final length.
@@ -1942,7 +2005,8 @@ enclosing function's return type, the parameter it is passed to, the field it
 is assigned to, or a field of an enclosing literal. It must set every field
 exactly once, with plain identifier keys.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Pair { first: i32; second: i32; }
 
 const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
@@ -1962,7 +2026,8 @@ A class with methods is made only by `new`: a literal typed as one would be a
 plain object under Node, without the methods (NL2556). A class with fields
 alone, and an interface, still take a literal.
 
-```ts nish:err NL2556
+<!-- nish:err NL2556 -->
+```ts
 class Counter {
   n: i32;
   constructor(n: i32) {
@@ -1981,7 +2046,8 @@ export const main = (): i32 => {
 
 ### Type aliases and enums
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 type Byte = u8;
 type Bytes = Byte[];
 
@@ -2027,7 +2093,8 @@ export const main = (): i32 => {
   `Role.parse` yet: test `s === String(Role.Admin)` per member, or decode it
   with typed JSON.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Role {
   Admin = "admin",
   Guest = "guest",
@@ -2074,7 +2141,8 @@ export const main = (): i32 => {
   `parallelFrom` or `parallelReduce` body answering one is NL2521: answer
   `Kind` instead.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   Scalar,
   Array,
@@ -2093,7 +2161,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2519
+<!-- nish:err NL2519 -->
+```ts
 enum Kind {
   Scalar,
   Array,
@@ -2117,7 +2186,8 @@ export const main = (): i32 => (pick(Kind.Array) === Kind.Array ? 0 : 1);
 
 ### Discriminated unions
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -2249,7 +2319,8 @@ export const main = (): i32 => {
   from there on. Declare the slot as the variant, or store a value of the
   whole union (a call returning `Shape`):
 
-```ts nish:err NL2534
+<!-- nish:err NL2534 -->
+```ts
 enum Kind {
   Circle,
   Square,
@@ -2302,9 +2373,10 @@ export const main = (): i32 => {
 - Functions and enums may be renamed on import; classes and interfaces may
   not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
-- **A function name is unique across the whole program**, exported or not
-  (a proposal to relax this for private functions is
-  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); it has not shipped).
+- **An exported function name is unique across the whole program**; two
+  modules may each keep a *private* function or generic of one name (its
+  symbol becomes `<module>$.<name>`, e.g. `helper$.add`), except under
+  `--no-strict-exports`, where every function name is unique.
 - An `export`ed function is an external C-ABI symbol; every other function gets
   `internal` linkage so LLVM may inline or drop it.
 - **So an exported function is not named after a C library function**
@@ -2363,7 +2435,8 @@ export const main = (): i32 => {
   `break`, `continue`, `process.exit`, an `if` whose branches all return, or an
   infinite loop.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const firstPair = (limit: i32, target: i32): i32 => {
   outer: for (let i: i32 = 0; i < limit; i++) {
     for (let j: i32 = 0; j < limit; j++) {
@@ -2482,7 +2555,8 @@ refused with where it was made; pass a fresh value, or a copy
 `secret(copy)`). `std/crypto`'s `p256`, `x25519` and
 `x509ParseP256PrivateKey` take and give keys this way.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Secret, expose, secret, wipe } from "nish:secret";
 
 const key = (): u8[] => [7, 1, 9];
@@ -2496,7 +2570,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2440
+<!-- nish:err NL2440 -->
+```ts
 import { Secret, expose, secret } from "nish:secret";
 
 const key = (): u8[] => [7, 1, 9];
@@ -2508,7 +2583,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2512
+<!-- nish:err NL2512 -->
+```ts
 import { Secret, secret, wipe } from "nish:secret";
 
 export const main = (): i32 => {
@@ -2531,7 +2607,8 @@ parameters, calling `wipe(this.k)` itself for every such field on every path
 `Secret` borrows it: it neither returns it (NL2546) nor wipes it (NL2548). Nothing checks that `wipe()` is called: call it when the
 holder is done.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Secret, expose, secret, wipe } from "nish:secret";
 
 const width = (k: u8[]): i32 => toI32(k.length);
@@ -2557,7 +2634,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2544
+<!-- nish:err NL2544 -->
+```ts
 import { Secret, secret, wipe } from "nish:secret";
 
 class Session {
@@ -2792,7 +2870,8 @@ was there) and `clear()`, and `keys()` / `values()` as the iterable of a
 and `s.forEach((x) => ...)` compile to that `for...of` walk with `f` inlined,
 and answer `void`. `entries` is refused by name.
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const seen = new Set<string>();
 const counts: Map<string, i32> = new Map();
 seen.add("a").add("b").add("a");
@@ -2818,7 +2897,8 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
 three ways: a default with `??`, a `const` tested with `!== undefined` (or
 `=== undefined` and an early `return`), or a bare test. Each is one probe.
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const counts = new Map<string, i32>();
 for (const w of ["a", "b", "a"]) {
   counts.set(w, (counts.get(w) ?? 0) + 1);
@@ -2838,7 +2918,8 @@ if (a !== undefined) {
   be the value type. For a `Map<K, Node | null>` it replaces a stored `null`
   too, but the result is still `Node | null`.
 
-```ts nish:err-body NL2361
+<!-- nish:err-body NL2361 -->
+```ts
 const m = new Map<string, i32>();
 let v = m.get("a");
 ```
@@ -2849,7 +2930,8 @@ may `set`, `delete` or `clear` the table inside the walk and get exactly what
 JavaScript gives (a new key is visited later in the same walk; a key deleted
 before it is reached is not).
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const ages = new Map<string, i32>();
 ages.set("ada", 36).set("alan", 41);
 ages.delete("alan");
@@ -2869,7 +2951,8 @@ console.log(`${total}`);                 // 121
 - `for (const e of m)` over a `Map` itself is refused, because its
   `[key, value]` pairs are two-type tuples: walk `m.keys()` and call `m.get(k)`.
 
-```ts nish:err-body NL2375
+<!-- nish:err-body NL2375 -->
+```ts
 const m = new Map<string, i32>();
 for (const e of m) {
 }
@@ -2887,7 +2970,8 @@ string `+`) or assign. Anything else still compiles, as one probe per call.
 inserting it — and `reserve(m, n)`, which sizes the table for `n` entries; both
 are one module with the program and run unchanged under Node.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { getOrInsert, reserve } from "nish/map";
 
 export const main = (): i32 => {
@@ -2950,7 +3034,8 @@ tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
 no union holds does nothing, and a JSON call on that class refuses its
 enum-member field.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -2974,7 +3059,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2485
+<!-- nish:err NL2485 -->
+```ts
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
@@ -2989,7 +3075,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
 
@@ -3010,7 +3097,8 @@ export const writeOrder = (w: JsonWriter, o: Order): void => {
 };
 ```
 
-```ts nish:err NL2495
+<!-- nish:err NL2495 -->
+```ts
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
@@ -3026,7 +3114,8 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2485
+<!-- nish:err NL2485 -->
+```ts
 import { JsonWriter } from "nish/json";
 import { jsonEncode } from "nish/json-typed";
 
@@ -3065,7 +3154,8 @@ outlive it — so allocate what must outlive the block before it, and let only
 numbers, booleans and enums out. `arena()` is only ever a `using` initialiser,
 and `a` is never read.
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const rows: string[] = ["a", "bb"];
 let total = 0;
 for (const row of rows) {
@@ -3105,7 +3195,8 @@ entry — use a region.** `region(f)` / `regionWith(arg, f)` make one and run
 gives all of it back. `f` is a named function or an arrow that captures
 nothing. `Region<T>` is a number, not a pointer.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Region, enter, free, region } from "nish:region";
 
 class Session {
@@ -3140,7 +3231,8 @@ the module (NL4015).
 
 **Iterate and accumulate** — there is no `reduce` (`map`, `filter`, `forEach`, `some`, `every`, `findIndex` and `slice` work, but a callback may not assign a local of its caller); fold in a loop:
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const xs: i32[] = [1, 2, 3];
 const doubled = xs.map((x) => x * 2);
 let sum = 0;
@@ -3152,7 +3244,8 @@ console.log(`${sum}`);
 
 **Convert a number to a string** — there is no `toString` and no `String()`:
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const n = 42;
 const s = `${n}`;
 console.log(s);
@@ -3160,7 +3253,8 @@ console.log(s);
 
 **Return two values** — there are no tuples: declare an interface.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Split { head: string; rest: string; }
 
 const cut = (s: string, at: i32): Split => ({
@@ -3351,7 +3445,8 @@ guide's [terminal page](guide/using-nish/terminal.md) its walk-through.)
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Sized { width: i32; height: i32; }
 
 class Photo implements Sized {
@@ -3410,7 +3505,8 @@ allowed. Each error names its fix, and there are five:
   per function, proven or not, and the `"panics"` of `--emit-capabilities` the
   same.
 
-```ts nish:ok --deny-panics
+<!-- nish:ok --deny-panics -->
+```ts
 const at = (xs: i32[], i: i32): i32 => {
   if (i >= 0 && i < xs.length) {
     return xs[i];
@@ -3445,7 +3541,8 @@ export const main = (): i32 => {
 
 The same function without its guard is refused, and the error names the guard:
 
-```ts nish:err NL2457 --deny-panics
+<!-- nish:err NL2457 --deny-panics -->
+```ts
 export const at = (xs: i32[], i: i32): i32 => xs[i];
 ```
 
@@ -3457,7 +3554,8 @@ they cannot panic, and their `nish:unsafe` import is the module's visible
 opt-in to an index out of range being undefined behaviour, so the scope allows
 them (as `"allowed": true` sites) and a call into them is never refused:
 
-```ts nish:ok --deny-panics
+<!-- nish:ok --deny-panics -->
+```ts
 import { uncheckedGet } from "nish:unsafe";
 
 export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
@@ -3465,7 +3563,8 @@ export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
 
 Without the import the call is refused (NL2456), scope or not:
 
-```ts nish:err NL2456 --deny-panics
+<!-- nish:err NL2456 --deny-panics -->
+```ts
 export const first = (xs: i32[]): i32 => uncheckedGet(xs, 0);
 ```
 
@@ -3483,7 +3582,8 @@ that keeps to it ([LANGUAGE.md](LANGUAGE.md#the-capability-policy)). Under an
 allowlist `exit` is a capability like the others, and `unsafe` can be denied
 but never allowed: importing `nish:unsafe` is the opt-in.
 
-```ts nish:err NL2459 --deny fs.read
+<!-- nish:err NL2459 --deny fs.read -->
+```ts
 const settings = (): string => readFileSync("settings.txt");
 
 export const main = (): i32 => settings().length;
@@ -3543,6 +3643,6 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    `LANGUAGE.md` rule and cookbook entry, and a conventional commit message,
    which is its changelog entry.
 
-Every `ts nish:ok` and `ts nish:err` block on this page is compiled by
+Every block under a `<!-- nish:ok -->` or `<!-- nish:err -->` comment on this page is compiled by
 `npm test`, so an example that has gone stale is a failing test rather than a
 program that no longer works.

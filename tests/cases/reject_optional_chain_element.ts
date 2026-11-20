@@ -1,5 +1,6 @@
-// `?.[i]` stays refused: an index after `?.` would bring the default past the
-// end of the array, where Node answers it and the bounds check panics.
+// A `?.[i]` that ends its chain stays refused in both dialects, unlike one
+// inside a chain: past the end of the array Node answers `undefined` and
+// takes the default, where the bounds check panics.
 class Node {
   value: i32 = 1;
   next: Node | null = null;

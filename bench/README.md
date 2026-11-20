@@ -2044,6 +2044,64 @@ the layout of the two binaries is a hypothesis, not a finding. With the
 rotation made equal and the link flags matched, no Nish-faster result has been
 measurable.
 
+### Against rusqlite
+
+`sqlite/twin.rs` runs the same four workloads through
+[rusqlite](https://crates.io/crates/rusqlite), the crate most Rust programs
+reach SQLite through. Each call is written in rusqlite's own style: `query_row`
+for a lookup and an insert, and `query` with `Rows::next` for the feed. Each
+call binds, steps, runs the closure, and resets when the rows drop. Text is
+read with `get_ref(c)?.as_bytes()`, which neither allocates nor checks UTF-8,
+and is copied into one reused buffer, as the other sides copy it.
+
+rusqlite refuses to open a connection on a SQLite built `THREADSAFE=0`, so it
+cannot run on the build the other sides use. `run.mjs` therefore times a second
+group on `SQLITE_THREADSAFE=2`, which is what a `--threads` build gets:
+
+- **nish mt:** `main.ts` built with `--link --threads`.
+- **C mt:** `twin.c` on a `sqlite3.c` object compiled with the C twin's flags
+  and `THREADSAFE=2`.
+- **Rust mt:** `twin.rs`, built by cargo with `opt-level = 3`, one codegen
+  unit, fat LTO across the Rust crates and `panic = "abort"`. It is linked to
+  an archive of that same object: libsqlite3-sys is pointed at it with
+  `SQLITE3_LIB_DIR`, never at its bundled copy or the system's. `run.mjs`
+  stops unless the Rust side's `PRAGMA compile_options` matches C mt's and the
+  binary loads no shared `libsqlite3`.
+
+rusqlite is pinned at 0.43.0 and fetched from crates.io on the first run.
+`--no-rust` leaves the group out, and so does a machine with no cargo, with a
+note. The Rust glue does not get the C side's hardening flags: SQLite is the
+same object, but the Rust code is built the way cargo builds it. The six
+binaries share the rotation, so 12 rounds is a multiple of 6.
+
+**The figures.** Twelve rounds of the bench code at commit `f08a1674` (later
+commits only reformat `run.mjs` and rename two locals), on a
+four-core Intel Xeon virtual machine that reports 2.10 GHz, with Ubuntu clang
+18.1.3, rustc 1.97.0, rusqlite 0.43.0 (libsqlite3-sys 0.40.0) and SQLite
+3.54.1. All figures are the median ns per call (IQR). This session's machine
+ran slower and noisier than the one in the table above: `lookup` took about
+6.0 µs, against 5.0 µs there, and `feed`'s noise band was 5.4 %.
+
+| Workload | Nish | C | Nish mt | C mt | Rust mt | Noise band |
+| --- | --- | --- | --- | --- | --- | --- |
+| `lookup` | 6,005 (195) | 5,987 (294) | 6,335 (370) | 6,098 (253) | 6,193 (180) | 32 |
+| `feed` | 20,894 (2,090) | 21,353 (1,616) | 22,222 (5,219) | 20,706 (702) | 22,449 (2,743) | 1,136 |
+| `insert` | 20,254 (1,203) | 20,221 (1,534) | 21,272 (2,417) | 20,764 (912) | 20,744 (2,833) | 431 |
+| `insert-txn` | 5,983 (885) | 5,981 (456) | 6,233 (1,317) | 6,084 (169) | 6,412 (689) | 88 |
+
+**What the figures say.** On the rule above, none of these differences is
+measurable on this machine. Each one is inside the IQR of at least one of the
+two sides it compares:
+
+- **Rust mt − C mt** runs from −20 ns (`insert`) to +1,742 ns (`feed`, 8.4 %).
+- **Nish mt − Rust mt** runs from −227 ns (`feed`) to +528 ns (`insert`).
+- **C mt − C**, the threading mode's own cost, is −647 to +543 ns.
+
+So at this run's noise, `nish/sqlite`, rusqlite and SQLite's C API cost the same
+per call on these workloads. SQLite's own work dominates every call. A
+difference of a few per cent, like `feed`'s 2 to 6 % above, needs a quieter
+machine or a callgrind count to show up.
+
 ## PostgreSQL
 
 `postgres/run.mjs` measures what
@@ -2299,6 +2357,69 @@ twin's 8.35 µs (−44.9 %). The difference is the kernel's: the module's system
 time drops to 3.68 µs, from 6.30 with Nagle off, while its user time stays
 near 0.9 µs. Its qps is 3.2 % under the twin's. The benchmark keeps Nagle off
 on both sides, as libpq does.
+
+### Against tokio-postgres
+
+`run.mjs` also times `postgres/twin.rs`, the same loop through
+[tokio-postgres](https://crates.io/crates/tokio-postgres), the client most
+Rust programs reach PostgreSQL through, directly or under deadpool-postgres or
+the sync `postgres` crate. It joins the rotation as a fourth side, so timed
+rounds round up to a multiple of 4. `--no-rust` leaves it out, and with no
+cargo it is left out with a note.
+
+- **The loop.** One connection on a current-thread tokio runtime, so the
+  client is one thread as on the other two sides. tokio-postgres pipelines the
+  queries a task has in flight on its own; `buffered(16)` (1 for `insert`)
+  keeps the same number in flight as the other sides. Each query is a
+  `Client::query`, or `execute` for `insert`, on a statement prepared once
+  with `int8` parameters, and it answers a `Vec<Row>`.
+- **The messages.** For a prepared statement tokio-postgres sends Bind,
+  Execute, Sync, as the module does, with no Describe; its connect sets
+  `TCP_NODELAY`. It asks for every result column in binary, which no option
+  changes, so the twin folds each binary value into what the text sides fold.
+  Text columns are the same bytes in both formats. An integer and a bool fold
+  as their value, and a timestamp is written as the same 24 ISO 8601 bytes from
+  its microseconds. The tag array's binary elements are walked as `twin.c`
+  walks the text form. `--validate` checks that all four sides print the same
+  rows and checksums.
+- **The build.** cargo with tokio-postgres 0.7.18, tokio 1.54.1, futures-util
+  0.3.34 and libc 0.2.191 pinned, no TLS, `opt-level=3`, one codegen unit, fat
+  LTO, `panic=abort`, stripped. Its glue is not built with the C twin's
+  hardening flags.
+
+**The figures.** Twelve rounds of the bench code at commit `5aee9afb`, on a
+four-core Intel Xeon virtual machine that reports 2.10 GHz (not the machine of
+the table above), with Ubuntu clang 18.1.3, rustc 1.97.0 and PostgreSQL and
+libpq 18.7, the server on the same machine. CPU is µs per query of the client,
+min / median (IQR); qps is the median.
+
+| Workload | Nish | C (libpq) | Rust (tokio-postgres) | Noise band | System, median, Nish / C / Rust | qps Nish / C / Rust |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 5.84 / 6.26 (0.13) | 7.60 / 7.80 (0.32) | 8.55 / 8.79 (0.30) | 0.16 | 5.12 / 5.06 / 5.18 | 44,582 / 42,938 / 44,708 |
+| `list` | 42.86 / 46.58 (3.28) | 53.77 / 59.04 (3.77) | 52.01 / 58.08 (2.18) | 0.42 | 24.27 / 23.48 / 21.90 | 431 / 427 / 434 |
+| `insert` | 14.08 / 15.86 (1.22) | 14.93 / 16.85 (1.52) | 17.94 / 19.19 (1.43) | 0.34 | 14.79 / 15.29 / 14.86 | 4,946 / 5,317 / 5,011 |
+
+| Workload | Nish − C | Rust − C | Nish − Rust |
+| --- | --- | --- | --- |
+| `pk` | −1.53 (−19.7 %), seen | +1.00 (+12.8 %), seen | −2.53 (−28.8 %), seen |
+| `list` | −12.47 (−21.1 %), seen | −0.96 (−1.6 %), inside the noise | −11.51 (−19.8 %), seen |
+| `insert` | −1.00 (−5.9 %), inside the noise | +2.33 (+13.8 %), seen | −3.33 (−17.4 %), seen |
+
+"Seen" is the rule above: the median difference is larger than the noise band
+and than the IQR of both sides. On this run:
+
+- The module costs the client less CPU than tokio-postgres on every workload.
+- tokio-postgres costs more than libpq on `pk` and `insert`, and the same as
+  libpq on `list`, as far as this machine can see.
+- The system time is within 0.5 µs across the three sides on `pk` and
+  `insert` and within 2.4 µs on `list`, where the differences are 11 to 12 µs.
+  So the differences come from user time.
+
+Why tokio-postgres's user time is higher was not measured. Its requests pass
+through a channel to the connection task, and each query allocates its
+`Vec<Row>`. A profile would say how much each costs. qps is within 7.0 % on
+every row. The server answers in about the same time for every client, so
+client CPU barely moves throughput at these depths.
 
 ### Over the Unix socket (`--unix`)
 
@@ -2792,9 +2913,12 @@ in is in parentheses.
   measures the vector schedule (#1186).
 - [`http1-conn/`](http1-conn/README.md): `Http1Connection` per request on one
   connection, over a cold pool and over an idle `Http1Server` pool with
-  `idleInput`, and the peak RSS of one idle connection.
+  `idleInput`, and the peak RSS of one idle connection; `bytes.ts` counts
+  what one connection holds, object by object.
 - [`http1-request/`](http1-request/README.md): `std/net/http1`'s request
-  parser on a browser, an API, a short and a 4 KB JSON request (#1187).
+  parser on a browser, an API, a short and a 4 KB JSON request (#1187), and
+  a minimal GET with 0, 4 or 10 unread fields; `breakdown.mjs` gives its
+  instructions by source function.
 - [`jwt-verify/`](jwt-verify/README.md): decoding and verifying an HS256 JWT
   (#1188).
 - [`pg-decode/`](pg-decode/README.md): the PostgreSQL wire decoder on

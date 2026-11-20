@@ -14,7 +14,8 @@ built-in module `nish:compact`. The rules are in the reference under
 Import `Compact` and add it to the class's `implements` clause. Nothing else
 in the program changes:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Compact } from "nish:compact";
 
 class Tree implements Compact {
@@ -60,14 +61,81 @@ A page module built for the host with `--emit-dts` runs on the wasm runtime,
 so it keeps full pointers too, and so does a sanitizer build (`NISH_ASAN`).
 Under Node the marker is an empty interface and changes nothing.
 
+## A compact class in a C host
+
+A `--emit-header` build keeps every class that holds a link opaque, because C
+would read a 32-bit link as an 8-byte pointer. That covers the compact class
+itself, a class with a field of it, and an instantiation such as `Box<Cell>`.
+C holds an instance as a handle, passes it back to an exported function, and
+never reads its fields:
+
+<!-- nish:ok -->
+```ts
+import { Compact } from "nish:compact";
+
+export class Cell implements Compact {
+  value: i32;
+  next: Cell | null;
+  constructor(value: i32, next: Cell | null) {
+    this.value = value;
+    this.next = next;
+  }
+}
+
+export const push = (value: i32, head: Cell | null): Cell => new Cell(value, head);
+
+export const total = (head: Cell | null): i32 => {
+  let sum = 0;
+  let at = head;
+  while (at !== null) {
+    sum = sum + at.value;
+    at = at.next;
+  }
+  return sum;
+};
+```
+
+The header declares `typedef struct Cell Cell;` and
+`struct Cell *push(int32_t value, struct Cell *head);`, so the host keeps a
+`Cell *` and calls back in:
+
+```c
+#include <stdio.h>
+#include "cells.h"
+
+int main(void) {
+  struct Cell *head = NULL;
+  for (int32_t i = 1; i <= 4; i++) head = push(i, head);
+  printf("%d\n", total(head)); /* 10 */
+  return 0;
+}
+```
+
+Build the runtime with `--arena-range`, the runtime that reserves the range
+the links count from. `$NISH` is the directory that holds `scripts/build.sh`
+and `runtime/`, as on [Calling Nish from other languages](../using-nish/interop.md):
+
+```sh
+nish cells.ts -o cells.ll --emit-header cells.h
+$NISH/scripts/build.sh --arena-range cells.ll $NISH/runtime/runtime.c host.c -o host -I$NISH/runtime
+```
+
+Without `--arena-range` the link fails on `nish_arena_range_abi`, rather than
+running with links that point nowhere. On Linux the range sits at a fixed
+address: if something else already holds it, the program stops at start-up
+with the range runtime's panic. On macOS the system places the range.
+
+Linking a header build into a shared library that another process loads is
+not supported: Nish would reserve its range inside a process it does not own.
+
 ## Where a compact class is refused
 
-C and Node read a pointer as 8 bytes, so a compact class may not cross into
-their code:
+Node reads a pointer as 8 bytes and runs an addon in its own process, so a
+compact class may not cross into it:
 
-- A build with `--emit-header`, `--emit-napi` or `--emit-napi-async` refuses
-  every compact class (NL4021), and an exported function whose signature holds
-  one (NL4020).
+- A build with `--emit-napi` or `--emit-napi-async` refuses every compact
+  class (NL4021), and an exported function whose signature holds one (NL4020).
+  Adding `--emit-header` beside it does not lift the refusal.
 - A `declare class` describes a C struct, so it cannot implement `Compact`
   (NL2795) or hold a field of a compact class (NL2796).
 - A generic class cannot implement `Compact` yet (NL2798): each
@@ -76,7 +144,8 @@ their code:
 - A compact class holds no `Secret` (NL2797). Keep the secret in a class of
   its own:
 
-```ts nish:err NL2797
+<!-- nish:err NL2797 -->
+```ts
 import { Compact } from "nish:compact";
 import { Secret, secret, wipe } from "nish:secret";
 

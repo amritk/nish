@@ -78,10 +78,20 @@ A class `R` is compact when all of these hold:
 
 1. **The output is a native executable** (`--link`, or `nish run`). A
    wasm32 build already has 4-byte pointers, so there is nothing to do. A
-   build whose classes C or Node can see (`--emit-header`, `--emit-napi`,
-   `--emit-napi-async`, a C library) is left alone, because a compact class
-   is opaque to C (§4) and the range would be reserved inside a host process
-   Nish does not own.
+   build whose classes Node can see (`--emit-napi`, `--emit-napi-async`, also
+   beside `--emit-header`) or a C library another process loads is left
+   alone, because the range would be reserved inside a host process Nish
+   does not own. An `implements Compact` class is refused there (NL4021, and
+   NL4020 at an export's signature). Since stage 2c a `--emit-header` build
+   whose C host is the process is not refused: the header keeps every class
+   holding a link opaque (§4), the host holds an instance as a `struct X *`
+   handle, the runtime is the range runtime (`-DNISH_ARENA_RANGE`), and a
+   runtime built without it lacks `nish_arena_range_abi`, so a program fails
+   to link as soon as a module whose links are offsets allocates: both
+   inline bumps name the symbol there, so an 8-aligned compact class does
+   too. A module that allocates nothing names nothing. A busy range address
+   is the start-up panic every range build has. The automatic rule
+   (`src/compact-rule.ts`, test 1) still leaves a header build alone.
 2. **Something links to `R`**: some class, `R` itself included, has a field
    typed exactly `R` or `R | null`.
 3. **Narrowing saves memory on every instance**: `computeLayout` run both
@@ -98,7 +108,8 @@ A class `R` is compact when all of these hold:
    correctness.
 5. **Nothing forbids it**: `R` is not, and is not a field of, a `declare
    class`; `R` does not hold a `Secret`; `R` is not exported in a C or N-API
-   surface.
+   surface. This test is the automatic rule's: an `implements Compact` class
+   may cross `--emit-header` as an opaque handle (rule 1).
 
 Two controls override the rule, both erased under Node and `tsc`:
 
@@ -277,7 +288,7 @@ does with each.
 | **Escape analysis** | a stack instance has no offset | a compact class is never promoted to the stack. `holdsNoPointerSlot` (`src/escape.ts:1893`) and the promotion site (`src/emit-classes.ts:105`) refuse it. That costs the promotion for that one class, which for a linked node rarely applied anyway (a node is stored, so it escapes). A test pins it. |
 | **Alignment and attributes** | — | a compact instance is `align 4 dereferenceable(size)`, not `align 8`. `src/attributes.ts:1951` and `:7053-7073` read the class's alignment instead of assuming 8, and `src/attributes.ts:2465` and `src/emit.ts:~2334` stop assuming 8-byte rounding. A decoded link is `nonnull` only once it is tested. With the zero-based decode, `o != 0` and `p != null` are the same test, and LLVM folds it (§5's assembly). `nocapture` counts an encoding store as a capture, as it counts a pointer store today. |
 | **TBAA** | a compressed field may-aliases every `i32` | a compressed field gets a scalar node of its own, `ref32`, under the root, beside `i32`. A store of a link then does not alias a store of an `i32` field. The struct-path nodes carry the new offsets (`src/tbaa.ts:110-142`). Prototyped in §5's IR. |
-| **C ABI and headers** | every struct holding a reference changes for C | a class holding a compressed field is **opaque** in `--emit-header` output, the same way a `Map` or a `Secret` already is (`src/interop-header.ts:147-158`), and C holds it as a handle. A compact instance passed to or returned from C is a full pointer, so N-API and FFI signatures do not change. A `declare class` (a C layout) may not hold a compact field: that is a checker refusal. |
+| **C ABI and headers** | every struct holding a reference changes for C | a class holding a compressed field is **opaque** in `--emit-header` output, the same way a `Map` or a `Secret` already is (`holdsLink` in `src/interop-header.ts`): the compact class itself, any class with a field narrowed to `i32`, and an instantiation such as `Box<Cell>`. C holds it as a handle. A compact instance passed to or returned from C is a full `struct X *`, so FFI signatures do not change. Done in stage 2c, with a C host round trip in `tests/run.js` ("compact header"). N-API stays refused (NL4020, NL4021), also beside `--emit-header`: an addon runs in Node's process. Out of scope: a header build linked into a shared library another process loads. A `declare class` (a C layout) may not hold a compact field: that is a checker refusal. |
 | **wasm32** | no-op | no-op. A wasm32 pointer is already 4 bytes, so a compact class compiles to exactly today's IR there: no range, no decode. Found on the way: `computeLayout` gave a class's pointer field 8 bytes on wasm32 where LLVM's `p:32:32` lays out 4 (only a `declare class` was special-cased), so `info.size` over-allocated on wasm32. Stage 6 fixed that separately: `computeLayout` now takes a pointer field's width from `pointerBytes` in `src/structs.ts`, 4 bytes on wasm32, so a class's size, alignment and field offsets there are LLVM's own. `resultLayout` (`src/result.ts`) took the same width later (#1749), so a `Result`'s pointer payload sits at LLVM's offset on wasm32 too. |
 | **Debug info** | a member gdb cannot follow | the same, but only for compact classes: the member is a `DW_TAG_base_type` `u32` named for what it is (`ref32 TNode`), and a debugger pretty-printer (gdb Python, an lldb formatter) in `tools/` decodes it. Decoded locals are ordinary pointers, so stepping through code that holds them shows them as today. `src/debug.ts:440-468`. |
 | **Pointer hashing** | must hash the decoded pointer | a `Map` key or a `Set` element is never a compressed field (§3.2), so every `ptrtoint` in `src/emit-map.ts` and `src/emit-parallel.ts` already sees a full pointer. Nothing to change. A test pins a compact class as a `Map` key. |
@@ -516,7 +527,10 @@ From a survey of `src/` at `8036aff1`.
 - `src/emit-root.ts:203-217`, `writeTrace` (wasm32 only, nothing compressed)
 - `src/tbaa.ts:110-142`, `src/debug.ts:440-468`
 - `src/attributes.ts:1951`, `:2465`, `:7053-7073`, and `src/emit.ts:~2334`
-- `src/interop-header.ts:200-216`, `src/interop-abi.ts:627`
+- `src/interop-header.ts:200-216`, `src/interop-abi.ts:627` at `8036aff1`;
+  since stage 2c the header's handling is `holdsLink` and the opaque branch
+  of `structDefinitions` (`src/interop-header.ts:199-245`), and the refusals
+  are `refuseCompactSidecars` (`src/interop-abi.ts:1340`)
 
 **Layout is computed in one place**: `computeLayout` (`src/structs.ts`),
 called from `src/structs.ts:1070`, `:1186` and `src/inline-arrays.ts:895`. A

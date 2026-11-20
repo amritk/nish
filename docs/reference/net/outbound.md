@@ -115,11 +115,11 @@ Whether `policy` lets a connection go to the sixteen address bytes at
 `addr[off]`: a prefix it `permit`s, or else a public address.
 
 ```ts
-function outboundAddressAllowed(
+const outboundAddressAllowed: (
   policy: OutboundPolicy,
   addr: u8[],
   off: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="policy" type="OutboundPolicy" required>
@@ -152,10 +152,10 @@ Whether the sixteen address bytes at `addr[off]` are public, as the module
 comment defines it. Panics when sixteen bytes do not fit there.
 
 ```ts
-function outboundAddressPublic(
+const outboundAddressPublic: (
   addr: u8[],
   off: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="addr" type="u8[]" required>
@@ -181,10 +181,7 @@ True for a public address. An IPv4 one carried by NAT64 or 6to4 is judged as tha
 The sixteen address bytes at `addr[off]` as text, for an error to name.
 
 ```ts
-function outboundAddressText(
-  addr: u8[],
-  off: i32,
-): string
+const outboundAddressText: (addr: u8[], off: i32) => string
 ```
 
 <scalar-field name="addr" type="u8[]" required>
@@ -212,11 +209,11 @@ that `policy` allows, moved to the front in their order, and answers how
 many. Refused records are left behind them, so the caller can name one.
 
 ```ts
-function outboundFilter(
+const outboundFilter: (
   policy: OutboundPolicy,
   addresses: u8[],
   count: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="policy" type="OutboundPolicy" required>
@@ -250,10 +247,10 @@ Whether `policy` lets a URL name `host`, as the URL parser gives it
 policy names none.
 
 ```ts
-function outboundHostAllowed(
+const outboundHostAllowed: (
   policy: OutboundPolicy,
   host: string,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="policy" type="OutboundPolicy" required>

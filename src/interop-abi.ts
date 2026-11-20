@@ -1322,14 +1322,17 @@ const reportUninstantiated = (
 }
 
 /**
- * WP48: refuses a compact class in a build C or Node reads. Its links are
- * 32-bit offsets no header, shim or host spells, so an exported function that
- * takes or returns one is refused at its signature (`CompactInSignature`), and
- * any other compact class of the program at its name, naming the flag: a host
- * reaches it through an object it is handed all the same. One check, then, and
- * two codes, because the signature is the line to change in the first case and
- * the flag in the second. `flag` is the sidecar flag the build was given.
- * True when the program has no compact class.
+ * WP48: refuses a compact class in an N-API build. Its links are 32-bit
+ * offsets into a range the process reserves at start-up, and an addon runs in
+ * Node's process, which Nish does not own, so nothing reserves that range
+ * there. A C host built with `--emit-header` is a process Nish starts, and is
+ * not refused: its header keeps a compact class opaque (`interop-header.ts`).
+ * An exported function that takes or returns one is refused at its signature
+ * (`CompactInSignature`), and any other compact class of the program at its
+ * name, naming the flag: a host reaches it through an object it is handed all
+ * the same. One check, then, and two codes, because the signature is the line
+ * to change in the first case and the flag in the second. `flag` is the N-API
+ * flag the build was given. True when the program has no compact class.
  */
 export const refuseCompactSidecars = (
   compilation: Compilation,
@@ -1351,7 +1354,7 @@ export const refuseCompactSidecars = (
         fn.unit.source,
         at.start,
         at.end,
-        `\`${sig.sourceName}\` is exported to C or Node and its signature holds \`${held.name}\`, which implements \`Compact\`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object`
+        `\`${sig.sourceName}\` is exported to Node and its signature holds \`${held.name}\`, which implements \`Compact\`: an N-API addon runs in Node's process, which Nish does not own, so nothing keeps free the range its links count from; an export to Node takes and returns no compact object`
       )
       reported.add(held.name)
     }
@@ -1367,7 +1370,7 @@ export const refuseCompactSidecars = (
         unit.source,
         at.start,
         at.end,
-        `\`${info.name}\` implements \`Compact\`, and \`${flag}\` describes the program to C or Node, which would read its 32-bit links as pointers; build without \`${flag}\`, or drop the marker`
+        `\`${info.name}\` implements \`Compact\`, and \`${flag}\` builds an addon Node loads into its own process, which Nish does not own, so nothing keeps free the range its 32-bit links count from; build a C host with \`--emit-header\`, or drop the marker`
       )
     }
   }

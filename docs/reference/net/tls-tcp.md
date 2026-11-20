@@ -185,12 +185,12 @@ read on every call; a program that connects often reads them once with
 `tlsClientSystemTrust` and passes them to `tlsConnectWith`.
 
 ```ts
-function tlsConnect(
+const tlsConnect: (
   addr: u8[],
   serverName: string,
   alpn: string[],
   timeoutMs: i32,
-): TlsTcpClient
+) => TlsTcpClient
 ```
 
 <scalar-field name="addr" type="u8[]" required>
@@ -229,12 +229,12 @@ The client, open or failed; the caller owns it and calls `close` when done with 
 `tlsConnect` under a `config` and `trust` of the caller's.
 
 ```ts
-function tlsConnectWith(
+const tlsConnectWith: (
   addr: u8[],
   config: TlsClientConfig,
   trust: TlsClientTrust,
   timeoutMs: i32,
-): TlsTcpClient
+) => TlsTcpClient
 ```
 
 <scalar-field name="addr" type="u8[]" required>

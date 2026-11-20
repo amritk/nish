@@ -10,6 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
+import { attachOverloads } from "./overloads"
 import { recordAccumulation } from "./accumulate"
 import {
   checkExportedLayouts,
@@ -33,7 +34,13 @@ import {
   unsafeModule,
 } from "./nish-modules"
 import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
-import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations"
+import {
+  collectFunctionSignature,
+  collectImports,
+  isExported,
+  isOptionalParameter,
+  markEntryMain,
+} from "./declarations"
 import {
   checkDeferredConstraints,
   collectStructTypeParamNames,
@@ -44,11 +51,13 @@ import {
   isTemplateFunction,
   refuseNestedFunctionTypes,
   parameterOrigin,
+  qualifiesClashing,
   refuseUninferable,
   rejectDollarInSymbolName,
   resolveStructTemplateConstraints,
   resolveTemplateConstraints,
 } from "./generics"
+import { moduleSymbolQualifier } from "./packages"
 import {
   FLAG_ABSTRACT,
   FLAG_COMPUTED,
@@ -540,7 +549,10 @@ export class Checker {
    *
    * `main` needs no exception: only the entry module may declare it, and the
    * entry module is the root package by construction (`Compilation` derives
-   * every other module's package by comparing it with the entry's own).
+   * every other module's package by comparing it with the entry's own). Nor
+   * does WP57 S1's module qualifier need one here: it is applied separately,
+   * by `qualifyClashing`, only to a private free function whose bare symbol
+   * clashes, and the entry's exported `main` is never one.
    *
    * A `declare function` is the exception that is not a symbol of the package
    * at all: it names a C function, and C has one namespace, so it keeps the
@@ -567,6 +579,44 @@ export class Checker {
       // spell the package twice.
       if (sig.instance === null && !sig.foreign() && sig.definedIn(this.program.source)) {
         sig.name = `${prefix}${sig.name}`
+      }
+    }
+  }
+
+  /**
+   * Give each free function this module defines whose bare symbol would clash
+   * (`qualifiesClashing`, in `src/generics.ts`) its module-qualified symbol,
+   * `<prefix><qualifier>$.<name>` (WP57 S1, `docs/wp57-module-scoped-names.md`
+   * §4). `Compilation.qualifyClashingSymbols` runs this for every module
+   * before any import is bound, so an importer copies the final symbol. A
+   * method or constructor is named after its class and is never in reach, and
+   * a template's instantiations are named when they are minted
+   * (`templateSymbol`). The qualifier is spelled only once a function needs it,
+   * so a module with no clash allocates nothing here.
+   *
+   * `qualifiesClashing` reads each peer's functions by source name, so
+   * renaming one here does not change the answer for the next.
+   *
+   * `$` cannot appear in a declared name and `.` cannot appear in a qualifier,
+   * so `lib_util$.helper` is spelled like no declared function, method or
+   * instantiation; the clash check still runs over the result, which is what
+   * refuses two modules whose paths reduce to one qualifier.
+   */
+  qualifyClashing(peers: CheckContext[], modulePath: string, entryPath: string): void {
+    const prefix = this.program.symbolPrefix
+    let qualifier = ""
+    for (const sig of this.program.functions) {
+      if (
+        sig.owner === null &&
+        sig.instance === null &&
+        !sig.foreign() &&
+        sig.definedIn(this.program.source) &&
+        qualifiesClashing(peers, this.ctx, sig.sourceName, sig.exported)
+      ) {
+        if (qualifier.length === 0) {
+          qualifier = moduleSymbolQualifier(modulePath, entryPath)
+        }
+        sig.name = `${prefix}${qualifier}$.${sig.sourceName}`
       }
     }
   }
@@ -728,6 +778,7 @@ export class Checker {
     }
     const sig = collectFunctionSignature(this.ctx, stmt)
     const name = sig.sourceName
+    attachOverloads(this.ctx, sig, -1, name)
     if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
       return
     }
@@ -1212,6 +1263,9 @@ export class Checker {
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM)
       local.origin = parameterOrigin(this.ctx, sig, i)
       local.typedArray = parameterSpelling(this.ctx, sig, sig.paramNames[i])
+      if (isOptionalParameter(this.ctx, sig, i)) {
+        this.ctx.optionalLocals.push(local)
+      }
       if (!scope.declare(local)) {
         this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``)
       }
@@ -2305,6 +2359,8 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     // the first operand of that `??` is sure to run.
     const chained =
       node.kind === NodeKind.Binary && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
+    // WP28 C1: a statement that is a `?.` chain stops at its links the same way.
+    const skipped = node.kind === NodeKind.ExprStmt && isOptionalChain(node.children[0])
     const repeats =
       node.kind === NodeKind.While ||
       node.kind === NodeKind.Do ||
@@ -2314,6 +2370,7 @@ const guardStatement = (body: Node, access: Node): Node | null => {
       down !== node &&
       ((branches && (!first || chained)) ||
         repeats ||
+        skipped ||
         node.kind === NodeKind.Arrow ||
         node.kind === NodeKind.Labeled)
     if (crosses) {

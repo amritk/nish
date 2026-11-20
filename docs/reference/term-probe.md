@@ -142,7 +142,7 @@ started it still counts, though the client attached now may differ.
 Every query the probe asks, as one write; `TermProbe` reads the answers.
 
 ```ts
-function probeQueries(env: TermEnv): string
+const probeQueries: (env: TermEnv) => string
 ```
 
 <scalar-field name="env" type="TermEnv" required>

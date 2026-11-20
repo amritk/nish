@@ -587,7 +587,7 @@ and https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nishsimd-lane-oper
 Each float lane's absolute value, `llvm.fabs`: the sign bit cleared.
 
 ```ts
-function abs<V extends FloatVector>(a: V): V
+const abs: <V extends FloatVector>(a: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -607,7 +607,7 @@ The vector of absolute values.
 The lane-wise sum of two float vectors, `fadd` with no fast-math flags. An integer vector is refused (NL2623): its form is `addWrapping`.
 
 ```ts
-function add<V extends FloatVector>(a: V, b: V): V
+const add: <V extends FloatVector>(a: V, b: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -634,10 +634,10 @@ The lane-wise sum of two integer vectors, `add` with no `nsw` or
 `nuw`: each lane wraps at the lane width.
 
 ```ts
-function addWrapping<V extends IntegerVector>(
+const addWrapping: <V extends IntegerVector>(
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -663,7 +663,7 @@ Each lane's sum, wrapped.
 Whether every lane of `m` is set, `llvm.vector.reduce.and`.
 
 ```ts
-function all(m: SimdMask): boolean
+const all: (m: SimdMask) => boolean
 ```
 
 <scalar-field name="m" type="SimdMask" required>
@@ -683,10 +683,10 @@ A mask.
 Bitwise `and`, on integer lanes or lane by lane on two masks.
 
 ```ts
-function and<V extends IntegerVector | SimdMask>(
+const and: <V extends IntegerVector | SimdMask>(
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -712,7 +712,7 @@ The bitwise `and`, of `a`'s type.
 Whether any lane of `m` is set, `llvm.vector.reduce.or`.
 
 ```ts
-function any(m: SimdMask): boolean
+const any: (m: SimdMask) => boolean
 ```
 
 <scalar-field name="m" type="SimdMask" required>
@@ -732,7 +732,7 @@ A mask.
 The same sixteen bytes read as an `f32x4`, one `bitcast`.
 
 ```ts
-function asF32x4(v: SimdVector): f32x4
+const asF32x4: (v: SimdVector) => f32x4
 ```
 
 <scalar-field name="v" type="SimdVector" required>
@@ -752,7 +752,7 @@ The bytes as 4 `f32` lanes.
 The same sixteen bytes read as an `f64x2`, one `bitcast`.
 
 ```ts
-function asF64x2(v: SimdVector): f64x2
+const asF64x2: (v: SimdVector) => f64x2
 ```
 
 <scalar-field name="v" type="SimdVector" required>
@@ -772,7 +772,7 @@ The bytes as 2 `f64` lanes.
 The same sixteen bytes read as an `i32x4`, one `bitcast`.
 
 ```ts
-function asI32x4(v: SimdVector): i32x4
+const asI32x4: (v: SimdVector) => i32x4
 ```
 
 <scalar-field name="v" type="SimdVector" required>
@@ -792,7 +792,7 @@ The bytes as 4 `i32` lanes.
 The same sixteen bytes read as a `u16x8`, one `bitcast`.
 
 ```ts
-function asU16x8(v: SimdVector): u16x8
+const asU16x8: (v: SimdVector) => u16x8
 ```
 
 <scalar-field name="v" type="SimdVector" required>
@@ -812,7 +812,7 @@ The bytes as 8 `u16` lanes.
 The same sixteen bytes read as a `u32x4`, one `bitcast`.
 
 ```ts
-function asU32x4(v: SimdVector): u32x4
+const asU32x4: (v: SimdVector) => u32x4
 ```
 
 <scalar-field name="v" type="SimdVector" required>
@@ -832,7 +832,7 @@ The bytes as 4 `u32` lanes.
 The same sixteen bytes read as a `u8x16`, one `bitcast`.
 
 ```ts
-function asU8x16(v: SimdVector): u8x16
+const asU8x16: (v: SimdVector) => u8x16
 ```
 
 <scalar-field name="v" type="SimdVector" required>
@@ -853,7 +853,7 @@ The mask as bits: a `bitcast` of `<N x i1>` to `iN`, zero-extended.
 Storable where the mask is not.
 
 ```ts
-function bitmask(m: SimdMask): i32
+const bitmask: (m: SimdMask) => i32
 ```
 
 <scalar-field name="m" type="SimdMask" required>
@@ -873,7 +873,7 @@ An `i32` with bit `k` set when lane `k` is.
 The lane-wise quotient of two float vectors, `fdiv` with no fast-math flags. An integer vector is refused (NL2623).
 
 ```ts
-function div<V extends FloatVector>(a: V, b: V): V
+const div: <V extends FloatVector>(a: V, b: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -900,10 +900,7 @@ Whether each lane of `a` is equal to the lane of `b`: `icmp`, unsigned on a
 `u*` lane, or on float lanes `fcmp oeq`.
 
 ```ts
-function eq<V extends SimdVector>(
-  a: V,
-  b: V,
-): V["__mask"]
+const eq: <V extends SimdVector>(a: V, b: V) => V["__mask"]
 ```
 
 <scalar-field name="a" type="V" required>
@@ -930,10 +927,10 @@ The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
 Lane `k` of `v`, one `extractelement` at a constant.
 
 ```ts
-function extract<V extends SimdVector>(
+const extract: <V extends SimdVector>(
   v: V,
   k: i32,
-): V["__lane"]
+) => V["__lane"]
 ```
 
 <scalar-field name="v" type="V" required>
@@ -960,12 +957,7 @@ The lane, of the lane type.
 An `f32x4` of 4 lanes, one argument per lane, lane 0 first.
 
 ```ts
-function f32x4(
-  a0: f32,
-  a1: f32,
-  a2: f32,
-  a3: f32,
-): f32x4
+const f32x4: (a0: f32, a1: f32, a2: f32, a3: f32) => f32x4
 ```
 
 <scalar-field name="a0" type="f32" required>
@@ -1003,7 +995,7 @@ The vector.
 An `f64x2` of 2 lanes, one argument per lane, lane 0 first.
 
 ```ts
-function f64x2(a0: f64, a1: f64): f64x2
+const f64x2: (a0: f64, a1: f64) => f64x2
 ```
 
 <scalar-field name="a0" type="f64" required>
@@ -1030,10 +1022,7 @@ Whether each lane of `a` is at least the lane of `b`: `icmp`, unsigned on a
 `u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
-function ge<V extends SimdVector>(
-  a: V,
-  b: V,
-): V["__mask"]
+const ge: <V extends SimdVector>(a: V, b: V) => V["__mask"]
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1061,10 +1050,7 @@ Whether each lane of `a` is greater than the lane of `b`: `icmp`, unsigned on a
 `u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
-function gt<V extends SimdVector>(
-  a: V,
-  b: V,
-): V["__mask"]
+const gt: <V extends SimdVector>(a: V, b: V) => V["__mask"]
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1091,12 +1077,7 @@ The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
 An `i32x4` of 4 lanes, one argument per lane, lane 0 first.
 
 ```ts
-function i32x4(
-  a0: i32,
-  a1: i32,
-  a2: i32,
-  a3: i32,
-): i32x4
+const i32x4: (a0: i32, a1: i32, a2: i32, a3: i32) => i32x4
 ```
 
 <scalar-field name="a0" type="i32" required>
@@ -1135,10 +1116,7 @@ Whether each lane of `a` is at most the lane of `b`: `icmp`, unsigned on a
 `u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
-function le<V extends SimdVector>(
-  a: V,
-  b: V,
-): V["__mask"]
+const le: <V extends SimdVector>(a: V, b: V) => V["__mask"]
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1168,10 +1146,7 @@ naming a lane past the end (the first when it is out of range, else the
 last) and the length, as `xs[i]` does.
 
 ```ts
-function loadF32x4(
-  xs: readonly f32[],
-  i: i32,
-): f32x4
+const loadF32x4: (xs: readonly f32[], i: i32) => f32x4
 ```
 
 <scalar-field name="xs" type="readonly f32[]" required>
@@ -1201,10 +1176,7 @@ naming a lane past the end (the first when it is out of range, else the
 last) and the length, as `xs[i]` does.
 
 ```ts
-function loadF64x2(
-  xs: readonly f64[],
-  i: i32,
-): f64x2
+const loadF64x2: (xs: readonly f64[], i: i32) => f64x2
 ```
 
 <scalar-field name="xs" type="readonly f64[]" required>
@@ -1234,10 +1206,7 @@ naming a lane past the end (the first when it is out of range, else the
 last) and the length, as `xs[i]` does.
 
 ```ts
-function loadI32x4(
-  xs: readonly i32[],
-  i: i32,
-): i32x4
+const loadI32x4: (xs: readonly i32[], i: i32) => i32x4
 ```
 
 <scalar-field name="xs" type="readonly i32[]" required>
@@ -1267,10 +1236,7 @@ naming a lane past the end (the first when it is out of range, else the
 last) and the length, as `xs[i]` does.
 
 ```ts
-function loadU16x8(
-  xs: readonly u16[],
-  i: i32,
-): u16x8
+const loadU16x8: (xs: readonly u16[], i: i32) => u16x8
 ```
 
 <scalar-field name="xs" type="readonly u16[]" required>
@@ -1300,10 +1266,7 @@ naming a lane past the end (the first when it is out of range, else the
 last) and the length, as `xs[i]` does.
 
 ```ts
-function loadU32x4(
-  xs: readonly u32[],
-  i: i32,
-): u32x4
+const loadU32x4: (xs: readonly u32[], i: i32) => u32x4
 ```
 
 <scalar-field name="xs" type="readonly u32[]" required>
@@ -1333,10 +1296,7 @@ naming a lane past the end (the first when it is out of range, else the
 last) and the length, as `xs[i]` does.
 
 ```ts
-function loadU8x16(
-  xs: readonly u8[],
-  i: i32,
-): u8x16
+const loadU8x16: (xs: readonly u8[], i: i32) => u8x16
 ```
 
 <scalar-field name="xs" type="readonly u8[]" required>
@@ -1364,10 +1324,7 @@ Whether each lane of `a` is less than the lane of `b`: `icmp`, unsigned on a
 `u*` lane, or on float lanes ordered `fcmp`.
 
 ```ts
-function lt<V extends SimdVector>(
-  a: V,
-  b: V,
-): V["__mask"]
+const lt: <V extends SimdVector>(a: V, b: V) => V["__mask"]
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1396,7 +1353,7 @@ lanes, `llvm.maximum` on float lanes, where a NaN lane answers NaN and -0
 is below +0, as `Math.max`.
 
 ```ts
-function max<V extends SimdVector>(a: V, b: V): V
+const max: <V extends SimdVector>(a: V, b: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1424,7 +1381,7 @@ lanes, `llvm.minimum` on float lanes, where a NaN lane answers NaN and -0
 is below +0, as `Math.min`.
 
 ```ts
-function min<V extends SimdVector>(a: V, b: V): V
+const min: <V extends SimdVector>(a: V, b: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1450,7 +1407,7 @@ Each lane's lesser.
 The lane-wise product of two float vectors, `fmul` with no fast-math flags. An integer vector is refused (NL2623): its form is `mulWrapping`.
 
 ```ts
-function mul<V extends FloatVector>(a: V, b: V): V
+const mul: <V extends FloatVector>(a: V, b: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1477,10 +1434,10 @@ The lane-wise product of two integer vectors, `mul` with no `nsw` or
 `nuw`: each lane wraps at the lane width.
 
 ```ts
-function mulWrapping<V extends IntegerVector>(
+const mulWrapping: <V extends IntegerVector>(
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1508,10 +1465,7 @@ on a `u*` lane, or on float lanes `fcmp une`, unordered, so a NaN lane is
 not equal.
 
 ```ts
-function ne<V extends SimdVector>(
-  a: V,
-  b: V,
-): V["__mask"]
+const ne: <V extends SimdVector>(a: V, b: V) => V["__mask"]
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1538,7 +1492,7 @@ The mask of the lane width: `mask8x16`, `mask16x8`, `mask32x4`
 Each float lane negated, `fneg`: the sign bit flipped.
 
 ```ts
-function neg<V extends FloatVector>(a: V): V
+const neg: <V extends FloatVector>(a: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1558,9 +1512,7 @@ The negated vector.
 Every bit flipped, `xor` with all-ones, on integer lanes or a mask.
 
 ```ts
-function not<V extends IntegerVector | SimdMask>(
-  a: V,
-): V
+const not: <V extends IntegerVector | SimdMask>(a: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1580,10 +1532,10 @@ The complement, of `a`'s type.
 Bitwise `or`, on integer lanes or lane by lane on two masks.
 
 ```ts
-function or<V extends IntegerVector | SimdMask>(
+const or: <V extends IntegerVector | SimdMask>(
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1610,11 +1562,11 @@ A new vector: `v` with lane `k` set to `x`, one `insertelement` at a
 constant. `v` is unchanged; under Node `replace` copies.
 
 ```ts
-function replace<V extends SimdVector>(
+const replace: <V extends SimdVector>(
   v: V,
   k: i32,
   x: V["__lane"],
-): V
+) => V
 ```
 
 <scalar-field name="v" type="V" required>
@@ -1647,10 +1599,7 @@ Each lane rotated left by `count`, `llvm.fshl` with `v` as both halves.
 Signed and unsigned lanes rotate alike.
 
 ```ts
-function rotl<V extends IntegerVector>(
-  v: V,
-  count: i32,
-): V
+const rotl: <V extends IntegerVector>(v: V, count: i32) => V
 ```
 
 <scalar-field name="v" type="V" required>
@@ -1678,10 +1627,7 @@ Each lane rotated right by `count`, `llvm.fshr` with `v` as both halves.
 Signed and unsigned lanes rotate alike.
 
 ```ts
-function rotr<V extends IntegerVector>(
-  v: V,
-  count: i32,
-): V
+const rotr: <V extends IntegerVector>(v: V, count: i32) => V
 ```
 
 <scalar-field name="v" type="V" required>
@@ -1709,11 +1655,11 @@ Lane `k` of `a` where lane `k` of `m` is set, else lane `k` of `b`, one
 `select`.
 
 ```ts
-function select<V extends SimdVector>(
+const select: <V extends SimdVector>(
   m: V["__mask"],
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="m" type="V[&quot;__mask&quot;]" required>
@@ -1746,10 +1692,7 @@ The blended vector.
 Each lane shifted left by `count`, `shl`.
 
 ```ts
-function shl<V extends IntegerVector>(
-  v: V,
-  count: i32,
-): V
+const shl: <V extends IntegerVector>(v: V, count: i32) => V
 ```
 
 <scalar-field name="v" type="V" required>
@@ -1777,10 +1720,7 @@ Each lane shifted right by `count`: `lshr`, logical, on `u8x16`, `u16x8`
 and `u32x4`, and `ashr`, copying the sign, on `i32x4`.
 
 ```ts
-function shr<V extends IntegerVector>(
-  v: V,
-  count: i32,
-): V
+const shr: <V extends IntegerVector>(v: V, count: i32) => V
 ```
 
 <scalar-field name="v" type="V" required>
@@ -1807,11 +1747,11 @@ The vector of shifted lanes.
 Lanes picked from `a` then `b`, one `shufflevector`.
 
 ```ts
-function shuffle<V extends SimdVector>(
+const shuffle: <V extends SimdVector>(
   a: V,
   b: V,
   ...lanes: i32[],
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1846,7 +1786,7 @@ The vector of the picked lanes, lane 0 first.
 `zeroinitializer` mask.
 
 ```ts
-function splatF32x4(x: f32): f32x4
+const splatF32x4: (x: f32) => f32x4
 ```
 
 <scalar-field name="x" type="f32" required>
@@ -1867,7 +1807,7 @@ The vector.
 `zeroinitializer` mask.
 
 ```ts
-function splatF64x2(x: f64): f64x2
+const splatF64x2: (x: f64) => f64x2
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -1888,7 +1828,7 @@ The vector.
 `zeroinitializer` mask.
 
 ```ts
-function splatI32x4(x: i32): i32x4
+const splatI32x4: (x: i32) => i32x4
 ```
 
 <scalar-field name="x" type="i32" required>
@@ -1909,7 +1849,7 @@ The vector.
 `zeroinitializer` mask.
 
 ```ts
-function splatU16x8(x: u16): u16x8
+const splatU16x8: (x: u16) => u16x8
 ```
 
 <scalar-field name="x" type="u16" required>
@@ -1930,7 +1870,7 @@ The vector.
 `zeroinitializer` mask.
 
 ```ts
-function splatU32x4(x: u32): u32x4
+const splatU32x4: (x: u32) => u32x4
 ```
 
 <scalar-field name="x" type="u32" required>
@@ -1951,7 +1891,7 @@ The vector.
 `zeroinitializer` mask.
 
 ```ts
-function splatU8x16(x: u8): u8x16
+const splatU8x16: (x: u8) => u8x16
 ```
 
 <scalar-field name="x" type="u8" required>
@@ -1971,7 +1911,7 @@ The vector.
 The square root of each float lane, `llvm.sqrt`.
 
 ```ts
-function sqrt<V extends FloatVector>(a: V): V
+const sqrt: <V extends FloatVector>(a: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -1992,11 +1932,11 @@ The lanes of `v` into `xs[i]` to `xs[i + N - 1]`, `N` the lane count,
 under the same single check as a load, then one `store`; a statement.
 
 ```ts
-function store<V extends SimdVector>(
+const store: <V extends SimdVector>(
   v: V,
   xs: V["__lane"][],
   i: i32,
-): void
+) => void
 ```
 
 <scalar-field name="v" type="V" required>
@@ -2022,7 +1962,7 @@ The index lane 0 goes to, an `i32`.
 The lane-wise difference of two float vectors, `fsub` with no fast-math flags. An integer vector is refused (NL2623): its form is `subWrapping`.
 
 ```ts
-function sub<V extends FloatVector>(a: V, b: V): V
+const sub: <V extends FloatVector>(a: V, b: V) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -2049,10 +1989,10 @@ The lane-wise difference of two integer vectors, `sub` with no `nsw` or
 `nuw`: each lane wraps at the lane width.
 
 ```ts
-function subWrapping<V extends IntegerVector>(
+const subWrapping: <V extends IntegerVector>(
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>
@@ -2080,7 +2020,7 @@ The lanes of a `u8x16` or `u16x8` added in an `i32`, `zext` then
 `u32x4` can, and is refused (NL2636): its total is `sumWrapping`.
 
 ```ts
-function sum(v: u8x16 | u16x8): i32
+const sum: (v: u8x16 | u16x8) => i32
 ```
 
 <scalar-field name="v" type="u8x16 | u16x8" required>
@@ -2100,7 +2040,7 @@ The lanes of an `f32x4` added from lane 0 to lane 3,
 every target.
 
 ```ts
-function sum(v: f32x4): f32
+const sum: (v: f32x4) => f32
 ```
 
 <scalar-field name="v" type="f32x4" required>
@@ -2118,7 +2058,7 @@ The total, an `f32`.
 The lanes of an `f64x2` added, lane 0 first, likewise in order.
 
 ```ts
-function sum(v: f64x2): f64
+const sum: (v: f64x2) => f64
 ```
 
 <scalar-field name="v" type="f64x2" required>
@@ -2139,7 +2079,7 @@ The lanes of an `i32x4` added, `llvm.vector.reduce.add`, wrapping as the
 lanes do.
 
 ```ts
-function sumWrapping(v: i32x4): i32
+const sumWrapping: (v: i32x4) => i32
 ```
 
 <scalar-field name="v" type="i32x4" required>
@@ -2157,7 +2097,7 @@ The wrapped total, an `i32`.
 The lanes of a `u32x4` added, wrapping.
 
 ```ts
-function sumWrapping(v: u32x4): u32
+const sumWrapping: (v: u32x4) => u32
 ```
 
 <scalar-field name="v" type="u32x4" required>
@@ -2177,7 +2117,7 @@ The wrapped total, a `u32`.
 A `u16x8` of 8 lanes, one argument per lane, lane 0 first.
 
 ```ts
-function u16x8(
+const u16x8: (
   a0: u16,
   a1: u16,
   a2: u16,
@@ -2186,7 +2126,7 @@ function u16x8(
   a5: u16,
   a6: u16,
   a7: u16,
-): u16x8
+) => u16x8
 ```
 
 <scalar-field name="a0" type="u16" required>
@@ -2248,12 +2188,7 @@ The vector.
 A `u32x4` of 4 lanes, one argument per lane, lane 0 first.
 
 ```ts
-function u32x4(
-  a0: u32,
-  a1: u32,
-  a2: u32,
-  a3: u32,
-): u32x4
+const u32x4: (a0: u32, a1: u32, a2: u32, a3: u32) => u32x4
 ```
 
 <scalar-field name="a0" type="u32" required>
@@ -2292,7 +2227,7 @@ A `u8x16` of sixteen lanes: one `insertelement` per lane, which `opt`
 folds to a constant vector when every lane is one.
 
 ```ts
-function u8x16(
+const u8x16: (
   a0: u8,
   a1: u8,
   a2: u8,
@@ -2309,7 +2244,7 @@ function u8x16(
   a13: u8,
   a14: u8,
   a15: u8,
-): u8x16
+) => u8x16
 ```
 
 <scalar-field name="a0" type="u8" required>
@@ -2419,10 +2354,10 @@ The vector.
 Bitwise `xor`, on integer lanes or lane by lane on two masks.
 
 ```ts
-function xor<V extends IntegerVector | SimdMask>(
+const xor: <V extends IntegerVector | SimdMask>(
   a: V,
   b: V,
-): V
+) => V
 ```
 
 <scalar-field name="a" type="V" required>

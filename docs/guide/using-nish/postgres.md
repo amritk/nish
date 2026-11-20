@@ -20,7 +20,8 @@ and every request gets its rows, or word that there were none. The connection
 asks for nothing a round trip does not need: the statement is prepared, bound
 and executed in one write.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import {
   PG_BATCH_MISSING,
   PG_BATCH_NONE,
@@ -392,7 +393,8 @@ nothing. When `failure` is `PG_TARGET_OK`, a `unix` target is
 `netAddress(addr, target.host, target.port)` and `tcpConnect(addr)`. Either
 way the connection is the same `PgConnection`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { PG_TARGET_OK, pgTargetUrl } from "nish/net/postgres";
 import { netAddress, tcpConnect, unixConnect } from "nish:net";
 
@@ -1001,7 +1003,7 @@ import {
   PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
 } from "nish/net/postgres-async"
 
-async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+const title = async (pool: PgAsyncPool, id: i32): Promise<void> => {
   const ticket: i32 = await pgAsyncClaim(pool)
   if (ticket < 0) {
     return // -1: no live connection; -2: none came free within claimWaitMs
@@ -1015,7 +1017,7 @@ async function title(pool: PgAsyncPool, id: i32): Promise<void> {
   }
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const config = new PgConfig()
   config.user = "app"
   const pool = new PgAsyncPool(4)
@@ -1100,14 +1102,15 @@ waits for its turn and reads its answer. Up to `depth` (8 by default, at most
 16) statements from different tasks are in flight on one connection at once,
 and each is parsed once a connection, then only bound and executed:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { spawn } from "nish:async"
 import {
   PgAsyncParams, PgAsyncPool, pgAsyncAnswer, pgAsyncDone, pgAsyncPrepare, pgAsyncSeat, pgAsyncSend,
   pgAsyncTurn,
 } from "nish/net/postgres-async"
 
-async function title(pool: PgAsyncPool, statement: i32, id: i32): Promise<void> {
+const title = async (pool: PgAsyncPool, statement: i32, id: i32): Promise<void> => {
   const ticket: i32 = await pgAsyncSeat(pool, statement)
   if (ticket < 0) {
     return
@@ -1121,7 +1124,7 @@ async function title(pool: PgAsyncPool, statement: i32, id: i32): Promise<void> 
   console.log(r.ok() && r.rows > 0 ? r.text(0, 0) : "none")
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const pool = new PgAsyncPool(4)
   const byId: i32 = pgAsyncPrepare(pool, "select title from article where id = $1")
   // ... pgAsyncConnect as above ...

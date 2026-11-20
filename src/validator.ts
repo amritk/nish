@@ -32,7 +32,7 @@ import { builtinTypeName } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
-import { unwrapParens } from "./emit-util"
+import { isOptionalChain, unwrapParens } from "./emit-util"
 import { isIteratorMethod, isThreadsSource } from "./parallel"
 import {
   FLAG_ASYNC,
@@ -242,20 +242,165 @@ export const validate = (ctx: CheckContext, node: Node): void => {
 const chainWithoutDefault = (): string =>
   "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`"
 
+/** NL1049: a `?.` link no dialect, or not this one, admits where it stands. */
+const optionalIndexForbidden = (): string =>
+  "Optional chaining `?.` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
+
 /**
- * Admit the `?.` links of `chain`, the left operand of a `??`: record each
- * one's receiver as a value the emitter tests for `null`, branching to the
- * default. A parenthesis ends a chain, as it does in TypeScript, so
+ * An element read the chain carries on past: a `?.[i]` that ends a `??` chain
+ * or a statement chain, or, in a statement chain, any element read that ends
+ * it or that a `?.` link tests. Past the end of the array JavaScript answers
+ * `undefined`, which the default, the dropped statement or the next `?.`
+ * absorbs, and a bounds check panics, so neither dialect admits one: the two
+ * would disagree on exactly the reads a `?.` is written to survive. A plain
+ * element read a `?.` tests in a `??` chain, `xs[i]?.m() ?? d`, is the strict
+ * dialect's own and keeps its meaning: the `?.` tests a nullable element, and
+ * the read is bounds-checked as every element read is.
+ */
+const finalElementLink = (): string =>
+  "An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)"
+
+/** An optional call, which no dialect admits yet: its callee has no `null` test to lower to. */
+const optionalCall = (): string =>
+  "An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first"
+
+/** Whether `chain`'s last link is a `?.[i]`. */
+const endsInElementLink = (chain: Node): boolean =>
+  chain.kind === NodeKind.Index && (chain.flags & FLAG_OPTIONAL) !== 0
+
+/**
+ * The element read in `chain` that the chain would carry on past, or null:
+ * its last link when that is a `?.[i]`; for a statement, also its last link
+ * when that is any element read, or an element read, plain or `?.`, whose
+ * value a `?.` member link tests, parenthesised or not. `xs[i]?.m();` with `i`
+ * past the end reads `undefined` in JavaScript and skips the call, where the
+ * bounds check panics. A parenthesised statement, `(a?.xs[i]);`, is no
+ * statement chain and is refused by the link's own rule.
+ */
+const carriedElement = (chain: Node, statement: boolean): Node | null => {
+  if (chain.kind === NodeKind.Index && (statement || (chain.flags & FLAG_OPTIONAL) !== 0)) {
+    return chain
+  }
+  if (!statement) {
+    return null
+  }
+  let node = chain
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
+    // Parentheses change nothing here: `(xs[i])?.m();` reads the element
+    // before the `?.` tests it, as `xs[i]?.m();` does.
+    const receiver = unwrapParens(node.children[0])
+    if (
+      (node.flags & FLAG_OPTIONAL) !== 0 &&
+      node.kind !== NodeKind.Call &&
+      receiver.kind === NodeKind.Index
+    ) {
+      return receiver
+    }
+    node = receiver
+  }
+  return null
+}
+
+/**
+ * The outermost `?.` member or element link of `chain`, or null when it has
+ * one only where no dialect admits it: an optional call, or a final `?.[i]`.
+ * It is where strict refuses a chain the compatibility dialect would admit.
+ */
+const admissibleLink = (chain: Node): Node | null => {
+  if (endsInElementLink(chain)) {
+    return null
+  }
+  let found: Node | null = null
+  let node = chain
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
+    if ((node.flags & FLAG_OPTIONAL) !== 0) {
+      if (node.kind === NodeKind.Call) {
+        return null
+      }
+      if (found === null) {
+        found = node
+      }
+    }
+    node = node.children[0]
+  }
+  return found
+}
+
+/** Whether `chain` has a `?.[i]` link. */
+const hasElementLink = (chain: Node): boolean => {
+  let node = chain
+  while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
+    if (node.kind === NodeKind.Index && (node.flags & FLAG_OPTIONAL) !== 0) {
+      return true
+    }
+    node = node.children[0]
+  }
+  return false
+}
+
+/**
+ * Admit the `?.` links of `chain`, the left operand of a `??` or, under the
+ * `optional-chaining` feature, a whole statement: record each one's receiver
+ * as a value the emitter tests for `null`, branching to the default or past
+ * the statement. `elements` admits a `?.[i]` link too, which only that
+ * feature does. A parenthesis ends a chain, as it does in TypeScript, so
  * `(a?.b).c` is refused at `?.b`, and a call's arguments are expressions of
  * their own, so a `?.` in one needs a `??` of its own.
  */
-const admitChain = (ctx: CheckContext, chain: Node): void => {
+const admitChain = (ctx: CheckContext, chain: Node, elements: boolean): void => {
   let node = chain
   while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
-    if (node.kind === NodeKind.Member && (node.flags & FLAG_OPTIONAL) !== 0) {
+    const optional = (node.flags & FLAG_OPTIONAL) !== 0
+    if (optional && (node.kind === NodeKind.Member || (elements && node.kind === NodeKind.Index))) {
       ctx.program.nodeNullTests[node.children[0].id] = true
     }
     node = node.children[0]
+  }
+}
+
+/**
+ * WP28 C1: the chain on the left of a `??`. Strict admits its `?.b` links;
+ * `optional-chaining` admits a `?.[i]` before the last link too, and strict
+ * names that feature where it refuses one the feature would admit.
+ */
+const admitCoalesceChain = (ctx: CheckContext, chain: Node): void => {
+  const carried = carriedElement(chain, false)
+  if (carried !== null) {
+    ctx.error(carried, finalElementLink())
+    return
+  }
+  const elements = ctx.compatAllows("optional-chaining")
+  admitChain(ctx, chain, elements)
+  if (!elements && hasElementLink(chain) && admissibleLink(chain) !== null) {
+    let node = chain
+    while ((node.flags & FLAG_OPTIONAL) === 0 || node.kind !== NodeKind.Index) {
+      node = node.children[0]
+    }
+    ctx.errorFeature(node, optionalIndexForbidden(), "optional-chaining")
+  }
+}
+
+/**
+ * WP28 C1: a statement that is a `?.` chain, `a?.b.c()`. JavaScript skips the
+ * rest of the statement where a link is `null`, and `optional-chaining` lowers
+ * it to the same: each link's receiver is tested, and a `null` one branches
+ * past the statement. Strict refuses it at its outermost `?.` link, naming the
+ * feature; a chain neither dialect admits is left to the link's own rule.
+ */
+const admitStatementChain = (ctx: CheckContext, chain: Node): void => {
+  const carried = carriedElement(chain, true)
+  if (carried !== null) {
+    ctx.error(carried, finalElementLink())
+    return
+  }
+  if (ctx.compatAllows("optional-chaining")) {
+    admitChain(ctx, chain, true)
+    return
+  }
+  const link = admissibleLink(chain)
+  if (link !== null) {
+    const message = link.kind === NodeKind.Index ? optionalIndexForbidden() : chainWithoutDefault()
+    ctx.errorFeature(link, message, "optional-chaining")
   }
 }
 
@@ -264,21 +409,22 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
   // `a?.b`, `a?.[i]` and `f?.()` are the member, element and call they
   // resemble, with a flag (`src/nodes.ts`). A `?.b` is admitted in a chain
   // whose value is the left operand of a `??`, which `admitChain` marked on
-  // the way down; the other two are always refused.
-  if ((node.flags & FLAG_OPTIONAL) !== 0 && (node.kind === NodeKind.Index || node.kind === NodeKind.Call)) {
-    ctx.error(
-      node,
-      "Optional chaining `?.` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
-    )
-  } else if (
-    (node.flags & FLAG_OPTIONAL) !== 0 &&
-    node.kind === NodeKind.Member &&
-    !ctx.program.nodeNullTests[node.children[0].id]
-  ) {
+  // the way down, and under `optional-chaining` so are a `?.[i]` before the
+  // last link and a chain that is a whole statement. An optional call is
+  // always refused.
+  const optional = (node.flags & FLAG_OPTIONAL) !== 0
+  if (optional && node.kind === NodeKind.Call) {
+    ctx.error(node, optionalCall())
+  } else if (optional && node.kind === NodeKind.Index && !ctx.program.nodeNullTests[node.children[0].id]) {
+    ctx.error(node, optionalIndexForbidden())
+  } else if (optional && node.kind === NodeKind.Member && !ctx.program.nodeNullTests[node.children[0].id]) {
     ctx.error(node, chainWithoutDefault())
   }
   if (node.kind === NodeKind.Binary && node.text === "??") {
-    admitChain(ctx, unwrapParens(node.children[0]))
+    admitCoalesceChain(ctx, unwrapParens(node.children[0]))
+  }
+  if (node.kind === NodeKind.ExprStmt && isOptionalChain(node.children[0])) {
+    admitStatementChain(ctx, node.children[0])
   }
   switch (node.kind) {
     case NodeKind.Ident: {

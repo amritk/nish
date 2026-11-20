@@ -145,9 +145,7 @@ Whether `name` is an IP literal, which RFC 6066 §3 keeps out of
 colon, which no DNS name has.
 
 ```ts
-function tlsClientIsIpLiteral(
-  name: string,
-): boolean
+const tlsClientIsIpLiteral: (name: string) => boolean
 ```
 
 <scalar-field name="name" type="string" required>

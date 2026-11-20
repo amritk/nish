@@ -12,7 +12,8 @@ and [Builtin modules](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#
 Put `export` on the declaration itself. It works on functions, constants,
 classes, interfaces, enums and type aliases:
 
-```ts nish:ok file=geometry.ts
+<!-- nish:ok -->
+```ts geometry.ts
 // geometry.ts
 export interface Point {
   x: i32;
@@ -29,7 +30,8 @@ export const distance2 = (a: Point, b: Point): i32 => {
 Then import what you need by name, with a path that starts with `./` or
 `../`. The `.ts` extension is optional:
 
-```ts nish:ok file=main.ts
+<!-- nish:ok -->
+```ts main.ts
 // main.ts
 import { distance2, Point } from "./geometry";
 
@@ -67,7 +69,8 @@ form TypeScript has is refused: a default import, a namespace import
 `import x = require(…)`. On the export side the same goes for
 `export default`, `export { a }` and `export * from`.
 
-```ts nish:err NL2119
+<!-- nish:err NL2119 -->
+```ts
 import * as geometry from "./geometry";
 
 export const main = (): i32 => 0;
@@ -75,10 +78,10 @@ export const main = (): i32 => 0;
 
 Four more rules come from compiling the whole program at once:
 
-- **A function's name is unique across the program**, exported or not. Two
-  files of your program cannot each have a private `helper`; name them apart.
-  (Packages are kept apart for you, so a dependency's `helper` does not
-  clash with yours.)
+- **An exported function's name is unique across the program.** A private
+  one need not be: two files may each keep their own private `helper`, as
+  [the next section](#private-functions-of-one-name) shows. (Packages are kept
+  apart for you too, so a dependency's `helper` does not clash with yours.)
 - **A class or interface name is unique across the program too**, for the
   same reason.
 - **Classes and interfaces cannot be renamed on import.** `import { Point as P }`
@@ -100,13 +103,46 @@ else, generic classes and interfaces included, can be renamed with `as`.
   `nish:io` or `exit` from `nish:process` is fine too: those are not functions
   of your program.
 
-```ts nish:err NL3037
+<!-- nish:err NL3037 -->
+```ts
 export const write = (line: string): i32 => toI32(line.length);
 
 export const main = (): i32 => write("hello");
 ```
 
 Rename it (`writeLine`, say), or drop the `export` if no other module needs it.
+
+## Private functions of one name
+
+Two files may each declare a private function, or a private generic
+function, of the same name; each file calls its own.
+
+<!-- nish:ok -->
+```ts helper.ts
+// helper.ts
+const add = (a: i32, b: i32): i32 => a + b;
+
+export const sum3 = (a: i32, b: i32, c: i32): i32 => add(add(a, b), c);
+```
+
+<!-- nish:ok -->
+```ts main.ts
+// main.ts
+import { sum3 } from "./helper";
+
+const add = (a: i32, b: i32): i32 => a * 10 + b;
+
+export const main = (): i32 => {
+  console.log(`${sum3(1, 2, 3)} ${add(1, 2)}`);
+  return 0;
+};
+```
+
+This prints `6 12`. Each private `add` gets a symbol named after its file
+(`helper$.add` and `main$.add`), so a native debugger or profiler shows which
+one ran. Exported functions are still unique across the program, and so are
+private ones when you build with `--no-strict-exports`, which keeps every
+function's own name as its symbol so a C driver can call it.
 
 ## Built-in modules: `nish:`
 
@@ -125,7 +161,8 @@ local name:
 | `nish:simd` | sixteen-byte vectors and the calls that make, load and store them ([Vectors](simd.md)), available only through the import |
 | `nish:async` | `spawn` and `awaitAll` for `async` functions ([Async functions](async.md)), available only through the import |
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { argv } from "nish:process";
 import { write } from "nish:io";
 
@@ -153,7 +190,8 @@ and you import it as `nish/` followed by the module's name: `nish/text`,
 and so on. It is compiled into your program like your own code, so a module
 you import but never call costs nothing.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { splitWhitespace, trim } from "nish/text";
 
 export const main = (): i32 => {
@@ -178,7 +216,8 @@ A package is compiled from its TypeScript source, not from built JavaScript,
 so it is checked and optimised exactly as your own code is. Its
 `package.json` says which file to compile under the `nish` export condition:
 
-```json nish:ok file=node_modules/hash/package.json
+<!-- nish:ok -->
+```json node_modules/hash/package.json
 {
   "name": "hash",
   "version": "1.0.0",
@@ -192,7 +231,8 @@ so it is checked and optimised exactly as your own code is. Its
 
 With `src/index.ts` and `src/blake3.ts` beside it in the package,
 
-```ts nish:ok file=node_modules/hash/src/index.ts
+<!-- nish:ok -->
+```ts node_modules/hash/src/index.ts
 // node_modules/hash/src/index.ts
 export const fnv1a = (text: string): u32 => {
   let h: u32 = 2166136261;
@@ -203,7 +243,8 @@ export const fnv1a = (text: string): u32 => {
 };
 ```
 
-```ts nish:ok file=node_modules/hash/src/blake3.ts
+<!-- nish:ok -->
+```ts node_modules/hash/src/blake3.ts
 // node_modules/hash/src/blake3.ts
 export const blake3Name = (): string => "BLAKE3";
 ```
@@ -211,7 +252,8 @@ export const blake3Name = (): string => "BLAKE3";
 a program imports the package by its name, and the subpath by the name of
 its export:
 
-```ts nish:ok file=main.ts
+<!-- nish:ok -->
+```ts main.ts
 // main.ts
 import { fnv1a } from "hash";
 import { blake3Name } from "hash/blake3";
@@ -238,6 +280,9 @@ export const main = (): i32 => {
 - A package can ship agent skills in `skills/<name>/SKILL.md`, and
   `npx nish-skills` links them into the project's `.claude/skills/`
   ([Agent skills](../using-nish/agent-skills.md)).
+- A package that wraps a C library names it, and its own C sources, in
+  `nish.link`. Your root `package.json` grants each one before it is linked
+  ([Calling C from Nish](../using-nish/interop.md#calling-c-from-nish-declare-function)).
 - The [`package.json` reference](../../reference/config/package-json.md)
   lists every field Nish reads in a package's manifest, and the error each
   mistake in one gets.

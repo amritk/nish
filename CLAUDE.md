@@ -26,7 +26,7 @@ call `walk.missType()`, never take the "not bound" branch.
 Locally, before pushing: `npm run check`, `npm run lint`, and
 `node tests/run.js <filter>` for every section or program the change touches
 (plus the `src/` runs below). **The full-suite gate is CI**: every
-`test (…, shard N/8)` row green on the current head, each shard's summary read
+`test (…, shard N/9)` row green on the current head, each shard's summary read
 for its skip count like a local run (`AGENTS.md` → "Trusting a test run"). Run
 the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
@@ -35,6 +35,15 @@ and say so in the PR body.
 A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
 narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
 release-note words) in the same PR; run nish-cmp before pushing.
+
+**`std/` line moves and panic proofs are pinned.** An edit that adds or
+removes lines in a `std/*.ts` file moves every `std/<file>.ts:LINE:COL` in
+`tests/link/*/expected.caps.json`, `tests/wordings/*.err` and
+`docs/reference/diagnostics/`: grep `std/<file>.ts:[0-9]` and regenerate them
+from the compiler's output in the same PR. A `nish:simd` load is always
+recorded as an unproven index site (`src/attributes.ts`), so `std/` code a
+`--deny-panics` caller can reach does not use one; lane-wise helpers for test
+tooling live under `tests/`.
 
 A new diagnostic code lands with a `tests/link` negative that provokes it
 (an `expected.err`): inline `tests/run.js` checks do not count toward "every
@@ -118,6 +127,14 @@ new positive `tests/cases/*` is registered with
 `.github/workflows/ci.yml` pins; another minor flipped a verdict
 (`str_surrogate_pair`) and turned CI red.
 
+**A CI lane reads what its commands read.** Before `scripts/ci-scope.mjs`
+lets a side job skip, trace every step of that job, composite actions
+included, to the files it opens; a job that runs `node tests/run.js` reads
+all of `tests/`. The backtest only evidences lanes whose jobs failed in its
+sample, so a narrowed read set needs a per-command test in
+`node tests/run.js ci-scope`, not a replay (`docs/wp10-ci.md`, "Scoped
+lanes").
+
 **Moving where a fact lives moves every pointer to it in the same PR.** Grep
 the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
 A builtin whose answer changes greps its old answer across
@@ -132,7 +149,7 @@ Every call re-reads the whole context, so cost is context size × calls.
   shipping, offer a short handoff for a fresh session instead.
 - **CI runs the full suite, not the session.** Unsharded, `npm test` takes 40
   to 70 minutes in a 4-core cloud session; CI's `test` job runs all of it in
-  eight cost-dealt shards on every push (about 10 minutes wall). Run the
+  nine cost-dealt shards on every push (about 10 minutes wall). Run the
   targeted sections in the [definition of done](#definition-of-done) and let
   the shards answer for the rest.
 - **Wait for a long run without polling.** Commit first, start it once in the

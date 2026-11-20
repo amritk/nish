@@ -752,7 +752,8 @@ value, so nothing is boxed; `null` takes its type from context. A
   (`reject_nullish_element`). A left operand that cannot be `null` (a scalar,
   or a nullable already narrowed to `T`) keeps Phase 0's refusal,
   `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-  (`reject_nullish`, `reject_nullish_nullable`).
+  (`reject_nullish`, `reject_nullish_nullable`); the `nullish` feature of
+  [the compatibility dialect](#the-compatibility-dialect) admits it.
 - **An optional chain**: `a?.b?.c ?? d` reads each link only where the
   receiver before its `?.` is not `null`, and answers `d` where one is, as
   TypeScript does. A `?.` is allowed only in a chain whose value is the left
@@ -762,7 +763,9 @@ value, so nothing is boxed; `null` takes its type from context. A
   `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` ``
   (`reject_optional_chain`, `reject_optional_chain_paren`,
   `reject_optional_chain_argument`, `reject_optional_chain_assign`,
-  `reject_optional_chain_template`). A link reads a field, a string's or an
+  `reject_optional_chain_template`); the `optional-chaining` feature of
+  [the compatibility dialect](#the-compatibility-dialect) admits a chain that
+  is a statement of its own. A link reads a field, a string's or an
   array's `length`, or calls a method, and its receiver is read as `T`
   (`optional_chain_field`, `optional_chain_order`,
   `optional_chain_generic`, `tests/link/optional_chain_modules`). The chain's value is its last link's, typed with
@@ -775,8 +778,14 @@ value, so nothing is boxed; `null` takes its type from context. A
   `` `a` is never `null` here, so `?.` has nothing to skip: write `.` ``
   (`reject_optional_chain_never_null`, `reject_optional_chain_narrowed`,
   `reject_optional_chain_this`, `reject_optional_chain_namespace`). `?.[i]`
-  and `f?.()` stay refused (`reject_optional_chain_element`,
-  `reject_optional_call`), a chain that ends in an element read is the
+  and `f?.()` stay refused: an element read inside a chain is
+  `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) ``
+  (`reject_optional_chain_element_inner`, which `optional-chaining` admits),
+  one that ends the chain is
+  `` An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``
+  (NL1067, `reject_optional_chain_element`), and an optional call is
+  `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first ``
+  (NL1068, `reject_optional_call`), in both dialects. A chain that ends in an element read is the
   element-read refusal above (`reject_optional_chain_element_last`), and one
   that ends in `get` is
   `` `h?.counts.get("a")` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers ``
@@ -1787,12 +1796,15 @@ spelling; the two compile to identical IR, instruction for instruction
   destructured parameters (`Destructured parameters are not supported`,
   `reject_param_destructured`), optional parameters (`x?: T`,
   `Optional parameters are not supported`, `reject_param_optional`, which names
-  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  `x: T = <default>` instead; the compatibility dialect's `optional-params`
+  feature accepts one read through `??`, [The compatibility
+  dialect](#the-compatibility-dialect)), a default or rest parameter anywhere but the
   declarations [Default and rest parameters](#default-and-rest-parameters)
   lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
-  `Functions must have a body`), an anonymous `export default function ()`
+  `Functions must have a body`; the compatibility dialect's `overloads`
+  feature accepts signatures before the implementation), an anonymous `export default function ()`
   (`Functions must be named`, `reject_fn_anonymous`),
   function expressions, an arrow anywhere but as a top-level `const` or a
   function argument (`reject_fnarg_arrow_value`, `reject_arrow_as_value`),
@@ -1808,9 +1820,9 @@ spelling; the two compile to identical IR, instruction for instruction
 #### Default and rest parameters
 
 ```ts
-function scale(x: number, by: number = 2): number { return x * by }
-function area(w: number, h: number = w): number { return w * h }
-function total(...xs: i64[]): i64 { let s: i64 = 0; for (const x of xs) { s = s + x } return s }
+const scale = (x: number, by: number = 2): number => { return x * by }
+const area = (w: number, h: number = w): number => { return w * h }
+const total = (...xs: i64[]): i64 => { let s: i64 = 0; for (const x of xs) { s = s + x } return s }
 
 scale(3)        // scale(3, 2)
 area(4)         // area(4, 4)
@@ -3172,15 +3184,40 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     (`tests/link/package_hidden_class_import`), and naming it in an annotation
     is `` Unsupported type reference `Space` ``
     (`tests/link/package_hidden_class_annotation`).
-- **A function name is unique across the whole program**, exported or not, in
-  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
-  `internal` linkage keeps a name out of the linker's way but it does not buy a
-  second namespace: the whole-program attribute analysis is keyed by symbol
-  name, so two functions sharing one would be emitted with each other's
-  attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag. A proposal to qualify a private function's
-  symbol by its module when it would clash is
-  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
+- **Two modules may each keep a private function of one name** (WP57 S1).
+  A non-exported free function or generic function whose name another
+  function of its package also defines — in another module, exported or not —
+  is emitted under a symbol qualified by its module's path:
+  `<package prefix><module>$.<name>`, where `<module>` is the module's path
+  from its package's root (the entry's directory, for the program's own
+  package) without `.ts`, every character outside `[A-Za-z0-9_]` spelled `_`.
+  So `helper.ts` and `main.ts` may each keep a private `add`, emitted as
+  `@helper$.add` and `@main$.add` (`tests/link/duplicate_internal`,
+  `module_private_helpers`); a private generic's instantiations are
+  `@a$.identity$i32` (`module_private_generic`); a task's arrow follows the
+  function it is written in (`@m$.work$arrow0`, `module_private_spawn`); and
+  a private `helper` beside an imported, exported `helper` is `@main$.helper`
+  while the exported one keeps `@helper` (`module_private_mixed`). The
+  qualifier is the module's path relative to its package root (the entry's
+  directory for the program's own modules), so a module outside that
+  directory keeps its `..` steps: `../shared/u.ts` gives
+  `@___shared_u$.helper` however the entry is named. A name no
+  other function shares keeps its bare symbol, so a program that built before
+  emits exactly what it did, and the entry's `main` is never qualified.
+- **Everything else still needs a unique symbol.** Two exported functions of
+  one name are refused (`tests/link/duplicate_export`), and so are two
+  exported generic functions. Under `--no-strict-exports` every function is
+  external and keeps its bare name, so there a function name is unique across
+  the program, exported or not
+  (`` under `--no-strict-exports` every function keeps its bare name as its symbol ``,
+  `tests/link/module_private_no_strict`). Two module paths that spell one
+  qualifier (`lib/util.ts` and `lib_util.ts`) are refused too, naming both
+  files: `` both modules' paths qualify it to one symbol ``. Each refusal is
+  the same reason: `internal` linkage keeps a name out of the linker's way but
+  the whole-program attribute analysis is keyed by symbol, so two functions
+  sharing one would be emitted with each other's attributes — a miscompile
+  rather than a link error. The design is
+  [`docs/wp57-module-scoped-names.md`](wp57-module-scoped-names.md).
 
 ### `main`
 
@@ -4157,15 +4194,15 @@ A failure is the answer's `Result`, `Promise<Result<T, E>>`, read after the
 ```ts
 import { awaitAll, spawn } from "nish:async"
 
-async function double(x: i32): Promise<i32> {
+const double = async (x: i32): Promise<i32> => {
   return x * 2
 }
 
-async function log(x: i32): Promise<void> {
+const log = async (x: i32): Promise<void> => {
   console.log(x)
 }
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   const a = await double(3)
   let b: i32 = 0
   b = await double(a)
@@ -4383,7 +4420,7 @@ ASYNC-4).
 import { readable, sleep, spawn } from "nish:async"
 import { netRead } from "nish:net"
 
-async function echo(fd: i32): Promise<void> {
+const echo = async (fd: i32): Promise<void> => {
   const ready = await readable(fd)
   if (!ready) {
     return
@@ -4392,12 +4429,12 @@ async function echo(fd: i32): Promise<void> {
   console.log(netRead(fd, buf, 0, 4))
 }
 
-async function tick(): Promise<void> {
+const tick = async (): Promise<void> => {
   await sleep(10)
   console.log("tick")
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   spawn(echo(0))
   spawn(tick())
   return 0
@@ -4441,7 +4478,7 @@ its task's end, once the executor reuses the task's slot, cancels nothing
 ```ts
 import { cancelAfter, cancelled, readableWithin, taskId } from "nish:async"
 
-async function serveOne(fd: i32): Promise<void> {
+const serveOne = async (fd: i32): Promise<void> => {
   // The whole task gets two seconds; this one read gets half of one.
   cancelAfter(taskId(), 2000)
   const ready = await readableWithin(fd, 500)
@@ -5047,8 +5084,10 @@ export const main = (): i32 => {
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
   reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
-  named after the one it is written in and a counter (`main$arrow0`), which
-  is the name a debugger or a profiler shows for the task's thread.
+  named after the symbol of the one it is written in and a counter
+  (`nish_main$arrow0` in the entry's `main`, `m$.work$arrow0` in a private
+  `work` that WP57 S1 qualified by its module `m.ts`), which is the name a
+  debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -6746,6 +6785,21 @@ C hands back that the program keeps is a copy it made**, so there is nothing for
 a foreign function to capture or free, which is what lets the escape analysis
 stay correct without knowing anything about the callee.
 
+**A `u8`, `u16` or `boolean` crosses as C's `unsigned char`, `unsigned short` or
+`_Bool`, and the caller widens it** (#1755). The x86-64 SysV and Apple arm64
+ABIs give the caller that job and a callee clang built reads the whole
+register, so the `declare` and every `call` carry `zeroext` on each such
+parameter and result; `toU8(511)` reaches C as 255
+(`tests/cases/ffi_narrow_zeroext`):
+
+```llvm
+declare i32 @widen_u8(i8 zeroext)
+declare zeroext i1 @is_odd(i32)
+  %3 = call i32 @widen_u8(i8 zeroext %2)
+```
+
+Nish has no signed integer narrower than `i32`, so no argument takes `signext`.
+
 #### A `string` parameter: borrowed for the length of the call
 
 **A `string` parameter is C's NUL-terminated `const char *`, and C borrows it:
@@ -6920,7 +6974,7 @@ import { readCString } from "nish:unsafe";
 declare function strdup(s: string): CPtr | null;
 declare function free(p: CPtr): void;
 
-function owned(s: string): string {
+const owned = (s: string): string => {
   const p = strdup(s);
   if (p === null) {
     return "";
@@ -6928,7 +6982,7 @@ function owned(s: string): string {
   const copy = readCString(p);
   free(p);
   return copy;
-}
+};
 ```
 
 ```llvm
@@ -7135,6 +7189,85 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   refuses a `declare function`, so a buffer declaration is for `--profile
   wasi` there (see "Host modules" below).
 
+#### `CountedBy`: a buffer that names its count
+
+**A buffer parameter written `CountedBy<u8[], "n">` (or `CountedBy<readonly
+u8[], "n">`) names its count parameter, `n`, which may stand anywhere in the
+declaration and be a `u8`, `u16`, `u32` or `u64`, or an out class whose one
+field is one.** It is how a C library's own count is declared when it is not a
+`u64` straight after the buffer: zlib's `uInt` (a `u32`), a count before its
+buffer, and `compress`'s in/out `uLongf *destLen`.
+
+```ts
+declare class OutLen {
+  value: u64
+}
+
+declare function z_fill(dst: CountedBy<u8[], "n">, n: u32, v: u8): i32
+declare function z_sum(n: u16, src: CountedBy<readonly u8[], "n">): u32
+declare function compress(
+  dest: CountedBy<u8[], "destLen">,
+  destLen: OutLen,
+  source: CountedBy<readonly u8[], "sourceLen">,
+  sourceLen: u64
+): i32
+```
+
+- **The spelling is on the buffer, because that is where C and the WP66
+  override file write it.** Clang spells the same fact `__counted_by(n)` on
+  the pointer, and the override JSON `nish c-import` reads writes it as
+  `"dest": {"buffer": "destLen"}`. `CountedBy<T, N>` is a type alias for `T`
+  to TypeScript, so a declaration still type-checks under `tsc` once a
+  `.d.ts` only `tsc` reads declares `type CountedBy<T, N extends string> = T`
+  (Nish refuses a generic type alias in its own source). A count-side spelling,
+  a naming convention (`bufLength`) and a `typeof buf["length"]` type were
+  considered and not taken: the first puts the fact on the side C does not,
+  the second is implicit, and the third loses the count's width.
+- **The call keeps the WP53 check.** The count is widened (`zext`) to 64
+  bits, or its field is loaded from the out class after the last argument
+  runs, and compared, unsigned, with the buffer's length before C runs; a
+  larger count panics `ffi-length` as a positional one does, and C never
+  runs. `tests/cases/ffi_buffer_counted_by_panic` passes a `u16` (once with
+  its top bit set, which a sign extension would pass), a `u32` and an
+  out-class count each larger than its buffer and sees the panic, exit 1, and
+  no line from C; `tests/cases/ffi_buffer_counted_by` runs the counts that
+  fit.
+- **A count of the buffer's own length is proved** at the width it is
+  declared: `toU8(b.length)`, `toU16(b.length)`, `toU32(b.length)` or
+  `toU64(b.length)` of the buffer itself, under the same conditions as the
+  positional proof. A narrowing conversion can only lower the count, so the
+  proof stays sound. An out-class count is always checked, because C may have
+  written it.
+- **A named buffer is outside the positional runs**, so WP53's adjacent-`u64`
+  rule applies to the other buffers of the declaration, and a declaration may
+  mix the two. A positional run steps over a named buffer when it looks for
+  its `u64`: in `f(a: u8[], b: CountedBy<u8[], "m">, m: u64)`, `a`'s count is
+  `m` as well, and the call checks both buffers against it.
+- **It is refused anywhere else, and in any other shape.** On a function
+  written in Nish: `` `CountedBy` names the count of a buffer lent to C, so it
+  is written only on a parameter of a `declare function` ``
+  (`tests/link/ffi_buffer_counted_by_place`). On a host module's function,
+  whose buffers are windows, it does not cross, as every other non-scalar the
+  page cannot pass (NL2661, pinned in `tests/ffi-buffer.js`). A missing name, a name that is
+  not a string literal, or a buffer that is not a `u8[]`: `` `CountedBy` takes
+  a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a
+  string literal `` (`ffi_buffer_counted_by_form`); so is an empty name or
+  `"?"`, neither of which a parameter can have. A name that is not a
+  parameter: `` counts the buffer `dst` by `len`, which is not one of its
+  parameters `` (`ffi_buffer_counted_by_unknown`). A signed, nullable or
+  many-field count: `` and the count `dst` names is a `u8`, `u16`, `u32` or
+  `u64`, or a `declare class` whose one field is one ``
+  (`ffi_buffer_counted_by_width`, whose `expected.json` pins each of the
+  four).
+- **`CountedBy` is read by its name.** The checker matches the bare name
+  `CountedBy` on a parameter, so a program's own type of that name is not
+  reachable there: on a `declare function` the annotation is read as this
+  form, and elsewhere it is refused as above.
+- **`runtime/nish.d.ts` does not declare `CountedBy` yet:** a module that
+  uses it under `tsc` declares the alias itself. `nish c-import` writes it on
+  a buffer whose override names a count that is not a `u64` straight after
+  it.
+
 #### A handle class: a class that owns a `CPtr`
 
 **A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C
@@ -7273,7 +7406,8 @@ close it.
 
 #### A `declare class`: a C struct, lent by pointer
 
-**A `declare class` is a C struct: its fields are laid out in declaration order,
+**A `declare class` with at least one field is a C struct (one with none is
+[opaque](#an-opaque-declare-class-a-c-pointer-type)): its fields are laid out in declaration order,
 each at its natural alignment, and the size is rounded up to the widest
 alignment, as a C compiler lays out the same fields. `new Name()` takes no
 arguments and zero-fills it, and a `declare function` parameter typed `Name`
@@ -7327,8 +7461,84 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   compiler could promise. A struct cannot embed
   itself, directly or through another (NL2749, `reject_ffi_struct_self`,
   `reject_ffi_struct_cycle`).
-- **A field is plain and has no initializer, and the class has nothing but
-  fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
+- **A field typed `Record<integer<0, Hi>, T>` is a fixed-length array, C's
+  `T name[Hi + 1]`, laid out inline at `T`'s alignment**, as OpenSSL's
+  `SHA_CTX` holds `unsigned int h[5]` (`tests/cases/ffi_array_field`, whose C
+  driver fills and checks a `SHA_CTX`-shaped struct; `tests/ffi-struct.js`,
+  where clang gives that shape the offsets and size Nish's build has, natively
+  and under `--profile wasi`):
+
+  ```ts
+  declare class ShaCtx {
+    tag: u8
+    h: Record<integer<0, 4>, u32>
+  }
+  const c = new ShaCtx()
+  c.h[i] = 7
+  ```
+
+  ```llvm
+  %struct.ShaCtx = type { i8, [5 x i32] }
+    %2 = sext i32 %i to i64
+    %3 = icmp ult i64 %2, 5
+    br i1 %3, label %bounds.ok, label %bounds.fail
+  bounds.fail:
+    call void @nish_panic_index(i64 %2, i64 5)
+    unreachable
+  bounds.ok:
+    %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+    store i32 7, i32* %4, align 4
+  ```
+
+  The spelling is TypeScript's own: `tsc` checks it against
+  `runtime/nish.d.ts` with no new declaration, its key type is the index
+  type every in-range index already has, and a `Record` over a finite key
+  says every key from 0 to `Hi` is present, as every element of a C array is.
+  A `CArray<T, N>` type would need a declaration in `runtime/nish.d.ts`, a
+  tuple has no parser here, and `T[]` cannot carry its length, because `tsc`
+  refuses an initializer in a `declare class`. (A `T[]` field of a Nish
+  class is a different rule: see "Fixed-length array fields are stored
+  inline".)
+  - **It takes `(Hi + 1) × sizeof(T)` bytes**, elements back to back with no
+    padding between them, and the struct pads around the array as C pads
+    around `T name[Hi + 1]`: the array starts at `T`'s alignment, and the
+    field after it starts at its own (`tests/ffi-struct.js` holds 8-byte
+    elements after a byte, a one-element array and two arrays in a row
+    against clang).
+  - **The key is `integer<0, Hi>`**, a range from 0, with `Hi` below
+    16777216: `` its key must be `integer<0, Hi>` `` (NL2813,
+    `tests/link/ffi_array_field_key`: a range from 1, a `string` key, a
+    length past the limit).
+  - **An element is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or
+    `f64`**: `` which has no C element layout `` (NL2814,
+    `ffi_array_field_element`: a `CPtr` and a `declare class` element).
+  - **An index is checked.** The index is any value an array index takes,
+    widened to `i64` before it is compared. A constant index outside 0 to `Hi` is refused at
+    compile time: `` its indices are 0 to 4 `` (NL2818,
+    `ffi_array_field_oob`, past the end and below zero). Any other index is
+    compared, unsigned, with the length, and one outside it panics with
+    `index out of range` before memory is touched (`readH(5)`, `readH(-1)`,
+    `poke(3)` in `ffi_array_field`). An index the prover keeps inside the
+    range — a constant, an `integer<0, Hi>` value, a `for` loop's counter
+    below the length — emits no check, and `--emit-panics` lists it as proven
+    (`sumH` and `written`, pinned by `ffi_array_field.panics`, which lists
+    `readH`'s, `readData`'s and `store`'s indices as unproven). Element loads and stores carry no TBAA tag, as the struct's
+    other fields do not.
+  - **It is read and written by index and nothing else.** It is not a Nish
+    array: holding it, passing it, reading its `.length` or walking it with
+    `for...of` is `` it cannot be held, passed or measured as a value ``
+    (NL2817, `ffi_array_field_value`), replacing it whole is
+    `` is written element by element `` (NL2816, `ffi_array_field_assign`),
+    and a spread of its object is `` which a spread cannot copy `` (NL2815,
+    `ffi_array_field_spread`).
+  - **It opens no other C shape.** A union field and a bitfield stay refused:
+    `` Union types other than `T | null` are forbidden `` (NL1053,
+    `ffi_array_field_union`) and `` has type `integer<0, 7>`, which has no C
+    layout `` (NL2752, `ffi_array_field_bitfield`).
+  - Under `-g` a debugger sees C's array type, with the element count
+    (`tests/ffi-struct.js`).
+- **A field is plain and has no initializer, and a class with fields has
+  nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
   member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
   and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
@@ -7351,7 +7561,7 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   struct, and a wasm module a page loads links no C to lend it to `` (NL2757,
   `tests/wordings/nl2757_declare_class_emit_dts`, `nl2757_declare_class_wasm32`).
   A `--profile wasi` build is wasm32 from the start and keeps it.
-- **It is built with `new` and nothing else.** `new Point(1)` is refused as for
+- **A class with fields is built with `new` and nothing else.** `new Point(1)` is refused as for
   any class without a constructor (`reject_ffi_struct_new_args`), and an object
   literal typed as one is
   `` an object literal cannot lay out a C struct `` (NL2744,
@@ -7376,7 +7586,9 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_nested_nish_arg`), and replacing it is
   `` a `declare class` embedded in its object is written field by field ``
   (NL2745, `reject_ffi_struct_nested_assign`).
-- **It is not a return type or an array element.** C returning a struct by
+- **It is not a return type or an array element.** An
+  [opaque](#an-opaque-declare-class-a-c-pointer-type) one is a return type of
+  a `declare function`, and still not an array element. C returning a struct by
   value, or a pointer into memory it owns, leaves the copy with no owner on
   this side: `` a C struct is only lent to C by pointer: take a `Point`
   parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); a struct
@@ -7393,6 +7605,82 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_spread`).
 - **`--emit-ts` refuses a module that declares one**, with the same message as
   for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
+
+#### An opaque `declare class`: a C pointer type
+
+**A `declare class` with no fields, no members and no `extends` or
+`implements` is opaque: it names a C type the program only ever holds a pointer
+to, such as `sqlite3 *` or `FILE *`. A `declare function` may take it and may
+return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
+what it adds is a name, so one C pointer type is never passed where another is
+wanted** (`tests/cases/ffi_opaque_handle`,
+[cookbook](IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
+`docs/roadmap/wp66-c-headers.md` S3):
+
+```ts
+declare class Db {}
+declare class Stmt {}
+declare function db_open(flags: i32): Db | null
+declare function stmt_prepare(db: Db, n: i32): Stmt
+declare function stmt_close(stmt: Stmt): void
+
+const db = db_open(1)
+if (db !== null) {
+  const stmt = stmt_prepare(db, 3)
+  stmt_close(stmt)
+}
+```
+
+```llvm
+declare i8* @db_open(i32)
+declare i8* @stmt_prepare(i8*, i32)
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %ffi.null, label %ffi.copy
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+```
+
+- **It is placed where a `CPtr` is**: in a `declare function` signature and on
+  a local bound to one, and nowhere else. A field, a parameter or the return
+  type of a function this program defines (`ffi_opaque_return`) is
+  `` `Db` cannot be a field: an
+  opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in
+  a `declare function` signature or on a local bound to one `` (NL2805,
+  `tests/link/ffi_opaque_field`, `ffi_opaque_param`), and so is either arm of
+  a `Result` type, in a signature or on a local (`ffi_opaque_result_type`,
+  `ffi_opaque_result`),
+  and a type argument of a generic class or function, written or inferred
+  (`ffi_opaque_type_argument`, `ffi_opaque_template_argument`). An arrow handed
+  to a call does not capture one, as it does not capture a `CPtr`
+  (`ffi_opaque_capture`). An array element is refused as for any
+  `declare class`, above (`ffi_opaque_array`).
+- **Each one is its own type.** Both lower to `i8*`, but a `Db` passed where a
+  `Stmt` is wanted is `` Argument 1 of `stmt_close`: expected Stmt, got Db ``
+  (`tests/link/ffi_opaque_mix`), and neither is a `CPtr`: a `Db` is not passed
+  where a `CPtr` is wanted, nor a `CPtr` where a `Db` is (`ffi_opaque_to_cptr`,
+  `ffi_opaque_from_cptr`). A `Db | null` is narrowed first
+  (`ffi_opaque_nullable`).
+- **C makes it and C reads it.** `new Db()` is `` Cannot `new` `Db`: an opaque
+  `declare class` has no layout to build `` (NL2806,
+  `tests/link/ffi_opaque_new`), and a member of one is `` `Db` is an opaque
+  `declare class`, so it has no member `handle`: C keeps its fields `` (NL2807,
+  `tests/link/ffi_opaque_member`), whether it is read, written
+  (`ffi_opaque_write`) or called (`ffi_opaque_call`). `readStruct` does not copy into one, since
+  there is nothing to copy: `` `readStruct(p)` cannot copy into `Db` `` (NL2808,
+  `tests/link/ffi_opaque_read_struct`); declare the C function to return the
+  class itself.
+- **A `Name` result is checked for `NULL`.** A `declare function` that returns
+  `Name` promises a pointer, so a `NULL` from C stops the program with
+  `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
+  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  A `Name | null` result is narrowed with `!== null` before it goes back to C:
+  passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
+  Db, got Db | null `` (`ffi_opaque_nullable`).
+- **This changed what a field-less `declare class` means.** Before WP66 S3,
+  `declare class Db {}` was a zero-byte struct, built with `new Db()` and lent to
+  C by pointer like any other `declare class`. It is now an opaque pointer, and
+  `new Db()` is NL2806: a program that built one declares the C function that
+  makes it instead, or gives the class the fields C lays out.
 
 #### `readStruct`: a struct out of memory C owns
 
@@ -7518,7 +7806,9 @@ or a private one whose name is not reserved to C:
 rename the defined function `` (`tests/link/ffi_package_declare_root_clash`).
 A private function named like a C library function is emitted as `abs$`, and a
 generic one's instantiations as `labs$i32`, so neither takes the C symbol and
-both are accepted (`tests/link/ffi_package_declare_apart`). The two refusals
+both are accepted (`tests/link/ffi_package_declare_apart`). A private function
+qualified by its module because another module defines its name (WP57 S1,
+`helper$.add`) holds a `$` already, so it is never one of these. The two refusals
 are refused rather than linked because the whole-program analysis keeps one
 set of facts per symbol, and the two would share it.
 
@@ -7925,7 +8215,9 @@ The condition must be `boolean`: there is no truthiness
 ### `for (const x of a)`
 
 - `a` must be an array (`` `for...of` requires an array, got string ``,
-  `tests/cases/reject_arr_forof_non_array`), or a walk of the global `Map` or
+  `tests/cases/reject_arr_forof_non_array`;
+  [the compatibility dialect](#the-compatibility-dialect) walks a string one
+  code point at a time under `for-of-string`), or a walk of the global `Map` or
   `Set`: `m.keys()`, `m.values()`, a `Set` itself, `s.keys()` or `s.values()`
   ([`Map` and `Set`](#map-and-set)), or a `Channel` from `nish/threads`, which
   takes values off it ([Channels](#channels-channelt)); `x` gets the element type and
@@ -7971,7 +8263,8 @@ switch (node.kind) {
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
   of `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
-  honestly.
+  honestly. [The compatibility dialect](#the-compatibility-dialect) admits
+  that chain under `string-switch`.
 - Every `case` label is an **integer constant expression** of the
   discriminant's type: a literal, its negation, a module constant, or an enum
   member
@@ -10491,10 +10784,21 @@ class Cell implements Compact {
 - **A generic field instantiated as exactly a compact class is narrowed.**
   `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
   interface view of the field and its implementer agree on the layout.
-- **A compact class is refused where C, Node or the runtime would read its
-  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
-  `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`); as a
+- **A C host reaches a compact class only through a handle.** A
+  `--emit-header` build keeps every class that holds a link opaque
+  (`typedef struct Cell Cell;`): the compact class, a class with a field of
+  it, and an instantiation such as `Box<Cell>`. An export takes and returns
+  one as a full `struct Cell *`. The C host links the range runtime
+  (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
+  default runtime a program fails to link as soon as one of its modules
+  allocates, an 8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
+  shared library another process loads is not supported.
+- **A compact class is refused where Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-napi` or
+  `--emit-napi-async`, also beside `--emit-header`, at the class (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`), or at an
+  export whose signature holds one (NL4020, `compact_reject_export`), because
+  the addon runs in Node's process, which Nish does not own; as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
@@ -13589,7 +13893,8 @@ export const main = (): i32 => {
     one whose left operand is neither is refused in the words Phase 0 always
     used,
     `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-    (`reject_nullish`, `reject_nullish_nullable`).
+    (`reject_nullish`, `reject_nullish_nullable`), which the `nullish`
+    feature of [the compatibility dialect](#the-compatibility-dialect) admits.
   - **Everywhere else a maybe is refused**, and the message names the place,
     because the rewrite differs by place. Some fail under `tsc` too (an
     operand, a `const` annotated `V`); the rest are legal TypeScript that this
@@ -14289,7 +14594,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities`, `host`, `compat` and `netRings` — is NL3036
+  than `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as
@@ -15158,6 +15463,31 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+
+### Profile-guided builds
+
+- **`--pgo-generate`** links an instrumented binary: the module, every
+  runtime unit and, when the program calls it, SQLite are compiled, and
+  linked, with `-fprofile-generate`, so each run writes a raw profile
+  (`LLVM_PROFILE_FILE` names it). **`--pgo-use <file.profdata>`** compiles
+  and links the same units with `-fprofile-use=<file>`, the file's real
+  path, so a relative path means the same file whichever unit compiles from
+  which directory. `scripts/build.sh --pgo-generate` and `--pgo-use` are the
+  same build.
+- **Each needs `--link` and the `speed` or `size` profile, and the host.**
+  Both flags at once, either without `--link`, with `--profile debug` or
+  `wasi`, with a `--target` that is not the host's, or in `nish run` is a
+  usage error (exit 2, one line, nothing written). The `--pgo-use` file must
+  exist and begin with the indexed profile's magic bytes, which
+  `llvm-profdata merge` writes: a directory, a raw `.profraw` (named, with
+  the `merge` that fixes it) or any other file is refused the same way, and
+  so is one `llvm-profdata show` cannot read. `llvm-profdata` missing from
+  `PATH` is a toolchain failure (exit 3).
+- **It changes the link and nothing else.** The IR is byte for byte the IR
+  without it. A profile-guided link compiles every runtime and SQLite unit
+  itself: it reads no entry of the runtime cache and writes none, so a plain
+  link after an instrumented one is byte for byte the plain link before it
+  (`tests/run.js`, the `pgo` section).
 
 ### The debug arena
 
@@ -16206,8 +16536,11 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once**, and anything
-  else is an error (NL3036) where `package.json` writes it: a second `"nish"`
+  keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once**, and anything
+  else is an error (NL3036) where `package.json` writes it (`link`, the C
+  libraries and sources a package links, has rules of its own: a bad shape is
+  NL3059, a bad entry NL3060 and a dependency's entry the root does not grant
+  NL3061, [`docs/security/package-link.md`](security/package-link.md)): a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
   key it does not know, a misspelt `capabilites` included
@@ -16253,16 +16586,17 @@ performance warning about the same check is not printed beside the error.
 ### The compatibility dialect
 
 Nish has two dialects. The strict one is this document. The compatibility
-dialect will accept more of TypeScript, feature by feature; it has no feature
-yet, so today it differs from the strict dialect in one thing only, the
-number a bare `number` is.
+dialect accepts more of TypeScript, feature by feature: it differs from the
+strict dialect in the number a bare `number` is, and in what each feature it
+allows admits. This compiler has built six features, `nullish`,
+`optional-chaining`, `string-switch`, `for-of-string`, `optional-params` and
+`overloads`.
 
 - **`--compat` selects the dialect with every feature this compiler has
   built; `--compat=<feature>,...` selects it with only the features named.**
   A name that is no feature is a usage error (exit 2) that names it and
-  writes no IR, and so is an empty list (`--compat=`). No feature is built, so
-  every `--compat=<list>` is refused today. `nish run` and `--fix` take the
-  flag too.
+  writes no IR, and so is an empty list (`--compat=`). `nish run` and `--fix`
+  take the flag too.
 - **`"compat"` in the root package's `"nish"` field selects it without the
   flag**: `true` for every built feature, or an array of feature names for
   exactly those (`[]` for the dialect with no feature). The root package is
@@ -16300,19 +16634,177 @@ number a bare `number` is.
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]`, and prints no such
   line for a strict build.
-- **The dialect only adds.** A strict build is unchanged by all of the above,
-  byte for byte. A compat build with no feature is `--number-mode f64`: the
-  same IR but for the mark, the same refusals in the same words. And under one
-  number mode a compat build and a strict build differ in the mark alone.
-  `tests/compat-erasure.js` checks both over every program in `tests/cases`,
-  and a later feature may accept a program the strict dialect refuses but may
-  never change the answer for one it does not.
+- **A strict refusal of a construct a feature admits names the feature.** It
+  closes with the note ``add `<feature>` to `nish.compat` in package.json to
+  accept it``, and under a compat build whose list leaves the feature out it
+  also names that build's dialect (`this program's dialect is
+  `compat=<list>``).
+- **`optional-chaining` admits a `?.` chain with no `??` default** where the
+  strict dialect has none to give it. A chain that is a statement of its own,
+  `a?.b`, `a?.m()` or `a?.b.m(x)`, runs to its end when every link is there
+  and does nothing from the first one that is `null` or `undefined`, as in
+  Node: the arguments of a call it skips are not evaluated
+  (`tests/cases/compat_optional_chain_statement`, refused in the strict
+  dialect as `reject_optional_chain_statement`), so an enum value one of them
+  assigns is, after the call, one the variable may or may not hold, as
+  `?:` has it (`tests/link/compat_optional_skipped_enum`). `?.[i]` is admitted inside a
+  chain that a member, a method call or a `??` default follows: the element is
+  read, and bounds-checked, only when the array is there
+  (`compat_optional_chain_element`, strict `reject_optional_chain_element_inner`).
+  An index read inside a link the chain skips is not counted as checked for
+  the reads after it. Two forms stay refused in the compatibility dialect
+  too, because Node's answer and the build's would part. An element read the
+  chain carries on past is NL1067, since past the end of the array Node
+  answers `undefined` and goes on where the bounds check panics: in a `??`
+  chain or a statement chain, a `?.[i]` that ends it
+  (`tests/link/compat_optional_element_last`); and in a statement chain any
+  element read that ends it, `a?.xs[i];`
+  (`tests/link/compat_optional_element_statement`), or an element read,
+  plain or `?.`, that a `?.` link tests, `xs[i]?.m();`
+  (`tests/link/compat_optional_element_before`). In a `??` chain a plain
+  element read a `?.` tests, `xs[i]?.m() ?? d`, is the strict dialect's own
+  and keeps its meaning in both: the `?.` tests a nullable element, and the
+  read is bounds-checked as every element read is. A
+  `?.[i]` that ends a chain in any other place, `const x = xs?.[0]`, is the
+  `?.` refusal of a chain with no default, NL1049. And an optional call
+  `f?.()` is NL1068 (`compat_optional_call`).
+- **`nullish` admits a `??` whose left operand is never missing**: a value
+  whose type is not nullable, or a nullable one narrowed past `null` (the
+  strict dialect refuses both, as a default with nothing to replace), when the
+  left operand is one of the forms JavaScript can be seen not to answer
+  `undefined` for: a literal (number, string, `true`, `false`, template, array
+  or object), a name, `this`, a `new`, a unary or binary operation, or a
+  plain member read of one of these, in parentheses or not. Any other left
+  operand keeps the strict refusal in the same words whatever its type: a
+  call, `f(x) ?? 1`, and a ternary, `(c ? a : b) ?? d`, are not on the list
+  yet (`tests/link/compat_nullish_call_left`), nor is an element read, below. Node's
+  answer is always the left operand, so the build keeps the left operand alone
+  and says so: one `performance` warning, NL9021, at the `??`, naming the
+  default to drop (`tests/cases/compat_nullish_never_missing`,
+  `compat_nullish_narrowed`; strict `reject_nullish`,
+  `reject_nullish_nullable`). The default is never run, but it is still
+  checked as the left operand's type, as TypeScript checks it (NL2370,
+  `tests/link/compat_nullish_never_missing`). A `??` on a nullable left
+  operand is the strict dialect's own and unchanged. An element read is not
+  never missing, whatever its element type: past the end of the array Node
+  reads `undefined` and answers the default, where the bounds check panics,
+  so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
+  (`reject_nullish_element_never_missing`).
+- **`string-switch` admits a `switch` whose discriminant is a `string`**
+  (`tests/cases/compat_string_switch`, strict `reject_switch_string`). Each
+  `case` label is a string literal, a template with no substitution, or a
+  module constant of type `string`, parenthesised or not, because a label is compared without being
+  run; any other label is NL2799
+  (`tests/link/compat_string_switch_label_not_constant`), a label of another
+  type is the strict `` `case` label is f64 but the discriminant is string ``
+  (`compat_string_switch_label_type`), and two labels with the same text, a
+  constant's included, are `` Duplicate `case` label `` as in an integer
+  switch (`compat_string_switch_duplicate`): the text is what the label
+  spells once its escapes are read, so `"\u00e9"` and `"é"`, or a template
+  and the literal it spells, are the same label
+  (`compat_string_switch_duplicate_spelling`,
+  `compat_string_switch_duplicate_template`). Fallthrough, into and out of a
+  `default` in any place, an empty case group, `return` from a case, `break`
+  and a labelled `break` out of an enclosing loop, and `continue` of an
+  enclosing loop mean what they mean in Node, and the discriminant is run
+  once, before the first comparison (`tests/cases/compat_string_switch_flow`).
+  A nullable discriminant, `string | null`, is no `string` and keeps the
+  strict refusal, naming no feature. The switch compares the discriminant with each label in
+  source order, one `nish_str_eq` call each, and jumps to the first that
+  matches, or to `default`: a chain, not a tree bucketed by length, because
+  `nish_str_eq` already answers on a length mismatch before it reads a byte.
+- **`for-of-string` admits `for (const c of s)` over a `string`**
+  (`tests/cases/compat_for_of_string`, strict `reject_arr_forof_non_array`).
+  Each pass binds `c` to the next code point, as Node walks a string: a
+  character outside the Basic Multilingual Plane is one pass, not two. `c` is
+  a new `string` holding that code point's UTF-8 bytes. `break`, `continue`
+  and labels work as they do over an array. A destructuring head,
+  `for (const [a] of s)`, keeps the array walk's refusal
+  (`tests/link/compat_for_of_string_destructure`), and so does a nullable
+  iterable, `string | null`, naming no feature. A string that is not valid
+  UTF-8 (`String.fromCharCode(200)`, `String.fromBytes`) is walked a lead
+  byte at a time: a pass takes the lead and only the continuation bytes
+  (`10xxxxxx`) after it, up to the width the lead names, so a lead with none
+  is a pass of one byte and the byte after it starts the next pass, a stray
+  continuation byte is a pass alone, and a sequence cut short by the end is
+  one pass of what is left. The number of passes is then Node's for the same
+  characters (`tests/cases/compat_for_of_string_invalid`), though `c`'s bytes
+  are nish's, not Node's UTF-16. `c` is fresh each pass, and the walk opens
+  no arena pass of its own: each `c` stays until the scope around the loop
+  releases its arena, so a code point kept past the loop, in a variable or
+  returned, is still there (`tests/cases/compat_for_of_string_fresh`), and a
+  walk of `n` code points holds `n` small strings until then.
+- **`optional-params` admits an `x?: T` parameter and a default that is not
+  a constant** (`tests/cases/compat_optional_params`, strict
+  `reject_param_default_expression`, `reject_param_default_array`,
+  `reject_param_default_object`). An `x?: T` parameter of a function, an
+  arrow or a method is `T | null` inside, and a call may leave it out. It is
+  read only as the left operand of `??`, parenthesised or not, because a call
+  that leaves it out passes `undefined` in Node and `null` here, and
+  `x ?? <default>` is the one read that gives both the same value; any other
+  read is NL2803 (`tests/link/compat_optional_params_read`,
+  `compat_optional_params_read_paren`). An `x?` whose `T` has no `null`, a
+  bare `number` or a `boolean`, is NL2804
+  (`compat_optional_params_value`): give it a default instead. A default of a
+  top-level function, an arrow `const` included, that is not one the strict
+  dialect accepts as a constant, a call, an array, an object or an
+  arithmetic on earlier parameters, runs in the callee, once per call that
+  leaves its argument out, after the arguments and left to right, as Node
+  runs it: a call that writes the argument does not run it. The build gives
+  the function one wrapper per argument count a call may stop at, and each
+  call goes to the wrapper for the count it writes. Only a function every
+  call to which the module sees and routes takes wrappers: an exported
+  function (`compat_optional_params_exported`), whose callers in another
+  module would pass the default themselves, an overloaded one
+  (`compat_optional_params_overloaded`), whose signatures name the
+  implementation, and one with a required parameter between two such
+  defaults (`compat_optional_params_required_between`) keep the strict
+  refusal, with a note that names the rule. So do a method's or a
+  constructor's default, and a function whose earlier parameter is an `x?`.
+  `--emit-ts` writes no wrapper: the TypeScript keeps each default where it
+  was written. Without the feature, the refusal of such a
+  default names it (`compat_optional_params_default_feature`), and an
+  `x?` stays refused as before (`compat_optional_params_feature`).
+- **`overloads` admits overload signatures**: a function, a method or a
+  constructor written as bodiless signatures of one name followed by its
+  implementation (`tests/cases/compat_overloads`; strict, the signatures are
+  `Functions must have a body`, `tests/link/compat_overloads_feature`). The
+  signatures are checked and then dropped, so the build is the
+  implementation's alone. Each signature is held to the implementation, as
+  `tsc` holds it: it takes no rest parameter, every argument list it takes
+  the implementation takes too, each parameter type is one the
+  implementation's takes, and it writes the return type, which is the
+  implementation's exactly, which is stricter than `tsc`, where a return
+  type the implementation's is assignable to will do; otherwise NL2800
+  (`compat_overloads_incompatible`, `compat_overloads_return`). A call the
+  implementation accepts is then held
+  to the signatures: one that no signature takes is NL2801, because the
+  implementation's own signature is not one a caller may call
+  (`compat_overloads_no_match`, `compat_overloads_method_no_match`,
+  `compat_overloads_constructor_no_match`). Only a call that names the
+  function, the method or the class is held to the signatures: a call
+  through a function value is held to the implementation alone. A
+  function with signatures is refused by `--emit-header`, `--emit-napi` and
+  `--emit-dts`, NL2802, since the file would spell only the implementation
+  (`compat_overloads_emit_header`, `compat_overloads_emit_dts`). A generic function or class keeps the
+  strict refusal.
+- **The dialect only adds.** A strict build of a program the strict dialect
+  accepts is unchanged by all of the above, byte for byte; what changed for a
+  program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the
+  strict dialect accepts: the same IR but for the mark, the same refusals in
+  the same words. And under one number mode a compat build and a strict build
+  of such a program differ in the mark alone. `tests/compat-erasure.js` checks
+  both over every program in `tests/cases`. A feature may accept a program the
+  strict dialect refuses, and that runner compiles each such case with the
+  feature, links it and runs it beside Node, which must print and exit the
+  same; it may never change the answer for a program the strict dialect
+  accepts.
 
 ### Retention as an error
 
@@ -16612,9 +17104,10 @@ fragment `tests/run.js` matches and the case that proves it.
 | `void expr` | `` `void` expressions are forbidden in Nish (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
-| `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain_element`, `reject_optional_call` |
-| `a?.b` outside a chain that is the left operand of `??` ([Nullable types](#nullable-types)) | `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` `` | `reject_optional_chain`, `reject_optional_chain_paren`, `reject_optional_chain_argument` |
-| `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
+| `a?.[i]` inside a chain ([the compatibility dialect](#the-compatibility-dialect) admits it) | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain_element_inner` |
+| `a?.[i]` ending a chain, `f?.()` (in both dialects) | `` An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`) ``; `` An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first `` | `reject_optional_chain_element`, `reject_optional_call` |
+| `a?.b` outside a chain that is the left operand of `??` ([Nullable types](#nullable-types); [the compatibility dialect](#the-compatibility-dialect) admits a chain that is a statement) | `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` `` | `reject_optional_chain`, `reject_optional_chain_paren`, `reject_optional_chain_argument` |
+| `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)); [the compatibility dialect](#the-compatibility-dialect) admits it | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |

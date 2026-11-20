@@ -119,11 +119,11 @@ that order. A path that cannot be read contributes nothing; a duplicate DER
 is kept once, where it was first read.
 
 ```ts
-function pkiLoadRoots(
+const pkiLoadRoots: (
   file: string | null,
   dirs: string[],
   bundles: string[],
-): PkiRoots
+) => PkiRoots
 ```
 
 <scalar-field name="file" type="string | null" required>
@@ -159,12 +159,12 @@ the order can be tested against fixture trees rather than the host's `/etc`.
 when unset; an empty value counts as unset.
 
 ```ts
-function pkiLoadRootsFor(
+const pkiLoadRootsFor: (
   certFile: string | null,
   certDir: string | null,
   dirs: string[],
   bundles: string[],
-): PkiRoots
+) => PkiRoots
 ```
 
 <scalar-field name="certFile" type="string | null" required>
@@ -207,7 +207,7 @@ The roots this program should trust: those `SSL_CERT_FILE` and
 first of `pkiSystemBundles()` that exists and `/etc/ssl/certs`.
 
 ```ts
-function pkiLoadSystemRoots(): PkiRoots
+const pkiLoadSystemRoots: () => PkiRoots
 ```
 
 <scalar-field name="returns" type="PkiRoots">
@@ -223,7 +223,7 @@ Whether a directory entry is one a trust directory holds: `*.pem`, `*.crt`,
 or the hash form `xxxxxxxx.N`.
 
 ```ts
-function pkiRootsDirEntry(name: string): boolean
+const pkiRootsDirEntry: (name: string) => boolean
 ```
 
 <scalar-field name="name" type="string" required>
@@ -249,7 +249,7 @@ Arch and Gentoo; Fedora and RHEL; openSUSE; OpenELEC; CentOS and RHEL 7;
 Alpine, macOS and the BSDs.
 
 ```ts
-function pkiSystemBundles(): string[]
+const pkiSystemBundles: () => string[]
 ```
 
 <scalar-field name="returns" type="string[]">

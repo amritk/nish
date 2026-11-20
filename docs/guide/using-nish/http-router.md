@@ -12,7 +12,8 @@ one as a pair of offsets into the target, in an `i32[]` you made once.
 
 ## A first table
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router";
 
 // The routes, in the order they are added: `add` answers 0, 1, 2.
@@ -153,7 +154,8 @@ does not depend on the order you added routes in.
 A route table is part of your program, so a refusal is usually a bug to fix
 before the server starts. Check every index, and stop there:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { ROUTER_DUPLICATE, Router, RouterLimits } from "nish/net/router";
 
 export const main = (): i32 => {
@@ -194,7 +196,8 @@ own and answers its length, or `ROUTER_BAD_ESCAPE` for a `%` not followed by
 two hex digits, or `ROUTER_NO_ROOM` when `out` is too small. `+` stays `+`:
 it means a space only in a query.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Router, RouterLimits, routerDecode } from "nish/net/router";
 
 const bytesOf = (text: string): u8[] => {

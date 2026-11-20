@@ -497,6 +497,31 @@ by the caller.
   ([CT-16](../../security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
 
+## Profile-guided builds
+
+- **`--pgo-generate`** links an instrumented binary: the module, every
+  runtime unit and, when the program calls it, SQLite are compiled, and
+  linked, with `-fprofile-generate`, so each run writes a raw profile
+  (`LLVM_PROFILE_FILE` names it). **`--pgo-use <file.profdata>`** compiles
+  and links the same units with `-fprofile-use=<file>`, the file's real
+  path, so a relative path means the same file whichever unit compiles from
+  which directory. `scripts/build.sh --pgo-generate` and `--pgo-use` are the
+  same build.
+- **Each needs `--link` and the `speed` or `size` profile, and the host.**
+  Both flags at once, either without `--link`, with `--profile debug` or
+  `wasi`, with a `--target` that is not the host's, or in `nish run` is a
+  usage error (exit 2, one line, nothing written). The `--pgo-use` file must
+  exist and begin with the indexed profile's magic bytes, which
+  `llvm-profdata merge` writes: a directory, a raw `.profraw` (named, with
+  the `merge` that fixes it) or any other file is refused the same way, and
+  so is one `llvm-profdata show` cannot read. `llvm-profdata` missing from
+  `PATH` is a toolchain failure (exit 3).
+- **It changes the link and nothing else.** The IR is byte for byte the IR
+  without it. A profile-guided link compiles every runtime and SQLite unit
+  itself: it reads no entry of the runtime cache and writes none, so a plain
+  link after an instrumented one is byte for byte the plain link before it
+  (`tests/run.js`, the `pgo` section).
+
 ## The debug arena
 
 - **`--debug-arena`** links the program against a runtime compiled with
@@ -1544,8 +1569,11 @@ performance warning about the same check is not printed beside the error.
   otherwise leave the module it meant outside the scope without a word
   (`tests/link/no_panic_unknown_entry`).
 - **The root package's `"nish"` field is one object, written once, whose
-  keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once**, and anything
-  else is an error (NL3036) where `package.json` writes it: a second `"nish"`
+  keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once**, and anything
+  else is an error (NL3036) where `package.json` writes it (`link`, the C
+  libraries and sources a package links, has rules of its own: a bad shape is
+  NL3059, a bad entry NL3060 and a dependency's entry the root does not grant
+  NL3061, [`docs/security/package-link.md`](../../security/package-link.md)): a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
   key it does not know, a misspelt `capabilites` included
@@ -1591,16 +1619,17 @@ performance warning about the same check is not printed beside the error.
 ## The compatibility dialect
 
 Nish has two dialects. The strict one is this document. The compatibility
-dialect will accept more of TypeScript, feature by feature; it has no feature
-yet, so today it differs from the strict dialect in one thing only, the
-number a bare `number` is.
+dialect accepts more of TypeScript, feature by feature: it differs from the
+strict dialect in the number a bare `number` is, and in what each feature it
+allows admits. This compiler has built six features, `nullish`,
+`optional-chaining`, `string-switch`, `for-of-string`, `optional-params` and
+`overloads`.
 
 - **`--compat` selects the dialect with every feature this compiler has
   built; `--compat=<feature>,...` selects it with only the features named.**
   A name that is no feature is a usage error (exit 2) that names it and
-  writes no IR, and so is an empty list (`--compat=`). No feature is built, so
-  every `--compat=<list>` is refused today. `nish run` and `--fix` take the
-  flag too.
+  writes no IR, and so is an empty list (`--compat=`). `nish run` and `--fix`
+  take the flag too.
 - **`"compat"` in the root package's `"nish"` field selects it without the
   flag**: `true` for every built feature, or an array of feature names for
   exactly those (`[]` for the dialect with no feature). The root package is
@@ -1638,19 +1667,177 @@ number a bare `number` is.
 
   ```llvm
   !nish.compat = !{!0}
-  !0 = !{!"f64"}
+  !0 = !{!"f64", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string", !"optional-params", !"overloads"}
   ```
 
   A strict build carries no `!nish.compat`. `--emit-checked` opens with the
-  same facts on one line, `compat number=f64 features=[]`, and prints no such
+  same facts on one line, `compat number=f64 features=[nullish,optional-chaining,string-switch,for-of-string,optional-params,overloads]`, and prints no such
   line for a strict build.
-- **The dialect only adds.** A strict build is unchanged by all of the above,
-  byte for byte. A compat build with no feature is `--number-mode f64`: the
-  same IR but for the mark, the same refusals in the same words. And under one
-  number mode a compat build and a strict build differ in the mark alone.
-  `tests/compat-erasure.js` checks both over every program in `tests/cases`,
-  and a later feature may accept a program the strict dialect refuses but may
-  never change the answer for one it does not.
+- **A strict refusal of a construct a feature admits names the feature.** It
+  closes with the note ``add `<feature>` to `nish.compat` in package.json to
+  accept it``, and under a compat build whose list leaves the feature out it
+  also names that build's dialect (`this program's dialect is
+  `compat=<list>``).
+- **`optional-chaining` admits a `?.` chain with no `??` default** where the
+  strict dialect has none to give it. A chain that is a statement of its own,
+  `a?.b`, `a?.m()` or `a?.b.m(x)`, runs to its end when every link is there
+  and does nothing from the first one that is `null` or `undefined`, as in
+  Node: the arguments of a call it skips are not evaluated
+  (`tests/cases/compat_optional_chain_statement`, refused in the strict
+  dialect as `reject_optional_chain_statement`), so an enum value one of them
+  assigns is, after the call, one the variable may or may not hold, as
+  `?:` has it (`tests/link/compat_optional_skipped_enum`). `?.[i]` is admitted inside a
+  chain that a member, a method call or a `??` default follows: the element is
+  read, and bounds-checked, only when the array is there
+  (`compat_optional_chain_element`, strict `reject_optional_chain_element_inner`).
+  An index read inside a link the chain skips is not counted as checked for
+  the reads after it. Two forms stay refused in the compatibility dialect
+  too, because Node's answer and the build's would part. An element read the
+  chain carries on past is NL1067, since past the end of the array Node
+  answers `undefined` and goes on where the bounds check panics: in a `??`
+  chain or a statement chain, a `?.[i]` that ends it
+  (`tests/link/compat_optional_element_last`); and in a statement chain any
+  element read that ends it, `a?.xs[i];`
+  (`tests/link/compat_optional_element_statement`), or an element read,
+  plain or `?.`, that a `?.` link tests, `xs[i]?.m();`
+  (`tests/link/compat_optional_element_before`). In a `??` chain a plain
+  element read a `?.` tests, `xs[i]?.m() ?? d`, is the strict dialect's own
+  and keeps its meaning in both: the `?.` tests a nullable element, and the
+  read is bounds-checked as every element read is. A
+  `?.[i]` that ends a chain in any other place, `const x = xs?.[0]`, is the
+  `?.` refusal of a chain with no default, NL1049. And an optional call
+  `f?.()` is NL1068 (`compat_optional_call`).
+- **`nullish` admits a `??` whose left operand is never missing**: a value
+  whose type is not nullable, or a nullable one narrowed past `null` (the
+  strict dialect refuses both, as a default with nothing to replace), when the
+  left operand is one of the forms JavaScript can be seen not to answer
+  `undefined` for: a literal (number, string, `true`, `false`, template, array
+  or object), a name, `this`, a `new`, a unary or binary operation, or a
+  plain member read of one of these, in parentheses or not. Any other left
+  operand keeps the strict refusal in the same words whatever its type: a
+  call, `f(x) ?? 1`, and a ternary, `(c ? a : b) ?? d`, are not on the list
+  yet (`tests/link/compat_nullish_call_left`), nor is an element read, below. Node's
+  answer is always the left operand, so the build keeps the left operand alone
+  and says so: one `performance` warning, NL9021, at the `??`, naming the
+  default to drop (`tests/cases/compat_nullish_never_missing`,
+  `compat_nullish_narrowed`; strict `reject_nullish`,
+  `reject_nullish_nullable`). The default is never run, but it is still
+  checked as the left operand's type, as TypeScript checks it (NL2370,
+  `tests/link/compat_nullish_never_missing`). A `??` on a nullable left
+  operand is the strict dialect's own and unchanged. An element read is not
+  never missing, whatever its element type: past the end of the array Node
+  reads `undefined` and answers the default, where the bounds check panics,
+  so `xs[i] ?? d` keeps strict's refusal in the same words, naming no feature
+  (`reject_nullish_element_never_missing`).
+- **`string-switch` admits a `switch` whose discriminant is a `string`**
+  (`tests/cases/compat_string_switch`, strict `reject_switch_string`). Each
+  `case` label is a string literal, a template with no substitution, or a
+  module constant of type `string`, parenthesised or not, because a label is compared without being
+  run; any other label is NL2799
+  (`tests/link/compat_string_switch_label_not_constant`), a label of another
+  type is the strict `` `case` label is f64 but the discriminant is string ``
+  (`compat_string_switch_label_type`), and two labels with the same text, a
+  constant's included, are `` Duplicate `case` label `` as in an integer
+  switch (`compat_string_switch_duplicate`): the text is what the label
+  spells once its escapes are read, so `"\u00e9"` and `"é"`, or a template
+  and the literal it spells, are the same label
+  (`compat_string_switch_duplicate_spelling`,
+  `compat_string_switch_duplicate_template`). Fallthrough, into and out of a
+  `default` in any place, an empty case group, `return` from a case, `break`
+  and a labelled `break` out of an enclosing loop, and `continue` of an
+  enclosing loop mean what they mean in Node, and the discriminant is run
+  once, before the first comparison (`tests/cases/compat_string_switch_flow`).
+  A nullable discriminant, `string | null`, is no `string` and keeps the
+  strict refusal, naming no feature. The switch compares the discriminant with each label in
+  source order, one `nish_str_eq` call each, and jumps to the first that
+  matches, or to `default`: a chain, not a tree bucketed by length, because
+  `nish_str_eq` already answers on a length mismatch before it reads a byte.
+- **`for-of-string` admits `for (const c of s)` over a `string`**
+  (`tests/cases/compat_for_of_string`, strict `reject_arr_forof_non_array`).
+  Each pass binds `c` to the next code point, as Node walks a string: a
+  character outside the Basic Multilingual Plane is one pass, not two. `c` is
+  a new `string` holding that code point's UTF-8 bytes. `break`, `continue`
+  and labels work as they do over an array. A destructuring head,
+  `for (const [a] of s)`, keeps the array walk's refusal
+  (`tests/link/compat_for_of_string_destructure`), and so does a nullable
+  iterable, `string | null`, naming no feature. A string that is not valid
+  UTF-8 (`String.fromCharCode(200)`, `String.fromBytes`) is walked a lead
+  byte at a time: a pass takes the lead and only the continuation bytes
+  (`10xxxxxx`) after it, up to the width the lead names, so a lead with none
+  is a pass of one byte and the byte after it starts the next pass, a stray
+  continuation byte is a pass alone, and a sequence cut short by the end is
+  one pass of what is left. The number of passes is then Node's for the same
+  characters (`tests/cases/compat_for_of_string_invalid`), though `c`'s bytes
+  are nish's, not Node's UTF-16. `c` is fresh each pass, and the walk opens
+  no arena pass of its own: each `c` stays until the scope around the loop
+  releases its arena, so a code point kept past the loop, in a variable or
+  returned, is still there (`tests/cases/compat_for_of_string_fresh`), and a
+  walk of `n` code points holds `n` small strings until then.
+- **`optional-params` admits an `x?: T` parameter and a default that is not
+  a constant** (`tests/cases/compat_optional_params`, strict
+  `reject_param_default_expression`, `reject_param_default_array`,
+  `reject_param_default_object`). An `x?: T` parameter of a function, an
+  arrow or a method is `T | null` inside, and a call may leave it out. It is
+  read only as the left operand of `??`, parenthesised or not, because a call
+  that leaves it out passes `undefined` in Node and `null` here, and
+  `x ?? <default>` is the one read that gives both the same value; any other
+  read is NL2803 (`tests/link/compat_optional_params_read`,
+  `compat_optional_params_read_paren`). An `x?` whose `T` has no `null`, a
+  bare `number` or a `boolean`, is NL2804
+  (`compat_optional_params_value`): give it a default instead. A default of a
+  top-level function, an arrow `const` included, that is not one the strict
+  dialect accepts as a constant, a call, an array, an object or an
+  arithmetic on earlier parameters, runs in the callee, once per call that
+  leaves its argument out, after the arguments and left to right, as Node
+  runs it: a call that writes the argument does not run it. The build gives
+  the function one wrapper per argument count a call may stop at, and each
+  call goes to the wrapper for the count it writes. Only a function every
+  call to which the module sees and routes takes wrappers: an exported
+  function (`compat_optional_params_exported`), whose callers in another
+  module would pass the default themselves, an overloaded one
+  (`compat_optional_params_overloaded`), whose signatures name the
+  implementation, and one with a required parameter between two such
+  defaults (`compat_optional_params_required_between`) keep the strict
+  refusal, with a note that names the rule. So do a method's or a
+  constructor's default, and a function whose earlier parameter is an `x?`.
+  `--emit-ts` writes no wrapper: the TypeScript keeps each default where it
+  was written. Without the feature, the refusal of such a
+  default names it (`compat_optional_params_default_feature`), and an
+  `x?` stays refused as before (`compat_optional_params_feature`).
+- **`overloads` admits overload signatures**: a function, a method or a
+  constructor written as bodiless signatures of one name followed by its
+  implementation (`tests/cases/compat_overloads`; strict, the signatures are
+  `Functions must have a body`, `tests/link/compat_overloads_feature`). The
+  signatures are checked and then dropped, so the build is the
+  implementation's alone. Each signature is held to the implementation, as
+  `tsc` holds it: it takes no rest parameter, every argument list it takes
+  the implementation takes too, each parameter type is one the
+  implementation's takes, and it writes the return type, which is the
+  implementation's exactly, which is stricter than `tsc`, where a return
+  type the implementation's is assignable to will do; otherwise NL2800
+  (`compat_overloads_incompatible`, `compat_overloads_return`). A call the
+  implementation accepts is then held
+  to the signatures: one that no signature takes is NL2801, because the
+  implementation's own signature is not one a caller may call
+  (`compat_overloads_no_match`, `compat_overloads_method_no_match`,
+  `compat_overloads_constructor_no_match`). Only a call that names the
+  function, the method or the class is held to the signatures: a call
+  through a function value is held to the implementation alone. A
+  function with signatures is refused by `--emit-header`, `--emit-napi` and
+  `--emit-dts`, NL2802, since the file would spell only the implementation
+  (`compat_overloads_emit_header`, `compat_overloads_emit_dts`). A generic function or class keeps the
+  strict refusal.
+- **The dialect only adds.** A strict build of a program the strict dialect
+  accepts is unchanged by all of the above, byte for byte; what changed for a
+  program it refuses is the refusal's words. A compat build is `--number-mode f64` for every program the
+  strict dialect accepts: the same IR but for the mark, the same refusals in
+  the same words. And under one number mode a compat build and a strict build
+  of such a program differ in the mark alone. `tests/compat-erasure.js` checks
+  both over every program in `tests/cases`. A feature may accept a program the
+  strict dialect refuses, and that runner compiles each such case with the
+  feature, links it and runs it beside Node, which must print and exit the
+  same; it may never change the answer for a program the strict dialect
+  accepts.
 
 ## Retention as an error
 

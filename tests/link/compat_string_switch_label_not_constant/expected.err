@@ -1,0 +1,1 @@
+main.ts:7:10: error: A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)

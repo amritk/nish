@@ -27,7 +27,8 @@ wherever it can prove that nothing allocated inside them is still reachable
 afterwards, and whatever is left in the arena is released when `main`
 returns.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const describe = (name: string, score: i32): i32 => {
   const line = `${name} scored ${score}`;
   return line.length;
@@ -51,7 +52,8 @@ A `Result` held in a `let` that you assign again does not cost a function its
 bracket. The `Ok` and the `Err` below live on `pick`'s stack frame, so calling
 it in a loop leaves the arena where it was:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const pick = (n: i32): i32 => {
   let r: Result<i32, string> = Ok(n);
   if (n % 3 === 0 && r.isOk()) {
@@ -158,7 +160,8 @@ prove that the same object reaches it on every pass. Open a block with
 For a program that must not retain memory this way, compile with
 `--deny-retention`, which turns these warnings into errors:
 
-```ts nish:err-body NL2462 --deny-retention
+<!-- nish:err-body NL2462 --deny-retention -->
+```ts
 let last = "";
 for (let i = 0; i < 1000; i++) {
   last = `item ${i}`;
@@ -196,7 +199,8 @@ pointers for each child where a sibling link follows one. On a tree of four
 million nodes, the linked layout took **0.52x the memory and 0.68x the time**
 of an array per node.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   kind: i32;
   parent: Node | null;
@@ -285,7 +289,8 @@ When you know a block's allocations are temporary, say so with
 released when the block ends, on every way out of it: the closing brace, a
 `return`, a `break` or a `continue`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const checksum = (lines: string[]): i32 => {
   let total = 0;
   for (const line of lines) {
@@ -310,7 +315,8 @@ reachable after the release, the program does not compile. Assigning a string
 built in the block to a variable declared outside it, storing it in an object
 or array that outlives the block, or returning it, are all refused:
 
-```ts nish:err-body NL2418
+<!-- nish:err-body NL2418 -->
+```ts
 const rows = ["a", "bb", "ccc"];
 let longest = "";
 for (const row of rows) {

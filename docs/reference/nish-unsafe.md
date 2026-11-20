@@ -132,7 +132,7 @@ call and saves it just after, before any result marshalling. Native and
 `--profile wasi` only.
 
 ```ts
-function cErrno(): i32
+const cErrno: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -150,7 +150,7 @@ The `NUL`-terminated bytes at `p`, copied into a new string by
 `ffi-null`. It reads and allocates, and is native only.
 
 ```ts
-function readCString(p: CPtr): string
+const readCString: (p: CPtr) => string
 ```
 
 <scalar-field name="p" type="CPtr" required>
@@ -174,7 +174,7 @@ may free or overwrite its struct straight after. It reads and allocates,
 and is native only.
 
 ```ts
-function readStruct<T>(p: CPtr): T
+const readStruct: <T>(p: CPtr) => T
 ```
 
 <scalar-field name="p" type="CPtr" required>
@@ -198,10 +198,10 @@ an index proven before it stays proven after; it records no passed check
 of its own.
 
 ```ts
-function uncheckedGet<T extends number>(
+const uncheckedGet: <T extends number>(
   xs: readonly T[],
   i: i32,
-): T
+) => T
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -231,11 +231,11 @@ The element at `i`.
 every rule that asks, the parallel-body rule included.
 
 ```ts
-function uncheckedSet<T extends number>(
+const uncheckedSet: <T extends number>(
   xs: T[],
   i: i32,
   v: T,
-): void
+) => void
 ```
 
 <scalar-field name="xs" type="T[]" required>
@@ -266,10 +266,7 @@ defined for every pair (`wrappingAdd(2147483647, 1)` is `-2147483648`).
 In a module constant's initialiser the call folds, wrapping.
 
 ```ts
-function wrappingAdd<T extends i32 | i64>(
-  a: T,
-  b: T,
-): T
+const wrappingAdd: <T extends i32 | i64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>
@@ -298,10 +295,7 @@ The sum, wrapped to the operands' width.
 (`wrappingMul(INT64_MAX, 2)` is `-2`).
 
 ```ts
-function wrappingMul<T extends i32 | i64>(
-  a: T,
-  b: T,
-): T
+const wrappingMul: <T extends i32 | i64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>
@@ -327,10 +321,7 @@ The product, wrapped to the operands' width.
 `a - b` as `sub` with no `nsw` and no check, wrapping.
 
 ```ts
-function wrappingSub<T extends i32 | i64>(
-  a: T,
-  b: T,
-): T
+const wrappingSub: <T extends i32 | i64>(a: T, b: T) => T
 ```
 
 <scalar-field name="a" type="T" required>

@@ -12,6 +12,7 @@ node bench/http1-conn/run.mjs                  # 15 rounds, 96a38347 against the
 node bench/http1-conn/run.mjs --rounds 5 --base origin/main   # on a branch: main against the branch
 node bench/http1-conn/run.mjs --connections 10000 --rounds 15 --base 98c4f9a7   # the table below
 bash bench/http1-conn/misses.sh                # then: where the misses land, per function and line
+build/nish bench/http1-conn/bytes.ts --link build/bench/http1-conn/bytes && build/bench/http1-conn/bytes   # bytes a connection holds, by object
 ```
 
 `run.mjs` builds `main.ts` twice at `--profile speed`, once against `std/` as

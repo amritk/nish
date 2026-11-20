@@ -15,6 +15,7 @@ usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
        nish run [flags] <file.ts> [args ...]  build, cache and run it
        nish run --watch <file.ts> [args ...]  rebuild and rerun it on each edit
        nish upgrade [<version>] [--check]     install a newer release
+       nish c-import <header> -o <file.ts>    write declarations from a C header
        nish -v, --version | -h, --help
 ```
 
@@ -24,7 +25,8 @@ usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
 file, links it into a cache, and starts it with the rest of the command line
 as its arguments:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   const args = process.argv;
   for (let i: i32 = 1; i < args.length; i++) {
@@ -223,6 +225,44 @@ likely to add to it:
   `"nish": { "host": [...] }` names them too. A native or WASI build that
   imports one is refused.
 
+### Optimizing a build with a profile
+
+A profile-guided build links your program twice. The first link is an
+instrumented binary: it counts which branches and calls your program takes.
+You run it on real work, and the second link uses those counts to lay out
+and inline the code. Four commands:
+
+```bash
+nish app.ts -o build/app.ir/ --link build/app.instr --pgo-generate
+LLVM_PROFILE_FILE=build/app-%p.profraw build/app.instr <a representative run>
+llvm-profdata merge -o build/app.profdata build/app-*.profraw
+nish app.ts -o build/app.ir/ --link build/app --pgo-use build/app.profdata
+```
+
+- **The profile covers the whole binary.** The runtime and, when your
+  program calls it, SQLite are compiled with the same flag, so the hot
+  paths in them are optimised too. Such a link compiles every unit itself
+  rather than reusing the runtime cache, so it takes longer, and it never
+  leaves an instrumented object behind for a plain link to pick up.
+- **Train on what production sees.** Run the instrumented binary on input
+  shaped like the real thing: the binary is fast where the training was.
+  Each run writes one `.profraw` (`%p` puts the process id in the name);
+  merge them all.
+- **A profile belongs to one machine and one LLVM.** Train and link on the
+  same toolchain; `llvm-profdata` and `clang` of another LLVM version may
+  refuse the file. Don't commit a `.profdata`: regenerate it.
+- **What is refused.** Each flag needs `--link` and the `speed` or `size`
+  profile, builds for this machine only, and `nish run` does not take it; a
+  `--pgo-use` file must be the merged `.profdata` (a raw `.profraw` is
+  refused with the `merge` command to run). Each is a usage error, exit 2.
+  `llvm-profdata` must be on your `PATH` (Ubuntu's `llvm-18` installs it as
+  `llvm-profdata-18`; link that as `llvm-profdata`); without it the link
+  stops with exit 3. The instrumented link also needs compiler-rt's profile
+  runtime (`libclang-rt-18-dev` on Ubuntu).
+
+The rules are in the language reference, [Profile-guided
+builds](../../LANGUAGE.md#profile-guided-builds).
+
 The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — and host modules have a page of
 their own: [Calling Nish from other languages](interop.md).
@@ -234,7 +274,8 @@ compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
 any other `sqlite3_*`). You need no SQLite library on your system, and a
 program that does not call SQLite gets none of it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function sqlite3_libversion(): string;
 
 export const main = (): i32 => {
@@ -445,7 +486,8 @@ out.
 
 An error prints with its position and an excerpt, and the compile exits 1:
 
-```ts nish:err NL1047
+<!-- nish:err NL1047 -->
+```ts
 export const main = (): i32 => {
   const x: i32 = 1;
   if (x == 1) {
@@ -662,6 +704,15 @@ A cache another user could have written is ignored and replaced, so nobody
 else chooses what the line says. What the check trusts is in the
 [security record](../../security/release.md).
 
+## Binding a C header: `nish c-import`
+
+`nish c-import <header> -o <file.ts>` reads a C header through `clang` and
+writes a Nish module of `declare function`s, `declare class`es and constants
+for it, with a comment listing what it could not bind. `--overrides <file>`
+adds what the header cannot say (which pointers may be `NULL`, which results
+must be freed), and `--target <triple>` writes the module for another target.
+[Binding a C library](c-import.md) is the whole story.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -669,7 +720,7 @@ else chooses what the line says. What the check trusts is in the
 | 0 | success |
 | 1 | the program was rejected: a compile error, or an input file that does not exist |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
-| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed |
+| 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written); for `nish upgrade`, no answer from the release server, or the installer failed; for `nish c-import`, `clang` cannot run |
 | 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own
@@ -745,10 +796,11 @@ leaves the IR unchanged.
 
   Use it for a simulation a server and a browser both run and must agree on
   ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
-- **`--compat`** selects the compatibility dialect, which will accept more of
-  TypeScript than Nish does by default. It has no feature yet, so today it
-  means one thing: a bare `number` is a 64-bit float, as `--number-mode f64`
-  makes it. `--compat=<feature>,...` allows only the features it names, and a
+- **`--compat`** selects the compatibility dialect, which accepts more of
+  TypeScript than Nish does by default: a bare `number` is a 64-bit float, as
+  `--number-mode f64` makes it, and its features (`nullish`,
+  `optional-chaining`, `string-switch`, `for-of-string`) admit forms the strict dialect refuses.
+  `--compat=<feature>,...` allows only the features it names, and a
   name that is no feature is a usage error (exit 2). `"compat"` in your
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too
@@ -767,6 +819,10 @@ leaves the IR unchanged.
   compact-class rule would pick it, or the first of the rule's five tests
   that refuses it, with its size in bytes now and with its links narrowed
   to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
+  A generic class gets one line for each of its instantiations, named as
+  written in a type (`TNode<i32>`), at the generic class's declaration. An
+  instantiation from the standard library is marked `(std)`. A generic class
+  that nothing instantiates gets no line.
   Nothing uses the verdict yet, and the flag changes no byte of the build.
   Only a native executable can pick a class: a build with `--link`, or
   `nish run`. Every other build refuses every class at the first test: IR

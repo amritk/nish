@@ -24,7 +24,7 @@ import {
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
 import { checkGenericCall, genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
-import { FLAG_GATHERED, FLAG_USING, isPatternReceiverName, Node, NodeKind } from "./nodes"
+import { FLAG_GATHERED, FLAG_OPTIONAL, FLAG_USING, isPatternReceiverName, Node, NodeKind } from "./nodes"
 import { StringSet } from "./map"
 import { crossesByCopy, parallelRole } from "./parallel"
 import {
@@ -161,23 +161,52 @@ export const checkIndex = (ctx: CheckContext, expr: Node, scope: Scope): i32 => 
   if (ctx.table.isSecret(base) || namesSecret(ctx, expr.children[1], scope)) {
     return ctx.errorType(ctx.table.isSecret(base) ? expr.children[0] : expr.children[1], secretIndexMessage())
   }
-  if (ctx.table.isNullable(base)) {
+  const array = optionalElementReceiver(ctx, expr, base)
+  if (array === T_ERROR) {
+    return T_ERROR
+  }
+  if (ctx.table.isNullable(array)) {
     return ctx.errorType(
       expr.children[0],
-      `Cannot index \`${ctx.table.typeName(base)}\`; check for null first: \`if (a !== null) { ... }\``
+      `Cannot index \`${ctx.table.typeName(array)}\`; check for null first: \`if (a !== null) { ... }\``
     )
   }
-  if (!ctx.table.isArray(base)) {
+  if (!ctx.table.isArray(array)) {
     return ctx.errorType(
       expr.children[0],
-      `Cannot index a value of type ${ctx.table.typeName(base)} (only arrays can be indexed)`
+      `Cannot index a value of type ${ctx.table.typeName(array)} (only arrays can be indexed)`
     )
   }
   const index = checkExpression(ctx, expr.children[1], scope, ctx.numberType())
   if (index !== T_ERROR && !isNumeric(index)) {
     ctx.error(expr.children[1], `Array index must be a number, got ${ctx.table.typeName(index)}`)
   }
-  return ctx.table.refOf(base)
+  return ctx.table.refOf(array)
+}
+
+/**
+ * WP28 C1: the array a `?.[i]` link reads, given its receiver's type `base`.
+ * Phase 0 admitted the link only under `optional-chaining`, before a chain's
+ * last link, and the emitter has left the chain by the time the read runs
+ * where the receiver is `null` (`nodeNullTests`), so the receiver is read as
+ * its `T` and recorded as one, as a `?.b` link's is. A receiver that cannot be
+ * `null` has nothing to skip, and is refused as a `?.b` on one is.
+ */
+const optionalElementReceiver = (ctx: CheckContext, expr: Node, base: i32): i32 => {
+  if ((expr.flags & FLAG_OPTIONAL) === 0) {
+    return base
+  }
+  const receiverExpr = expr.children[0]
+  if (!ctx.table.isNullable(base)) {
+    const written = `${ctx.textOf(receiverExpr)}[${ctx.textOf(expr.children[1])}]`
+    return ctx.errorType(
+      receiverExpr,
+      `\`${ctx.textOf(receiverExpr)}\` is never \`null\` here, so \`?.\` has nothing to skip: write \`${written}\``
+    )
+  }
+  const inner = ctx.table.stripNull(base)
+  ctx.program.nodeTypes[receiverExpr.id] = inner
+  return inner
 }
 
 /**

@@ -1,0 +1,7 @@
+{
+  "name": "compat-optional-params-read-paren",
+  "private": true,
+  "nish": {
+    "compat": ["optional-params"]
+  }
+}

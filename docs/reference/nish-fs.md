@@ -214,10 +214,7 @@ value. A symbolic link as the last component of `path` is refused, as for
 `writeFileSync`.
 
 ```ts
-function appendFileSync(
-  path: string,
-  data: string,
-): void
+const appendFileSync: (path: string, data: string) => void
 ```
 
 <scalar-field name="path" type="string" required>
@@ -242,11 +239,11 @@ file before it answers, so a failed create never leaves a half-written lock
 behind. Never a panic.
 
 ```ts
-function createFileExclusiveSync(
+const createFileExclusiveSync: (
   path: string,
   data: string,
   mode: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -280,7 +277,7 @@ The length written, `-17` EEXIST when any name is already at
 Close a descriptor `fileOpen` gave; close it once.
 
 ```ts
-function fileClose(fd: i32): i32
+const fileClose: (fd: i32) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -302,7 +299,7 @@ and non-blocking. A directory is `-21`, any other kind that is not a
 regular file `-22`. Close it with `fileClose` in a `finally`.
 
 ```ts
-function fileOpen(path: string): i32
+const fileOpen: (path: string) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -327,13 +324,13 @@ Read up to `len` bytes from file offset `pos` into `buf[off .. off + len)`
 `buf`; the array is never grown.
 
 ```ts
-function fileReadAt(
+const fileReadAt: (
   fd: i32,
   buf: u8[],
   off: i32,
   len: i32,
   pos: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -380,7 +377,7 @@ The bytes read, `0` at end of file (and for a `len` of `0`, even
 The file's size in bytes now, from `fstat`.
 
 ```ts
-function fileSize(fd: i32): i64
+const fileSize: (fd: i32) => i64
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -403,7 +400,7 @@ made, and `readFileSyncOrNull` the way to read a file without racing a
 check against it.
 
 ```ts
-function isDirectorySync(path: string): boolean
+const isDirectorySync: (path: string) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -427,7 +424,7 @@ like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a
 failure and not a reason to create it.
 
 ```ts
-function mkdirSync(path: string): boolean
+const mkdirSync: (path: string) => boolean
 ```
 
 <scalar-field name="path" type="string" required>
@@ -452,10 +449,7 @@ owner's bits, and a wider mode may come out narrower. An existing name
 keeps its mode, never changed. Never a panic.
 
 ```ts
-function mkdirSyncMode(
-  path: string,
-  mode: i32,
-): i32
+const mkdirSyncMode: (path: string, mode: i32) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -488,9 +482,7 @@ file's size and equals its capacity. There is no exiting twin. Under Node
 the answer is `Array.from(fs.readFileSync(path))` or `null`.
 
 ```ts
-function readFileBytesSync(
-  path: string,
-): u8[] | null
+const readFileBytesSync: (path: string) => u8[] | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -513,7 +505,7 @@ Read the whole file as one arena string. A failure prints
 the call that answers instead.
 
 ```ts
-function readFileSync(path: string): string
+const readFileSync: (path: string) => string
 ```
 
 <scalar-field name="path" type="string" required>
@@ -539,9 +531,7 @@ cannot be searched, a pipe with no length to ask for. It subsumes an
 `readFileSync` prints "cannot read" for.
 
 ```ts
-function readFileSyncOrNull(
-  path: string,
-): string | null
+const readFileSyncOrNull: (path: string) => string | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -564,9 +554,7 @@ every machine; it agrees with Node's `.sort()` for ASCII names and can
 differ for names that are not.
 
 ```ts
-function readdirSync(
-  path: string,
-): string[] | null
+const readdirSync: (path: string) => string[] | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -592,7 +580,7 @@ separator removed. Every component but the last must exist for POSIX
 result is an ordinary string; narrow it with `if (p !== null)`.
 
 ```ts
-function realpathSync(path: string): string | null
+const realpathSync: (path: string) => string | null
 ```
 
 <scalar-field name="path" type="string" required>
@@ -616,7 +604,7 @@ Nothing is copied across file systems: write the temporary in the target's
 directory. Never a panic.
 
 ```ts
-function renameSync(from: string, to: string): i32
+const renameSync: (from: string, to: string) => i32
 ```
 
 <scalar-field name="from" type="string" required>
@@ -647,7 +635,7 @@ The path's modification time, following symbolic links, as Node's
 kept.
 
 ```ts
-function statMtimeSync(path: string): f64
+const statMtimeSync: (path: string) => f64
 ```
 
 <scalar-field name="path" type="string" required>
@@ -670,7 +658,7 @@ it names. A directory is refused, not removed: there is no fallback to
 `rmdir`. Never a panic.
 
 ```ts
-function unlinkSync(path: string): i32
+const unlinkSync: (path: string) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -695,10 +683,10 @@ component is refused, as for `writeFileSync`. Where `writeFileSync` exits,
 this answers, and it never panics.
 
 ```ts
-function writeFileBytesSync(
+const writeFileBytesSync: (
   path: string,
   bytes: readonly u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>
@@ -728,10 +716,7 @@ not a value. A symbolic link as the last component of `path` is refused
 with `nish: cannot write <path>`, where Node follows it.
 
 ```ts
-function writeFileSync(
-  path: string,
-  data: string,
-): void
+const writeFileSync: (path: string, data: string) => void
 ```
 
 <scalar-field name="path" type="string" required>
@@ -764,11 +749,11 @@ EPERM. To replace a secret, write it to a temporary beside the target and
 with `-40` ELOOP, its target untouched. Never a panic.
 
 ```ts
-function writeFileSyncMode(
+const writeFileSyncMode: (
   path: string,
   data: string,
   mode: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="path" type="string" required>

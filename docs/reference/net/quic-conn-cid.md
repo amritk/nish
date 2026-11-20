@@ -98,12 +98,12 @@ implementation. Private names carry the `quicCid` prefix
 Copies `length` bytes of `from` at `at` into the start of `to`, and zeroes the rest of `to`.
 
 ```ts
-function quicCidCopy(
+const quicCidCopy: (
   to: u8[],
   from: u8[],
   at: i32,
   length: i32,
-): void
+) => void
 ```
 
 <scalar-field name="to" type="u8[]" required>

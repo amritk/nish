@@ -8,7 +8,8 @@ reference's [Functions](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.m
 
 ## Declaring a function
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const add = (a: i32, b: i32): i32 => {
   return a + b;
 };
@@ -50,7 +51,8 @@ passes. A default is a constant — a number, `true`/`false`, a string, an enum
 member — or the name of an earlier parameter, and the parameter keeps its type
 annotation:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const scale = (x: i32, by: i32 = 2): i32 => x * by;
 const area = (w: i32, h: i32 = w): i32 => w * h;
 
@@ -64,7 +66,8 @@ export const main = (): i32 => {
 The last parameter may instead be a **rest parameter**, an array that gathers
 every remaining argument. A call with none passes an empty array:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const total = (...xs: i32[]): i32 => {
   let sum = 0;
   for (const x of xs) {
@@ -83,7 +86,8 @@ A parameter that may be `null` (`T | null`) may default to `null`, and to
 nothing else. That is how an options argument is written: the call that leaves
 it out passes `null`, exactly as if it had written it:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Options {
   loud: boolean = true;
 }
@@ -112,7 +116,8 @@ callee's write would not reach it as it does in TypeScript. Pass `[p, q]` to a
 parameter of array type instead, where the copy is written out. A class
 instance is the caller's object, so a rest of class instances takes any:
 
-```ts nish:err NL2608
+<!-- nish:err NL2608 -->
+```ts
 interface Cell {
   v: i32;
 }
@@ -129,14 +134,16 @@ export const main = (): void => {
 
 Optional parameters (`n?: i32`) are refused; write a default instead:
 
-```ts nish:err NL2605
+<!-- nish:err NL2605 -->
+```ts
 const greet = (name?: string): string => "hi";
 ```
 
 A call never spreads an array into arguments; pass the array to a parameter
 of array type:
 
-```ts nish:err-body NL2606
+<!-- nish:err-body NL2606 -->
+```ts
 const xs: i32[] = [1, 2];
 console.log(`${Math.max(...xs)}`);
 ```
@@ -146,14 +153,16 @@ console.log(`${Math.max(...xs)}`);
 Assigning to a parameter is an error. Copy it into a `let` when you need a
 value that changes:
 
-```ts nish:err NL2179
+<!-- nish:err NL2179 -->
+```ts
 const countdown = (n: i32): i32 => {
   n = n - 1;
   return n;
 };
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const countdown = (n: i32): i32 => {
   let left = n;
   while (left > 0) {
@@ -169,7 +178,8 @@ A program starts at `export const main` in the file you compile. It takes no
 parameters and returns either `void` (exit status 0) or an `i32`, which is
 the process's exit status:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 export const main = (): i32 => {
   if (process.argv.length < 2) {
     console.error("usage: greet <name>");
@@ -202,7 +212,8 @@ holds a [function reference](function-references.md#as-a-function-argument).
 A field or element is refused (`NL2759`): read it into a `const` first, as in
 `const op = ops[0]`, and pass the `const`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const countWhere = (xs: i32[], keep: (x: i32) => boolean): i32 => {
   let n = 0;
   for (const x of xs) {
@@ -237,7 +248,8 @@ pointer and nothing to allocate at run time. That decides the rules:
   array or object may be written through (`hits.push(x)`), because the arrow
   runs during the call, on the same thread:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const each = (xs: i32[], f: (x: i32) => void): void => {
   for (const x of xs) {
     f(x);
@@ -268,7 +280,8 @@ export const main = (): i32 => {
   arrow argument does ([Sorting](arrays-and-strings.md#sorting),
   [`map`, `filter` and `slice`](arrays-and-strings.md#map-filter-and-slice)):
 
-```ts nish:err NL2585
+<!-- nish:err NL2585 -->
+```ts
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);
 
 export const main = (): i32 => {

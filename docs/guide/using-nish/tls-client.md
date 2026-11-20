@@ -24,7 +24,8 @@ so resolve a name first with [`nish/net/dns`](networking.md#names-nishnetdns).
 `serverName` is what the server is checked against and is sent as SNI unless
 it is an IP literal; it is always yours, never taken from the address.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { netAddress } from "nish:net";
 import { tlsConnect } from "nish/net/tls-tcp";
 
@@ -125,7 +126,8 @@ randomness: 32 random bytes for the ClientHello and a 32-byte private key per
 key-exchange group. Use a fresh key from a secure random source for every
 connection; the fixed bytes below are only for the example:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { TLS_LEVEL_INITIAL } from "nish/net/tls";
 import { TLS_CLIENT_STATE_WAIT_SERVER_HELLO, TlsClient, TlsClientConfig } from "nish/net/tls/client";
 
@@ -190,7 +192,8 @@ that decision the way `TlsTcpClient` does: the signature under the leaf's
 key, then the chain to a root in `trust` for the server's name at `nowMs`,
 and the verdict sent. Use it unless you have your own check.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";
 import { TlsClientTrust, tlsClientAuthenticate } from "nish/net/tls/verify";
 
@@ -211,7 +214,8 @@ to a root you trust, that the leaf names the server, and that
 chain, leaf first. Then call `authenticate(true)`, or `reject(alert)` to
 fail the connection with that alert sent:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";
 
 const BAD_CERTIFICATE: i32 = 42;

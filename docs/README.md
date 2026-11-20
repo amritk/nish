@@ -86,12 +86,13 @@ box per stage; the status line at a note's head may lag it.
 | [wp54-async-wasm.md](wp54-async-wasm.md) | Proposed, design only. `async` on wasm with the page as the executor: WP49's state machine unchanged, a host import that answers a promise as a wait token, a settled promise resuming the module through one generated export, `sleep` through the loader, and a task's memory on wasm from a fixed pool or a `malloc`. Written for a service that runs on Cloudflare Workers; a page that drives a module does not need it. JSPI weighed and not recommended; nothing measured yet. |
 | [wp55-persistent-root.md](wp55-persistent-root.md) | Landed. An object graph a `wasm-host` module keeps between export calls, with memory bounded while the page calls it for hours: the options weighed, root storage, its checker rules, descriptors, `nish_root_keep` and the loader. |
 | [wp56-flat-memory-generators.md](wp56-flat-memory-generators.md) | Proposed, design accepted. Generators whose memory stays flat: why a program that writes thousands of files keeps every string it built, the shapes that already stay flat (a function per file, an arena block, a region per target), and `builder()` from `nish:string`, whose bytes live outside the arena on a stack the compiler releases at the exit of every scope that makes one, with a write handle to flush it, the benchmark and gates, and the stages. |
-| [wp57-module-scoped-names.md](wp57-module-scoped-names.md) | Proposed, design only. Module-scoped names: why a private function's name must be unique across the whole program (the emitted symbol, not lookup, which is already per module), and three stages: a private function's or generic template's symbol qualified by its module path only when it would clash, so no IR moves; exported names that clash inside one package, an open choice among four options for the C surface; and module-scoped class and interface names, sized across every place that reaches a struct by name. |
+| [wp57-module-scoped-names.md](wp57-module-scoped-names.md) | S1 built; S2 and S3 proposed. Module-scoped names: why a private function's name must be unique across the whole program (the emitted symbol, not lookup, which is already per module), and three stages: a private function's or generic template's symbol qualified by its module path only when it would clash, so no IR moves (built); exported names that clash inside one package, an open choice among four options for the C surface; and module-scoped class and interface names, sized across every place that reaches a struct by name. |
 | [wp59-wasm-arena-memory.md](wp59-wasm-arena-memory.md) | Proposed, design only. The wasm arena in a second, unexported memory: what WH-10 leaves standing, every place the page or loader reads the module's memory today, why LLVM 18 can load and store only memory 0 (so the page's memory is the one added, after `wasm-ld`), module storage mirrored at the edges of a call, the copy each crossing costs, the engine table and Safari fallback, and four stages ending in the security record. |
 | [wp60-dyn-dispatch.md](wp60-dyn-dispatch.md) | Proposed, designed and measured. Dynamic dispatch over interfaces: `Dyn<I>` from `nish:dyn`, a class tag and a pointer (two registers in a local, one tagged word when stored) whose method call lowers to a per-place `switch` of direct calls (WP51's machinery with classes as members), measured against a hand `kind` switch, a discriminated union, a WP51 table and a vtable: on the surface stage 2 can write, 0.72x the hand program in geomean but 2.21x on a set of two chosen at random per call; stored, 1.11x (1.18x on arrays); the escape-join refusal with `this` as an argument; ships interface method signatures (stage 1) now, with stages 2 and 3 each gated on its own build's timing. |
 | [wp61-json-typed-checks.md](wp61-json-typed-checks.md) | Proposed, design only. Typed JSON, constraints and coercion in one pass: a `constraints` option in the class literal checked straight after each field's read with `JSON_DECODE_CONSTRAINT` at the value, patterns through the non-backtracking `nish/regex`; an opt-in `coerce` mode in which `jsonDecode` always answers `OK` with a correct instance (an exact lossless conversion table, otherwise the class's own defaults; malformed JSON and limits stop reading but do not fail; `reason` and `errorAt` stay readable); a per-field converted/defaulted record whose default is settled by measurement; byte-identical IR for a class without either; three stages ending in the guide page and Bun/Node benchmarks. The schema-to-class generator is WP62. |
 | [wp62-json-schema-classes.md](wp62-json-schema-classes.md) | Proposed, design only. Nish classes from a JSON Schema: `nish schema` reads a draft 2020-12 schema or OpenAPI 3.1 components and writes typed JSON classes, every keyword typed, checked through WP61's `constraints` literal, kept as JSDoc, or refused with its JSON Pointer; defaults as initializers and how they meet `required`, names and `rename`, a deterministic file with a header and `--check`, the round trip and a vendored corpus test, a first stage of two typed JSON prerequisites (constructor-assigned optional defaults, per-class unknown keys), and five stages. |
 | [wp65-lexer-surface.md](wp65-lexer-surface.md) | Proposed, design only. The surface a table-driven lexer port asked for: constant tables, already built, and the docs that point a lexer author to them; `indexOf(x, fromIndex)` on arrays, lowered to `memchr` on byte arrays, with `indexOfByte`, `equalBytes` and `compareBytes` in `std/bytes`; `withCapacity` and `grow` in `std/array`, and a zero fill dropped where a counted loop overwrites it (never an uninitialised `length`); field initializers that are not literals, run before the constructor body; and an open question on `toString()` for numbers. |
+| [wp66-c-headers.md](wp66-c-headers.md) | Proposed, design only. C libraries from their headers: `nish c-import` reads a header through clang and writes `declare function`s, `declare class`es and constants, measured on four real headers; the `zeroext` fix it needs first; and the language stages that would bind the rest (opaque classes, array fields, named buffer counts, callbacks, linking a library). |
 
 Two notes record a stage of WP39 rather than a package of their own:
 
@@ -114,18 +115,22 @@ who write programs in Nish. A page there follows these rules:
   does and how to use it; leave the IR, the checker and the runtime's layout
   to the reference. No internal vocabulary: stage0, the seed, Nish-0 and work
   packages do not appear.
-- **Examples are compiled.** A program is a fence marked for compilation —
-  ` ```ts nish:ok `, `nish:ok-body` (wrapped in a `main` body),
-  `nish:err CODE` or `nish:err-body CODE` (must be rejected with that code) —
-  and `node tests/run.js guide` compiles it. Every page but
-  `installation.md` carries at least one once it is more than a stub (its
-  title and one paragraph). A fragment that cannot compile on its own is a
-  plain ` ```ts ` block, and short. An example of several files tags each
-  fence `file=<path>` (` ```ts nish:ok file=geometry.ts `, or
-  ` ```json nish:ok file=node_modules/hash/package.json ` for a package): the
-  `file=` fences of one section are written out together, each at its path,
-  and the last is compiled with its marker, so only it may be `nish:err`;
-  each other `.ts` fence must also compile alone.
+- **Examples are compiled.** A program is a fence marked for compilation by
+  an HTML comment on the line just above it — `<!-- nish:ok -->`,
+  `<!-- nish:ok-body -->` (wrapped in a `main` body), `<!-- nish:err CODE -->`
+  or `<!-- nish:err-body CODE -->` (must be rejected with that code), with
+  any CLI flags after them — and `node tests/run.js guide` compiles it. The
+  marker is a comment because the site shows a word after a fence's language
+  as the block's title; a marker in the fence's own line is refused. Every
+  page but `installation.md` carries at least one once it is more than a stub
+  (its title and one paragraph). A fragment that cannot compile on its own is
+  a plain ` ```ts ` block, and short. An example of several files puts each
+  file's path after its fence's language, which the site shows as its title
+  (` ```ts geometry.ts `, or ` ```json node_modules/hash/package.json ` for a
+  package), under its own marker: the titled fences of one section are
+  written out together, each at its path, and the last is compiled with its
+  marker, so only it may be `nish:err`; each other `.ts` fence must also
+  compile alone.
 - **The reference is normative.** Each page links the
   [LANGUAGE.md](LANGUAGE.md) section that governs it and describes nothing
   that section does not say; where the two disagree, the guide is wrong.
@@ -191,23 +196,35 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
 
 - [`mark.svg`](site/mark.svg) is the logo, and the source of every other
   image there: `logo-dark.png` and `logo-light.png` (the mark beside "nish",
-  for the header) and the favicons are renders of it, so a new mark
-  re-renders them all. The theme's violets and cyan are its colours.
+  for the header), the favicons and `icon-512.png` (the logo in the pages'
+  structured data) are renders of it, so a new mark re-renders them all.
+  Google shows a site's favicon in its results only at 48×48 or larger, so
+  `favicon.ico` carries a 48px image and `favicon-48.png` and
+  `favicon-192.png` are linked beside it. The theme's violets and cyan are
+  its colours.
 
 - [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
   gradient behind every page, and every animation — a page's entrance, blocks
   that rise as they scroll into view, the cards' pointer highlight and the
   landing page's hero. All of it stops under `prefers-reduced-motion`, and a
   colour change re-measures the contrast figures in the file's head.
-- [`site.js`](site/site.js) builds the hero into the empty
-  `<div data-nish-hero></div>` at the top of [the landing
-  page](guide/index.md) and tracks the pointer for the cards. Until it
-  marks the hero's host `data-nish-ready`, `theme.css` holds the page under
-  the hero hidden, so the hero's late arrival pushes nothing a reader is
-  looking at; the hold ends by itself after 1.2s if `site.js` never runs.
+- The hero is static markup on one line at the top of [the landing
+  page](guide/index.md), so the server's HTML paints it with the page and
+  nothing under it moves when a script runs (no entrance animation fades
+  anything in from transparent either: each rises from 14px, already
+  visible). The line is `site.js`'s `hero()`, serialized: after a change to
+  the hero, rewrite it with `node tests/break-web/check.mjs --write-hero`;
+  the break-web check fails while the two differ. GitHub renders the same
+  Markdown, so it shows the hero's text there, unstyled.
+- [`site.js`](site/site.js) gives the hero its behaviour (the copy button,
+  the terminal), builds it into a host left empty (as the `og.png` script's
+  is), marks the host `data-nish-ready` once wired, and tracks the pointer
+  for the cards.
 - [`page.js`](site/page.js) writes each page's structured data and its
   `theme-color` (below), and lets a path in a table break after its
-  slashes, where `theme.css` keeps a table's names whole. It draws nothing, and stays out of `site.js` so the
+  slashes, where `theme.css` keeps a table's names whole. It draws nothing,
+  so it starts on `requestIdleCallback`, when the main thread is idle, and
+  stays out of `site.js` so the
   hero's script keeps its size budget (`tests/break-web/check.mjs`).
 - The landing page is the site's home, not a page of the guide: its route,
   first under `/` in `scalar.config.json` and out of the sidebar, sets a
@@ -216,8 +233,7 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   centred column, a lead paragraph and centred section headings, with the
   hero and the card grids wider. The sidebar stays on in the route, because
   on a phone it is the menu, and `theme.css` hides it on a wider screen. Keep it a home page:
-  what it says in detail belongs on a guide page it links. The host stays
-  empty in the Markdown so that GitHub shows nothing in its place; nothing a
+  what it says in detail belongs on a guide page it links. Nothing a
   reader needs may live only in the hero.
 - [`og.png`](site/og.png) is the 1200×630 card a link to the site unfurls
   into: the hero itself, at rest, without its buttons, rendered by

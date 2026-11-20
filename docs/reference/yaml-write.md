@@ -86,10 +86,10 @@ A value as block YAML text that `parseYaml` reads back as the same tree. See
 the module comment for the rule that quotes a string.
 
 ```ts
-function stringifyYaml(
+const stringifyYaml: (
   doc: JsonDocument,
   v: JsonValue,
-): string
+) => string
 ```
 
 <scalar-field name="doc" type="JsonDocument" required>

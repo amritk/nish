@@ -11,7 +11,7 @@
 <!-- How did you verify this works? -->
 
 - [ ] `npm run check` passes (the ambient type-check of `src/`, `std/` and `tests/nish/`)
-- [ ] Every CI `test (…, shard N/8)` row green and undegraded on the current head (no `DEGRADED:` line); skip counts read from the shard summaries: <!-- n -->
+- [ ] Every CI `test (…, shard N/9)` row green and undegraded on the current head (no `DEGRADED:` line); skip counts read from the shard summaries: <!-- n -->
 - [ ] `node tests/run.js <filter>` passes for each section or program the change touches
 - [ ] `npm run lint` passes
 - [ ] Markdown changed: `node docs/check-links.mjs` passes

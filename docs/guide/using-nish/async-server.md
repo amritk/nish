@@ -19,7 +19,8 @@ The rules for `async`, `await` and `spawn` are in
 
 ## A first server
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
 import { Router, RouterLimits } from "nish/net/router";
 import { sleep } from "nish:async";
@@ -29,7 +30,7 @@ const HOME: i32 = 0;
 const USER: i32 = 1;
 const ECHO: i32 = 2;
 
-async function handle(req: Request): Promise<Response> {
+const handle = async (req: Request): Promise<Response> => {
   switch (req.route) {
     case HOME:
       return new Response(200).text("hello\n");
@@ -45,15 +46,15 @@ async function handle(req: Request): Promise<Response> {
     default:
       return refuse(req); // 404, or 405 with its Allow
   }
-}
+};
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const router = new Router(new RouterLimits());
   router.add("GET", "/");
   router.add("GET", "/users/:id");
   router.add("POST", "/echo");
   return await serve(8080, router, new ServeLimits(), handle);
-}
+};
 ```
 
 `serve(port, router, limits, handle)` listens on every address at `port`
@@ -107,7 +108,8 @@ shares those objects with `main`, in place, so a handler reads and updates
 their numbers and awaits a pooled query, and builds its answer in its own
 memory:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Request, Response, ServeLimits, refuse, serve } from "nish/net/serve";
 import { Router, RouterLimits } from "nish/net/router";
 import { secret, wipe } from "nish:secret";
@@ -129,7 +131,7 @@ class Stats {
   served: i32 = 0;
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const config = new PgConfig();
   config.user = "app";
   const pool = new PgAsyncPool(4);
@@ -157,7 +159,7 @@ export async function main(): Promise<i32> {
     }
     return new Response(200).text(r.text(0, 0));
   });
-}
+};
 ```
 
 What the arrow captures is checked as a spawned task's function argument
@@ -221,17 +223,18 @@ so does every one it makes later, so the handler runs on to its end, its
 `using` bindings are disposed and its region is freed. Check `cancelled()`
 from `nish:async` after an `await` that failed, and answer:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { cancelled, sleep } from "nish:async";
 import { Request, Response } from "nish/net/serve";
 
-async function slow(req: Request): Promise<Response> {
+const slow = async (req: Request): Promise<Response> => {
   const slept = await sleep(5000);
   if (!slept && cancelled()) {
     return new Response(503).text("past the deadline");
   }
   return new Response(200).text("done");
-}
+};
 
 export const main = (): i32 => 0;
 ```

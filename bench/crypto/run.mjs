@@ -12,6 +12,11 @@
 //                       portableProof also proves its portable columns are
 //                       portable (README.md, "portableProof").
 //                       Exit 1 on any mismatch
+//     --no-proofs       with --validate: keep the exact part of each portable
+//                       proof (a portable column's own binary is other bytes)
+//                       and leave out the timed part, printing `not timed` for
+//                       each column. tests/run.js passes it on a pull request
+//                       (`--delegate-bench-timing`); a push to main times them
 //     --write-expected  with --validate: rewrite each family's expected.txt from
 //                       the checksums, once every variant agrees
 //     --only a,b        family names (hash) or kernel names (sha256) to run
@@ -163,6 +168,7 @@ const opts = {
   rounds: 11,
   out: null,
   record: false,
+  noProofs: false,
   skip: new Set(),
   families: here,
 }
@@ -177,6 +183,8 @@ for (let i = 2; i < nishc.rest.length; i++) {
   }
   if (a === "--validate") {
     opts.validate = true
+  } else if (a === "--no-proofs") {
+    opts.noProofs = true
   } else if (a === "--write-expected") {
     opts.writeExpected = true
   } else if (a === "--only") {
@@ -197,6 +205,9 @@ for (let i = 2; i < nishc.rest.length; i++) {
   } else {
     fail(`unknown option ${a}`)
   }
+}
+if (opts.noProofs && !opts.validate) {
+  fail("--no-proofs belongs to --validate")
 }
 if (opts.writeExpected && !opts.validate) {
   fail("--write-expected belongs to --validate")
@@ -1166,6 +1177,10 @@ if (opts.validate) {
           mismatches++
           continue
         }
+        if (opts.noProofs) {
+          console.log(`portable ${family.name} ${slow.id}: not timed (--no-proofs)`)
+          continue
+        }
         for (const [i, { kernel, size }] of cases.entries()) {
           // The fastest round of each: a shared machine's noise only ever adds time.
           // A short ratio is measured once more, longer, before it counts.
@@ -1265,6 +1280,10 @@ if (opts.validate) {
     }
     if (why !== null) {
       console.log(`portable ${family.name} nish-portable: unproved (${why})`)
+      continue
+    }
+    if (opts.noProofs) {
+      console.log(`portable ${family.name} nish-portable: not timed (--no-proofs)`)
       continue
     }
     const iterations = calibrate(fast, p.kernel, p.size, TARGET_NS / 2)

@@ -25,7 +25,8 @@ It does three things:
 Discover once at start-up, make the `OidcKeys`, take the first key set, and
 then verify each request's token:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import {
   OIDC_ERR_STALE,
   OIDC_ERR_UNKNOWN_KID,
@@ -189,7 +190,8 @@ server's own loop or timer, never inside a request. `refresh(now)` answers
 `OIDC_SKIPPED` and does nothing while the set is fresh and no token has
 asked for a new one, so calling it on every turn of the loop is cheap:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { OIDC_OK, OIDC_SKIPPED, OidcKeys } from "nish/net/oidc";
 
 // Call once per turn of your server's loop, before or after serving.
@@ -219,7 +221,8 @@ key set you already hold, for a test or for a set you fetch yourself.
 A provider running on your own machine over plain http (Keycloak in a
 container, say) is refused unless you allow it:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { OidcMetadata, OidcOptions, oidcDiscover } from "nish/net/oidc";
 
 export const main = (): i32 => {

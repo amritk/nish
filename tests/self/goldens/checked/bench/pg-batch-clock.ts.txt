@@ -285,6 +285,7 @@ struct PgConnection (class) size=216 align=8 exported
   method tailRoom -> @nish.PgConnection.tailRoom
   method compactOutput -> @nish.PgConnection.compactOutput
   method reserve -> @nish.PgConnection.reserve
+  method grow -> @nish.PgConnection.grow
   method putByte -> @nish.PgConnection.putByte
   method putI32 -> @nish.PgConnection.putI32
   method putI16 -> @nish.PgConnection.putI16
@@ -710,11 +711,17 @@ function PgText.int(this: PgText, b: u8[], start: i32, length: i32): i64 -> @nis
   local -2:11 end: i32 (const)
   local +3:11 negative: boolean (const)
   local +4:9 i: i32 (let)
-  local +13:11 lastDigit: i64 (const)
-  local +15:11 minTenth: i64 (const)
-  local +16:9 acc: i64 (let)
-  local +18:13 d: i32 (const)
-  local +23:13 digit: i64 (const)
+  local +20:11 head: i64 (let)
+  local +22:15 d: i32 (const)
+  local +30:11 tail: i64 (let)
+  local +31:11 scale: i64 (let)
+  local +33:15 d: i32 (const)
+  local +53:13 v: i64 (const)
+  local +57:11 lastDigit: i64 (const)
+  local +59:11 minTenth: i64 (const)
+  local +60:9 acc: i64 (let)
+  local +62:13 d: i32 (const)
+  local +67:13 digit: i64 (const)
 function PgText.bool(this: PgText, b: u8[], start: i32, length: i32): boolean -> @nish.PgText.bool [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1351,12 +1358,20 @@ function PgConnection.compactOutput(this: PgConnection): void -> @nish.PgConnect
   callee -1:5 copyBytes -> @nish.copyBytes
 function PgConnection.reserve(this: PgConnection, want: i32): void -> @nish.PgConnection.reserve [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.PgConnection.grow
+  escaping: want
+  calls: nish.PgConnection.grow
+  pointer this: size=216 writesThrough=true captured=false passedTo=nish.PgConnection.grow#0
+  stackSites=0 stackLocals=0
+  callee +0:7 PgConnection.grow -> @nish.PgConnection.grow
+function PgConnection.grow(this: PgConnection, want: i32): void -> @nish.PgConnection.grow [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: want
   calls: nish_panic nish_panic_overflow nish_panic_slice
   pointer this: size=216 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -6:11 size: i32 (const)
+  local -3:11 size: i32 (const)
   local -2:11 grown: u8[] (const)
 function PgConnection.putByte(this: PgConnection, v: i32): void -> @nish.PgConnection.putByte [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true

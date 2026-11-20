@@ -1,0 +1,1 @@
+main.ts:3:31: error: Optional parameter `factor` is `number`, which has no `null` to stand for an omitted argument: give it a default instead, `factor: number = <default>`, which a call that leaves it out passes

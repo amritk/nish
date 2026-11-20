@@ -46,11 +46,18 @@
 // inheritance (docs/LANGUAGE.md), so `T.m()` and an inherited `this.m()` have
 // no case to cover.
 //
-// A generic class is not reported and makes no class a holder: only a
-// class's own declaration (`info.instance === null`) is asked about. Nor is
-// `new Box<i32>(...)` a made-site or a constructor edge (`madeClass` reads a
-// bare class name), so recursion through a generic class's constructor is a
-// miss; §3.1 allows a miss, since a missed class only stays as it is. Test 5
+// A generic class is asked about once per instantiation (`Box<i32>`), which
+// is a candidate `R` like any class: its fields, monomorphised, are links for
+// test 2 and holders for test 3 when typed exactly that instantiation or it
+// `| null`. A template no code instantiates has no layout, and no line. An
+// instantiation is reported once, at its template's declaration, under the
+// module that declares the template, though every module that names it holds
+// it. A `new Box<T>(...)` or `new Box(...)` is a made-site and a constructor
+// edge: the body is read before any type argument is settled, so the site
+// names the template and counts for each of its instantiations. Test 4 then
+// over-counts an instantiation made once beside one made in a loop; test 4
+// picks where narrowing pays, and a wrong yes costs a decode, not
+// correctness. Test 5
 // reads a field's own type (`holdsSecret`): a `Secret<T>`, or an array,
 // nullable or `Result` of one; a field holding a class that holds a `Secret`
 // is not looked into.
@@ -107,14 +114,17 @@ class CallNode {
   }
 }
 
-/** A `new R(...)`: the class, the function it is in, and whether a loop encloses it there. */
+/**
+ * A `new R(...)`: the class as written (`classKey`), the function it is in,
+ * and whether a loop encloses it there.
+ */
 class MadeSite {
-  info: StructInfo
+  key: string
   fn: i32
   inLoop: boolean
 
-  constructor(info: StructInfo, fn: i32, inLoop: boolean) {
-    this.info = info
+  constructor(key: string, fn: i32, inLoop: boolean) {
+    this.key = key
     this.fn = fn
     this.inLoop = inLoop
   }
@@ -172,15 +182,19 @@ const functionKey = (sig: FunctionSig): string => {
 }
 
 /**
- * The key of `owner`'s member `member`: the class as written, without its type
- * arguments. A generic class's instance is named by its symbol (`Box$i32`), so
- * its template gives the written name.
+ * The key of a class as written, without its type arguments: its module's
+ * path and its name. A generic class's instance is named by its symbol
+ * (`Box$i32`), so its template gives the written name, and every
+ * instantiation of one template shares the template's key.
  */
-const memberKey = (owner: StructInfo, member: string): string => {
-  const instance = owner.instance
-  const name = instance === null ? owner.name : instance.template.sourceName
-  return `${owner.origin.path}#${name}.${member}`
+const classKey = (info: StructInfo): string => {
+  const instance = info.instance
+  const name = instance === null ? info.name : instance.template.sourceName
+  return `${info.origin.path}#${name}`
 }
+
+/** The key of `owner`'s member `member`, as `classKey` writes the class. */
+const memberKey = (owner: StructInfo, member: string): string => `${classKey(owner)}.${member}`
 
 /** The block a declaration's body is: a constructor's second child, any other function's fourth. */
 const functionBodyOf = (decl: Node): Node | null => {
@@ -255,13 +269,22 @@ const calleeIndex = (graph: CallGraph, self: CallNode, callee: Node): i32 => {
   return -1
 }
 
-/** The class `new` builds when its callee is a name `program` knows as a class, else `null`. */
-const madeClass = (program: CheckedProgram, node: Node): StructInfo | null => {
+/**
+ * The `classKey` of what `new` builds when its callee is a name `program`
+ * knows as a class or a generic class's template, else `""`. A template's key
+ * is its instantiations' key, whatever type arguments the site writes.
+ */
+const madeClass = (program: CheckedProgram, node: Node): string => {
   const callee = node.children[0]
   if (callee.kind !== NodeKind.Ident) {
-    return null
+    return ""
   }
-  return program.struct(callee.text)
+  const info = program.struct(callee.text)
+  if (info !== null) {
+    return classKey(info)
+  }
+  const template = program.structTemplate(callee.text)
+  return template === null ? "" : `${template.origin.path}#${template.sourceName}`
 }
 
 /**
@@ -277,10 +300,10 @@ const scanBody = (graph: CallGraph, fn: i32, node: Node, inLoop: boolean): void 
       self.calls.push(callee)
     }
   } else if (node.kind === NodeKind.New) {
-    const info = madeClass(self.program, node)
-    if (info !== null) {
-      graph.sites.push(new MadeSite(info, fn, inLoop))
-      const ctor = graph.byKey.get(memberKey(info, "constructor"), -1)
+    const made = madeClass(self.program, node)
+    if (made.length > 0) {
+      graph.sites.push(new MadeSite(made, fn, inLoop))
+      const ctor = graph.byKey.get(`${made}.constructor`, -1)
       if (ctor >= 0) {
         self.calls.push(ctor)
       }
@@ -354,21 +377,63 @@ const buildGraph = (modules: LayoutModule[]): CallGraph => {
   return graph
 }
 
+/** Whether `info` is a class a report line is about: a class, laid out whole. */
+const reportable = (info: StructInfo): boolean => info.kind === STRUCT_CLASS && !info.poisoned
+
+/**
+ * Every generic class instantiation any of `modules` holds, once each by its
+ * symbol, into `into`, and into `homes` the index of the module that declares
+ * its template (or the first that holds it, when no module in the list does).
+ */
+const collectInstances = (modules: LayoutModule[], into: StructInfo[], homes: i32[]): void => {
+  const seen = new StringMap()
+  let m = 0
+  while (m < modules.length) {
+    for (const info of modules[m].program.structList) {
+      if (info.instance === null || !reportable(info) || seen.has(info.name)) {
+        continue
+      }
+      seen.set(info.name, 1)
+      let home = m
+      let h = 0
+      while (h < modules.length) {
+        if (modules[h].program.source === info.origin) {
+          home = h
+        }
+        h = h + 1
+      }
+      into.push(info)
+      homes.push(home)
+    }
+    m = m + 1
+  }
+}
+
 /**
  * Appends every class a report line is about to `into`: each declared class
- * of `program` (not an instantiation), in its module's source order.
+ * of module `m`, and each instantiation of `instances` whose template it
+ * declares (`homes`), in the module's source order. An instantiation sits at
+ * its template's declaration, after the classes declared before it.
  */
-const collectClasses = (program: CheckedProgram, into: StructInfo[]): void => {
+const collectClasses = (
+  m: i32,
+  program: CheckedProgram,
+  instances: StructInfo[],
+  homes: i32[],
+  into: StructInfo[]
+): void => {
   const first = into.length
   for (const info of program.structList) {
-    if (
-      info.origin === program.source &&
-      info.kind === STRUCT_CLASS &&
-      info.instance === null &&
-      !info.poisoned
-    ) {
+    if (info.origin === program.source && info.instance === null && reportable(info)) {
       into.push(info)
     }
+  }
+  let n = 0
+  while (n < instances.length && n < homes.length) {
+    if (homes[n] === m) {
+      into.push(instances[n])
+    }
+    n = n + 1
   }
   // `structList` is in collection order; a report reads in source order.
   let i = first + 1
@@ -385,6 +450,10 @@ const collectClasses = (program: CheckedProgram, into: StructInfo[]): void => {
     i = i + 1
   }
 }
+
+/** The class as a diagnostic spells it: `Node`, or an instantiation's `Box<i32>`. */
+const displayName = (table: TypeTable, info: StructInfo): string =>
+  info.instance === null ? info.name : table.typeName(info.type)
 
 /** Test 1's refusal, the flag or target that makes the build not a native executable, or `""`. */
 const notNative = (opts: Options, programs: CheckedProgram[]): string => {
@@ -460,8 +529,12 @@ export class LayoutReport {
  */
 export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutModule[]): LayoutReport => {
   const wasm = isWasmBuild(opts)
-  // Every class in the program, for test 2's and test 3's scan of the
-  // holders, and the index of the module each one is declared in.
+  // Every class in the program, each generic class's instantiations
+  // included, for test 2's and test 3's scan of the holders, and the index of
+  // the module each one is declared in.
+  const instances: StructInfo[] = []
+  const homes: i32[] = []
+  collectInstances(modules, instances, homes)
   const all: StructInfo[] = []
   const owners: i32[] = []
   const programs: CheckedProgram[] = []
@@ -469,7 +542,7 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
   while (m < modules.length) {
     const program = modules[m].program
     programs.push(program)
-    collectClasses(program, all)
+    collectClasses(m, program, instances, homes, all)
     while (owners.length < all.length) {
       owners.push(m)
     }
@@ -477,22 +550,36 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
   }
   const native = notNative(opts, programs)
   const graph = buildGraph(modules)
+  // Each class's shown name and call-graph key are made once, before the
+  // report loop, so no pass of that loop allocates a string it keeps.
+  const names: string[] = []
+  const keys: string[] = []
+  for (const each of all) {
+    names.push(displayName(table, each))
+    keys.push(classKey(each))
+  }
   const lines = new StringBuilder()
   let classes = 0
   let picked = 0
   let k = 0
-  while (k < all.length && k < owners.length) {
+  while (k < all.length && k < owners.length && k < names.length && k < keys.length) {
     const info = all[k]
     const module = modules[owners[k]]
     const source = module.program.source
+    const shownName = names[k]
+    const key = keys[k]
     k = k + 1
     {
       classes = classes + 1
       const after = narrowedSize(table, info, info.type, wasm)
       let linked = false
-      let saver = after < info.size ? info.name : ""
+      let saver = after < info.size ? shownName : ""
       let saving = after < info.size ? `${info.size} → ${after}` : ""
-      for (const holder of all) {
+      let h = 0
+      while (h < all.length && h < names.length) {
+        const holder = all[h]
+        const holderName = names[h]
+        h = h + 1
         if (!linksTo(table, holder, info.type)) {
           continue
         }
@@ -500,14 +587,14 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
         if (saver.length === 0 && holder !== info) {
           const narrowed = narrowedSize(table, holder, info.type, wasm)
           if (narrowed < holder.size) {
-            saver = holder.name
+            saver = holderName
             saving = `${holder.size} → ${narrowed}`
           }
         }
       }
       let made = false
       for (const site of graph.sites) {
-        if (site.info === info && (site.inLoop || graph.nodes[site.fn].recursive)) {
+        if (site.key === key && (site.inLoop || graph.nodes[site.fn].recursive)) {
           made = true
         }
       }
@@ -527,13 +614,13 @@ export const explainLayout = (opts: Options, table: TypeTable, modules: LayoutMo
       const shown = !linked || saver.length === 0 ? info.size : after
       const name = info.decl.children[0]
       lines.add(`${source.path}:${source.lineOf(name.start)}:${source.columnOf(name.start)}: layout: `)
-      lines.add(`${info.name}${module.std ? " (std)" : ""}: ${verdict}, ${info.size} → ${shown} bytes`)
+      lines.add(`${shownName}${module.std ? " (std)" : ""}: ${verdict}, ${info.size} → ${shown} bytes`)
       if (verdict === "compact") {
         picked = picked + 1
       }
       // When the saving that passed test 3 is a holder's, not `R`'s own, the
       // line names that holder.
-      if (linked && saver.length > 0 && saver !== info.name) {
+      if (linked && saver.length > 0 && saver !== shownName) {
         lines.add(`; ${saver} saves ${saving}`)
       }
       lines.add("\n")

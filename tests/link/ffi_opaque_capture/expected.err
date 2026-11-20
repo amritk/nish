@@ -1,0 +1,1 @@
+The arrow reads `db`, which is `Db`, and an arrow argument cannot capture it: a foreign pointer is named only where the handle rules can follow it, never in an arrow

@@ -1314,7 +1314,125 @@ const RECURSION_ARENA = "Emit self-recursive checked sums with a per-step arena 
 const RECURSION_ARENA_WHY =
   "a self-recursive checked sum whose frames allocate on the arena, and whose steps pass only scalars or unchanged parameters, is the same loop: it marks the arena once in `entry` and calls `nish_arena_release` at the end of every step and before every `ret`, so its parameters arrive as `%name.in` and its steps lose their `sadd.with.overflow`"
 
+const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
+
+const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overload signatures under --compat"
+
+const PACKAGE_LINK = "A package links a C library or its own C sources"
+
 const DECLARED = [
+  {
+    program: "tests/link/pkg_link_flag_library/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_escape/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_unknown_key/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_repeated_key/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_repeated_package/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_absolute/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_backslash/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nonascii/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nonascii_raw/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_control/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_nul/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_dep_key_nonascii/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_source_not_c/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/link/pkg_link_wrong_type/main.ts",
+    file: "exit",
+    changelog: PACKAGE_LINK,
+    why: "the reference knows no `nish.link` key and refuses the package; the candidate reads it and refuses the entry only when it links",
+  },
+  {
+    program: "tests/cases/compat_optional_params.ts",
+    file: "exit",
+    changelog: COMPAT_SIGNATURES,
+    why: "`--compat` with `optional-params` lifts a non-constant default into a wrapper the call site evaluates, which the reference refuses",
+  },
+  {
+    program: "tests/cases/compat_overloads.ts",
+    file: "exit",
+    changelog: COMPAT_SIGNATURES,
+    why: "`--compat` with `overloads` accepts body-less overload signatures before one implementation, which the reference refuses as a function with no body",
+  },
+  {
+    program: "tests/cases/host_import_call.ts",
+    file: "host_import_call.ll",
+    changelog: FFI_ZEROEXT,
+    why: "a call to a narrow host import now carries the `zeroext` its declaration already did, on the `i8` argument and result (#1755)",
+  },
+  // src/c-import-json.ts reads clang's JSON AST and the overrides file with
+  // counted loops that add a loop-invariant value to the counter.
+  ...loopGuard(
+    "src/c-import-json.ts, which nish c-import reads clang's JSON AST through, adds a loop-invariant value to a counted loop's counter, so its module gains that loop's pre-loop overflow test, its unchecked and checked additions, and renumbered values",
+    {
+      "src/c-import-json.ts": ["c-import-json.ll"],
+      "src/c-import.ts": ["c-import-json.ll"],
+      "src/compile.ts": ["c-import-json.ll"],
+    }
+  ),
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
   ...ecnEcho(
@@ -1847,6 +1965,45 @@ const DECLARED = [
     changelog: APPEND_RANGE,
     why: "tests/link/net_http3/peer.ts copies a byte range with a push loop, so the peer module this program imports gains the guarded memcpy before the loop and renumbered values",
   })),
+  // WP57 S1: a private function or generic whose bare symbol would clash is
+  // qualified by its module, so the 0.42.0 seed refuses these programs with
+  // its whole-program uniqueness rule and only the candidate compiles them.
+  {
+    program: "tests/link/duplicate_internal/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts and helper.ts each keep a private `add`, which the candidate spells `@main$.add` and `@helper$.add`; the 0.42.0 seed refuses the second definition ("Function `add` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_generic/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'a.ts and b.ts each keep a private generic `identity<T>`, whose instantiations the candidate prefixes with each module\'s qualifier; the 0.42.0 seed refuses the second template ("Generic function `identity` is also defined in a.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_helpers/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts, up.ts and down.ts each keep a private `step`, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `step` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_mixed/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: "main.ts keeps a private `helper` beside lib.ts's exported one, which the candidate spells `@main$.helper` while `@helper` stays lib's; the 0.42.0 seed refuses the pair (\"Function `helper` is also defined in main.ts\"), so only the candidate compiles it (WP57 S1)",
+  },
+  {
+    program: "tests/link/module_private_spawn/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts and m.ts each keep a private `work` that a spawn names, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `work` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_outside/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts keeps a private `helper` and imports ../module_private_shared/u.ts, which keeps one too; the candidate spells them `@main$.helper` and `@___module_private_shared_u$.helper`, and the 0.42.0 seed refuses the pair ("Function `helper` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
@@ -1889,6 +2046,104 @@ const DECLARED = [
     file: "exit",
     changelog: "nish.compat and the dialect in the IR",
     why: "a dependency's package.json asks for the compatibility dialect and the strict root does not allow it, which the candidate refuses with NL3057; the 0.39.0 seed reads no dependency's nish field, so only the reference compiles it",
+  },
+  // WP28 C1: the `nullish` and `optional-chaining` compat features are new, so
+  // the seed refuses the programs they admit and lists no feature in the mark.
+  {
+    program: "tests/cases/compat_nullish_narrowed.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses a `??` on a left operand narrowed to never missing, which `nullish` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_nullish_never_missing.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses a `??` whose left operand is never missing, which `nullish` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_element.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses an optional chain with an element link, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_string_switch.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and switches on a string, which `string-switch` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_for_of_string.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_string_switch_flow.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and switches on a string, which `string-switch` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_for_of_string_fresh.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_for_of_string_invalid.ts",
+    file: "exit",
+    changelog: "string switch and for...of over a string under --compat",
+    why: "the case is compiled under --compat and walks a string with `for...of`, which `for-of-string` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_statement.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses an optional chain as a statement, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_fusion.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses optional calls as statements and `??` conditions, which `optional-chaining` and `nullish` admit; the seed has no such features and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_loops.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses optional chains as loop bodies and whole statements, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/compat_optional_chain_skipped_arguments.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the case is compiled under --compat and uses optional calls as statements, which `optional-chaining` admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/link/compat_optional_skipped_enum/main.ts",
+    file: "exit",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the program's package.json turns on `optional-chaining` and it uses an optional call as a statement, which that feature admits; the seed has no such feature and refuses it",
+  },
+  {
+    program: "tests/cases/perf_compat_number_i32.ts",
+    file: "perf_compat_number_i32.ll",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: 'the case is compiled under --compat, and the `!nish.compat` mark lists the enabled features after the number mode, `!{!"i32", !"nullish", !"optional-chaining", !"string-switch", !"for-of-string"}`, which the seed\'s mark does not',
+  },
+  {
+    program: "tests/link/compat_manifest_program/main.ts",
+    file: "index.ll",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the `!nish.compat` mark lists the enabled features after the number mode, which the seed's mark does not",
+  },
+  {
+    program: "tests/link/compat_manifest_program/main.ts",
+    file: "main.ll",
+    changelog: "optional chaining and nullish coalescing under --compat",
+    why: "the `!nish.compat` mark lists the enabled features after the number mode, which the seed's mark does not",
   },
   {
     changelog: "internal work-package references from diagnostics and generated files",
@@ -8816,6 +9071,44 @@ const DECLARED = [
       "tests/cases/wasm_union_generic.ts": ["wasm_union_generic.ll"],
     }
   ),
+  // #1750: a seat waiting for its turn waits on its own turn lane, and a
+  // done rings the waiting seats' lanes in answer order, so the pool gains
+  // `pgAsyncWakeTurns` and `pgAsyncTurnLane` and its wakes are laid out again.
+  ...byFinding("the pipelined pool's seats-freed-together check deterministic")(
+    "a seat waiting for its turn waits on its own turn lane, which a done rings in answer order, so `std/net/postgres-async.ts` gains `pgAsyncWakeTurns` and `pgAsyncTurnLane` and renumbers its wakes; no importer's own module moves",
+    {
+      "tests/link/std_postgres_async/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_depth_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_pipeline/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["postgres-async.ll"],
+      "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
+    }
+  ),
+  // WP48 stage 2c: in a program with a compact class, `nish_alloc_struct`'s
+  // slow block loads `nish_arena_range_abi` as `nish_alloc_ref`'s already did,
+  // so an 8-aligned compact class fails to link against the default runtime
+  // too. Compared only under `--no-sidecars`: with the WP8 sidecars on, both
+  // compilers refuse a compact class beside `--emit-napi`.
+  ...byFinding("compact class crosses --emit-header as an opaque handle")(
+    "the program has a compact class, so every module of it that allocates gains a volatile load of `nish_arena_range_abi` in `nish_alloc_struct`'s slow block, so every line after it moves down one",
+    {
+      "tests/cases/perf_padding_compact.ts": ["perf_padding_compact.ll"],
+      "tests/link/compact_json/main.ts": ["json-tokenizer.ll", "json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/compact_threads/main.ts": ["main.ll", "threads.ll"],
+    }
+  ),
+  // `reserve` splits its growth into `grow`, so a program whose own module
+  // declares the connection's put methods declares one more.
+  ...[
+    "tests/link/std_postgres_tls_connection_panic/main.ts",
+    "tests/link/std_postgres_tls_pool_panic/main.ts",
+  ].map((program) => ({
+    program,
+    file: "main.ll",
+    changelog: "short Postgres int columns without the overflow test",
+    why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
+  })),
 ]
 
 /**

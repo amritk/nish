@@ -19,7 +19,8 @@ the time to check validity at, in milliseconds since the epoch. It answers a
 `PkiResult`: `code` is `PKI_OK` or the reason it was refused, and `path` is
 the chain it accepted, the server's certificate first and the root last.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
 import { PKI_OK, PkiResult, PkiTrustStore, pkiReason, pkiTrustStore, pkiVerifyServer } from "nish/crypto/pki";
 
@@ -76,7 +77,8 @@ too. It is the hash HTTP public key pinning used; for a PEM certificate,
 until you call it, and a hash that is not 32 bytes is not added: the call
 answers `false`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { PKI_ERR_DISTRUSTED, PkiTrustStore, pkiDistrustSpki, pkiTrustStore } from "nish/crypto/pki";
 import { sha256 } from "nish/crypto/sha256";
 import { X509Certificate } from "nish/crypto/x509";

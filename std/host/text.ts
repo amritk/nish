@@ -13,7 +13,7 @@
  *     export const OUTBOX = new Array<u8>(256);
  *
  *     // The page: n = new TextEncoder().encodeInto(text, views.INBOX).written
- *     export function echo(n: i32): i32 {
+ *     export const echo = (n: i32): i32 => {
  *       const text = textRead(INBOX, n);
  *       if (text === null) return -1;
  *       return textWriteInt(OUTBOX, textWrite(OUTBOX, 0, text), toI64(n));

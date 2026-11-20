@@ -694,6 +694,9 @@ const fieldLLVMType = (emitter: Emitter, field: FieldInfo): string => {
   if (field.link) {
     return "i32"
   }
+  if (field.cLength >= 0) {
+    return `[${field.cLength} x ${emitter.llvm(field.type)}]`
+  }
   if (!field.inline()) {
     return emitter.llvm(field.type)
   }

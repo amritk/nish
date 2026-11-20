@@ -22,6 +22,8 @@ tests/cases/dump_ast.ts  # its expected AST dump is the function-declaration tre
 tests/cases/reject_type_mismatch.ts  # docs/FAQ.md and docs/wp10-ci.md quote its line and its 1:40 diagnostic; tests/run.js pins it
 
 # The `function` spelling is the subject of the test.
+tests/cases/compat_optional_params.ts  # pins that a default that is not a constant lifts from a function declaration as from an arrow (WP28 C1)
+tests/cases/compat_overloads.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
 tests/cases/reject_export_c_symbol_function.ts  # the function spelling of #618; reject_export_c_symbol_const is the arrow sibling
 tests/cases/reject_ffi_body.ts  # an extern function with a body is the rejection (WP22 §8c, §9a)
 tests/differential/arrow-parity/declared.ts  # the declaration half of the stage-B arrow-parity pair
@@ -65,3 +67,10 @@ tests/wordings/host/regex.ts  # host-module wording; src/host-module.ts reads ex
 tests/wordings/host/unknown_parameter.ts  # host-module wording; src/host-module.ts reads export function
 tests/wordings/host/window_element.ts  # host-module wording; src/host-module.ts reads export function
 tests/wordings/host/window_width.ts  # host-module wording; src/host-module.ts reads export function
+tests/link/compat_optional_params_overloaded/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_emit_dts/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_emit_header/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_feature/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_incompatible/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_no_match/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_return/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)

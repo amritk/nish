@@ -464,6 +464,18 @@ export class DebugInfo {
         )
         continue
       }
+      if (f.cLength >= 0) {
+        // WP66 S4: C's `T name[N]` inline, where `f.type` is the element `T`.
+        const bits = bitsOfIn(this.table, f.type) * f.cLength
+        const range = this.module.addMetadata(
+          `!{${this.module.addMetadata(`!DISubrange(count: ${f.cLength})`)}}`
+        )
+        const array = this.module.addMetadata(
+          `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(f.type)}, size: ${bits}, elements: ${range})`
+        )
+        members.push(this.member(f.name, ref, array, bits, f.offset * 8, file, line))
+        continue
+      }
       if (f.link) {
         // WP48: a compact class's link is a 32-bit offset, not a pointer;
         // until stage 2b's pretty-printers, a debugger shows the raw offset.

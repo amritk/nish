@@ -132,7 +132,7 @@ the count, `0` at the end; `fileClose(fd)` gives the descriptor back, once.
 The buffer is yours, so memory stays the size of the window:
 
 ```ts
-export function main(): number {
+export const main = (): number => {
   const fd = fileOpen("big.log");
   if (fd < 0) {
     console.log(`open failed: ${fd}`);
@@ -154,7 +154,7 @@ export function main(): number {
   fileClose(fd);
   console.log(`read ${pos} bytes`);
   return 0;
-}
+};
 ```
 
 A read may come back short, so loop on the count rather than on
@@ -228,7 +228,8 @@ code. A function cannot be a value in Nish, so there is no
 `test("name", () => ...)`: you call one assertion per check, and each answers
 whether it passed.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Suite } from "nish/testing";
 
 const sumOf = (xs: i32[]): i32 => {
@@ -266,7 +267,8 @@ arrays of lines, and `skip(name, reason)`. Because an assertion returns a
 
 The string operations a program would otherwise write by hand.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { contains, replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
 
 export const main = (): i32 => {
@@ -307,7 +309,8 @@ exact value the `f64` holds. That is why `toFixed(1.005, 2)` is `"1.00"`:
 1.005 is stored a little below itself. A tie rounds away from zero, so
 `toFixed(2.5, 0)` is `"3"` and `toFixed(-2.5, 0)` is `"-3"`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { toFixed } from "nish/text";
 
 export const main = (): i32 => {
@@ -354,7 +357,8 @@ Together with `nish/regex` they turn a snake_case or kebab-case name into a
 camelCase identifier. A regex template cannot change case, so the regex only
 makes every separator an underscore, and the case helpers do the rest:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { asciiLower, asciiUpper, split } from "nish/text";
 import { Regex, regexCompile } from "nish/regex";
 
@@ -412,7 +416,8 @@ such a string counts its UTF-8 bytes there.
 Regular expressions in JavaScript's syntax. `regexCompile(pattern, flags)`
 answers a `Result`: the `Regex`, or the reason the pattern is refused.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Regex, RegexMatch, regexCompile } from "nish/regex";
 
 export const main = (): i32 => {
@@ -518,7 +523,8 @@ it does not validate, and a nested value is stepped over rather than searched.
 It reads exactly the shape `nish --json` prints, which is what it was written
 for ([The CLI](cli.md#--json-for-tools)).
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { jsonField } from "nish/json";
 
 export const main = (): i32 => {
@@ -546,7 +552,8 @@ one pass.
 own, placing every comma and colon itself, byte for byte what
 `JSON.stringify` writes. You say only what the value is:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 
 export const main = (): i32 => {
@@ -592,7 +599,8 @@ it once, and it stays until you set it again.
   `null` as `JSON.stringify` does. A misuse before it, such as a value where a
   key is due, keeps its own code.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";
 
 export const main = (): i32 => {
@@ -642,7 +650,8 @@ number, `true`, `false` or `null`. It reads a window of a `u8[]` and
 allocates nothing per token, so one tokenizer, `reset` for each new body,
 serves a whole connection.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JSON_TOK_END, JSON_TOK_KEY, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer";
 
 const bytesOf = (text: string): u8[] => {
@@ -719,7 +728,8 @@ a `Map` with `string` keys whose values are any of those, or a `string`, a
 class, an array or a map with `| null`; and a `JsonNumber`, which keeps a
 number's text exactly.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -792,7 +802,8 @@ field keeps the member it held. That makes a string enum field the way to take
 one of a fixed set of strings from input: the decoder checks it for you, and
 allocates nothing to do it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_DECODE_TYPE, JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -844,7 +855,8 @@ can't be keyed by an enum; an array of one, `Role[]`, is fine. A
 decoding empties the map and fills it in the order the keys arrive, a key given
 twice is an error, and encoding writes the entries in the map's order.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -911,7 +923,8 @@ wider than a `u64` or with more digits than an `f64` comes back byte for byte.
 Read it with `text()`, `isI64()` and `i64()`, `isU64()` and `u64()`, or
 `f64()`, and set it with `setText`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed";
@@ -972,7 +985,8 @@ replaces the whole target in RFC 7396; here it fails the decode with
 patch object: a decode refills arrays and maps in place, so a reused one
 shares them with the target. `examples/merge-patch.ts` is the whole recipe.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_DECODE_OK, JsonDecoder, jsonDecode } from "nish/json-typed";
 
@@ -1042,7 +1056,8 @@ variant, half read, so check `d.failed` before using anything it decoded. The ta
 when it is not the first key the decoder reads ahead to find it. A tag that is
 missing, not a string or no variant's is `JSON_DECODE_TAG`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDecoder, jsonDecodeUnion, jsonEncode } from "nish/json-typed";
@@ -1109,7 +1124,8 @@ do not know — a configuration file, a body you pass on after changing one
 field, a tool that prints whatever it is given — parse the document into a
 `JsonDocument` and walk it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JSON_VALUE_NUMBER, JsonDocument } from "nish/json-value";
 
@@ -1208,7 +1224,8 @@ The offsets are into the array you gave `parseRanged`, or into the string
 UTF-16 code unit, its offsets count code units, so past the first non-ASCII
 character they differ from a native build's, which count UTF-8 bytes.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
 
@@ -1256,7 +1273,8 @@ compare values, not doubles, and `0.3` is a multiple of `0.1` though
 `0.3 / 0.1` is `2.9999999999999996`. This module reads the decimal digits
 themselves and never makes an `f64`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JSON_NUMBER_ERR_GAP, jsonNumberCanonical, jsonNumberCompare, jsonNumberMultipleOf } from "nish/json-number";
 
 export const main = (): i32 => {
@@ -1303,7 +1321,8 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1346,7 +1365,8 @@ first element of the member `tags`. A token is a member's key, with `~1` for a
 `/` in it and `~0` for a `~`, or an array index written without a leading
 zero.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JSON_POINTER_NONE, isRelativeJsonPointer, jsonPointerEscape, jsonPointerParse, jsonPointerResolve } from "nish/json-pointer";
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1384,7 +1404,8 @@ A JSON Schema names a string's shape with `format`: `"date-time"`, `"email"`,
 `"ipv6"`, `"uri"`. `nish/json-format` checks the formats of draft 2020-12, one
 predicate each, and a dispatcher for a format named in a schema.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JSON_FORMAT_UNKNOWN, JSON_FORMAT_VALID, isEmail, isIpv6, jsonFormatCheck, jsonFormatId, jsonFormatValidate } from "nish/json-format";
 
 export const main = (): i32 => {
@@ -1436,7 +1457,8 @@ is about. A parse never fails and never panics on its input; a stream that is
 not valid YAML still answers its nodes, as the parser's best reading of it,
 beside the errors that say why.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
 
@@ -1515,7 +1537,8 @@ line that set it. A recursive alias ends the search. A `<<` whose value names
 no map is an error, `BAD_MERGE`. The nodes themselves are not changed: a map
 still holds the pairs it was written with.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { parseYaml, pathNode, pathPair } from "nish/yaml";
 import { YamlLineIndex } from "nish/yaml-lines";
 
@@ -1577,7 +1600,8 @@ Because the ranges are byte offsets into the text either way, one
 `YamlLineIndex` turns them into `line:column` whether the document came from
 JSON or from YAML:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
 import { parseYaml } from "nish/yaml";
@@ -1624,7 +1648,8 @@ and `false` plain, a number as its JSON text, and a trailing newline. It
 answers `""` for a handle that names no value and for a tree deeper than
 `JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
 import { parseYaml } from "nish/yaml";
@@ -1676,7 +1701,8 @@ A key longer than 1024 bytes as written is an explicit key, `? key` and then
 nothing else. It is how a function answers two values: you return an object
 literal and the annotation gives it its type.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Pair } from "nish/pair";
 
 const minMax = (xs: i32[]): Pair<i32, i32> => {
@@ -1711,7 +1737,8 @@ value at `key`, first storing `value` there if the key was missing, in one
 lookup. `reserve(m, n)` makes room for `n` entries up front, so filling the
 map never has to grow it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { getOrInsert, reserve } from "nish/map";
 
 export const main = (): i32 => {
@@ -1750,7 +1777,8 @@ unrelated sequences, so a task or a parallel body can seed its own from its
 index. It is not for keys or passwords: those come from
 `crypto.getRandomValues`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Rng } from "nish/random";
 
 export const main = (): i32 => {
@@ -1767,7 +1795,8 @@ export const main = (): i32 => {
 `nextInt(6, 1)`, with `lo` above `hi`, stops the program with
 `Rng.nextInt: lo is greater than hi`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Rng } from "nish/random";
 
 export const main = (): i32 => {
@@ -1796,7 +1825,8 @@ in the reference.
 sections of flags with their placeholders and descriptions lined up in
 columns, and notes. It is what `nish --help` itself is built with.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HelpMenu, agentDriven, styleFor } from "nish/cli";
 
 export const main = (): i32 => {
@@ -1896,7 +1926,8 @@ two SGR lists, one for the theme and one for the failsafe:
 Set a pair before you build the menu; an empty list leaves that role plain.
 The defaults are the ones described above.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
 
 export const main = (): i32 => {
@@ -1916,7 +1947,8 @@ export const main = (): i32 => {
 `nish/cli-flags` reads a command line against a table of flags you declare
 once. The same table writes the help rows, so the two cannot drift apart.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HelpMenu, Style } from "nish/cli";
 import { FlagTable } from "nish/cli-flags";
 
@@ -2028,7 +2060,8 @@ walks the arguments, and the answer is the id of the command they reached
 and every flag's value with where it came from. `finish` then prints the
 help, the version or an error, the way [`nish/cli`](#nishcli) lays help out.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Cli, ROOT, finish } from "nish/cli-args";
 import { agentDriven, styleFor } from "nish/cli";
 
@@ -2203,7 +2236,8 @@ and slowing the frame rate when the link cannot keep up — use
 walks through. This section is the layer underneath, for a program that
 wants its own loop.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";
 import { write } from "nish:io";
 
@@ -2277,7 +2311,8 @@ the timeout you gave the constructor passes. While `waiting()` is true, call
 followed by more than 32 parameter bytes is no key, so the decoder gives the
 ESC up as `KEY_ESCAPE` at once rather than holding what follows.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { KEY_LEFT, KeyDecoder } from "nish/term";
 
 export const main = (): i32 => {
@@ -2328,7 +2363,8 @@ time, so `delivered(sentAtMs)` tells it that the answer to a query sent at
 `releaseGapMs` after its last repeat is in, since a key still held would have
 repeated ahead of it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { EVENT_KEY, EVENT_REPLY, KeyDecoder } from "nish/term";
 
 export const main = (): i32 => {
@@ -2361,7 +2397,8 @@ behind, after a stall, drops the backlog instead of trying to catch up. The
 same clock with `maxSteps` 1 paces the drawing: it answers 1 when a frame is
 due. The first `advance` only starts the clock, and answers 0.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { COLOR_DEFAULT, Canvas, FixedStep, Screen, rgb } from "nish/term";
 import { write } from "nish:io";
 import { monotonicNanos } from "nish:process";
@@ -2436,7 +2473,8 @@ grown once to the largest frame, so a program that keeps one encodes frame
 after frame without allocating. `out.text()` is the bytes to write and
 `out.reset()` empties it for the next frame.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { GRAPHICS_KITTY, Framebuffer, PixelBytes, fitFramebuffer, kittyFrame } from "nish/term-pixels";
 
 export const main = (): i32 => {
@@ -2467,7 +2505,8 @@ A host owns one `StepInput` and points its `events` and `keys` at what it read
 each step; nothing is copied. A terminal program points them at the
 `TermInput` that [`nish/term-io`](terminal.md)'s `runTerminal` hands it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { KEY_CHAR, KeyState } from "nish/term";
 import { StepInput } from "nish/input";
 
@@ -2495,7 +2534,8 @@ The same draw fills either kind of frame, with no copy:
 - module storage, `const FRAME = new Int32Array(...)`, which is how a `wasm32`
   module shares a frame with its page ([`nish/host/game`](#nishhostgame)).
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { RASTER_SOLID, rasterDisc, rasterFrame, rasterGradient, rasterRect, rasterText } from "nish/raster";
 
 export const main = (): i32 => {
@@ -2530,7 +2570,8 @@ or noise wave whose pitch slides from `f0` to `f1` Hz and whose loudness falls
 away by `decay` a second. The sample rate is passed to every call, so one
 program can make sounds at whatever rate its player wants.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { SYNTH_SQUARE, SYNTH_TRIANGLE, synthSemitone, synthSilence, synthTone } from "nish/synth";
 
 export const main = (): i32 => {
@@ -2586,7 +2627,8 @@ When two modules declare storage of one name, the later one's is keyed by its
 symbol instead, and a program's own `GAME_FRAME` could move this module's off
 its key.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { GAME_FRAME, gameHeight, gamePlaySound, gameReadInput, gameSetSize, gameWidth } from "nish/host/game";
 import { RASTER_SOLID, rasterRect } from "nish/raster";
 import { StepInput } from "nish/input";
@@ -2624,7 +2666,8 @@ many characters `n` bytes take, so the buffer can be sized first. A range
 outside its array panics before anything is written. The module only encodes;
 the URL-safe, unpadded decoder for tokens and keys is `nish/crypto/base64url`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64";
 
 export const main = (): i32 => {
@@ -2657,7 +2700,8 @@ significant.
 A signed width is the same bytes read as two's complement, and an `f64` is
 its IEEE 754 bits. There is no `f32`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
 
 export const main = (): i32 => {
@@ -2699,7 +2743,8 @@ run ends — the first index in `[from, to)` whose byte is not in the class, or
 `from` into `dst` at `at`. The two arrays may be the same one, and the ranges
 may overlap.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { copyBytes, skipBlank, skipDigits } from "nish/bytes";
 
 export const main = (): i32 => {
@@ -2763,7 +2808,8 @@ compiler refuses every road out of it but one: `expose(s, f)` or
 `exposeWith(s, arg, f)` hands the value to a function. `wipe(s)` zeroes it
 with a store the optimiser may not remove.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Secret, exposeWith, secret, wipe } from "nish:secret";
 import { hmacSha256 } from "nish/crypto/hmac";
 
@@ -2786,7 +2832,8 @@ a compile error.
 The type can be left off: `secret` answers a `Secret` of whatever it is given,
 and every rule below holds the same.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { expose, secret, wipe } from "nish:secret";
 
 const length = (k: u8[]): i32 => toI32(k.length);
@@ -2804,7 +2851,8 @@ new array or record, or a local that is the only name for its value. A second
 name made before the move would read the key outside the `Secret`, and zeros
 once it is wiped, so the compiler refuses it and says where it was made:
 
-```ts nish:err NL2512
+<!-- nish:err NL2512 -->
+```ts
 import { Secret, secret, wipe } from "nish:secret";
 
 export const main = (): i32 => {
@@ -2820,7 +2868,8 @@ Storing the array in a field or an element, pushing it, or handing it to a
 function that keeps it is a second name too. To keep the plain bytes as well,
 copy them first, and move the copy in:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Secret, secret, wipe } from "nish:secret";
 
 export const main = (): i32 => {
@@ -2844,7 +2893,8 @@ class has a `wipe(): void` that calls `wipe(this.field)` for every such field
 on every path: the checker reads that method, and a field it can leave
 unwiped is a compile error.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Secret, expose, secret, wipe } from "nish:secret";
 
 const count = (k: u8[]): i32 => toI32(k.length);
@@ -2875,7 +2925,8 @@ once. It may be read only to lend it: as an argument of a call or of `new`, or
 as an operand of `===` or `!==`. Copying it into a local, returning it, or
 storing it anywhere else is refused:
 
-```ts nish:err NL2544
+<!-- nish:err NL2544 -->
+```ts
 import { Secret, secret, wipe } from "nish:secret";
 
 class Session {
@@ -2901,7 +2952,8 @@ anywhere else is refused, so call `s.wipe()` instead. A function that takes a
 `Secret` borrows it, so it may lend it on or `expose` it, but it neither
 returns it nor wipes it:
 
-```ts nish:err NL2546
+<!-- nish:err NL2546 -->
+```ts
 import { Secret, secret, wipe } from "nish:secret";
 
 const same = (k: Secret<u8[]>): Secret<u8[]> => k; // a second name for the caller's key
@@ -2951,7 +3003,8 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/pki` | `pkiVerifyServer(chain, hostname, nowMs, store)`, whether a TLS server's chain leads to a root of `pkiTrustStore(roots)` and names the host, as a `PkiResult` of a `code` (`PKI_OK` or a `PKI_ERR_` reason, `pkiReason(code)` its sentence) and the `path`. Checks signatures, validity, CA and path-length rules, key usages, name constraints and the hostname, never the common name; revocation is not checked. [Verifying TLS certificates](./tls-certificates.md) |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { base64urlEncode } from "nish/crypto/base64url";
 import { sha256 } from "nish/crypto/sha256";
 
@@ -2992,7 +3045,8 @@ WebAssembly build always takes the portable code.
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
 the program wipes both:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
 import { Secret, secret, wipe } from "nish:secret";
 
@@ -3270,7 +3324,8 @@ if ((wants & TLS_RECORD_TICKET) !== 0) {
 }
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1-codec";
 
 const bytesOf = (text: string): u8[] => {
@@ -3321,7 +3376,8 @@ your array. `percentDecode` and `percentDecodePathSegment` decode one window
 into a buffer you own and answer how many bytes they wrote. An iterator is made
 once and `reset` for each request.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import {
   URL_DECODE_FORM,
   URL_QUERY_PAIR,
@@ -3462,7 +3518,8 @@ written, so `http://a.com./` (a trailing dot) and `http://[0::1]/` are
 different origins from `http://a.com/` and `http://[::1]/`: an equal string is
 the same origin, and a split errs toward "different".
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
 
 const show = (base: Url, ref: string): void => {
@@ -3545,7 +3602,8 @@ waiting. On `DNS_NOERROR`, `reply.count` addresses are in `reply.addresses`,
 most `DNS_MAX_ANSWERS` (8) are kept and `reply.dropped` counts the rest. When
 `reply.truncated` is set, nothing was read: ask again over TCP.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import {
   DNS_ERR_NOT_REPLY,
   DNS_QUERY_MAX_BYTES,
@@ -3591,7 +3649,8 @@ with no usable `nameserver` gives 127.0.0.1 and ::1, as glibc does.
 `dnsHostsFind(hosts, name, qtype, port, out, max)` writes the addresses it
 gives `name`, without case, in file order, and answers how many.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { DnsHosts, dnsHostsFind, dnsParseHosts } from "nish/net/dns-config";
 import { DNS_TYPE_A } from "nish/net/dns-message";
 
@@ -3659,7 +3718,8 @@ number that is not a lookup.
 `localhost`, an address literal and a name your hosts table has answer at once,
 with no packet sent:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { DnsResolver } from "nish/net/dns-resolver";
 import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
@@ -3709,7 +3769,8 @@ until it is not `DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket
 with a random ID, and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32)
 datagrams, so a flood on the port cannot keep your loop inside the client.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { DnsClient } from "nish/net/dns";
 import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";
 import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
@@ -3764,7 +3825,8 @@ returned on its own, and only a lookup with none yet is
 negative errno is the answer; a name `start` refuses answers `start`'s code.
 `dnsLookupWith` is the same with a configuration you give it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { resolveHost } from "nish/net/dns";
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
 

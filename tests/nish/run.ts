@@ -773,8 +773,23 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   }
   const args = readFileSyncOrNull(`${dir}/args`);
   const flags: string[] = args === null ? [] : splitWhitespace(args);
-  for (const flag of flags) {
-    argv.push(flag);
+  // `wasmRun` in tests/run.js: a program that runs but whose `args` name a
+  // wasm32 target is linked and run as a native build of the same flags. A
+  // wasm32 module lays a class's pointer field out in 4 bytes, and clang swaps
+  // its datalayout for the host's, so a native link of wasm32 IR writes 8-byte
+  // pointers into 4-byte slots and dies. The wasm32 compile is still made,
+  // below, and its modules verified. Only the two-token `--target wasm32` is
+  // recognised, as there.
+  const targetAt = flags.indexOf("--target");
+  const wasmRun =
+    targetAt >= 0 &&
+    targetAt + 1 < flags.length &&
+    flags[targetAt + 1].startsWith("wasm32") &&
+    readFileSyncOrNull(`${dir}/expected.err`) === null;
+  for (let i = 0; i < flags.length; i++) {
+    if (!wasmRun || (i !== targetAt && i !== targetAt + 1)) {
+      argv.push(flags[i]);
+    }
   }
   // `linkProfile` in tests/run.js: an unoptimised link is about a third of
   // the speed one's time, and the profile never changes a byte of the IR.
@@ -798,6 +813,26 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   if (status !== 0) {
     t.fail(label, `the compile failed with ${status}: ${trim(diagnostics)}`);
     return;
+  }
+  if (wasmRun) {
+    const wasmDir = `${outDir}.wasm32`;
+    const wasmArgv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${wasmDir}/`]);
+    for (const flag of flags) {
+      wasmArgv.push(flag);
+    }
+    const wasmStatus = spawnSyncTo(wasmArgv, `${work}.wasm32.out`, `${work}.wasm32.err`);
+    const none: string[] = [];
+    const wasmEntries: string[] = wasmStatus === 0 ? (readdirSync(wasmDir) ?? none) : none;
+    let modules = 0;
+    for (const file of wasmEntries) {
+      if (file.endsWith(".ll")) {
+        modules++;
+        verifyIR(t, tools, `${label}: wasm32 ${file}`, `${wasmDir}/${file}`, `${work}_wasm32_${file}`);
+      }
+    }
+    if (modules === 0) {
+      t.fail(`${label}: its wasm32 compile writes modules`, `exit ${wasmStatus}: ${trim(readOrEmpty(`${work}.wasm32.err`))}`);
+    }
   }
 
   const entries = readdirSync(outDir);

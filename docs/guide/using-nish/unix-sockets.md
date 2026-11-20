@@ -32,7 +32,8 @@ and it goes away with the last socket bound to it. Any other path makes a
 socket file. The client connects with the same name, and the listener takes
 the connection once the loop says it is readable.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import {
   netClose,
   netRead,
@@ -108,7 +109,8 @@ once the server stops.
   The limit is on the path as written, so a relative path counts only its own
   bytes; it is resolved from the working directory.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_UNIX_UNLINK_STALE, netClose, unixListenMode } from "nish:net";
 import { unlinkSync } from "nish:fs";
 
@@ -134,7 +136,8 @@ hand one end to a thread and keep the other. `fds` is an
 arrive as one read. `NET_UNIX_SEQPACKET` keeps each write one message, so each
 read answers exactly one; it is Linux only and answers `-95` on macOS.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_UNIX_SEQPACKET, netClose, netRead, netWrite, unixSocketPair } from "nish:net";
 
 export const main = (): i32 => {
@@ -165,7 +168,8 @@ carried none. The two descriptors, the sender's and the receiver's, are one
 open file: they share its offset and its flags, as a `dup` would. The sender's
 stays open until it closes it.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_UNIX_STREAM, netClose, recvFd, sendFd, unixSocketPair } from "nish:net";
 
 export const main = (): i32 => {
@@ -219,7 +223,8 @@ answers `0`. `out` is an `i32[]` of at least three; a shorter one answers
 `-22`. A server uses it to decide what a client may do before it reads a byte
 of what the client sent.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { NET_UNIX_STREAM, netClose, peerCredentials, unixSocketPair } from "nish:net";
 
 export const main = (): i32 => {

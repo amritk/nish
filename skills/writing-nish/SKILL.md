@@ -43,7 +43,8 @@ nish --help                       # every flag
 
 ## The shape of a program
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const gcd = (a: i32, b: i32): i32 => {
   let x = a;
   let y = b;
@@ -71,7 +72,8 @@ declarations at the top level: functions, `class`, `interface`, module `const`s,
 There is no `throw`, no `try` and no unwinding. A function that can fail says
 so in its return type.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
@@ -115,7 +117,8 @@ export const main = (): i32 => {
 
 The most common rejection, NL2188:
 
-```ts nish:err-body NL2188
+<!-- nish:err-body NL2188 -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length) {
   console.log("non-empty");

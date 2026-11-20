@@ -224,7 +224,7 @@ frame's size. Pure: no capability, no I/O and no clock.
 Two colours added channel by channel, each saturating at 255: how light adds.
 
 ```ts
-function rasterAdd(a: i32, b: i32): i32
+const rasterAdd: (a: i32, b: i32) => i32
 ```
 
 <scalar-field name="a" type="i32" required>
@@ -250,7 +250,7 @@ the sum
 A dimmer copy of the same hue.
 
 ```ts
-function rasterDim(c: i32, k: f64): i32
+const rasterDim: (c: i32, k: f64) => i32
 ```
 
 <scalar-field name="c" type="i32" required>
@@ -279,7 +279,7 @@ still looks round, and one narrower than a pixel fades out rather than stay
 a grey dot.
 
 ```ts
-function rasterDisc(
+const rasterDisc: (
   pixels: Int32Array,
   width: i32,
   height: i32,
@@ -288,7 +288,7 @@ function rasterDisc(
   r: f64,
   colour: i32,
   alpha: f64,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -345,7 +345,7 @@ An `i32[]` frame as the `Int32Array` the drawing functions take: the same
 array, not a copy, so drawing through the result draws into `pixels`.
 
 ```ts
-function rasterFrame(pixels: i32[]): Int32Array
+const rasterFrame: (pixels: i32[]) => Int32Array
 ```
 
 <scalar-field name="pixels" type="i32[]" required>
@@ -366,7 +366,7 @@ Light added around a point, brightest at the centre and falling off with the
 square of the distance: a halo.
 
 ```ts
-function rasterGlow(
+const rasterGlow: (
   pixels: Int32Array,
   width: i32,
   height: i32,
@@ -375,7 +375,7 @@ function rasterGlow(
   r: f64,
   colour: i32,
   strength: f64,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -431,13 +431,13 @@ how much: 1 adds the full colour at the centre
 Every pixel of the frame, as a vertical gradient: a background.
 
 ```ts
-function rasterGradient(
+const rasterGradient: (
   pixels: Int32Array,
   width: i32,
   height: i32,
   top: i32,
   bottom: i32,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -476,7 +476,7 @@ The fully saturated colour at a hue, so a rainbow is
 `rasterHue(phase + i * step)`.
 
 ```ts
-function rasterHue(h: f64): i32
+const rasterHue: (h: f64) => i32
 ```
 
 <scalar-field name="h" type="f64" required>
@@ -496,7 +496,7 @@ the colour
 `a` moved toward `b` by a fraction.
 
 ```ts
-function rasterMix(a: i32, b: i32, t: f64): i32
+const rasterMix: (a: i32, b: i32, t: f64) => i32
 ```
 
 <scalar-field name="a" type="i32" required>
@@ -529,11 +529,7 @@ the mixed colour
 once with `rasterWeight`.
 
 ```ts
-function rasterMixWeight(
-  a: i32,
-  b: i32,
-  w: i32,
-): i32
+const rasterMixWeight: (a: i32, b: i32, w: i32) => i32
 ```
 
 <scalar-field name="a" type="i32" required>
@@ -567,7 +563,7 @@ position `alpha` of the way from the last step to this one and faded by the
 life it has left. A position `v` is drawn at pixel `offset + v * scale`.
 
 ```ts
-function rasterParticles(
+const rasterParticles: (
   pixels: Int32Array,
   width: i32,
   height: i32,
@@ -576,7 +572,7 @@ function rasterParticles(
   scale: f64,
   offsetX: f64,
   offsetY: f64,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -633,7 +629,7 @@ A pixel coordinate floored to an `i32`, clamped first so neither a huge
 value nor NaN can overflow the conversion.
 
 ```ts
-function rasterPixel(v: f64): i32
+const rasterPixel: (v: f64) => i32
 ```
 
 <scalar-field name="v" type="f64" required>
@@ -653,11 +649,11 @@ the coordinate
 Add the newest point to a trail, forgetting the oldest when it is full.
 
 ```ts
-function rasterPushTrail(
+const rasterPushTrail: (
   trail: RasterTrail,
   x: f64,
   y: f64,
-): void
+) => void
 ```
 
 <scalar-field name="trail" type="RasterTrail" required>
@@ -684,7 +680,7 @@ The pixel rectangle `x0..x1` × `y0..y1` (right and bottom exclusive) set to
 a colour or blended toward it, clipped to the frame.
 
 ```ts
-function rasterRect(
+const rasterRect: (
   pixels: Int32Array,
   width: i32,
   height: i32,
@@ -694,7 +690,7 @@ function rasterRect(
   y1: i32,
   colour: i32,
   weight: i32,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -756,7 +752,7 @@ how much of `colour`, 0 to `RASTER_SOLID` (see `rasterWeight`); 0 draws nothing
 A colour from three channels.
 
 ```ts
-function rasterRgb(r: i32, g: i32, b: i32): i32
+const rasterRgb: (r: i32, g: i32, b: i32) => i32
 ```
 
 <scalar-field name="r" type="i32" required>
@@ -789,7 +785,7 @@ A new particle in the pool's oldest slot, live or not, so a full pool
 replaces its oldest particle.
 
 ```ts
-function rasterSpawnParticle(
+const rasterSpawnParticle: (
   pool: RasterParticles,
   x: f64,
   y: f64,
@@ -798,7 +794,7 @@ function rasterSpawnParticle(
   life: f64,
   size: f64,
   colour: i32,
-): void
+) => void
 ```
 
 <scalar-field name="pool" type="RasterParticles" required>
@@ -854,12 +850,12 @@ its colour, `0xRRGGBB`
 One step of a pool: every live particle falls, slows, moves and ages.
 
 ```ts
-function rasterStepParticles(
+const rasterStepParticles: (
   pool: RasterParticles,
   dt: f64,
   gravity: f64,
   drag: f64,
-): void
+) => void
 ```
 
 <scalar-field name="pool" type="RasterParticles" required>
@@ -894,7 +890,7 @@ A byte outside ASCII 32..126 draws as `?`, so a character outside ASCII
 draws as one `?` for each of its UTF-8 bytes.
 
 ```ts
-function rasterText(
+const rasterText: (
   pixels: Int32Array,
   width: i32,
   height: i32,
@@ -903,7 +899,7 @@ function rasterText(
   scale: i32,
   text: string,
   colour: i32,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -960,10 +956,7 @@ The width text takes in the 5×7 font: six font pixels a glyph, less the
 last gap.
 
 ```ts
-function rasterTextWidth(
-  text: string,
-  scale: i32,
-): i32
+const rasterTextWidth: (text: string, scale: i32) => i32
 ```
 
 <scalar-field name="text" type="string" required>
@@ -991,7 +984,7 @@ opaque than the one before: a streak that fades out behind what made it.
 A point at `v` is drawn at pixel `offset + v * scale`.
 
 ```ts
-function rasterTrail(
+const rasterTrail: (
   pixels: Int32Array,
   width: i32,
   height: i32,
@@ -1002,7 +995,7 @@ function rasterTrail(
   scale: f64,
   offsetX: f64,
   offsetY: f64,
-): void
+) => void
 ```
 
 <scalar-field name="pixels" type="Int32Array" required>
@@ -1070,7 +1063,7 @@ the pixel y of trail y 0
 A fraction as the 0..256 weight the mixes and `rasterRect` take.
 
 ```ts
-function rasterWeight(t: f64): i32
+const rasterWeight: (t: f64) => i32
 ```
 
 <scalar-field name="t" type="f64" required>

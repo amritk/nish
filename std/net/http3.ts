@@ -17,12 +17,12 @@
  *     import { QuicConnection } from "nish/net/quic";
  *
  *     // Once per slot, beside a server QuicConnection; restart() per connection.
- *     function open(quic: QuicConnection): Http3Connection {
+ *     const open = (quic: QuicConnection): Http3Connection => {
  *       return new Http3Connection(new Http3Config(), quic);
  *     }
  *
  *     // After each quic.receive(...):
- *     function serve(h3: Http3Connection): void {
+ *     const serve = (h3: Http3Connection): void => {
  *       const names: u8[][] = [httpFieldBytes("content-type")];
  *       const values: u8[][] = [httpFieldBytes("text/plain")];
  *       const body: u8[] = httpFieldBytes("hello\n");

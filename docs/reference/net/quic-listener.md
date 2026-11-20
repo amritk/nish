@@ -264,10 +264,10 @@ When `quicListenerTakeFlight` next lets `conn` start a flight, in the
 caller's milliseconds: `now` when it may already.
 
 ```ts
-function quicListenerFlightTime(
+const quicListenerFlightTime: (
   conn: QuicConnection,
   now: i64,
-): i64
+) => i64
 ```
 
 <scalar-field name="conn" type="QuicConnection" required>
@@ -294,10 +294,10 @@ When `quicListenerTakePaced` next lets `conn` send a full datagram, in the
 caller's milliseconds: `now` when it may already.
 
 ```ts
-function quicListenerPaceTime(
+const quicListenerPaceTime: (
   conn: QuicConnection,
   now: i64,
-): i64
+) => i64
 ```
 
 <scalar-field name="conn" type="QuicConnection" required>
@@ -327,14 +327,14 @@ ECN bits the caller set in `conn.arrivalEcn`. Answers how many it handed
 over.
 
 ```ts
-function quicListenerReceiveSegments(
+const quicListenerReceiveSegments: (
   conn: QuicConnection,
   buf: u8[],
   off: i32,
   len: i32,
   segment: i32,
   now: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="conn" type="QuicConnection" required>
@@ -401,14 +401,14 @@ it, so a carrier gives `QUIC_CONN_DATAGRAM_MAX` bytes or more to let the
 connection discover a larger path.
 
 ```ts
-function quicListenerTakeFlight(
+const quicListenerTakeFlight: (
   conn: QuicConnection,
   now: i64,
   buf: u8[],
   at: i32,
   cap: i32,
   flight: QuicFlight,
-): i32
+) => i32
 ```
 
 <scalar-field name="conn" type="QuicConnection" required>
@@ -462,10 +462,10 @@ but only when the connection's pacer has the credit for a full datagram
 datagram is charged to the pacer at its real size.
 
 ```ts
-function quicListenerTakePaced(
+const quicListenerTakePaced: (
   conn: QuicConnection,
   now: i64,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="conn" type="QuicConnection" required>

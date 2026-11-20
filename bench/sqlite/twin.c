@@ -6,6 +6,8 @@
  *   twin seed <db> <schema.sql>    the challenge's 50,000 users, 500,000 posts
  *                                  and 2,000,000 likes, in WAL mode
  *   twin <workload> <db> <count>   lookup | feed | insert | insert-txn
+ *   twin options <db>              SQLite's compile options, one a line, which
+ *                                  run.mjs holds twin.rs's against
  *
  * A workload prints `rows R checksum S failed F count N ns T`, the same line
  * main.ts prints for the same arguments; T is the timed loop alone. Each call
@@ -227,10 +229,21 @@ static void make_bodies(void) {
     for (int j = 0; j < body_len(k); j++) bodies[k * 256 + j] = j % 6 == 5 ? ' ' : (uint8_t)('a' + (j * 7 + k) % 26);
 }
 
+static int options(const char *path) {
+  sqlite3 *db = NULL;
+  if (sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) die(db, path);
+  sqlite3_stmt *st = prepare(db, "PRAGMA compile_options");
+  while (sqlite3_step(st) == SQLITE_ROW) printf("%s\n", (const char *)sqlite3_column_text(st, 0));
+  sqlite3_finalize(st);
+  if (sqlite3_close(db) != SQLITE_OK) die(db, "close");
+  return 0;
+}
+
 int main(int argc, char **argv) {
   if (argc == 4 && strcmp(argv[1], "seed") == 0) return seed(argv[2], argv[3]);
+  if (argc == 3 && strcmp(argv[1], "options") == 0) return options(argv[2]);
   if (argc != 4) {
-    fprintf(stderr, "usage: twin seed <db> <schema.sql> | twin <lookup|feed|insert|insert-txn> <db> <count>\n");
+    fprintf(stderr, "usage: twin seed <db> <schema.sql> | twin options <db> | twin <lookup|feed|insert|insert-txn> <db> <count>\n");
     return 2;
   }
   const char *mode = argv[1];

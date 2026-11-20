@@ -18,7 +18,8 @@ bytes, fresh for every password, from `crypto.getRandomValues`, and the hash
 carries it, so you store only the hash. `bcryptVerify(password, hash)` answers
 whether the password is the one the hash was made from.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt";
 import { Secret, secret, wipe } from "nish:secret";
 
@@ -111,7 +112,8 @@ the thread that opened the scope waits for the slowest hash rather than for
 all of them in turn. Here three sign-ups that arrived together are hashed side
 by side, given a free core for each:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { bcryptHash } from "nish/crypto/bcrypt";
 import { Secret, secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
@@ -203,7 +205,8 @@ each width from one to six on throwaway passwords and returns the fastest. It
 takes a few tens of milliseconds and keeps nothing, so call it once, at
 startup, and keep the answer:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { bcryptCalibrate } from "nish/crypto/bcrypt";
 
 export const main = (): i32 => {
@@ -241,7 +244,8 @@ itself. `nish/crypto/bcrypt-batch` holds them until it can:
   for one that was an `Err`. A run is due when `width` requests are queued or
   the oldest has waited `holdNanos`.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { bcryptCalibrate, bcryptHash } from "nish/crypto/bcrypt";
 import { BcryptAnswer, BcryptBatchConfig, BcryptBatcher, bcryptBatcher } from "nish/crypto/bcrypt-batch";
 import { Secret, secret, wipe } from "nish:secret";

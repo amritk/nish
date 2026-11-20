@@ -171,10 +171,10 @@ Creates the region `name`, `bytes` long and zeroed, mode 0600, and maps it.
 `SHM_EXISTS` when the name is taken: unlink a stale one first.
 
 ```ts
-function createRegion(
+const createRegion: (
   name: string,
   bytes: i32,
-): Result<SharedRegion, ShmError>
+) => Result<SharedRegion, ShmError>
 ```
 
 <scalar-field name="name" type="string" required>
@@ -209,7 +209,7 @@ regions and to its own memory, exactly as that fence does; `RELAXED` is no
 fence at all.
 
 ```ts
-function fence(order: i32): void
+const fence: (order: i32) => void
 ```
 
 <scalar-field name="order" type="i32" required>
@@ -225,9 +225,9 @@ Maps the region `name` that some process of this user created. Its size is
 the region's (on Darwin, rounded up to a page).
 
 ```ts
-function openRegion(
+const openRegion: (
   name: string,
-): Result<SharedRegion, ShmError>
+) => Result<SharedRegion, ShmError>
 ```
 
 <scalar-field name="name" type="string" required>
@@ -255,9 +255,7 @@ Removes the name, so no process can open it again; every mapping of it
 stays valid until it is closed. `SHM_NOT_FOUND` when there is none.
 
 ```ts
-function unlinkRegion(
-  name: string,
-): Result<void, ShmError>
+const unlinkRegion: (name: string) => Result<void, ShmError>
 ```
 
 <scalar-field name="name" type="string" required>

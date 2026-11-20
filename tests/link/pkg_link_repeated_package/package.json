@@ -1,0 +1,12 @@
+{
+  "name": "pkg-link-repeated-package",
+  "private": true,
+  "nish": {
+    "link": {
+      "dependencies": {
+        "pkg_mul": { "sources": ["c/mul.c"] },
+        "pkg_mul": { "libraries": ["m"] }
+      }
+    }
+  }
+}

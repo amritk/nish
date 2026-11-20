@@ -1,0 +1,1 @@
+`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`

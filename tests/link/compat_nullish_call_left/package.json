@@ -1,0 +1,7 @@
+{
+  "name": "compat-nullish-call-left",
+  "private": true,
+  "nish": {
+    "compat": ["nullish"]
+  }
+}

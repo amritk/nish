@@ -131,7 +131,7 @@ node bench/run.mjs       # the benchmark suite; rewrites docs/BENCHMARKS.md (abo
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks the links
 ```
 
-The whole suite takes a long time on one machine; CI runs it in eight shards
+The whole suite takes a long time on one machine; CI runs it in nine shards
 on every push. Locally, run the sections a change touches.
 
 ### Tests written in Nish

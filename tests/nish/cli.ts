@@ -119,6 +119,8 @@ const advertisedFlags = (): string[] => [
   "--compat[=<feature>,...]",
   "--target",
   "--cpu",
+  "--pgo-generate",
+  "--pgo-use",
   "--profile",
   "--warn-portability",
   "--fix",
@@ -1458,7 +1460,16 @@ const checkPackageBoundary = (t: Suite, cli: Cli): void => {
  * these were `NL0000`, which is not a code a tool can key on.
  */
 const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: string): void => {
-  const run = cli.plain(name, [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`]);
+  checkClashCodeWith(t, cli, name, file, code, []);
+};
+
+/** `checkClashCode` for a program built with `flags` as well. */
+const checkClashCodeWith = (t: Suite, cli: Cli, name: string, file: string, code: string, flags: string[]): void => {
+  const args = [`tests/link/${name}/main.ts`, "--json", "-o", `${WORK}/${name}/`];
+  for (const flag of flags) {
+    args.push(flag);
+  }
+  const run = cli.plain(name, args);
   if (!t.eqI32(`${name}: a symbol two modules define is refused`, run.status, 1)) {
     return;
   }
@@ -1474,7 +1485,11 @@ const checkClashCode = (t: Suite, cli: Cli, name: string, file: string, code: st
  * An exported function and a private one are each a symbol the whole program
  * shares, so a second definition is a driver refusal with a code of its own:
  * NL3024 for an exported function and NL3026 for a private one, whose package
- * spellings, NL3025 and NL3027, are pinned by `tests/wordings/`. A class's
+ * spellings, NL3025 and NL3027, are pinned by `tests/wordings/`. Two private
+ * functions clash only under `--no-strict-exports`: by default each is
+ * qualified by its module's path (WP57 S1), so `duplicate_internal` builds, and
+ * two whose paths qualify them to one symbol (`module_private_residual`) are
+ * NL3026 even so. A class's
  * constructor or method is one too, but two classes that share one share a name,
  * and since #193 that is refused first and alone, as NL3028 — one object for one
  * mistake, whether the classes declare a constructor, a method, fields only, or
@@ -1491,7 +1506,8 @@ const checkSymbolClashes = (t: Suite, cli: Cli): void => {
   checkClashCode(t, cli, "iface_clash_private", "lib.ts", "NL3028");
   checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3028");
   checkClashCode(t, cli, "duplicate_export", "b.ts", "NL3024");
-  checkClashCode(t, cli, "duplicate_internal", "helper.ts", "NL3026");
+  checkClashCodeWith(t, cli, "module_private_no_strict", "helper.ts", "NL3026", ["--no-strict-exports"]);
+  checkClashCode(t, cli, "module_private_residual", "lib_util.ts", "NL3026");
   checkClashCode(t, cli, "generic_class_clash_signature", "a.ts", "NL3013");
   checkClashCode(t, cli, "class_dollar_name", "main.ts", "NL2296");
   checkClashCode(t, cli, "class_dollar_name_imported", "lib.ts", "NL2296");

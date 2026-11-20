@@ -255,7 +255,7 @@ decoded where a grammar allows one and refused everywhere else.
 Whether `s` is an RFC 3339 `full-date`, `1963-06-19`.
 
 ```ts
-function isDate(s: string): boolean
+const isDate: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -276,7 +276,7 @@ true when `s` is a date, false otherwise.
 Whether `s` is an RFC 3339 `date-time`, `1963-06-19T08:30:06.283185Z`.
 
 ```ts
-function isDateTime(s: string): boolean
+const isDateTime: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -302,7 +302,7 @@ in `YMD` and `HMS` order: `P1Y1D` and `PT1H1S` are invalid as written,
 though ISO 8601 allows them.
 
 ```ts
-function isDuration(s: string): boolean
+const isDuration: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -323,7 +323,7 @@ true when `s` is a duration, false otherwise.
 Whether `s` is an RFC 5321 mailbox, `joe.bloggs@example.com`.
 
 ```ts
-function isEmail(s: string): boolean
+const isEmail: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -344,7 +344,7 @@ true when `s` is a mailbox, false otherwise.
 Whether `s` is a host name, `www.example.com`.
 
 ```ts
-function isHostname(s: string): boolean
+const isHostname: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -365,7 +365,7 @@ true when `s` is a host name, false otherwise.
 Whether `s` is a dotted-quad IPv4 address, `192.168.0.1`.
 
 ```ts
-function isIpv4(s: string): boolean
+const isIpv4: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -386,7 +386,7 @@ true when `s` is an IPv4 address, false otherwise.
 Whether `s` is an IPv6 address, `::ffff:192.168.0.1`.
 
 ```ts
-function isIpv6(s: string): boolean
+const isIpv6: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -407,7 +407,7 @@ true when `s` is an IPv6 address, false otherwise.
 Whether `s` is an absolute IRI, `http://ƒøø.ßår/?∂éœ=πîx`.
 
 ```ts
-function isIri(s: string): boolean
+const isIri: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -428,7 +428,7 @@ true when `s` is an IRI, false otherwise.
 Whether `s` is an IRI or a relative IRI reference.
 
 ```ts
-function isIriReference(s: string): boolean
+const isIriReference: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -451,7 +451,7 @@ Lookaround, backreferences and what the `u` flag refuses are answered
 false, though ECMA-262 accepts them (see the module header).
 
 ```ts
-function isRegex(s: string): boolean
+const isRegex: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -471,7 +471,7 @@ true when `nish/regex` compiles `s`, false otherwise.
 Whether `s` is an RFC 3339 `full-time`, `08:30:06Z` or `08:30:06+01:00`.
 
 ```ts
-function isTime(s: string): boolean
+const isTime: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -492,7 +492,7 @@ true when `s` is a time, false otherwise.
 Whether `s` is an absolute URI, `http://example.com/a?b#c`.
 
 ```ts
-function isUri(s: string): boolean
+const isUri: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -513,7 +513,7 @@ true when `s` is a URI, false otherwise.
 Whether `s` is a URI or a relative reference, `../a?b#c`.
 
 ```ts
-function isUriReference(s: string): boolean
+const isUriReference: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -535,7 +535,7 @@ Whether `s` is an RFC 6570 URI template,
 `http://example.com/{term:1}/{term}`.
 
 ```ts
-function isUriTemplate(s: string): boolean
+const isUriTemplate: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -556,7 +556,7 @@ true when `s` is a URI template, false otherwise.
 Whether `s` is a UUID, `2eb8aa08-aa98-11ea-b4aa-73b441d16380`.
 
 ```ts
-function isUuid(s: string): boolean
+const isUuid: (s: string) => boolean
 ```
 
 <scalar-field name="s" type="string" required>
@@ -579,10 +579,7 @@ true when `s` is a UUID, false otherwise.
 for an id that names no format, -1 included.
 
 ```ts
-function jsonFormatCheck(
-  id: i32,
-  value: string,
-): i32
+const jsonFormatCheck: (id: i32, value: string) => i32
 ```
 
 <scalar-field name="id" type="i32" required>
@@ -609,7 +606,7 @@ The id of the format `name` for `jsonFormatCheck`, one of the
 `JSON_FORMAT_*` ids, or -1 for a format this module does not check.
 
 ```ts
-function jsonFormatId(name: string): i32
+const jsonFormatId: (name: string) => i32
 ```
 
 <scalar-field name="name" type="string" required>
@@ -634,10 +631,10 @@ does not check. A validator that checks many instances against one schema
 resolves the name once with `jsonFormatId` and calls `jsonFormatCheck`.
 
 ```ts
-function jsonFormatValidate(
+const jsonFormatValidate: (
   name: string,
   value: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="name" type="string" required>

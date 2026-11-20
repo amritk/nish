@@ -1,6 +1,6 @@
 # WP48: 32-bit references for linked classes
 
-**State:** In progress · **Done:** 4 of 9 · **Design note:** [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
+**State:** In progress · **Done:** 5 of 9 · **Design note:** [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
 
 ## Stages
 
@@ -8,7 +8,7 @@
 - [x] Stage 1: the arena on a reserved range, switched on only by a compact class, with no IR moved for any program
 - [x] Stage 2a: `implements Compact` from `nish:compact`, the `i32` layout of a compact class's links in any class, the encode and decode in field loads and stores (no operator takes a link, so no compound assignment reaches one), the 4-rounding allocation through `@nish_alloc_ref`, and the refusals (C and N-API surfaces, `declare class`, a `Secret` field, a generic class), each with its code; wasm32, host page modules and ASAN builds stay uncompressed
 - [ ] Stage 2b: TBAA for an offset field, its debug info, and debugger pretty-printers that show a link as the object it names
-- [ ] Stage 2c: the opaque C header, so a compact class can cross `--emit-header`
+- [x] Stage 2c: the opaque C header, so a compact class can cross `--emit-header`: every class holding a link is opaque, a C host holds an instance as a handle and links the range runtime (against a default runtime, a program that allocates fails the link); N-API builds stay refused (NL4020, NL4021), also beside `--emit-header`
 - [ ] Stage 3: the compiler picks compact classes by itself (a native executable, a link field, a byte saving, made in a loop or recursion), with `implements Wide` and `--compact off` to refuse; gated on the corpus showing no program slower. Prepared: `nish --explain-layout` reports which classes the rule picks, and changes no IR
 - [ ] Stage 4: the `bench/goose` tree programs, `bench/wp48-refs/sibling.ts` and the guide's memory page
 - [ ] Stage 5: inside Nish: which of the compiler's and `std/`'s own classes the rule picks, measured on a self-build and the `std/` benches, with `implements Compact` or `Wide` where the measurement disagrees with the rule (in `src/` only after the release that ships the markers)
@@ -16,7 +16,7 @@
 
 ## Next
 
-Stage 2b, TBAA, debug info and pretty-printers for an offset field: [§3.2](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md#32-what-the-compiler-does-with-it).
+Stage 2b, TBAA, debug info and pretty-printers for an offset field: [§3.2](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md#32-what-the-compiler-does-with-it). Then stage 3, the automatic rule.
 
 ## Not planned
 

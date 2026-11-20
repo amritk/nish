@@ -141,9 +141,7 @@ after it; for a modulus that is even or not `RSA_MIN_BITS` to
 not below 2^32 (which also keeps it below the modulus).
 
 ```ts
-function rsaParsePublicKey(
-  der: u8[],
-): RsaPublicKey | null
+const rsaParsePublicKey: (der: u8[]) => RsaPublicKey | null
 ```
 
 <scalar-field name="der" type="u8[]" required>
@@ -169,12 +167,12 @@ id, a modulus too short for the encoding, a signature that is not exactly
 as long as the modulus or not below it, and any other bytes.
 
 ```ts
-function rsaVerifyPkcs1v15(
+const rsaVerifyPkcs1v15: (
   key: RsaPublicKey,
   hash: i32,
   msg: u8[],
   sig: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="RsaPublicKey" required>
@@ -219,13 +217,13 @@ negative `saltLen`, and a signature that is not exactly as long as the
 modulus or not below it.
 
 ```ts
-function rsaVerifyPss(
+const rsaVerifyPss: (
   key: RsaPublicKey,
   hash: i32,
   saltLen: i32,
   msg: u8[],
   sig: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="key" type="RsaPublicKey" required>

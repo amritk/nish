@@ -1,0 +1,6 @@
+{
+  "header": "opaque.h",
+  "functions": {
+    "blob_make": { "return": { "owned": "blob_free" } }
+  }
+}

@@ -48,6 +48,7 @@
 // answers with the IR text per module and the stem each module's file should
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
+import { recordOverloads } from "./overloads"
 import { REGION_STD_SPECIFIER } from "./region"
 import { explainLayout, LayoutModule } from "./compact-rule"
 import { handleFindings } from "./handles"
@@ -65,13 +66,14 @@ import {
 } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
+import { liftDefaults } from "./defaults"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { implementsDeclaration, spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart, templateSymbol } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -242,6 +244,7 @@ import {
   isFreestandingWasmBuild,
   isWasmBuild,
 } from "./visibility"
+import { dataModelRefusal } from "./c-import-model"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47
@@ -885,6 +888,12 @@ export class Compilation {
       this.sink.report(source, read.start, read.end, read.problem)
       return false
     }
+    // A module `nish c-import` wrote for another data model (WP66 D3).
+    const modelRefusal = dataModelRefusal(source.text, isWasmBuild(this.opts))
+    if (modelRefusal !== null) {
+      this.sink.report(source, modelRefusal.start, modelRefusal.end, modelRefusal.message)
+      return false
+    }
     const parser = new Parser(source)
     const file = parser.parseSourceFile()
     if (host) {
@@ -920,6 +929,12 @@ export class Compilation {
       // takes its ids from the same parser.
       liftScript(parser, file)
     }
+    // WP28 `optional-params`: before the checker too, for the same reason.
+    const lifted = liftDefaults(
+      parser,
+      file,
+      read === null && this.opts.compatFeatures.indexOf("optional-params") >= 0
+    )
     const checker = new Checker(
       this.table,
       source,
@@ -942,6 +957,13 @@ export class Compilation {
     checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
     checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
+    checker.ctx.compat = this.opts.compat
+    checker.ctx.compatFeatures = this.opts.compatFeatures
+    checker.ctx.defaultImpls = lifted.impls
+    checker.ctx.defaultArities = lifted.arities
+    checker.ctx.defaultWrappers = lifted.wrappers
+    checker.ctx.defaultLifted = lifted.lifted
+    recordOverloads(checker.ctx, file)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
@@ -1393,6 +1415,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // Every module's context, entry first: before any import is bound, because
+    // a clashing private function takes its module-qualified symbol here and an
+    // importer copies the symbol it finds, and before any template is
+    // instantiated, because its instantiations are named by the same rule.
+    const peers: CheckContext[] = []
+    for (const unit of this.modules) {
+      peers.push(unit.checker.ctx)
+    }
+    for (const unit of this.modules) {
+      unit.checker.ctx.peers = peers
+    }
+    this.qualifyClashingSymbols(peers)
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = []
       for (const imp of unit.checker.program.imports) {
@@ -1432,13 +1466,8 @@ export class Compilation {
     // every module needs to know whether the entry declares `main` before its
     // bodies are checked.
     const hasMain = this.entry().checker.program.entryMain !== null
-    const peers: CheckContext[] = []
-    for (const unit of this.modules) {
-      peers.push(unit.checker.ctx)
-    }
     for (const unit of this.modules) {
       unit.checker.ctx.entryHasMain = hasMain
-      unit.checker.ctx.peers = peers
     }
     // Constants fold once every module has its signatures, because an
     // initialiser may name a constant imported from a module checked later.
@@ -1478,6 +1507,7 @@ export class Compilation {
     this.rejectRootWithArenas()
     this.rejectRootInShim()
     this.rejectRootInWasiLoader()
+    this.rejectOverloadsInInterop()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -3462,6 +3492,46 @@ export class Compilation {
   }
 
   /**
+   * WP28 C1: an exported function, method or constructor with overload
+   * signatures, in a build that describes the program to C or Node
+   * (`--emit-header`, `--emit-napi`, `--emit-napi-async`, `--emit-dts`). The
+   * signatures are lifted out before the checker runs, so a header or `.d.ts`
+   * would spell the implementation's signature, which a caller may not call.
+   */
+  rejectOverloadsInInterop(): void {
+    const opts = this.opts
+    if (
+      opts.emitNapi.length === 0 &&
+      opts.emitNapiAsync.length === 0 &&
+      opts.emitHeader.length === 0 &&
+      opts.emitDts.length === 0
+    ) {
+      return
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const sig of program.functions) {
+        if (sig.exported) {
+          this.refuseOverloadedExport(program.source, sig, sig.sourceName)
+        }
+      }
+    }
+  }
+
+  /** NL2802: `sig` has overload signatures and is described to C or Node. */
+  refuseOverloadedExport(source: SourceFile, sig: FunctionSig, shown: string): void {
+    if (sig.overloads.length === 0) {
+      return
+    }
+    this.sink.report(
+      source,
+      sig.decl.start,
+      sig.decl.end,
+      `\`${shown}\` has overload signatures and cannot be described to C or Node (\`--emit-header\`, \`--emit-napi\` or \`--emit-dts\`): a header or declaration file would spell only the implementation's signature, which a caller may not call; export a function per signature`
+    )
+  }
+
+  /**
    * WP55 §4.2: root storage in a WASI build that writes a loader
    * (`--emit-dts`). The loader releases the arena after every call, and only
    * a page module (`buildsPageModule`) emits the `nish_root_keep` a loader
@@ -3774,6 +3844,27 @@ export class Compilation {
   }
 
   /**
+   * WP57 S1 (`docs/wp57-module-scoped-names.md` §4): give each private free
+   * function whose bare symbol another of its package's free functions or
+   * templates also takes -- or, for a `main` outside the entry, the entry
+   * wrapper -- its module-qualified symbol, `<prefix><qualifier>$.<name>`. An
+   * exported party keeps its bare symbol, so what a C caller or another
+   * package links against never moves, and two exported parties are still
+   * refused by `rejectSymbolClashes`, which runs over the final symbols.
+   *
+   * Nothing qualifies under `--no-strict-exports`: every function is then
+   * external, and an external symbol is the name as written. A program with no
+   * clash is not touched, which is why no existing program's IR moves.
+   * Templates are named when instantiated, by the same predicate.
+   */
+  qualifyClashingSymbols(peers: CheckContext[]): void {
+    const entryName = this.entry().name
+    for (const unit of this.modules) {
+      unit.checker.qualifyClashing(peers, unit.name, entryName)
+    }
+  }
+
+  /**
    * A function's *symbol* must be unique across the program whether or not it
    * is exported, and the entry wrapper reserves `main` as well. An external
    * symbol is global to the link, and even an `internal` one reaches
@@ -3788,6 +3879,13 @@ export class Compilation {
    * out of one name. A program of one package is every program that existed
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
+   *
+   * WP57 S1 did the same one level down: `qualifyClashingSymbols` has already
+   * given a clashing private function its module-qualified symbol, so two
+   * modules' private `add` arrive here as `helper$.add` and `main$.add` and do
+   * not clash. What still does is two exported functions, anything under
+   * `--no-strict-exports` (nothing is qualified there) and two qualified
+   * symbols that come out alike (`clashMessage` words each).
    *
    * A `declare function` is not a package's symbol but C's, so it keeps its
    * name in every package and two packages can make one key of it. That is
@@ -3835,7 +3933,7 @@ export class Compilation {
         if (template.origin !== unit.source) {
           continue
         }
-        const symbol = unit.checker.program.symbolPrefix + template.sourceName
+        const symbol = templateSymbol(entry.checker.ctx.peers, template)
         const at = owners.get(symbol, -1)
         if (at < 0) {
           owners.set(symbol, ownerSigs.length)
@@ -3899,7 +3997,8 @@ export class Compilation {
             previousSig,
             previousModule.name,
             unit.name,
-            unit.packageName
+            unit.packageName,
+            this.opts.strictExports
           )
         }
         // Reported, not thrown: every clash is listed.
@@ -4742,7 +4841,8 @@ const clashMessage = (
   previous: FunctionSig,
   previousFile: string,
   file: string,
-  packageName: string
+  packageName: string,
+  strictExports: boolean
 ): string => {
   const owner = sig.owner
   if (owner !== null) {
@@ -4763,10 +4863,24 @@ const clashMessage = (
     }
     return `Exported function ${where}; exported names must be unique within the package that declares them`
   }
-  if (packageName === ROOT_PACKAGE) {
-    return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
+  // Under `--strict-exports` a private function that clashes is qualified by
+  // its module's path (WP57 S1), so a clash left over is two paths that spell
+  // one qualifier (`lib/util.ts` and `lib_util.ts`). Without it every function
+  // keeps its bare name, so the name itself has to be unique.
+  let why = ""
+  if (strictExports) {
+    why = `, and both modules' paths qualify it to one symbol, \`${sig.name}\`, so rename one of the modules or the function`
+  } else if (packageName === ROOT_PACKAGE) {
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported"
+  } else {
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported"
   }
-  return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+  if (packageName === ROOT_PACKAGE) {
+    return `Function ${where}${why}; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name`
+  }
+  return `Function ${where}${why}; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol`
 }
 
 /**

@@ -1,0 +1,7 @@
+{
+  "name": "compat-optional-params-exported",
+  "private": true,
+  "nish": {
+    "compat": ["optional-params"]
+  }
+}

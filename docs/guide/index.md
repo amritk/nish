@@ -1,13 +1,18 @@
 # Nish
 
-<div data-nish-hero></div>
+<div data-nish-hero class="nish-hero"><div class="nish-hero__inner"><div class="nish-hero__aurora" aria-hidden="true"></div><p class="nish-hero__name" role="img" aria-label="Nish: Native Instruction Static Host" tabindex="0"><span class="nish-hero__name-row" aria-hidden="true"><span class="nish-hero__word" style="--i:0"><b>N</b><span class="nish-hero__rest"><span>ative</span></span></span><span class="nish-hero__word" style="--i:1"><b>I</b><span class="nish-hero__rest"><span>nstruction</span></span></span><span class="nish-hero__word" style="--i:2"><b>S</b><span class="nish-hero__rest"><span>tatic</span></span></span><span class="nish-hero__word" style="--i:3"><b>H</b><span class="nish-hero__rest"><span>ost</span></span></span></span><span class="nish-hero__name-row nish-hero__name-row--ghost" aria-hidden="true"><span class="nish-hero__word" style="--i:0"><b>N</b><span class="nish-hero__rest"><span>ative</span></span></span><span class="nish-hero__word" style="--i:1"><b>I</b><span class="nish-hero__rest"><span>nstruction</span></span></span><span class="nish-hero__word" style="--i:2"><b>S</b><span class="nish-hero__rest"><span>tatic</span></span></span><span class="nish-hero__word" style="--i:3"><b>H</b><span class="nish-hero__rest"><span>ost</span></span></span></span></p><p class="nish-hero__title">TypeScript in. <span class="nish-hero__accent">Native code out.</span></p><div class="nish-hero__actions"><a class="nish-hero__cta" href="/getting-started/installation">Get started<span aria-hidden="true">→</span></a><button class="nish-hero__install" type="button" title="Copy the install command"><span class="nish-hero__prompt" aria-hidden="true">$</span><code>curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh</code><span class="nish-hero__copied" aria-live="polite"></span></button></div><div class="nish-hero__stage"><div class="nish-hero__window nish-hero__editor" aria-hidden="true"><div class="nish-hero__bar"><i></i><i></i><i></i><span>squares.ts</span></div><pre class="nish-hero__code"><span class="nish-hero__line" style="--i:0"><span class="nish-tok-k">const</span> sumOfSquares = (limit: <span class="nish-tok-t">i32</span>): <span class="nish-tok-t">i32</span> =&gt; {</span><span class="nish-hero__line" style="--i:1">  <span class="nish-tok-k">let</span> total = <span class="nish-tok-n">0</span>;</span><span class="nish-hero__line" style="--i:2">  <span class="nish-tok-k">for</span> (<span class="nish-tok-k">let</span> i = <span class="nish-tok-n">1</span>; i &lt;= limit; i++) {</span><span class="nish-hero__line" style="--i:3">    total = total + i * i;</span><span class="nish-hero__line" style="--i:4">  }</span><span class="nish-hero__line" style="--i:5">  <span class="nish-tok-k">return</span> total;</span><span class="nish-hero__line" style="--i:6">};</span></pre></div><div class="nish-hero__flow" aria-hidden="true"><svg class="nish-hero__beams" viewBox="0 0 300 200" preserveAspectRatio="none" aria-hidden="true"><path class="nish-hero__rail" d="M0 100 H120" vector-effect="non-scaling-stroke"></path><path class="nish-hero__pulse nish-hero__pulse--in" d="M0 100 H120" pathLength="100" style="--i:0" vector-effect="non-scaling-stroke"></path><path class="nish-hero__rail" d="M180 100 C230 100 240 34 300 34" vector-effect="non-scaling-stroke"></path><path class="nish-hero__pulse nish-hero__pulse--out" d="M180 100 C230 100 240 34 300 34" pathLength="100" style="--i:0" vector-effect="non-scaling-stroke"></path><path class="nish-hero__rail" d="M180 100 H300" vector-effect="non-scaling-stroke"></path><path class="nish-hero__pulse nish-hero__pulse--out" d="M180 100 H300" pathLength="100" style="--i:1" vector-effect="non-scaling-stroke"></path><path class="nish-hero__rail" d="M180 100 C230 100 240 166 300 166" vector-effect="non-scaling-stroke"></path><path class="nish-hero__pulse nish-hero__pulse--out" d="M180 100 C230 100 240 166 300 166" pathLength="100" style="--i:2" vector-effect="non-scaling-stroke"></path></svg><div class="nish-hero__core"><span class="nish-hero__ring"></span><img src="/mark.svg" alt="" width="52" height="52"></div><div class="nish-hero__targets"><span class="nish-hero__target" style="--i:0">x86_64</span><span class="nish-hero__target" style="--i:1">ARM64</span><span class="nish-hero__target" style="--i:2">WebAssembly</span></div></div><div class="nish-hero__window nish-hero__terminal"><div class="nish-hero__bar" aria-hidden="true"><i></i><i></i><i></i><span>terminal</span></div><pre class="nish-hero__code" aria-hidden="true"><span class="nish-hero__cmd"><b>$ </b><span class="nish-hero__typed">nish run squares.ts</span></span><span class="nish-hero__out">1² + … + 10² = 385</span><span class="nish-hero__ready"><b>$ </b><i></i></span></pre><input class="nish-hero__input" aria-label="Terminal" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"></div></div></div></div>
 
-Nish — **N**ative **I**nstruction **S**tatic **H**ost — compiles a strict,
-static subset of TypeScript ahead of time to native code. You write `.ts`
-files with the syntax you already know; the compiler checks that every value
-has one fixed type and layout, turns the program into LLVM IR, and LLVM turns
-that into a small executable for x86_64, ARM64 or WebAssembly. There is no
-interpreter, no garbage collector and nothing to ship beside the binary.
+**Write TypeScript, ship a fast native binary.** Nish — **N**ative
+**I**nstruction **S**tatic **H**ost — compiles a strict, static subset of
+TypeScript ahead of time, through LLVM, to a small executable for x86_64,
+ARM64 or WebAssembly. There is no interpreter, no JIT and no garbage
+collector, and nothing to ship beside the binary. In the recorded
+[benchmark run](../BENCHMARKS.md), Nish is faster than Go on all seven programs
+and at most 2% slower than Rust `-O3` on six of them.
+
+You write `.ts` files with the syntax you already know; the compiler checks
+that every value has one fixed type and layout, so it can lay data out and
+generate code the way a C compiler would.
 
 > [!CAUTION]
 > **Nish is pre-alpha. Do not use it in production.** It is an early
@@ -67,7 +72,8 @@ browser, and a native build can be called from Node, WebAssembly or C.
 
 ## A first look
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const sumOfSquares = (limit: i32): i32 => {
   let total = 0;
   for (let i = 1; i <= limit; i++) {

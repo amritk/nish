@@ -1,16 +1,19 @@
-// What `nish/net/postgres` costs a client beside libpq in pipeline mode, on
-// the multicore server challenge's schema, --dev seed and queries: the same
-// loop through the module (main.ts) and through libpq (twin.c), against the
-// same PostgreSQL 18, and how much of a difference this machine can see at all.
+// What `nish/net/postgres` costs a client beside libpq in pipeline mode and
+// beside tokio-postgres, on the multicore server challenge's schema, --dev
+// seed and queries: the same loop through the module (main.ts), through libpq
+// (twin.c) and through tokio-postgres (twin.rs), against the same PostgreSQL
+// 18, and how much of a difference this machine can see at all.
 //
 //   bash bench/postgres/setup.sh   # once: the cluster and its seed
-//   npm run build && node bench/postgres/run.mjs [--unix] [--validate] [--rounds N] [--compiler <nish>]
+//   npm run build && node bench/postgres/run.mjs [--unix] [--validate] [--rounds N] [--no-rust] [--compiler <nish>]
 //     --unix      the module over TCP against the module over the server's
 //                 Unix socket, instead of the module against libpq (below)
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
-//     --rounds N  timed rounds, rounded up to a multiple of the sides (3, or
-//                 4 with --unix; default 12), after one uncounted warm-up round
+//     --rounds N  timed rounds, rounded up to a multiple of the sides (4, 3
+//                 with --no-rust, or 4 with --unix; default 12), after one
+//                 uncounted warm-up round
+//     --no-rust   leave out twin.rs; with no cargo it is left out, with a note
 //
 // The cluster is setup.sh's, in $PG_BENCH_DIR (else $TMPDIR/nish-bench-postgres,
 // /tmp without TMPDIR); run.mjs starts it on a free port on 127.0.0.1 and stops
@@ -29,14 +32,21 @@
 // timestamps and walking the tag array. Every run must read its workload's
 // rows per query times its count.
 //
-// Each round runs every workload on the build, its copy and the C twin, in an
-// order that rotates by round, so over a multiple of 3 rounds each goes first
-// equally often. A run times its own loop and prints a checksum of every value
+// twin.rs is built by cargo with tokio-postgres pinned, on a current-thread
+// runtime, with the speed profile's shape (-O3, one codegen unit, fat LTO).
+// tokio-postgres sends Bind, Execute, Sync as the module does, but asks for
+// every result column in binary, so twin.rs folds each binary value to what
+// the text sides fold (twin.rs's header).
+//
+// Each round runs every workload on the build, its copy, the C twin and the
+// Rust twin, in an order that rotates by round, so over a multiple of 4 rounds
+// each goes first equally often. A run times its own loop and prints a checksum of every value
 // it read; every run of a workload must print the same rows and checksum. The
 // report is the client's CPU time per query (user and system, getrusage of the
 // client process only; the system part's median beside it) and queries per second, min, median and interquartile
 // range over the rounds. The module's cost is the build less the twin, and the
-// copy less the twin beside it; the noise band is the build against its byte-identical copy. The verdict is the
+// copy less the twin beside it; the noise band is the build against its byte-identical copy. Rust less C
+// and the build less Rust are given the same way. The verdict is the
 // medians: a difference is one this machine can see only when it exceeds the
 // noise band and both sides' IQRs.
 //
@@ -68,6 +78,17 @@ const pgDir = process.env.PG_BENCH_DIR || path.join(process.env.TMPDIR || "/tmp"
 const pgBin = process.env.PG_BIN || "/usr/lib/postgresql/18/bin"
 const nishc = compilerFrom(process.argv)
 
+/** `name` on PATH or in one of `extra`, or null. */
+const which = (name, extra = []) => {
+  for (const dir of [...(process.env.PATH ?? "").split(path.delimiter), ...extra]) {
+    const p = path.join(dir, name)
+    if (dir !== "" && fs.existsSync(p)) {
+      return p
+    }
+  }
+  return null
+}
+
 const fail = (msg) => {
   console.error(`bench/postgres/run.mjs: ${msg}`)
   process.exit(2)
@@ -76,12 +97,15 @@ const fail = (msg) => {
 let rounds = 12
 let validate = false
 let unix = false
+let rust = true
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
     rounds = Number(argv[++i])
   } else if (argv[i] === "--unix") {
     unix = true
+  } else if (argv[i] === "--no-rust") {
+    rust = false
   } else if (argv[i] === "--validate") {
     validate = true
   } else {
@@ -181,7 +205,9 @@ fs.mkdirSync(outDir, { recursive: true })
 const exe = path.join(outDir, "nish")
 const copy = path.join(outDir, "nish-copy")
 const twin = path.join(outDir, "twin")
-for (const f of [exe, copy, twin]) {
+const rustDir = path.join(outDir, "rust")
+const twinRs = path.join(rustDir, "target", "release", "twin-rs")
+for (const f of [exe, copy, twin, twinRs]) {
   fs.rmSync(f, { force: true })
 }
 fs.rmSync(path.join(outDir, "nish.ir"), { recursive: true, force: true })
@@ -223,6 +249,48 @@ if (!unix) {
   if (lacks !== null) {
     fail(`the C twin is not built as hardened as a Nish binary\n${lacks}`)
   }
+}
+
+// The Rust twin, when there is a cargo to build twin.rs with.
+const home = path.join(os.homedir(), ".cargo", "bin")
+const cargo = rust && !unix ? process.env.CARGO || which("cargo", [home]) : null
+if (rust && !unix && cargo === null) {
+  console.error("note: cargo not found; the Rust twin (tokio-postgres) is left out (set CARGO=<path>)")
+}
+let rustVersions = null
+if (cargo !== null) {
+  fs.mkdirSync(path.join(rustDir, "src"), { recursive: true })
+  fs.copyFileSync(path.join(here, "twin.rs"), path.join(rustDir, "src", "main.rs"))
+  fs.writeFileSync(
+    path.join(rustDir, "Cargo.toml"),
+    [
+      '[package]\nname = "twin-rs"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n',
+      // An empty workspace keeps cargo from looking above build/ for one.
+      "[workspace]\n",
+      // Pinned, so a rerun builds the crates the figures were measured with;
+      // no TLS and no tokio features beyond the runtime the connection needs.
+      "[dependencies]",
+      'tokio-postgres = { version = "=0.7.18", default-features = false, features = ["runtime"] }',
+      'tokio = { version = "=1.54.1", default-features = false, features = ["rt", "net", "time"] }',
+      'futures-util = { version = "=0.3.34", default-features = false, features = ["alloc"] }',
+      'libc = "=0.2.191"\n',
+      // The speed profile's shape: -O3, one unit, LTO across the Rust crates.
+      '[profile.release]\nopt-level = 3\ncodegen-units = 1\nlto = "fat"\npanic = "abort"\nstrip = "symbols"\n',
+    ].join("\n")
+  )
+  run(
+    cargo,
+    ["build", "--release", "--quiet", "--manifest-path", path.join(rustDir, "Cargo.toml")],
+    "cargo twin-rs"
+  )
+  const lock = fs.readFileSync(path.join(rustDir, "Cargo.lock"), "utf8")
+  const crate = (name) => lock.match(new RegExp(`name = "${name}"\nversion = "([^"]+)"`))?.[1] ?? "unknown"
+  const rustc = run(
+    process.env.RUSTC || which("rustc", [home]) || "rustc",
+    ["--version"],
+    "rustc --version"
+  ).trim()
+  rustVersions = `tokio-postgres ${crate("tokio-postgres")}, tokio ${crate("tokio")}, ${rustc}`
 }
 
 const pgCtl = (args, what) => run(...asPostgres(path.join(pgBin, "pg_ctl"), ["-D", data, ...args]), what)
@@ -276,9 +344,12 @@ const runOnce = (bin, w, dir) => {
 }
 
 // --unix: the build and its copy, over TCP and over the socket.
-const bins = unix ? [exe, copy, exe, copy] : [exe, copy, twin]
-const dirs = unix ? [null, null, sock, sock] : [null, null, null]
-const labels = unix ? ["nish tcp", "copy tcp", "nish unix", "copy unix"] : ["nish", "nish copy", "C"]
+const withRust = cargo !== null
+const bins = unix ? [exe, copy, exe, copy] : [exe, copy, twin, ...(withRust ? [twinRs] : [])]
+const dirs = bins.map((_, k) => (unix && k >= 2 ? sock : null))
+const labels = unix
+  ? ["nish tcp", "copy tcp", "nish unix", "copy unix"]
+  : ["nish", "nish copy", "C", ...(withRust ? ["Rust"] : [])]
 
 if (validate) {
   for (const w of WORKLOADS) {
@@ -390,6 +461,9 @@ console.log(
   `postgres: ${timed} rounds; PostgreSQL ${server},` +
     ` libpq ${pgConfig("--version").replace(/^PostgreSQL /, "")}; ${os.cpus().length} cores`
 )
+if (rustVersions !== null) {
+  console.log(`  Rust: ${rustVersions}, current-thread runtime`)
+}
 for (let w = 0; w < WORKLOADS.length; w++) {
   const [n, c, t] = cpus[w]
   console.log(`${WORKLOADS[w].name}: ${answers[w]}`)
@@ -416,4 +490,21 @@ for (let w = 0; w < WORKLOADS.length; w++) {
       ` qps median ${((Math.abs(median(qpss[w][0]) - median(qpss[w][1])) / median(qpss[w][0])) * 100).toFixed(1)}%;` +
       ` ${seen ? "the cpu difference is outside it and both IQRs" : "the cpu difference is inside the noise"}`
   )
+  if (withRust) {
+    // Rust less C, and the build less Rust: each judged against the same
+    // noise band and the IQRs of its own two sides.
+    const r = cpus[w][3]
+    for (const [name, a, b, qa, qb] of [
+      ["Rust - C   ", r, t, qpss[w][3], qpss[w][2]],
+      ["nish - Rust", n, r, qpss[w][0], qpss[w][3]],
+    ]) {
+      const d = median(a) - median(b)
+      const out = Math.abs(d) > band && Math.abs(d) > iqr(a) && Math.abs(d) > iqr(b)
+      console.log(
+        `  ${name} cpu median ${signed(d)} (${((d / median(b)) * 100).toFixed(1)}% of the second's median;` +
+          ` ${out ? "outside the noise band and both IQRs" : "inside the noise"}); qps median` +
+          ` ${(((median(qa) - median(qb)) / median(qb)) * 100).toFixed(1)}% of the second's`
+      )
+    }
+  }
 }

@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 20 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 21 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -537,4 +537,29 @@ The message of a warning `--no-warn-performance` turns off contains:
 
 ```text
 …beside the compatibility dialect: a bare `number` is the 32-bit integer
+```
+
+## NL9021
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? …
+```
+
+[`nl9021_nullish_never_missing.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9021_nullish_never_missing.ts) (compiled with `--compat=nullish`):
+
+```ts
+// Under `--compat=nullish` a `??` whose left operand can never be missing
+// compiles to that operand, as Node computes it. NL9021 names the default the
+// build drops, so the program can say what it means.
+const f = (a: number): number => a ?? 1
+
+export const main = (): void => {
+  console.log(f(4))
+}
+```
+
+```text
+`a` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? 1`)
 ```
