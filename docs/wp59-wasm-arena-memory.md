@@ -4,7 +4,7 @@
 wasm-host` module still has one memory, exports it, and holds every pointer
 and length its kept graph traces to the arena
 ([security record](security/wasm-host.md), WH-10). The stages are in §9 and
-on [the roadmap page](roadmap/wp59-wasm-arena-memory.md). S3 waits on the
+on [its open-work issue](https://github.com/amritk/nish/issues/1861). S3 waits on the
 owner (§8). The plan that tracks the stages is
 [`.claude/plans/wp59-wasm-arena-memory.plan.md`](../.claude/plans/wp59-wasm-arena-memory.plan.md).
 

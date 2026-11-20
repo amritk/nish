@@ -37,22 +37,41 @@ reference documents are [`docs/LANGUAGE.md`](./docs/LANGUAGE.md) (what the langu
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (how the compiler is put
 together); [`docs/MASTER_PLAN.md`](./docs/MASTER_PLAN.md) is the work-package
 plan, with the conventions every agent follows in §7 and a brief template in §8,
-and [`docs/roadmap/`](./docs/roadmap/index.md) holds each package's state, a box
-per stage, and the stage to do next.
+and the [Roadmap issue](https://github.com/amritk/nish/issues/1849) holds the open work, a parent issue per package
+and a sub-issue per stage.
 
 ## Picking up a work package
 
-For a contributor, or an agent asked to "pick up WP50":
+The open work is GitHub issues. The [Roadmap issue](https://github.com/amritk/nish/issues/1849)
+lists one parent issue per work package (or theme) in pickup order, and each
+parent's sub-issues are its stages, one pull request each. A plan file,
+`.claude/plans/<slug>.plan.md`, specifies each parent, the design note in
+`docs/` holds the reasons, and the issues hold the state.
 
-1. Open the package's page, `docs/roadmap/wpN-*.md`. The work is the item
-   under **Next**; if that item is an *(open question)*, ask before
-   starting.
-2. Read the section of the design note that **Next** links, and the open
-   pull requests and issues that name the package, so the work is not done twice.
-3. In the pull request that lands the stage, tick its box on the page, move
-   **Next** on, update the page's "Done" count and its row in
-   [`docs/roadmap/index.md`](./docs/roadmap/index.md), and update that
-   page's Up next list if the order changed.
+The labels, and how an agent claims, checkpoints, hands off and takes over an
+issue, are the `pickup` skill's
+([`pickup`](https://github.com/amritk/ai/blob/main/.claude/skills/pickup/SKILL.md)):
+
+- To build a whole package, run `/feature #<parent issue>` or `/feature --next`.
+- To work one stage by hand, run `/pickup #<stage issue>` or `/pickup next`.
+- For questions only the owner can answer, use `/decide`.
+- For new work, add a stage to the plan file in a PR, then run `/plan-issues`.
+
+What nish adds to the skill:
+
+- **When a package's last stage closes**, the PR that lands that stage also
+  sets the status line at the head of its design note to landed, with a
+  summary of what shipped. Nothing else under `docs/` records a package's state.
+- **A new package** gets its design note and plan file (with a `priority`) in
+  one PR, then `/plan-issues`.
+
+The workflow skills and agents (`feature`, `plan-issues`, `pickup`, `decide`,
+the review agents) are not in this repo. They come from the `ai` plugin in the
+`amritk` marketplace, which is the [`amritk/ai`](https://github.com/amritk/ai)
+repository. `.claude/settings.json` enables it for local sessions, and the
+owner's claude.ai account syncs it. A skill is named `/ai:<name>`, or `/<name>`
+where no other skill takes that name. Change a skill in `amritk/ai`, never here.
+This repo keeps only what is nish's own: the plans, the hooks and these rules.
 
 ## Workflow
 

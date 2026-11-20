@@ -31,7 +31,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(root, "build", "bench", "aes-gcm")
@@ -98,7 +98,7 @@ fs.mkdirSync(outDir, { recursive: true })
 const exe = path.join(outDir, "aes-gcm")
 const build = spawnSync(
   nishc.cmd,
-  [...nishc.prefix, "bench/aes-gcm.ts", "-o", `${rel(outDir)}/`, "--link", rel(exe), "--profile", "speed"],
+  compileArgv(nishc, ["bench/aes-gcm.ts", "-o", `${rel(outDir)}/`, "--link", rel(exe), "--profile", "speed"]),
   { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
 )
 if (build.status !== 0) {

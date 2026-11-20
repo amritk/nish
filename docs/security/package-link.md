@@ -1,7 +1,7 @@
 # Security record: a package's C link
 
 The record of `nish.link` (WP66 S7,
-[wp66-c-headers.md](https://github.com/amritk/nish/blob/main/docs/roadmap/wp66-c-headers.md)):
+[wp66-c-headers.md](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)):
 a `package.json` names C `libraries`, each passed to the linker as `-l<name>`,
 and C `sources`, each compiled with clang beside the runtime, for `nish run`
 and `--link`. A dependency's link takes effect only once the root package's

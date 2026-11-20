@@ -19,7 +19,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const srcDir = path.join(root, "bench", "simd-arx")
@@ -51,10 +51,10 @@ const exes = {}
 for (const form of ["simd", "scalar"]) {
   const src = path.join(srcDir, `chacha-${form}.ts`)
   const exe = path.join(outDir, `chacha-${form}`)
-  run(nishc.cmd, [...nishc.prefix, src, "--link", exe, "--profile", "speed"])
+  run(nishc.cmd, compileArgv(nishc, [src, "--link", exe, "--profile", "speed"]))
   if (form === "simd") {
     const irDir = path.join(outDir, "ir")
-    run(nishc.cmd, [...nishc.prefix, src, "-o", `${irDir}${path.sep}`, "--profile", "speed"])
+    run(nishc.cmd, compileArgv(nishc, [src, "-o", `${irDir}${path.sep}`, "--profile", "speed"]))
     const ir = fs.readFileSync(path.join(irDir, "chacha-simd.ll"), "utf8")
     if (/llvm\.(x86|aarch64)\./.test(ir)) {
       fail("chacha-simd.ll calls a target intrinsic; the kernel must lower to portable vector IR")

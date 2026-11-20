@@ -6,6 +6,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /** A layout with a pointer in it and one embedded, lent to C by an internal function. */
 const LAYOUTS = [
@@ -157,6 +158,9 @@ const measureSha = (types) =>
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, buildDir }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   const dir = path.join(buildDir, "ffi-struct")
   const write = (name, text) => {
     fs.mkdirSync(dir, { recursive: true })
@@ -164,8 +168,7 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.writeFileSync(file, text)
     return file
   }
-  const compile = (file, out, extra) =>
-    spawnSync(nish, [file, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+  const compile = (file, out, extra) => nishSync([file, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
 
   /**
    * Nish's struct as `llc` lays it out for `triple`: `count` constants (the
@@ -384,7 +387,7 @@ export const runFfiStructChecks = ({ only, has, check, skip, shown, nish, root, 
         denyUnsafe.stderr.includes("calls readStruct"),
       shown(denyUnsafe)
     )
-    const checked = spawnSync(nish, [read, "--emit-checked"], { cwd: root, encoding: "utf8" })
+    const checked = nishSync([read, "--emit-checked"], { cwd: root, encoding: "utf8" })
     check(
       "ffi_struct_read: --emit-checked records the `readStruct` import and its call",
       checked.status === 0 &&

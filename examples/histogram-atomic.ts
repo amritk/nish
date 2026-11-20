@@ -1,6 +1,11 @@
+// Opt-out from `--deny-panics`: `ThreadScope.spawn` reaches the `panic` in
+// `slotOutOfRange` (std/threads.ts); this file keeps no site of its own.
+// Follow-up: make `spawn`'s slot store in `std/threads.ts` panic-free, then
+// build this file with `--deny-panics`.
+//
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
 // bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task
-// counts its own values into a local `i32[]` that no other core touches, then adds each local count to its bin with one `add`, a
+// counts its own values into a local `u32[]` that no other core touches, then adds each local count to its bin with one `add`, a
 // single indivisible read-modify-write: 256 atomic adds per task instead of one
 // per value, no lock, and no increment lost to a race.
 //
@@ -46,12 +51,14 @@ class Shard {
  * Bins a shard by the top eight bits of each value into a local tally, then
  * adds the tally to the shared bins, one atomic add per bin. The values come
  * from Marsaglia's xorshift32, shifts and xors only, so they wrap the same way
- * natively and under Node.
+ * natively and under Node. A count is a `u32`, whose arithmetic wraps rather
+ * than panics: no bin holds more than the 8000000 values of a round, far below
+ * its 4294967295.
  */
 const binShard = (s: Shard): i32 => {
-  const local: i32[] = []
+  const local: u32[] = []
   for (let b: i32 = 0; b < BINS; b++) {
-    local.push(ZERO)
+    local.push(toU32(ZERO))
   }
   let x: i32 = s.seed
   for (let i: i32 = 0; i < s.n; i++) {
@@ -64,7 +71,7 @@ const binShard = (s: Shard): i32 => {
     }
   }
   for (let b: i32 = 0; b < toI32(local.length); b++) {
-    s.bins.add(b, local[b])
+    s.bins.add(b, toI32(local[b]))
   }
   return s.n
 }
@@ -82,14 +89,14 @@ const binPerValue = (s: Shard): i32 => {
   return s.n
 }
 
-/** The per-value-lock version's tally: every bin behind one lock. */
+/** The per-value-lock version's tally: every bin behind one lock, `u32` counts as in `binShard`. */
 class Hist {
-  bins: i32[]
+  bins: u32[]
 
   constructor() {
     this.bins = []
     for (let b: i32 = 0; b < BINS; b++) {
-      this.bins.push(ZERO)
+      this.bins.push(toU32(ZERO))
     }
   }
 }
@@ -115,13 +122,16 @@ const binLocked = (s: LockedShard): i32 => {
     x = x ^ (x << 5)
     const bin: i32 = x >>> 24
     using g = s.hist.lock()
-    g.value.bins[bin] = g.value.bins[bin] + 1
+    // Never false: `x >>> 24` is below 256, which is BINS; the test is what proves the index.
+    if (bin < toI32(g.value.bins.length)) {
+      g.value.bins[bin] = g.value.bins[bin] + 1
+    }
   }
   return s.n
 }
 
 /** The same values, binned on one thread into plain counters. */
-const binPlain = (seed: i32, n: i32, bins: i32[]): i32 => {
+const binPlain = (seed: i32, n: i32, bins: u32[]): i32 => {
   let x: i32 = seed
   for (let i: i32 = 0; i < n; i++) {
     x = x ^ (x << 13)
@@ -135,27 +145,32 @@ const binPlain = (seed: i32, n: i32, bins: i32[]): i32 => {
   return n
 }
 
-/** One round's bins, read into plain numbers whichever mode filled them. */
-const round = (mode: string, first: i32): i32[] => {
-  const out: i32[] = []
+/**
+ * One round's bins, read into plain numbers whichever mode filled them. Task
+ * `t` is seeded with `high | (first + t)`: `first + t` stays below 64, in the
+ * six low bits `high` (the shift moved left by six) leaves clear, so the `|`
+ * adds it and cannot overflow.
+ */
+const round = (mode: string, high: i32, first: u32): u32[] => {
+  const out: u32[] = []
   if (mode === "--single") {
     for (let b: i32 = 0; b < BINS; b++) {
-      out.push(ZERO)
+      out.push(toU32(ZERO))
     }
-    for (let t: i32 = 0; t < TASKS; t++) {
-      binPlain(first + t, PER_TASK, out)
+    for (let t: u32 = 0; t < toU32(TASKS); t++) {
+      binPlain(high | toI32(first + t), PER_TASK, out)
     }
   } else if (mode === "--lock") {
     const hist = new Mutex<Hist>(new Hist())
     const binned: i32[] = [0, 0, 0, 0]
     {
       using s = scope()
-      for (let t: i32 = 0; t < TASKS; t++) {
-        s.spawn(binLocked, new LockedShard(first + t, PER_TASK, hist), binned, t)
+      for (let t: i32 = 0; t < toI32(binned.length); t++) {
+        s.spawn(binLocked, new LockedShard(high | toI32(first + toU32(t)), PER_TASK, hist), binned, t)
       }
     }
     using g = hist.lock()
-    for (let b: i32 = 0; b < BINS; b++) {
+    for (let b: i32 = 0; b < toI32(g.value.bins.length); b++) {
       out.push(g.value.bins[b])
     }
   } else {
@@ -164,16 +179,17 @@ const round = (mode: string, first: i32): i32[] => {
     const perValue = mode === "--per-value"
     {
       using s = scope()
-      for (let t: i32 = 0; t < TASKS; t++) {
+      for (let t: i32 = 0; t < toI32(binned.length); t++) {
+        const seed = high | toI32(first + toU32(t))
         if (perValue) {
-          s.spawn(binPerValue, new Shard(first + t, PER_TASK, bins), binned, t)
+          s.spawn(binPerValue, new Shard(seed, PER_TASK, bins), binned, t)
         } else {
-          s.spawn(binShard, new Shard(first + t, PER_TASK, bins), binned, t)
+          s.spawn(binShard, new Shard(seed, PER_TASK, bins), binned, t)
         }
       }
     }
     for (let b: i32 = 0; b < bins.length; b++) {
-      out.push(bins.load(b))
+      out.push(toU32(bins.load(b)))
     }
   }
   return out
@@ -191,12 +207,15 @@ export const main = (): i32 => {
       shift = parseInt(arg)
     }
   }
-  let total: i32 = 0
-  let checksum: i32 = 0
+  // `u32` as the bins are: the total is 32000000 and the checksum stays below
+  // 1000003 * 32, both far inside 4294967295.
+  let total: u32 = 0
+  let checksum: u32 = 0
   // Every round seeds its shards afresh and folds its bins into the checksum,
   // so no round repeats another's work and none of it can be skipped.
-  for (let r: i32 = 0; r < ROUNDS; r++) {
-    const bins = round(mode, shift * 64 + r * TASKS + 1)
+  for (let r: u32 = 0; r < toU32(ROUNDS); r++) {
+    // `shift << 6` is `shift * 64` that wraps as Node's seed did, never panicking.
+    const bins = round(mode, shift << 6, r * toU32(TASKS) + 1)
     for (let b = 0; b < bins.length; b++) {
       total = total + bins[b]
       checksum = (checksum * 31 + bins[b]) % 1000003

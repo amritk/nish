@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { CACHE, fetchAll } from "../json-compare/fetch.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
@@ -48,7 +48,7 @@ fs.rmSync(outDir, { recursive: true, force: true })
 const build = (compiler, program, name, extra) => {
   const dir = path.join(outDir, name)
   const app = path.join(dir, "app")
-  execFileSync(compiler.cmd, [...compiler.prefix, program, "-o", `${dir}/`, "--link", app, ...extra], {
+  execFileSync(compiler.cmd, compileArgv(compiler, [program, "-o", `${dir}/`, "--link", app, ...extra]), {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],
   })

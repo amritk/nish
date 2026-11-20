@@ -45,7 +45,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const srcDir = path.join(root, "bench", "simd-s3a")
@@ -175,7 +175,7 @@ for (const kernel of KERNELS.filter((k) => only.has(k))) {
   const ll = path.join(outDir, `${kernel}-simd.ll`)
   run(
     nishc.cmd,
-    [...nishc.prefix, rel(path.join(srcDir, `${kernel}-simd.ts`)), "-o", rel(ll)],
+    compileArgv(nishc, [rel(path.join(srcDir, `${kernel}-simd.ts`)), "-o", rel(ll)]),
     `${kernel} simd IR`
   )
   const hit = fs
@@ -203,7 +203,7 @@ const build = (kernel) => {
       const src = path.join(srcDir, `${kernel}-${form}.ts`)
       run(
         nishc.cmd,
-        [...nishc.prefix, rel(src), "--link", rel(exe), "--profile", "speed"],
+        compileArgv(nishc, [rel(src), "--link", rel(exe), "--profile", "speed"]),
         `${kernel} ${form}`
       )
     }
@@ -226,7 +226,7 @@ const vectorised = (kernel, form) => {
   } else {
     input = path.join(outDir, `${kernel}-${form}.ll`)
     const src = path.join(srcDir, `${kernel}-${form}.ts`)
-    run(nishc.cmd, [...nishc.prefix, rel(src), "-g", "-o", rel(input)], `${kernel} ${form} -g`)
+    run(nishc.cmd, compileArgv(nishc, [rel(src), "-g", "-o", rel(input)]), `${kernel} ${form} -g`)
   }
   const r = run(CC, [...flags, rel(input)], `vectorizer remarks for ${kernel} ${form}`)
   const remarks = []

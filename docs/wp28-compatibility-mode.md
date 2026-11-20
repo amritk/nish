@@ -14,7 +14,7 @@ applications, by a margin two of them do not settle (§7.5). What the
 measurements leave for the owner to decide is in §10.
 [wp33-round-trip.md](wp33-round-trip.md) schedules the package as R6, after
 the way back out to TypeScript; its stages and their state are on the
-[roadmap page](roadmap/wp28-compatibility-mode.md). Three things have landed
+[open-work issue](https://github.com/amritk/nish/issues/1907). Three things have landed
 since this note was written that change its ground:
 
 **2026-10-30:** an arrow passed to a function-typed parameter of a top-level

@@ -40,7 +40,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 import { AMRITK_YAML_ENTRY, AMRITK_YAML_VERSION, FIXTURES, fetchAll, fixturePath } from "./fetch.mjs"
 
@@ -101,8 +101,7 @@ const IMPLS = [
     build: () => {
       fs.mkdirSync(outDir, { recursive: true })
       const exe = path.join(outDir, "main")
-      const args = [
-        ...nishc.prefix,
+      const args = compileArgv(nishc, [
         path.join(here, "main.ts"),
         "-o",
         `${outDir}/`,
@@ -110,7 +109,7 @@ const IMPLS = [
         exe,
         "--profile",
         "speed",
-      ]
+      ])
       const r = spawnSync(nishc.cmd, args, { encoding: "utf8" })
       if (r.error !== undefined || r.status !== 0) {
         fail(`building main.ts failed:\n${r.stdout}${r.stderr}`)

@@ -1265,12 +1265,12 @@ what the proposal does to it.
 | [AI.md](AI.md) `:205` | NL2048's row: an interface declares no method | agents writing Nish | rewritten to the narrowed NL2048 (stage 1) |
 | [AI.md](AI.md) `:294`, `:712` | dispatch is a `switch`; constraints | agents writing Nish | gains the `Dyn` idiom and when to prefer `<T extends I>` (stage 4) |
 | [guide classes-and-interfaces](guide/language/classes-and-interfaces.md) `:236` | constraints | users | a link to the new page `docs/guide/language/dynamic-dispatch.md` (stage 2, which ships the construct a user sees: CLAUDE.md's "the user guide moves with the language"; §9) |
-| [wp2-classes.md](wp2-classes.md) `:18`, `:120`–`138`; [roadmap/wp2-classes.md](roadmap/wp2-classes.md) `:15` | no vtable, by design | the history | historical notes; unchanged |
+| [wp2-classes.md](wp2-classes.md) `:18`, `:120`–`138` | no vtable, by design | the history | historical notes; unchanged |
 | [wp15-performance.md](wp15-performance.md) `:49`, `:60` | static dispatch as a speed property | the performance case | holds for every program without `Dyn` (I1) |
 | [wp18-generics.md](wp18-generics.md) `:295` | constraints monomorphise | D2 | holds (D2) |
-| [wp25-inheritance.md](wp25-inheritance.md) `:40`–`42`, `:155`–`160`; [roadmap/wp25-inheritance.md](roadmap/wp25-inheritance.md) `:15` | dynamic dispatch "is a work package of its own" | the pointer | repointed here by this PR |
+| [wp25-inheritance.md](wp25-inheritance.md) `:40`–`42`, `:155`–`160` | dynamic dispatch "is a work package of its own" | the pointer | repointed here by this PR |
 | [wp26-stdlib.md](wp26-stdlib.md) `:97` | the library avoids dynamic dispatch | `std/` | unchanged in this work package: no stage adopts `Dyn` in `std/` (§11) |
-| [wp28-compatibility-mode.md](wp28-compatibility-mode.md) `:144`, `:481`; [roadmap/wp28-compatibility-mode.md](roadmap/wp28-compatibility-mode.md) `:19` | C7: `extends` with virtual dispatch, in compat mode | the compat plan | unchanged; strict `Dyn` covers the interface half of C7, not `extends` |
+| [wp28-compatibility-mode.md](wp28-compatibility-mode.md) `:144`, `:481` | C7: `extends` with virtual dispatch, in compat mode | the compat plan | unchanged; strict `Dyn` covers the interface half of C7, not `extends` |
 | [wp51-function-references.md](wp51-function-references.md) `:1077` | no vtables: dispatch is closed-world | WP51 | intact: a `Dyn` set is closed and solved per program, and no stage adds a vtable |
 | [FAQ.md](FAQ.md) `:12`, [wp0-validator.md](wp0-validator.md) `:40` | JavaScript's dynamic dispatch is out | the strict subset | true: prototype dispatch stays out; a pointer to this note is added |
 | [README.md](../README.md) | (formerly) "There is no dynamic dispatch (classes have no inheritance, so every method call names one function)" | the front page | the sentence left the front page on `main`; nothing to repoint |

@@ -41,7 +41,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -126,8 +126,7 @@ const buildInto = (cmd, prefix, cwd, dir, bin) => {
   fs.mkdirSync(dir, { recursive: true })
   const r = spawnSync(
     cmd,
-    [
-      ...prefix,
+    compileArgv({ cmd, prefix }, [
       path.join(root, "bench", "pg-decode", "main.ts"),
       "-o",
       `${dir}/`,
@@ -136,7 +135,7 @@ const buildInto = (cmd, prefix, cwd, dir, bin) => {
       "--profile",
       "speed",
       ...(cpu === null ? [] : ["--cpu", cpu]),
-    ],
+    ]),
     { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   )
   if (r.status !== 0) {

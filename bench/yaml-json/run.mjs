@@ -27,7 +27,7 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const here = import.meta.dirname
 const root = path.resolve(here, "..", "..")
@@ -130,8 +130,7 @@ const generate = (paths) => {
 const build = () => {
   fs.mkdirSync(outDir, { recursive: true })
   const exe = path.join(outDir, "main")
-  const args = [
-    ...nishc.prefix,
+  const args = compileArgv(nishc, [
     path.join(here, "main.ts"),
     "-o",
     `${outDir}/`,
@@ -139,7 +138,7 @@ const build = () => {
     exe,
     "--profile",
     "speed",
-  ]
+  ])
   const r = spawnSync(nishc.cmd, args, { encoding: "utf8" })
   if (r.error !== undefined || r.status !== 0) {
     fail(`building main.ts failed:\n${r.stdout}${r.stderr}`)

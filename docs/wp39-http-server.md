@@ -1,6 +1,6 @@
 # WP39: The HTTP server — a TechEmpower entry, then a general-purpose server
 
-**Status (2026-11-20): every stage is built but E9, submitting, which is the owner's, and G9, which is deferred; [the roadmap page](roadmap/wp39-http-server.md) keeps the state.** The rest of this paragraph and §1 are the record as of 2026-11-08. E1, E3, E4 and E5 are built. E1 is
+**Status (2026-11-20): every stage is built but E9, submitting, which is the owner's, and G9, which is deferred; [its open-work issue](https://github.com/amritk/nish/issues/1850) keeps the state.** The rest of this paragraph and §1 are the record as of 2026-11-08. E1, E3, E4 and E5 are built. E1 is
 `tcpListenFlags`, `SO_REUSEPORT` on a TCP listener (#733). E3 is `JsonWriter`
 in `std/json.ts`. E4 is `httpDateWrite` in `std/net/http-fields.ts` and
 `HttpDate` in `std/net/http1-server.ts`. E5 is `bench/techempower/`, pinned by

@@ -7648,7 +7648,7 @@ return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
 what it adds is a name, so one C pointer type is never passed where another is
 wanted** (`tests/cases/ffi_opaque_handle`,
 [cookbook](IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
-`docs/roadmap/wp66-c-headers.md` S3):
+`docs/wp66-c-headers.md` S3):
 
 ```ts
 declare class Db {}
@@ -10831,8 +10831,8 @@ class Cell implements Compact {
   layout as full pointers**, each with its own code: in a build with `--emit-napi` or
   `--emit-napi-async`, also beside `--emit-header`, because the addon runs
   in Node's process, which Nish does not own, at the name of each exported
-  function (every function, under `--no-strict-exports`) and the constructor
-  of each exported class whose signature holds one (NL4020,
+  function (every function, under `--no-strict-exports`) and each
+  constructor and method of an exported class whose signature holds one (NL4020,
   `compact_reject_export`, `compact_reject_header_export`), which names the
   first compact class of its return type and then its parameters in order,
   and at the name of each compact class no NL4020 names (NL4021,

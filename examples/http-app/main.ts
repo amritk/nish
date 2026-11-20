@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: calls into `std/json`, `std/net/handler`,
+// `std/net/http1-server` and `std/net/router` reach their panic sites, and
+// app.ts's `String.fromBytes` slice keeps a range check the checker cannot yet
+// discharge. Follow-up: make those modules panic-free and teach the prover that
+// slice's bound, then build this program with `--deny-panics`.
+//
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
 // SIGINT or SIGTERM.
@@ -68,7 +74,10 @@ export const main = (): i32 => {
   }
   console.log(`http-app: stopping, draining ${h.connections()} connections`)
   h.drain()
-  const deadline: i64 = monotonicNanos() + toI64(config.drainMs) * NANOS_PER_MS
+  // `u64`, which wraps rather than panics, and cannot here: the clock counts
+  // from boot and `--drain-ms` has nine digits at most, so the sum stays
+  // under 2^60.
+  const deadline: i64 = toI64(toU64(monotonicNanos()) + toU64(config.drainMs) * toU64(NANOS_PER_MS))
   let forced = false
   while (h.connections() > 0 && monotonicNanos() < deadline && !forced) {
     serveTurn(app, DRAIN_TURN_MS)

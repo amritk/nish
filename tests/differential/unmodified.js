@@ -29,6 +29,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { compilerFor } from "./lib.js"
+import { seedArgs } from "../self/seed.js"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const prelude = path.join(root, "runtime", "nish.mjs")
@@ -92,7 +93,7 @@ const programs = () => {
 /** Compile and link with `--number-mode f64`, then run the binary. */
 const native = ({ name, source }, compiler) => {
   const exe = path.join(work, name)
-  const built = spawnSync(compiler.cmd, [...compiler.prefix, source, "--number-mode", "f64", "--link", exe], {
+  const built = spawnSync(compiler.cmd, seedArgs(compiler, [source, "--number-mode", "f64", "--link", exe]), {
     cwd: root,
     encoding: "utf8",
   })

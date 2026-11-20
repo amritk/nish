@@ -81,7 +81,7 @@ import { fileURLToPath } from "node:url"
 import { jobsFrom, pool, run } from "./pool.js"
 import { readCodesRegistry } from "../scripts/codes-registry.js"
 import { extraArgs, linkPrograms, root } from "./self/corpus.js"
-import { defaultSeedSpec } from "./self/seed.js"
+import { defaultSeedSpec, seedArgs } from "./self/seed.js"
 
 const WORDINGS = path.join(root, "tests", "wordings")
 const CASES = path.join(root, "tests", "cases")
@@ -258,7 +258,7 @@ const compile = async (compiler, program) => {
   fs.mkdirSync(out, { recursive: true })
   const result = await run(
     compiler.cmd,
-    [...compiler.prefix, named, "--json", "-o", `${out}${path.sep}`, ...program.args],
+    seedArgs(compiler, [named, "--json", "-o", `${out}${path.sep}`, ...program.args]),
     { cwd: root, encoding: "utf8" }
   )
   const objects = []

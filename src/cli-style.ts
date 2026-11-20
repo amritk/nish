@@ -92,6 +92,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
   menu.row("--deny-panics", "", "refuse an unproven panic in your package")
+  menu.row("--allow-panics", "", "undo an earlier --deny-panics")
   menu.row("--deny-retention", "", "refuse retained arena memory in your package")
   menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")

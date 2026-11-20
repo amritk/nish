@@ -17,6 +17,7 @@
 // Linux only (wait4's ru_maxrss), run from the repository root.
 import { execFileSync, spawnSync } from "node:child_process"
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
@@ -56,7 +57,10 @@ const field = (text, name) => {
 const cc = process.env.CC ?? "clang"
 execFileSync(cc, ["-O2", "bench/union-result/peak.c", "-o", `${out}/peak`])
 for (const v of ["union", "wrapper"]) {
-  execFileSync("build/nish", [`bench/union-result/${v}.ts`, "--link", `${out}/${v}`])
+  execFileSync(
+    "build/nish",
+    withAllowPanics("build/nish", [`bench/union-result/${v}.ts`, "--link", `${out}/${v}`])
+  )
 }
 copyFileSync(`${out}/union`, `${out}/union2`)
 

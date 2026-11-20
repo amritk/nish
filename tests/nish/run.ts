@@ -110,15 +110,17 @@ const SLOWEST: i32 = 5;
 class Tools {
   /** The argv prefix that runs the compiler under test: `["node", "<entry>.js"]`, or just a binary. */
   compiler: string[];
+  /** This process's scratch files for the golden cases. */
+  work: string;
+  /** This process's link work directory, one subdirectory per program. */
+  linkWork: string;
   clang: boolean;
   llvmAs: boolean;
   opt: boolean;
   /** `env(1)`, and specifically an `env` that honours `-u`. See `hasEnvTool`. */
   env: boolean;
-  /** This process's scratch files for the golden cases. */
-  work: string;
-  /** This process's link work directory, one subdirectory per program. */
-  linkWork: string;
+  /** Whether the compiler's `--help` lists `--allow-panics`. See `listsAllowPanics`. */
+  allowPanics: boolean;
 
   constructor(
     clang: boolean,
@@ -137,14 +139,43 @@ class Tools {
     this.env = env;
     const node = compiler.endsWith(".js") || compiler.endsWith(".mjs") || compiler.endsWith(".cjs");
     this.compiler = node ? ["node", compiler] : [compiler];
+    this.allowPanics = listsAllowPanics(this.compiler, work);
   }
 }
 
-/** The compiler's argv prefix followed by `args`: one compile's whole command line. */
+/**
+ * Whether `compiler --help` lists `--allow-panics`, the question
+ * `tests/allow-panics.js` asks for the JS harnesses. Every case and link program
+ * here is a test that may panic on purpose, so its compile passes the flag; a
+ * released compiler older than the flag exits 2 on it, so it is asked first. A
+ * case whose `.args` say `--deny-panics` still builds strict: the flag goes
+ * first and the last of the two wins.
+ */
+const listsAllowPanics = (compiler: string[], work: string): boolean => {
+  const argv: string[] = [];
+  for (const part of compiler) {
+    argv.push(part);
+  }
+  argv.push("--help");
+  const out = `${work}/help.probe.out`;
+  if (spawnSyncTo(argv, out, `${work}/help.probe.err`) !== 0) {
+    return false;
+  }
+  const help = readFileSyncOrNull(out);
+  return help !== null && help.indexOf("--allow-panics") >= 0;
+};
+
+/**
+ * The compiler's argv prefix, `--allow-panics` when it lists the flag, and then
+ * `args`: one compile's whole command line.
+ */
 const compilerArgv = (tools: Tools, args: string[]): string[] => {
   const argv: string[] = [];
   for (const part of tools.compiler) {
     argv.push(part);
+  }
+  if (tools.allowPanics) {
+    argv.push("--allow-panics");
   }
   for (const arg of args) {
     argv.push(arg);
