@@ -1,6 +1,6 @@
 import { JsonWriter } from "nish/json";
 import { JsonLimits } from "nish/json-tokenizer";
-import { JsonDecoder, jsonDecodeUnion, jsonEncode } from "nish/json-typed";
+import { JsonDecoder, jsonDecode, jsonDecodeUnion, jsonEncode } from "nish/json-typed";
 
 // A tagged union whose tag enum is a string enum: each variant's tag is its
 // member's string on the wire, unless `static json = { tag }` names another.
@@ -44,4 +44,28 @@ export const figure = (text: string): void => {
   const w = new JsonWriter(new Array<u8>(256), 0);
   jsonEncode(w, got);
   console.log(`${d.failed} ${String(got.kind)} ${w.text()} ${w.text() === text}`);
+};
+
+// One document holding a string-enum field, an array of them, a `| null`
+// array of them and a union whose tag is the same string enum.
+class Account {
+  shape: Shape = Shape.Circle;
+  shapes: Shape[];
+  past: Shape[] | null = null;
+  figure: Figure;
+  constructor() {
+    const none: Shape[] = [];
+    this.shapes = none;
+    this.figure = circle();
+  }
+}
+
+export const account = (text: string): void => {
+  const src = shapeBytes(text);
+  const d = new JsonDecoder(src, 0, toI32(src.length), new JsonLimits());
+  const a = new Account();
+  const code = jsonDecode(d, a);
+  const w = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(w, a);
+  console.log(`${code} ${w.text()} ${w.text() === text}`);
 };

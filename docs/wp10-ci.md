@@ -104,7 +104,10 @@ A pull request that touches only the docs used to pay for every side job:
 about 42 of a run's ~119 runner-minutes go to seven jobs that read only the
 compiler and some test trees. Those jobs are now **lanes**. The `scope` job runs
 `scripts/ci-scope.mjs`, which reads the pull request's changed files and labels
-from the API and writes `<lane>=true|false`. A lane job `needs: scope` and gates
+from the API and writes `<lane>=true|false` and a one-line `why=`: the reason
+every lane runs (a `ci:full` label, a deleted file, a path that changes what CI
+runs, ...), else `lanes off: <names>; ...` naming each lane that is off, else
+`every lane reads a changed path`. A lane job `needs: scope` and gates
 every work step on `needs.scope.outputs.<lane> != 'false'`, so an empty or missing
 output runs it. If `scope` itself fails, GitHub skips the jobs that need it, and
 `ci-gate` fails on that. When the lane is off, the job's first step writes why to the job
