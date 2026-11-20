@@ -25,7 +25,7 @@ import { Mutex, scope } from "nish/threads"
 /**
  * The shared tally. A field initialiser is a literal, so the array is built in
  * the constructor. A count is a `u32`, whose arithmetic wraps rather than
- * panics: the most any bin holds, 800000000, is far below its 4294967295.
+ * panics: a round's fresh `Hist` takes 100000000 values, far below its 4294967295.
  */
 class Hist {
   bins: u32[]

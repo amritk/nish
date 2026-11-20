@@ -122,6 +122,7 @@ const binLocked = (s: LockedShard): i32 => {
     x = x ^ (x << 5)
     const bin: i32 = x >>> 24
     using g = s.hist.lock()
+    // Never false: `x >>> 24` is below 256, which is BINS; the test is what proves the index.
     if (bin < toI32(g.value.bins.length)) {
       g.value.bins[bin] = g.value.bins[bin] + 1
     }
