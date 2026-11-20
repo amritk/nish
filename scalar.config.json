@@ -3640,13 +3640,6 @@
                 }
               }
             }
-          },
-          "/roadmap": {
-            "type": "link",
-            "title": "Roadmap",
-            "icon": "phosphor/regular/map-trifold",
-            "url": "https://github.com/amritk/nish/issues/1849",
-            "newTab": true
           }
         }
       }
