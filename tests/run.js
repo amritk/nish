@@ -25881,16 +25881,16 @@ if (dealtHere("cliChecks")) {
     // (`--link`, or `nish run`), so each is linked.
     const benchWant = {
       "bench/goose/tree.ts": [
-        "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
+        "bench/goose/tree.ts:21:7: layout: TNode: compact, 24 → 12 bytes",
         "explain-layout: 1 of 1 classes compact",
       ],
       "bench/goose/bintrees.ts": [
-        "bench/goose/bintrees.ts:11:7: layout: TNode: 3 no saving that pays: TNode saves 16 → 8, under 24 bytes, 16 → 16 bytes",
+        "bench/goose/bintrees.ts:18:7: layout: TNode: 3 no saving that pays: TNode saves 16 → 8, under 24 bytes, 16 → 16 bytes",
         "explain-layout: 0 of 1 classes compact",
       ],
       "bench/wp48-refs/sibling.ts": [
-        "bench/wp48-refs/sibling.ts:13:7: layout: Node: compact, 32 → 20 bytes",
-        "bench/wp48-refs/sibling.ts:26:7: layout: Builder: 2 no link, 16 → 16 bytes",
+        "bench/wp48-refs/sibling.ts:22:7: layout: Node: compact, 32 → 20 bytes",
+        "bench/wp48-refs/sibling.ts:35:7: layout: Builder: 2 no link, 16 → 16 bytes",
         "explain-layout: 1 of 2 classes compact",
       ],
     }

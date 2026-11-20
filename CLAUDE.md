@@ -33,6 +33,12 @@ the whole `npm test` locally only when the change is to the suite itself
 (`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
 and say so in the PR body.
 
+**`npm run lint` is not CI's lint job.** Before pushing, also run
+`npm run lint:dead` and `node docs/check-links.mjs` (the job's full list is in
+`.github/workflows/ci.yml`). knip fails on an export your change leaves unused,
+and the link check fails when a renamed heading breaks an anchor in a file you
+never opened; `npm run lint` passes both.
+
 A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
 narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
 release-note words) in the same PR; run nish-cmp before pushing.
@@ -114,7 +120,11 @@ count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 `node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
 `build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
 merges, regenerates the goldens and stages them without committing. Sync after
-any `src/` or `std/` change lands on `main`, even with no textual conflict. A
+any `src/` or `std/` change lands on `main`, even with no textual conflict.
+A sync can stale a fact the branch pins without a conflict: after it, run
+`node scripts/gen-diagnostic-codes.mjs --check` (a code the branch adds may now
+be taken) and recount any `**Done:** N of M` the branch ticks against its `[x]`
+boxes, on the work package's page and in `docs/roadmap/index.md`. A
 new positive `tests/cases/*` is registered with
 `node tests/differential/goldens.js --update` in the same commit. Details:
 `.claude/selfhost.md` → "The goldens". `docs/reference/` (and its routes in

@@ -1,4 +1,4 @@
-// WP48: `--emit-napi-async` refuses like `--emit-napi`: the export at its signature, the class no export names at its name.
+// WP48: `--emit-napi-async` refuses like `--emit-napi`: the export at its signature (a method of an exported class too), the class no export names at its name.
 import { Compact } from "nish:compact"
 
 export class Cell implements Compact {
@@ -7,6 +7,9 @@ export class Cell implements Compact {
   constructor(value: i32, next: Cell | null) {
     this.value = value
     this.next = next
+  }
+  prepend(value: i32): Cell {
+    return new Cell(value, this)
   }
 }
 

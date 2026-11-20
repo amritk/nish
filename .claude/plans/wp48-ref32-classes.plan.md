@@ -43,7 +43,7 @@ stages:
     title: WP48 S4 — the goose tree programs, sibling.ts and the guide's memory page say what the rule picks
     goal: bench/goose tree programs, bench/wp48-refs/sibling.ts and docs/guide's memory page state what the rule picks and when to override it with implements Wide.
     verification: node tests/run.js cli && node docs/check-links.mjs && npm run lint
-    status: pending
+    status: completed
     issue: 1900
     todos:
       - id: s4-goose

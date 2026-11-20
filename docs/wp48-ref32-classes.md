@@ -562,7 +562,37 @@ builds. Before stage 3 no class was compact without `implements Compact`.
 | `tests/link/net_http_server*` | `P256ProjectivePoint`, `QuicKeysSlot` (held by `P256PointScratch`, `QuicListener`) | holders only | refused, not `R` itself |
 | `tests/link/net_fetch_async_https` | `FetchResponse` (held by the test's `Outcome`) | holder 24 → 16 | refused, not `R` itself |
 | `tests/link/net_serve_pg` | `PgConnection` (held by `PgPoolSlot`) | holder 64 → 56 | refused, not `R` itself |
-| the compiler (`src/compile.ts`) | any | 19 of 307 (#1736 counted 18; `SourceFile`, via `CheckContext` 448 → 440, is the 19th), all holder-only but `FunctionSig` 224 → 216 and `PanicSite` 56 → 48 | 0 of 307 |
+| the compiler (`src/compile.ts`) | the 19 below | 19 of 307 (#1736 counted 18; `SourceFile`, via `CheckContext` 448 → 440, is the 19th), all holder-only but `FunctionSig` 224 → 216 and `PanicSite` 56 → 48 | 0 of 307 |
+
+The compiler's 19 under #1736's rule, from `--explain-layout` on
+`src/compile.ts` at 568e1ef5 with test 3 set back to #1736's (a scratch
+build, not committed). Each line sizes its holders as if that class alone
+were compact, so a holder's figure differs between lines (`CheckContext` 448 →
+432 for `Node`'s two links, 448 → 440 for one). The final rule refuses all 19
+at test 3: only `FunctionSig` and `PanicSite` save anything of their own, and
+neither saves a quarter.
+
+| class | own size | holders that shrink, before → after |
+| --- | --- | --- |
+| `Node` (`nodes.ts`) | 40 → 40 | `LoopScope` 40 → 32, `PrivateArray` 24 → 16, `FunctionFacts` 440 → 432, `FunctionSig` 224 → 216, `FieldInfo` 104 → 96, `StructInfo` 184 → 176, `ConstInfo` 112 → 104, `ImportBinding` 88 → 80, `CheckedProgram` 928 → 920, `CheckContext` 448 → 432, `MinusLiteral` 16 → 8, `ElementRef` 56 → 48, `CollectionNames` 16 → 8, `Site` 24 → 16, `FlowTarget` 24 → 16, `AppendRange` 56 → 40, `GuardedAdd` 16 → 8, `ScopeSite` 32 → 24, `StatementSite` 16 → 8, `LateUse` 16 → 8, `Trail` 80 → 72, `Around` 40 → 32 |
+| `StringBuilder` (`strings.ts`) | 8 → 8 | `Lexer` 72 → 64 |
+| `AnalysisUnit` (`attributes.ts`) | 16 → 16 | `DropOrigin` 48 → 40 |
+| `FunctionSig` (`program.ts`) | **224 → 216** | `ParamUse` 24 → 12, `RangeSite` 32 → 24, `CaptureSlot` 16 → 8, `CaptureTarget` 16 → 8, `HandleClose` 24 → 16, `StoreScan` 88 → 80 |
+| `FunctionBindings` (`program.ts`) | 16 → 16 | `Instantiation` 192 → 184 |
+| `StructInstantiation` (`program.ts`) | 40 → 40 | `CheckContext` 448 → 440, `StructExpansion` 16 → 8 |
+| `Instantiation` (`program.ts`) | 192 → 192 | `FunctionSig` 224 → 216, `Expansion` 16 → 8 |
+| `FieldInfo` (`program.ts`) | 104 → 104 | `ArrayBase` 48 → 40 |
+| `StructInfo` (`program.ts`) | 184 → 184 | `FunctionSig` 224 → 216, `FieldInfo` 104 → 96, `JsonField` 64 → 56, `JsonPart` 56 → 48 |
+| `SourceFile` (`diagnostics.ts`) | 48 → 48 | `CheckContext` 448 → 440 |
+| `StringMap` (`map.ts`) | 48 → 48 | `StructInfo` 184 → 176, `StructRegistry` 24 → 16, `CheckedProgram` 928 → 920, `CheckContext` 448 → 440, `DiagnosticSink` 48 → 40, `StringSet` 8 → 4, `TypeTable` 168 → 160, `IRFunction` 184 → 176, `Demoter` 136 → 120, `Compilation` 232 → 224, `CallNode` 64 → 56, `InlineWalk` 80 → 72, `CalleeDrops` 80 → 72, `Importer` 248 → 232 |
+| `StringSet` (`map.ts`) | 8 → 8 | `FunctionFacts` 440 → 424, `Emitter` 424 → 416, `CheckedProgram` 928 → 912, `CheckContext` 448 → 440, `Assigned` 16 → 8, `ExternalFunction` 32 → 24, `Walk` 264 → 248, `Importer` 248 → 240 |
+| `Local` (`symbols.ts`) | 64 → 64 | `CheckContext` 448 → 440, `Fact` 32 → 16, `Offset` 16 → 8, `FlowTarget` 24 → 16, `SiblingSpawn` 32 → 24, `Declared` 24 → 16 |
+| `PanicSite` (`panics.ts`) | **56 → 48** | none |
+| `EntryFacts` (`bounds.ts`) | 56 → 56 | `RangeSite` 32 → 24, `RangeBody` 120 → 112 |
+| `IRBlock` (`ir.ts`) | 16 → 16 | `LoopTarget` 48 → 40, `IRFunction` 184 → 176 |
+| `RefModule` (`fnref-places.ts`) | 40 → 40 | `Builder` 8 → 4 |
+| `DropOrigin` (`arena-report.ts`) | 48 → 48 | `ArenaSite` 64 → 56 |
+| `ManifestList` (`manifest.ts`) | 24 → 24 | `ManifestCompat` 16 → 8, `LinkRequest` 16 → 8, `CapabilityManifest` 72 → 64 |
 
 No `std/` class is picked, `std/crypto` included (ECC-9 in
 `docs/security/crypto-ecc.md`), so the compiler and every program that picks
@@ -623,6 +653,29 @@ bytes a round and its peak RSS doubles. `ZlibCompressor`'s 4 bytes and
 `JsonDocument`'s 8 are one object each; the compiler's peak RSS moves by
 1.4 MB of 2 GB. The figures support the tightened test 3 (`R`'s own saving,
 at least 24 bytes, at least a quarter) as it stands.
+
+### 5.6 Stage 4: `tree.ts` at the README's size
+
+§5.5's gate ran `tree.ts` at its own depth, 20. Stage 4 restates the Goose
+README's loss at the README's size, depth 24 (33,554,431 nodes): `build/nish`
+at 568e1ef5, the program built at depth 24 from its `bench:n` line with
+`--link --profile speed`, once with `--compact on` (the default) and once with
+`--compact off`. 11 rounds, alternating which ran first, each run a fresh
+process under `bench/rss.c`, process wall, one 4-core cloud container. Both
+print 33554431 and 134079322148.
+
+| build | median wall ms | peak RSS | binary bytes |
+| --- | ---: | ---: | ---: |
+| `--compact off` | 2805.6 | 788,320 KB | 7,832 |
+| `--compact on` | 1888.2 | 394,720 KB | 9,360 |
+
+Median per-round gap −33.5%, range −37.6% to −30.0%: every round gained.
+The binary grows by the range allocator (1,528 bytes). §5.2's prototype gave
+0.61x at this size; this is 0.67x, in another session whose `--compact off`
+runs were 31% slower than §5.2's `ptr`, so the two ratios are not one
+measurement. Goose was not rebuilt; its README figure, 395,320 KB, is now
+level with Nish's peak RSS, and its time is from another session, so no
+time ratio against Goose is claimed.
 
 ## 6. Where the emitter changes
 

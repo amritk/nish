@@ -7,6 +7,13 @@
 // index folded into each node so no pass can be hoisted. A node is a class
 // with two nullable links; every node outlives `build`, so they all come from
 // `main`'s scope and are given back in one release when it returns.
+//
+// The compact rule (docs/guide/language/compact-classes.md) picks `TNode`:
+// it is native, holds links, is made in recursion, and its links as 32-bit
+// offsets take it from 24 bytes to 12. `--explain-layout` prints that verdict.
+// At n = 24 that halves peak RSS (788 MB to 395 MB) and cuts wall time by a
+// third against `--compact off`; the run is in docs/wp48-ref32-classes.md,
+// section 5.6. Nothing here asks for it: the program is written as before.
 
 const DEPTH: i32 = 20 // bench:n
 const PASSES: i64 = 8
