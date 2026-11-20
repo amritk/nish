@@ -117,8 +117,8 @@ const drain = (): i32 => {
   return held
 }
 
-/** One instance: four floats at slot `n`. */
-const put = (n: i32, x: f64, y: f64, r: f64, heat: f64): void => {
+/** One instance: four floats at slot `n`, below `INSTANCE_CAP` (321). */
+const put = (n: integer<0, 320>, x: f64, y: f64, r: f64, heat: f64): void => {
   const at: i32 = n * INSTANCE_FLOATS
   INSTANCES[at] = toF32(x)
   INSTANCES[at + 1] = toF32(y)
@@ -148,11 +148,13 @@ export const frame = (dtMs: f64): i32 => {
   STEPPED[0] = steps
   CLOCK[0] = pending >= tickMs ? 0.0 : pending
   let n: i32 = 0
-  for (let i = 0; i < BODY_CAP; i++) {
+  // The loops count to `BODY_CAP` and `SHOT_CAP` as literals: the checker bounds `n` by
+  // a literal loop bound, where it does not read a constant's value.
+  for (let i = 0; i < 256; i++) {
     put(n, BODIES[i].x, BODIES[i].y, BODIES[i].r, BODIES[i].heat)
     n++
   }
-  for (let k = 0; k < SHOT_CAP; k++) {
+  for (let k = 0; k < 64; k++) {
     if (SHOTS[k].life > 0.0) {
       put(n, SHOTS[k].x, SHOTS[k].y, 1.5, 200.0)
       n++

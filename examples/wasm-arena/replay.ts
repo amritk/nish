@@ -17,7 +17,10 @@ const hex = (h: u64): string => {
   const out: string[] = []
   for (let shift = 60; shift >= 0; shift = shift - 4) {
     const d: i32 = toI32(toU32((h >> toU64(shift)) & toU64(15)))
-    out.push(digits.slice(d, d + 1))
+    // `d` is four bits, so the test always holds; it proves `d + 1` fits.
+    if (d < 16) {
+      out.push(digits.substring(d, d + 1))
+    }
   }
   return out.join("")
 }
@@ -34,12 +37,13 @@ export const main = (): i32 => {
   for (let a = 3; a < args.length; a++) {
     const run = args[a]
     const x: i32 = toI32(run.indexOf("x"))
-    if (x <= 0) {
+    // `indexOf` answers below the length, so the second test only proves `x + 1` fits.
+    if (x <= 0 || x >= toI32(run.length)) {
       console.log(`replay: bad run ${run}`)
       return 2
     }
-    const count: i32 = parseInt(run.slice(0, x))
-    const word: i32 = parseInt(run.slice(x + 1))
+    const count: i32 = parseInt(run.substring(0, x))
+    const word: i32 = parseInt(run.substring(x + 1))
     for (let k = 0; k < count && stepped < ticks; k++) {
       simStep(word)
       stepped++
