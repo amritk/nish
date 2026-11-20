@@ -1,0 +1,5 @@
+{
+  "name": "pkg-link-flag-library",
+  "private": true,
+  "nish": { "link": { "libraries": ["-Wl,-rpath,/tmp"] } }
+}

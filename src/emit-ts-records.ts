@@ -43,6 +43,7 @@
 // the composer, which this row tells by setting `walk.instanceChoice`.
 
 import { isSortInstance } from "./arrays"
+import { isOptionalChain } from "./emit-util"
 import { Operands, splice, Walk } from "./emit-ts-edits"
 import {
   FLAG_GATHERED,
@@ -622,7 +623,11 @@ const processArgv = (walk: Walk, node: Node): string | null => {
 export const recordsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   switch (node.kind) {
     case NodeKind.Index:
-      if ((node.flags & FLAG_OPTIONAL) !== 0 || !checkedAt(walk, node)) {
+      if (
+        (node.flags & FLAG_OPTIONAL) !== 0 ||
+        (walk.optionalChaining && isOptionalChain(node.children[0])) ||
+        !checkedAt(walk, node)
+      ) {
         return null
       }
       return `${walk.helperName("idx")}(${operands.at(0)}, ${operands.at(1)})`

@@ -77,6 +77,21 @@ static NISH_TLS nishsqlite_table nishsqlite_dbs;
 static NISH_TLS nishsqlite_table nishsqlite_stmts;
 static NISH_TLS nishsqlite_table nishsqlite_cursors;
 
+/* A shape `cursor_build` checked: what the schema check found for one `name`
+ * and `columns`, under one schema cookie. It is kept only from a transaction
+ * that is a read (`SQLITE_TXN_READ`), whose cookie is a committed one, and
+ * answered only to an open whose read sees the same cookie: SQLite's own test
+ * of whether a prepared statement still matches the schema. */
+#define NISH_SQLITE_SHAPES 8
+typedef struct nishsqlite_shape {
+  char *name;    /* NULL for an empty entry */
+  char *columns;
+  u32 cookie;
+  int32_t is_index, ncol, nkey, alias;
+  Pgno root;
+  KeyInfo *ki; /* one reference, the entry's */
+} nishsqlite_shape;
+
 /* A connection: the slot of a database handle points at one of these. The
  * authorizer (`nishsqlite_authorize`) gets it as its user data. */
 typedef struct nishsqlite_conn {
@@ -87,6 +102,11 @@ typedef struct nishsqlite_conn {
   int32_t seen_other;  /* an action off the allowlist was authorized */
   int32_t internal;    /* the adapter's own statements are running */
   int32_t ncursors;    /* open cursors, so invalidating none costs no scan */
+  int32_t shape_next;  /* the entry of `shapes` the next miss replaces */
+  /* `nishsqlite_begin_read`'s and `nishsqlite_end_read`'s statements,
+   * prepared on first use and reset after each run. */
+  sqlite3_stmt *begin_st, *schema_st, *commit_st;
+  nishsqlite_shape shapes[NISH_SQLITE_SHAPES];
 } nishsqlite_conn;
 
 /* A statement that authorized SQLITE_SELECT and nothing off the allowlist: one
@@ -166,6 +186,22 @@ static void slot_give(nishsqlite_table *t, int32_t h) {
 
 static void cursors_invalidate(nishsqlite_conn *c);
 
+/* Empties the connection's checked shapes. Before the close: a KeyInfo is
+ * freed through its connection. */
+static void shapes_clear(nishsqlite_conn *c) {
+  sqlite3_mutex *mx = sqlite3_db_mutex(c->db);
+  sqlite3_mutex_enter(mx); /* a KeyInfo is freed through its db */
+  for (int32_t i = 0; i < NISH_SQLITE_SHAPES; i++) {
+    nishsqlite_shape *s = &c->shapes[i];
+    sqlite3_free(s->name);
+    sqlite3_free(s->columns);
+    sqlite3KeyInfoUnref(s->ki);
+    memset(s, 0, sizeof *s);
+  }
+  c->shape_next = 0;
+  sqlite3_mutex_leave(mx);
+}
+
 /* The connection's authorizer, which the adapter owns: `nish/sqlite` exposes
  * none. It never refuses anything; it only watches. While `nishsqlite_prepare`
  * classifies a statement it records whether the statement authorized
@@ -239,6 +275,10 @@ int32_t nishsqlite_close(int32_t h) {
   if (c == NULL) return SQLITE_MISUSE;
   sqlite3 *db = c->db;
   cursors_invalidate(c);
+  shapes_clear(c);
+  sqlite3_finalize(c->begin_st);
+  sqlite3_finalize(c->schema_st);
+  sqlite3_finalize(c->commit_st);
   nishsqlite_table *t = &nishsqlite_stmts;
   for (int32_t i = 1; i < t->len; i++) {
     if (t->at[i].p != NULL && t->at[i].owner == h) {
@@ -569,6 +609,23 @@ static int internal_step(nishsqlite_conn *c, sqlite3_stmt *st) {
   return rc;
 }
 
+/* Runs `sql` to its end as the adapter's own SQL, through the statement kept
+ * in `*st`: prepared the first time, reset after each run so it holds no
+ * lock. A schema change re-prepares it inside `sqlite3_step`, under the same
+ * `internal` flag. */
+static int internal_run(nishsqlite_conn *c, sqlite3_stmt **st, const char *sql) {
+  c->internal = 1;
+  int rc = *st ? SQLITE_OK : sqlite3_prepare_v3(c->db, sql, -1, SQLITE_PREPARE_PERSISTENT, st, NULL);
+  if (rc == SQLITE_OK) {
+    rc = sqlite3_step(*st);
+    while (rc == SQLITE_ROW) rc = sqlite3_step(*st);
+    rc = rc == SQLITE_DONE ? SQLITE_OK : rc;
+    sqlite3_reset(*st);
+  }
+  c->internal = 0;
+  return rc;
+}
+
 static int main_in_read(sqlite3 *db) {
   return !sqlite3_get_autocommit(db) && sqlite3_txn_state(db, "main") >= SQLITE_TXN_READ;
 }
@@ -581,15 +638,9 @@ int32_t nishsqlite_begin_read(int32_t h) {
   nishsqlite_conn *c = conn_of(h);
   if (c == NULL || !sqlite3_get_autocommit(c->db)) return SQLITE_MISUSE;
   cursors_invalidate(c);
-  int rc = internal_exec(c, "BEGIN");
+  int rc = internal_run(c, &c->begin_st, "BEGIN");
   if (rc != SQLITE_OK) return rc;
-  sqlite3_stmt *st = NULL;
-  rc = internal_prepare(c, "SELECT 1 FROM main.sqlite_schema", NULL, &st);
-  if (rc == SQLITE_OK) {
-    rc = internal_step(c, st);
-    rc = rc == SQLITE_ROW || rc == SQLITE_DONE ? SQLITE_OK : rc;
-  }
-  sqlite3_finalize(st);
+  rc = internal_run(c, &c->schema_st, "SELECT 1 FROM main.sqlite_schema LIMIT 1");
   if (rc == SQLITE_OK && !main_in_read(c->db)) rc = SQLITE_ERROR;
   if (rc != SQLITE_OK && !sqlite3_get_autocommit(c->db)) internal_exec(c, "ROLLBACK");
   return rc;
@@ -601,7 +652,7 @@ int32_t nishsqlite_end_read(int32_t h) {
   nishsqlite_conn *c = conn_of(h);
   if (c == NULL || sqlite3_get_autocommit(c->db)) return SQLITE_MISUSE;
   cursors_invalidate(c);
-  return internal_exec(c, "COMMIT");
+  return internal_run(c, &c->commit_st, "COMMIT");
 }
 
 /* Appends `name` to the expected column list, after a comma unless first.
@@ -774,6 +825,22 @@ static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *co
   Pgno root = 0;
   char *table = NULL;
   KeyInfo *ki = NULL;
+  /* A read transaction's cookie, and a shape checked under it. */
+  u32 cookie = 0;
+  int cacheable = sqlite3_txn_state(db, "main") == SQLITE_TXN_READ;
+  if (cacheable) sqlite3BtreeGetMeta(sqlite3DbNameToBtree(db, "main"), BTREE_SCHEMA_VERSION, &cookie);
+  for (int32_t i = 0; cacheable && i < NISH_SQLITE_SHAPES; i++) {
+    nishsqlite_shape *s = &c->shapes[i];
+    if (s->name && s->cookie == cookie && strcmp(s->name, name) == 0 && strcmp(s->columns, columns) == 0) {
+      is_index = s->is_index;
+      ncol = s->ncol;
+      nkey = s->nkey;
+      alias = s->alias;
+      root = s->root;
+      ki = sqlite3KeyInfoRef(s->ki);
+      goto build;
+    }
+  }
   int rc = main_is_utf8(c);
   if (rc == SQLITE_OK) rc = object_of(c, name, &is_index, &root, &table);
   sqlite3_str *want = sqlite3_str_new(db);
@@ -800,7 +867,22 @@ static int32_t cursor_build(nishsqlite_conn *c, const char *name, const char *co
     sqlite3KeyInfoUnref(ki);
     return -rc;
   }
+  if (cacheable) {
+    nishsqlite_shape *s = &c->shapes[c->shape_next];
+    char *n = sqlite3_mprintf("%s", name), *cols = sqlite3_mprintf("%s", columns);
+    if (n && cols) {
+      sqlite3_free(s->name);
+      sqlite3_free(s->columns);
+      sqlite3KeyInfoUnref(s->ki);
+      *s = (nishsqlite_shape){n, cols, cookie, is_index, ncol, nkey, alias, root, sqlite3KeyInfoRef(ki)};
+      c->shape_next = (c->shape_next + 1) % NISH_SQLITE_SHAPES;
+    } else {
+      sqlite3_free(n);
+      sqlite3_free(cols);
+    }
+  }
 
+build:;
   int32_t nkeyfields = is_index ? nkey : ncol;
   size_t head = ROUND8(sizeof(nishsqlite_cursor));
   size_t btsz = ROUND8((size_t)sqlite3BtreeCursorSize());

@@ -1,0 +1,7 @@
+{
+  "name": "compat-overloads-emit-header",
+  "private": true,
+  "nish": {
+    "compat": ["overloads"]
+  }
+}
