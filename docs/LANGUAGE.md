@@ -10796,7 +10796,8 @@ class Cell implements Compact {
 - **A compact class is refused where Node or the runtime would read its
   layout as full pointers**, each with its own code: in a build with `--emit-napi` or
   `--emit-napi-async`, also beside `--emit-header`, at the name of each
-  export whose signature holds one (NL4020, `compact_reject_export`,
+  exported function and the constructor of each exported class whose
+  signature holds one (NL4020, `compact_reject_export`,
   `compact_reject_header_export`), which names the first compact class of
   its return type and then its parameters in order, and at the name of each
   compact class no NL4020 names (NL4021, `compact_reject_napi`,
