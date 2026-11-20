@@ -49,12 +49,14 @@ if [ "$missing" -eq 1 ]; then
   fi
 fi
 
-# The sanitizer and libFuzzer runtimes scripts/fuzz.sh and tests/run.js's
-# `runtime_sanitize` and `fuzz` sections link (tests/fuzz/README.md). An image
+# The sanitizer, libFuzzer and profile runtimes scripts/fuzz.sh and
+# tests/run.js's `runtime_sanitize`, `fuzz` and `pgo` sections link (tests/fuzz/README.md). An image
 # with clang but without them gets them here; non-fatal, as those sections
 # name the package in their skip.
 if ! clang -print-file-name=libclang_rt.fuzzer-"$(uname -m)".a 2>/dev/null | grep -q /; then
-  sudo apt-get install -y --no-install-recommends libclang-rt-18-dev || true
+  # The package index may be empty in a fresh image (the LLVM install above
+  # only refreshes it when a tool is missing), so refresh it here too.
+  { sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libclang-rt-18-dev; } || true
 fi
 
 # The seed: the last released compiler, in build/seed (scripts/fetch-seed.sh).

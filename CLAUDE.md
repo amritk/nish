@@ -122,6 +122,13 @@ new positive `tests/cases/*` is registered with
 `--check` fails on a stale, extra or hand-edited page
 ([`docs/README.md`](docs/README.md#the-library-reference)).
 
+**`--help` and `scripts/build.sh` are inputs of `examples/break-web`'s
+committed build.** A change to either, or a merge of `main` that touches
+either, reruns `node examples/break-web/build.mjs` and commits what it
+rewrites (`docs/site/break/**`, `examples/break-web/help.ts`) in the same
+commit; `--check` exits 0. A conflict in those files is regenerated, never
+resolved by hand.
+
 **The emit-ts known list is Node-version-specific.** Regenerate
 `tests/differential/emit-ts-known.txt` only under the Node that
 `.github/workflows/ci.yml` pins; another minor flipped a verdict
