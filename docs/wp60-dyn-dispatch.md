@@ -826,8 +826,8 @@ What this says, and does not:
 
 - **The proposed lowering is the hand program's cost here, and this is not
   stage 2's form.** Its geomean is 0.98 and 11 of its 25 cases are inside
-  the ±2.6% band of `switch` (marked *n.s.*), and it is never the slowest variant of a
-  row. Only the five serial
+  the ±2.6% band of `switch` (marked *n.s.*), and it is never the slowest
+  variant of a row. Only the five serial
   aperiodic cases take the tag from a register (the drawn index, 0.84x in
   geomean, a shape that favours `proposed` by construction: `switch` must
   load what `proposed` already holds). The other 20 read it from a side
@@ -919,8 +919,8 @@ in milliseconds:
 
 This run states no band of its own: read its ratios against §3.1's ±2.6%,
 taken in another run, and against the drift between runs below (2% and 7% in
-the two cases measured), which is larger. A cell within 2.6% of `switch` shows no difference by
-either; the 1.49 and 1.66 array cells, which repeat `timing_tp`'s, are far
+the two cases measured), which is larger. A cell within 2.6% of `switch`
+shows no difference by either; the 1.49 and 1.66 array cells, which repeat `timing_tp`'s, are far
 outside both.
 
 Serial periodic at K ≥ 8 swings from run to run for every variant, `proposed`
