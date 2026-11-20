@@ -434,6 +434,24 @@ across modules, not its name. Files: `types.ts`, `program.ts`, `structs.ts`,
 `generics.ts`, and the `structOf(` callers. Depends on nothing. Release note:
 `refactor(checker): give each struct a symbol separate from its source name`.
 
+*As built:* `StructInfo.symbol` is set equal to `name` in its constructor (an
+instantiation's is its mangled `Box$i32`, which `name` already held), and
+`TypeTable.symbolOf` reads the symbol a struct id is interned under. A
+declaration interns through `TypeTable.declaredStructOf(symbol, display)`, so
+every declared struct has a display, its source name, and an instantiation
+keeps `Box<i32>`. Both registries gained a type-keyed index,
+`CheckedProgram.structByType` and `StructRegistry.byType`. The cross-module
+walks, `registerForeignLayouts` and its three callers (`adoptArgumentLayouts`,
+`adoptInstanceLayouts`, `noteJsonRoute`) and the checker's
+`closeReachableStructs`, collect struct types (`noteStructTypes`,
+`signatureStructTypes`, `referencedStructTypes` in `src/structs.ts`, which
+replace the `*StructNames` walkers), find each struct by its type in the
+other module's registry, and register a foreign struct under its symbol.
+Lookups inside one module (`members.ts`'s `structOf`, the 51
+`.struct(nameOf(...))` sites) still go by name, which equals the symbol until
+S3d; S3d moves them to `structByType` where a qualified local struct would
+otherwise be missed.
+
 **S3b: spell structs by their symbol.** Every `%struct.` speller and
 `llvmType` reads the symbol, and so does the header's `cStructName`, since
 the header must name the IR's struct; every message and `tsKeyword` read the
@@ -490,7 +508,7 @@ note: `feat(checker): a class or interface may be renamed on import`.
 | ---: | --- | --- |
 | S1 | Private functions and generic templates qualified by their module when they would clash (§4) | Built (#1812) |
 | S2 | Exported names that clash inside one package (§6) | Decided: keep refusing; nothing to build |
-| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Proposed |
+| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Built |
 | S3b | Structs spelled by their symbol in the IR (§7b) | Proposed |
 | S3c | Member symbols spelled from their owner's symbol (§7b) | Proposed |
 | S3d | A clashing private class or interface qualified by its module (§7b) | Proposed |

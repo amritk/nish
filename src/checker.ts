@@ -125,9 +125,9 @@ import {
   declaresWide,
   declareStruct,
   markTemplateImplements,
-  noteStructNames,
-  referencedStructNames,
-  signatureStructNames,
+  noteStructTypes,
+  referencedStructTypes,
+  signatureStructTypes,
 } from "./structs"
 import { handleHeaderMessage, isHandleFieldAnnotation } from "./handles"
 import {
@@ -1366,57 +1366,59 @@ export class Checker {
       const struct = imp.struct
       if (struct !== null) {
         // The imported class itself is already registered under its name.
-        seen.add(struct.name)
+        seen.add(struct.symbol)
         pending.push(struct)
       }
       // An imported *function* drags its types in the same way: `parse(): Node`
       // hands this module `Node` values with no mention of `Node` anywhere.
       const sig = imp.sig
       if (sig !== null) {
-        const names = new StringSet()
-        signatureStructNames(this.ctx.table, sig, names)
-        this.reachAll(declared, seen, pending, names)
+        const types: i32[] = []
+        signatureStructTypes(this.ctx.table, sig, types)
+        this.reachAll(declared, seen, pending, types)
       }
       // So does an imported module storage: `cells[0].v` reads a `Cell` this
       // module may never name (`tests/link/storage_import_record`).
       const constant = imp.constant
       if (constant !== null) {
-        const names = new StringSet()
-        noteStructNames(this.ctx.table, constant.type, names)
-        this.reachAll(declared, seen, pending, names)
+        const types: i32[] = []
+        noteStructTypes(this.ctx.table, constant.type, types)
+        this.reachAll(declared, seen, pending, types)
       }
     }
     while (pending.length > 0) {
       const info = pending.pop()
-      const names = new StringSet()
-      // A self-referential field (`parent: Node | null`) puts the struct's own name in
+      const types: i32[] = []
+      // A self-referential field (`parent: Node | null`) puts the struct's own type in
       // here; `reach` ignores it, since nothing reaches `pending` unless marked seen.
       // @ts-expect-error `pop` is `T` in Nish and `T | undefined` in lib.es5 (runtime/nish.d.ts).
-      referencedStructNames(this.ctx.table, info, names)
-      this.reachAll(declared, seen, pending, names)
+      referencedStructTypes(this.ctx.table, info, types)
+      this.reachAll(declared, seen, pending, types)
     }
   }
 
-  reachAll(declared: StructRegistry, seen: StringSet, pending: StructInfo[], names: StringSet): void {
-    let i = 0
-    while (i < names.size()) {
-      this.reach(declared, seen, pending, names.at(i))
-      i = i + 1
+  reachAll(declared: StructRegistry, seen: StringSet, pending: StructInfo[], types: i32[]): void {
+    for (const type of types) {
+      this.reach(declared, seen, pending, type)
     }
   }
 
-  /** Register `name`'s layout here, if the program declares it and this module has not seen it. */
-  reach(declared: StructRegistry, seen: StringSet, pending: StructInfo[], name: string): void {
-    if (!seen.add(name)) {
+  /**
+   * Register the layout of the struct type `type` here, if the program
+   * declares it and this module has not seen it. It is found by its type, not
+   * its name (WP57 S3a), and registered under its symbol.
+   */
+  reach(declared: StructRegistry, seen: StringSet, pending: StructInfo[], type: i32): void {
+    if (!seen.add(this.ctx.table.symbolOf(type))) {
       return
     }
-    const info = declared.get(name)
+    const info = declared.byType(type)
     if (info === null) {
       return
     }
-    if (!this.program.structs.has(name)) {
+    if (this.program.structByType(type) === null) {
       this.program.reachableStructs.push(this.program.structList.length)
-      this.program.addStruct(name, info)
+      this.program.addStruct(info.symbol, info)
     }
     pending.push(info)
   }

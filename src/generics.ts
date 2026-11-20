@@ -100,8 +100,8 @@ import {
 import {
   collectMethodSignature,
   collectStructMembers,
-  noteStructNames,
-  referencedStructNames,
+  noteStructTypes,
+  referencedStructTypes,
   rejectOpaque,
 } from "./structs"
 import { FLAG_ASYNC, FLAG_FOREIGN, FLAG_REFERENCE_ARROW, isGatheredRest, Node, NodeKind } from "./nodes"
@@ -946,16 +946,19 @@ class RequestSite {
  * same (#613).
  */
 const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolean): boolean => {
-  if (ctx.program.structs.has(info.name)) {
+  const held = ctx.program.structByType(info.type)
+  if (held !== null) {
     if (symbols) {
-      reachForeignSymbols(ctx, info.name)
+      reachForeignSymbols(ctx, held)
     }
     return false
   }
   if (symbols) {
     ctx.program.reachableStructs.push(ctx.program.structList.length)
   }
-  ctx.program.addStruct(info.name, info)
+  // Under its symbol: a layout another module declares is reached by its
+  // identity, and a qualified symbol (WP57 S3d) never meets a source name.
+  ctx.program.addStruct(info.symbol, info)
   return true
 }
 
@@ -970,13 +973,10 @@ const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolea
  * module (#613). A struct this module defines itself is never upgraded, and one
  * already in `reachableStructs` is not pushed twice.
  */
-const reachForeignSymbols = (ctx: CheckContext, name: string): void => {
+const reachForeignSymbols = (ctx: CheckContext, held: StructInfo): void => {
   const program = ctx.program
-  let index = 0
-  while (index < program.structList.length && program.structList[index].name !== name) {
-    index = index + 1
-  }
-  if (index === program.structList.length || program.structList[index].origin === program.source) {
+  const index = program.structIndex(held)
+  if (index < 0 || held.origin === program.source) {
     return
   }
   for (const reached of program.reachableStructs) {
@@ -1001,7 +1001,7 @@ const reachForeignMember = (
   walked: StringSet,
   pending: StructInfo[]
 ): void => {
-  if (!walked.add(info.name)) {
+  if (!walked.add(info.symbol)) {
     return
   }
   if (reachForeignLayout(ctx, info, symbols) || (symbols && info.origin !== ctx.program.source)) {
@@ -1037,15 +1037,13 @@ const registerForeignLayouts = (
   while (at < pending.length) {
     const info = pending[at]
     at = at + 1
-    const names = new StringSet()
-    referencedStructNames(ctx.table, info, names)
-    let i = 0
-    while (i < names.size()) {
-      const next = from.program.struct(names.at(i))
+    const types: i32[] = []
+    referencedStructTypes(ctx.table, info, types)
+    for (const type of types) {
+      const next = from.program.structByType(type)
       if (next !== null) {
         reachForeignMember(ctx, next, symbols, walked, pending)
       }
-      i = i + 1
     }
   }
 }
@@ -1063,17 +1061,15 @@ const adoptArgumentLayouts = (ctx: CheckContext, args: i32[], site: RequestSite)
   if (site.asker === ctx) {
     return
   }
-  const names = new StringSet()
+  const types: i32[] = []
   for (const arg of args) {
-    noteStructNames(ctx.table, arg, names)
+    noteStructTypes(ctx.table, arg, types)
   }
-  let i = 0
-  while (i < names.size()) {
-    const info = site.asker.program.struct(names.at(i))
+  for (const type of types) {
+    const info = site.asker.program.structByType(type)
     if (info !== null) {
       registerForeignLayouts(ctx, info, site.asker, false)
     }
-    i = i + 1
   }
 }
 
@@ -1358,18 +1354,16 @@ const instantiate = (
  * declaring because it defines them (`Emitter.declareAll`).
  */
 const adoptInstanceLayouts = (ctx: CheckContext, home: CheckContext, sig: FunctionSig): void => {
-  const names = new StringSet()
-  noteStructNames(ctx.table, sig.returnType, names)
+  const types: i32[] = []
+  noteStructTypes(ctx.table, sig.returnType, types)
   for (const type of sig.paramTypes) {
-    noteStructNames(ctx.table, type, names)
+    noteStructTypes(ctx.table, type, types)
   }
-  let i = 0
-  while (i < names.size()) {
-    const info = home.program.struct(names.at(i))
+  for (const type of types) {
+    const info = home.program.structByType(type)
     if (info !== null) {
       registerForeignLayouts(ctx, info, home, true)
     }
-    i = i + 1
   }
 }
 
@@ -1979,17 +1973,15 @@ const noteJsonRoute = (ctx: CheckContext, home: CheckContext, sig: FunctionSig):
   for (const fn of jsonRouteCallees(home.program, ctx.table, sig)) {
     exposeTo(ctx, fn)
   }
-  const names = new StringSet()
+  const types: i32[] = []
   for (const type of sig.paramTypes) {
-    noteStructNames(ctx.table, type, names)
+    noteStructTypes(ctx.table, type, types)
   }
-  let i = 0
-  while (i < names.size()) {
-    const info = home.program.struct(names.at(i))
+  for (const type of types) {
+    const info = home.program.structByType(type)
     if (info !== null) {
       registerForeignLayouts(ctx, info, home, false)
     }
-    i = i + 1
   }
 }
 
