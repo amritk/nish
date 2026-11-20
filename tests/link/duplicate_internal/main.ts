@@ -1,10 +1,11 @@
 import { twice } from "./helper";
 
-// Two modules each declaring their own non-exported `add`. `internal` linkage
-// keeps both out of the linker's way, but the whole-program attribute fixpoint
-// is keyed by symbol name, so sharing one would give each function the other's
-// attributes. The name rule is therefore unconditional, and this is refused
-// whatever `--strict-exports` says.
+// Two modules each declaring their own non-exported `add`. Since WP57 S1 each
+// keeps it: a private function whose bare symbol another module's also takes
+// is spelled with its module's qualifier, `@helper$.add` and `@main$.add`, so
+// the whole-program attribute fixpoint, keyed by symbol, never sees one
+// symbol for the two. `--no-strict-exports` still refuses the pair
+// (`tests/link/module_private_no_strict`).
 const add = (a: number, b: number): number => {
   return a + b;
 };

@@ -73,7 +73,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { implementsDeclaration, spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, qualifiesClashing, spellCSymbolsApart, templateSymbol } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -122,6 +122,7 @@ import {
 import { CapabilityLock, capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
 import {
   PACKAGE_ROOT_SEGMENT,
+  moduleSymbolQualifier,
   packageDirOf,
   packageNameOf,
   parseBareSpecifier,
@@ -1415,6 +1416,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // Every module's context, entry first: before any import is bound, because
+    // a clashing private function takes its module-qualified symbol here and an
+    // importer copies the symbol it finds, and before any template is
+    // instantiated, because its instantiations are named by the same rule.
+    const peers: CheckContext[] = []
+    for (const unit of this.modules) {
+      peers.push(unit.checker.ctx)
+    }
+    for (const unit of this.modules) {
+      unit.checker.ctx.peers = peers
+    }
+    this.qualifyClashingSymbols(peers)
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = []
       for (const imp of unit.checker.program.imports) {
@@ -1454,13 +1467,8 @@ export class Compilation {
     // every module needs to know whether the entry declares `main` before its
     // bodies are checked.
     const hasMain = this.entry().checker.program.entryMain !== null
-    const peers: CheckContext[] = []
-    for (const unit of this.modules) {
-      peers.push(unit.checker.ctx)
-    }
     for (const unit of this.modules) {
       unit.checker.ctx.entryHasMain = hasMain
-      unit.checker.ctx.peers = peers
     }
     // Constants fold once every module has its signatures, because an
     // initialiser may name a constant imported from a module checked later.
@@ -3837,6 +3845,42 @@ export class Compilation {
   }
 
   /**
+   * WP57 S1 (`docs/wp57-module-scoped-names.md` §4): give each private free
+   * function whose bare symbol another of its package's free functions or
+   * templates also takes -- or, for a `main` outside the entry, the entry
+   * wrapper -- its module-qualified symbol, `<prefix><qualifier>$.<name>`. An
+   * exported party keeps its bare symbol, so what a C caller or another
+   * package links against never moves, and two exported parties are still
+   * refused by `rejectSymbolClashes`, which runs over the final symbols.
+   *
+   * Nothing qualifies under `--no-strict-exports`: every function is then
+   * external, and an external symbol is the name as written. A program with no
+   * clash is not touched, which is why no existing program's IR moves.
+   * Templates are named when instantiated, by the same predicate.
+   */
+  qualifyClashingSymbols(peers: CheckContext[]): void {
+    const entryName = this.entry().name
+    for (const unit of this.modules) {
+      const ctx = unit.checker.ctx
+      const names = new StringSet()
+      for (const sig of unit.checker.program.functions) {
+        if (
+          sig.owner === null &&
+          sig.instance === null &&
+          !sig.foreign() &&
+          sig.definedIn(unit.source) &&
+          qualifiesClashing(peers, ctx, sig.sourceName, sig.exported)
+        ) {
+          names.add(sig.sourceName)
+        }
+      }
+      if (names.size() > 0) {
+        unit.checker.qualifyClashing(moduleSymbolQualifier(unit.name, entryName), names)
+      }
+    }
+  }
+
+  /**
    * A function's *symbol* must be unique across the program whether or not it
    * is exported, and the entry wrapper reserves `main` as well. An external
    * symbol is global to the link, and even an `internal` one reaches
@@ -3898,7 +3942,7 @@ export class Compilation {
         if (template.origin !== unit.source) {
           continue
         }
-        const symbol = unit.checker.program.symbolPrefix + template.sourceName
+        const symbol = templateSymbol(entry.checker.ctx.peers, template)
         const at = owners.get(symbol, -1)
         if (at < 0) {
           owners.set(symbol, ownerSigs.length)

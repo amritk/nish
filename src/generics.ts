@@ -56,6 +56,7 @@ import {
   typedArraySpelling,
 } from "./arrays"
 import { StringMap, StringSet } from "./map"
+import { moduleSymbolQualifier } from "./packages"
 import {
   CAPTURE_CALL,
   CAPTURE_NONE,
@@ -346,6 +347,77 @@ const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => 
     out = `${out}$${table.mangle(arg)}`
   }
   return out
+}
+
+/**
+ * Whether the free function or function template `name` that `home` declares
+ * takes a module-qualified symbol (WP57 S1, `docs/wp57-module-scoped-names.md`
+ * §4): it is private, the build keeps `--strict-exports`, and another free
+ * function or template of its package -- or, for a `main` outside the entry,
+ * the entry wrapper `@main` -- would take the same bare symbol. Every private
+ * party to such a clash is qualified and an exported one keeps its name, so an
+ * exported symbol never moves.
+ *
+ * Decided from source names and each module's own lookups, which renaming a
+ * signature leaves alone, so `Compilation.qualifyClashingSymbols` (which
+ * renames the functions before imports are bound) and `instantiate` (which
+ * names a template's instantiations whenever pass 2 or 3 asks for one) reach
+ * one answer. `peers` is every module, entry first; empty, nothing qualifies.
+ */
+export const qualifiesClashing = (
+  peers: CheckContext[],
+  home: CheckContext,
+  name: string,
+  exported: boolean
+): boolean => {
+  if (exported || !home.strictExports || peers.length === 0) {
+    return false
+  }
+  const entry = peers[0]
+  if (home === entry && name === "main") {
+    return false
+  }
+  const prefix = home.program.symbolPrefix
+  let parties = 0
+  if (name === "main" && prefix.length === 0 && entry.program.entryMain !== null) {
+    parties = 1
+  }
+  for (const peer of peers) {
+    if (peer.program.symbolPrefix !== prefix) {
+      continue
+    }
+    const sig = peer.signature(name)
+    if (
+      sig !== null &&
+      sig.owner === null &&
+      sig.instance === null &&
+      !sig.foreign() &&
+      sig.definedIn(peer.source) &&
+      !(peer === entry && name === "main")
+    ) {
+      parties = parties + 1
+    }
+    const template = peer.template(name)
+    if (template !== null && template.owner === null && template.origin === peer.source) {
+      parties = parties + 1
+    }
+  }
+  return parties > 1
+}
+
+/**
+ * The symbol a free function template's instantiations build on: its
+ * package's prefix and name, `pkg.identity`, or with its module's qualifier
+ * between them when `qualifiesClashing` says so, `pkg.lib_util$.identity`.
+ */
+export const templateSymbol = (peers: CheckContext[], template: TemplateInfo): string => {
+  const home = template.home
+  const prefix = home.program.symbolPrefix
+  if (!qualifiesClashing(peers, home, template.sourceName, template.exported)) {
+    return `${prefix}${template.sourceName}`
+  }
+  const qualifier = moduleSymbolQualifier(home.source.path, peers[0].source.path)
+  return `${prefix}${qualifier}$.${template.sourceName}`
 }
 
 /** `identity<i32>`: the source spelling, for diagnostics and the dump. */
@@ -1349,13 +1421,25 @@ const instantiateHere = (
   // A generic method's symbol builds on its receiver's method symbol,
   // `Box$i32.pick` (WP18 G8, §15.8).
   const owner = template.owner
-  const base = owner === null ? template.sourceName : `${owner.name}.${template.decl.children[0].text}`
+  const home = template.home
+  if (owner === null && home.peers.length === 0) {
+    process.exit(
+      internalErrorFor(
+        `generics: \`${template.sourceName}\` was instantiated before the modules were known`,
+        ctx.table.json
+      )
+    )
+  }
+  const base =
+    owner === null
+      ? templateSymbol(home.peers, template)
+      : `${home.program.symbolPrefix}${owner.name}.${template.decl.children[0].text}`
   // WP29: a callee another module defines has to be callable from this one.
   for (const fn of functions) {
     exposeTo(ctx, fn)
   }
   const symbol = withFunctionArguments(
-    instanceSymbol(ctx.table, template.home.program.symbolPrefix + base, args),
+    instanceSymbol(ctx.table, base, args),
     functions
   )
   const existing = ctx.program.instantiation(symbol)

@@ -1,0 +1,2 @@
+define internal noundef i32 @helper$.add(
+define internal noundef i32 @main$.add(
