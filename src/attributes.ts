@@ -178,7 +178,7 @@ import {
   walkMethodsOf,
 } from "./emit-map"
 import { isCollectionStruct } from "./generics"
-import { isSimdLoad } from "./simd"
+import { isSimdAccess, isSimdLoad } from "./simd"
 import {
   builtinPanicKind,
   PANIC_ARRAY_LENGTH,
@@ -1150,7 +1150,9 @@ export class FactsTable {
   set(name: string, facts: FunctionFacts): void {
     const at = this.index.get(name, -1)
     if (at >= 0) {
-      // A symbol is unique across a program (the driver rejects clashes), so
+      // A symbol is unique across a program (the driver qualifies a clashing
+      // private function by its module, WP57 S1, and rejects what still
+      // clashes), so
       // this only happens on the second collection round, which replaces the
       // first round's facts in place.
       this.list[at] = facts
@@ -3980,11 +3982,16 @@ class FactCollector {
     }
   }
 
-  /** The site a builtin call is, by the name the analysis resolved it to (`builtinPanicKind`). */
+  /**
+   * The site a builtin call is, by the name the analysis resolved it to
+   * (`builtinPanicKind`). A `nish:simd` access is proven exactly when
+   * `bounds.ts` discharged its bound, the fact `emitVectorAccess` reads to
+   * drop the check, so the table and the IR agree.
+   */
   noteBuiltinSite(call: Node, name: string): void {
     const kind = builtinPanicKind(name)
     if (kind >= 0) {
-      this.noteSite(call, kind, false, "")
+      this.noteSite(call, kind, isSimdAccess(name) && this.unit.program.nodeProvenIndex[call.id], "")
     }
   }
 

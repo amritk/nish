@@ -91,17 +91,20 @@ The message of an error contains:
 [`nl3010_generic_redeclared.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3010_generic_redeclared.ts):
 
 ```ts
-// NL3010: two modules declaring one generic name. An instantiation is named
+// NL3010: two modules exporting one generic name. An instantiation is named
 // after its template, so both would emit `@identity$i32` — the same collision
-// the plain-function rule refuses, one namespace up. Two *packages* may each
-// keep a private `identity<T>`, because an instantiation carries its package's
-// prefix (`tests/link/package_generic`); this is one package, so they clash.
+// the exported-function rule refuses, one namespace up. Two *packages* may
+// each keep a private `identity<T>`, because an instantiation carries its
+// package's prefix (`tests/link/package_generic`), and since WP57 S1 two
+// modules may too, because a private template that clashes is qualified by
+// its module's path (`tests/link/module_private_generic`). Both of these are
+// exported, so neither is qualified and they clash.
 //
 // `anchor` is imported only to load the other module; the clash is between the
 // two `identity` templates and not between anything this file names.
 import { anchor } from "./wordings_generic";
 
-const identity = <T>(x: T): T => x;
+export const identity = <T>(x: T): T => x;
 
 export const main = (): i32 => identity(1) + anchor();
 ```
@@ -271,15 +274,18 @@ Exported function `twice` is also defined in tests/wordings/nl3_clash/node_modul
 The message of an error contains:
 
 ```text
-…; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name
+…; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name
 ```
 
-[`nl3026_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3026_function_clash.ts):
+[`nl3026_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3026_function_clash.ts) (compiled with `--no-strict-exports`):
 
 ```ts
 // NL3026: `hidden` is exported by neither module, and still clashes with
-// `nl3_clash/lib.ts`'s, because the whole-program attribute analysis is keyed
-// by symbol name and a module-private function has no prefix of its own.
+// `nl3_clash/lib.ts`'s under `--no-strict-exports` (this case's `.args`):
+// there every function keeps its bare name as its symbol, and the
+// whole-program attribute analysis is keyed by symbol. Under the default
+// `--strict-exports` each module's `hidden` is qualified by its path (WP57 S1)
+// and the program builds.
 import { anchor } from "./nl3_clash/lib";
 
 const hidden = (): i32 => 4;
@@ -288,7 +294,7 @@ export const main = (): i32 => hidden() + anchor();
 ```
 
 ```text
-Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name
+Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts, and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name
 ```
 
 ## NL3027
@@ -296,21 +302,22 @@ Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts; a 
 The message of an error contains:
 
 ```text
-…; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol
+…; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol
 ```
 
-[`nl3027_package_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3027_package_function_clash.ts):
+[`nl3027_package_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3027_package_function_clash.ts) (compiled with `--no-strict-exports`):
 
 ```ts
 // NL3027: NL3026 inside a package. `clash_internal`'s two modules each keep a
-// private `hidden`, which is one package-scoped symbol.
+// private `hidden`, which under `--no-strict-exports` (this case's `.args`) is
+// one package-scoped symbol.
 import { run } from "./nl3_clash/node_modules/clash_internal/index";
 
 export const main = (): i32 => run();
 ```
 
 ```text
-Function `hidden` is also defined in tests/wordings/nl3_clash/node_modules/clash_internal/index.ts; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol
+Function `hidden` is also defined in tests/wordings/nl3_clash/node_modules/clash_internal/index.ts, and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol
 ```
 
 ## NL3028
