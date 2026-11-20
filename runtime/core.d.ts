@@ -25,7 +25,7 @@ export interface Wide {}
 export declare const Wide: Wide;
 
 // `nish:simd`: what `--emit-ts` writes for a program's `import ... from "nish:simd"`.
-import type { f32, f64, i32, u16, u32, u64, u8 } from "./core/numbers.js";
+import type { f32, f64, i32, u16, u32, u8 } from "./core/numbers.js";
 
 /**
  * A sixteen-byte vector of lanes. Opaque: TypeScript refuses `+` on one, as
@@ -147,6 +147,9 @@ export declare function asI32x4(v: SimdVector): i32x4;
 export declare function asU32x4(v: SimdVector): u32x4;
 export declare function asF32x4(v: SimdVector): f32x4;
 export declare function asF64x2(v: SimdVector): f64x2;
+
+// `mulHigh` and `mulHighIsNative`: builtins, written out under these names.
+import type { u64 } from "./core/numbers.js";
 
 /** The high 64 bits of the 128-bit product of `a` and `b` (WP41): `(a * b) >> 64n`. */
 export declare function mulHigh(a: u64, b: u64): u64;

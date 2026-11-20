@@ -938,7 +938,7 @@ multiplies where its hardware has one (WP41,
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `mulHigh(a: u64, b: u64): u64` | the top 64 bits of `a * b` computed in 128 bits; with `a * b` for the low half, the whole product | none | `mul_high_basic`, `mul_high_native`, `mul_high_aarch64`, `mul_high_wasm32`; `mul_high_reject_operand` |
+| `mulHigh(a: u64, b: u64): u64` | the top 64 bits of `a * b` computed in 128 bits; with `a * b` for the low half, the whole product | none | `mul_high_basic`, `mul_high_native`, `mul_high_aarch64`, `mul_high_wasm32`; `mul_high_reject_operand`, `mul_high_reject_signed`, `mul_high_reject_number`, `mul_high_reject_arity` |
 | `mulHighIsNative(): boolean` | `true` where `mulHigh` is one instruction (x86-64, AArch64), `false` on wasm32 and under Node; a constant of the build | none | `mul_high_native`, `mul_high_aarch64`, `mul_high_wasm32` |
 
 - **`u64` operands only**, because the product is defined on the unsigned
@@ -956,8 +956,12 @@ multiplies where its hardware has one (WP41,
   no wide multiply, and an `i128` multiply there is a call to compiler-rt's
   `__multi3`, so the IR holds no `i128` at all. `tests/run.js` checks that
   `mul_high_basic`'s wasm32 IR has no `i128` and its machine code no
-  `__multi3`, and runs the `--profile wasi` builds of `mul_high_basic` and
-  `mul_high_wasm32` against their native output.
+  `__multi3`; that `std/crypto/p256.ts`'s wasm32 IR and machine code have
+  neither; and that `std/json-tokenizer.ts`'s IR has no `i128` and its
+  `jsonTokEiselLemire`, the caller of `mulHigh`, no `__multi3` (its checked
+  `i64` multiply elsewhere is a `__multi3` call on wasm32). It runs the `--profile wasi` build of
+  `mul_high_basic` against its native output, and that of `mul_high_wasm32`
+  against the line it must print, `18446744073709551614 false`.
 - **Neither lowering branches on its operands**, so a secret is a fine operand:
   `tests/run.js` holds `mul_high_native`'s and `mul_high_aarch64`'s `high` to
   `tests/ct-asm.js` with both operands secret.

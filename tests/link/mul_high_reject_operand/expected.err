@@ -1,1 +1,1 @@
-main.ts:8:26: error: `mulHigh` takes u64 operands (convert with toU64), got u32
+main.ts:6:26: error: `mulHigh` takes u64 operands (convert with toU64), got u32

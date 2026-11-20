@@ -14417,6 +14417,38 @@ if (dealtHere("cryptoChecks")) {
           wasmAsm.stdout.includes("__multi3") ? "\nthe machine code calls __multi3" : ""
         }`
       )
+
+      // The two std modules that take their high products from `mulHigh`, as a
+      // wasm32 build of a program that imports each one writes them: no i128
+      // in either module's IR, and no `__multi3` in P-256's machine code or in
+      // the tokenizer's `jsonTokEiselLemire`, its one caller of `mulHigh`. The
+      // rest of the tokenizer is not held to it: `integerScan`'s checked i64
+      // multiply is an `smul.with.overflow.i64`, which wasm32 lowers to a
+      // `__multi3` call, and has nothing to do with `mulHigh`.
+      for (const [program, module, symbol] of [
+        ["tests/link/crypto_p256/plain.ts", "p256", ""],
+        ["tests/link/json_enum_string/main.ts", "json-tokenizer", "nish.jsonTokEiselLemire"],
+      ]) {
+        const dir = path.join(workDir, `wasm32-${module}`)
+        fs.rmSync(dir, { recursive: true, force: true })
+        const built = spawnSync(NISH, [path.join(root, program), "-o", `${dir}${path.sep}`, "--target", "wasm32"], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const ll = path.join(dir, `${module}.ll`)
+        const text = built.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+        const asm = text === "" ? { status: 1, stdout: "", stderr: shown(built) } : asmOf(ll, "wasm32-wasi")
+        const lines = symbol === "" ? asm.stdout.split("\n") : body(asm.stdout, symbol.replaceAll(".", "\\."))
+        const calls = lines.some((line) => line.includes("__multi3"))
+        const where = symbol === "" ? "its machine code" : `\`${symbol}\``
+        check(
+          `mul_high: for wasm32 std's ${module} module has no i128 in its IR and ${where} no __multi3`,
+          asm.status === 0 && lines.length > 0 && !text.includes("i128") && !calls,
+          `${asm.stderr}${text.includes("i128") ? "\nthe IR has an i128" : ""}${
+            calls ? "\nthe machine code calls __multi3" : ""
+          }${lines.length === 0 ? `\nno ${symbol} in the machine code` : ""}`
+        )
+      }
     }
 
     if (WASI_SYSROOT && has("wasm-ld")) {
