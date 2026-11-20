@@ -94,10 +94,35 @@ A class `R` is compact when all of these hold:
    (`src/compact-rule.ts`, test 1) still leaves a header build alone.
 2. **Something links to `R`**: some class, `R` itself included, has a field
    typed exactly `R` or `R | null`.
-3. **Narrowing saves memory on every instance**: `computeLayout` run both
-   ways gives `R`, or the class holding the link, a smaller size after
-   rounding. A class with one link among wide fields that rounding gives back
-   is left alone, because it would pay the decode for nothing.
+3. **Narrowing saves memory on every instance**: `R` is at least 24 bytes,
+   and `computeLayout` run both ways takes at least a quarter off its own
+   size after rounding. A 16-byte cell already packs four to a cache line;
+   narrowed to 8 it measured slower in both programs that make one in
+   bulk (`bench/awfy` List, `bench/goose/bintrees`, §5.5), so it is left
+   alone. A class
+   with one link among wide fields that rounding gives back is left alone,
+   because it would pay the decode for nothing, and so is a smaller saving:
+   it pays the decode on every link read for a few percent of one class.
+   Three rules are named in this note. **#1736's rule** (the
+   `--explain-layout` report that prepared this stage) passed test 3 on
+   any saving after rounding, in `R` or in any class holding a link to it,
+   with no floor on `R`'s size. On the corpus it picked seven `std/`
+   classes only through a holder (`Deflater`, whose `ZlibCompressor` holder
+   goes 8 → 4 bytes; `JsonTokenizer`, `JsonDocument` 248 → 240;
+   `HttpServerRequest`, `P256ProjectivePoint`, `QuicKeysSlot`,
+   `FetchResponse`, `PgConnection`), 19 of the compiler's 307 classes on
+   this branch's merged tree (17 of them holder-only; #1736 counted 18 on
+   its own tree, and the 19th, `SourceFile`, joins because `CheckContext`
+   has since grown to 448 bytes and narrowing its `SourceFile` link now
+   saves 448 → 440 after rounding), and the 16-byte cells of `awfy` List and `bintrees`
+   (§5.5). Two drafts of this stage came between it and the final rule:
+   a quarter off `R` or off a holder made in a loop, then a quarter off
+   `R` alone. Neither was gated on a run of its own; §5.5 times #1736's
+   rule and **the final rule**, which is the test as written above. A
+   holder-only saving is 4 to 8 bytes in one holder per stream, document or
+   request, which measured as noise and cost memory where the narrowed
+   class stopped being a stack value (§5.5), so only `R`'s own size counts.
+   The refusal still names the holder that would have saved.
 4. **`R` is made in a loop or in a recursive function**: some `new R(...)`
    is lexically inside a loop, or inside a function that can reach itself in
    the call graph. A class made once or a few times per run is left alone.
@@ -114,27 +139,31 @@ A class `R` is compact when all of these hold:
 Two controls override the rule, both erased under Node and `tsc`:
 
 ```ts
-import type { Compact, Wide } from "nish:compact"
+import { Compact, Wide } from "nish:compact"
 
 class TNode implements Compact { /* compact even if the rule says no */ }
 class Big implements Wide { /* never compact */ }
 ```
 
-and `--compact off` turns the whole mechanism off for one build, which is
-what to try first when a program hits the range's limit (§3.3) or runs
-slower. `implements Compact` on a class that rule 1 or 5 refuses is a
-compile error naming the reason. Each class the rule picks is listed by
-`nish --explain-layout`, so the decision can be seen and checked.
+and `--compact off` turns the whole mechanism off for one build, classes
+marked `implements Compact` included, which is what to try first when a
+program hits the range's limit (§3.3) or runs slower. `implements Compact` on
+a class that rule 1 or 5 refuses is a compile error naming the reason, and a
+class may not write both markers (NL2819). `nish --explain-layout` prints one
+line per class: `compact` with its size before and after, `off` under
+`--compact off`, or the first test that refused it, numbered as above
+(`5 forbidden: implements Wide` for the marker), so the decision can be seen
+and checked. Stage 3 ships both controls and the flag (§5.5).
 
-Against the measured programs: `tree.ts`'s and `bintrees.ts`'s `TNode` are
-made in a recursive build and shrink from 24 to 12 and 16 to 8 bytes, and
-`sibling.ts`'s node is made in the build loop and shrinks from 32 to 20. The
-rule picks all three with no source change.
+Against the measured programs: `tree.ts`'s `TNode` is made in a recursive
+build and shrinks from 24 to 12 bytes, and `sibling.ts`'s node is made in the
+build loop and shrinks from 32 to 20. The rule picks both with no source
+change. `bintrees.ts`'s 16-byte `TNode` would shrink to 8, but test 3 refuses
+it for being under 24 bytes (§5.5).
 
 The rule lands after the mechanism (§8): stage 2 builds compact classes with
-`implements Compact` as the only way in, and stage 3 turns the rule on once
-the corpus shows no program slower beyond its noise band. Until then a
-program that does not write the marker is unchanged.
+`implements Compact` as the only way in, and stage 3 turns the rule on, gated
+on the corpus showing no program slower beyond its noise band (§5.5).
 
 **Why not every class.** The compiler could narrow every class's links, and
 that is the first note's Design A, measured and declined. Three costs stay
@@ -510,6 +539,90 @@ NISH=build/seed/bin/nish node bench/wp48-refs/range.mjs --program tree --rounds 
 All three print 33554431 and 134079322148. Band: widest per-round gap 16.8%,
 median per-round gap 3.5%. Verdict: `ptr-range` wall +2.5% against `ptr`,
 within the widest band and within the median band. Peak RSS moves by 0.1 MB.
+
+### 5.5 Stage 3: the rule's picks and its gate
+
+The rule (§3.1) run with `--explain-layout` over the nish-cmp corpus, every
+`tests/link` program, `bench/goose` and `bench/wp48-refs`, as `--link`
+builds. Before stage 3 no class was compact without `implements Compact`.
+
+| program | class | #1736's rule (any saving, `R` or a holder) | final rule |
+| --- | --- | --- | --- |
+| `bench/goose/tree.ts` | `TNode` | 24 → 12 | 24 → 12 |
+| `bench/treesum.ts` | `TreeNode` | 24 → 12 | 24 → 12 |
+| `bench/wp48-refs/sibling.ts` | `Node` | 32 → 20 | 32 → 20 |
+| `bench/goose/bintrees.ts` | `TNode` | 16 → 8 | refused, under 24 bytes |
+| `bench/awfy` `list.ts` | `Element` | 16 → 8 | refused, under 24 bytes |
+| `bench/awfy` `towers.ts` | `TowersDisk` | 16 → 8 | refused, under 24 bytes |
+| `tests/link/alias_export_nullable` | `Node` | 16 → 8 | refused, under 24 bytes |
+| `tests/link/std_json_typed` `keys.ts` | `Link` | 8 → 4 | refused, under 24 bytes |
+| `tests/link/std_compress*` | `Deflater` (held by `ZlibCompressor`) | holder 8 → 4 | refused, not `R` itself |
+| `tests/link/std_json_value` | `JsonTokenizer` (held by `JsonDocument`) | holder 248 → 240 | refused, not `R` itself |
+| `tests/link/net_http_server*` | `HttpServerRequest` (held by `Taken`) | holder 24 → 16 | refused, not `R` itself |
+| `tests/link/net_http_server*` | `P256ProjectivePoint`, `QuicKeysSlot` (held by `P256PointScratch`, `QuicListener`) | holders only | refused, not `R` itself |
+| `tests/link/net_fetch_async_https` | `FetchResponse` (held by the test's `Outcome`) | holder 24 → 16 | refused, not `R` itself |
+| `tests/link/net_serve_pg` | `PgConnection` (held by `PgPoolSlot`) | holder 64 → 56 | refused, not `R` itself |
+| the compiler (`src/compile.ts`) | any | 19 of 307 (#1736 counted 18; `SourceFile`, via `CheckContext` 448 → 440, is the 19th), all holder-only but `FunctionSig` 224 → 216 and `PanicSite` 56 → 48 | 0 of 307 |
+
+No `std/` class is picked, `std/crypto` included (ECC-9 in
+`docs/security/crypto-ecc.md`), so the compiler and every program that picks
+nothing build the same IR with `--compact on` and `--compact off`;
+`explain_layout` pins that byte for byte. Each program in the table prints
+the same stdout both ways.
+
+**The gate.** Each picked program built both ways by the same compiler,
+`--compact on` against `--compact off`, run interleaved off then on in each
+round, timed as process wall under one 4-core cloud container. "Gap" is the
+per-round on/off ratio; its median and range are the noise band.
+
+| program (args) | rounds | off s | on s | median gap | gap range | peak RSS off → on |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `goose/tree` (depth 20) | 11 | 0.1838 | 0.1017 | −43.2% | −56.2 .. −25.6% | 50.5 → 25.9 MB |
+| `treesum` | 11 | 0.5181 | 0.3974 | −23.8% | −31.4 .. −6.7% | 25.8 → 13.6 MB |
+| `wp48-refs/sibling` (1M, 4) | 11 | 0.0934 | 0.1003 | +5.6% | −18.0 .. +31.2% | 32.7 → 20.9 MB |
+| `wp48-refs/sibling` (4M, 4) | 9 | 0.4132 | 0.4132 | +0.4% | −10.4 .. +9.4% | 126.6 → 79.7 MB |
+| `awfy` List (20 × 1500), #1736's rule | 11 + 9 | 0.4447 | 0.5507 | +26.9% | +5.5 .. +48.8% | 1.5 → 1.5 MB |
+| `goose/bintrees` (depth 17), #1736's rule | 11 | 0.1175 | 0.1396 | +18.3% | −14.5 .. +64.1% | 9.4 → 5.4 MB |
+| `goose/bintrees` (depth 19), #1736's rule | 9 | 0.5727 | 0.6446 | +18.8% | +1.8 .. +25.5% | 34.0 → 17.7 MB |
+| `awfy` Towers (20 × 600), #1736's rule | 11 | 0.2912 | 0.2958 | +1.5% | −14.3 .. +56.5% | 1.6 → 1.5 MB |
+| self-build (`src/compile.ts -o dir/`), #1736's rule | 9 | 2.660 | 2.574 | −2.7% | −10.3 .. +4.5% | 2026.9 → 2025.5 MB |
+| `compact-bench/json-doc` (700000), #1736's rule | 9 | 0.977 | 0.987 | +0.4% | −8.2 .. +3.9% | 86.7 → 172.4 MB |
+| `compact-bench/zlib-each` (2500), #1736's rule | 9 | 0.571 | 0.576 | +1.0% | −13.8 .. +8.2% | 865.2 → 856.6 MB |
+| `compact-bench/request-slot` (80000000), #1736's rule | 9 | 0.938 | 0.950 | +1.3% | −7.8 .. +26.2% | 1222.6 → 1222.4 MB |
+
+#1736's rule failed the gate: the `awfy` List cells ran slower in every
+round, and `bintrees` at depth 19 in every round. Both are 16-byte cells,
+four to a cache line already: List's lists are short enough to stay in L1,
+so the widening on each hop is all cost, and `bintrees` frees each tree
+before the next, so halving its nodes saves little traffic. Every 24- and
+32-byte node held within its noise band or gained. Test 3 therefore asks that `R` be at least
+24 bytes; the programs it refuses now build the same IR as `--compact off`,
+and of the three it keeps, `sibling`'s 1M run sits inside its band (which
+crosses zero) and its 4M run is even, while `treesum` gains 24% and `tree`
+43%, and both halve their peak RSS. A holder-only saving is not counted
+(§3.1), and the self-build and `compact-bench` rows are why.
+They time #1736's rule (any saving, `R`'s own or a holder's) against
+`--compact off`, in nine rounds that alternate which side runs first, on the
+head compiler with test 3 set back to #1736's. No `bench/` program makes one of
+the seven `std/` classes that rule picks only through a holder, so the three
+`tests/layout/compact-bench/` programs are minimal benches written for this
+measurement, for three of the seven: `json-doc` makes a `JsonTokenizer` each round and parses into one
+reused `JsonDocument`, `zlib-each` makes a `Deflater` each round beside one
+reused `ZlibCompressor`, and `request-slot` keeps a ring of 64 slots of its own
+(`Taken`'s shape) over `HttpServerRequest`s. Each prints the same checksum both
+ways, and the self-build writes the same 141 modules byte for byte. The other
+four (`FetchResponse`, `PgConnection`, `P256ProjectivePoint`, `QuicKeysSlot`)
+were not benched here; the final rule refuses them at test 3 with the rest,
+and stage 5 measures `std/`'s own classes. Every gap's
+range crosses zero: the self-build's −2.7% (19 classes picked, two of them
+shrinking themselves by 4% and 14%) and the three benches' +0.4% to +1.3% are
+noise. The memory goes the wrong way: `JsonTokenizer` in the build under #1736's rule is
+heap-allocated (`nish_alloc_struct(i64 128)` in `json-doc`'s loop), where with
+`--compact off` the same `new` is an `alloca`, so `json-doc` keeps 128 more
+bytes a round and its peak RSS doubles. `ZlibCompressor`'s 4 bytes and
+`JsonDocument`'s 8 are one object each; the compiler's peak RSS moves by
+1.4 MB of 2 GB. The figures support the tightened test 3 (`R`'s own saving,
+at least 24 bytes, at least a quarter) as it stands.
 
 ## 6. Where the emitter changes
 

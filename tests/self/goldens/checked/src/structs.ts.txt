@@ -792,14 +792,14 @@ function collectLayoutField(ctx: CheckContext, owner: StructInfo, decl: Node): v
 function collectLayoutMembers(ctx: CheckContext, info: StructInfo): void -> @collectLayoutMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error collectLayoutField compactLayoutMessage computeLayout namesCompact nish_panic_index nish_str_concat
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 namesCompact#0 collectLayoutField#0 CheckContext.error#0 computeLayout#0
+  calls: CheckContext.error collectLayoutField compactLayoutMessage computeLayout namesMarker nish_panic_index nish_str_concat
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=CheckContext.error#0 namesMarker#0 collectLayoutField#0 CheckContext.error#0 computeLayout#0
   pointer info: size=176 writesThrough=true captured=false passedTo=collectLayoutField#1 computeLayout#1
   stackSites=0 stackLocals=0
   local -1:9 decl: Node (const)
   local +2:11 clause: Node (const)
   callee +3:5 CheckContext.error -> @CheckContext.error
-  callee +5:7 namesCompact -> @namesCompact
+  callee +5:7 namesMarker -> @namesMarker
   callee +6:11 compactLayoutMessage -> @compactLayoutMessage
   local +11:14 member: Node (const)
   callee +13:7 collectLayoutField -> @collectLayoutField
@@ -816,14 +816,29 @@ function namesCompactMarker(ctx: CheckContext, iface: Node): boolean -> @namesCo
   callee +0:20 CheckedProgram.importNamed -> @CheckedProgram.importNamed
   callee +2:70 isCompactExport -> @isCompactExport
 function declaresCompact(ctx: CheckContext, decl: Node): boolean -> @declaresCompact [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: declaresMarker
+  pointer ctx: size=448 writesThrough=false captured=false passedTo=declaresMarker#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=declaresMarker#1
+  stackSites=0 stackLocals=0
+  callee +0:3 declaresMarker -> @declaresMarker
+function declaresWide(ctx: CheckContext, decl: Node): boolean -> @declaresWide [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: declaresMarker
+  pointer ctx: size=448 writesThrough=false captured=false passedTo=declaresMarker#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=declaresMarker#1
+  stackSites=0 stackLocals=0
+  callee +0:73 declaresMarker -> @declaresMarker
+function declaresMarker(ctx: CheckContext, decl: Node, marker: string): boolean -> @declaresMarker
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: namesCompact nish_panic_index
-  pointer ctx: size=448 writesThrough=false captured=false passedTo=namesCompact#0
+  escaping: marker
+  calls: namesMarker nish_panic_index
+  pointer ctx: size=448 writesThrough=false captured=false passedTo=namesMarker#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 iface: Node (const)
-  callee +1:9 namesCompact -> @namesCompact
-function namesCompact(ctx: CheckContext, iface: Node): boolean -> @namesCompact
+  callee +1:9 namesMarker -> @namesMarker
+function namesMarker(ctx: CheckContext, iface: Node, marker: string): boolean -> @namesMarker
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.importNamed namesCompactMarker nish_str_eq
   pointer ctx: size=448 writesThrough=false captured=false passedTo=namesCompactMarker#0
@@ -835,14 +850,16 @@ function namesCompact(ctx: CheckContext, iface: Node): boolean -> @namesCompact
 function checkCompactClass(ctx: CheckContext, info: StructInfo): void -> @checkCompactClass [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
-  calls: CheckContext.error compactSecretMessage nish_panic_index secretFieldOf
-  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0
+  calls: CheckContext.error compactSecretMessage compactWideMessage nish_panic_index secretFieldOf
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer info: size=176 writesThrough=false captured=false passedTo=secretFieldOf#1
   stackSites=0 stackLocals=0
-  local +0:9 secret: FieldInfo | null (const)
-  callee +0:18 secretFieldOf -> @secretFieldOf
-  callee +2:5 CheckContext.error -> @CheckContext.error
-  callee +2:40 compactSecretMessage -> @compactSecretMessage
+  callee +0:5 CheckContext.error -> @CheckContext.error
+  callee +0:38 compactWideMessage -> @compactWideMessage
+  local +6:9 secret: FieldInfo | null (const)
+  callee +6:18 secretFieldOf -> @secretFieldOf
+  callee +8:5 CheckContext.error -> @CheckContext.error
+  callee +8:40 compactSecretMessage -> @compactSecretMessage
 function refuseCompactTemplate(ctx: CheckContext, decl: Node): void -> @refuseCompactTemplate [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -862,6 +879,10 @@ function compactLayoutMessage(name: string): string -> @compactLayoutMessage
   calls: nish_str_concat
   stackSites=0 stackLocals=0
 function compactLayoutFieldMessage(owner: string, field: string, target: string): string -> @compactLayoutFieldMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function compactWideMessage(name: string): string -> @compactWideMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0

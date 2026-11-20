@@ -50,7 +50,8 @@
 
 import { recordOverloads } from "./overloads"
 import { REGION_STD_SPECIFIER } from "./region"
-import { explainLayout, LayoutModule } from "./compact-rule"
+import { explainLayout, LayoutModule, LayoutReport } from "./compact-rule"
+import { computeLayout } from "./structs"
 import { handleFindings } from "./handles"
 import { RefModule, resolveReferences } from "./fnref-places"
 import { escapeJoinMessage, refuseHostReferences, WIDE_SET, wideSetMessage } from "./fnrefs"
@@ -511,6 +512,12 @@ export class Compilation {
    * can read them even when a later refusal (`--deny-retention`) fails it.
    */
   factsSettled: boolean
+  /**
+   * WP48 stage 3: the compact-class rule's answer once
+   * `settleCompactClasses` has run, the one `--explain-layout` prints, so the
+   * report and the layout are one decision; null before.
+   */
+  layoutDecision: LayoutReport | null
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[]
   /**
@@ -597,6 +604,7 @@ export class Compilation {
     this.capabilityLockPath = ""
     this.capabilityLockText = ""
     this.factsSettled = false
+    this.layoutDecision = null
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -954,7 +962,10 @@ export class Compilation {
     // full pointers, as on wasm32. `NISH_ASAN` is read from the environment,
     // so setting it switches compression off for every compile in the process,
     // matching the uncompressed runtime ASAN builds link.
-    checker.ctx.compressLinks = !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
+    // `--compact off` lays every link out as a pointer, `implements Compact`
+    // classes' included (`Options.compact`).
+    checker.ctx.compressLinks =
+      this.opts.compact && !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
     checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
     checker.ctx.compat = this.opts.compat
@@ -1619,6 +1630,10 @@ export class Compilation {
       layoutInlineArrays(contexts, mode)
       proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     }
+    // WP48 stage 3: the classes the compact-class rule picks, decided once
+    // every body is checked (test 4 reads them) and before anything reads
+    // a layout or `StructInfo.compact`: the attribute facts, escape, the emitter.
+    this.settleCompactClasses()
     this.factsSettled = true
     this.reportArenaLoops()
     this.reportUnboundedPasses()
@@ -4344,13 +4359,82 @@ export class Compilation {
    * structs and changes no byte of the IR.
    */
   explainLayoutText(): string {
+    const decision = this.layoutDecision
+    return decision !== null ? decision.text : this.decideLayout().text
+  }
+
+  /** The compact-class rule over every module (`src/compact-rule.ts`). */
+  decideLayout(): LayoutReport {
     const modules: LayoutModule[] = []
     for (const unit of this.modules) {
       modules.push(
         new LayoutModule(unit.checker.program, isStdModule(this.libraryRoot(), unit.name, unit.path))
       )
     }
-    return explainLayout(this.opts, this.table, modules).text
+    return explainLayout(this.opts, this.table, modules, this.keepsPointers())
+  }
+
+  /**
+   * Why a native build still lays every link out as a pointer
+   * (`compressLinks` in `addModule`), or `""`: the rule picks nothing then.
+   */
+  keepsPointers(): string {
+    if (buildsPageModule(this.opts)) {
+      return "a page module, whose runtime reads links as pointers"
+    }
+    if (getenv("NISH_ASAN") !== null) {
+      return "NISH_ASAN, whose runtime reserves no range"
+    }
+    return ""
+  }
+
+  /**
+   * WP48 stage 3: runs the compact-class rule and makes its picks compact.
+   * Each picked class's name joins the shared names `computeLayout` reads,
+   * every module's copy of it is marked, and every struct is laid out again,
+   * so a field typed a picked class becomes a link wherever it is declared;
+   * an interface a picked class implements then promises only `align 4`,
+   * as `checkImplements` sets for a marked one. `--compact off` instead
+   * unmarks every `implements Compact` class, whose links `compressLinks`
+   * already kept as pointers, so nothing downstream treats one as compact.
+   */
+  settleCompactClasses(): void {
+    const decision = this.decideLayout()
+    this.layoutDecision = decision
+    if (!this.opts.compact) {
+      for (const unit of this.modules) {
+        for (const info of unit.checker.program.structList) {
+          info.compact = false
+          info.compactImplementer = false
+        }
+      }
+      return
+    }
+    if (decision.compact.length === 0) {
+      return
+    }
+    for (const info of decision.compact) {
+      this.compactNames.add(info.name)
+    }
+    const implemented = new StringSet()
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (this.compactNames.has(info.name)) {
+          info.compact = true
+          for (const name of info.implementsNames) {
+            implemented.add(name)
+          }
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (implemented.has(info.name)) {
+          info.compactImplementer = true
+        }
+        computeLayout(unit.checker.ctx, info)
+      }
+    }
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 997
+export const RULE_COUNT: i32 = 998
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -527,6 +527,8 @@ const diagnosticRules = (): string[] => [
   "NL2716",
   "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
   "NL2499",
+  "` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker",
+  "NL2819",
   "An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first",
   "NL1068",
   ", and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target",
@@ -1208,7 +1210,7 @@ const diagnosticRules = (): string[] => [
   ": definite-assignment assertions (`!`) are not supported",
   "NL2029",
   "` again, which never ends (assign it in the constructor)",
-  "NL2819",
+  "NL2821",
   "` is a built-in type name and cannot be used for an enum",
   "NL2281",
   "`: a type parameter is inferred from the arguments, and ",

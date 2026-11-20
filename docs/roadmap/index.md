@@ -50,7 +50,7 @@ specified.
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | In progress | 6 of 13 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 4 of 7 |
-| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 6 of 9 |
+| [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 7 of 9 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP57: Module-scoped names](wp57-module-scoped-names.md) | In progress | 2 of 7 |

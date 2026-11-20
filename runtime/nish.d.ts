@@ -3759,6 +3759,12 @@ declare module "nish:unsafe" {
  * so a tree or list node of an `i32` and two links is 12 bytes, not 24. Locals,
  * parameters, returns, arrays, maps and other unions stay full pointers.
  *
+ * A native `--link` build also compacts, with no marker, each class whose
+ * links take at least a quarter off a class made in a loop or recursion
+ * (`--explain-layout` prints each pick and why the others are left alone).
+ * `implements Wide` keeps one class out of that, and `--compact off` keeps
+ * every class, `implements Compact` included, at full pointers.
+ *
  * A `--emit-header` build keeps a compact class, and every class holding one
  * of its links, opaque: C holds it as a full `struct X *` handle and links the
  * range runtime (`scripts/build.sh --arena-range`). The compiler refuses a
@@ -3783,8 +3789,11 @@ declare module "nish:compact" {
   export interface Compact {}
 
   /**
-   * Reserved for WP48 stage 3, which lets a class refuse a layout the
-   * compiler picks. Accepted today and changes nothing.
+   * The marker a class implements to keep its links full pointers. The
+   * compiler compacts a class on its own when its rule finds the saving pays
+   * (`--explain-layout` names each pick); `implements Wide` refuses that
+   * pick, the way `--compact off` refuses every one. It has no members, so it
+   * adds no field, and a class cannot write it with `Compact`.
    */
   export interface Wide {}
 }

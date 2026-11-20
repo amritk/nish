@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 812 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 813 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15685,7 +15685,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` again, which never ends (assign it in the constructor)
+` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
 ```
 
 ## NL2820
@@ -15694,4 +15694,12 @@ The message of an error contains:
 
 ```text
 ` is not exported, but this class's initializers run in the module that builds it (export `
+```
+
+## NL2821
+
+The message of an error contains:
+
+```text
+` again, which never ends (assign it in the constructor)
 ```

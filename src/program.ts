@@ -1250,15 +1250,24 @@ export class StructInfo {
    * WP48: the class writes `implements Compact` (`nish:compact`), so a field
    * typed exactly this class or this class `| null`, in any class, is a 32-bit
    * offset into the reserved range where the target compresses
-   * (`computeLayout`, docs/wp48-ref32-classes.md §3.2).
+   * (`computeLayout`, docs/wp48-ref32-classes.md §3.2). Since stage 3 the
+   * compact-class rule (`src/compact-rule.ts`) also sets it, once every body
+   * is checked, on each class it picks (`Compilation.settleCompactClasses`).
    */
   compact: boolean
+  /**
+   * WP48: the class writes `implements Wide` (`nish:compact`), so the
+   * compact-class rule never picks it and every field typed this class stays
+   * a full pointer (`src/compact-rule.ts`, test 5).
+   */
+  wide: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
     this.layout = false
     this.laying = false
     this.compact = false
+    this.wide = false
     this.kind = kind
     this.origin = origin
     this.type = type

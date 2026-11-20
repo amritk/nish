@@ -44,6 +44,64 @@ export const main = (): i32 => {
 };
 ```
 
+## Classes the compiler picks for you
+
+A native build (`--link`, or `nish run`) compacts a class without the marker
+when doing so pays: something links to the class, the class is at least 24
+bytes, narrowing those links takes at least a quarter off its size, and the
+program makes the class in a loop or a recursive function. The `Tree` above qualifies with
+the marker removed: its two links take it from 24 bytes to 12. A saving
+smaller than a quarter is left alone, because every read of a compact link
+pays a widening back to a pointer. So is a class of 16 bytes or less, such as
+a list cell of an `i32` and one link: four already fit in a cache line, and
+narrowed it measured slower. A saving only in some other class that holds the
+link is left alone too. Write `implements Compact` if you want one of these.
+
+To see what was picked, and why each other class was not, add
+`--explain-layout`:
+
+```
+nish run --explain-layout tree.ts
+```
+
+It prints one line per class: `compact` with its size before and after, or
+the first test that refused it. IR alone (`-o` with no `--link`) and wasm32
+builds pick nothing.
+
+## Keeping a class wide
+
+To keep one class's links full pointers, write `implements Wide`. Without
+the marker, this 24-byte `Peer` would be picked and narrowed to 12:
+
+<!-- nish:ok -->
+```ts
+import { Wide } from "nish:compact";
+
+class Peer implements Wide {
+  next: Peer | null = null;
+  prev: Peer | null = null;
+  id: i32;
+  constructor(id: i32) {
+    this.id = id;
+  }
+}
+
+export const main = (): i32 => {
+  let head: Peer | null = null;
+  for (let i = 0; i < 4; i++) {
+    const p = new Peer(i);
+    p.next = head;
+    head = p;
+  }
+  console.log(head === null ? -1 : head.id);
+  return 0;
+};
+```
+
+`--compact off` does the same for every class in the build, those marked
+`implements Compact` included. A class may not write both `Compact` and
+`Wide` (NL2819).
+
 ## What gets smaller
 
 Only a *link* shrinks: a field whose type is exactly the compact class, or the
