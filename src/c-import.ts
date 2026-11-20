@@ -565,21 +565,6 @@ class CType {
 }
 
 /**
- * The width of a buffer's count of type `t`: a `u8`, `u16`, `u32` or `u64`
- * by value, or through a pointer the function writes (an out class), or the
- * empty string for any other type, which `CountedBy` does not take.
- */
-const countWidth = (t: CType): string => {
-  const byValue = t.pointers === 0
-  const written = t.pointers === 1 && !t.constPointee
-  if (t.base !== BASE_SCALAR || (!byValue && !written)) {
-    return ""
-  }
-  const s = t.scalar
-  return s === "u8" || s === "u16" || s === "u32" || s === "u64" ? s : ""
-}
-
-/**
  * `T [N]`, clang's spelling of an array, split into its element and length.
  * Any other shape (`T []`, `T [2][3]`, a length that is not a plain decimal)
  * keeps `length` at -1 and says why in `reason`, which `fieldType` gives.
@@ -1750,6 +1735,19 @@ class Importer {
     return index >= 0 && index < this.records.length ? index : -1
   }
 
+  /**
+   * Whether a value of type `t` can be a buffer's count: a `u8`, `u16`, `u32`
+   * or `u64` (an `unsigned char` included) by value, or through a pointer the
+   * function writes (an out class). `CountedBy` takes no other type.
+   */
+  isCountType(t: CType): boolean {
+    if (t.pointers > 1 || (t.pointers === 1 && t.constPointee) || (t.base !== BASE_SCALAR && t.base !== BASE_CHAR)) {
+      return false
+    }
+    const s = this.valueType(t)
+    return s === "u8" || s === "u16" || s === "u32" || s === "u64"
+  }
+
   /** The Nish type of a value of type `t` (no pointer), or `!` and the reason it has none. */
   valueType(t: CType): string {
     if (t.base === BASE_VOID) {
@@ -2673,7 +2671,7 @@ class Importer {
         this.fail(`overrides: ${this.paramWhere(f, param)} cannot be its own count`, 1)
         return
       }
-      if (countWidth(this.resolve(f.paramTypes[countAt])).length === 0) {
+      if (!this.isCountType(this.resolve(f.paramTypes[countAt]))) {
         this.fail(
           `overrides: ${this.paramWhere(f, param)}'s count \`${buffer}\` must be a \`u8\`, \`u16\`, \`u32\` or \`u64\`, passed by value or through a pointer the function writes`,
           1

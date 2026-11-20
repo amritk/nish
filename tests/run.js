@@ -46238,7 +46238,15 @@ export function main(): i32 {
       ],
       [
         '{ "functions": { "db_read": { "into": { "buffer": "d" } } } }',
-        "overrides: `db_read` parameter `into`'s count `d` must be the next parameter",
+        "overrides: `db_read` parameter `into`'s count `d` must be a `u8`, `u16`, `u32` or `u64`, passed by value or through a pointer the function writes",
+      ],
+      [
+        '{ "functions": { "db_read": { "into": { "buffer": "size" } } } }',
+        "overrides: `db_read` parameter `into`'s count `size` is not a parameter of `db_read`",
+      ],
+      [
+        '{ "functions": { "db_read": { "into": { "buffer": "into" } } } }',
+        "overrides: `db_read` parameter `into` cannot be its own count",
       ],
       [
         '{ "functions": { "db_close": { "d": { "readonly": true } } } }',
@@ -46273,6 +46281,7 @@ export function main(): i32 {
         'int t_attr(int __attribute__((btf_type_tag("x"))) *p);\n' +
         "char *_Nonnull nn_ret(void);\n" +
         "int i_buf(void *p, long long n);\n" +
+        "int b_pair(void *a, unsigned char *b, unsigned n);\n" +
         'int asm_fn(int x) __asm__("real_asm");\n'
     )
     const noOpRefusals = [
@@ -46354,7 +46363,12 @@ export function main(): i32 {
       [
         "refuse.h",
         '{ "functions": { "i_buf": { "p": { "buffer": "n" } } } }',
-        "an unsigned 64-bit integer passed by value",
+        "`i_buf` parameter `p`'s count `n` must be a `u8`, `u16`, `u32` or `u64`, passed by value or through a pointer the function writes",
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "b_pair": { "a": { "buffer": "b" }, "b": { "buffer": "n" } } } }',
+        "`b_pair` parameter `a`'s count `b` is a buffer itself, not a count",
       ],
       ["refuse.h", '{ "functions": { "asm_fn": {} } }', "`asm_fn` is not bound (declared with an asm label or alias"]
     )
@@ -46369,6 +46383,103 @@ export function main(): i32 {
         shown(run)
       )
     }
+
+    // A bare `enum e;` after an included header's definition is a
+    // redeclaration, not the definition: the other file's enumerators stay
+    // out of the module, as they are when the header names no `enum e` at all.
+    fs.writeFileSync(path.join(cImportDir, "enum-inc.h"), "enum e { E_FROM_INC = 7 };\n")
+    fs.writeFileSync(path.join(cImportDir, "enum-redecl.h"), '#include "enum-inc.h"\nenum e;\nint enum_use(int x);\n')
+    const enumRun = cImport([path.join(cImportDir, "enum-redecl.h"), "-o", out])
+    const enumText = enumRun.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    fs.rmSync(out, { force: true })
+    check(
+      "c-import: a bare `enum e;` does not bring in the enumerators an included header defines",
+      enumRun.status === 0 && enumText.includes("declare function enum_use(x: i32): i32\n") && !enumText.includes("E_FROM_INC"),
+      shown(enumRun) + enumText
+    )
+
+    // A module that uses each spelling the generator writes for a C library
+    // -- an opaque class, a struct with array fields and a named buffer pair
+    // whose count is a `u16` before its buffer -- is generated, linked with
+    // the library's C source and run.
+    const tripH = path.join(cImportDir, "trip.h")
+    fs.writeFileSync(
+      tripH,
+      "#include <stdint.h>\n" +
+        "typedef struct conn conn;\n" +
+        "conn *conn_open(int32_t id);\n" +
+        "int32_t conn_id(conn *c);\n" +
+        "void conn_close(conn *c);\n" +
+        "struct digest { uint32_t h[4]; uint64_t total; uint8_t tag[3]; };\n" +
+        "void digest_fill(struct digest *d);\n" +
+        "uint32_t sum_bytes(uint16_t len, const void *data);\n"
+    )
+    const tripC = path.join(cImportDir, "trip.c")
+    fs.writeFileSync(
+      tripC,
+      '#include <stdlib.h>\n#include "trip.h"\n' +
+        "struct conn { int32_t id; };\n" +
+        "conn *conn_open(int32_t id) { conn *c = malloc(sizeof *c); if (c) c->id = id; return c; }\n" +
+        "int32_t conn_id(conn *c) { return c->id; }\n" +
+        "void conn_close(conn *c) { free(c); }\n" +
+        "void digest_fill(struct digest *d) {\n" +
+        "  for (int i = 0; i < 4; i++) d->h[i] += (uint32_t)(i * 10);\n" +
+        "  d->total = 99; d->tag[2] = 5;\n}\n" +
+        "uint32_t sum_bytes(uint16_t len, const void *data) {\n" +
+        "  const uint8_t *p = data; uint32_t s = 0;\n" +
+        "  for (uint16_t i = 0; i < len; i++) s += p[i];\n  return s;\n}\n"
+    )
+    const tripJson = path.join(cImportDir, "trip.overrides.json")
+    fs.writeFileSync(tripJson, '{ "header": "trip.h", "functions": { "sum_bytes": { "data": { "buffer": "len" } } } }')
+    const tripTs = path.join(cImportDir, "trip.ts")
+    const trip = cImport([tripH, "--overrides", tripJson, "-o", tripTs])
+    const tripText = trip.status === 0 ? fs.readFileSync(tripTs, "utf8") : ""
+    check(
+      "c-import: trip.h writes an opaque class, array fields and a named buffer pair",
+      trip.status === 0 &&
+        tripText.includes("declare class conn {}\n") &&
+        tripText.includes("declare function conn_open(id: i32): conn | null\n") &&
+        tripText.includes("  h: Record<integer<0, 3>, u32>\n") &&
+        tripText.includes("  tag: Record<integer<0, 2>, u8>\n") &&
+        tripText.includes('declare function sum_bytes(len: u16, data: CountedBy<readonly u8[], "len">): u32\n'),
+      shown(trip) + tripText
+    )
+    fs.writeFileSync(
+      tripTs,
+      `${tripText}
+export function main(): i32 {
+  const c = conn_open(42)
+  if (c === null) {
+    return 1
+  }
+  console.log(\`id \${conn_id(c)}\`)
+  conn_close(c)
+  const d = new digest()
+  d.h[1] = 1
+  digest_fill(d)
+  console.log(\`h \${d.h[0]} \${d.h[1]} \${d.h[3]} total \${d.total} tag \${d.tag[2]}\`)
+  const bytes: u8[] = [1, 2, 3, 250]
+  console.log(\`sum \${sum_bytes(4, bytes)}\`)
+  return 0
+}
+`
+    )
+    const tripLl = path.join(cImportDir, "trip.ll")
+    const tripExe = path.join(cImportDir, "trip")
+    const tripCompiled = spawnSync(NISH, [tripTs, "-o", tripLl], { encoding: "utf8" })
+    const tripBuilt =
+      tripCompiled.status === 0
+        ? spawnSync("bash", [path.join(root, "scripts", "build.sh"), tripLl, path.join(root, "runtime", "runtime.c"), tripC, "-o", tripExe], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : tripCompiled
+    const tripRan = tripBuilt.status === 0 ? spawnSync(tripExe, { encoding: "utf8" }) : tripBuilt
+    check(
+      "c-import: the trip.h module links with its C source and runs each spelling",
+      tripRan.status === 0 && tripRan.stdout === "id 42\nh 0 11 30 total 99 tag 5\nsum 256\n",
+      shown(tripRan)
+    )
 
     // `-o` naming the header itself is refused before clang runs, and the
     // header is left as it was.
