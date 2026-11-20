@@ -609,7 +609,6 @@ export class Checker {
     }
   }
 
-
   /**
    * One `type X = T;`. The name goes in now and the right-hand side is
    * resolved later; the language shares one declaration namespace, so a clash

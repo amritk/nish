@@ -1440,10 +1440,7 @@ const instantiateHere = (
   for (const fn of functions) {
     exposeTo(ctx, fn)
   }
-  const symbol = withFunctionArguments(
-    instanceSymbol(ctx.table, base, args),
-    functions
-  )
+  const symbol = withFunctionArguments(instanceSymbol(ctx.table, base, args), functions)
   const existing = ctx.program.instantiation(symbol)
   if (existing !== null) {
     // One symbol is one (template, tuple): the mangling is injective because

@@ -4887,9 +4887,11 @@ const clashMessage = (
   if (strictExports) {
     why = `, and both modules' paths qualify it to one symbol, \`${sig.name}\`, so rename one of the modules or the function`
   } else if (packageName === ROOT_PACKAGE) {
-    why = ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported"
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported"
   } else {
-    why = ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported"
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported"
   }
   if (packageName === ROOT_PACKAGE) {
     return `Function ${where}${why}; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name`
