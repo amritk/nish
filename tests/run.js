@@ -45567,7 +45567,7 @@ if (!only || "cpu-level".includes(only)) {
   const nish = (args, env = {}) =>
     spawnSync(NISH, args, { cwd: root, encoding: "utf8", env: { ...process.env, ...env } })
   const refusals = [
-    ["`native`", ["--cpu", "native"], "unknown cpu level `native`"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["`x86-64-v4`", ["--cpu", "x86-64-v4"], "unknown cpu level `x86-64-v4`"],
     ["`armv8.2-a`", ["--cpu", "armv8.2-a"], "unknown cpu level `armv8.2-a`"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
@@ -45594,11 +45594,11 @@ if (!only || "cpu-level".includes(only)) {
     "cpu level: nish run --cpu native is refused with exit 2 before anything runs",
     runRefused.status === 2 &&
       runRefused.stdout === "" &&
-      runRefused.stderr.includes("unknown cpu level `native`"),
+      runRefused.stderr.includes("--cpu native is refused: under clang 18 the constant-time check (CT-16)"),
     `${runRefused.status}: ${runRefused.stderr}`
   )
   for (const [what, flags, says] of [
-    ["`native`", ["--cpu", "native"], "--cpu takes x86-64-v3, not 'native'"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
     ["the wasm profile", ["--profile", "wasm", "--cpu", "x86-64-v3"], "the wasm profile does not take it"],
     ["the wasi profile", ["--profile", "wasi", "--cpu", "x86-64-v3"], "the wasi profile does not take it"],
@@ -45685,6 +45685,40 @@ if (!only || "cpu-level".includes(only)) {
         "cpu level: the runtime cache keeps the level in its own entry beside the baseline's",
         entries("runtime") === 2,
         `${entries("runtime")} runtime entries`
+      )
+      // SQLite's units are compiled apart from the runtime's (build.sh's
+      // `sqlite_units`, from inside runtime/sqlite/ by their bare names), so the
+      // level reaching the nineteen runtime units says nothing about them. Each
+      // unit, every `runtime/sqlite/*.c` but sqlite3.c, has its own clang line,
+      // and that line carries the level. The amalgamation has no line of its
+      // own: nish-sqlite.c includes it, so it is compiled at that unit's level.
+      const sqliteUnits = fs
+        .readdirSync(path.join(root, "runtime", "sqlite"))
+        .filter((f) => f.endsWith(".c") && f !== "sqlite3.c")
+        .sort()
+      const sqlite = nish(
+        [
+          path.join(root, "tests", "link", "sqlite_link", "main.ts"),
+          "-o",
+          path.join(cpuDir, "sqlite.ir") + "/",
+          "--link",
+          path.join(cpuDir, "sqlite-v3"),
+          "--cpu",
+          "x86-64-v3",
+        ],
+        env
+      )
+      const sqliteLines = ccLines()
+      const unitLines = (unit) => sqliteLines.filter((l) => new RegExp(` -c ${unit.replace(".", "\\.")}( |$)`).test(l))
+      check(
+        `cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on every runtime/sqlite/ unit (${sqliteUnits.join(", ")}, which includes sqlite3.c), the module and the link`,
+        sqlite.status === 0 &&
+          sqliteUnits.includes("nish-sqlite.c") &&
+          sqliteUnits.every((unit) => unitLines(unit).length === 1) &&
+          unitLines("sqlite3.c").length === 0 &&
+          sqliteLines.some((l) => !/ -c /.test(l)) &&
+          sqliteLines.every(marched),
+        sqlite.stderr + sqliteLines.join("\n")
       )
       const flags = fs.existsSync("/proc/cpuinfo")
         ? (fs.readFileSync("/proc/cpuinfo", "utf8").match(/^flags\s*:.*$/m) ?? [""])[0]

@@ -1,4 +1,4 @@
-// WP48 rule 1: an N-API build refuses every compact class, named at its class: the addon runs in Node's process.
+// WP48 rule 1: an N-API build refuses a compact class no refused export names, at its class: the addon runs in Node's process.
 import { Compact } from "nish:compact"
 
 class Cell implements Compact {

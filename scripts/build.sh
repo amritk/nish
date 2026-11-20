@@ -250,6 +250,7 @@ while [ $# -gt 0 ]; do
 done
 [ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: no input files" >&2; exit 2; }
 if [ -n "$cpu" ]; then
+  [ "$cpu" != native ] || { echo "error: --cpu native is refused: under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids); --cpu takes x86-64-v3" >&2; exit 2; }
   [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
   case "$profile" in
     wasm|wasm-host|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;

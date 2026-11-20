@@ -870,9 +870,11 @@ A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
 [Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
-A numeric enum crosses as its number. A string enum has no spelling in C or
-in the typings yet, so a function that takes or returns one is refused under
-`--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
+An enum does not cross. A function that takes or returns a numeric enum is
+left out of the header and the typings, and each writes a comment naming
+the signature where the declaration would be. A string enum has no spelling in C or in the typings yet either,
+and a function that takes or returns one is refused under `--emit-header`,
+`--emit-dts`, `--emit-napi` and `--emit-napi-async`:
 
 <!-- nish:err NL4019 --emit-header build/docs-ai/nl4019.h -->
 ```ts
