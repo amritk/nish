@@ -451,6 +451,11 @@ Lookups inside one module (`members.ts`'s `structOf`, the 51
 `.struct(nameOf(...))` sites) still go by name, which equals the symbol until
 S3d; S3d moves them to `structByType` where a qualified local struct would
 otherwise be missed.
+The checked goldens of 50 modules the stage does not edit move too, but
+only in `size=` and `returnDeref=` figures: `StructInfo` (176 to 184 bytes),
+`CheckedProgram` (920 to 928) and `StructRegistry` (16 to 24) each gained a
+field, and every module holding a pointer to one prints its size. Normalised
+for those figures, their diff is empty.
 
 **S3b: spell structs by their symbol.** Every `%struct.` speller and
 `llvmType` reads the symbol, and so does the header's `cStructName`, since

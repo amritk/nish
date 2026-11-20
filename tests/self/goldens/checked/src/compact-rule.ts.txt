@@ -55,15 +55,15 @@ function LayoutModule.constructor(this: LayoutModule, program: CheckedProgram, s
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: program std
   pointer this: size=16 writesThrough=true captured=false
-  pointer program: size=920 writesThrough=true captured=true
+  pointer program: size=928 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CallNode.constructor(this: CallNode, key: string, program: CheckedProgram, owner: StructInfo | null, body: Node): void -> @CallNode.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: body key owner program
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
-  pointer program: size=920 writesThrough=true captured=true
-  pointer owner: size=176 writesThrough=true captured=true
+  pointer program: size=928 writesThrough=true captured=true
+  pointer owner: size=184 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:21 new StringMap -> @StringMap.constructor
@@ -101,14 +101,14 @@ function functionKey(sig: FunctionSig): string -> @functionKey
 function classKey(info: StructInfo): string -> @classKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   local +1:9 name: string (const)
 function memberKey(owner: StructInfo, member: string): string -> @memberKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: classKey nish_str_concat
-  pointer owner: size=176 writesThrough=false captured=false passedTo=classKey#0
+  pointer owner: size=184 writesThrough=false captured=false passedTo=classKey#0
   stackSites=0 stackLocals=0
   callee +0:69 classKey -> @classKey
 function functionBodyOf(decl: Node): Node | null -> @functionBodyOf
@@ -167,7 +167,7 @@ function calleeIndex(graph: CallGraph, self: CallNode, callee: Node): i32 -> @ca
 function madeClass(program: CheckedProgram, node: Node): string -> @madeClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct CheckedProgram.structTemplate classKey nish_panic_index nish_str_concat
-  pointer program: size=920 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
+  pointer program: size=928 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -225,7 +225,7 @@ function buildGraph(modules: LayoutModule[]): CallGraph -> @buildGraph
   callee +10:7 connect -> @connect$
 function reportable(info: StructInfo): boolean -> @reportable
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function collectInstances(modules: LayoutModule[], into: StructInfo[], homes: i32[]): void -> @collectInstances
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -248,7 +248,7 @@ function collectClasses(m: i32, program: CheckedProgram, instances: StructInfo[]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_panic_index nish_panic_overflow reportable
-  pointer program: size=920 writesThrough=false captured=false
+  pointer program: size=928 writesThrough=false captured=false
   pointer instances: size=0 writesThrough=false captured=false
   pointer homes: size=0 writesThrough=false captured=false
   pointer into: size=0 writesThrough=true captured=false
@@ -264,7 +264,7 @@ function displayName(table: TypeTable, info: StructInfo): string -> @displayName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.typeName#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:40 TypeTable.typeName -> @TypeTable.typeName
 function notNative(opts: Options, programs: CheckedProgram[]): string -> @notNative
@@ -280,7 +280,7 @@ function linksTo(table: TypeTable, info: StructInfo, target: i32): boolean -> @l
   escaping: target
   calls: isLinkTo
   pointer table: size=168 writesThrough=false captured=false passedTo=isLinkTo#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   callee +1:9 isLinkTo -> @isLinkTo
@@ -288,7 +288,7 @@ function forbidden(table: TypeTable, info: StructInfo): string -> @forbidden
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsSecret nish_str_concat
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.holdsSecret#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   callee +1:9 TypeTable.holdsSecret -> @TypeTable.holdsSecret
