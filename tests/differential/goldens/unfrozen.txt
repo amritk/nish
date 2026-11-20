@@ -187,6 +187,7 @@ cases/cf_label_walks added after R6: no rewriter to freeze it with
 cases/cls_boxed_array added after R6: no rewriter to freeze it with
 cases/cls_boxed_array_push added after R6: no rewriter to freeze it with
 cases/cls_field_init added after R6: no rewriter to freeze it with
+cases/cls_field_init_arena added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with

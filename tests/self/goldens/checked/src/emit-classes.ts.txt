@@ -196,7 +196,7 @@ function arenaObject(emitter: Emitter, info: StructInfo): string -> @arenaObject
   callee +1:48 Emitter.useRuntime -> @Emitter.useRuntime
   callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:56 structTypeName -> @structTypeName
-function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @initializerConstant [exported]
+function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @initializerConstant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.stringConstant TypeTable.isFnRef TypeTable.stripNull floatText internalErrorFor isFloat nish_exit nish_panic_index nish_panic_overflow nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral

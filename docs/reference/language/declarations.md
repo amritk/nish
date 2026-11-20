@@ -302,13 +302,13 @@ having no top-level code and therefore no initialisation order.
   [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
-  There is deliberately no second, larger language inside `const`: a constant
-  can compute exactly what a runtime expression can.
+  There is deliberately no second, larger language inside `const`: what a
+  constant computes, it computes as the runtime expression would, but it
+  computes less.
   "Arithmetic" here is `+ - * / %`, the comparisons, `!`, `&&`, `||`, unary
-  minus and string `+`; a shift or bitwise operator (`<< >> >>> & | ^`) is
-  not folded, and is `` Unsupported operator `<<` in a constant `` in a
-  constant or a [constant table](#constant-tables)'s element alike (`~` is
-  `` Unsupported unary operator ``). Write the
+  minus and string `+`. The shift and bitwise operators (`<< >> >>> & | ^ ~`)
+  are refused in a constant and in a [constant table](#constant-tables)'s
+  element alike, whatever their operands' type, not folded. Write the
   value out (`8`, not `1 << 3`), or compute it at run time.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
