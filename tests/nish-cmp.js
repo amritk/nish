@@ -3037,6 +3037,13 @@ const DECLARED = [
     changelog: "Split, asciiUpper, asciiLower, padStart and padEnd in nish/text",
     why: "std/text.ts gains split, asciiUpper, asciiLower, padStart and padEnd, so the module every importer of nish/text writes has new functions and renumbered string constants; no importer's own module moves",
   },
+  // std/text.ts's splitLines scans with nish:simd, a lane-wise compare over a
+  // 4096-position flag buffer, instead of one position at a time.
+  {
+    file: "text.ll",
+    changelog: "split lines in std/text sixteen positions at a time",
+    why: "std/text.ts's splitLines copies newline flags into a 4096-byte buffer and compares sixteen at a time with nish:simd, so the module every importer of nish/text writes declares the vector load, compare and bitmask and has a longer splitLines; no importer's own module moves",
+  },
   // H1-3: the WebSocket accept key is written into storage the connection
   // owns, so nish/crypto/sha1 gains Sha1 and digestInto and
   // nish/crypto/base64url gains the into-a-buffer encoder: the module every
