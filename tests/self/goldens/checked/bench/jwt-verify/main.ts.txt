@@ -408,7 +408,7 @@ function hmacKeySha512(inner: Sha512, outer: Sha512, key: u8[]): void -> @nish.h
 function HmacSha256.constructor(this: HmacSha256, key: u8[]): void -> @nish.HmacSha256.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.hmacKeySha256
-  calls: nish.Sha256.constructor nish.hmacKeySha256 nish_alloc_struct nish_panic
+  calls: nish.Sha256.constructor nish.hmacKeySha256 nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
   stackSites=0 stackLocals=0
@@ -427,7 +427,7 @@ function HmacSha256.update(this: HmacSha256, data: u8[], off: i32, len: i32): vo
 function HmacSha256.digest(this: HmacSha256): u8[] -> @nish.HmacSha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HmacSha256.digestInto
-  calls: nish.HmacSha256.digestInto nish_panic
+  calls: nish.HmacSha256.digestInto
   pointer this: size=24 writesThrough=false captured=false passedTo=nish.HmacSha256.digestInto#0
   stackSites=0 stackLocals=0
   local +0:11 tag: u8[] (const)
@@ -625,8 +625,8 @@ function hmacCopySha384(from: Sha384, to: Sha384): void -> @nish.hmacCopySha384 
   local +3:9 toBlock: u8[] (const)
   local +5:9 i: i32 (let)
 function HmacSha256Scratch.constructor(this: HmacSha256Scratch): void -> @nish.HmacSha256Scratch.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish.Sha256.constructor nish_alloc_struct nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Sha256.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new Sha256 -> @nish.Sha256.constructor
@@ -697,8 +697,8 @@ function HmacSha256Scratch.wipe(this: HmacSha256Scratch): void -> @nish.HmacSha2
   callee +0:5 hmacWipeSha256 -> @nish.hmacWipeSha256
   callee +1:5 hmacWipeSha256 -> @nish.hmacWipeSha256
 function HmacSha384Scratch.constructor(this: HmacSha384Scratch): void -> @nish.HmacSha384Scratch.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish.Sha384.constructor nish_alloc_struct nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.Sha384.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new Sha384 -> @nish.Sha384.constructor
@@ -1477,8 +1477,7 @@ function sha256Compress(h: u32[], w: u32[], src: u8[], at: i32): void -> @nish.s
   callee +268:14 sha256BigSigma0 -> @nish.sha256BigSigma0
   callee +268:35 sha256Majority -> @nish.sha256Majority
 function Sha256.constructor(this: Sha256): void -> @nish.Sha256.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:11 h: u32[] (const)
@@ -1515,7 +1514,7 @@ function Sha256.copy(this: Sha256): Sha256 -> @nish.Sha256.copy [exported method
 function Sha256.digest(this: Sha256): u8[] -> @nish.Sha256.digest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha256.digestInto
-  calls: nish.Sha256.digestInto nish_panic
+  calls: nish.Sha256.digestInto
   pointer this: size=40 writesThrough=true captured=false passedTo=nish.Sha256.digestInto#0
   stackSites=0 stackLocals=0
   local +0:11 out: u8[] (const)
@@ -1745,9 +1744,8 @@ function storeWord(buf: u8[], off: i32, word: u64): void -> @nish.storeWord
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
 function Sha512Engine.constructor(this: Sha512Engine, initial: u64[]): void -> @nish.Sha512Engine.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: initial
-  calls: nish_panic
   pointer this: size=40 writesThrough=true captured=false
   pointer initial: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -1854,7 +1852,7 @@ function Sha512Engine.finish(this: Sha512Engine, size: i32): u8[] -> @nish.Sha51
   local +18:14 i: i32 (let)
   callee +19:7 storeWord -> @nish.storeWord
 function Sha512.constructor(this: Sha512): void -> @nish.Sha512.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Sha512Engine.constructor nish.sha512Initial nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -1886,7 +1884,7 @@ function Sha512.digest(this: Sha512): u8[] -> @nish.Sha512.digest [exported meth
   stackSites=0 stackLocals=0
   callee +0:12 Sha512Engine.finish -> @nish.Sha512Engine.finish
 function Sha384.constructor(this: Sha384): void -> @nish.Sha384.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.Sha512Engine.constructor nish.sha384Initial nish_alloc_struct
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -7004,7 +7002,7 @@ function p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> | null -> @
 function p256EcdhExposed(priv: u8[], peerPoint: u8[]): u8[] | null -> @nish.p256EcdhExposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256ScalarInRange
-  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256DecodePoint nish.p256FiatMul nish.p256FiatNonzero nish.p256FieldInvert nish.p256Limbs nish.p256LimbsToBytes nish.p256PlainOne nish.p256ScalarInRange nish.p256ScalarMult nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic
+  calls: nish.P256PointScratch.constructor nish.P256ProjectivePoint.constructor nish.p256DecodePoint nish.p256FiatMul nish.p256FiatNonzero nish.p256FieldInvert nish.p256Limbs nish.p256LimbsToBytes nish.p256PlainOne nish.p256ScalarInRange nish.p256ScalarMult nish.p256WipePoint nish.p256WipeScratch nish.wipe$arr.u32 nish.wipe$arr.u8
   pointer priv: size=0 writesThrough=false captured=false passedTo=nish.p256ScalarInRange#0 nish.p256ScalarMult#1
   pointer peerPoint: size=0 writesThrough=false captured=false passedTo=nish.p256DecodePoint#0
   stackSites=2 stackLocals=2

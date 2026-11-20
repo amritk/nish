@@ -3676,7 +3676,7 @@ function p256UpdateFg30(f: u32[], g: u32[], t: u32[]): void -> @p256UpdateFg30 [
   callee +45:8 p256Carry30 -> @p256Carry30
 function limbsOfHex(text: string): u32[] -> @limbsOfHex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_index
   stackSites=0 stackLocals=0
   local +0:9 out: u32[] (const)
   local +1:12 i: i32 (let)
@@ -3728,7 +3728,7 @@ function invert(out: u32[], a: u32[]): void -> @invert
 function baseMult(k: string): string -> @baseMult
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via toMontgomery
-  calls: affineHex limbsOfHex nish_panic_index nish_panic_overflow p256PointAdd p256WindowStep toMontgomery
+  calls: affineHex limbsOfHex nish_panic_index p256PointAdd p256WindowStep toMontgomery
   stackSites=5 stackLocals=5
   local +0:9 gx: u32[] (const)
   callee +0:21 limbsOfHex -> @limbsOfHex
@@ -3772,7 +3772,7 @@ function affineHex(x: u32[], y: u32[], z: u32[]): string -> @affineHex
   callee +6:30 hexOfLimbs -> @hexOfLimbs
 function bytesOfHex(text: string): u8[] -> @bytesOfHex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow
+  calls: nish_panic_index
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 i: i32 (let)

@@ -328,7 +328,7 @@ function Diagnostic.editsJson(this: Diagnostic, key: string, edits: Edit[]): str
   callee +14:5 StringBuilder.add -> @StringBuilder.add
   callee +15:12 StringBuilder.toText -> @StringBuilder.toText
 function DiagnosticSink.constructor(this: DiagnosticSink): void -> @DiagnosticSink.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
