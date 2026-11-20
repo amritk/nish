@@ -261,7 +261,10 @@ states) is the decision.
   meta-schemas and a document corpus: the same verdict, and with all errors
   the same keyword, instance path and schema path for each error, in the same
   order. Vendoring the meta-schemas keeps their licences
-  (`.claude/licensing.md`, `THIRD_PARTY_NOTICES.md`).
+  (`.claude/licensing.md`, `THIRD_PARTY_NOTICES.md`). ajv's answers are
+  generated once by a script run by hand and committed beside the corpus,
+  with the ajv versions that wrote them; the test reads only those, so ajv
+  is not a dependency of this repository (§7).
 - **The limits of §4.9**, each with a case that passes it.
 - **The loaders** against a local file tree and a local HTTP server: relative
   and absolute references, `$id` bases, the root fence, a private address
@@ -280,11 +283,13 @@ states) is the decision.
   `nish/json-schema-file`.
 - **S4: the HTTP loader and its security record.** `nish/json-schema-http`,
   its record and index row.
-- **S5: the differential and the docs.** §6's ajv differential, the guide
-  page, the `std/README.md` rows and `docs/reference/`. Whether ajv becomes a
-  dev dependency of this repository for the differential, or the corpus's
-  expected answers are generated once and committed, is the owner's
-  *(open question)*.
+- **S5: the differential and the docs.** §6's ajv differential, and the
+  guide page and `std/README.md` rows completed for all three modules. Each
+  earlier stage already updates the guide page and `docs/reference/` for
+  what it adds, as CLAUDE.md requires of a `std/` change. The owner chose
+  how the differential gets ajv's answers: generated once by a script run by
+  hand with ajv outside the repository, and committed beside the corpus with
+  a `--check` mode, rather than ajv as a dev dependency run by the test.
 
 ## 8. Not planned
 
