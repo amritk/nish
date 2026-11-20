@@ -426,7 +426,11 @@ const writeWide = (out: u8[], values: i64[], side: i32): i32 => {
  * the lengths are drawn from one digit to ten.
  */
 const measureNarrow = (out: u8[], status: boolean): i32 => {
-  console.log(status ? "status: i32 values of three digits, 100 to 599" : "non-negative: i32 values of one to ten digits")
+  console.log(
+    status
+      ? "status: i32 values of three digits, 100 to 599"
+      : "non-negative: i32 values of one to ten digits"
+  )
   const values: i32[] = []
   let x: u32 = 2463534242
   for (let i = 0; i < COUNT; i++) {

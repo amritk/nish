@@ -9,8 +9,8 @@ the owner (§9).
 
 Every claim about today's code is anchored at commit `0eefa5e9`, on `main`.
 The survey (§3) is `node bench/wp68-survey.mjs`, rerunnable on any commit.
-The benchmarks (§4) are `bench/wp68-*.ts`, with the bench code from the
-working tree on `662f581b`. They were built with the released 0.42.0 compiler
+The benchmarks (§4) are `bench/wp68-*.ts`, with the bench code at commit
+`38031fa9`. They were built with the released 0.42.0 compiler
 (`build/seed`), run on x86-64 Linux (4 cores, Intel Xeon @ 2.10GHz), and
 pinned to one core with `taskset -c 2`.
 
@@ -28,7 +28,8 @@ The owner set the order of priorities:
 prefix. The decoder from a hex digit to its value has 15 copies. One of them is
 `http1HexValue`, another is `jwtHexValue`, and the rest follow the same
 pattern. A predicate for ASCII digits has nine copies. Code that checks UTF-8
-has nineteen copies across encoders, validators and widths. `src/` adds its own
+has nineteen copies across encoders, validators and widths, and a twentieth
+the survey does not count (§4.3). `src/` adds its own
 copies: `isDigit` in the lexer, `fnv1a` in the map, `jsonIsUtf8` and
 `addJsonQuoted`.
 
@@ -42,27 +43,32 @@ and §4 measure:
   outside the noise band:
   - on hex, `lower` in `std/math.ts` is about 1.5 times the `http1HexValue`
     chain on mixed bytes and on mixed code units, and `manifestHexDigit`'s
-    `& 15` form is 6% faster on random hex digits;
+    `& 15` form is 4–6% faster on random hex digits;
   - on big-endian loads, the shift form is 1.5 times `std/bytes.ts`
-    `getU32BE`, which multiplies in the top byte. That is the load alone:
-    `getU32BE`'s one caller outside `std/bytes.ts` loads a DNS TTL once per
-    record (`std/net/dns-message.ts:539`);
-  - on JSON strings, `jsonWriterPutRuns` is 1.9 to 4.2 times the
+    `getU32BE`, which multiplies in the top byte. That is the load alone, and
+    it is the load the libraries run most: `getI32BE` wraps it, and the
+    postgres decoders call that per array word, per `int4` value and, in
+    `postgres-async.ts`, per message. No program-level
+    gain is measured; `bench/pg-decode` decides it (§4.2);
+  - on JSON strings, `jsonWriterPutRuns` is 1.8 to 4.8 times the
     byte-by-byte quoter for strings of 16 bytes or more with 1 byte in 256
     escaped, and slower at 8 bytes, on empty strings, and with 1 byte in 16
-    escaped;
+    escaped. No shipped caller gains from that: `jsonWriterPutBytes` already
+    takes the runs from 16 bytes, and the byte loop over a `string`,
+    `jsonWriterPutString`, is not what this bench times (§4.2);
   - on UTF-8, the tokenizer's real path, the native `skipJsonText` and then
-    `jsonTokUtf8Length`, is 5.8 times `urlIsUtf8` on mixed text and 1.9 times
+    `jsonTokUtf8Length`, is 5.7 to 5.9 times `urlIsUtf8` on mixed text and 1.9 times
     on ASCII text;
-  - on signed decimals, `jsonWriterPutDigits64` is 9–11% faster than
+  - on signed decimals, `jsonWriterPutDigits64` is 7–10% faster than
     `pgPutDecimal`.
 
   Against the fastest existing copy, two candidates win on some inputs. A
-  256-entry hex table is 4.8 times `lower` on mixed bytes and 5.5 times
+  256-entry hex table is 4.8 to 4.9 times `lower` on mixed bytes and 5.6 to 5.7 times
   `manifestHexDigit` on random hex digits, with no gain established on digits
   alone; on `i32` code units, the table behind a range guard is 1.5 times
-  `lower`. Two digits a step is 5–6% faster than `http1PutDecimal` on
-  non-negative values, and no faster than `jsonWriterPutDigits64` on signed
+  `lower`. Two digits a step is 4% faster than `http1PutDecimal` on
+  non-negative values of 1 to 10 digits and 5% faster on three-digit status
+  codes, and no faster than `jsonWriterPutDigits64` on signed
   ones (§4).
 - **A fix reaches one copy.** `std/bytes.ts` already holds shared byte loads
   and runs. Its header lists five modules that keep their own copy anyway:
@@ -242,8 +248,9 @@ and exits 1 if a build fails, a program exits non-zero, or the checksums
 differ. After each run it prints a WARN line for every side whose ratio is no
 further from 1 than the twin's. Pass a bench's name to run it alone, for
 example `hex` or `utf8`. The figures below are the range over the two runs of
-one invocation of that command, with the bench code from the working tree on
-`662f581b`. A side is called faster or slower only when its ratio is outside
+one invocation of that command, with the bench code at commit `38031fa9`
+(the commit after it changes one comment in `bench/wp68-be-load.ts` and
+reflows one line of `bench/wp68-decimal.ts`; no code changes). A side is called faster or slower only when its ratio is outside
 the twin's band in both runs, and no side the run WARNs about is called a
 gain.
 
@@ -261,10 +268,10 @@ it answers -1 for anything outside `[0, 256)` before it indexes.
 
 | Input | twin (band) | `lower` | `mask` | `table` or `guarded` |
 | --- | ---: | ---: | ---: | ---: |
-| **mixed bytes**: `u8`, 32 symbols, 22 of them hex digits, every class at random | 1.081–1.084 (8%) | **0.672–0.674**, 1.5x faster | 1.205–1.207, slower | `table` **0.140–0.141**, 4.8x faster than `lower` |
-| **random hex bytes**: lower-case hex digits at random, the shape of a hash | 1.033–1.036 (3–4%) | 0.997–1.004, inside the band | **0.939–0.940**, 6% faster | `table` **0.170**, 5.5x faster than `mask` |
-| **digit bytes**: `0` to `9` only, every branch the same way | 0.860–0.910 (9–14%) | **0.784–0.803**, 20–22% faster | 0.998–1.010, inside the band | `table` 0.780–0.781: 0.5–3% below `lower`, no gain established |
-| **mixed code units**: `i32`, the 22 hex digits, -1, `/ : @`, 0x00 and five units from 0x100 up | 0.914–0.941 (6–9%) | **0.627–0.646**, 1.5–1.6x faster | 1.130–1.163, slower | `guarded` **0.430–0.438**, 1.5x faster than `lower` |
+| **mixed bytes**: `u8`, 32 symbols, 22 of them hex digits, every class at random | 1.059–1.093 (6–9%) | **0.657–0.674**, 1.5x faster | 1.171–1.179, slower | `table` **0.137**, 4.8–4.9x faster than `lower` |
+| **random hex bytes**: lower-case hex digits at random, the shape of a hash | 1.025–1.031 (2–3%) | 0.975–1.005, inside the band in run 1 | **0.943–0.961**, 4–6% faster | `table` **0.167–0.168**, 5.6–5.7x faster than `mask` |
+| **digit bytes**: `0` to `9` only, every branch the same way | 0.837–0.893 (11–16%) | **0.783–0.796**, 20–22% faster | 0.971–0.981, inside the band | `table` 0.776–0.787: about 1% below `lower`, no gain established |
+| **mixed code units**: `i32`, the 22 hex digits, -1, `/ : @`, 0x00 and five units from 0x100 up | 0.918–0.944 (6–8%) | **0.641–0.644**, 1.6x faster | 1.154–1.166, slower | `guarded` **0.422–0.426**, 1.5x faster than `lower` |
 
 Mixed input, every class at random, is the worst case for a copy that
 branches, so its ratios are a maximum, not a typical gain. On digits alone,
@@ -276,77 +283,113 @@ where every branch is predicted, the table gains nothing measurable over
 | Side | x first | Reading |
 | --- | ---: | --- |
 | `bytesA`, `std/bytes.ts` `getU32BE` | 1 | top byte multiplied in; no surveyed site has this form |
-| twin | 0.994–1.012 | noise band: 1% |
-| `shifts`, `sha1LoadWord` | 0.653–0.661 | fastest existing copy, **1.5x faster than `getU32BE`** in this micro-bench |
-| `wide`, `http2FrameU32` in `i64` | 0.654–0.662 | within 0.2% of `shifts`: no difference |
+| twin | 0.949–0.983 | noise band: 2–5% |
+| `shifts`, `sha1LoadWord` | 0.647–0.659 | fastest existing copy, **1.5x faster than `getU32BE`** in this micro-bench |
+| `wide`, `http2FrameU32` in `i64` | 0.641–0.651 | 1% slower than `shifts` in run 1, 3% faster in run 2, both inside the twin's band: no difference |
 
-The 1.5x is the load alone. `getU32BE` has one caller outside
-`std/bytes.ts`: `std/net/dns-message.ts:539`, which loads a record's TTL once
-per resource record. No bench times that caller, so no program-level gain is
-claimed.
+The 1.5x is the load alone. `getU32BE` is the load the libraries run most.
+Its direct caller outside `std/bytes.ts` is `std/net/dns-message.ts:539`, a
+TTL once per resource record. It also runs through `getI32BE`, which wraps
+it. `std/net/postgres.ts` calls `getI32BE` per array header word and
+element length, per `int4` value and per RowDescription column; its
+per-message and per-column-value lengths are the inline loads at `:1749`
+and `:1983`. `postgres-async.ts` calls it per message length.
+`bench/pg-decode`'s `rows` case runs the array path. Its README estimates the loads at 14% of
+`rows 100` and a fast path at about -8% (`bench/pg-decode/README.md`, item 3),
+counted in instructions, not timed. That is the README's estimate, not a
+figure of this note, and no program-level gain is claimed until S4 times
+`bench/pg-decode`.
 
-**utf8**, 4 MiB in 4 KiB segments × 10 passes. `urlA` is `urlIsUtf8`,
-`bytesWalk` is `std/bytes.ts` `bytesUtf8Length`, and `wordSkip` is an 8-byte
-ASCII skip (a candidate). `jsonTokLoop` is a synthetic driver:
-`jsonTokUtf8Length` called from a byte loop of the bench's own, which the
-tokenizer does not have. `kernel` is the tokenizer's real path:
-`jsonTokSkipPlain` calls `skipJsonText` from `nish/bytes`, and
+**utf8**, 4 MiB in 4 KiB segments × 10 passes. `urlA` is `urlIsUtf8`, and
+`wordSkip` is an 8-byte ASCII skip (a candidate). Two sides are drivers the
+bench wrote, not shipped code. `bytesWalk` is an ASCII skip around a copy of
+the private `bytesUtf8Length`. `std/bytes.ts`'s `skipJsonTextWalk` also tests
+each byte for a control, a quote and a backslash, and natively the kernel
+replaces that walk, so this side times the per-sequence decode alone.
+`jsonTokLoop` is `jsonTokUtf8Length` called from a byte loop of the bench's
+own, which the tokenizer does not have. `kernel` is the tokenizer's real
+path: `jsonTokSkipPlain` calls `skipJsonText` from `nish/bytes`, and
 `jsonTokUtf8Length` runs at the byte where that stopped. Built natively,
-`skipJsonText` is the runtime's `nish_bytes_skip_json_text`, and on this host
-`nish_run_choose` picked its AVX2 path, 32 bytes a block (`avx2` present,
-`NISH_SIMD` unset).
+`skipJsonText` is the runtime's `nish_bytes_skip_json_text`. The host has
+`avx2` and `NISH_SIMD` was unset, so `nish_run_choose` should pick the AVX2
+path, 32 bytes a block, but the bench does not print which path ran. Each
+call covers one 4 KiB segment, so the `kernel` figure is for windows of that
+size and says nothing about short strings.
 
 | Input | twin (band) | `bytesWalk` | `jsonTokLoop` | `kernel` | `wordSkip` |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| **mixed**: 16 of 64 symbols not ASCII | 0.941–0.944 (6%) | 0.894–0.900, 10–11% faster | 0.889–0.897, 10–11% faster | **0.172–0.173**, 5.8x faster | 1.102–1.116, slower |
-| **ASCII**: 1 of 64 symbols not ASCII | 0.994–1.000 (under 1%) | 1.640–1.648, slower | 1.642–1.651, slower | **0.516–0.527**, 1.9x faster | 1.195–1.199, slower |
+| **mixed**: 16 of 64 symbols not ASCII | 0.945–0.948 (5%) | 0.894–0.899, 10–11% faster | 0.866–0.911, 9–13% faster | **0.170–0.175**, 5.7–5.9x faster | 1.104–1.109, slower |
+| **ASCII**: 1 of 64 symbols not ASCII | 0.974–0.997 (under 3%) | 1.623–1.648, slower | 1.599–1.639, slower | **0.519–0.524**, 1.9x faster | 1.170–1.199, slower |
 
 **decimal**, 1 Mi values. `http1A` is `http1PutDecimal`, `pg` is
 `pgPutDecimal`, `json` is `jsonWriterPutDigits`, `client` is
-`http1ClientPutDecimal`, `compress` is `http1A`'s write with
-`httpDecimalDigits` as the count, `template` is `` `${v}` `` and `join`, and
+`http1ClientPutDecimal`, `compress` is a hybrid no shipped site has,
+`http1A`'s write with `httpDecimalDigits` (`std/net/http-compress.ts`) as
+the count, which is the one thing that copy does, `template` is `` `${v}` `` and `join`, and
 `pairs` and `pairs64` write two digits a step from a table (candidates).
+The `json` and `json64` sides pass the cursor in and return it, so they drop
+the `w.buf` and `w.end` loads and stores the shipped writers make on each
+call; their ratios time the digit loop alone. The status input is the codes
+an HTTP server writes: three digits, 100 to 599.
 
 | Input | Side | x first | Reading |
 | --- | --- | ---: | --- |
 | **non-negative**: `i32` values of 1 to 10 digits | `http1A` | 1 | the fastest existing copy |
-| | twin | 0.963–0.968 | noise band: 3–4% |
-| | `pg` | 1.303–1.312 | slower |
-| | `json` | 1.460–1.469 | slower |
-| | `client` | 1.043–1.051 | slower |
-| | `compress` | 0.993–0.994 | inside the band |
-| | `template` | 2.853–2.873 | how `src/` writes numbers; builds strings |
-| | `pairs` | 0.940–0.950 | **5–6% faster** |
+| | twin | 0.994–1.006 | noise band: under 1% |
+| | `pg` | 1.324–1.332 | slower |
+| | `json` | 1.513–1.519 | slower |
+| | `client` | 1.049–1.067 | slower |
+| | `compress` | 0.998–1.001 | inside the band |
+| | `template` | 2.947–2.990 | how `src/` writes numbers; builds strings |
+| | `pairs` | 0.956–0.964 | **4% faster** |
+| **status**: `i32` values of three digits, 100 to 599 | `http1A` | 1 | the fastest existing copy |
+| | twin | 1.029–1.044 | noise band: 3–4% |
+| | `pg` | 1.341–1.354 | slower |
+| | `json` | 2.200–2.223 | slower |
+| | `client` | 1.122–1.130 | slower |
+| | `compress` | 1.009–1.039 | inside the band |
+| | `template` | 6.297–6.378 | how `src/` writes numbers; builds strings |
+| | `pairs` | 0.951 | **5% faster** |
 | **signed**: `i64` values of 1 to 19 digits, half negative, with 0 and the `i64` minimum | `pgA`, `pgPutDecimal` | 1 | |
-| | twin | 0.977–0.990 | noise band: 1–2% |
-| | `json64`, `jsonWriterPutDigits64` | **0.895–0.906** | fastest existing copy, 9–11% faster |
-| | `pairs64` | 0.917–0.923 | 8% faster than `pgA`, 2% slower than `json64`: no gain over `json64` |
+| | twin | 0.976–1.019 | noise band: 2% |
+| | `json64`, `jsonWriterPutDigits64` | **0.899–0.934** | fastest existing copy, 7–10% faster |
+| | `pairs64` | 0.888–0.940 | 6–11% faster than `pgA`; 1% slower than `json64` in run 1 and 1% faster in run 2: no gain over `json64` |
 
 **json-escape** quotes 4 MiB cut into strings of one length, with a given
 share of bytes escaped (quotes, backslashes, the five letter escapes and
 control bytes that take `\u00xx`; 0x7f and bytes from 0x80 up pass through).
-The empty case quotes a million empty strings. The first side, `byteA`, has
-the `jsonWriterPutString` shape, byte by byte. `runs` is `jsonWriterPutRuns`,
-an existing copy. `builder` is `src/strings.ts` `addJsonQuoted`, which builds
-a `string`:
+The empty case quotes a million empty strings. The first side, `byteA`, is
+the byte loop of `jsonWriterPutBytes` over a `u8[]` window. `runs` is
+`jsonWriterPutRuns`, an existing copy. `builder` is `src/strings.ts`
+`addJsonQuoted` with `StringBuilder`'s `add` and `addChar` written out
+(`addChar` as `String.fromCharCode`), without the method call; it builds a
+`string`.
+
+Who runs which side today: `jsonWriterPutBytes` (`std/json.ts:1769`) runs
+the byte loop below `JSON_PLAIN_RUN_MIN = 16` (`:1759`) and `runs` from 16
+bytes up, so its callers, `stringBytes` among them, already have the gain
+below. `jsonWriterPutString` (`:1696`) runs a byte loop over a `string`'s
+`charCodeAt` at every length; no side here times a `string`, so no figure
+below is its. No shipped caller runs the byte loop over a window of 16 bytes
+or more.
 
 | Strings, escaped | twin (band) | `runs` | `builder` |
 | --- | ---: | ---: | ---: |
-| empty, a million | 0.965–1.008 | 1.041–1.199, slower | 20.47–22.78 |
-| 8 B, 1 in 256 | 1.106–1.112 | 1.213–1.295, slower | 19.56–20.50 |
-| 13 B, 1 in 256 | 1.032–1.134 | 1.042–1.055, inside the band | 20.37–21.07 |
-| 16 B, 1 in 256 | 1.024–1.081 | **0.520–0.538**, 1.9x faster | 19.86–20.43 |
-| 32 B, 1 in 256 | 1.004–1.159 | **0.380–0.438**, 2.3–2.6x faster | 19.77–21.82 |
-| 64 B, 1 in 256 | 0.937–1.104 | **0.301–0.336**, 3.0–3.3x faster | 19.34–21.17 |
-| 100 B, 1 in 256 | 1.147–1.199 | **0.314–0.322**, 3.1–3.2x faster | 21.60–22.69 |
-| 1024 B, 1 in 256 | 1.111–1.151 | **0.237–0.251**, 4.0–4.2x faster | 22.44–22.86 |
-| 64 B, 1 in 16 | 1.010–1.056 | 1.197–1.219, slower | 13.75–14.64 |
-| 1024 B, 1 in 16 | 1.027–1.033 | 1.044–1.059, slower | 14.23–14.59 |
+| empty, a million | 0.873–0.914 | 1.187–1.244, slower | 23.21–23.35 |
+| 8 B, 1 in 256 | 1.016–1.052 | 1.128–1.205, slower | 21.43–22.39 |
+| 13 B, 1 in 256 | 1.039–1.067 | 0.994–1.063, inside the band | 23.33–23.77 |
+| 16 B, 1 in 256 | 1.059–1.061 | **0.552–0.554**, 1.8x faster | 22.51–23.38 |
+| 32 B, 1 in 256 | 1.016–1.041 | **0.408–0.411**, 2.4–2.5x faster | 23.16–23.17 |
+| 64 B, 1 in 256 | 1.028–1.063 | **0.292–0.326**, 3.1–3.4x faster | 20.94–22.17 |
+| 100 B, 1 in 256 | 1.059–1.079 | **0.297–0.302**, 3.3–3.4x faster | 22.26–22.43 |
+| 1024 B, 1 in 256 | 1.026–1.125 | **0.208–0.229**, 4.4–4.8x faster | 24.12–24.23 |
+| 64 B, 1 in 16 | 0.955–0.994 | 1.152–1.160, slower | 13.92–14.22 |
+| 1024 B, 1 in 16 | 1.021–1.025 | 1.074–1.077, slower | 14.78–15.63 |
 
 The `builder` and `template` ratios are not escaper against escaper, or writer
 against writer: they time building and joining strings against sides that
-write into a byte buffer. The json-escape twins' bands reach 20%, so only the
-gains of 1.9x and more are read from that table.
+write into a byte buffer. The json-escape twins' bands reach 13%, so only the
+gains of 1.8x and more are read from that table.
 
 Every bench's checksums agree, in both runs:
 
@@ -356,24 +399,25 @@ Every bench's checksums agree, in both runs:
 | `be-load` | `803431694`, every bit of every load kept |
 | `utf8` | `940794903` (mixed and ASCII, by design) |
 | `json-escape` | `171421394` (empty), `767317795` (8 B), `685581548` (13 B), `188703669` (16 B), `684331899` (32 B), `889065188` (64 B), `298561697` (100 B), `887696390` (1024 B), all at 1 in 256; `809424538` (64 B) and `685572362` (1024 B) at 1 in 16 |
-| `decimal` | `579990990` (non-negative), `385357899` (signed) |
+| `decimal` | `579990990` (non-negative), `1043928` (status), `385357899` (signed) |
 
 What the figures do not say:
 
 - **Why `getU32BE` is slower.** The two sides differ only in the multiply and
-  the add where `sha1LoadWord` has a shift and an OR. S5 reads the IR.
+  the add where `sha1LoadWord` has a shift and an OR. S4 reads the IR.
 - **That the table is faster in every program.** A 256-byte table costs a
   cache line or four the first time it is touched, and on predictable input
   it gains nothing measurable. S2's non-regression benches check the effect
   on real callers.
 - **That a UTF-8 candidate beats the kernel.** `wordSkip` is slower than
   `urlA` on both inputs, and no side is faster than `kernel`.
-- **Where json-escape should switch.** `runs` wins at 1 byte in 256 from
-  16 bytes up, is inside the band at 13 bytes, and loses at 8 bytes, on empty
-  strings, and at 1 byte in 16 at both lengths measured. `jsonWriterPutBytes`
-  already switches on length, at `JSON_PLAIN_RUN_MIN = 16`
-  (`std/json.ts:1759`), but neither that switch nor one on density is a side
-  here. So the switch the molecule needs is not measured.
+- **That any shipped caller gains from json-escape.** `runs` wins at 1 byte
+  in 256 from 16 bytes up, is inside the band at 13 bytes, and loses at
+  8 bytes, on empty strings, and at 1 byte in 16 at both lengths measured.
+  The length switch at 16 that this supports is the one `jsonWriterPutBytes`
+  already has. What is open is a switch on density, for dense strings where
+  `runs` is slower, and whether `jsonWriterPutString` over a `string` gains
+  from runs. Neither is a side here.
 - **Anything that is not a side.** Not measured: an RFC 3629 table walk with
   ASCII words skipped by SIMD; a `readonly u8[]` table for json-escape's short
   escapes; a digit count that returns `integer<1, 20>`; `jsonWriterPutDigits`
@@ -390,10 +434,10 @@ where its shape looks like a timed side's.
 | Cluster | Timed (side) | Not timed | What callers pass |
 | --- | --- | --- | --- |
 | `hex` | `http1HexValue` (`chainA`), `hexDigit` in `std/math.ts` (`lower`), `manifestHexDigit` in `src/manifest.ts` (`mask`) | `jwtHexValue`, `pkiHexDigit`, `jsonHexDigit`, `dnsHexValue`, `routerHex`, `tlsHexNibble`, `urlHexValue`, `regexHexValue`, `pixelsHex`, `yamlJsonHexValue`, `yamlHexValue`, `escapeDigit` in `src/emit-ts-strings.ts`, and the inline decoder at `src/constants.ts:168` | A `u8` widened to `i32` or -1: `jwtHexValue`, `dnsHexValue`, `http1HexValue`, `routerHex`, `urlHexValue` (the byte inputs). A `charCodeAt` code unit, which can be 256 or more: `pkiHexDigit`, `jsonHexDigit`, `hexDigit`, `tlsHexNibble`, `regexHexValue`, `yamlJsonHexValue` and `yamlHexValue` (both also -1), `escapeDigit`, `manifestHexDigit`, `src/constants.ts:168` (the code-unit input). A `string`: `pixelsHex` |
-| `be-load` | `getU32BE` (`bytesA`), `sha1LoadWord` (`shifts`), `http2FrameU32` (`wide`) | `p256LoadWord`, `bcryptSaltWords`, and the inline loads in zlib, http1-server, tls/codec and `websocket.ts:432`; `aesLoad32`, which is `sha1LoadWord` with its shift counts written as `toU32(24)`; the inline `i32` loads that sign-extend the top byte (`postgres.ts:1749` and `:1983`, `postgres-async.ts:2210`, `websocket.ts:566`); `tls.ts:2403`, an `i64` load narrowed by `toU32`. `poly1305Le64` is little-endian and not a copy | `getU32BE`: one caller outside `std/bytes.ts`, `dns-message.ts:539`, once per resource record. The others: bytes of a frame, block or key, in their own module |
+| `be-load` | `getU32BE` (`bytesA`), `sha1LoadWord` (`shifts`), `http2FrameU32` (`wide`) | `p256LoadWord`, `bcryptSaltWords`, and the inline loads in zlib, http1-server, tls/codec and `websocket.ts:432`; `aesLoad32`, which is `sha1LoadWord` with its shift counts written as `toU32(24)`; the inline `i32` loads that sign-extend the top byte (`postgres.ts:1749` and `:1983`, `postgres-async.ts:2210`, `websocket.ts:566`); `tls.ts:2403`, an `i64` load narrowed by `toU32`. `poly1305Le64` is little-endian and not a copy | `getU32BE`: directly, `dns-message.ts:539`, once per resource record; through `getI32BE`, the postgres decoders, per array word, `int4` value and (in `postgres-async.ts`) message, which `bench/pg-decode` runs. The others: bytes of a frame, block or key, in their own module |
 | `decimal` | every site: `http1PutDecimal` and `http1DecimalDigits` (`http1A`), `pgPutDecimal` and `pgDecimalLength` (`pg`, `pgA`), `jsonWriterPutDigits` (`json`), `jsonWriterPutDigits64` (`json64`), `http1ClientPutDecimal` and its count (`client`), `httpDecimalDigits` (`compress`) | `jsonWriterPutDigits` on negative values and with its suffix | Non-negative `i32`: the `http1` writers and `httpDecimalDigits`. Non-negative `i64`: `http1ClientPutDecimal`. Signed `i32` and a suffix: `jsonWriterPutDigits`. Signed `i64`: `jsonWriterPutDigits64`, `pgPutDecimal` |
 | `json-escape` | the `jsonWriterPutString` byte loop (`byteA`), `jsonWriterPutRuns` (`runs`), `addJsonQuoted` (`builder`) | `jsonTokShortEscape` and `jsonShortEscape`, the escape tables inside the byte loops; `jsonQuote`, a wrapper over `addJsonQuoted`; the inline quoter in `src/ice.ts` `internalErrorFor` | Bytes in `std/`; a `string` in `src/` |
-| `utf8` | `urlIsUtf8` (`urlA`), `bytesUtf8Length` (`bytesWalk`), `jsonTokUtf8Length` (`jsonTokLoop`, and after `skipJsonText` in `kernel`) | The validators `websocketUtf8Run` and `websocketIsUtf8` (resumable), `x509IsUtf8Name` (also refuses NUL), `termUtf8At` (replaces bad input with U+FFFD) and `src/json-typed.ts` `jsonIsUtf8` (over a `string`). The encoders `jwtUtf8Width`, `jwtUtf8Byte`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonUtf8`, `jsonUtf8Width`, `jsonUtf8Byte`, `regexPushUtf8`, `termPushUtf8` and `src/lexer.ts` `utf8Encode`. `websocketUtf8Reset` is a name match, not a copy | Bytes, as a range or a stream, in `std/`; a `string` or a code point in `src/` |
+| `utf8` | `urlIsUtf8` (`urlA`), `jsonTokUtf8Length` (`jsonTokLoop`, and after `skipJsonText` in `kernel`). `bytesWalk` is a driver the bench wrote around a copy of `bytesUtf8Length`, not the shipped walk | The validators `websocketUtf8Run` and `websocketIsUtf8` (resumable), `x509IsUtf8Name` (also refuses NUL), `termUtf8At` (replaces bad input with U+FFFD), `src/json-typed.ts` `jsonIsUtf8` (over a `string`), and `JwtJson.utf8Tail` (`std/crypto/jwt.ts:999`, a private method, which §3's survey does not count). The encoders `jwtUtf8Width`, `jwtUtf8Byte`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonUtf8`, `jsonUtf8Width`, `jsonUtf8Byte`, `regexPushUtf8`, `termPushUtf8` and `src/lexer.ts` `utf8Encode`. `websocketUtf8Reset` is a name match, not a copy | Bytes, as a range or a stream, in `std/`; a `string` or a code point in `src/` |
 | `digit` | none | all nine | A byte or code unit as `i32` |
 | `grow` | none | all eight; `quicFrameGrow` calls `quicPacketGrow` rather than copying it | A buffer and the size wanted |
 | `fnv` | none | all five | A `string` by code units in `src/map.ts`; bytes in `std/` |
@@ -404,28 +448,30 @@ The clusters are ranked by measured gain over the cluster's fastest existing
 copy. Ties go to the gain that callers of the slower copies get, then to sites
 × lines, then to risk:
 
-1. **hex**: the table is 4.8x `lower` on mixed bytes and 5.5x `mask` on
+1. **hex**: the table is 4.8–4.9x `lower` on mixed bytes and 5.6–5.7x `mask` on
    random hex, with no gain established on digits alone; on code units the
    guarded table is 1.5x `lower`. 15 sites and 136 lines. The risk is low
    except where a crypto caller decodes secret bytes (§10).
-2. **decimal**: `pairs` is 5–6% faster than `http1PutDecimal` on non-negative
-   values. On signed values `jsonWriterPutDigits64` is the fastest copy, 9–11%
+2. **decimal**: `pairs` is 4% faster than `http1PutDecimal` on non-negative
+   values of 1 to 10 digits and 5% faster on three-digit status codes. On
+   signed values `jsonWriterPutDigits64` is the fastest copy, 7–10%
    faster than `pgPutDecimal`, and `pairs64` does not beat it. 8 sites and
    159 lines.
-3. **json-escape**: no gain over the fastest existing copy is measured,
-   because `runs` and `byteA` each win on part of the inputs. Callers of the
-   byte-by-byte quoters gain 1.9x to 4.2x on strings of 16 bytes or more with
-   1 byte in 256 escaped. They lose 4–30% where `runs` is slower, unless the
-   molecule switches, and that switch is not measured. 7 sites and 239 lines.
-   The `src/` copies are under the freeze.
-4. **be-load**: no gain over `shifts` is established; `wide` is the same
+3. **be-load**: no gain over `shifts` is established; `wide` is the same
    speed. The shift form is 1.5x `getU32BE` in the micro-bench, and
-   `getU32BE`'s one caller outside `std/bytes.ts` loads a DNS TTL once per
-   record, so the measured gain reaches one cold load and no caller bench
-   shows it. 15 sites and 59 lines, or 14 and 46 without `poly1305Le64`. It
-   touches crypto modules and their records.
+   `getU32BE` is the load the libraries run most, through `getI32BE` in the
+   postgres decoders. `bench/pg-decode`'s README estimates those loads at 14%
+   of `rows 100` by instruction count, not timed. 15 sites and 59 lines, or
+   14 and 46 without `poly1305Le64`. It touches crypto modules and their
+   records.
+4. **json-escape**: no gain over the fastest existing copy is measured,
+   because `runs` and `byteA` each win on part of the inputs, and no shipped
+   caller gains: `jsonWriterPutBytes` already switches to `runs` at 16 bytes,
+   and `jsonWriterPutString` over a `string` is not timed. What is left is a
+   density switch, not measured. 7 sites and 239 lines. The `src/` copies are
+   under the freeze.
 5. **utf8**: no candidate beats the fastest existing path, the tokenizer's
-   kernel path (5.8x `urlIsUtf8` on mixed text, 1.9x on ASCII). Its gain is
+   kernel path (5.7–5.9x `urlIsUtf8` on mixed text, 1.9x on ASCII). Its gain is
    for callers of the byte-loop validators, if the kernel can serve them.
    19 sites and 440 lines, 18 without `websocketUtf8Reset`. It has the most
    lines and the most security-relevant callers (`x509`, `websocket`, `url`).
@@ -518,8 +564,11 @@ maintain.
    - the commit whose bench produced it.
 2. **No caller gets slower.** Each stage names the existing benches of its
    biggest callers and reruns them before and after, interleaved, with a twin.
-   For example, `bench/json-writer` and `bench/json-tokenizer` for json-escape,
-   and `bench/http1-parse` for hex and decimal. A slower caller blocks the
+   A named bench counts only where its timed input runs the changed function,
+   not where the function is merely linked in: `bench/http1-parse`, for
+   example, links `http1HexValue` but has no chunked body, so it never calls
+   it. Each stage in §11 names benches that run its cluster, or adds the input
+   that does. A slower caller blocks the
    stage. The stage may record the caller as an exception only with its own
    figure and the owner's yes.
 3. **A divergence is kept, not averaged.** A copy that trusts its caller, such
@@ -587,7 +636,7 @@ the point of sharing.
   reads its skip line.
 - **Under Node.** `std/bytes.ts` multiplies in the top byte of a `u32`
   because under Node `<<` turns bit 31 into a sign. The 1.5x of `shifts` over
-  `getU32BE` in the micro-bench (§4.2) must not cost that answer. S5
+  `getU32BE` in the micro-bench (§4.2) must not cost that answer. S4
   measures candidates that give the native speed and the same answer under
   Node (`docs/RUN_UNDER_NODE.md`), or keeps the multiply.
 - **Security records.** A stage that changes a file named in a
@@ -678,11 +727,11 @@ cluster, and every stage has the same parts:
 
 | | Cluster | Baseline | Optimisation, measured gain | Non-regression benches | Depends on |
 | --- | --- | --- | --- | --- | --- |
-| S2 | hex, and the tier directories, the biome rule and its fixture | `lower` (`std/math.ts` `hexDigit`); `manifestHexDigit` on random hex | `table` on `u8` input: 4.8x `lower` on mixed bytes, 5.5x `manifestHexDigit` on random hex, none established on digits. `guarded` on `i32` code units: 1.5x `lower` | `bench/http1-parse`, `bench/json-tokenizer` | D1, D2, D5 |
-| S3 | decimal | `http1PutDecimal` on non-negative values, `jsonWriterPutDigits64` on signed ones | `pairs`: 5–6% on non-negative values; none on signed ones. The `integer<1, 20>` count is not measured | `bench/http1-request`, `bench/json-writer` | S2 |
-| S4 | json-escape | `jsonWriterPutRuns` on strings of 16 bytes or more with sparse escapes, the `jsonWriterPutString` byte loop elsewhere | a switch between the two, on length and density: not measured. No gain over the baseline is claimed; callers of the byte loop gain 1.9x to 4.2x on sparse strings from 16 bytes | `bench/json-writer` | S2, D4 |
-| S5 | be-load | `shifts` (`sha1LoadWord`), the form every surveyed site has | none established: `wide` is the same speed. In the micro-bench the shift form is 1.5x `getU32BE`, whose one outside caller loads a DNS TTL once per record, if the Node answer holds | none: no existing bench times a caller of these loads | S2, D6 |
-| S6 | utf8 | the tokenizer's kernel path, `skipJsonText` and then `jsonTokUtf8Length` | none measured. `wordSkip` is slower on both inputs; the table walk is not measured | `bench/json-tokenizer`, `bench/jwt-verify` | S2, S4 |
+| S2 | hex, and the tier directories, the biome rule and its fixture | `lower` (`std/math.ts` `hexDigit`); `manifestHexDigit` on random hex | `table` on `u8` input: 4.8–4.9x `lower` on mixed bytes, 5.6–5.7x `manifestHexDigit` on random hex, none established on digits. `guarded` on `i32` code units: 1.5x `lower` | `bench/json-tokenizer` (runs `jsonTokHexDigit` on its `\u` escapes). No existing bench runs `http1HexValue` or `urlHexValue`: `bench/http1-parse` links both, but its input has no chunked body and no `%` escape, so S2 adds such a case before it gates them | D1, D2, D5 |
+| S3 | decimal | `http1PutDecimal` on non-negative values, `jsonWriterPutDigits64` on signed ones | `pairs`: 4% on values of 1 to 10 digits, 5% on three-digit status codes; none on signed ones. The `integer<1, 20>` count is not measured | `bench/http1-request` (`http1PutDecimal`, `http1DecimalDigits`, and `jsonWriterPutDigits` through `w.i32`), `bench/pg-decode` `params` (`pgPutDecimal`) | S2 |
+| S4 | be-load | `shifts` (`sha1LoadWord`), the form every surveyed site has | none established: `wide` is the same speed. In the micro-bench the shift form is 1.5x `getU32BE`, if the Node answer holds; what that is worth to `getI32BE`'s postgres callers is not timed | `bench/pg-decode` `rows`, which runs `getI32BE` | S2, D6 |
+| S5 | json-escape | `jsonWriterPutRuns` on strings of 16 bytes or more, the byte loop below, as `jsonWriterPutBytes` already does | none claimed: byte callers already switch at 16. Open: a density switch, and runs for `jsonWriterPutString` over a `string`, neither measured | `bench/json-writer` (`jsonWriterPutString`), `bench/http1-request`'s JSON cases (`jsonWriterPutBytes` through `stringBytes`, and `jsonWriterPutString`) | S2, D4 |
+| S6 | utf8 | the tokenizer's kernel path, `skipJsonText` and then `jsonTokUtf8Length` | none measured. `wordSkip` is slower on both inputs; the table walk is not measured | `bench/json-tokenizer` (runs `jsonTokUtf8Length` and `skipJsonText`). `bench/jwt-verify` links only the encoders and `JwtJson.utf8Tail`, which its ASCII tokens do not run, so S6 adds non-ASCII claims before it gates on it | S2, S5 |
 | S7 | digit | the one shape every copy has | none: one shape. Not yet measured | `bench/json-tokenizer`, `bench/compiler.mjs` | S2 |
 | S8 | grow | not yet measured; the copies differ in policy | none proposed. Which policy the shared copy keeps is a D4 question | `bench/http1-request`, `bench/http1-conn` | S2 |
 | S9 | fnv | the one loop every copy has | none: one shape. Not yet measured | `bench/router.ts`, `bench/compiler.mjs` | S2 |
@@ -694,8 +743,8 @@ candidate is claimed to be faster.
 
 The stages follow §4.4's ranking. S2 goes first, because it creates the
 directories and the rule. After it, S3, S4, S5, S7, S8 and S9 do not depend on
-one another and can run in parallel. S4 and S6 both edit `std/json.ts` and
-`std/json-tokenizer.ts`, so S6 follows S4. The *blocked* rows of §7 add no
+one another and can run in parallel. S5 and S6 both edit `std/json.ts` and
+`std/json-tokenizer.ts`, so S6 follows S5. The *blocked* rows of §7 add no
 follow-up here.
 
 ### Not planned here
@@ -703,7 +752,7 @@ follow-up here.
 - Moving or renaming any public `std/` module.
 - Merging `std/bytes.ts` into `std/atoms/`. It stays public at `nish/bytes`
   and counts as an atom file where it is. An atom imports no other atom, so
-  where a faster form is found for one of its functions, such as S5's load,
+  where a faster form is found for one of its functions, such as S4's load,
   that function is rewritten in place.
 - Sharing code between `runtime/*.c` and Nish.
 - A tier above pages.

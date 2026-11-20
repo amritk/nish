@@ -11,8 +11,8 @@
 //   taskset -c 2 build/wp68-be-load
 //
 // `getU32BE` is the one the libraries run most: `getI32BE` wraps it, and the
-// postgres decoders call that per message and per column (std/net/postgres.ts,
-// std/net/postgres-async.ts). This bench times the load alone; what a change
+// postgres decoders call that per array word, per int4 value and per message
+// (std/net/postgres.ts, std/net/postgres-async.ts). This bench times the load alone; what a change
 // is worth to those callers is bench/pg-decode's to say.
 //
 // Not timed, so unmeasured: `p256LoadWord`, `bcryptSaltWords`, and the inline
