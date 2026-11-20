@@ -2,7 +2,7 @@
 
 # NL1xxx\: forbidden syntax
 
-The 66 codes of band 1. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 68 codes of band 1. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL1001
 
@@ -714,4 +714,20 @@ export const test = (): i32 => 0;
 
 ```text
 A string enum member's value must be a string literal: a computed value is not supported, because the enum's strings are a table fixed when it is declared
+```
+
+## NL1067
+
+The message of an error contains:
+
+```text
+An element read cannot end a `?.` chain or be what a `?.` tests: past the end of the array JavaScript answers `undefined` and carries on, and the bounds check panics (test the index against `length`, or narrow the array with `!== null` and read the element into a `const`)
+```
+
+## NL1068
+
+The message of an error contains:
+
+```text
+An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first
 ```

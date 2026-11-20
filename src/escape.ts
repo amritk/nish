@@ -494,6 +494,11 @@ class EscapeAnalysis {
         this.table.isArray(type) &&
         node.children.length * this.elementSize(this.table.refOf(type)) <= STACK_ARRAY_BYTES
       this.sites.push(new Site(node, stackable))
+    } else if (node.kind === NodeKind.ForOf && program.nodeTypes[node.children[1].id] === T_STRING) {
+      // WP28 C1: a `for...of` over a string copies each code point out with
+      // `nish_str_new`, so the loop is an allocation site whose value is its
+      // variable (`flowTarget`), never an element of an older string.
+      this.sites.push(new Site(node, false))
     } else if (node.kind === NodeKind.Binary) {
       if (node.text === "+" && program.nodeTypes[node.children[0].id] === T_STRING) {
         this.sites.push(new Site(node, false))
@@ -675,6 +680,10 @@ class EscapeAnalysis {
 
   /** The local the value is stored in, or the return value, or neither. */
   flowTarget(expr: Node): FlowTarget {
+    if (expr.kind === NodeKind.ForOf) {
+      // A string walk's site (`visit`): each code point goes to the variable.
+      return new FlowTarget(this.unit.program.nodeLocals[expr.children[0].children[0].children[0].id], false)
+    }
     let node = expr
     for (;;) {
       const parent = this.unit.parents.parentOf(node)
@@ -2328,7 +2337,9 @@ class PassWalk {
       }
     } else if (node.kind === NodeKind.ForOf) {
       const variable = program.nodeLocals[node.children[0].children[0].children[0].id]
-      if (variable !== null && !variable.mutable) {
+      // A string walk's variable is a fresh copy of each code point, not an
+      // element of the string, so it is the pass's own allocation.
+      if (variable !== null && !variable.mutable && program.nodeTypes[node.children[1].id] !== T_STRING) {
         this.elementLocals.push(variable)
         this.elementSources.push(node.children[1])
       }

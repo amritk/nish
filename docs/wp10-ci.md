@@ -12,9 +12,16 @@ workflow's comments point at.
 `.github/workflows/ci.yml` runs on every pull request, on pushes to `main`
 (scoped to `main` so a branch with an open pull request is not tested twice),
 and through `workflow_call` from `release.yml`. A pull request's superseded
-runs are cancelled; a push to `main` never is, because each one is a merge and
-its run is the only record of whether `main` was green after it (the runs of #396
-and #397 ended cancelled before that rule).
+runs are cancelled, and so is a push to `main`'s run once the next merge lands:
+the merge queue (below) already tested that tree and records which merge broke
+`main`, and the next run, which runs every lane, tests a superset of it. Two
+kinds of `main` run are pinned to a group of their own and never cancelled: the
+Release PR's merge (its `chore(release):` subject, or a push adding
+`changelog/`) and a re-run. Release CI is otherwise untouched: `release.yml`'s
+call runs at the tag's ref, and the Release PR's runs are ordinary pull request
+runs. `interop.yml` follows the same rule. (Before the queue, `main`'s runs
+queued instead, after the runs of #396 and #397 ended cancelled with nothing to
+say which merge broke `main`.)
 
 It also runs on `merge_group`, the merge queue's event, as does
 `pr-title.yml`. A pull request's own run tests its head merged with `main` as
@@ -36,7 +43,8 @@ them for review.
 
 | Job | Runner | What it does |
 | --- | --- | --- |
-| `test (ubuntu-latest, shard <i>/8)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard <i>/8` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
+| `test (ubuntu-latest, shard <i>/9)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard <i>/9` ([shards](#shards-and-time-limits)), then, in shard 2 only, the steps that read the `simd` group's drivers and kernel lines, and in shard 1 only the stage1 the suite built kept as `build/nish` and used for `bench/crc32.mjs --check` and `bench/adler32.mjs --check` |
+| `examples` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | beside the shards, with the compiler from their cache key (linked here on a miss, saved only by shard 1): `scripts/smoke.sh` over every example with a `main`, `docs/cookbook/regen.sh --check`, and the size report in the job summary. They ran after the suite in shard 1 until #1797, about 80 s on the critical path of every run. Not scoped: it runs on every event |
 | `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built. Skipped by its lane on a pull request that does not need it ([scoped lanes](#scoped-lanes)) |
@@ -198,17 +206,21 @@ way.
 
 Three jobs took longer than 15 minutes unsplit, so each is split:
 
-- **`test`**, eight ways. `node tests/run.js --shard <i>/<n>` splits the suite.
+- **`test`**, nine ways. `node tests/run.js --shard <i>/<n>` splits the suite.
   Every shard builds stage1 and runs everything before the `tests/link/`
   programs but the sections there that are dealt (`term-io`, `--emit-ts`
   and the fifteen small sections between the golden cases and the link
-  programs, from `os_host` to `tests/fix`): the setup, stage1 and the golden
-  cases' IR per shard (measured in the paragraph on the eight-way split,
-  below, from before the small sections were dealt). Of the golden
-  cases, every shard compiles all of them and checks their IR, because later
-  sections read that compile, and only does the rest of each case's work (the
-  `llvm-as` pass, the side compiles and the native run) for the eighth that
-  `caseShard` in `tests/run.js` deals it by position. Shard 1 runs every section after them
+  programs, from `os_host` to `tests/fix`): the setup and stage1 per shard
+  (measured in the paragraph on the eight-way split, below, from before the
+  small sections were dealt). The golden cases are dealt whole: `caseShard` in `tests/run.js` deals them round-robin within
+  each kind (rejections, stdout programs, linked, compiled), and a shard
+  compiles, checks the IR of, assembles and runs only its own, printing each
+  other case as delegated to the shard that owns it. A later section that
+  reads a case's IR takes the path from `caseLl`, which compiles a case this
+  shard does not own on demand, so a section reads the same `.ll` whichever
+  shard runs it; a check fails on any reader that names a case's `.ll` by
+  hand instead. The two linked specimens, with and without `--threads`, stay
+  on shard 1. Shard 1 runs every section after them
   that is not dealt, together with the link programs whose output a later
   check reads (`LINK_READ_LATER`). The dealt sections (`DEALT_SECTIONS` in
   `tests/run.js`: term-io, `--emit-ts`, the small pre-link sections (`os_host`,
@@ -230,6 +242,20 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   of its own and reads nothing another section writes, since the shard that
   runs it runs none of the others it used to run beside.
 
+  On a pull request, crypto-bench's timing leaves the shard
+  (`--delegate-bench-timing`, honoured on a `pull_request` event only). The
+  section still builds every twin, checks every checksum against
+  `bench/crypto/expected.txt` and asserts which kernel path ran; the timed
+  portability proofs (`bench/crypto/run.mjs` without `--no-proofs`, and the
+  paired portable-rounds runs) print as `DELEGATED` to the push-to-main run
+  of the same `test` job. A newer push to `main` cancels an older one's
+  first attempt (`concurrency` in `ci.yml`), so the proofs time the code as
+  it stands at the next push whose run is not cancelled. A check in
+  `tests/run.js` fails if `ci.yml`'s `test` job stops running on a push to
+  `main`. The builds are most of the section (about 184 s of 273 s locally);
+  the timed proofs are the paired runs (49 s and 30 s) and the portable
+  proofs. WP9 bench stays whole on every push: its checks are all asserts.
+
   Regenerate the table when a shard drifts more than about a fifth from the
   others, with `scripts/shard-costs.mjs` over at least three green `ci.yml`
   runs of `main` (each unzipped from its run page's "Download log archive"):
@@ -240,7 +266,9 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   shard 1 says it dealt it. It reads the same spans this paragraph names: the
   costs are the gaps between consecutive programs' last lines in a
   CI shard's log, `shardOne` the span of shard 1's sections after the link
-  programs that are not dealt, plus its steps after the suite, and each dealt
+  programs that are not dealt, plus its steps after the suite (less the
+  smoke, cookbook and size-report steps, which a log from before the
+  `examples` job still holds: `MOVED_STEPS`), and each dealt
   section's entry the span of its lines in the shard that ran it. Runners
   differ in speed by nearly a factor of two (one built stage1 in 34 s where
   its siblings took 57-61 s), so read a span only from a shard whose stage1
@@ -298,6 +326,41 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   run and runs 43109728024 and 43114281714; dealt on it, the old deal's
   pieces measure 5.0 to 8.4 minutes a shard after the setup every shard
   runs, and the new deal's 6.5 minutes each.
+
+  With the smoke, cookbook and size-report steps moved to the `examples`
+  job and shard 1's sections dealt as `tail` groups (#1797), shard 1 was no
+  longer the long pole, but the interim table mis-dealt the rest: in
+  [run 44569577732](https://github.com/amritk/nish/actions/runs/44569577732)
+  (`4614df6`) the shards reached their summaries at 8.2, 10.8, 12.0, 7.2,
+  7.2, 8.2, 9.9 and 8.0 minutes, 12.5 minutes wall. The table was refitted
+  from the median of that run, run 44565722776 and `main`'s run
+  44489604733. Dealt on it eight ways, each shard carries about 511 s of the
+  Test step after its 40 s of setup, about 9.2 minutes a job, above the
+  8.5 minutes that leaves room under ten for a slow runner; nine ways it
+  carries about 454 s, about 8.3 minutes. So the job is split nine ways.
+  One deal runs from 542 to 684 s on the same shard across runs, so a
+  single run's slowest shard says more about its runner than about the
+  table.
+
+  The first nine-way run,
+  [run 44573014763](https://github.com/amritk/nish/actions/runs/44573014763)
+  (`8334dc9`), was dealt 453 s a shard but took 336 to 600 s, 11.7 minutes
+  wall. Its own measure of each piece, summed over that deal, gives 358 to
+  600 s, so the script reads the log right and the eight-way runs had
+  costed the pieces differently. The script also mistook shard 9's golden
+  case `arr_range_call_generic` for the `arrayChecks` section, and now looks
+  for sections only after the golden cases. The table is refitted from the
+  median of that run and runs 44569577732 and 44565722776. Its deal comes to
+  455 s a shard, and summed under each of those three runs' own costs its
+  slowest shard is 1.07 to 1.18 times its median one. The test shards need
+  no other job, but a run's 26 jobs queue for runners, and in that run
+  shard 5 started 1.6 minutes after the first.
+
+  Dealt on that table,
+  [run 44576694180](https://github.com/amritk/nish/actions/runs/44576694180)
+  (`2df949d`) took 9.1 minutes wall, its test jobs 355 to 537 s, the
+  slowest 1.14 times the median. The table was refitted again from the
+  median of the two nine-way runs and run 44569577732.
 
   The steps after the suite that require a `PASS` line or a driver the suite
   built (`cpu-level`, `hardening`, `sandbox`) grep the Test step's log for it
@@ -575,11 +638,12 @@ the first, `fuzz-smoke` and `postgres-live` spent 96 s and 113 s on
 the `test` job's stage1 through the same action under the same key (stage2
 is the same compiler, which `bootstrap (x86_64-linux)` asserts), and
 `nish-cmp elision`'s candidate, the same `--link` with its row's seed, comes
-through it too. The golden cases are dealt too: a shard compiles
-all of them and does the other work of its eighth only, which took section A
-from 59 s to 30 s of shard 2 in
+through it too. Dealing the golden cases' work after the compile
+(each shard still compiled all of them then) took section A from 59 s to
+30 s of shard 2 in
 [run 43375907084](https://github.com/amritk/nish/actions/runs/43375907084),
-where every job restored stage1 from the cache. The longest `test` job there
+where every job restored stage1 from the cache; a shard now compiles and
+checks only its own eighth too, as [Shards](#shards-and-time-limits) says. The longest `test` job there
 took 10 min 49 s and the NEON job 4 min 38 s. What every shard still ran
 before the link programs then was about 90 s of small sections, the largest
 `fnref`'s `--profile debug` runs and lldb check (15 s), the performance

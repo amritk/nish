@@ -166,12 +166,15 @@ spelling; the two compile to identical IR, instruction for instruction
   destructured parameters (`Destructured parameters are not supported`,
   `reject_param_destructured`), optional parameters (`x?: T`,
   `Optional parameters are not supported`, `reject_param_optional`, which names
-  `x: T = <default>` instead), a default or rest parameter anywhere but the
+  `x: T = <default>` instead; the compatibility dialect's `optional-params`
+  feature accepts one read through `??`, [The compatibility
+  dialect](semantics-decisions.md#the-compatibility-dialect)), a default or rest parameter anywhere but the
   declarations [Default and rest parameters](#default-and-rest-parameters)
   lists (`reject_param_default`, `reject_param_rest`), overloads
   (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
   signature with no body, `function f(): void;`, is
-  `Functions must have a body`), an anonymous `export default function ()`
+  `Functions must have a body`; the compatibility dialect's `overloads`
+  feature accepts signatures before the implementation), an anonymous `export default function ()`
   (`Functions must be named`, `reject_fn_anonymous`),
   function expressions, an arrow anywhere but as a top-level `const` or a
   function argument (`reject_fnarg_arrow_value`, `reject_arrow_as_value`),
@@ -5535,6 +5538,84 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   refuses a `declare function`, so a buffer declaration is for `--profile
   wasi` there (see "Host modules" below).
 
+### `CountedBy`: a buffer that names its count
+
+**A buffer parameter written `CountedBy<u8[], "n">` (or `CountedBy<readonly
+u8[], "n">`) names its count parameter, `n`, which may stand anywhere in the
+declaration and be a `u8`, `u16`, `u32` or `u64`, or an out class whose one
+field is one.** It is how a C library's own count is declared when it is not a
+`u64` straight after the buffer: zlib's `uInt` (a `u32`), a count before its
+buffer, and `compress`'s in/out `uLongf *destLen`.
+
+```ts
+declare class OutLen {
+  value: u64
+}
+
+declare function z_fill(dst: CountedBy<u8[], "n">, n: u32, v: u8): i32
+declare function z_sum(n: u16, src: CountedBy<readonly u8[], "n">): u32
+declare function compress(
+  dest: CountedBy<u8[], "destLen">,
+  destLen: OutLen,
+  source: CountedBy<readonly u8[], "sourceLen">,
+  sourceLen: u64
+): i32
+```
+
+- **The spelling is on the buffer, because that is where C and the WP66
+  override file write it.** Clang spells the same fact `__counted_by(n)` on
+  the pointer, and the override JSON `nish c-import` reads writes it as
+  `"dest": {"buffer": "destLen"}`. `CountedBy<T, N>` is a type alias for `T`
+  to TypeScript, so a declaration still type-checks under `tsc` once a
+  `.d.ts` only `tsc` reads declares `type CountedBy<T, N extends string> = T`
+  (Nish refuses a generic type alias in its own source). A count-side spelling,
+  a naming convention (`bufLength`) and a `typeof buf["length"]` type were
+  considered and not taken: the first puts the fact on the side C does not,
+  the second is implicit, and the third loses the count's width.
+- **The call keeps the WP53 check.** The count is widened (`zext`) to 64
+  bits, or its field is loaded from the out class after the last argument
+  runs, and compared, unsigned, with the buffer's length before C runs; a
+  larger count panics `ffi-length` as a positional one does, and C never
+  runs. `tests/cases/ffi_buffer_counted_by_panic` passes a `u16` (once with
+  its top bit set, which a sign extension would pass), a `u32` and an
+  out-class count each larger than its buffer and sees the panic, exit 1, and
+  no line from C; `tests/cases/ffi_buffer_counted_by` runs the counts that
+  fit.
+- **A count of the buffer's own length is proved** at the width it is
+  declared: `toU8(b.length)`, `toU16(b.length)`, `toU32(b.length)` or
+  `toU64(b.length)` of the buffer itself, under the same conditions as the
+  positional proof. A narrowing conversion can only lower the count, so the
+  proof stays sound. An out-class count is always checked, because C may have
+  written it.
+- **A named buffer is outside the positional runs**, so WP53's adjacent-`u64`
+  rule applies to the other buffers of the declaration, and a declaration may
+  mix the two. A positional run steps over a named buffer when it looks for
+  its `u64`: in `f(a: u8[], b: CountedBy<u8[], "m">, m: u64)`, `a`'s count is
+  `m` as well, and the call checks both buffers against it.
+- **It is refused anywhere else, and in any other shape.** On a function
+  written in Nish: `` `CountedBy` names the count of a buffer lent to C, so it
+  is written only on a parameter of a `declare function` ``
+  (`tests/link/ffi_buffer_counted_by_place`). On a host module's function,
+  whose buffers are windows, it does not cross, as every other non-scalar the
+  page cannot pass (NL2661, pinned in `tests/ffi-buffer.js`). A missing name, a name that is
+  not a string literal, or a buffer that is not a `u8[]`: `` `CountedBy` takes
+  a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a
+  string literal `` (`ffi_buffer_counted_by_form`); so is an empty name or
+  `"?"`, neither of which a parameter can have. A name that is not a
+  parameter: `` counts the buffer `dst` by `len`, which is not one of its
+  parameters `` (`ffi_buffer_counted_by_unknown`). A signed, nullable or
+  many-field count: `` and the count `dst` names is a `u8`, `u16`, `u32` or
+  `u64`, or a `declare class` whose one field is one ``
+  (`ffi_buffer_counted_by_width`, whose `expected.json` pins each of the
+  four).
+- **`CountedBy` is read by its name.** The checker matches the bare name
+  `CountedBy` on a parameter, so a program's own type of that name is not
+  reachable there: on a `declare function` the annotation is read as this
+  form, and elsewhere it is refused as above.
+- **`runtime/nish.d.ts` does not declare `CountedBy` yet,** and `nish
+  c-import` does not write it: a module that uses it under `tsc` declares the
+  alias itself.
+
 ### A handle class: a class that owns a `CPtr`
 
 **A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C
@@ -5673,7 +5754,8 @@ close it.
 
 ### A `declare class`: a C struct, lent by pointer
 
-**A `declare class` is a C struct: its fields are laid out in declaration order,
+**A `declare class` with at least one field is a C struct (one with none is
+[opaque](#an-opaque-declare-class-a-c-pointer-type)): its fields are laid out in declaration order,
 each at its natural alignment, and the size is rounded up to the widest
 alignment, as a C compiler lays out the same fields. `new Name()` takes no
 arguments and zero-fills it, and a `declare function` parameter typed `Name`
@@ -5727,8 +5809,84 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   compiler could promise. A struct cannot embed
   itself, directly or through another (NL2749, `reject_ffi_struct_self`,
   `reject_ffi_struct_cycle`).
-- **A field is plain and has no initializer, and the class has nothing but
-  fields**: no `readonly`, `static` or optional field (NL2747), no initializer,
+- **A field typed `Record<integer<0, Hi>, T>` is a fixed-length array, C's
+  `T name[Hi + 1]`, laid out inline at `T`'s alignment**, as OpenSSL's
+  `SHA_CTX` holds `unsigned int h[5]` (`tests/cases/ffi_array_field`, whose C
+  driver fills and checks a `SHA_CTX`-shaped struct; `tests/ffi-struct.js`,
+  where clang gives that shape the offsets and size Nish's build has, natively
+  and under `--profile wasi`):
+
+  ```ts
+  declare class ShaCtx {
+    tag: u8
+    h: Record<integer<0, 4>, u32>
+  }
+  const c = new ShaCtx()
+  c.h[i] = 7
+  ```
+
+  ```llvm
+  %struct.ShaCtx = type { i8, [5 x i32] }
+    %2 = sext i32 %i to i64
+    %3 = icmp ult i64 %2, 5
+    br i1 %3, label %bounds.ok, label %bounds.fail
+  bounds.fail:
+    call void @nish_panic_index(i64 %2, i64 5)
+    unreachable
+  bounds.ok:
+    %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+    store i32 7, i32* %4, align 4
+  ```
+
+  The spelling is TypeScript's own: `tsc` checks it against
+  `runtime/nish.d.ts` with no new declaration, its key type is the index
+  type every in-range index already has, and a `Record` over a finite key
+  says every key from 0 to `Hi` is present, as every element of a C array is.
+  A `CArray<T, N>` type would need a declaration in `runtime/nish.d.ts`, a
+  tuple has no parser here, and `T[]` cannot carry its length, because `tsc`
+  refuses an initializer in a `declare class`. (A `T[]` field of a Nish
+  class is a different rule: see "Fixed-length array fields are stored
+  inline".)
+  - **It takes `(Hi + 1) × sizeof(T)` bytes**, elements back to back with no
+    padding between them, and the struct pads around the array as C pads
+    around `T name[Hi + 1]`: the array starts at `T`'s alignment, and the
+    field after it starts at its own (`tests/ffi-struct.js` holds 8-byte
+    elements after a byte, a one-element array and two arrays in a row
+    against clang).
+  - **The key is `integer<0, Hi>`**, a range from 0, with `Hi` below
+    16777216: `` its key must be `integer<0, Hi>` `` (NL2813,
+    `tests/link/ffi_array_field_key`: a range from 1, a `string` key, a
+    length past the limit).
+  - **An element is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or
+    `f64`**: `` which has no C element layout `` (NL2814,
+    `ffi_array_field_element`: a `CPtr` and a `declare class` element).
+  - **An index is checked.** The index is any value an array index takes,
+    widened to `i64` before it is compared. A constant index outside 0 to `Hi` is refused at
+    compile time: `` its indices are 0 to 4 `` (NL2818,
+    `ffi_array_field_oob`, past the end and below zero). Any other index is
+    compared, unsigned, with the length, and one outside it panics with
+    `index out of range` before memory is touched (`readH(5)`, `readH(-1)`,
+    `poke(3)` in `ffi_array_field`). An index the prover keeps inside the
+    range — a constant, an `integer<0, Hi>` value, a `for` loop's counter
+    below the length — emits no check, and `--emit-panics` lists it as proven
+    (`sumH` and `written`, pinned by `ffi_array_field.panics`, which lists
+    `readH`'s, `readData`'s and `store`'s indices as unproven). Element loads and stores carry no TBAA tag, as the struct's
+    other fields do not.
+  - **It is read and written by index and nothing else.** It is not a Nish
+    array: holding it, passing it, reading its `.length` or walking it with
+    `for...of` is `` it cannot be held, passed or measured as a value ``
+    (NL2817, `ffi_array_field_value`), replacing it whole is
+    `` is written element by element `` (NL2816, `ffi_array_field_assign`),
+    and a spread of its object is `` which a spread cannot copy `` (NL2815,
+    `ffi_array_field_spread`).
+  - **It opens no other C shape.** A union field and a bitfield stay refused:
+    `` Union types other than `T | null` are forbidden `` (NL1053,
+    `ffi_array_field_union`) and `` has type `integer<0, 7>`, which has no C
+    layout `` (NL2752, `ffi_array_field_bitfield`).
+  - Under `-g` a debugger sees C's array type, with the element count
+    (`tests/ffi-struct.js`).
+- **A field is plain and has no initializer, and a class with fields has
+  nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
   member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
   and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
@@ -5751,7 +5909,7 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   struct, and a wasm module a page loads links no C to lend it to `` (NL2757,
   `tests/wordings/nl2757_declare_class_emit_dts`, `nl2757_declare_class_wasm32`).
   A `--profile wasi` build is wasm32 from the start and keeps it.
-- **It is built with `new` and nothing else.** `new Point(1)` is refused as for
+- **A class with fields is built with `new` and nothing else.** `new Point(1)` is refused as for
   any class without a constructor (`reject_ffi_struct_new_args`), and an object
   literal typed as one is
   `` an object literal cannot lay out a C struct `` (NL2744,
@@ -5776,7 +5934,9 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_nested_nish_arg`), and replacing it is
   `` a `declare class` embedded in its object is written field by field ``
   (NL2745, `reject_ffi_struct_nested_assign`).
-- **It is not a return type or an array element.** C returning a struct by
+- **It is not a return type or an array element.** An
+  [opaque](#an-opaque-declare-class-a-c-pointer-type) one is a return type of
+  a `declare function`, and still not an array element. C returning a struct by
   value, or a pointer into memory it owns, leaves the copy with no owner on
   this side: `` a C struct is only lent to C by pointer: take a `Point`
   parameter for C to fill `` (NL2742, `reject_ffi_struct_return`); a struct
@@ -5793,6 +5953,82 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   `reject_ffi_struct_spread`).
 - **`--emit-ts` refuses a module that declares one**, with the same message as
   for a `declare function` (NL4010): it is C's layout, and JavaScript has none.
+
+### An opaque `declare class`: a C pointer type
+
+**A `declare class` with no fields, no members and no `extends` or
+`implements` is opaque: it names a C type the program only ever holds a pointer
+to, such as `sqlite3 *` or `FILE *`. A `declare function` may take it and may
+return it as `Name` or `Name | null`, and it lowers to `i8*` as a `CPtr` does;
+what it adds is a name, so one C pointer type is never passed where another is
+wanted** (`tests/cases/ffi_opaque_handle`,
+[cookbook](https://github.com/amritk/nish/blob/main/docs/IR_COOKBOOK.md#an-opaque-declare-class-a-c-pointer-type),
+`docs/roadmap/wp66-c-headers.md` S3):
+
+```ts
+declare class Db {}
+declare class Stmt {}
+declare function db_open(flags: i32): Db | null
+declare function stmt_prepare(db: Db, n: i32): Stmt
+declare function stmt_close(stmt: Stmt): void
+
+const db = db_open(1)
+if (db !== null) {
+  const stmt = stmt_prepare(db, 3)
+  stmt_close(stmt)
+}
+```
+
+```llvm
+declare i8* @db_open(i32)
+declare i8* @stmt_prepare(i8*, i32)
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %ffi.null, label %ffi.copy
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+```
+
+- **It is placed where a `CPtr` is**: in a `declare function` signature and on
+  a local bound to one, and nowhere else. A field, a parameter or the return
+  type of a function this program defines (`ffi_opaque_return`) is
+  `` `Db` cannot be a field: an
+  opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in
+  a `declare function` signature or on a local bound to one `` (NL2805,
+  `tests/link/ffi_opaque_field`, `ffi_opaque_param`), and so is either arm of
+  a `Result` type, in a signature or on a local (`ffi_opaque_result_type`,
+  `ffi_opaque_result`),
+  and a type argument of a generic class or function, written or inferred
+  (`ffi_opaque_type_argument`, `ffi_opaque_template_argument`). An arrow handed
+  to a call does not capture one, as it does not capture a `CPtr`
+  (`ffi_opaque_capture`). An array element is refused as for any
+  `declare class`, above (`ffi_opaque_array`).
+- **Each one is its own type.** Both lower to `i8*`, but a `Db` passed where a
+  `Stmt` is wanted is `` Argument 1 of `stmt_close`: expected Stmt, got Db ``
+  (`tests/link/ffi_opaque_mix`), and neither is a `CPtr`: a `Db` is not passed
+  where a `CPtr` is wanted, nor a `CPtr` where a `Db` is (`ffi_opaque_to_cptr`,
+  `ffi_opaque_from_cptr`). A `Db | null` is narrowed first
+  (`ffi_opaque_nullable`).
+- **C makes it and C reads it.** `new Db()` is `` Cannot `new` `Db`: an opaque
+  `declare class` has no layout to build `` (NL2806,
+  `tests/link/ffi_opaque_new`), and a member of one is `` `Db` is an opaque
+  `declare class`, so it has no member `handle`: C keeps its fields `` (NL2807,
+  `tests/link/ffi_opaque_member`), whether it is read, written
+  (`ffi_opaque_write`) or called (`ffi_opaque_call`). `readStruct` does not copy into one, since
+  there is nothing to copy: `` `readStruct(p)` cannot copy into `Db` `` (NL2808,
+  `tests/link/ffi_opaque_read_struct`); declare the C function to return the
+  class itself.
+- **A `Name` result is checked for `NULL`.** A `declare function` that returns
+  `Name` promises a pointer, so a `NULL` from C stops the program with
+  `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
+  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  A `Name | null` result is narrowed with `!== null` before it goes back to C:
+  passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
+  Db, got Db | null `` (`ffi_opaque_nullable`).
+- **This changed what a field-less `declare class` means.** Before WP66 S3,
+  `declare class Db {}` was a zero-byte struct, built with `new Db()` and lent to
+  C by pointer like any other `declare class`. It is now an opaque pointer, and
+  `new Db()` is NL2806: a program that built one declares the C function that
+  makes it instead, or gives the class the fields C lays out.
 
 ### `readStruct`: a struct out of memory C owns
 

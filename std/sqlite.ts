@@ -44,6 +44,26 @@
  * message; every other call answers `Err` with the bare extended code, and
  * `Database.error` or `Statement.error` turns it into a `SqliteError`.
  *
+ * **A cursor reads a table or index without SQL.** Inside a read transaction
+ * (`beginRead` to `endRead`), `openCursor` checks the object's columns against
+ * the list the program names, and the `Cursor` then walks SQLite's B-tree
+ * directly: `first`, `next`, `seekRowid`, and for an index a seek key built
+ * with `keyI64` and `keyText` and moved to with `seek`. Its column reads
+ * answer what the row stores and, like a statement's, allocate nothing. Every
+ * `exec`, `commit`, `rollback` and `endRead`, and every stepped statement but
+ * a plain read (a `pragma_*` SELECT included), closes every cursor first, so
+ * a cursor never reads a page that changed; its calls answer `SQLITE_MISUSE`.
+ *
+ *     db.beginRead().expect("begin")
+ *     const ix = db.openCursor("t_name", "name,rowid").expect("cursor")
+ *     ix.keyText("ada").expect("key")
+ *     let on = ix.seek(SEEK_GE).expect("seek")
+ *     while (on) {
+ *       // ix.columnInto(0, buf, 0) is the name, ix.rowid() the row
+ *       on = ix.next().expect("next")
+ *     }
+ *     db.endRead().expect("end")  // closes `ix`
+ *
  * **Closing is explicit.** `close` finalizes every statement the connection
  * still has, so a statement never outlives its database; `finalize` frees one
  * statement early. A connection and its statements belong to the thread that
@@ -92,6 +112,24 @@ declare function nishsqlite_column_f64(h: i32, c: i32): f64
 declare function nishsqlite_column_bytes(h: i32, c: i32): i32
 declare function nishsqlite_column_text(h: i32, c: i32): string | null
 declare function nishsqlite_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
+declare function nishsqlite_begin_read(h: i32): i32
+declare function nishsqlite_end_read(h: i32): i32
+declare function nishsqlite_cursor_open(h: i32, name: string, columns: string): i32
+declare function nishsqlite_cursor_close(h: i32): i32
+declare function nishsqlite_cursor_first(h: i32): i32
+declare function nishsqlite_cursor_last(h: i32): i32
+declare function nishsqlite_cursor_next(h: i32): i32
+declare function nishsqlite_cursor_previous(h: i32): i32
+declare function nishsqlite_cursor_seek_rowid(h: i32, rowid: i64): i32
+declare function nishsqlite_key_reset(h: i32): i32
+declare function nishsqlite_key_i64(h: i32, v: i64): i32
+declare function nishsqlite_key_text(h: i32, text: string): i32
+declare function nishsqlite_key_bytes(h: i32, buf: readonly u8[], n: u64, off: i32, len: i32): i32
+declare function nishsqlite_cursor_seek(h: i32, op: i32): i32
+declare function nishsqlite_cursor_column_type(h: i32, c: i32): i32
+declare function nishsqlite_cursor_column_i64(h: i32, c: i32): i64
+declare function nishsqlite_cursor_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
+declare function nishsqlite_cursor_rowid(h: i32): i64
 declare function sqlite3_errstr(code: i32): string
 declare function sqlite3_libversion(): string
 
@@ -164,6 +202,15 @@ export const OPEN_MEMORY: i32 = 0x80
 /** Refuse a path whose last component is a symbolic link. */
 export const OPEN_NOFOLLOW: i32 = 0x01000000
 
+/** `Cursor.seek`: the first index entry at or after the key. */
+export const SEEK_GE: i32 = 1
+/** `Cursor.seek`: the first index entry after the key. */
+export const SEEK_GT: i32 = 2
+/** `Cursor.seek`: the last index entry at or before the key. */
+export const SEEK_LE: i32 = 3
+/** `Cursor.seek`: the last index entry before the key. */
+export const SEEK_LT: i32 = 4
+
 /**
  * The version of the SQLite library linked into this program.
  *
@@ -214,6 +261,14 @@ const messageFor = (code: i32, connection: string): string => {
     return sqlite3_errstr(code)
   }
   return connection
+}
+
+/** A cursor move's answer: 1 on a row, 0 for none, the negated code. */
+const moved = (r: i32): Result<boolean, i32> => {
+  if (r < 0) {
+    return Err(-r)
+  }
+  return Ok(r === 1)
 }
 
 /**
@@ -291,6 +346,59 @@ export class Database {
    */
   rollback(): Result<void, i32> {
     return this.exec("ROLLBACK")
+  }
+
+  /**
+   * Starts a read transaction: `BEGIN`, then a read of the schema, which takes
+   * the main database's read lock. Its snapshot is what every cursor of this
+   * connection reads until `endRead`, and `openCursor` needs one.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` inside a transaction
+   *   already, or the extended result code, such as `SQLITE_BUSY`.
+   */
+  beginRead(): Result<void, i32> {
+    return done(nishsqlite_begin_read(this.handle))
+  }
+
+  /**
+   * Closes every cursor of this connection and commits the transaction.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` outside a transaction, or
+   *   the extended result code of the `COMMIT`.
+   */
+  endRead(): Result<void, i32> {
+    return done(nishsqlite_end_read(this.handle))
+  }
+
+  /**
+   * Opens a cursor on `name`, a table or index of the main database, inside a
+   * read transaction (`beginRead`). `columns` is the schema the program reads,
+   * checked at open: a table's columns, or an index's key columns, each with
+   * ` DESC` where the index has it, and then `rowid`, in order, joined by `,`
+   * with no space. A table that is `WITHOUT ROWID`, a view or virtual table,
+   * one with a generated column, an index on an expression or with a
+   * collation other than `BINARY`, and a database that is not UTF-8 are
+   * refused. `close`, `endRead`, closing the connection, any `exec`, and any
+   * stepped statement but a plain read (`pragma_*` SELECTs too) close it.
+   *
+   * @param name The table or index, as the schema names it.
+   * @param columns The columns, such as `"id,name,score"` for a table or
+   *   `"name,score DESC,rowid"` for an index.
+   * @returns The cursor, or a `SqliteError`: `SQLITE_MISUSE` outside a read
+   *   transaction, `SQLITE_SCHEMA` for an object that is not there, is not one
+   *   a cursor reads, or has columns other than `columns`.
+   */
+  openCursor(name: string, columns: string): Result<Cursor, SqliteError> {
+    const h: i32 = nishsqlite_cursor_open(this.handle, name, columns)
+    if (h < 0) {
+      if (-h === SQLITE_SCHEMA) {
+        return Err(
+          new SqliteError(-h, `no table or index ${name} with columns "${columns}" that a cursor reads`)
+        )
+      }
+      return Err(this.error(-h))
+    }
+    return Ok(new Cursor(h))
   }
 
   /**
@@ -608,5 +716,222 @@ export class Statement {
    */
   error(code: i32): SqliteError {
     return new SqliteError(code, messageFor(code, nishsqlite_stmt_errmsg(this.handle)))
+  }
+}
+
+/**
+ * A B-tree cursor on a table or index, which reads rows without a statement.
+ * Columns count from 0 in the order `openCursor` named them. A call on a
+ * closed or invalidated cursor answers `SQLITE_MISUSE` (0 from `rowid` and
+ * `columnI64`).
+ */
+export class Cursor {
+  /** The adapter's handle. */
+  private handle: i32
+
+  /**
+   * Wraps an adapter handle. A program gets a `Cursor` from
+   * `Database.openCursor` rather than building one.
+   *
+   * @param handle The adapter's cursor handle.
+   */
+  constructor(handle: i32) {
+    this.handle = handle
+  }
+
+  /**
+   * Moves to the first row, in the index's order for an index.
+   *
+   * @returns `true` on a row, `false` for an empty table or index, or `Err`
+   *   with the code: `SQLITE_MISUSE` for a closed cursor, or SQLite's, such as
+   *   `SQLITE_CORRUPT`.
+   */
+  first(): Result<boolean, i32> {
+    return moved(nishsqlite_cursor_first(this.handle))
+  }
+
+  /**
+   * Moves to the last row.
+   *
+   * @returns `true` on a row, `false` for an empty table or index, or `Err`
+   *   with the code, as for `first`.
+   */
+  last(): Result<boolean, i32> {
+    return moved(nishsqlite_cursor_last(this.handle))
+  }
+
+  /**
+   * Moves to the next row.
+   *
+   * @returns `true` on a row, `false` past the last, or `Err` with the code,
+   *   as for `first`, or `SQLITE_MISUSE` when the cursor has no row to move
+   *   from.
+   */
+  next(): Result<boolean, i32> {
+    return moved(nishsqlite_cursor_next(this.handle))
+  }
+
+  /**
+   * Moves to the row before.
+   *
+   * @returns `true` on a row, `false` before the first, or `Err` with the
+   *   code, as for `next`.
+   */
+  previous(): Result<boolean, i32> {
+    return moved(nishsqlite_cursor_previous(this.handle))
+  }
+
+  /**
+   * Moves a table cursor to the row whose rowid is `rowid`.
+   *
+   * @param rowid The row's rowid.
+   * @returns `true` when the row is there, `false` when not, or `Err` with
+   *   the code, as for `first`, or `SQLITE_MISUSE` for an index cursor.
+   */
+  seekRowid(rowid: i64): Result<boolean, i32> {
+    return moved(nishsqlite_cursor_seek_rowid(this.handle, rowid))
+  }
+
+  /**
+   * Empties an index cursor's seek key, to build a new one with `keyI64`,
+   * `keyText` and `keyTextBytes`.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for a table cursor or a
+   *   closed one.
+   */
+  keyReset(): Result<void, i32> {
+    return done(nishsqlite_key_reset(this.handle))
+  }
+
+  /**
+   * Appends an integer to the seek key, for the index's next key column.
+   *
+   * @param v The value.
+   * @returns `Ok()`, or `Err` with `SQLITE_RANGE` when the key has a value
+   *   for every key column already, or `SQLITE_MISUSE` for a table cursor.
+   */
+  keyI64(v: i64): Result<void, i32> {
+    return done(nishsqlite_key_i64(this.handle, v))
+  }
+
+  /**
+   * Appends text to the seek key, copied; the text ends at its first NUL.
+   *
+   * @param text The value.
+   * @returns `Ok()`, or `Err` with the code, as for `keyI64`, or
+   *   `SQLITE_NOMEM`.
+   */
+  keyText(text: string): Result<void, i32> {
+    return done(nishsqlite_key_text(this.handle, text))
+  }
+
+  /**
+   * Appends `buf[off, off + len)` to the seek key as text, copied; a window
+   * outside `buf` is `SQLITE_MISUSE`.
+   *
+   * @param buf The bytes to read from.
+   * @param off Where the text starts in `buf`, in bytes.
+   * @param len The text's length in bytes.
+   * @returns `Ok()`, or `Err` with the code, as for `keyText`.
+   */
+  keyTextBytes(buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
+    return done(nishsqlite_key_bytes(this.handle, buf, toU64(buf.length), off, len))
+  }
+
+  /**
+   * Moves an index cursor by its seek key, compared with each entry's first
+   * key columns, so a key with fewer values than the index is a prefix:
+   * `SEEK_GE` and `SEEK_GT` land on the first entry at or after the key,
+   * `SEEK_LE` and `SEEK_LT` on the last at or before it, the `E` forms
+   * counting an equal entry. The key stays, for the next seek.
+   *
+   * @param op One of `SEEK_GE`, `SEEK_GT`, `SEEK_LE` and `SEEK_LT`.
+   * @returns `true` on an entry, `false` when there is none on that side, or
+   *   `Err` with the code, as for `first`, or `SQLITE_MISUSE` for a table
+   *   cursor, an empty key or another `op`.
+   */
+  seek(op: i32): Result<boolean, i32> {
+    return moved(nishsqlite_cursor_seek(this.handle, op))
+  }
+
+  /**
+   * The current row's rowid: a table row's key, an index entry's `rowid`.
+   *
+   * @returns The rowid, or 0 when the cursor has no row.
+   */
+  rowid(): i64 {
+    return nishsqlite_cursor_rowid(this.handle)
+  }
+
+  /**
+   * The type the current row stores for column `c`, as written: a REAL
+   * column holding a whole number stores an integer, where a query would
+   * answer a float.
+   *
+   * @param c The column's index, from 0, in `openCursor`'s order.
+   * @returns One of `SQLITE_INTEGER` to `SQLITE_NULL`, or `Err` with
+   *   `SQLITE_MISUSE` when the cursor has no row, `SQLITE_RANGE` for a column
+   *   that is not there, `SQLITE_SCHEMA` for a row written before `ALTER TABLE`
+   *   added the column, or `SQLITE_ABORT` when the cursor's row has moved.
+   */
+  columnType(c: i32): Result<i32, i32> {
+    const t: i32 = nishsqlite_cursor_column_type(this.handle, c)
+    if (t < 0) {
+      return Err(-t)
+    }
+    return Ok(t)
+  }
+
+  /**
+   * Column `c` of the current row as an integer, converted as SQLite
+   * converts.
+   *
+   * @param c The column's index, from 0.
+   * @returns The value; 0 for NULL and for a column `columnType` refuses.
+   */
+  columnI64(c: i32): i64 {
+    return nishsqlite_cursor_column_i64(this.handle, c)
+  }
+
+  /**
+   * Copies a text or blob column's stored bytes into `buf` at `at`, and
+   * answers their length, as `Statement.columnInto` does: it copies only when
+   * all of them fit, so a length larger than `buf.length - at` means nothing
+   * was written. It converts no number to text.
+   *
+   * @param c The column's index, from 0.
+   * @param buf The caller's buffer, written in place.
+   * @param at Where in `buf` the copy starts, in bytes.
+   * @returns The length in bytes, 0 for NULL, or `Err` with the code, as for
+   *   `columnType`, or `SQLITE_MISMATCH` for an integer or float, or
+   *   `SQLITE_MISUSE` for an `at` outside `0..buf.length`.
+   */
+  columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32> {
+    const n: i32 = nishsqlite_cursor_column_into(this.handle, c, buf, toU64(buf.length), at)
+    if (n < 0) {
+      return Err(-n)
+    }
+    return Ok(n)
+  }
+
+  /**
+   * Closes the cursor; the handle names nothing after.
+   *
+   * @returns `Ok()`, or `Err` with `SQLITE_MISUSE` for a cursor already
+   *   closed or invalidated.
+   */
+  close(): Result<void, i32> {
+    return done(nishsqlite_cursor_close(this.handle))
+  }
+
+  /**
+   * The error for `code`, which this cursor's last call answered.
+   * Allocates the `SqliteError`.
+   *
+   * @param code The extended result code an `Err` carried.
+   * @returns The error, with SQLite's description of the code.
+   */
+  error(code: i32): SqliteError {
+    return new SqliteError(code, sqlite3_errstr(code))
   }
 }

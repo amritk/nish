@@ -48,6 +48,7 @@
 // answers with the IR text per module and the stem each module's file should
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
+import { recordOverloads } from "./overloads"
 import { REGION_STD_SPECIFIER } from "./region"
 import { explainLayout, LayoutModule, LayoutReport } from "./compact-rule"
 import { computeLayout } from "./structs"
@@ -66,6 +67,7 @@ import {
 } from "./escape"
 import { portabilityFindings } from "./portability"
 import { liftScript } from "./script"
+import { liftDefaults } from "./defaults"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
@@ -928,6 +930,12 @@ export class Compilation {
       // takes its ids from the same parser.
       liftScript(parser, file)
     }
+    // WP28 `optional-params`: before the checker too, for the same reason.
+    const lifted = liftDefaults(
+      parser,
+      file,
+      read === null && this.opts.compatFeatures.indexOf("optional-params") >= 0
+    )
     const checker = new Checker(
       this.table,
       source,
@@ -953,6 +961,13 @@ export class Compilation {
       this.opts.compact && !checker.ctx.wasm && !checker.ctx.pageModule && getenv("NISH_ASAN") === null
     checker.ctx.compactNames = this.compactNames
     checker.ctx.deterministic = this.opts.deterministic
+    checker.ctx.compat = this.opts.compat
+    checker.ctx.compatFeatures = this.opts.compatFeatures
+    checker.ctx.defaultImpls = lifted.impls
+    checker.ctx.defaultArities = lifted.arities
+    checker.ctx.defaultWrappers = lifted.wrappers
+    checker.ctx.defaultLifted = lifted.lifted
+    recordOverloads(checker.ctx, file)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     unit.hostRefusals = refusals
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
@@ -1489,6 +1504,7 @@ export class Compilation {
     this.rejectRootWithArenas()
     this.rejectRootInShim()
     this.rejectRootInWasiLoader()
+    this.rejectOverloadsInInterop()
     this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
       return false
@@ -3474,6 +3490,46 @@ export class Compilation {
         }
       }
     }
+  }
+
+  /**
+   * WP28 C1: an exported function, method or constructor with overload
+   * signatures, in a build that describes the program to C or Node
+   * (`--emit-header`, `--emit-napi`, `--emit-napi-async`, `--emit-dts`). The
+   * signatures are lifted out before the checker runs, so a header or `.d.ts`
+   * would spell the implementation's signature, which a caller may not call.
+   */
+  rejectOverloadsInInterop(): void {
+    const opts = this.opts
+    if (
+      opts.emitNapi.length === 0 &&
+      opts.emitNapiAsync.length === 0 &&
+      opts.emitHeader.length === 0 &&
+      opts.emitDts.length === 0
+    ) {
+      return
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const sig of program.functions) {
+        if (sig.exported) {
+          this.refuseOverloadedExport(program.source, sig, sig.sourceName)
+        }
+      }
+    }
+  }
+
+  /** NL2802: `sig` has overload signatures and is described to C or Node. */
+  refuseOverloadedExport(source: SourceFile, sig: FunctionSig, shown: string): void {
+    if (sig.overloads.length === 0) {
+      return
+    }
+    this.sink.report(
+      source,
+      sig.decl.start,
+      sig.decl.end,
+      `\`${shown}\` has overload signatures and cannot be described to C or Node (\`--emit-header\`, \`--emit-napi\` or \`--emit-dts\`): a header or declaration file would spell only the implementation's signature, which a caller may not call; export a function per signature`
+    )
   }
 
   /**

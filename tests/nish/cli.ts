@@ -120,6 +120,8 @@ const advertisedFlags = (): string[] => [
   "--compat[=<feature>,...]",
   "--target",
   "--cpu",
+  "--pgo-generate",
+  "--pgo-use",
   "--profile",
   "--warn-portability",
   "--fix",

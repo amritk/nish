@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_overloads_incompatible/main.ts","line":2,"column":15,"endLine":2,"endColumn":28,"severity":"error","code":"NL2800","message":"This overload signature of `show` is not compatible with its implementation: parameter 1 is string, which the implementation's f64 does not take"}

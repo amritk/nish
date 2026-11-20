@@ -44,7 +44,10 @@
  *   - the compiler compiles it and only the link step refuses it. What this
  *     oracle runs is `src/dump-checked.ts`, a dump entry point with no
  *     `--link` of its own, so a case whose refusal comes from the linker has
- *     no message here to compare.
+ *     no message here to compare. The driver's read of each package's
+ *     `nish.link` (NL3059, NL3060, NL3061) comes after checking too, so a
+ *     case the checker accepts whose manifests carry a `link` key is skipped
+ *     the same way.
  *
  * Both of those judgements used to be stage0's, and the second was a *compile*
  * by stage0 (WP19 G2.3). It is the seed's now — the last released `nish`, or
@@ -280,6 +283,15 @@ const compare = (seed, binary, entry) => {
     maxBuffer: 64 * 1024 * 1024,
   })
   const output = `${run.stdout}${run.stderr}`
+  // The driver reads every package's `nish.link` after checking, in
+  // `src/compile.ts`, which dump_checked does not run. The seed cannot answer
+  // for a case refused there when it predates the key, so what the checker
+  // accepts and a manifest of the program asks to link is that read's to refuse.
+  if (run.status === 0 && entry.linked && asksToLink(entry.file)) {
+    return {
+      skipped: "it checks; only the driver's `nish.link` read refuses it, and dump_checked does not read it",
+    }
+  }
   if (run.status === 0) {
     return { failed: "stage1 accepted it" }
   }
@@ -305,6 +317,15 @@ const compare = (seed, binary, entry) => {
     return { failed }
   }
   return { fragments: entry.fragments.length }
+}
+
+/** Whether any `package.json` under a `tests/link` case's directory has a `link` key. */
+const asksToLink = (entryFile) => {
+  const dir = path.dirname(entryFile)
+  const manifests = fs
+    .readdirSync(dir, { recursive: true })
+    .filter((f) => path.basename(String(f)) === "package.json")
+  return manifests.some((f) => fs.readFileSync(path.join(dir, String(f)), "utf8").includes('"link"'))
 }
 
 /** Whether the seed compiles the program at all, IR written to a directory it then forgets. */

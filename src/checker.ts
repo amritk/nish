@@ -10,6 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
+import { attachOverloads } from "./overloads"
 import { recordAccumulation } from "./accumulate"
 import {
   checkExportedLayouts,
@@ -33,7 +34,13 @@ import {
   unsafeModule,
 } from "./nish-modules"
 import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
-import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations"
+import {
+  collectFunctionSignature,
+  collectImports,
+  isExported,
+  isOptionalParameter,
+  markEntryMain,
+} from "./declarations"
 import {
   checkDeferredConstraints,
   collectStructTypeParamNames,
@@ -730,6 +737,7 @@ export class Checker {
     }
     const sig = collectFunctionSignature(this.ctx, stmt)
     const name = sig.sourceName
+    attachOverloads(this.ctx, sig, -1, name)
     if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
       return
     }
@@ -1214,6 +1222,9 @@ export class Checker {
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM)
       local.origin = parameterOrigin(this.ctx, sig, i)
       local.typedArray = parameterSpelling(this.ctx, sig, sig.paramNames[i])
+      if (isOptionalParameter(this.ctx, sig, i)) {
+        this.ctx.optionalLocals.push(local)
+      }
       if (!scope.declare(local)) {
         this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``)
       }
@@ -2307,6 +2318,8 @@ const guardStatement = (body: Node, access: Node): Node | null => {
     // the first operand of that `??` is sure to run.
     const chained =
       node.kind === NodeKind.Binary && node.text === "??" && isOptionalChain(unwrapParens(node.children[0]))
+    // WP28 C1: a statement that is a `?.` chain stops at its links the same way.
+    const skipped = node.kind === NodeKind.ExprStmt && isOptionalChain(node.children[0])
     const repeats =
       node.kind === NodeKind.While ||
       node.kind === NodeKind.Do ||
@@ -2316,6 +2329,7 @@ const guardStatement = (body: Node, access: Node): Node | null => {
       down !== node &&
       ((branches && (!first || chained)) ||
         repeats ||
+        skipped ||
         node.kind === NodeKind.Arrow ||
         node.kind === NodeKind.Labeled)
     if (crosses) {

@@ -224,6 +224,44 @@ likely to add to it:
   `"nish": { "host": [...] }` names them too. A native or WASI build that
   imports one is refused.
 
+### Optimizing a build with a profile
+
+A profile-guided build links your program twice. The first link is an
+instrumented binary: it counts which branches and calls your program takes.
+You run it on real work, and the second link uses those counts to lay out
+and inline the code. Four commands:
+
+```bash
+nish app.ts -o build/app.ir/ --link build/app.instr --pgo-generate
+LLVM_PROFILE_FILE=build/app-%p.profraw build/app.instr <a representative run>
+llvm-profdata merge -o build/app.profdata build/app-*.profraw
+nish app.ts -o build/app.ir/ --link build/app --pgo-use build/app.profdata
+```
+
+- **The profile covers the whole binary.** The runtime and, when your
+  program calls it, SQLite are compiled with the same flag, so the hot
+  paths in them are optimised too. Such a link compiles every unit itself
+  rather than reusing the runtime cache, so it takes longer, and it never
+  leaves an instrumented object behind for a plain link to pick up.
+- **Train on what production sees.** Run the instrumented binary on input
+  shaped like the real thing: the binary is fast where the training was.
+  Each run writes one `.profraw` (`%p` puts the process id in the name);
+  merge them all.
+- **A profile belongs to one machine and one LLVM.** Train and link on the
+  same toolchain; `llvm-profdata` and `clang` of another LLVM version may
+  refuse the file. Don't commit a `.profdata`: regenerate it.
+- **What is refused.** Each flag needs `--link` and the `speed` or `size`
+  profile, builds for this machine only, and `nish run` does not take it; a
+  `--pgo-use` file must be the merged `.profdata` (a raw `.profraw` is
+  refused with the `merge` command to run). Each is a usage error, exit 2.
+  `llvm-profdata` must be on your `PATH` (Ubuntu's `llvm-18` installs it as
+  `llvm-profdata-18`; link that as `llvm-profdata`); without it the link
+  stops with exit 3. The instrumented link also needs compiler-rt's profile
+  runtime (`libclang-rt-18-dev` on Ubuntu).
+
+The rules are in the language reference, [Profile-guided
+builds](../../LANGUAGE.md#profile-guided-builds).
+
 The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — and host modules have a page of
 their own: [Calling Nish from other languages](interop.md).
@@ -748,10 +786,11 @@ leaves the IR unchanged.
 
   Use it for a simulation a server and a browser both run and must agree on
   ([`--deterministic`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#--deterministic)).
-- **`--compat`** selects the compatibility dialect, which will accept more of
-  TypeScript than Nish does by default. It has no feature yet, so today it
-  means one thing: a bare `number` is a 64-bit float, as `--number-mode f64`
-  makes it. `--compat=<feature>,...` allows only the features it names, and a
+- **`--compat`** selects the compatibility dialect, which accepts more of
+  TypeScript than Nish does by default: a bare `number` is a 64-bit float, as
+  `--number-mode f64` makes it, and its features (`nullish`,
+  `optional-chaining`, `string-switch`, `for-of-string`) admit forms the strict dialect refuses.
+  `--compat=<feature>,...` allows only the features it names, and a
   name that is no feature is a usage error (exit 2). `"compat"` in your
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too

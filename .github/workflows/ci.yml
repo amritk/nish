@@ -2,13 +2,15 @@
 #
 # test: the full golden/native test suite on Linux with LLVM 18
 #       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), every case compiled by a
-#       stage1 the last released nish builds, then a binary size table in the
-#       job summary, and the IR cookbook staleness check. The matrix is
+#       stage1 the last released nish builds. The matrix is
 #       written for macOS too and that row is commented out; the comment beside
 #       it names the four checks that still fail there, with the run that
 #       measured them. `bootstrap` below has had darwin rows since the 0.4.0
 #       seeds, `runtime-net` runs the network runtime on a mac, and `nish-cmp`
 #       runs on the Linux rows only (.github/seed-matrix.sh says why).
+# examples: scripts/smoke.sh over every example with a main, the IR
+#       cookbook staleness check and the binary size table in the job
+#       summary, with the compiler the shards test, beside the shards.
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -127,19 +129,37 @@ env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
 
-# A newer push to a pull request makes the older run's answer worthless, so
-# that run is cancelled. A push to main is never superseded that way: each one
-# is a merge, and its run is the only record of whether main was green after
-# it. With `cancel-in-progress: true` for every event, the next merge landing
-# within the half hour a run takes cancelled the one before it, and #396's and
-# #397's runs on main ended cancelled -- neither green nor red, and nothing
-# said which merge broke main if one had. So only a pull request's runs cancel;
-# main's queue up in the same group and each finishes. A merge-queue run has a
-# ref of its own per queued entry, so it shares a group with nothing and the
-# queue, not this setting, decides when it is superseded.
+# Every run shares one group per ref, and the newest run cancels the one it
+# replaces: a newer push to a pull request makes the older run's answer
+# worthless, and so does a newer merge to main. A main push's run tests a tree
+# the merge queue already tested (`merge_group` below runs this workflow on
+# main plus everything queued ahead, and merges only what passed there), and
+# runs every lane (`scope` turns lanes off for pull requests only), so the
+# next merge's run tests a superset of what a cancelled one would have. Which
+# merge broke main is the queue's record, one run per entry, not this one's:
+# before the queue, #396's and #397's main runs ended cancelled and nothing
+# said which merge broke main, which is why main used to queue instead.
+#
+# Two kinds of main push are pinned instead: each gets a group of its own (its
+# run id) and is never cancelled, nor cancels the run before it.
+# - The Release PR's merge, recognised by its squash subject
+#   (`chore(release): <version>`) or by the push adding `changelog/<version>.json`,
+#   which only the release PR writes. Either is enough: a false match only
+#   leaves an ordinary run uncancelled, while a miss would let the next merge
+#   cancel the release commit's run.
+# - Re-runs (a later attempt), so recovering an older run never cancels the
+#   tip's run.
+# Release CI proper is untouched: release.yml calls this workflow at the tag,
+# where `github.ref` is `refs/tags/v*`, and the Release PR's own runs are
+# `pull_request` runs like any other. A merge-queue run has a ref of its own
+# per queued entry, so it shares a group with nothing and the queue, not this
+# setting, decides when it is superseded. interop.yml uses the same rule.
+# `run_attempt` is a string in the `github` context, hence `'1'`.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ci-${{ github.workflow }}-${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.run_attempt != '1' || startsWith(github.event.head_commit.message, 'chore(release)') || contains(join(github.event.head_commit.added, ' '), 'changelog/'))) && format('pinned-{0}', github.run_id) || github.ref }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && !startsWith(github.event.head_commit.message, 'chore(release)') && !contains(join(github.event.head_commit.added, ' '), 'changelog/')) }}
 
 jobs:
   # Which side jobs this run needs (docs/wp10-ci.md, "Scoped lanes"). One
@@ -186,13 +206,13 @@ jobs:
         run: node scripts/ci-scope.mjs
 
   test:
-    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/8)
+    name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/9)
     runs-on: ${{ matrix.os }}
     # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
     # #663 added about 3 s of clang -O2 to each program that imports p256, so
     # a 15-minute limit cancelled it. With four shards, shard 1 alone ran the
     # twelve minutes of sections after the tests/link programs and took 21
-    # minutes (run 41882940444). Those sections are now dealt too, eight ways,
+    # minutes (run 41882940444). Those sections are now dealt too, nine ways,
     # by the costs in tests/shard-costs.json (regenerated from that run), so
     # each shard takes about nine; the limit stays as headroom while the
     # table drifts.
@@ -280,14 +300,14 @@ jobs:
         # cancelling the Linux row that says whether it is the platform or the
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the four checks above
-        # `npm test` is split eight ways by `--shard` (tests/run.js, "Shards"):
+        # `npm test` is split nine ways by `--shard` (tests/run.js, "Shards"):
         # shard 1 runs the sections after the tests/link programs that are not
         # dealt (`DEALT_SECTIONS`), shard 2 the `simd` group the steps below
         # read, and the programs and the other sections are dealt by their
-        # cost in tests/shard-costs.json so that the eight finish together.
-        # One unsharded run took 25 minutes. The `/8` in the Test step is this
+        # cost in tests/shard-costs.json so that the nine finish together.
+        # One unsharded run took 25 minutes. The `/9` in the Test step is this
         # list's length, and a check in tests/run.js holds the two together.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -403,7 +423,7 @@ jobs:
       # every shard, and the same binary as the last run whose src/, std/, seed
       # and toolchain were these: tests/self/compiler-cache.js keys it on all
       # of them, and the Test step below copies it rather than linking again.
-      # Shard 1 alone saves a miss, since the eight build the same bytes;
+      # Shard 1 alone saves a miss, since the nine build the same bytes;
       # `fuzz-smoke` and `postgres-live` read the same key and save nothing.
       - name: The compiler under test
         uses: ./.github/actions/compiler-cache
@@ -443,6 +463,16 @@ jobs:
       # running them a second time. A check in tests/run.js fails if this step
       # asks for it while `fuzz-smoke` has stopped running either.
       #
+      # `--delegate-bench-timing`, which tests/run.js honours on a
+      # `pull_request` event alone: there the crypto-bench section still
+      # builds every twin and checks every checksum against expected.txt, and
+      # leaves the timed portable proofs to the push-to-main run of this job.
+      # A newer push to main cancels an older one's first attempt (the
+      # concurrency group above), so the proofs time the code as it stands at
+      # the next push whose run is not cancelled; the merge queue and
+      # workflow_call time them too. A check in tests/run.js fails if this job
+      # stops running on a push to main.
+      #
       # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
@@ -454,7 +484,7 @@ jobs:
         # The log is kept for the steps below that require a line of it.
         run: |
           set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --shard "$SHARD/8" | tee "$RUNNER_TEMP/test.log"
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee "$RUNNER_TEMP/test.log"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -620,10 +650,77 @@ jobs:
         if: matrix.shard == 1
         run: node bench/adler32.mjs --check
 
+      # The diagnostic-code registry's `gen-diagnostic-codes.mjs --check` and
+      # `security-scope.mjs` are not steps here: `npm test` runs both, in the
+      # diagnostics section (`codes: scripts/gen-diagnostic-codes.mjs --check
+      # accepts the registry`, `security-scope: every std/net, std/crypto and
+      # runtime C file is in a record ...`, and the scope script's refusal of a
+      # file no record names), in whichever shard the deal sends it to. A
+      # failure there is named by its own check line in that shard's log.
+      #
+      # The other half of WP19 G2.4 -- every code provoked by a program, not
+      # only every diagnostic given a code -- is not a step here: it is inside
+      # `npm test`, which runs `tests/diagnostic-coverage.js` with
+      # `--require-coverage` and `--strict-refusals`.
+
+  # examples: the checks that drive a linked compiler over examples/ and
+  # docs/IR_COOKBOOK.md rather than through `npm test`: the smoke test, the IR
+  # cookbook staleness check and the binary size table. They ran after the
+  # suite on test shard 1, about 80 s on the critical path of every run; here
+  # they run beside the shards on their own runner. The compiler comes from
+  # the same cache key the shards link (tests/self/compiler-cache.js), so it is
+  # the binary the suite tests. Not scoped: like `test` and `lint`, it runs on
+  # every event, and `ci-gate` needs it.
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26.13.1
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev
+
+      - name: Link the LLVM 18 tools by their plain names
+        run: |
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-link llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NISH_REQUIRE_ATTESTATION: "1"
+        run: bash scripts/fetch-seed.sh
+
+      # The test shards save this key; this job only reads it, so a miss links
+      # here (about a minute) and saves nothing.
+      - name: The compiler under test
+        timeout-minutes: 10
+        uses: ./.github/actions/compiler-cache
+        with:
+          out: build/nish
+          save: "false"
+
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
-      # run, the compiler this job built.
+      # run, the compiler the step above linked.
       - name: Smoke (build + run every example with a main, size profile)
-        if: matrix.shard == 1
         env:
           NISH: build/nish
         run: bash scripts/smoke.sh
@@ -633,41 +730,18 @@ jobs:
       # (the `internal` linkage of --strict-exports and the `nsw` defaults were
       # missing), so the staleness check is a gate rather than a chore.
       - name: Docs (IR cookbook up to date)
-        if: matrix.shard == 1
         env:
           NISH: build/nish
         run: bash docs/cookbook/regen.sh --check
 
-      # The diagnostic-code registry, src/codes.ts, is kept by hand: a new
-      # code takes the next free number in its band, and this checks its
-      # format and that every code is unique.
-      # `npm test` checks it too -- this names it in its own step so a stale
-      # registry reads as itself rather than as one failure among a thousand.
-      - name: Diagnostic codes (registry up to date)
-        if: matrix.shard == 1
-        run: node scripts/gen-diagnostic-codes.mjs --check
-
-      # Every std/net, std/crypto and runtime C file is in a security record's
-      # scope or on docs/security/README.md's "Not yet audited" list, which only
-      # shrinks: new attacker-facing code ships with its record (CLAUDE.md).
-      - name: Security records cover the attacker-facing surface
-        if: matrix.shard == 1
-        run: node scripts/security-scope.mjs
-
-      # The other half of WP19 G2.4 -- every code provoked by a program, not
-      # only every diagnostic given a code -- is not a step here: it is inside
-      # `npm test`, which runs `tests/diagnostic-coverage.js` with
-      # `--require-coverage` and `--strict-refusals`.
-
       - name: Size report
-        if: matrix.shard == 1
         env:
-          MATRIX_OS: ${{ matrix.os }}
+          RUNNER_LABEL: ubuntu-latest
         run: |
           build/nish examples/add.ts -o build/add.ll
           bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
           {
-            echo "### Binary size ($MATRIX_OS, LLVM 18)"
+            echo "### Binary size ($RUNNER_LABEL, LLVM 18)"
             echo
             echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime-os.c`'
             echo
@@ -2055,7 +2129,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       # The typecheck, once per push. It used to run in each of the `test`
-      # job's eight shards, over the same sources every time.
+      # job's shards, over the same sources every time.
       - name: Typecheck
         run: npm run check
 
@@ -2108,6 +2182,7 @@ jobs:
     needs:
       - scope
       - test
+      - examples
       - seeds
       - bootstrap
       - nish-cmp

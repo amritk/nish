@@ -1,0 +1,6 @@
+-1
+stmt_close db=1
+db_close open=1
+6
+`stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null`
+broken exit 1
