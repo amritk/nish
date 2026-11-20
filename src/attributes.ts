@@ -1402,7 +1402,8 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
     return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE)
   }
   // An inline array field's slots are bytes of the object itself, so writing
-  // an element of `p.f` writes through `p` (`src/inline-arrays.ts`). The
+  // an element of `p.f` writes through `p` (`src/inline-arrays.ts`), as does
+  // writing an element of a `declare class`'s fixed-length array. The
   // pointer layout's slots are an allocation of their own, and there the
   // same store is only a read of `p`.
   if (
@@ -1422,7 +1423,10 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
   return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ)
 }
 
-/** Whether `access` reads an array field stored inside its object (`FieldInfo.inlineCapacity`). */
+/**
+ * Whether `access` reads an array field stored inside its object: an inline
+ * one (`FieldInfo.inlineCapacity`) or a fixed-length one (`FieldInfo.cLength`).
+ */
 const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
   const receiver = program.nodeTypes[access.children[0].id]
   if (receiver < 0) {
@@ -1437,7 +1441,7 @@ const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node):
     return false
   }
   const field = info.field(access.text)
-  return field !== null && field.inline()
+  return field !== null && (field.inline() || field.cLength >= 0)
 }
 
 /**

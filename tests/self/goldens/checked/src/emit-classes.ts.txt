@@ -537,16 +537,17 @@ function fieldLLVMType(emitter: Emitter, field: FieldInfo): string -> @fieldLLVM
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm FieldInfo.inline TypeTable.refOf nish_str_concat nish_str_from_i32 structTypeName
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0 Emitter.llvm#0
   pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
   callee +2:12 structTypeName -> @structTypeName
-  callee +7:8 FieldInfo.inline -> @FieldInfo.inline
-  callee +8:12 Emitter.llvm -> @Emitter.llvm
-  local +10:9 slot: string (const)
-  callee +10:16 Emitter.llvm -> @Emitter.llvm
-  callee +10:29 TypeTable.refOf -> @TypeTable.refOf
+  callee +8:35 Emitter.llvm -> @Emitter.llvm
+  callee +10:8 FieldInfo.inline -> @FieldInfo.inline
+  callee +11:12 Emitter.llvm -> @Emitter.llvm
+  local +13:9 slot: string (const)
+  callee +13:16 Emitter.llvm -> @Emitter.llvm
+  callee +13:29 TypeTable.refOf -> @TypeTable.refOf
 function noteStruct(emitter: Emitter, referenced: string[], results: string[], headers: string[], type: i32): void -> @noteStruct
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

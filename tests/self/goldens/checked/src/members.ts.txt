@@ -135,38 +135,39 @@ function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @check
   stackSites=0 stackLocals=0
   local -3:9 receiverExpr: Node (const)
   local -1:9 embedded: boolean (const)
-  callee +1:8 isValueReceiver -> @isValueReceiver
-  callee +3:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee +3:33 neverNullMessage -> @neverNullMessage
-  local +9:11 declaredEnum: EnumInfo | null (const)
-  callee +9:26 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
-  callee +11:14 checkEnumMember -> @checkEnumMember
-  callee +13:12 checkNamespaceProperty -> @checkNamespaceProperty
-  callee +15:22 unwrapParens -> @unwrapParens
-  local +16:9 receiver: i32 (const)
-  callee +16:20 linkReceiver -> @linkReceiver
-  callee +16:58 checkExpression -> @checkExpression
-  callee +21:7 refuseSecretMember -> @refuseSecretMember
-  callee +24:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee +26:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee +28:53 TypeTable.typeName -> @TypeTable.typeName
-  callee +28:88 nullableHint -> @nullableHint
-  callee +32:7 refuseParameterMember -> @refuseParameterMember
-  callee +36:12 checkStringProperty -> @checkStringProperty
-  callee +38:7 TypeTable.isResult -> @TypeTable.isResult
-  callee +39:12 checkResultProperty -> @checkResultProperty
-  callee +41:7 TypeTable.isArray -> @TypeTable.isArray
-  callee +42:12 checkArrayProperty -> @checkArrayProperty
-  callee +44:7 TypeTable.isStruct -> @TypeTable.isStruct
-  callee +45:12 checkStructProperty -> @checkStructProperty
-  callee +47:7 TypeTable.isUnion -> @TypeTable.isUnion
-  callee +48:12 checkUnionTag -> @checkUnionTag
-  callee +50:7 TypeTable.isFnRef -> @TypeTable.isFnRef
-  callee +51:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +51:32 opaqueReferenceMessage -> @opaqueReferenceMessage
-  callee +51:55 CheckContext.textOf -> @CheckContext.textOf
-  callee +53:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee +53:69 TypeTable.typeName -> @TypeTable.typeName
+  local +2:9 indexed: boolean (const)
+  callee +4:8 isValueReceiver -> @isValueReceiver
+  callee +6:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +6:33 neverNullMessage -> @neverNullMessage
+  local +12:11 declaredEnum: EnumInfo | null (const)
+  callee +12:26 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
+  callee +14:14 checkEnumMember -> @checkEnumMember
+  callee +16:12 checkNamespaceProperty -> @checkNamespaceProperty
+  callee +18:22 unwrapParens -> @unwrapParens
+  local +19:9 receiver: i32 (const)
+  callee +19:20 linkReceiver -> @linkReceiver
+  callee +19:58 checkExpression -> @checkExpression
+  callee +24:7 refuseSecretMember -> @refuseSecretMember
+  callee +27:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +29:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +31:53 TypeTable.typeName -> @TypeTable.typeName
+  callee +31:88 nullableHint -> @nullableHint
+  callee +35:7 refuseParameterMember -> @refuseParameterMember
+  callee +39:12 checkStringProperty -> @checkStringProperty
+  callee +41:7 TypeTable.isResult -> @TypeTable.isResult
+  callee +42:12 checkResultProperty -> @checkResultProperty
+  callee +44:7 TypeTable.isArray -> @TypeTable.isArray
+  callee +45:12 checkArrayProperty -> @checkArrayProperty
+  callee +47:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee +48:12 checkStructProperty -> @checkStructProperty
+  callee +50:7 TypeTable.isUnion -> @TypeTable.isUnion
+  callee +51:12 checkUnionTag -> @checkUnionTag
+  callee +53:7 TypeTable.isFnRef -> @TypeTable.isFnRef
+  callee +54:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +54:32 opaqueReferenceMessage -> @opaqueReferenceMessage
+  callee +54:55 CheckContext.textOf -> @CheckContext.textOf
+  callee +56:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +56:69 TypeTable.typeName -> @TypeTable.typeName
 function checkUnionTag(ctx: CheckContext, expr: Node, receiver: i32): i32 -> @checkUnionTag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -203,13 +204,13 @@ function checkEnumMember(ctx: CheckContext, expr: Node, info: EnumInfo): i32 -> 
   callee -4:8 EnumInfo.hasMember -> @EnumInfo.hasMember
   callee -3:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
   callee +0:41 EnumInfo.memberValue -> @EnumInfo.memberValue
-function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32, embedded: boolean): i32 -> @checkStructProperty
+function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32, embedded: boolean, indexed: boolean): i32 -> @checkStructProperty
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via refuseCollectionMember
   escaping: receiver
-  calls: CheckContext.errorAtProperty CheckContext.textOf StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.isOpaque TypeTable.typeName methodReferenceMessage nish_str_concat opaqueMemberMessage refuseCollectionMember structOf
-  pointer ctx: size=448 writesThrough=true captured=false passedTo=structOf#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.textOf#0 CheckContext.textOf#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=refuseCollectionMember#2 CheckContext.errorAtProperty#1 CheckContext.textOf#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.textOf#1 CheckContext.textOf#1
+  calls: CheckContext.errorAtProperty CheckContext.textOf StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.arrayOf TypeTable.isOpaque TypeTable.typeName cArrayValueMessage methodReferenceMessage nish_str_concat opaqueMemberMessage refuseCollectionMember structOf
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=structOf#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.textOf#0 CheckContext.textOf#0 CheckContext.errorAtProperty#0 CheckContext.textOf#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=refuseCollectionMember#2 CheckContext.errorAtProperty#1 CheckContext.textOf#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.textOf#1 CheckContext.textOf#1 CheckContext.errorAtProperty#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +0:16 structOf -> @structOf
@@ -231,6 +232,14 @@ function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32, embed
   callee +27:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
   callee +29:12 CheckContext.textOf -> @CheckContext.textOf
   callee +29:109 CheckContext.textOf -> @CheckContext.textOf
+  callee +38:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee +38:33 cArrayValueMessage -> @cArrayValueMessage
+  callee +38:52 CheckContext.textOf -> @CheckContext.textOf
+  callee +41:12 TypeTable.arrayOf -> @TypeTable.arrayOf
+function cArrayValueMessage(text: string, length: i32): string -> @cArrayValueMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
 function refuseSecretMember(ctx: CheckContext, receiver: i32, member: Node): boolean -> @refuseSecretMember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
@@ -603,16 +612,17 @@ function checkSpreadSource(ctx: CheckContext, spread: Node, info: StructInfo, li
   callee +37:5 CheckContext.error -> @CheckContext.error
   local +47:7 embedded: FieldInfo | null (let)
   local +49:16 field: FieldInfo (const)
-  callee +57:5 CheckContext.error -> @CheckContext.error
-  callee +59:22 TypeTable.typeName -> @TypeTable.typeName
-  callee +59:58 TypeTable.typeName -> @TypeTable.typeName
-  local +65:7 bad: FieldInfo | null (let)
-  local +66:7 badInto: FieldInfo | null (let)
-  local +67:14 field: FieldInfo (const)
-  local +68:11 into: FieldInfo | null (const)
-  callee +68:18 StructInfo.field -> @StructInfo.field
-  callee +71:56 setByNameAfter -> @setByNameAfter
-  callee +80:3 reportSpreadField -> @reportSpreadField
+  local +57:11 head: string (const)
+  callee +57:33 TypeTable.typeName -> @TypeTable.typeName
+  callee +57:69 TypeTable.typeName -> @TypeTable.typeName
+  callee +58:5 CheckContext.error -> @CheckContext.error
+  local +68:7 bad: FieldInfo | null (let)
+  local +69:7 badInto: FieldInfo | null (let)
+  local +70:14 field: FieldInfo (const)
+  local +71:11 into: FieldInfo | null (const)
+  callee +71:18 StructInfo.field -> @StructInfo.field
+  callee +74:56 setByNameAfter -> @setByNameAfter
+  callee +83:3 reportSpreadField -> @reportSpreadField
 function reportSpreadField(ctx: CheckContext, value: Node, source: StructInfo, info: StructInfo, got: i32, field: FieldInfo, into: FieldInfo | null): void -> @reportSpreadField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -731,7 +741,7 @@ function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections StructInfo.field TypeTable.isArray TypeTable.isOpaque TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.typeName assignInto assignableReadonly checkExpression isCollectionStruct isValueReceiver nish_panic_index nish_str_concat nish_str_eq opaqueMemberMessage refuseCollectionMember refuseParameterMember refuseSecretMember refuseStorageLength structOf unwrapParens
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=isValueReceiver#0 CheckContext.errorType#0 CheckContext.textOf#0 checkExpression#0 refuseParameterMember#0 refuseSecretMember#0 CheckContext.errorType#0 refuseStorageLength#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.errorType#0 CheckContext.textOf#0 assignableReadonly#0 CheckContext.errorType#0 assignInto#0
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=isValueReceiver#0 CheckContext.errorType#0 CheckContext.textOf#0 checkExpression#0 refuseParameterMember#0 refuseSecretMember#0 CheckContext.errorType#0 refuseStorageLength#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.errorType#0 CheckContext.textOf#0 CheckContext.textOf#0 assignableReadonly#0 CheckContext.errorType#0 assignInto#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=assignInto#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=isValueReceiver#2 checkExpression#2 refuseParameterMember#6 assignInto#2
   stackSites=0 stackLocals=0
@@ -776,11 +786,14 @@ function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32
   callee +63:56 TypeTable.typeName -> @TypeTable.typeName
   callee +70:12 CheckContext.errorType -> @CheckContext.errorType
   callee +72:29 CheckContext.textOf -> @CheckContext.textOf
-  callee +75:26 assignableReadonly -> @assignableReadonly
-  local +76:11 where: string (const)
   callee +77:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +79:65 TypeTable.typeName -> @TypeTable.typeName
-  callee +82:10 assignInto -> @assignInto
+  callee +79:29 CheckContext.textOf -> @CheckContext.textOf
+  callee +79:135 CheckContext.textOf -> @CheckContext.textOf
+  callee +82:26 assignableReadonly -> @assignableReadonly
+  local +83:11 where: string (const)
+  callee +84:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +86:65 TypeTable.typeName -> @TypeTable.typeName
+  callee +89:10 assignInto -> @assignInto
 function refuseCollectionMember(ctx: CheckContext, info: StructInfo, at: Node, call: boolean): boolean -> @refuseCollectionMember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
