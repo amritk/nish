@@ -15,7 +15,7 @@ only the guide your task touches; the rules there are authoritative:
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
 | pick up a work package ("pick up WP50", `/feature --next`) | its parent issue under the [Roadmap issue](https://github.com/amritk/nish/issues/1849), its plan `.claude/plans/<slug>.plan.md`, [`AGENTS.md`](AGENTS.md#picking-up-a-work-package) → "Picking up a work package", and the `pickup` skill; the PR `Fixes` the stage's issue |
-| change a skill or agent in `.claude/skills/` or `.claude/agents/` | they are vendored from `amritk/ai`: change it there, then `node scripts/sync-skills.mjs` (`--check` refuses a hand edit) |
+| change a workflow skill or agent (`feature`, `plan-issues`, `pickup`, `decide`, the reviewers) | they are the `ai` plugin (`ai@amritk`, enabled in `.claude/settings.json`), from [`amritk/ai`](https://github.com/amritk/ai): change them there, not here |
 
 **An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
 types only through `walk.typeAt`, and treat a null binding table

@@ -50,7 +50,7 @@ parent's sub-issues are its stages, one pull request each. A plan file,
 
 The labels, and how an agent claims, checkpoints, hands off and takes over an
 issue, are the `pickup` skill's
-([`.claude/skills/pickup/SKILL.md`](.claude/skills/pickup/SKILL.md)):
+([`pickup`](https://github.com/amritk/ai/blob/main/.claude/skills/pickup/SKILL.md)):
 
 - To build a whole package, run `/feature #<parent issue>` or `/feature --next`.
 - To work one stage by hand, run `/pickup #<stage issue>` or `/pickup next`.
@@ -66,10 +66,13 @@ What nish adds to the skill:
 - **A new package** gets its design note, roadmap page and plan file (with a
   `priority`) in one PR, then `/plan-issues`.
 
-The workflow skills and agents are copied from `amritk/ai`, the shared skills
-repository, because a cloud session loads only what the repo commits. Change one
-there, then run `node scripts/sync-skills.mjs` here.
-`node scripts/sync-skills.mjs --check` refuses a vendored file edited in place.
+The workflow skills and agents (`feature`, `plan-issues`, `pickup`, `decide`,
+the review agents) are not in this repo. They come from the `ai` plugin in the
+`amritk` marketplace, which is the [`amritk/ai`](https://github.com/amritk/ai)
+repository. `.claude/settings.json` enables it for local sessions, and the
+owner's claude.ai account syncs it. A skill is named `/ai:<name>`, or `/<name>`
+where no other skill takes that name. Change a skill in `amritk/ai`, never here.
+This repo keeps only what is nish's own: the plans, the hooks and these rules.
 
 ## Workflow
 
