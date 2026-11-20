@@ -34,6 +34,7 @@ stages:
     goal: Two modules may each declare a private class or interface of one name; the clash checks run over symbols, and the user sees the change.
     verification: node tests/run.js link && node tests/run.js wasi && npm run check && npm run lint
     status: pending
+    issue: 1980
     todos:
       - id: s3d-qualify
         content: Qualify a clashing private class or interface symbol by module path and move name lookups to structByType in src/members.ts — see WP57 S3d — a private class or interface qualified by its module path when it would clash
@@ -46,6 +47,7 @@ stages:
     goal: import { A as B } works for a class or interface, using the symbol the type table now carries.
     verification: node tests/run.js link && npm run check && npm run lint
     status: pending
+    issue: 1982
     todos:
       - id: s3e-rename
         content: Admit rename on import for a class or interface in the import resolution in src/ — see WP57 S3e — a class or interface renamed on import

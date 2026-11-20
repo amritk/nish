@@ -43,6 +43,7 @@ stages:
     goal: Dyn<I> may be stored (fields, arrays, Map values, | null, Result arms and threads) as one tagged word, replacing the NL2779 refusal.
     verification: node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
+    issue: 1984
     todos:
       - id: s3-gate
         content: Build the stage after S2 and measure it against the note's stage 3 gate before landing — see WP60 S3 — Dyn of an interface in fields, arrays, Map values, null unions and Result arms
@@ -55,6 +56,7 @@ stages:
     goal: docs/AI.md and the guide teach Dyn as the way to dispatch, and NL2079's wording is decided.
     verification: npm run lint && node docs/check-links.mjs
     status: pending
+    issue: 1986
     todos:
       - id: s4-ai-md
         content: Add the Dyn idiom to docs/AI.md and the guide and decide NL2079's wording — see WP60 S4 — the agents' idiom and the NL2079 decision

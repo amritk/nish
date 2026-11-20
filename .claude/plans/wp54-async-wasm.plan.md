@@ -13,6 +13,7 @@ stages:
     verification: node tests/run.js wasm && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1966
     todos:
       - id: s1-jspi-survey
         content: Survey where JSPI runs in Node, Chromium and the Worker runtime and record it as Q3's evidence in docs/wp54-async-wasm.md — see WP54 S1 spike
@@ -26,6 +27,7 @@ stages:
     verification: node tests/run.js wasm && node tests/run.js async && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1968
     todos:
       - id: s2-queue-complete
         content: Build runtime-async.c's queue and tokens without the poll half and add nish_async_complete for wasm — see WP54 S2 executor on wasm
@@ -42,6 +44,7 @@ stages:
     verification: node tests/run.js wasm && node scripts/security-scope.mjs && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1970
     todos:
       - id: s3-memory
         content: Give each task a region from a fixed pool or a malloc under wasm-host as the owner decides, in runtime/runtime-async.c — see WP54 S3 task memory Decision needed
@@ -55,6 +58,7 @@ stages:
     verification: node tests/run.js examples && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1973
     todos:
       - id: s4-example
         content: Add an example under examples/ answering requests over an awaited host fetch and database handle, run under Node and the Worker runtime in CI — see WP54 S4 Worker example

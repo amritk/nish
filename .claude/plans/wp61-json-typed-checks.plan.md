@@ -45,6 +45,7 @@ stages:
     goal: A Typed JSON guide page with a scalar route and the JSON_DECODE_* table exists, bench/json-compare has Bun and Node rows for constrained and coercion workloads, and an Ir/doc gate pins the zero-cost claim.
     verification: npm run lint && node docs/check-links.mjs && node scripts/gen-reference.mjs --check
     status: pending
+    issue: 1976
     todos:
       - id: s3-guide
         content: Write docs/guide/using-nish/typed-json.md lifted from standard-library.md, with its scalar.config.json route and error-code table — see WP61 S3 — the Typed JSON guide page, error-code table and benchmarks

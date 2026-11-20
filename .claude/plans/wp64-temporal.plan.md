@@ -44,6 +44,7 @@ stages:
     verification: node tests/run.js temporal && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1977
     todos:
       - id: s4-layout
         content: Implement the chosen option-bag layout and the units and rounding in std/temporal — see WP64 S4 — option bags for until, since, round, total and with
@@ -56,6 +57,7 @@ stages:
     goal: PlainYearMonth and PlainMonthDay exist with Temporal's parsing and arithmetic, and toLocaleString answers as toString.
     verification: node tests/run.js temporal && npm run lint
     status: pending
+    issue: 1978
     todos:
       - id: s5-types
         content: Add PlainYearMonth and PlainMonthDay and toLocaleString as toString in std/temporal — see WP64 S5 — PlainYearMonth, PlainMonthDay and toLocaleString as toString
@@ -66,6 +68,7 @@ stages:
     verification: node tests/run.js temporal && node tests/run.js wasi && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1979
     todos:
       - id: s6-embed
         content: Embed the time zone database for the wasm profile and decide the default for native builds in std/temporal — see WP64 S6 — the wasm profile and an embedded time zone database

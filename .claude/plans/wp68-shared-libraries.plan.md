@@ -45,6 +45,7 @@ stages:
     verification: node tests/run.js ct_asm && node tests/run.js std && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1963
     todos:
       - id: s4-decide
         content: Record the owner's answer to D6, which crypto callers keep their constant-time copies, in docs/wp68-shared-libraries.md section 9 — see WP68 S4 — the big-endian load atom
@@ -61,6 +62,7 @@ stages:
     verification: node tests/run.js json && node tests/run.js performance && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1965
     todos:
       - id: s5-decide
         content: Record the owner's answer to D4, how divergent copies are unified, in docs/wp68-shared-libraries.md section 9 — see WP68 S5 — the JSON escape molecule
@@ -76,6 +78,7 @@ stages:
     goal: One RFC 3629 validator from the tokenizer's kernel path (skipJsonText then jsonTokUtf8Length) replaces the copies, with its candidates benched first and the corner tests run against every former caller.
     verification: node tests/run.js json && node tests/run.js std && node tests/run.js performance && npm run lint
     status: pending
+    issue: 1967
     todos:
       - id: s6-bench-inputs
         content: Add a non-ASCII body to bench/json-tokenizer and non-ASCII claims to bench/jwt-verify so S6 is gated on the code it moves — see WP68 S6 — the UTF-8 molecule
@@ -88,6 +91,7 @@ stages:
     goal: One digit predicate replaces the copies with no gain claimed and none lost on bench/json-tokenizer and bench/lexer.ts.
     verification: node tests/run.js std && node tests/run.js performance && npm run lint
     status: pending
+    issue: 1969
     todos:
       - id: s7-atom
         content: Add the digit atom and move jsonTokIsDigit and src/lexer.ts isDigit onto it, respecting the seed freeze for src — see WP68 S7 — the digit predicate
@@ -98,6 +102,7 @@ stages:
     verification: node tests/run.js std && node tests/run.js performance && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1972
     todos:
       - id: s8-decide
         content: Record the owner's answer to D4 for which growth policy the shared copy keeps in docs/wp68-shared-libraries.md section 9 — see WP68 S8 — the byte-buffer grow
@@ -113,6 +118,7 @@ stages:
     goal: One FNV-1a step replaces the copies with no gain claimed and none lost on bench/router.ts, and a bench for src/map.ts fnv1a exists before it is gated.
     verification: node tests/run.js std && node tests/run.js performance && npm run lint
     status: pending
+    issue: 1974
     todos:
       - id: s9-atom
         content: Add the FNV-1a atom and move routerHashWith and src/map.ts fnv1a onto it, adding a bench for fnv1a first — see WP68 S9 — the FNV-1a step

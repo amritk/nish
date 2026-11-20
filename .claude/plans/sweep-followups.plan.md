@@ -35,6 +35,7 @@ stages:
     goal: A session builds main and checks the 11 criteria of the wp50-s3-storage-driven tracker, posting a table with a verdict.
     verification: WASI_SYSROOT=/usr node tests/run.js wasm
     status: pending
+    issue: 1930
     todos:
       - id: s3-build-check
         content: Build main and check the 11 criteria of tracker 1270 (WP50 S3, 1273 merged) against it — see SWEEP S3 — run the WP50 S3 storage-driven acceptance pass
@@ -47,6 +48,7 @@ stages:
     goal: A session builds main and checks the 8 criteria of the security-compiler-soundness-fuzzing tracker, posting a table with a verdict.
     verification: node tests/run.js soundness
     status: pending
+    issue: 1932
     todos:
       - id: s4-build-check
         content: Build main and check the 8 criteria of tracker 883 (897, 902 and 924 merged) against it — see SWEEP S4 — run the compiler-soundness-fuzzing acceptance pass
@@ -59,6 +61,7 @@ stages:
     goal: NL2708 no longer refuses a spread when a later spread supplies the field, and the attribute facts for a spread are as precise as the fields they copy, each with a test.
     verification: node tests/run.js object_spread && node tests/run.js link && npm run check && npm run lint
     status: pending
+    issue: 1935
     todos:
       - id: s5-nl2708
         content: Make the field-type check in the spread lowering of src/ accept a field a later spread supplies, with a golden and a negative beside tests/cases/obj_spread_override_type — see SWEEP S5 — object spread over-refusal
@@ -72,6 +75,7 @@ stages:
     verification: node tests/run.js object_spread && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1938
     todos:
       - id: s6-decide
         content: Record the owner's rule for a private field in an object spread in docs/LANGUAGE.md — see SWEEP S6 — object spread and private fields
@@ -85,6 +89,7 @@ stages:
     verification: WASI_SYSROOT=/usr node tests/run.js wasm
     status: pending
     labels: [deferred]
+    issue: 1939
     todos:
       - id: s7-soak
         content: Run the wasm-arena soak under Chrome ten times on main and record the failure count on the tracker — see SWEEP S7 — re-run the wasm-arena soak
@@ -94,6 +99,7 @@ stages:
     goal: The diagnostic for using s = scope(), [a] = xs reads correctly, and two patterns at different offsets can no longer share a display key.
     verification: node tests/run.js link && node tests/run.js diagnostic-coverage && npm run check && npm run lint
     status: pending
+    issue: 1943
     todos:
       - id: s8-message
         content: Fix the message for a using declaration mixed with a destructuring declarator in src/ and its tests/wordings entry — see SWEEP S8 — destructuring declarations notes
@@ -106,6 +112,7 @@ stages:
     goal: bench/yaml-compare shows std/yaml at least 2x faster than @amritk/yaml and docs/BENCHMARKS.md has a yaml row with its commit.
     verification: node bench/yaml-compare/run.mjs && node tests/run.js yaml && npm run lint
     status: pending
+    issue: 1946
     todos:
       - id: s9-baseline
         content: Take an interleaved same-machine baseline of bench/yaml-compare on a trusted run and record the noise band — see SWEEP S9 — std/yaml performance tune
@@ -121,6 +128,7 @@ stages:
     goal: Each of the s5-postgres and s10-bcrypt-pool slices is shown to be covered by a later run or is scheduled as its own stage.
     verification: node tests/run.js postgres && node tests/run.js bcrypt
     status: pending
+    issue: 1949
     todos:
       - id: s10-check
         content: Check std/ and docs/roadmap for what tracker 1114's s5-postgres and s10-bcrypt-pool slices would have built, and record each as covered or open — see SWEEP S10 — check the server-stack-1 slices
@@ -133,6 +141,7 @@ stages:
     goal: Each of the six follow-ups from tracker 1114 is either fixed or shown already fixed.
     verification: node scripts/gen-reference.mjs --check && node docs/check-links.mjs && npm run lint
     status: pending
+    issue: 1952
     todos:
       - id: s11-guide-1126
         content: Check the guide text added by 1126 for an overclaim and correct it in the matching docs/guide page — see SWEEP S11 — server-stack-1 non-blocking follow-ups
@@ -154,6 +163,7 @@ stages:
     goal: A test proves the fuzz harness reports a target that panics as a crash rather than a pass.
     verification: node tests/run.js fuzz && npm run lint
     status: pending
+    issue: 1954
     todos:
       - id: s12-test
         content: Add a fuzz target that panics on purpose under tests/fuzz/ and a check in tests/run.js that the harness reports a crash — see SWEEP S12 — a panicking fuzz target is reported as a crash
@@ -164,6 +174,7 @@ stages:
     verification: npm run lint
     status: pending
     labels: [deferred]
+    issue: 1958
     todos:
       - id: s13-unfurl
         content: Check the Discord and Facebook link unfurls for the og-video page by hand, criterion 7 of tracker 1694 — see SWEEP S13 — the checks that need a person or a real GPU
@@ -176,6 +187,7 @@ stages:
     goal: docs/security/http1-codec.md and docs/security/tls.md say the websocket-client and tls-server-flight targets ran their 30 minute fuzz step.
     verification: node scripts/security-scope.mjs && node docs/check-links.mjs && npm run lint
     status: pending
+    issue: 1960
     todos:
       - id: s14-http1
         content: Replace "not yet run" for websocket-client at docs/security/http1-codec.md lines 106 to 109 with the fuzz.yml runs that succeeded — see SWEEP S14 — stale fuzz lines
@@ -188,6 +200,7 @@ stages:
     goal: The WP61 and WP62 notes no longer say a class field initializer must be a literal, and the WP65 S3 box is ticked if its PR has merged.
     verification: node docs/check-links.mjs && npm run lint
     status: pending
+    issue: 1961
     todos:
       - id: s15-wp61
         content: Correct the initializer-must-be-a-literal sentence at docs/wp61-json-typed-checks.md line 138 — see SWEEP S15 — stale initializer lines in the WP61 and WP62 notes

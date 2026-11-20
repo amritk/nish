@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp29-thread-surface.md
 spec: docs/wp29-thread-surface.md
 priority: 80
 labels: [deferred]
+issue: 1988
 stages:
   - id: s6-parallel-sort
     title: WP29 S6 — parallelSort
@@ -12,6 +13,7 @@ stages:
     verification: node tests/run.js thread && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1990
     todos:
       - id: s6-surface
         content: Declare parallelSort in std/threads.ts with its doc comment and the legality rules of parallelMap — see WP29 S6 — parallelSort
@@ -28,6 +30,7 @@ stages:
     verification: node tests/run.js thread && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1991
     todos:
       - id: s7-surface
         content: Declare parallelFilter in std/threads.ts, concatenating per-block results in order — see WP29 S7 — parallelFilter
@@ -44,6 +47,7 @@ stages:
     verification: node tests/run.js thread && node tests/run.js link && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1992
     todos:
       - id: s8-rule
         content: Extend the copy-at-join rule of section 7 to class values and state what a class holding an array or another class does — see WP29 S8 — copy-at-join for class values

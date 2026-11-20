@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp18-generics.md
 spec: docs/wp18-generics.md
 priority: 80
 labels: [deferred]
+issue: 1975
 stages:
   - id: g-return-inference
     title: WP18 G9 — infer a type parameter that appears only in the return type
@@ -12,6 +13,7 @@ stages:
     verification: node tests/run.js generics && npm run check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1981
     todos:
       - id: g9-infer
         content: Infer a return-only type parameter from the contextual type in src/generics.ts — see WP18 G9
@@ -22,6 +24,7 @@ stages:
     verification: node tests/run.js generics && npm run check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1983
     todos:
       - id: g10-parser
         content: Add a save/restore cursor in src/parser.ts that tells f<i32>(x) from (f < i32) > (x) — see WP18 G10
@@ -32,6 +35,7 @@ stages:
     verification: node tests/run.js differential && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1985
     todos:
       - id: g11-rewriter
         content: Drive the rewriter from stage1's per-instantiation types in tests/differential — see WP18 G11
@@ -42,6 +46,7 @@ stages:
     verification: node tests/run.js link && node tests/run.js generics && npm run check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1987
     todos:
       - id: g12-implements
         content: Lift the NL2079 refusal and record StructInfo in implementsDeclaration in src/generics.ts — see WP18 G12
