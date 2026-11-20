@@ -25584,10 +25584,10 @@ if (dealtHere("cliChecks")) {
       cookbookText
     )
     const cookbookSource = path.join(root, "docs", "cookbook", "builtin-capabilities.ts")
-    // strict: a docs/cookbook program builds as a user who copies it would.
+    // The snippet exits and adds on purpose, so it builds as regen.sh builds it.
     const refusedRun = spawnSync(
       NISH,
-      [cookbookSource, "-o", path.join(capsDir, "refused") + path.sep, "--deny", "fs.read"],
+      withAllowPanics(NISH, [cookbookSource, "-o", path.join(capsDir, "refused") + path.sep, "--deny", "fs.read"]),
       {
         cwd: root,
         encoding: "utf8",
@@ -25635,10 +25635,10 @@ if (dealtHere("cliChecks")) {
       shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
     )
     const grantedDir = path.join(capsDir, "granted") + path.sep
-    // strict: a docs/cookbook program builds as a user who copies it would.
+    // The snippet exits and adds on purpose, so it builds as regen.sh builds it.
     const grantedRun = spawnSync(
       NISH,
-      [cookbookSource, "-o", grantedDir, "--allow", "fs.read", "--deny", "net"],
+      withAllowPanics(NISH, [cookbookSource, "-o", grantedDir, "--allow", "fs.read", "--deny", "net"]),
       {
         cwd: root,
         encoding: "utf8",
@@ -28762,8 +28762,8 @@ if (dealtHere("releaseChecks")) {
           const target = path.resolve(dir, f.file)
           if (f.lang === "ts" && !misplaced.includes(f.line)) {
             const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
-            // strict: a docs snippet is a program a user copies, so it builds as they would.
-            const alone = spawnSync(NISH, [target, "-o", out], { encoding: "utf8" })
+            // Snippets keep panic sites until they are rewritten strict, so they build relaxed.
+            const alone = spawnSync(NISH, withAllowPanics(NISH, [target, "-o", out]), { encoding: "utf8" })
             if (alone.status !== 0) {
               misplaced.push(f.line)
             }
@@ -28775,8 +28775,8 @@ if (dealtHere("releaseChecks")) {
       }
       // A directory, because a snippet that imports `nish/threads` writes one module per file.
       const out = `${path.join(snippetDir, stem)}${path.sep}`
-      // strict: a docs snippet is a program a user copies, so it builds as they would.
-      const run = spawnSync(NISH, [file, "--json", "-o", out, ...s.args], { encoding: "utf8" })
+      // Snippets keep panic sites until they are rewritten strict, so they build relaxed.
+      const run = spawnSync(NISH, withAllowPanics(NISH, [file, "--json", "-o", out, ...s.args]), { encoding: "utf8" })
       const errors = run.stdout
         .split("\n")
         .filter(Boolean)
@@ -29812,8 +29812,11 @@ if (dealtHere("releaseChecks")) {
                 '  console.log(trim("  ok  "));\n' +
                 "  return 0;\n};\n"
             )
-            // strict: a user's own first program, built the way a user builds it
-            const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" })
+            // `trim` reaches a std/ panic site, so the program builds relaxed.
+            const stdLink = spawnSync(bin, withAllowPanics(bin, ["std.ts", "--link", "stdhello"]), {
+              cwd: work,
+              encoding: "utf8",
+            })
             const stdRan =
               stdLink.status === 0
                 ? spawnSync(path.join(work, "stdhello"), [], { cwd: work, encoding: "utf8" })
@@ -31276,8 +31279,8 @@ if (dealtHere("releaseChecks")) {
           'import { trim } from "nish/text";\n\nexport const main = (): number => {\n  write(`[${trim("  padded  ")}]\\n`);\n  return 0;\n};\n'
         )
         const onPath = (args) =>
-          // strict: a user's own first program, built the way a user builds it
-          spawnSync("nish", args, {
+          // `trim` reaches a std/ panic site, so the program builds relaxed.
+          spawnSync("nish", withAllowPanics(NISH, args), {
             cwd: work,
             encoding: "utf8",
             env: { ...process.env, PATH: `${path.join(inst, "bin")}${path.delimiter}${process.env.PATH}` },
@@ -31322,8 +31325,8 @@ if (dealtHere("releaseChecks")) {
           const headers = spellings.map(([label, cmd, Path]) => {
             const out = path.join(work, `out-${label.split(",")[0]}`)
             fs.rmSync(out, { recursive: true, force: true })
-            // strict: a user's own first program, built the way a user builds it
-            const r = spawnSync(cmd, ["prog.ts", "-o", `${out}${path.sep}`], {
+            // `trim` reaches a std/ panic site, so the program builds relaxed.
+            const r = spawnSync(cmd, withAllowPanics(NISH, ["prog.ts", "-o", `${out}${path.sep}`]), {
               cwd: work,
               encoding: "utf8",
               env: Path === undefined ? process.env : { ...process.env, PATH: Path },
@@ -31403,8 +31406,8 @@ if (dealtHere("releaseChecks")) {
 
         // An admin's link: absolute, and invoked by its own absolute path.
         const absLink = symlinkInstall(path.join(buildDir, "argv0-symlink-abs"), binary)
-        // strict: a user's own first program, built the way a user builds it
-        const viaAbsLink = spawnSync(absLink, ["prog.ts", "--link", "prog-abs-link"], {
+        // `trim` reaches a std/ panic site, so the program builds relaxed.
+        const viaAbsLink = spawnSync(absLink, withAllowPanics(NISH, ["prog.ts", "--link", "prog-abs-link"]), {
           cwd: work,
           encoding: "utf8",
         })
@@ -31427,8 +31430,8 @@ if (dealtHere("releaseChecks")) {
         // resolved.
         const binDir = path.join(buildDir, "argv0-symlink-bin")
         symlinkInstall(binDir, path.relative(binDir, binary))
-        // strict: a user's own first program, built the way a user builds it
-        const viaBinLink = spawnSync("nish", ["prog.ts", "--link", "prog-bin-link"], {
+        // `trim` reaches a std/ panic site, so the program builds relaxed.
+        const viaBinLink = spawnSync("nish", withAllowPanics(NISH, ["prog.ts", "--link", "prog-bin-link"]), {
           cwd: work,
           encoding: "utf8",
           env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
