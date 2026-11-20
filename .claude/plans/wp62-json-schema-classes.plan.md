@@ -1,43 +1,104 @@
 ---
-name: WP62 — Nish classes from a JSON Schema (proposal, docs only)
-overview: A JSON Schema says a shape, prose, defaults and rules; a hand-written typed JSON class keeps only the shape. Propose `nish schema`, a generator that writes Nish classes from a draft 2020-12 schema or OpenAPI 3.1 components, with every keyword typed, checked through WP61's constraints literal, kept as JSDoc, or refused with its JSON Pointer. This PR writes the design note and roadmap page and changes no compiler code.
+name: WP62 — Nish classes from a JSON Schema
+overview: Proposed only. nish schema would write typed-JSON classes from a draft 2020-12 schema or OpenAPI 3.1 components, keeping every keyword as a type, a WP61 constraint, JSDoc, or a refusal naming its JSON Pointer. Nothing is built and several owner decisions are open.
+roadmap: docs/roadmap/wp62-json-schema-classes.md
+spec: docs/wp62-json-schema-classes.md
+priority: 60
 stages:
-  - id: s1-proposal
-    title: S1 — the WP62 proposal (docs only)
-    goal: docs/wp62-json-schema-classes.md and docs/roadmap/wp62-json-schema-classes.md exist, every claim about the compiler and std checked at 798636cb, registered in the indexes, aligned with WP61 (proposed).
-    verification: npm run lint && npm run lint:dead && node docs/check-links.mjs && node scripts/gen-reference.mjs --check
+  - id: s1-typed-json-prereqs
+    title: WP62 S1 — typed JSON prerequisites for generated classes
+    goal: A typed JSON class can have an optional field whose default the constructor assigns, a per-class unknown ignore or error option, and new JsonNumber() in a coerce class, with NL2498 reworded and the security record updated.
+    verification: node tests/run.js json && node tests/run.js wordings && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
+    status: pending
+    labels: [needs-decision]
     todos:
-      - id: research-typed-json
-        content: What a typed JSON class can say today (field kinds, the options literal, strict decode, encoding every field, refusals) with anchors — see S1 — the WP62 proposal
-        status: completed
-      - id: research-wp61
-        content: Read WP61's proposal (constraints, coerce, its generator sketch) and follow its spelling — see S1 — the WP62 proposal
-        status: completed
-      - id: design-note
-        content: Write docs/wp62-json-schema-classes.md, the keyword-by-keyword table for draft 2020-12 and OpenAPI 3.1, defaults, names, round trip, how it runs, stages — see S1 — the WP62 proposal
-        status: completed
-      - id: roadmap-page
-        content: Write docs/roadmap/wp62-json-schema-classes.md, five unticked stages, S5 ending in *(owner's decisions)*; its index rows, scalar route, MASTER_PLAN and README rows — see S1 — the WP62 proposal
-        status: completed
+      - id: s1-default-ctor
+        content: Admit an optional field whose default the constructor assigns ([], new Map(), new C(), new JsonNumber()) and reword NL2498 in src/ and std/json-typed.ts — see WP62 S1 — typed JSON prerequisites for generated classes
+        status: pending
+      - id: s1-unknown
+        content: Add the per-class unknown ignore or error option to the typed-JSON options literal — see WP62 S1 — typed JSON prerequisites for generated classes
+        status: pending
+      - id: s1-docs
+        content: Update docs/security/json.md with a finding per case where an unknown key or missing field could now reach the decoded value, plus LANGUAGE.md and the guide — see WP62 S1 — typed JSON prerequisites for generated classes
+        status: pending
+  - id: s2-plain-objects
+    title: WP62 S2 — nish schema for plain objects
+    goal: nish schema writes a deterministic class file, with header, Flags line and --check, for scalars, strings, arrays, required and optional fields and additionalProperties as unknown, refusing every other keyword with its JSON Pointer.
+    verification: node tests/run.js schema && npm run check && npm run lint
+    status: pending
+    todos:
+      - id: s2-generator
+        content: Add the nish schema command reading a schema with JsonLimits and writing classes, JSDoc from annotations, names and rename — see WP62 S2 — nish schema for plain objects
+        status: pending
+      - id: s2-check-refusals
+        content: Add the file header, the Flags line, --check and the refusal of every other keyword with its JSON Pointer, with tests/link negatives — see WP62 S2 — nish schema for plain objects
+        status: pending
+  - id: s3-refs-unions
+    title: WP62 S3 — $defs and $ref, maps, nullables, tagged unions and allOf
+    goal: The generator handles $defs and $ref, maps, nullables, tagged unions from const and OpenAPI's discriminator, the flat allOf merge, and recursion through arrays, maps and | null.
+    verification: node tests/run.js schema && npm run check && npm run lint
+    status: pending
+    todos:
+      - id: s3-refs
+        content: Resolve $defs and $ref with a visiting set and a class-count limit in the generator — see WP62 S3 — $defs and $ref, maps, nullables, tagged unions and allOf
+        status: pending
+      - id: s3-unions
+        content: Generate tagged unions from const and discriminator, the flat allOf merge and recursion — see WP62 S3 — $defs and $ref, maps, nullables, tagged unions and allOf
+        status: pending
+  - id: s4-validation
+    title: WP62 S4 — validation keywords onto WP61 constraints, and the transitive coerce switch
+    goal: Validation keywords become WP61's constraints literal with format checked by default, and the generator's coerce switch is transitive.
+    verification: node tests/run.js schema && node tests/run.js json && npm run lint
+    status: pending
+    labels: [needs-decision]
+    todos:
+      - id: s4-constraints
+        content: Map validation keywords to the constraints literal after WP61 S1 and record --formats-as-tags in Flags — see WP62 S4 — validation keywords onto WP61 constraints, and the transitive coerce switch
+        status: pending
+      - id: s4-coerce
+        content: Add the transitive coerce switch after WP61 S2 — see WP62 S4 — validation keywords onto WP61 constraints, and the transitive coerce switch
+        status: pending
+  - id: s5-corpus-guide
+    title: WP62 S5 — the schema corpus, the guide page and the reverse generator
+    goal: A vendored schema corpus with per-schema counts, the guide page and, if the owner takes it, nish schema --emit-schema exist.
+    verification: node tests/run.js schema && npm run lint && node docs/check-links.mjs
+    status: pending
+    labels: [needs-decision]
+    todos:
+      - id: s5-corpus
+        content: Vendor the schema corpus with per-schema counts and its licence notices in THIRD_PARTY_NOTICES.md — see WP62 S5 — the schema corpus, the guide page and the reverse generator
+        status: pending
+      - id: s5-guide
+        content: Write the guide page and its scalar.config.json route, and the reverse generator if taken — see WP62 S5 — the schema corpus, the guide page and the reverse generator
+        status: pending
 ---
 
-# WP62 — Nish classes from a JSON Schema (proposal)
+# WP62 — Nish classes from a JSON Schema
 
-## S1 — the WP62 proposal
+## Context
+Only the proposal has landed (the design note and roadmap page, no compiler code); see [the roadmap page](../../docs/roadmap/wp62-json-schema-classes.md). Spec: [design note §12](../../docs/wp62-json-schema-classes.md#12-stages); the keyword table is [§4](../../docs/wp62-json-schema-classes.md#4-the-keyword-table). S4 depends on WP61's S1 (constraints in decode) and S2 (coercion), whose plan is `wp61-json-typed-checks.plan.md`.
 
-Owns: `docs/wp62-json-schema-classes.md`,
-`docs/roadmap/wp62-json-schema-classes.md`, `docs/roadmap/index.md`,
-`scalar.config.json`, `docs/MASTER_PLAN.md`, `docs/README.md`,
-`.claude/plans/wp62-json-schema-classes.plan.md`.
+## WP62 S1 — typed JSON prerequisites for generated classes
+An optional field whose default the constructor assigns (`[]`, `new Map()`, `new C()`, `new JsonNumber()`) with NL2498 reworded, a per-class `unknown: "ignore" | "error"` option, `new JsonNumber()` in a coerce class, and the `docs/security/json.md` update. Whichever of this stage and WP61's coercion lands first builds the in-place reset they share.
+Likely files: `std/json-typed.ts`, `src/` typed-JSON checker, `docs/security/json.md`.
 
-One PR, docs only. No file under `src/`, `std/`, `runtime/`, `tests/` or
-`bench/` changes.
+### Decision needed
+Where do the two typed JSON changes land ([§10](../../docs/wp62-json-schema-classes.md#10-decisions-for-the-owner), item 1)? Options: as WP62's S1 before any generator code (recommended, WP62 is their first user); as a WP61 stage; or generator first, refusing the fields they cover.
 
-Stages proposed (unticked on the roadmap page):
+## WP62 S2 — nish schema for plain objects
+Scalars, strings, arrays, `required`/`optional`, the default rule with its warning, `additionalProperties` as `unknown`, annotations as JSDoc, names and `rename`; a deterministic file with a header, a `Flags:` line and `--check`; every other keyword refused with its JSON Pointer. The note recommends `nish schema` as the home (§10 item 9). The schema is read with `JsonLimits`; no separate security record is expected (§11).
 
-- S1: typed JSON prerequisites (constructor-assigned optional defaults,
-  per-class unknown keys)
-- S2: `nish schema` for plain objects, annotations and defaults
-- S3: `$ref`, maps, nullables and tagged unions
-- S4: validation keywords onto WP61's `constraints`, and the coerce switch
-- S5: the corpus, the guide page and the round trip *(owner's decisions)*
+## WP62 S3 — $defs and $ref, maps, nullables, tagged unions and allOf
+`$defs` and `$ref` (a visiting set so a cycle is a refusal, a class-count limit), maps, nullables, tagged unions from `const` and OpenAPI's `discriminator`, the flat `allOf` merge, and recursion through arrays, maps and `| null`.
+
+## WP62 S4 — validation keywords onto WP61 constraints, and the transitive coerce switch
+Validation keywords onto WP61's `constraints` literal with `format` checked by default, after WP61 "S1 — constraints in decode"; the transitive coerce switch after "S2 — coercion".
+
+### Decision needed
+Is `format` checked by default (§10 item 10)? Options: checked by default with `--formats-as-tags` as a weakening recorded in `Flags:` (recommended, the generator never keeps less than the schema says unless the header shows it), or draft 2020-12's annotation reading, which would make checking the opt-in.
+
+## WP62 S5 — the schema corpus, the guide page and the reverse generator
+A vendored schema corpus with per-schema counts, the guide page, and the reverse generator if taken.
+
+### Decision needed
+Build `nish schema --emit-schema` (recommended, it is what proves §8.1) or test the round trip on instances only. Also open in §10: `readOnly`/`writeOnly` (tags only is recommended), unknown and `x-*` keywords (refuse unless allowed by name), nullable `boolean` and type-discriminated unions (refuse), `--presence` (off), field-name style (keep as written), and where the generator lives.

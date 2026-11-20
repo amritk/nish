@@ -1,0 +1,296 @@
+---
+name: feature
+description: Drive work from requirements to merged pull requests autonomously on Claude Code cloud — plan it, fan the plan's stages out to one cloud session per PR, review each PR with fresh-context adversarial rounds, merge once the gate passes, and check the merged result against the acceptance criteria before calling it done. Use when asked to "build this feature", "ship this", "run /feature", "build and merge this autonomously", to take an accepted plan all the way to main without supervision, or to build a GitHub parent issue whose sub-issues are its stages ("/feature #123", "/feature --next" to claim the next ready plan from the Roadmap issue). Spawns sibling cloud sessions and merges PRs, so it always stops for plan acceptance first.
+argument-hint: "[requirements | plan slug | #issue | --next] [--dry-run] [--max-slices N] [--max-rounds N] [--deadline <duration>] [--no-merge] [--no-qa] [--no-report] [--status <slug>] [--abort <slug>]"
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Grep
+  - Glob
+  - Agent
+  - AskUserQuestion
+  - PushNotification
+  - ToolSearch
+  - ListAgents
+  - SendMessage
+  - Skill
+  - mcp__Claude_Code_Remote__create_session
+  - mcp__Claude_Code_Remote__get_session
+  - mcp__Claude_Code_Remote__list_environments
+  - mcp__Claude_Code_Remote__set_session_tags
+  - mcp__Claude_Code_Remote__set_session_title
+  - mcp__Claude_Code_Remote__interrupt_session
+  - mcp__Claude_Code_Remote__archive_session
+  - mcp__Claude_Code_Remote__unarchive_session
+  - mcp__Claude_Code_Remote__send_later
+  - mcp__Claude_Code_Remote__create_trigger
+  - mcp__Claude_Code_Remote__list_triggers
+  - mcp__Claude_Code_Remote__delete_trigger
+  - mcp__Claude_Code_Remote__update_trigger
+  - mcp__Claude_Code_Remote__subscribe_pr_activity
+  - mcp__Claude_Code_Remote__unsubscribe_pr_activity
+  - mcp__github__issue_read
+  - mcp__github__issue_write
+  - mcp__github__list_issues
+  - mcp__github__sub_issue_write
+  - mcp__github__add_issue_comment
+  - mcp__github__list_pull_requests
+  - mcp__github__pull_request_read
+  - mcp__github__pull_request_review_write
+  - mcp__github__add_comment_to_pending_review
+  - mcp__github__resolve_review_thread
+  - mcp__github__update_pull_request
+  - mcp__github__update_pull_request_branch
+  - mcp__github__merge_pull_request
+  - mcp__github__list_branches
+  - mcp__github__get_file_contents
+  - mcp__github__list_releases
+  - mcp__github__list_tags
+  - mcp__github__get_check_run
+  - mcp__github__actions_list
+  - mcp__github__actions_get
+  - mcp__github__get_job_logs
+  - Bash(git status:*)
+  - Bash(git diff:*)
+  - Bash(git log:*)
+  - Bash(git add:*)
+  - Bash(git commit:*)
+  - Bash(git push:*)
+  - Bash(git fetch:*)
+  - Bash(git checkout:*)
+  - Bash(git rev-parse:*)
+  - Bash(git merge-base:*)
+  - Bash(git remote:*)
+---
+
+# feature
+
+Requirements in, merged PRs out, on **Claude Code cloud**. One lead session plans the work and never writes code; each stage of the plan becomes one sibling cloud session, one branch, one PR; each PR is reviewed by fresh-context adversarial rounds and merged by the lead when the gate passes. Then the run checks whether what merged is what was asked for.
+
+Invoke with `/feature [requirements | plan slug] [flags]`.
+
+**Arguments** (from `$ARGUMENTS`):
+
+- First non-flag token: a plan slug/path (`.claude/plans/<slug>.plan.md`) to execute, a parent issue (`#123` or its URL) to build in **issue mode**, or free-text requirements to plan from. Free text means Phase 1 runs; a slug means it is skipped; an issue runs Phase 1 in issue mode (see **Issue mode**).
+- `--next`: claim the next ready parent issue from the Roadmap issue and run it in issue mode. With nothing ready, report what is waiting and stop.
+- `--max-runs N`: with `--next`, the most parent issues `in-progress` at once across the repo (default **2**). At the cap, `--next` reports and stops without claiming.
+- `--dry-run`: plan, slice, and print the fan-out table — spawn nothing, open nothing, merge nothing.
+- `--max-slices N`: concurrent cloud sessions (default **4**).
+- `--max-rounds N`: adversarial review rounds per PR (default **6**). Only blocking findings open a round (`references/review-loop.md`), so a PR that is still finding blocking problems after six is one a human should look at.
+- `--deadline <duration>`: wall-clock ceiling for the whole run (default **8h**). At the deadline the lead stops spawning, finishes the rounds already in flight, merges what has converged and passes its gate, escalates the rest, and closes out. A run with no deadline does not fail, it just never admits it has.
+- `--no-merge`: run everything up to the merge gate, then stop with PRs green and report. Acceptance (Phase 7) does not run — nothing merged, so there is nothing to accept — and the report says the criteria were never checked. Use this the first few times against a new repo.
+- `--no-qa`: skip the dynamic half of acceptance (Phase 7). The static pass still runs, and the report says the feature was never exercised. Use it for a repo with no runnable surface, not to save time.
+- `--no-report`: skip the `session-report` write-up at close-out. The tracking issue and the terminal summary are still written. Whether a report is *published* or only handed over as a file is asked once, at sign-off.
+- `--status <slug>`: read the ledger for an existing run and report; change nothing.
+- `--abort <slug>`: stop a run — see **Aborting**.
+
+## What this skill assumes
+
+- **Cloud, not a laptop.** Every worker is a separate session with its own container and its own fresh clone. There is no shared filesystem and no worktree; the lead cannot see a worker's files and a worker cannot see the lead's. Everything that has to cross that boundary crosses through **git and GitHub** — see `references/ledger.md`.
+- **The lead does not write code.** It plans, spawns, reviews, merges, and reports. If the lead finds itself editing a source file, the slicing was wrong — respawn the slice instead.
+- **Autonomous merge is the default outcome, not a licence.** The only human gate is plan acceptance in Phase 1. Everything after it must be gated by machine-checkable facts, which is what `references/merge-gate.md` exists to enumerate.
+
+---
+
+## Issue mode
+
+A repo that tracks work as issues (the `plan-issues` skill files them) gives this skill its stages ready-made: a **parent issue** labelled `plan` names its plan file in a `<!-- plan: <path> -->` marker, and its **sub-issues** are the stages, in merge order. Issue mode builds such a parent. The labels mean what `plan-issues` says they mean: `ready`, `needs-decision`, `deferred`, `in-progress`.
+
+1. **Claim.** With `--next`: count open parents labelled `in-progress` (`list_issues`); at `--max-runs`, report and stop. Otherwise read the open issue labelled `roadmap` and walk its sub-issues in order; the first open one labelled `ready` and not `in-progress`, `needs-decision` or `deferred` is the parent. Nothing qualifies → report how many parents and stages are `needs-decision` (they are `/decide`'s) and stop. With `#N`: the parent is N; if it is not labelled `ready`, run Phase 1 as a normal sign-off instead of skipping it. Add `in-progress` to the parent (`issue_write update` with the union of its labels), then re-read it: if another run's `Feature:` tracking issue already links it, remove nothing, switch to `--status`, and stop.
+2. **The stages.** `issue_read get_sub_issues` on the parent. The run's stages are the **open** sub-issues not labelled `needs-decision`, `deferred` or `in-progress`, in sub-issue order; each maps to a plan stage through its `<!-- plan-stage: <file>#<id> -->` marker (in the body, or in a comment for a reused issue). Read each one's comments: an owner's answer recorded by `/decide` opens with `<!-- decision -->` and binds the plan. A stage's own sub-issues are issues its PR also resolves. The slug is the plan file's slug.
+3. **Phase 1, without the stop.** The parent's `ready` label is the human sign-off, given before the run. Refine the plan file as Phase 1 says (Owns, verification commands, pre-flight, `Model:` lines, acceptance criteria), fold every recorded decision into it, and post the refined stage table and criteria as one comment on the parent. Then go straight to Phase 2. Stop only when refining **changes what was signed off** — a stage added, dropped, merged or split, or a goal changed: post the change on the parent, swap `ready` for `needs-decision` with a decision request (`decide` skill → "Asking for a decision"), remove `in-progress`, and end. A single stage that cannot be built without an answer gets that label and request itself and is left out of the run; the rest go ahead. The two questions sign-off would have asked take their defaults, because no one is there to answer: merge autonomously unless Phase 0.2 found a required human review (then `--no-merge`), and hand the report over as a file, not a published artifact. A Phase 0 precondition that fails is posted on the parent, `in-progress` comes off, and the run ends.
+4. **The ledger** records `parent: #N` and the stage → issue map in its `## Run` block (`references/ledger.md`); post the tracking issue's link on the parent.
+5. **Spawning** a stage adds `in-progress` to its sub-issue. The worker's PR body carries `Fixes #<stage issue>` and a `Fixes` line for each open sub-issue of it (`references/fan-out.md`, step 7), so the merge closes them.
+6. **Close-out** (Phase 8.5), in issue mode: after every merge, confirm GitHub closed each `Fixes` issue, and close any it did not (`state_reason: completed`) — a squash merge drops the keyword when the PR body is rewritten. An escalated stage's sub-issue loses `in-progress` and gains `needs-decision`, with the escalation reason as its decision request. Then the parent: every sub-issue closed → close it `completed` and drop `in-progress` and `ready`; otherwise drop `in-progress`, and drop `ready` too when no open sub-issue is left that an agent may build. The next-step prompt (Phase 8.2) is `/feature #<parent>` when stages remain, or `/feature --next`. Under `--next` nobody is watching, so skip the selection prompt (Phase 8.9): post the action items on the parent and the tracking issue, give each one that needs the owner a `needs-decision` label and a decision request on the issue it concerns, and end — `/decide` asks the owner.
+
+New work on a finished plan reopens its parent: add the stage to the plan file and run `plan-issues`, which creates the sub-issue and reopens the parent. A recurring scheduled task that starts a fresh session with `/feature --next` keeps the roadmap moving with no one at the keyboard; `--max-runs` bounds it.
+
+---
+
+## Phase 0: Preconditions
+
+Check all of these before touching anything. Any failure stops the run with the specific remedy — do not "proceed anyway" on a partial pass, because every one of these failures surfaces hours later as a stuck worker.
+
+1. **Repo and remote.** `git remote -v` resolves to a GitHub repo in scope. Record `owner/repo`.
+2. **Default branch, and who is allowed to merge.** Record the default branch. Branch protection rules are not readable through the tools here, so establish the answer two ways instead: look for a `CODEOWNERS` file and for a required-review convention in `CONTRIBUTING.md`, and **ask the user directly in Phase 1** whether merging this repo requires a human approval. If it does, this run cannot end in an autonomous merge — continue in `--no-merge` mode and say so now, rather than discovering it at the gate after every PR is already green. The first PR's `mergeable_state` from `pull_request_read` confirms it either way; treat a `blocked` state as the authoritative answer and switch to `--no-merge` mid-run if it contradicts what you were told.
+3. **Dependencies install themselves.** A worker's container starts from a bare clone, so the repo needs a `SessionStart` hook (`.claude/settings.json`) that installs dependencies. Without one, the coverage gate cannot execute and workers quietly downgrade "100% coverage" to "I believe coverage is fine". No hook → stop with: `No SessionStart hook in this repo — workers start with no dependencies installed and cannot run the coverage gate. Add one, then re-run /feature.` (Claude Code ships a `session-start-hook` skill that writes one; it is not part of this repo, so do not assume it is loaded.)
+4. **The verification commands.** Identify the repo's real test, coverage, lint, and typecheck commands from `package.json` / task runner config. Record the exact strings; they go verbatim into every worker brief and into the merge gate. If no coverage command exists or coverage thresholds are not configured, stop and say so — the coverage gate is a command, never a judgement. Record two more things beside them:
+   - **The targeted test command**: how to run only the part of the suite a change touches (a file, a section, a filter). Workers use it before the PR and during review rounds, and keep the full suite for the moments that need it (`references/fan-out.md`). When the full suite takes more than a few minutes this is the largest single saving in the run, because every full run is a wait the worker is woken from.
+   - **What CI runs**: whether the PR workflow runs the full test command and the coverage command, read from `.github/workflows/`. If it runs both, workers open the PR on targeted tests and CI's run is the full one. If it skips either, the worker runs that command itself once before opening the PR. The worker brief is written for whichever case applies.
+   - **Generated files**: the globs of files the repo regenerates with its own tooling (goldens, snapshots, lockfiles, generated docs). Reviewers skip them, and a conflict in one is regenerated, never resolved by hand.
+   - **CI job → local command**: for every job in the PR workflow, the local command that runs what that job runs. Read it from the job's steps, not from the script names — a CI lint job that also runs a generator `--check` or a dead-code pass is not `npm run lint`. Past workers spent six red-CI cycles on one PR because their local lint skipped steps CI ran. The table goes verbatim into every worker brief.
+   - **Jobs a PR never runs**: every CI job whose `if:` keeps it off pull requests — one that runs only on tags or a release branch — with its condition. In one past run the golden-case job ran only on tags and `release/next`. Leave them out of the required checks. The gate counts these as skipped by design, not missing, and the acceptance pass names them as unexercised, so a reader knows their check first runs at release (`references/merge-gate.md`).
+   - **Known environment failures**: run the test command once on the base SHA in this container and record what fails there regardless of any change (a missing cross-compiler, a platform-only suite). Workers are told not to investigate these; without the list, each one rediscovers them.
+5. **Environment and permissions.** `list_environments` to resolve the environment workers inherit. Note the lead's own permission mode: **workers cannot be more permissive than the lead**, so if the lead is running in a mode that prompts, workers will stall unattended. If the lead cannot pre-approve the worker toolset, stop and say which permission the run needs.
+6. **What the workers inherit.** A worker created without an explicit `environment_id` inherits the lead's environment, and with it the same linked repos — so the skills available here are normally available there too. Confirm which of `check-iterate`, `simplify`, `debug`, and the repo's convention skills the workers will actually have, and render the worker brief accordingly: a brief that tells a worker to run a slash command it does not have wastes a round. The fallbacks are in `references/fan-out.md`.
+7. **No run already in flight.** Search for an open tracking issue for this slug (`Feature: <slug>`, label `feature-run`). If one exists, switch to `--status` behaviour and report instead of starting a duplicate run. In issue mode the claim (Issue mode step 1) has already guarded the parent.
+8. **The bounds, as numbers.** Record the run deadline (now + `--deadline`), the worker silence timeouts, and the re-run allowance for a red check — the values are in `references/fan-out.md` and Phase 4. They go in the ledger because they are decisions, and a lead that re-decides "long enough" or "probably a flake" on each wake is not running the same policy twice.
+9. **How this run gets accepted.** Establish now how the merged result will be exercised (Phase 7): whether `/qa` is available to a spawned session, whether the feature has a surface a browser can drive, and what URL or command brings the app up. If nothing can exercise it, the run is static-acceptance-only — say so here, not in the closing report.
+
+---
+
+## Phase 1: Plan, and stop for sign-off
+
+Skip if a plan slug was given and its file already exists. In issue mode, run the refinement and skip the stop (Issue mode step 3).
+
+1. Draft the plan with the **`plan` skill**, into `.claude/plans/<slug>.plan.md`. Use the **staged** frontmatter schema — not the flat `todos` form. This is not cosmetic: **one stage = one worker = one branch = one PR**, so the stage boundaries *are* the PR boundaries.
+2. Slice for parallelism and against conflict, per `references/fan-out.md`. Every stage needs a `goal`, a `verification` line that is a runnable command, and an `Owns:` line in its body section naming the file globs that stage may touch. Two stages that can run at once must have disjoint `Owns` sets. A stage that is purely mechanical may also carry a `Model: sonnet` line, which runs its worker on Sonnet instead of the lead's model (`references/fan-out.md` says which stages qualify). Leave it off when in doubt; the human sees it at sign-off.
+3. Order stages by dependency. A stage that must land before another is a **merge-order edge**, recorded in the ledger; it does not have to block that stage's *development*, only its merge.
+4. **Pre-flight the slicing** — the mechanical checks in `references/fan-out.md`: every stage complete, every `Owns` glob resolving to real paths, concurrent stages disjoint, every file the todos need owned by exactly one stage, every file that pins an owned file's contents (goldens, snapshots, `LINE:COL` quotes) owned with it, dependency graph acyclic. Fix failures in the plan and re-run it. This costs seconds and it is the only chance to catch a bad slice before four containers are already acting on it.
+5. **Write the acceptance criteria** — numbered, observable, derived from the requirements and not from the stages, per `references/acceptance.md`. They are what Phase 7 checks the merged result against. Writing them now, before any code exists, is the point: criteria written at the end get written to match what was built.
+6. Present the plan **and the criteria** and **stop**. This is the one human gate in the whole run — use `AskUserQuestion` to take sign-off, an edit, or a cancel. In the same call, ask whether the run report should be published as an artifact at close-out or handed over as a file (default: file), and record the answer in the ledger. Asked here, it costs nothing; asked at close-out, it is a prompt nobody is awake for. Do not spawn anything until the plan is accepted. The criteria are part of what is being accepted: they are the sentence the run will be judged by, and this is the last moment a human sees them.
+
+With `--dry-run`, print the fan-out table (slice, branch, owns, model, depends-on, verification command), the pre-flight result, and the criteria — then stop here.
+
+---
+
+## Phase 2: Publish the plan and open the ledger
+
+Workers clone `main` into empty containers, so the plan must exist on the remote before anyone spawns.
+
+1. Commit the plan file and push it to `feature/<slug>/plan`. Do not merge it and do not push to the default branch. The commit follows the repo's own commit rules from `CLAUDE.md` — if it forbids attribution trailers or session links, the commit carries none, whatever the session's default is. A plan branch with a forbidden trailer is a cleanup left for the human. The same goes for every comment and message the lead writes: no attribution footer where the repo forbids one.
+2. Open the tracking issue — title `Feature: <slug>`, label `feature-run` — with the ledger table from `references/ledger.md`, one row per slice, all `pending`. **The issue is the run's only durable state.** The lead's container and context will not survive the run; the issue will.
+3. Record in the issue body: `owner/repo`, base SHA, plan branch, the verification commands from Phase 0 with the CI job → local command table, the required checks, the jobs a PR never runs, and the known environment failures, the report choice from sign-off, the flags in effect, the round/slice budgets, the bounds from Phase 0.8, and the acceptance criteria as their own table.
+
+---
+
+## Phase 3: Fan out
+
+Follow `references/fan-out.md` exactly. In summary:
+
+1. Take the next slices whose merge-order dependencies do not block *development*, up to `--max-slices` concurrent.
+2. **Check first, spawn second** — if the slice's branch or PR already exists, the slice is already running or done; reconcile, never double-spawn.
+3. `create_session` per slice, with the worker brief as `prompt` and the standing rules as `append_system_prompt`, both rendered in full from the templates in `references/fan-out.md`, never written freehand. Also set `outcome_branch` to `feature/<slug>/<stage-id>`, a distinctive `title`, and tags `feature:<slug>`. The standing rules are what keep a worker's limits on push, files, spawning and messages through compaction, and rule 6 passes them on to every agent the worker starts.
+4. Write the returned **session id into the ledger immediately**, before spawning the next one. A session id that is not in the issue is lost — the lead cannot re-discover its own workers later, because `list_sessions` tag filtering is unavailable to in-session callers.
+5. `subscribe_pr_activity` for each PR as it appears, and schedule the first self-wake (`send_later`, 30 min). Later check-ins back off; see Phase 4.6.
+
+---
+
+## Phase 4: The wake loop
+
+Every wake — a PR event, a scheduled check-in, a worker failure notice — runs the same stateless cycle. **Never trust context; re-derive.**
+
+Every wake also re-reads the lead's whole context, so a wake that changes nothing still costs a full read of it. Most of a run's wakes are of that kind, and the cycle is shaped to keep them to one short call:
+
+0. **Drop echoes first.** When every event in the wake is the lead's own action coming back — `review_comment.created` or `review.submitted` for a review the lead just posted, `subscription.created`, `pr.closed` for a PR the lead just merged, a CI run starting — end the turn with one line. Do not reconcile, do not reply, do not re-arm. Only an event someone else caused (a worker push, a CI result, a human comment, a worker message, a failed session) runs the cycle below.
+
+   **Further CI failures on a head already in hand are echoes too.** A PR's checks fail one at a time, and each failure is its own event: one past run took ten wakes in 24 minutes, each re-reading 325k tokens, to learn that shard after shard had failed on a commit the worker was already fixing. Act on the **first** red result for a head SHA and on its check suite completing. A further failure on that same head, once its failures are already logged as sent or held for a round, is an echo. So is any CI event on a head that is no longer the PR's head. End those wakes in one line.
+
+1. **Collect state.** Spawn one fresh `subagent_type: "run-reconciler"` agent with `owner/repo` and the issue number — and, when the wake was caused by one PR's event, that PR's stage id, so it checks only that row. A scheduled check-in checks every row. It reads the ledger and checks every live row against GitHub and `get_session`: branch, PR, CI on the current head, mergeable state, review activity, worker `status_bucket`. It returns only the rows that drifted, plus the clocks. Act on its table, not on raw API reads. The lead's context lasts the whole run, so a full set of PR and CI payloads on every wake is the most expensive thing the lead can do. Past leads that skipped the reconciler made dozens of ad-hoc API calls per wake and wrote a fresh "read the gate for PR N" agent prompt each time; do neither. The gate's read before a merge is the reconciler too, in its `gate` mode (`references/merge-gate.md`). Fetch a raw payload yourself only when the action needs it: job logs to hand to a worker. Anything the reconciler reports as `unknown` gets a direct read, never a guess.
+2. **Write back** every drifted row to the ledger and log the drift. It, not memory, is the state.
+3. **Act on exactly one thing per row**, in this priority order:
+   - Worker `failed`, or silent past one of the timeouts in `references/fan-out.md` → respawn once, escalate on the second failure.
+   - PR conflicted → hand it back to the slice's worker to resolve. The lead never resolves conflicts itself and never force-pushes a worker's branch.
+   - PR not yet converged, and its head has no round logged for that SHA (the PR just opened, or the worker pushed for a batch) → start the next review round now, whatever CI says (`references/review-loop.md`). Review and CI run at the same time. Waiting for green before reviewing serializes them, and every cycle costs two waits instead of one.
+   - PR red → the failure goes back to the worker with the job logs. If a round on this head is still running, the logs go out in that round's batch message, so the worker fixes both in one push. Otherwise send them now. Never skip, disable, or quarantine a test, and never relax a coverage threshold to get green; a diff that edits coverage config is a blocking review finding. "Flake" is a policy, not a hunch: **one** re-run per failing check per head SHA, logged; a check that fails twice at the same head is real and goes to the worker. A check that is red on the base branch too is not this slice's — log it, do not spend the worker's rounds on it, and let the merge gate hold the PR.
+   - PR converged and CI pending → nothing to do; the CI result wakes the lead.
+   - PR converged and green → evaluate the merge gate (`references/merge-gate.md`).
+4. **Advance the fan-out** — spawn any slice a merge just unblocked, respecting `--max-slices`.
+5. **Check the clock.** Past the deadline, stop spawning and stop starting new review rounds: let the rounds already in flight finish, merge whatever passes its gate, escalate every row that is not `merged`, and go to close-out. The deadline bounds the run, not the work already done — it never abandons an open PR without escalating it, and it never rushes a merge for the clock. Which open PRs merge depends on convergence. One that has converged may still finish an update-before-merge and merge on its gate, because the user's instruction to merge on green still stands and what is left is mechanical. The updated head opens no round (`references/review-loop.md` step 0); the gate re-checks it as usual. One that has not converged is escalated. Under `--no-merge` nothing merges either way. Log the decision, with the deadline and the PR's state.
+6. **Re-arm** the next wake and stop. Re-arm *before* reporting, so a failure in reporting cannot end the run. PR events and worker messages wake the lead on their own, so the scheduled check-in is only a safety net for what they cannot report — a worker that went silent — and it backs off: **30 → 60 → 120 minutes** across consecutive check-ins whose reconcile reported no drift, and back to 30 on any drift. Cap it at the shortest silence timeout still running in `references/fan-out.md`, so backing off never makes the lead miss one. At most one check-in is pending at a time: re-arming replaces it, never adds a second.
+
+The loop ends when every slice is merged or escalated, and the acceptance row (Phase 7) has resolved. Then close out.
+
+---
+
+## Phase 5: Review
+
+Per `references/review-loop.md`, with the same two-agent split `/check-iterate` uses: `pr-adversary` collects, `verifier` refutes. The shape, briefly: a round starts as soon as a new head appears, while CI is still running on it, never after CI; each round is a **new** `pr-adversary` with no memory of prior rounds, reviewing the PR's current head from a diff file the lead wrote once; every finding it returns has to survive a `verifier` before anything reaches the worker; confirmed findings go over as **one batch per round**, with that head's red checks if any, and the round ends there. There is no discussion. **Only blocking findings open a round** — correctness, security, soundness, scope, gate integrity, a missing todo, a weakened property the default branch pins. Wording, style, PR-body prose and a performance delta inside its noise band are non-blocking: they ride along with a blocking batch or go over once at convergence, and never start a round of their own. A round with zero confirmed blocking findings is convergence; `--max-rounds` exhausted with blocking findings open is an escalation, never a merge.
+
+---
+
+## Phase 6: Merge
+
+Merge in the dependency order recorded in Phase 1, one at a time, re-checking the gate for each PR at its current head — a gate evaluated before an earlier merge is stale. A converged PR merges at its current head, on the CI that ran there, without first taking in the default branch. It updates first only when GitHub requires it, when a stage it depends on merged after its base, or when it changes a generated file (`references/merge-gate.md` lists the rules). Updating means a regeneration, a full suite run and a CI cycle, one PR after another. For a PR whose files no other PR touched, that cost buys nothing the acceptance pass does not already check against the whole merged result. Never update a PR ahead of its turn. Past the deadline the order still holds: a converged PR may finish its update and merge on its gate, and a PR that has not converged is escalated instead (Phase 4.5). Log which it was. If CI on the default branch goes red after one of this run's merges, merge nothing more and escalate it. A PR that GitHub reports as conflicted goes back to its worker whatever its place in the order.
+
+---
+
+## Phase 7: Acceptance
+
+Per `references/acceptance.md`. Once every slice is merged or escalated, and **before anything is reported as finished**: every gate so far has read the diff, and none of them has run the software or looked at what was asked for.
+
+1. **Static pass.** One fresh `Agent` reads the merged result through the GitHub tools and rules on each acceptance criterion — MET, PARTIAL, or NOT MET, with evidence, defaulting to NOT MET when it cannot find any.
+2. **Dynamic pass.** Spawn the acceptance session on Sonnet against the merged default branch; it runs `/qa` with the criteria as its checklist and posts one verdict comment on the tracking issue behind the `<!-- feature:acceptance -->` marker. It is a ledger row like any other, so the wake loop keeps running until it resolves. `--no-qa` skips this half and the report says so.
+3. **Verdict.** All criteria met and a SHIP verdict ends the run. Anything else escalates: one follow-up issue naming the criterion and its evidence, linked from the tracking issue, notified. Never revert, never open a repair slice, never re-plan — the code passed every gate agreed in advance, and what an unmet criterion means is a human's call.
+
+Criteria belonging to an escalated slice are marked `escalated` without being checked; do not let an unbuilt stage read as a failed acceptance.
+
+---
+
+## Phase 8: Close out
+
+Everything that tells the human how the run went comes first; anything that might wait on a permission prompt comes last. In every past run that reached close-out, the report publish waited on a prompt for between ten minutes and ten hours and was then declined, and the final comment, the cleanup and the notification all sat behind it.
+
+1. **Propose what the run learned.** Group the review findings by root cause across slices: a mistake several workers made independently, or a false positive the collectors kept raising, is a repo convention nobody wrote down. Put the `CLAUDE.md` line you would add — verbatim and ready to paste, with the PRs that motivated it — in the closing comment and the report. Propose it; never commit it (`references/acceptance.md`).
+2. **Write the next step.** If the plan, a follow-up issue, or an escalation leaves work undone, write the `/feature` prompt that would pick it up — requirements, what is already on the default branch with PR numbers, and what this run learned — in one fenced block, ready to paste. Under it, list the run's **prerequisites**: each thing that must be true before the next run can start (a PR merged, a release published, a version on npm), as a line the lead can check by machine (`references/close-out.md`). Users asked for this by hand after most past runs.
+3. Final comment on the tracking issue: the outcome table, what merged, the acceptance result, the CI jobs skipped on PRs by design named as never exercised (whether or not acceptance ran), what escalated and why, the proposed conventions, the next-step prompt and its prerequisites, and any branches left behind.
+4. `unsubscribe_pr_activity` for every PR; `delete_trigger` for the run's check-ins (a chained next-run watcher set up in step 9 is not a check-in, and stays); archive the worker sessions, acceptance included. If a cleanup step is refused (deleting a branch or archiving a session can be), do not retry it: list what is left, with the command to remove it, in the final comment.
+5. Close the issue only if every slice merged **and** every criterion was met. An escalation leaves it open — that is the handoff.
+6. Report to the human (see below), and `PushNotification` the one-line outcome. The run started because nobody wanted to watch it; it ends by telling them how it went.
+7. **The run report, last.** Unless `--no-report` was passed, write the run through the **`session-report` skill**, with the ledger as its source — what was asked, what each slice changed, what was verified, every finding with its verdict, the acceptance table, and what escalated. Publish it as an artifact only if the human said yes to that at sign-off (Phase 1.6); otherwise run it with `--no-publish` and hand the file over with `SendUserFile`. If publishing is declined anyway, fall back to the file and do not ask again. Add the link or file name to the tracking issue.
+8. **List what needs a human.** After the report is written, gather every item that still needs someone to act or decide into one list, and put it last in the summary, right before the selection prompt in step 9. Sources: escalated slices and their reasons, criteria that were PARTIAL or NOT MET, follow-up issues opened, PRs left open, red CI on the default branch, the proposed `CLAUDE.md` line (a decision: add it or not), the next-step `/feature` prompt (run it or not), cleanup that was refused and what is left behind, and every item in the report's "Needs a human call" section. Each item is one line: the action or decision, then the link or the command. Leave out anything already done — merged PRs, fixed findings, met criteria and finished cleanup belong in the summary above, not here. Merge duplicates: an escalation that is also in the report appears once. If nothing needs action, write `Action items: none`.
+9. **Let the human act on them by picking.** Print the summary with its action items, then ask with `AskUserQuestion` about the items the lead can carry out itself, one decision per question. Each question carries the whole situation: what is blocked, why, and the obvious fix. Each option says exactly what will be done and what it costs, with the recommended option first. Items the lead can carry out include: merge a PR, open one more review round, delete a leftover branch, open a PR with the `CLAUDE.md` line. The next-step run always gets its own question: start it now, start it automatically once its prerequisites are met, or leave it. Do what was picked and nothing more; a picked merge still goes through the merge gate. A pick that has to wait for CI or a review round goes to a fresh session running `/pr-land`, because nothing wakes this lead after cleanup. Then print the list again with what was done ticked, and post it to the tracking issue. If a prompt is dismissed, act on nothing from it and ask nothing more. Items only a human can do stay in the list and are never options. How to build the questions and the prerequisite watcher: `references/close-out.md`. Skip this step if nothing can be offered.
+10. Type `The End` as the very last line of the final message. It is the unambiguous signal that the run is over and no wake will follow — so it belongs only here, after every step above has run, including the picks from step 9. A chained next run does not delay it: the watcher is its own scheduled task, and this run is over.
+
+---
+
+## Aborting
+
+`/feature --abort <slug>`: interrupt and archive every worker session in the ledger, unsubscribe from the PRs, delete the run's triggers, comment the abort reason on the tracking issue, and leave the branches and PRs exactly as they are. **Aborting never closes PRs and never deletes branches** — the work is the user's to keep or discard.
+
+---
+
+## Final summary
+
+Short, whatever the outcome:
+
+```
+/feature: {slug} — {N merged | N merged, M escalated | aborted}
+
+  {stage-id}  PR #{n}  {merged | escalated: reason | open: state}
+  ...
+  Review: {total rounds across PRs}, {findings} confirmed and fixed, {refuted} refuted
+  Acceptance: {n/n criteria met} — QA {ship | fail | not run: reason}
+  Escalated: {one line each, or "none"}
+  Learned: {proposed CLAUDE.md line, or "nothing recurring"}
+  Ledger: {issue url}
+  Report: {artifact url | file name | skipped} — filled in after close-out step 7
+
+Action items:
+  - [ ] {action or decision needed} — {link | command}
+  ...
+```
+
+Then the selection prompt (close-out step 9). After the picks are carried out:
+
+```
+Done:
+  {one line per pick: what was done, or why it was not}
+
+Action items:
+  - [x] {item that was done}
+  - [x] Next run chained: starts when {prerequisites} — cancel with delete_trigger {id}
+  - [ ] {item left for a human}
+
+The End
+```
+
+The action items are close-out step 8: only what still needs someone to act or decide, nothing that is already done, and the report's "Needs a human call" items folded in. When nothing needs action, the whole block is the single line `Action items: none`. They sit last so the reader finishes on what to do next, and the selection prompt lets the reader do it by picking instead of typing.
+
+`The End` closes the summary only when the run is complete — Phase 8 has finished. A `--status` report, a `--dry-run`, an abort, and any mid-run wake never print it, because the line means nothing is left running.
+
+---
+
+## Design notes
+
+- **The plan's stages are the unit of everything.** Slice, branch, session, PR, review scope, and merge order all key off the same stage id, so there is exactly one place where "how is this work divided" is decided — in a plan a human accepted.
+- **GitHub is the process memory.** On cloud, the lead is as ephemeral as the workers: containers get reclaimed, context gets compacted, wakes arrive hours apart. Any state that lives only in the lead's head is state the run loses. The tracking issue is chosen over a state file for the same reason the plan is pushed rather than kept local — it survives the container, and a human can read it mid-run.
+- **Every wake is stateless and idempotent.** The lead re-derives the world on each wake and guards every action on "has this already happened". That is what makes a dropped event, a duplicate event, and a resumed-after-hours session all behave identically.
+- **Fresh context is a spawn property, not an instruction.** "No going back and forth" cannot be achieved by telling a reviewer not to argue; it is achieved by the reviewer being a new agent each round that has never seen the previous round. See `references/review-loop.md`.
+- **Borrow, do not restate.** The worker's pre-PR verification is `/check-iterate`, its pre-PR quality pass is `/simplify`, a red build is `/debug`, the write-up is `/session-report`, and the review loop uses the same `checker`-and-`verifier` split those skills already established — `pr-adversary` exists only because reviewing a PR through the API at a fixed head SHA is genuinely a different job from reviewing a local diff. Every mechanic this skill restates in its own words is a mechanic that drifts from the skill that owns it.
+- **Acceptance is a different question from the gate, asked of a different thing.** The gate asks whether this diff is safe to merge and answers it from the diff. Acceptance asks whether the feature exists and answers it from the merged branch and a running app. A run that only ever asks the first question can merge four impeccable PRs that do not add up to what was requested, and report success — which is the specific way autonomous systems lose people's trust.
+- **A bound is a number or the lead re-decides it every wake.** "Long past its spawn", "probably a flake", "this is taking a while" are judgements, and an ephemeral lead making them from a compacted context makes them inconsistently. Deadlines, silence timeouts, and the one re-run per check live in the ledger with everything else the run must not re-invent.
+- **Spend the strong model on judgement, not on reading.** The lead (planning, slicing, merge decisions), the workers that write code, and the static acceptance pass inherit the lead's model, because a mistake there multiplies or ships. Work that gathers or executes runs on Sonnet: state collection (`run-reconciler`), review and refutation (`pr-adversary`, `verifier`), the `/qa` acceptance session, and stages the plan marks `Model: sonnet`. That split is in the agent definitions and the spawn tables. Do not move work across it run by run. Any other helper the lead spawns — an `Explore` or `general-purpose` agent to read a transcript, a log or a long file — passes `model: "sonnet"`, since those types otherwise inherit the lead's model.
+- **The cost of a run is its context times its calls.** Every call re-reads the whole context, so a lead or worker at 600k pays for 600k on a one-line "nothing changed" wake. Cache reads were most of every past run's bill, and output a small part of it. So the skill drops echo wakes before reconciling (Phase 4.0), keeps one backing-off check-in, keeps raw payloads in files and subagents instead of the lead's context, runs the full suite only when it decides something, and opens a review round only for a blocking finding. Set the repo's `autoCompactWindow` (for example `200000`) so long-lived sessions compact well before the 1M window. The run's state lives in the ledger, so a compacted lead loses nothing it needs.
+- **The gate is machine-checkable or it is not a gate.** Coverage is a command's exit code, mergeability is GitHub's answer, convergence is a round with zero confirmed findings. Nothing in the merge path is the lead's opinion.
