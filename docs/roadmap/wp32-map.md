@@ -1,15 +1,15 @@
 # WP32: `Map` and `Set`
 
-**State:** Landed · **Done:** 2 of 2 · **Design note:** [`docs/wp32-map.md`](https://github.com/amritk/nish/blob/main/docs/wp32-map.md)
+**State:** Landed · **Open work:** [#1862](https://github.com/amritk/nish/issues/1862) · **Design note:** [`docs/wp32-map.md`](https://github.com/amritk/nish/blob/main/docs/wp32-map.md)
 
 ## Stages
 
 - [x] S1 to S7: global `Map` and `Set`, `get` typed `V | undefined`, iteration, fusion and `nish/map`, `StringMap`, measured against Node ([#227](https://github.com/amritk/nish/pull/227) to [#244](https://github.com/amritk/nish/pull/244))
 - [x] `Map` reads (`get`, `has`, `size`) inside a parallel body, a table reaching `dst` only through its keys and values
 
-## Next
+## Open work
 
-Nothing scheduled. Any unchecked item is deferred; the note says what would reopen it.
+Open stages are the sub-issues of [#1862](https://github.com/amritk/nish/issues/1862), one pull request each, specified in [`.claude/plans/wp32-map.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp32-map.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

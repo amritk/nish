@@ -1,6 +1,6 @@
 # WP34: The network stack
 
-**State:** Landed · **Done:** 24 of 24 · **Design note:** [`docs/wp34-network-stack.md`](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md)
+**State:** Landed · **Open work:** [#1852](https://github.com/amritk/nish/issues/1852) · **Design note:** [`docs/wp34-network-stack.md`](https://github.com/amritk/nish/blob/main/docs/wp34-network-stack.md)
 
 ## Stages
 
@@ -29,9 +29,9 @@
 - [x] Phase two, N13: the TLS 1.3 client ([#1018](https://github.com/amritk/nish/pull/1018)), and Postgres over TLS in the carrier ([#1446](https://github.com/amritk/nish/pull/1446))
 - [x] Phase two, N14: discriminated unions ([#682](https://github.com/amritk/nish/pull/682), [#716](https://github.com/amritk/nish/pull/716), [#798](https://github.com/amritk/nish/pull/798))
 
-## Next
+## Open work
 
-Nothing of WP34 is open. The HTTP server's remaining work is WP39's, on [its own page](wp39-http-server.md).
+Open stages are the sub-issues of [#1852](https://github.com/amritk/nish/issues/1852), one pull request each, specified in [`.claude/plans/wp34-network-stack.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp34-network-stack.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

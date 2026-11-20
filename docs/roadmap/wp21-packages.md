@@ -1,6 +1,6 @@
 # WP21: Packages
 
-**State:** In progress · **Done:** 5 of 7 · **Design note:** [`docs/wp21-packages.md`](https://github.com/amritk/nish/blob/main/docs/wp21-packages.md)
+**State:** In progress · **Open work:** [#1911](https://github.com/amritk/nish/issues/1911) · **Design note:** [`docs/wp21-packages.md`](https://github.com/amritk/nish/blob/main/docs/wp21-packages.md)
 
 ## Stages
 
@@ -9,12 +9,10 @@
 - [x] S3: resolution diagnostics and package identity, a module is its real path
 - [x] S3: an error naming the package when a builtin has no runtime on the target (`readFileSync` on wasm)
 - [x] S3: a compile error inside `node_modules/<pkg>` attributed to that dependency
-- [ ] S4: the build cache, keyed by package version, number mode, target, profile and compiler
-- [ ] S5: prebuilt distribution *(deferred)*
 
-## Next
+## Open work
 
-S4: the build cache, content-addressed by package version, number mode, target, profile and compiler version. Spec: [§8 Stages](https://github.com/amritk/nish/blob/main/docs/wp21-packages.md#8-stages).
+Open stages are the sub-issues of [#1911](https://github.com/amritk/nish/issues/1911), one pull request each, specified in [`.claude/plans/wp21-packages.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp21-packages.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

@@ -65,7 +65,9 @@ next":
    parent, refines its plan, and gives each open stage its own session,
    branch and PR. Working by hand instead, take one open sub-issue of a
    `ready` parent that carries no `needs-decision`, `deferred` or
-   `in-progress` label, and label it `in-progress` before you start.
+   `in-progress` label. Claim it: label it `in-progress` and post its one
+   `<!-- status -->` comment, in the shape `/plan-issues` gives
+   ([Claiming, checkpoints and takeover](.claude/skills/plan-issues/SKILL.md#claiming-checkpoints-and-takeover)).
 2. Read the stage's section of the plan file, the design-note section it
    links, and the issue's comments. An owner's answer recorded by `/decide`
    opens with `<!-- decision -->` and binds the work.
@@ -75,11 +77,19 @@ next":
    parent, and in the same PR as that stage set the package's `**State:**`
    on its roadmap page and its row in
    [`docs/roadmap/index.md`](./docs/roadmap/index.md) to Landed.
-4. For a question only the owner can answer, label the issue
+4. Keep the work recoverable at checkpoints, not on a timer. Push the
+   branch when a todo is finished and builds, before a long run, and before
+   you stop; until a PR exists those pushes run no CI. Edit the status
+   comment in place, never as a new comment, when the next step changes.
+   Stopping unfinished, push, write the exact next step into the status,
+   and remove `in-progress`. An `in-progress` issue whose status and branch
+   are both more than a day old, with no live session, may be taken over,
+   from its branch.
+5. For a question only the owner can answer, label the issue
    `needs-decision` and post a `<!-- decision-request -->` comment in the
    shape that [`.claude/skills/decide/SKILL.md`](.claude/skills/decide/SKILL.md)
    gives. Then go on with work that does not wait on it.
-5. New work for a package is a stage added to its plan file in a PR, then
+6. New work for a package is a stage added to its plan file in a PR, then
    `/plan-issues`. That files the sub-issue and reopens the parent if it was
    closed. A new package gets its design note, roadmap page and plan file
    (with a `priority`) in one PR, then `/plan-issues`.

@@ -1,6 +1,6 @@
 # WP63: io_uring direct descriptors for `nish:net`
 
-**State:** Landed · **Done:** 6 of 6 · **Design note:** [`docs/wp63-iouring-net.md`](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md)
+**State:** Landed · **Open work:** [#1891](https://github.com/amritk/nish/issues/1891) · **Design note:** [`docs/wp63-iouring-net.md`](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md)
 
 ## Stages
 
@@ -11,13 +11,9 @@
 - [x] S4: `nish/net/handler` past the limit (`HandlerLimits.ring`, -23 rests the listener like -24) and the entry re-measured with SQLite on top: one ring process spent 29.5% less CPU a request than five epoll processes at 96,000 connections under a limit of 20,000 (25.9% at 18,000; bands under 1%), at about four times the memory a connection, so the verdict is go ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#io_uring-under-the-handler-wp63-s4))
 - [x] S5: the cheaper wins for the multi-process entry, `PRAGMA mmap_size` and shared state in `nish/sync/shm`, measured on their own against the unchanged five epoll processes at 18,000 connections (`bench/handler-ring/wins.sh`, 7 rounds): `mmap_size` spent 15.7% less CPU a request, all of it system time, with no fall in memory (RSS and PSS rise as the mapped file is counted against the workers); a shared like-count cache spent 14.9% less, mostly the cache's, since the same cache held privately was not separable from noise; both gains against a 0.6% band ([BENCHMARKS.md](https://github.com/amritk/nish/blob/main/docs/BENCHMARKS.md#the-cheaper-wins-for-five-processes-wp63-s5))
 
-## Next
+## Open work
 
-Nothing scheduled: every stage is built. S5 measured the cheaper wins on S4's stand-in, not on the entry; [§10](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#10-stages) asks for `wins.sh` to be rerun on the entry before it adopts either.
-
-## Open questions
-
-None open. S3 decided D2 (`nish.netRings` in `package.json`, 1 to 64, default 1). S2 decided D1 (the bit is opt-in) and S4 kept it: the ring path is not dearer at 18,000 or 96,000, but it cost about four times the memory a connection (141.4 against 128.9 MB at 96,000 once an idle slot frees its receive queue, NURING-38) and no low C was measured beyond a one-round smoke run, so `HandlerLimits.ring` stays false by default and D3 (one thread with N rings). [§11](https://github.com/amritk/nish/blob/main/docs/wp63-iouring-net.md#11-open-questions).
+Open stages are the sub-issues of [#1891](https://github.com/amritk/nish/issues/1891), one pull request each, specified in [`.claude/plans/wp63-iouring-net.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp63-iouring-net.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

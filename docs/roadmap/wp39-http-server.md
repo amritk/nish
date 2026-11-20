@@ -1,6 +1,6 @@
 # WP39: The HTTP server: a TechEmpower entry, then a general-purpose server
 
-**State:** Landed · **Done:** 27 of 29 · **Design note:** [`docs/wp39-http-server.md`](https://github.com/amritk/nish/blob/main/docs/wp39-http-server.md)
+**State:** Landed · **Open work:** [#1850](https://github.com/amritk/nish/issues/1850) · **Design note:** [`docs/wp39-http-server.md`](https://github.com/amritk/nish/blob/main/docs/wp39-http-server.md)
 
 ## Stages
 
@@ -11,7 +11,6 @@
 - [x] E6: the Postgres client, its pool and carrier, binary results and a live CI job
 - [x] E6: Postgres over TLS ([#1446](https://github.com/amritk/nish/pull/1446))
 - [x] E7, E8: the `db`, `query`, `update`, `cached-query` and `fortune` entry
-- [ ] E9: submit the entry to TechEmpower *(open question)*
 - [x] G1: Chrome over HTTP/2 on TCP in the interop job
 - [x] G1: `curl` and Autobahn for HTTP/1.1 and WebSocket; Chrome over HTTP/1.1 ([#1437](https://github.com/amritk/nish/pull/1437))
 - [x] G2: the request-head deadline (H1-1) and HPACK's allocation (H2-1)
@@ -31,16 +30,11 @@
 - [x] G7: one handler for HTTP/1.1, 2 and 3, with `Alt-Svc`: the `nish/net/http-server` façade ([#1473](https://github.com/amritk/nish/pull/1473))
 - [x] G8: the `h2load` harness
 - [x] G8: HTTP/2 and HTTP/3 figures in BENCHMARKS.md ([#1462](https://github.com/amritk/nish/pull/1462))
-- [ ] G9: move WebTransport's pin when Chrome moves past the draft *(deferred)*
 - [x] G10: the TLS client, chain validation and outbound HTTPS
 
-## Next
+## Open work
 
-Nothing scheduled: every stage is built but E9, which waits on a decision, and G9, which is deferred until Chrome moves past the WebTransport draft.
-
-## Open questions
-
-E9: whether and when to submit to TechEmpower, a public number.
+Open stages are the sub-issues of [#1850](https://github.com/amritk/nish/issues/1850), one pull request each, specified in [`.claude/plans/wp39-http-server.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp39-http-server.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

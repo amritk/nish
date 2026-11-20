@@ -1,6 +1,6 @@
 # WP50: A WebAssembly module a TypeScript page drives
 
-**State:** Landed · **Done:** 6 of 6 · **Design note:** [`docs/wp50-wasm-host.md`](https://github.com/amritk/nish/blob/main/docs/wp50-wasm-host.md)
+**State:** Landed · **Open work:** [#1873](https://github.com/amritk/nish/issues/1873) · **Design note:** [`docs/wp50-wasm-host.md`](https://github.com/amritk/nish/blob/main/docs/wp50-wasm-host.md)
 
 ## Stages
 
@@ -11,9 +11,9 @@
 - [x] Stage 5: `--deterministic`, the same float bits on every target ([#1363](https://github.com/amritk/nish/pull/1363))
 - [x] Stage 6: `examples/wasm-arena/`, its replay check and size row, and the ten-minute Chromium soak ([#1372](https://github.com/amritk/nish/pull/1372))
 
-## Next
+## Open work
 
-Nothing scheduled: every stage is built.
+Open stages are the sub-issues of [#1873](https://github.com/amritk/nish/issues/1873), one pull request each, specified in [`.claude/plans/wp50-wasm-host.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp50-wasm-host.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

@@ -53,7 +53,9 @@ const walk = (base, dir) => {
 /** The vendored paths, relative to the repository root, for one tree. */
 const vendored = (base) => [
   ...manifest.skills.flatMap((name) => walk(base, `.claude/skills/${name}`)),
-  ...manifest.agents.map((name) => `.claude/agents/${name}.md`).filter((rel) => fs.existsSync(path.join(base, rel))),
+  ...manifest.agents
+    .map((name) => `.claude/agents/${name}.md`)
+    .filter((rel) => fs.existsSync(path.join(base, rel))),
 ]
 
 const sha256 = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
@@ -76,7 +78,9 @@ if (args.includes("--check")) {
   }
   if (problems.length > 0) {
     console.error(problems.join("\n"))
-    console.error("Change shared skills in amritk/ai, then run node scripts/sync-skills.mjs to bring them back.")
+    console.error(
+      "Change shared skills in amritk/ai, then run node scripts/sync-skills.mjs to bring them back."
+    )
     process.exit(1)
   }
   console.log(`${present.size} vendored files match amritk/ai@${manifest.commit.slice(0, 12)}`)

@@ -1,15 +1,14 @@
 # WP13: Differential testing against Node
 
-**State:** Landed · **Done:** 1 of 2 · **Design note:** [`docs/wp13-differential.md`](https://github.com/amritk/nish/blob/main/docs/wp13-differential.md)
+**State:** Landed · **Open work:** [#1864](https://github.com/amritk/nish/issues/1864) · **Design note:** [`docs/wp13-differential.md`](https://github.com/amritk/nish/blob/main/docs/wp13-differential.md)
 
 ## Stages
 
 - [x] The native-against-Node oracle, run from frozen rewrites, and the seed-against-HEAD IR fuzzer
-- [ ] A rewriter driven by `--emit-checked`, for programs added after stage0 was removed *(deferred)*
 
-## Next
+## Open work
 
-Nothing scheduled. Any unchecked item is deferred; the note says what would reopen it.
+Open stages are the sub-issues of [#1864](https://github.com/amritk/nish/issues/1864), one pull request each, specified in [`.claude/plans/wp13-differential.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp13-differential.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

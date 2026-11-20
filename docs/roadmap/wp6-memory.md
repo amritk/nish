@@ -1,16 +1,14 @@
 # WP6: Memory: escape-analysed stack, arena scopes, `T | null`
 
-**State:** Landed · **Done:** 1 of 3 · **Design note:** [`docs/wp6-memory.md`](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md)
+**State:** Landed · **Open work:** [#1993](https://github.com/amritk/nish/issues/1993) · **Design note:** [`docs/wp6-memory.md`](https://github.com/amritk/nish/blob/main/docs/wp6-memory.md)
 
 ## Stages
 
 - [x] Arenas, escape-analysed stack allocation, call-site, callee and loop-pass scopes, and `using a = arena()`
-- [ ] A stack rule for branch-assigned locals and objects stored into a local container *(deferred)*
-- [ ] Precise `llvm.lifetime.start`/`end` on hoisted allocas *(deferred)*
 
-## Next
+## Open work
 
-Nothing scheduled. Any unchecked item is deferred; the note says what would reopen it.
+Open stages are the sub-issues of [#1993](https://github.com/amritk/nish/issues/1993), one pull request each, specified in [`.claude/plans/wp6-memory.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp6-memory.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

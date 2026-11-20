@@ -1,6 +1,6 @@
 # WP37: The OS sandbox
 
-**State:** Landed · **Done:** 5 of 9 · **Design note:** [`docs/wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md)
+**State:** Landed · **Open work:** [#1909](https://github.com/amritk/nish/issues/1909) · **Design note:** [`docs/wp37-os-sandbox.md`](https://github.com/amritk/nish/blob/main/docs/wp37-os-sandbox.md)
 
 ## Stages
 
@@ -9,14 +9,10 @@
 - [x] Dependency-grant scopes and the exec allowlist under `--sandbox`
 - [x] Close SBX-1: the loader a granted program reaches can run any program, as a spawn target and from the granted program's own exec (one exec per spawn)
 - [x] `process.spawn=exec:<program>`: a grant that lets one program start helpers, outside the one-exec hold
-- [ ] Scopes in the `package.json` manifest *(deferred)*
-- [ ] Refuse IFUNC resolvers at link time *(deferred)*
-- [ ] `nish run` sandboxed by default *(deferred)*
-- [ ] A seccomp allowlist mode, as its own flag *(deferred)*
 
-## Next
+## Open work
 
-The remaining stages are deferred; none is scheduled.
+Open stages are the sub-issues of [#1909](https://github.com/amritk/nish/issues/1909), one pull request each, specified in [`.claude/plans/wp37-os-sandbox.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp37-os-sandbox.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 

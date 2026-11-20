@@ -1,6 +1,6 @@
 # WP38: SIMD
 
-**State:** Landed · **Done:** 10 of 10 · **Design note:** [`docs/wp38-simd.md`](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
+**State:** Landed · **Open work:** [#1865](https://github.com/amritk/nish/issues/1865) · **Design note:** [`docs/wp38-simd.md`](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md)
 
 ## Stages
 
@@ -15,9 +15,9 @@
 - [x] S8: the SSSE3 and NEON Adler-32 kernels, measured past their bar ([#1079](https://github.com/amritk/nish/issues/1079))
 - [x] `--cpu` levels for AArch64 and `x86-64-v4`, each on its own measurement: measured, not built ([#1432](https://github.com/amritk/nish/pull/1432))
 
-## Next
+## Open work
 
-Nothing is scheduled. `x86-64-v4` is kept out of `--cpu` (decided 2026-11-12): it clears S2's bar against the baseline but gains nothing over `x86-64-v3` ([§7](https://github.com/amritk/nish/blob/main/docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear)).
+Open stages are the sub-issues of [#1865](https://github.com/amritk/nish/issues/1865), one pull request each, specified in [`.claude/plans/wp38-simd.plan.md`](https://github.com/amritk/nish/blob/main/.claude/plans/wp38-simd.plan.md). What waits on a decision is labelled `needs-decision` there.
 
 ## Not planned
 
