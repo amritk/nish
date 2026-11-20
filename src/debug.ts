@@ -342,7 +342,7 @@ export class DebugInfo {
       // `p *r` shows `ok`, `value` and `error` rather than an opaque pointer.
       // Only the arm the discriminant selects is meaningful; the other is
       // whatever the construction left there (WP16 does not zero it).
-      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
+      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type, this.pointerBits / 8)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
     } else if (this.table.isNullable(type)) {
@@ -481,8 +481,7 @@ export class DebugInfo {
         continue
       }
       const base = this.typeRef(f.type)
-      const bits = this.table.isPointerValue(f.type) ? this.pointerBits : bitsOfIn(this.table, f.type)
-      members.push(this.member(f.name, ref, base, bits, f.offset * 8, file, line))
+      members.push(this.member(f.name, ref, base, this.memberBits(f.type), f.offset * 8, file, line))
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
@@ -594,6 +593,11 @@ export class DebugInfo {
     return ref
   }
 
+  /** A member's width: a pointer is the target's, anything else its own. */
+  memberBits(type: i32): i32 {
+    return this.table.isPointerValue(type) ? this.pointerBits : bitsOfIn(this.table, type)
+  }
+
   /**
    * `%struct.nish_result.<T>.<E>` with the layout the checker derived: the
    * discriminant, the success payload (absent for `Result<void, E>`) and the
@@ -620,7 +624,7 @@ export class DebugInfo {
     let i = 0
     while (i < names.length) {
       const base = this.typeRef(types[i])
-      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0))
+      members.push(this.member(names[i], ref, base, this.memberBits(types[i]), offsets[i] * 8, "", 0))
       i = i + 1
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
@@ -663,7 +667,7 @@ export class DebugInfo {
     if (known >= 0) {
       return this.typeRefs[known]
     }
-    const layout = resultLayout(this.table, type)
+    const layout = resultLayout(this.table, type, this.pointerBits / 8)
     const ref = this.module.reserveMetadata()
     const union = this.module.reserveMetadata()
     const armNames: string[] = []

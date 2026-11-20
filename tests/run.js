@@ -39063,6 +39063,8 @@ class Flat {
 
 const parse = (n: i32): Result<i32, string> => (n > 0 ? Ok(n) : Err("neg"))
 
+const find = (n: i32, at: Node, code: i64): Result<Node, i64> => (n > 0 ? Ok(at) : Err(code))
+
 class Wide {
   flag: boolean
   shape: Round | Flat
@@ -39086,7 +39088,8 @@ export const main = (): i32 => {
   const m = new Mixed(1.5, b, 3, 4, "m")
   const l = new Links(a, b, m, 2, [1, 2, 3], true)
   const w = new Wide(true, new Flat(2), ["x", "y"], [a, b], parse(3), 4)
-  return l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
+  const f = find(l.count, a, m.b)
+  return (f.ok ? f.value.value : 0) + l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
 }
 `
     )
@@ -39114,11 +39117,26 @@ export const main = (): i32 => {
     const native = layouts([])
     const ll = path.join(dir, "classes.ll")
     const emitted = spawnSync(NISH, [entry, "--target", "wasm32", "-o", ll], { cwd: root, encoding: "utf8" })
+    // A `Result` has no `--emit-checked` line: `-g` describes it from
+    // `resultLayout`, so its composite's size and member offsets are the
+    // compiler's numbers (#1749).
+    const gll = path.join(dir, "classes.g.ll")
+    const debugged = spawnSync(NISH, [entry, "--target", "wasm32", "-g", "-o", gll], { cwd: root, encoding: "utf8" })
+    // A class arm's struct name is spelled with a `$`, which a probe's own name
+    // leaves out.
+    const results = [
+      { name: "nish_result.i32.str", label: "result.i32.str" },
+      { name: "nish_result.$Node.i64", label: "result.Node.i64" },
+    ]
     if (
       check(
         "wasm32-layout: the program compiles for wasm32 and both targets print every class's layout",
-        wasm.r.status === 0 && native.r.status === 0 && emitted.status === 0 && names.every((n) => wasm.found.has(n)),
-        `${shown(wasm.r)}\n${shown(emitted)}`
+        wasm.r.status === 0 &&
+          native.r.status === 0 &&
+          emitted.status === 0 &&
+          debugged.status === 0 &&
+          names.every((n) => wasm.found.has(n)),
+        `${shown(wasm.r)}\n${shown(emitted)}\n${shown(debugged)}`
       )
     ) {
       // One probe per number, each `add`ed to 0 so instcombine folds it.
@@ -39134,12 +39152,20 @@ export const main = (): i32 => {
           probes.push(probe(`${name}.${f.name}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${f.index})`))
         }
       }
+      for (const { name, label } of results) {
+        const t = `%struct.${name}`
+        probes.push(probe(`${label}.size`, t, `(${t}, ${t}* null, i32 1)`))
+        probes.push(probe(`${label}.align`, t, `({ i1, ${t} }, { i1, ${t} }* null, i32 0, i32 1)`))
+        for (const index of [0, 1, 2]) {
+          probes.push(probe(`${label}.${index}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${index})`))
+        }
+      }
       // The probes run in a module of their own: the emitted one's data layout
       // and type definitions, and nothing for instcombine to rewrite but them.
       const kept = fs
         .readFileSync(ll, "utf8")
         .split("\n")
-        .filter((line) => line.startsWith("target datalayout") || /^%[\w.]+ = type /.test(line))
+        .filter((line) => line.startsWith("target datalayout") || /^%[\w.$]+ = type /.test(line))
       const probed = path.join(dir, "probed.ll")
       fs.writeFileSync(probed, `${kept.join("\n")}\n\n${probes.join("\n")}`)
       const folded = spawnSync("opt", ["-S", "-passes=instcombine", probed], { encoding: "utf8", maxBuffer: 1 << 28 })
@@ -39177,6 +39203,42 @@ export const main = (): i32 => {
           `allocation sizes cast to %struct.${name}*: ${sites.join(", ") || "none"}; alloca: ${onStack}`
         )
       }
+      // The composite's size and alignment, then its `ok`, `value` and
+      // `error` members' offsets, in bits as DWARF spells them.
+      const dbg = fs.readFileSync(gll, "utf8")
+      for (const { name, label } of results) {
+        const composite = new RegExp(
+          `!(\\d+) = distinct !DICompositeType\\(tag: DW_TAG_structure_type, name: "${name.replace(/[.$]/g, "\\$&")}", file: !\\d+, size: (\\d+), align: (\\d+)`
+        ).exec(dbg)
+        const offsets =
+          composite === null
+            ? []
+            : [...dbg.matchAll(new RegExp(`DW_TAG_member, name: "(?:ok|value|error)", scope: !${composite[1]}, [^)]*offset: (\\d+)`, "g"))].map(
+                (m) => Number(m[1]) / 8
+              )
+        const mine =
+          composite === null ? "no composite" : `size=${composite[2] / 8} align=${composite[3] / 8} offsets=${offsets.join(",")}`
+        const theirs = `size=${llvm.get(`${label}.size`)} align=${llvm.get(`${label}.align`)} offsets=${[0, 1, 2]
+          .map((i) => llvm.get(`${label}.${i}`))
+          .join(",")}`
+        check(
+          `wasm32-layout: -g describes %struct.${name} with the size, alignment and member offsets LLVM's wasm32 DataLayout gives it`,
+          folded.status === 0 && mine === theirs,
+          `compiler: ${mine}\nLLVM:     ${theirs}`
+        )
+      }
+      // `Result<i32, string>` is `{ i1, i32, i8* }`: 12 bytes, so a pointer
+      // payload back at offset 8 fails here as well as above.
+      const resultSites = [...text.matchAll(/call i8\* @nish_alloc_struct\(i64 (\d+)\)\n\s*%\d+ = bitcast i8\* %\d+ to %struct\.nish_result\.i32\.str\*\n/g)].map(
+        (m) => Number(m[1])
+      )
+      check(
+        "wasm32-layout: `Result<i32, string>` is allocated in 12 bytes on wasm32 and `parse` claims dereferenceable(12)",
+        resultSites.length > 0 &&
+          resultSites.every((size) => size === 12) &&
+          /dereferenceable\(12\) %struct\.nish_result\.i32\.str\* @parse\(/.test(text),
+        `allocation sizes: ${resultSites.join(", ") || "none"}`
+      )
       const node = wasm.found.get("Node")
       const nativeNode = native.found.get("Node")
       check(

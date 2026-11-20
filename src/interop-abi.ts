@@ -33,7 +33,6 @@ import { hasFunctionParameter } from "./generics"
 import { basename } from "./paths"
 import { Node, NodeKind } from "./nodes"
 import { FieldInfo, FunctionSig, STRUCT_CLASS, StructInfo, TemplateInfo } from "./program"
-import { ResultLayout, resultLayout } from "./result"
 import { StringBuilder } from "./strings"
 import {
   K_ARRAY,
@@ -660,13 +659,11 @@ const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
  */
 class ResultUse {
   type: i32
-  layout: ResultLayout
   word: boolean
   object: boolean
 
-  constructor(type: i32, layout: ResultLayout) {
+  constructor(type: i32) {
     this.type = type
-    this.layout = layout
     this.word = false
     this.object = false
   }
@@ -717,7 +714,7 @@ const noteResultTypes = (
     if (at < 0) {
       at = uses.length
       index.set(name, at)
-      uses.push(new ResultUse(type, resultLayout(table, type)))
+      uses.push(new ResultUse(type))
     }
     // Only the outermost type of a by-value return travels in a register;
     // anything nested inside it is a payload, and a payload is a pointer.
@@ -1546,24 +1543,27 @@ export const resultDefinitions = (table: TypeTable, fns: ExternalFunction[], fie
 }
 
 const resultDefinition = (table: TypeTable, use: ResultUse): string[] => {
-  const layout = use.layout
+  // Only the arms' types: the C compiler lays the struct out for its own target.
+  const ok = table.okOf(use.type)
+  const hasValue = ok !== T_VOID
+  const err = table.errOf(use.type)
   const lines: string[] = []
   lines.push(`/* ${tsKeyword(table, use.type)} */`)
   if (use.object) {
     lines.push(`struct ${cResultName(table, use.type)} {`)
     lines.push("  bool ok; /* 1 = value, 0 = error */")
-    if (layout.hasValue) {
-      lines.push(`  ${resultField(table, layout.valueType, "value")}`)
+    if (hasValue) {
+      lines.push(`  ${resultField(table, ok, "value")}`)
     }
-    lines.push(`  ${resultField(table, layout.errorType, "error")}`)
+    lines.push(`  ${resultField(table, err, "error")}`)
     lines.push("};")
   }
   if (use.word) {
     const arms: string[] = []
-    if (layout.hasValue) {
-      arms.push(resultField(table, layout.valueType, "value"))
+    if (hasValue) {
+      arms.push(resultField(table, ok, "value"))
     }
-    arms.push(resultField(table, layout.errorType, "error"))
+    arms.push(resultField(table, err, "error"))
     const name = cResultWord(table, use.type)
     lines.push(`typedef struct ${name} {`)
     lines.push("  int32_t ok; /* 1 = value, 0 = error */")
