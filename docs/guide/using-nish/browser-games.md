@@ -252,10 +252,11 @@ command in `node_modules/.bin`; `--nish <path>` names another compiler,
 `--out <dir>` another directory and `--memory <MiB>` the memory size. The
 build empties its output directory first, so `--out` must name a new or empty
 directory, or one an earlier build wrote; any other flag is refused. It runs two commands, which a build of
-your own can run instead (`$NISH` is `node_modules/nish`):
+your own can run instead (`$NISH` is `node_modules/nish`; the starter's
+`game.ts` keeps panic sites, so it is built with `--allow-panics`):
 
 ```console
-$ nish game.ts --target wasm32 --emit-dts out/game.d.ts -o ll/
+$ nish game.ts --allow-panics --target wasm32 --emit-dts out/game.d.ts -o ll/
 $ $NISH/scripts/build.sh ll/*.ll $NISH/runtime/runtime-wasm.c -o out/game.wasm \
     --profile wasm-host --memory 16
 ```

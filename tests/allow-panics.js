@@ -11,7 +11,8 @@
  * panic on purpose, keep building. An example or a docs program a user would
  * copy is the exception: the helper leaves it strict, so it proves the default,
  * unless its own source opts out with the `OPT_OUT` header, which also names
- * the reason and the follow-up.
+ * the reason and the follow-up. The IR cookbook's snippets (`docs/cookbook/`)
+ * are listings that show a check's IR, often a panic's, so they get the flag.
  *
  * It is a probe, not "the seed never gets it": the last release exits 2 on a
  * flag it does not know, and `NISH_BOOTSTRAP` or `--seed` can name any release
@@ -36,13 +37,13 @@ const NOT_A_COMPILE = new Set(["upgrade", "c-import", "break"])
 const ROOT = path.resolve(import.meta.dirname, "..")
 
 /**
- * A program under the repository's own `examples/` or `docs/`, relative to
- * `ROOT`: a user copies it, so its build stays strict and proves the default
- * rather than the harness. A directory merely named `examples` elsewhere (a
- * fixture, a scratch copy under `build/`) is not one. A relative path is read
- * from the process's working directory, as the suite runs from the root.
+ * A program under the repository's own `examples/`, relative to `ROOT`: a user
+ * copies it, so its build stays strict and proves the default rather than the
+ * harness. A directory merely named `examples` elsewhere (a fixture, a scratch
+ * copy under `build/`) is not one. A relative path is read from the process's
+ * working directory, as the suite runs from the root.
  */
-const EXAMPLE = /^(?:examples|docs)[\\/]/
+const EXAMPLE = /^examples[\\/]/
 
 /**
  * The header line an example that keeps a panic site on purpose opens with;
@@ -51,8 +52,8 @@ const EXAMPLE = /^(?:examples|docs)[\\/]/
 const OPT_OUT = "// Opt-out (`--allow-panics`):"
 
 /**
- * Whether `file` is one of the repository's examples or docs programs that is
- * held to the default: it does not carry `OPT_OUT`. A file that cannot be read
+ * Whether `file` is one of the repository's examples that is held to the
+ * default: it does not carry `OPT_OUT`. A file that cannot be read
  * is held to it, and the compile reports why.
  */
 const isStrictExample = (file) => {

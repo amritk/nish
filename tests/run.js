@@ -25557,16 +25557,16 @@ if (dealtHere("cliChecks")) {
       cookbookText
     )
     const cookbookJson = path.join(capsDir, "cookbook.json")
-    // strict: a docs/cookbook program builds as a user who copies it would.
+    // The snippet exits and adds on purpose, so it builds as regen.sh builds it.
     const cookbookRun = spawnSync(
       NISH,
-      [
+      withAllowPanics(NISH, [
         path.join(root, "docs", "cookbook", "builtin-capabilities.ts"),
         "-o",
         path.join(capsDir, "cookbook") + path.sep,
         "--emit-capabilities",
         cookbookJson,
-      ],
+      ]),
       { cwd: root, encoding: "utf8" }
     )
     check(
@@ -28204,20 +28204,23 @@ if (dealtHere("releaseChecks")) {
       ["--version"],
       ["upgrade", "--check"],
       ["c-import", "x.h"],
-      [path.join(root, "docs", "cookbook", "builtin-capabilities.ts")],
     ]
     // Anchored to the repository's own `examples/`: a scratch copy that merely
     // has a directory of that name is a case, not an example.
     const copied = [path.join(buildDir, "examples", "x.ts"), "-o", "x.ll"]
     // An example whose header opts out (`// Opt-out (\`--allow-panics\`):`)
     // gets the flag, as its header says a user builds it.
+    // So does an IR cookbook snippet: a listing of a check's IR, not a program
+    // a user builds.
     const optOut = [path.join(root, "examples", "add.ts")]
+    const listingArgs = [path.join(root, "docs", "cookbook", "builtin-capabilities.ts")]
     const added = withAllowPanics(listing, ["run", "tests/cases/panics_index.ts", "--deny-panics"])
     check(
-      "allow-panics: the helper leaves a line that decides the scope, a strict example, a docs program or no compile alone, flags an opt-out example, and puts the flag after `run`",
+      "allow-panics: the helper leaves a line that decides the scope, a strict example or no compile alone, flags an opt-out example and a cookbook listing, and puts the flag after `run`",
       unchanged.every((args) => withAllowPanics(listing, args) === args) &&
         JSON.stringify(withAllowPanics(listing, copied)) === JSON.stringify([ALLOW_PANICS, ...copied]) &&
         JSON.stringify(withAllowPanics(listing, optOut)) === JSON.stringify([ALLOW_PANICS, ...optOut]) &&
+        JSON.stringify(withAllowPanics(listing, listingArgs)) === JSON.stringify([ALLOW_PANICS, ...listingArgs]) &&
         JSON.stringify(added) === JSON.stringify(["run", ALLOW_PANICS, "tests/cases/panics_index.ts", "--deny-panics"]),
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
     )

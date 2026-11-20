@@ -220,7 +220,7 @@ frame-rate measurements every second for five seconds. Run it in the terminal
 that draws wrong and put its output in the bug report:
 
 ```
-nish run examples/term-probe.ts
+nish run --allow-panics examples/term-probe.ts
 ```
 
 ## `nish:term`, underneath

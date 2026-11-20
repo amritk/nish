@@ -182,8 +182,8 @@ answer.
 
 `examples/http-app` is a JSON notes API on this page's pieces: command-line
 flags, a log line a request, problems for bad input, and the graceful stop
-above with a deadline. Build it with `nish examples/http-app/main.ts --link
-http-app` and run `./http-app 8080`. Copy it and change it: logging and
+above with a deadline. Build it with `nish examples/http-app/main.ts --allow-panics
+--link http-app` (its header says which panic sites it keeps) and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
 

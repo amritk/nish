@@ -3509,9 +3509,10 @@ its fix, and there are five:
   supply a value instead of stopping.
 - **Swap `readFileSync` for `readFileSyncOrNull`**, which answers `null` where
   the other exits.
-- **Read the list**: `nish file.ts --emit-panics panics.json` writes every site
-  per function, proven or not, and the `"panics"` of `--emit-capabilities` the
-  same.
+- **Read the list**: `nish file.ts --allow-panics --emit-panics panics.json`
+  writes every site per function, proven or not, and the `"panics"` of
+  `--emit-capabilities` the same. Pass `--allow-panics` to get it: a build the
+  default refuses writes neither file.
 
 <!-- nish:ok --deny-panics -->
 ```ts
