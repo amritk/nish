@@ -287,10 +287,10 @@ does with each.
 | **Thread sharing** | threads share the range | the same. A worker carves its chunks from the shared range under the size-class lock (a chunk grab, not a bump, so the lock is cold). `nish_cross_adopt` links range chunks unchanged. A compact instance riding in a parallel task payload (`src/emit-parallel.ts:421-512`) stays a full pointer, because a payload slot is not a class field. |
 | **Escape analysis** | a stack instance has no offset | a compact class is never promoted to the stack. `holdsNoPointerSlot` (`src/escape.ts:1893`) and the promotion site (`src/emit-classes.ts:105`) refuse it. That costs the promotion for that one class, which for a linked node rarely applied anyway (a node is stored, so it escapes). A test pins it. |
 | **Alignment and attributes** | — | a compact instance is `align 4 dereferenceable(size)`, not `align 8`. `src/attributes.ts:1951` and `:7053-7073` read the class's alignment instead of assuming 8, and `src/attributes.ts:2465` and `src/emit.ts:~2334` stop assuming 8-byte rounding. A decoded link is `nonnull` only once it is tested. With the zero-based decode, `o != 0` and `p != null` are the same test, and LLVM folds it (§5's assembly). `nocapture` counts an encoding store as a capture, as it counts a pointer store today. |
-| **TBAA** | a compressed field may-aliases every `i32` | a compressed field gets a scalar node of its own, `ref32`, under the root, beside `i32`. A store of a link then does not alias a store of an `i32` field. The struct-path nodes carry the new offsets (`src/tbaa.ts:110-142`). Prototyped in §5's IR. |
+| **TBAA** | a compressed field may-aliases every `i32` | a compressed field gets a scalar node of its own, `ref32`, under the root, beside `i32`. A store of a link then does not alias a store of an `i32` field. The struct-path nodes carry the new offsets. Landed in stage 2b (`ref32Node` and `fieldScalar` in `src/tbaa.ts`); two tags that both name a class are told apart by the class path whatever their scalars, so the node decides only once LLVM merges link stores through two classes into one store tagged with the bare scalar. `tests/cases/compact_tbaa.ts` pins that case: after `simplifycfg` sinks the two stores, `gvn` forwards an `i32` field and a pointer field across the merged store, and renaming the node to `i32` or `ptr` keeps the matching reload (`tests/run.js`, "compact tbaa"). `--plain` reloads both. |
 | **C ABI and headers** | every struct holding a reference changes for C | a class holding a compressed field is **opaque** in `--emit-header` output, the same way a `Map` or a `Secret` already is (`holdsLink` in `src/interop-header.ts`): the compact class itself, any class with a field narrowed to `i32`, and an instantiation such as `Box<Cell>`. C holds it as a handle. A compact instance passed to or returned from C is a full `struct X *`, so FFI signatures do not change. Done in stage 2c, with a C host round trip in `tests/run.js` ("compact header"). N-API stays refused (NL4020, NL4021), also beside `--emit-header`: an addon runs in Node's process. Out of scope: a header build linked into a shared library another process loads. A `declare class` (a C layout) may not hold a compact field: that is a checker refusal. |
 | **wasm32** | no-op | no-op. A wasm32 pointer is already 4 bytes, so a compact class compiles to exactly today's IR there: no range, no decode. Found on the way: `computeLayout` gave a class's pointer field 8 bytes on wasm32 where LLVM's `p:32:32` lays out 4 (only a `declare class` was special-cased), so `info.size` over-allocated on wasm32. Stage 6 fixed that separately: `computeLayout` now takes a pointer field's width from `pointerBytes` in `src/structs.ts`, 4 bytes on wasm32, so a class's size, alignment and field offsets there are LLVM's own. `resultLayout` (`src/result.ts`) took the same width later (#1749), so a `Result`'s pointer payload sits at LLVM's offset on wasm32 too. |
-| **Debug info** | a member gdb cannot follow | the same, but only for compact classes: the member is a `DW_TAG_base_type` `u32` named for what it is (`ref32 TNode`), and a debugger pretty-printer (gdb Python, an lldb formatter) in `tools/` decodes it. Decoded locals are ordinary pointers, so stepping through code that holds them shows them as today. `src/debug.ts:440-468`. |
+| **Debug info** | a member gdb cannot follow | the same, but only for compact classes: the member is a `DW_TAG_typedef` named for what it is (`ref32 TNode`) over `unsigned int` (a typedef, not a renamed base type, because lldb shows a base type by its encoding and drops the name), and a debugger pretty-printer in `tools/` decodes it: `tools/gdb/ref32.py` (a printer and `$ref32(link)`) and `tools/lldb/ref32.py` (a summary and a synthetic child provider). Each picks the zero-based or based decode from the inferior's OS ABI or triple, as `zeroBasedLinks` does, with an override. Decoded locals are ordinary pointers, so stepping through code that holds them shows them as today. Landed in stage 2b (`linkType` in `src/debug.ts`); `tests/run.js` walks a list to `null` in both debuggers on Linux. |
 | **Pointer hashing** | must hash the decoded pointer | a `Map` key or a `Set` element is never a compressed field (§3.2), so every `ptrtoint` in `src/emit-map.ts` and `src/emit-parallel.ts` already sees a full pointer. Nothing to change. A test pins a compact class as a `Map` key. |
 | **Size limit** | 32 GiB, whole program | 15 GiB of arena for chunks of 2 MiB or less, only in programs the compiler gives a compact class (§7, decision 2). |
 | **AddressSanitizer** | — | the ASAN runtime (`-DNISH_ASAN`) mallocs every block, which a range cannot hold. Compression is a layout change with the same behaviour, so the ASAN build compiles compact classes uncompressed. The differential ASAN run tests the program's behaviour, not its layout. |
@@ -390,6 +390,13 @@ from the same rounds.)
 
 Noise band: wall 5.3%. Its trees are small and short-lived, so the time is
 allocation and release, and the decode is lost in the band.
+
+Stage 2b's `ref32` TBAA node, measured on `tree.ts` (compact) at n = 24:
+the IR linked with the node and with it renamed to `i32` (so a link
+may-aliases an `i32` again) builds byte-identical binaries, peak RSS
+394652 KB each: the node changes nothing LLVM does to `tree.ts`, so its time
+and memory cannot move. `tests/cases/compact_tbaa.ts` is a case the node does
+fold.
 
 ### 5.3 What the numbers say
 
@@ -525,7 +532,7 @@ From a survey of `src/` at `8036aff1`.
   `emitStructCopy`, `emitNew` (they read `info.size` and `info.align`, which
   `computeLayout` sets)
 - `src/emit-root.ts:203-217`, `writeTrace` (wasm32 only, nothing compressed)
-- `src/tbaa.ts:110-142`, `src/debug.ts:440-468`
+- `src/tbaa.ts` and `src/debug.ts` (done in stage 2b: `fieldScalar` and `linkType`)
 - `src/attributes.ts:1951`, `:2465`, `:7053-7073`, and `src/emit.ts:~2334`
 - `src/interop-header.ts:200-216`, `src/interop-abi.ts:627` at `8036aff1`;
   since stage 2c the header's handling is `holdsLink` and the opaque branch

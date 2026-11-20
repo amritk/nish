@@ -77,7 +77,7 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   sharedWrite: via Emitter.llvm
   escaping: receiver
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue decodeLink fieldTbaa nish_str_concat structFieldPointer
-  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 decodeLink#0 fieldTbaa#0 Emitter.alignSuffix#0
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 decodeLink#0 Emitter.alignSuffix#0
   pointer info: size=176 writesThrough=true captured=true passedTo=structFieldPointer#1 fieldTbaa#1
   pointer field: size=88 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
@@ -85,10 +85,10 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   callee +0:14 Emitter.llvm -> @Emitter.llvm
   local +1:9 ptr: string (const)
   callee +1:15 structFieldPointer -> @structFieldPointer
-  callee +3:12 decodeLink -> @decodeLink
-  callee +3:36 IRFunction.emitValue -> @IRFunction.emitValue
-  local +5:9 tbaa: string (const)
-  callee +5:16 fieldTbaa -> @fieldTbaa
+  local +2:9 tbaa: string (const)
+  callee +2:16 fieldTbaa -> @fieldTbaa
+  callee +4:12 decodeLink -> @decodeLink
+  callee +4:36 IRFunction.emitValue -> @IRFunction.emitValue
   callee +6:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +6:59 Emitter.alignSuffix -> @Emitter.alignSuffix
 function storeField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo, value: string): void -> @storeField [exported]
@@ -96,20 +96,22 @@ function storeField(emitter: Emitter, info: StructInfo, receiver: string, field:
   sharedWrite: via Emitter.llvm
   escaping: receiver value
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit encodeLink fieldTbaa nish_str_concat structFieldPointer
-  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 encodeLink#0 fieldTbaa#0 Emitter.alignSuffix#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=88 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 encodeLink#0 fieldTbaa#0 fieldTbaa#0 Emitter.alignSuffix#0
+  pointer info: size=176 writesThrough=true captured=true passedTo=structFieldPointer#1 fieldTbaa#1 fieldTbaa#1
+  pointer field: size=88 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +0:14 Emitter.llvm -> @Emitter.llvm
   local +1:9 ptr: string (const)
   callee +1:15 structFieldPointer -> @structFieldPointer
-  callee +3:5 IRFunction.emit -> @IRFunction.emit
-  callee +3:34 encodeLink -> @encodeLink
-  local +6:9 tbaa: string (const)
-  callee +6:16 fieldTbaa -> @fieldTbaa
-  callee +7:3 IRFunction.emit -> @IRFunction.emit
-  callee +7:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +3:11 offset: string (const)
+  callee +3:20 encodeLink -> @encodeLink
+  callee +4:5 IRFunction.emit -> @IRFunction.emit
+  callee +4:65 fieldTbaa -> @fieldTbaa
+  local +7:9 tbaa: string (const)
+  callee +7:16 fieldTbaa -> @fieldTbaa
+  callee +8:3 IRFunction.emit -> @IRFunction.emit
+  callee +8:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function decodeLink(emitter: Emitter, ty: string, slot: string): string -> @decodeLink
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue

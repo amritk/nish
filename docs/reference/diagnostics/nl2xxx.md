@@ -3661,7 +3661,54 @@ Unknown identifier `
 The message of an error contains:
 
 ```text
-Unknown method `
+Unknown method `…
+```
+
+[`nl2249_num_tostring.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring.ts):
+
+```ts
+// NL2249: a `u8`'s `toString()` is refused, and the message names `${b}`.
+export const main = (): i32 => {
+  const b: u8 = 1;
+  console.log(b.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on u8; use a template literal: `${b}`
+```
+
+[`nl2249_num_tostring_i64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_i64.ts):
+
+```ts
+// NL2249: an `i64`'s `toString()` with no argument names `${n}`, as the other
+// numeric types do (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64; use a template literal: `${n}`
+```
+
+[`nl2249_num_tostring_radix.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_radix.ts):
+
+```ts
+// NL2249: with a radix a number's `toString` names no template literal, since
+// a template literal has no radix (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString(16));
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64
 ```
 
 ## NL2250
