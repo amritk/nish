@@ -1,7 +1,7 @@
 # WP57: Module-scoped names
 
 **Status: S1 built (#1812); S2 decided, keep refusing (§6); S3 split into
-five stages, none built (§7, §8).** Two modules may each keep a private
+five stages, S3a built (#1840) (§7, §8).** Two modules may each keep a private
 function or generic template of one name: a clashing one's symbol is
 qualified by its module path (§4), as
 [LANGUAGE.md](LANGUAGE.md#export-and-import) states. Exported names stay
@@ -434,6 +434,29 @@ across modules, not its name. Files: `types.ts`, `program.ts`, `structs.ts`,
 `generics.ts`, and the `structOf(` callers. Depends on nothing. Release note:
 `refactor(checker): give each struct a symbol separate from its source name`.
 
+*As built:* `StructInfo.symbol` is set equal to `name` in its constructor (an
+instantiation's is its mangled `Box$i32`, which `name` already held), and
+`TypeTable.symbolOf` reads the symbol a struct id is interned under. A
+declaration interns through `TypeTable.declaredStructOf(symbol, display)`, so
+every declared struct has a display, its source name, and an instantiation
+keeps `Box<i32>`. Both registries gained a type-keyed index,
+`CheckedProgram.structByType` and `StructRegistry.byType`. The cross-module
+walks, `registerForeignLayouts` and its three callers (`adoptArgumentLayouts`,
+`adoptInstanceLayouts`, `noteJsonRoute`) and the checker's
+`closeReachableStructs`, collect struct types (`noteStructTypes`,
+`signatureStructTypes`, `referencedStructTypes` in `src/structs.ts`, which
+replace the `*StructNames` walkers), find each struct by its type in the
+other module's registry, and register a foreign struct under its symbol.
+Lookups inside one module (`members.ts`'s `structOf`, the 51
+`.struct(nameOf(...))` sites) still go by name, which equals the symbol until
+S3d; S3d moves them to `structByType` where a qualified local struct would
+otherwise be missed.
+The checked goldens of 50 modules the stage does not edit move too, but
+only in `size=` and `returnDeref=` figures: `StructInfo` (176 to 184 bytes),
+`CheckedProgram` (920 to 928) and `StructRegistry` (16 to 24) each gained a
+field, and every module holding a pointer to one prints its size. Normalised
+for those figures, their diff is empty.
+
 **S3b: spell structs by their symbol.** Every `%struct.` speller and
 `llvmType` reads the symbol, and so does the header's `cStructName`, since
 the header must name the IR's struct; every message and `tsKeyword` read the
@@ -490,7 +513,7 @@ note: `feat(checker): a class or interface may be renamed on import`.
 | ---: | --- | --- |
 | S1 | Private functions and generic templates qualified by their module when they would clash (§4) | Built (#1812) |
 | S2 | Exported names that clash inside one package (§6) | Decided: keep refusing; nothing to build |
-| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Proposed |
+| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Built (#1840) |
 | S3b | Structs spelled by their symbol in the IR (§7b) | Proposed |
 | S3c | Member symbols spelled from their owner's symbol (§7b) | Proposed |
 | S3d | A clashing private class or interface qualified by its module (§7b) | Proposed |

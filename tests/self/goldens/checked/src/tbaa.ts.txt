@@ -74,7 +74,7 @@ function structNode(emitter: Emitter, info: StructInfo): string -> @structNode
   escaping: info
   calls: StringMap.get StringMap.set buildStructNode nish_array_grow nish_panic_index
   pointer emitter: size=424 writesThrough=false captured=false passedTo=buildStructNode#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=buildStructNode#1
+  pointer info: size=184 writesThrough=true captured=true passedTo=buildStructNode#1
   stackSites=0 stackLocals=0
   local -8:9 cache: TbaaCache (const)
   local -7:9 at: i32 (const)
@@ -87,7 +87,7 @@ function buildStructNode(emitter: Emitter, info: StructInfo): string -> @buildSt
   sharedWrite: via fieldScalar
   calls: Emitter.metadata FieldInfo.inline fieldScalar nish_str_concat nish_str_from_i32
   pointer emitter: size=424 writesThrough=false captured=false passedTo=fieldScalar#0 Emitter.metadata#0
-  pointer info: size=176 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 members: string (let)
   local +1:7 i: i32 (let)
@@ -100,7 +100,7 @@ function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string
   sharedWrite: via structNode
   calls: Emitter.metadata fieldScalar nish_str_concat nish_str_from_i32 structNode
   pointer emitter: size=424 writesThrough=false captured=false passedTo=structNode#0 fieldScalar#0 Emitter.metadata#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=structNode#1
+  pointer info: size=184 writesThrough=true captured=true passedTo=structNode#1
   pointer field: size=104 writesThrough=false captured=false passedTo=fieldScalar#1
   stackSites=0 stackLocals=0
   local +0:9 base: string (const)

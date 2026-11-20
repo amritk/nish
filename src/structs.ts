@@ -547,7 +547,7 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], `\`${name}\` is already declared in this module`)
     return null
   }
-  const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source)
+  const info = new StructInfo(name, kind, ctx.table.declaredStructOf(name, name), decl, ctx.source)
   info.exported = isExported(decl)
   // WP27 S4.1: a `declare class` is a C struct layout, never a handle: its
   // `CPtr` fields are C's to own (docs/wp27-ffi.md §9).
@@ -1776,65 +1776,78 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
 const describeField = (ctx: CheckContext, field: FieldInfo): string =>
   `\`${field.name}: ${ctx.table.typeName(field.type)}\``
 
+/** Append the struct type `type` to `out` unless it is there already, keeping first-seen order. */
+const addStructType = (out: i32[], type: i32): void => {
+  for (const seen of out) {
+    if (seen === type) {
+      return
+    }
+  }
+  out.push(type)
+}
+
 /**
- * The struct names a type mentions, following `T[]` and `T | null` inwards.
- * A name reached this way is a *layout* this module needs even though it
- * never wrote the name.
+ * The struct types a type mentions, following `T[]` and `T | null` inwards,
+ * in the order first met. A struct reached this way is a *layout* this module
+ * needs even though it never wrote the name. It answers types, not names
+ * (WP57 S3a): a walk across modules finds each struct by its identity, which
+ * stays one struct when two modules use one source name.
  */
-export const noteStructNames = (table: TypeTable, type: i32, out: StringSet): void => {
+export const noteStructTypes = (table: TypeTable, type: i32, out: i32[]): void => {
   if (table.isStruct(type)) {
-    out.add(table.nameOf(type))
+    addStructType(out, type)
     return
   }
   // A `Result<Config, IoError>` hands the importer both payload layouts
   // without either name appearing in its source (WP16), so both arms count.
   if (table.isResult(type)) {
-    noteStructNames(table, table.okOf(type), out)
-    noteStructNames(table, table.errOf(type), out)
+    noteStructTypes(table, table.okOf(type), out)
+    noteStructTypes(table, table.errOf(type), out)
     return
   }
   // A union is laid out as each of its variants.
   if (table.isUnion(type)) {
     for (const variant of table.variantsOf(type)) {
-      noteStructNames(table, variant, out)
+      noteStructTypes(table, variant, out)
     }
     return
   }
   const inner = table.refOf(type)
   if (inner >= 0) {
-    noteStructNames(table, inner, out)
+    noteStructTypes(table, inner, out)
   }
 }
 
 /**
- * The struct names a signature mentions. `this` is skipped: it is the owner or
+ * The struct types a signature mentions. `this` is skipped: it is the owner or
  * its base, which is reached through the `StructInfo` itself rather than by
- * name, and noting it would pull an inherited constructor's `%struct.Base` in
- * behind a derived class.
+ * its type, and noting it would pull an inherited constructor's
+ * `%struct.Base` in behind a derived class.
  */
-export const signatureStructNames = (table: TypeTable, sig: FunctionSig, out: StringSet): void => {
+export const signatureStructTypes = (table: TypeTable, sig: FunctionSig, out: i32[]): void => {
   let i = sig.owner === null ? 0 : 1
   while (i < sig.paramTypes.length) {
-    noteStructNames(table, sig.paramTypes[i], out)
+    noteStructTypes(table, sig.paramTypes[i], out)
     i = i + 1
   }
-  noteStructNames(table, sig.returnType, out)
+  noteStructTypes(table, sig.returnType, out)
 }
 
 /**
- * The struct names `info` mentions through its fields and its members, its
- * inherited ones included. Its own name is not one of them.
+ * The struct types `info` mentions through its fields and its members, its
+ * inherited ones included. Its own type is among them only through a
+ * self-referential field.
  */
-export const referencedStructNames = (table: TypeTable, info: StructInfo, out: StringSet): void => {
+export const referencedStructTypes = (table: TypeTable, info: StructInfo, out: i32[]): void => {
   for (const field of info.fields) {
-    noteStructNames(table, field.type, out)
+    noteStructTypes(table, field.type, out)
   }
   for (const method of info.methodSigs) {
-    signatureStructNames(table, method, out)
+    signatureStructTypes(table, method, out)
   }
   const ctor = info.ctor
   if (ctor !== null) {
-    signatureStructNames(table, ctor, out)
+    signatureStructTypes(table, ctor, out)
   }
 }
 
