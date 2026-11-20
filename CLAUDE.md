@@ -119,7 +119,11 @@ count ([`.claude/testing.md`](.claude/testing.md#checks-that-spawn-a-process)).
 `node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
 `build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
 merges, regenerates the goldens and stages them without committing. Sync after
-any `src/` or `std/` change lands on `main`, even with no textual conflict. A
+any `src/` or `std/` change lands on `main`, even with no textual conflict.
+A sync can stale a fact the branch pins without a conflict: after it, run
+`node scripts/gen-diagnostic-codes.mjs --check` (a code the branch adds may now
+be taken) and recount any `**Done:** N of M` the branch ticks against its `[x]`
+boxes, on the work package's page and in `docs/roadmap/index.md`. A
 new positive `tests/cases/*` is registered with
 `node tests/differential/goldens.js --update` in the same commit. Details:
 `.claude/selfhost.md` → "The goldens". `docs/reference/` (and its routes in
