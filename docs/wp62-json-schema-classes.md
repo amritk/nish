@@ -1,7 +1,7 @@
 # WP62: Nish classes from a JSON Schema, keeping everything the schema says
 
 **Status: proposed, design only.** Nothing here is built. The stages are in
-§12 and on [the roadmap page](roadmap/wp62-json-schema-classes.md). S5 waits
+§12 and on [its open-work issue](https://github.com/amritk/nish/issues/1860). S5 waits
 on the owner (§10). The plan that tracks the stages is
 [`.claude/plans/wp62-json-schema-classes.plan.md`](../.claude/plans/wp62-json-schema-classes.plan.md).
 
@@ -1005,7 +1005,7 @@ could now reach the decoded value.
 
 ## 12. Stages
 
-Each stage is a PR, ticked on [the roadmap page](roadmap/wp62-json-schema-classes.md)
+Each stage is a PR that closes its sub-issue of [the open-work issue](https://github.com/amritk/nish/issues/1860)
 when it lands. S1 adds two typed JSON language options (the
 constructor-assigned optional default and the per-class `unknown`), each with
 its `docs/LANGUAGE.md` rule, a golden `.ll` and an `llvm-as` pass. S2 to S5
