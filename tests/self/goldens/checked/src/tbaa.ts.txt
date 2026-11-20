@@ -6,17 +6,18 @@ import StringMap from "./map" -> struct StringMap
 import FieldInfo from "./program" -> struct FieldInfo
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
 import StructInfo from "./program" -> struct StructInfo
-struct TbaaCache (class) size=40 align=8 exported
+struct TbaaCache (class) size=48 align=8 exported
   field char: string index=0 offset=0
   field scalars: string[] index=1 offset=8
-  field structIndex: StringMap index=2 offset=16
-  field structs: StructInfo[] index=3 offset=24
-  field structNodes: string[] index=4 offset=32
+  field ref32: string index=2 offset=16
+  field structIndex: StringMap index=3 offset=24
+  field structs: StructInfo[] index=4 offset=32
+  field structNodes: string[] index=5 offset=40
   constructor -> @TbaaCache.constructor
 function TbaaCache.constructor(this: TbaaCache): void -> @TbaaCache.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:24 new StringMap -> @StringMap.constructor
 function charNode(emitter: Emitter): string -> @charNode
@@ -49,6 +50,24 @@ function scalarNode(emitter: Emitter, type: i32): string -> @scalarNode
   callee +3:21 Emitter.metadata -> @Emitter.metadata
   callee +3:45 typeName -> @typeName
   callee +3:74 charNode -> @charNode
+function ref32Node(emitter: Emitter): string -> @ref32Node
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: Emitter.metadata charNode nish_str_concat
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.metadata#0 charNode#0
+  stackSites=0 stackLocals=0
+  local -2:9 cache: TbaaCache (const)
+  callee +0:19 Emitter.metadata -> @Emitter.metadata
+  callee +0:51 charNode -> @charNode
+function fieldScalar(emitter: Emitter, field: FieldInfo): string -> @fieldScalar
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via ref32Node
+  calls: ref32Node scalarNode
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=ref32Node#0 scalarNode#0
+  pointer field: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:16 ref32Node -> @ref32Node
+  callee +0:37 scalarNode -> @scalarNode
 function structNode(emitter: Emitter, info: StructInfo): string -> @structNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -65,29 +84,29 @@ function structNode(emitter: Emitter, info: StructInfo): string -> @structNode
   callee -1:5 StringMap.set -> @StringMap.set
 function buildStructNode(emitter: Emitter, info: StructInfo): string -> @buildStructNode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via scalarNode
-  calls: Emitter.metadata FieldInfo.inline nish_str_concat nish_str_from_i32 scalarNode
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=scalarNode#0 Emitter.metadata#0
+  sharedWrite: via fieldScalar
+  calls: Emitter.metadata FieldInfo.inline fieldScalar nish_str_concat nish_str_from_i32
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=fieldScalar#0 Emitter.metadata#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 members: string (let)
   local +1:7 i: i32 (let)
   local +3:11 field: FieldInfo (const)
   callee +7:10 FieldInfo.inline -> @FieldInfo.inline
-  callee +12:32 scalarNode -> @scalarNode
-  callee +16:10 Emitter.metadata -> @Emitter.metadata
+  callee +10:32 fieldScalar -> @fieldScalar
+  callee +14:10 Emitter.metadata -> @Emitter.metadata
 function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string -> @fieldTbaa [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structNode
-  calls: Emitter.metadata nish_str_concat nish_str_from_i32 scalarNode structNode
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=structNode#0 scalarNode#0 Emitter.metadata#0
+  calls: Emitter.metadata fieldScalar nish_str_concat nish_str_from_i32 structNode
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=structNode#0 fieldScalar#0 Emitter.metadata#0
   pointer info: size=176 writesThrough=true captured=true passedTo=structNode#1
-  pointer field: size=88 writesThrough=false captured=false
+  pointer field: size=88 writesThrough=false captured=false passedTo=fieldScalar#1
   stackSites=0 stackLocals=0
   local +0:9 base: string (const)
   callee +0:16 structNode -> @structNode
   local +1:9 scalar: string (const)
-  callee +1:18 scalarNode -> @scalarNode
+  callee +1:18 fieldScalar -> @fieldScalar
   callee +2:21 Emitter.metadata -> @Emitter.metadata
 function elementTbaa(emitter: Emitter, elem: i32): string -> @elementTbaa [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
