@@ -56,6 +56,12 @@ import {
 const dir = path.join(root, "build", "bench", "bcrypt")
 
 const compiler = argValue("--compiler", path.join(root, "build", "nish"))
+// A fresh checkout has no build/nish: say so before anything is fetched or
+// compiled. A bare name such as `nish` is left for the shell's PATH to find.
+if (compiler.includes(path.sep) && !fs.existsSync(compiler)) {
+  console.error(`${compiler} does not exist: run \`npm run build\` first, or pass --compiler <nish>`)
+  process.exit(1)
+}
 const hashes = intArg("--hashes", 8, 1, 1e6)
 const rounds = intArg("--rounds", 5, 1, 1e3)
 const cost = intArg("--cost", 10, 4, 31)
