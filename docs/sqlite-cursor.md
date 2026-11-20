@@ -165,6 +165,27 @@ A column of a table is the rowid's alias when the table's primary key is that
 single column and no index implements it (`index_list` has no `origin = 'pk'`
 row): that is how SQLite itself decides, `INTEGER PRIMARY KEY DESC` included.
 
+### Kept shapes
+
+The check costs seven queries, so a connection keeps the last eight shapes it
+passed: the name and declared columns, the root page, the alias column and,
+for an index, its `KeyInfo` (one reference, `sqlite3KeyInfoRef`). Each is
+stamped with the schema cookie it was checked under, read from the `main`
+B-tree with `sqlite3BtreeGetMeta(BTREE_SCHEMA_VERSION)`. An open answers from
+a kept shape only when the `main` transaction is `SQLITE_TXN_READ` and the
+cookie is the shape's; a miss runs the check and keeps the result, replacing
+the entries in turn. A write transaction's open runs the check and keeps
+nothing: its cookie may belong to a schema it later rolls back, and a
+committed change of as many DDL statements reaches the same cookie. This is
+SQLite's own test of whether a prepared statement still matches the schema.
+`nishsqlite_close` releases the kept references under the connection's mutex.
+
+`beginRead` and `endRead` prepare their `BEGIN`, schema read and `COMMIT`
+once per connection (`SQLITE_PREPARE_PERSISTENT`) and reset them after each
+run. On `bench/sqlite`'s database, one read transaction per call, that took a
+point lookup from 72.0 to 6.2 µs and a feed read from 84.5 to 16.1 µs; the same
+work through SQL in autocommit takes 5.9 and 19.1 µs.
+
 ## The traps
 
 | Trap | Rule |
@@ -204,12 +225,13 @@ translation unit. The calls, all of them:
 
 - B-tree: `sqlite3DbNameToBtree`, `sqlite3BtreeCursorSize`,
   `sqlite3BtreeCursorZero`, `sqlite3BtreeCursor`, `sqlite3BtreeCloseCursor`,
-  `sqlite3BtreeCursorHasMoved`, `sqlite3BtreeTxnState`,
+  `sqlite3BtreeCursorHasMoved`, `sqlite3BtreeTxnState`, `sqlite3BtreeGetMeta`,
   `sqlite3BtreeFirst`, `sqlite3BtreeLast`, `sqlite3BtreeNext`,
   `sqlite3BtreePrevious`, `sqlite3BtreeEof`, `sqlite3BtreeTableMoveto`,
   `sqlite3BtreeIndexMoveto`, `sqlite3BtreeIntegerKey`,
   `sqlite3BtreePayloadSize`, `sqlite3BtreePayloadFetch`, `sqlite3BtreePayload`.
-- Records and keys: `sqlite3KeyInfoAlloc`, `sqlite3KeyInfoUnref`,
+- Records and keys: `sqlite3KeyInfoAlloc`, `sqlite3KeyInfoRef`,
+  `sqlite3KeyInfoUnref`,
   `sqlite3VdbeAllocUnpackedRecord`, `sqlite3VdbeRecordUnpack`,
   `sqlite3VdbeMemInit`, `sqlite3VdbeMemSetInt64`, `sqlite3VdbeMemSetStr`,
   `sqlite3VdbeMemSetNull`, `sqlite3VdbeMemRelease`, `sqlite3DbFree`.
@@ -217,7 +239,8 @@ translation unit. The calls, all of them:
   `sqlite3_txn_state`, `sqlite3_db_mutex`, `sqlite3_mutex_enter`,
   `sqlite3_mutex_leave`, `sqlite3_malloc64`, `sqlite3_realloc64`,
   `sqlite3_free`, the `sqlite3_value_*` accessors, and the statement and
-  `sqlite3_str` API for the schema check.
+  `sqlite3_str` API for the schema check (with `sqlite3_prepare_v3` for
+  `beginRead`'s and `endRead`'s kept statements).
 
 What it writes, all of it: its own allocations; in the `KeyInfo` it allocated,
 `aSortFlags` (the per-column `DESC` flags `sqlite3KeyInfoAlloc` leaves zero,

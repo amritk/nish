@@ -349,6 +349,14 @@ export class TypeTable {
    * empty. Read only by `typeName`; symbols keep the name.
    */
   displays: string[]
+  /**
+   * WP66 S3: whether a struct id names an opaque `declare class`, one with no
+   * members, which C hands out and takes back. It is a flag beside the kind,
+   * as `readonlys` is, so the checker keeps every struct rule it already has
+   * for a layout class, and only `llvmType` asks: the value is a C pointer, so
+   * it lowers as `CPtr` does, to `i8*`.
+   */
+  opaques: boolean[]
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap
   /**
@@ -409,6 +417,7 @@ export class TypeTable {
     this.states = []
     this.readonlys = []
     this.displays = []
+    this.opaques = []
     this.index = new StringMap()
     this.memberEnums = []
     this.stringEnums = []
@@ -427,6 +436,7 @@ export class TypeTable {
       this.states.push(R_UNKNOWN)
       this.readonlys.push(false)
       this.displays.push("")
+      this.opaques.push(false)
       scalar = scalar + 1
     }
   }
@@ -488,6 +498,7 @@ export class TypeTable {
     this.states.push(state)
     this.readonlys.push(ro)
     this.displays.push("")
+    this.opaques.push(false)
     this.index.set(key, id)
     return id
   }
@@ -508,6 +519,16 @@ export class TypeTable {
 
   structOf(name: string): i32 {
     return this.intern(K_STRUCT, -1, name)
+  }
+
+  /** Marks the struct id `type` as an opaque `declare class` (WP66 S3). */
+  markOpaque(type: i32): void {
+    this.opaques[type] = true
+  }
+
+  /** Whether `type` is an opaque `declare class` (WP66 S3); -1 is not. */
+  isOpaque(type: i32): boolean {
+    return type >= 0 && this.opaques[type]
   }
 
   /** Record `display` as the spelling `typeName` gives the struct id `type`. */
@@ -1374,7 +1395,7 @@ export class TypeTable {
       case K_ARRAY:
         return `${ARRAY_STRUCT}*`
       case K_STRUCT:
-        return `%struct.${this.names[type]}*`
+        return this.opaques[type] ? "i8*" : `%struct.${this.names[type]}*`
       case K_ENUM:
         return "i32"
       case K_ENUM_MEMBER:
