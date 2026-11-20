@@ -21,13 +21,21 @@ The marker a class implements to store its links as 32-bit offsets.
 
 <scalar-card title="Wide" icon="phosphor/regular/cube" href="#wide">
 
-Reserved for WP48 stage 3, which lets a class refuse a layout the compiler picks.
+The marker a class implements to keep its links full pointers.
 
 </scalar-card>
 
 </scalar-grid>
 
 <scalar-callout type="info">
+
+A native `--link` build also compacts, with no marker, each class whose
+links take at least a quarter off a class made in a loop or recursion
+(`--explain-layout` prints each pick and why the others are left alone).
+`implements Wide` keeps one class out of that, and `--compact off` keeps
+every class, `implements Compact` included, at full pointers.
+
+</scalar-callout>
 
 A `--emit-header` build keeps a compact class, and every class holding one
 of its links, opaque: C holds it as a full `struct X *` handle and links the
@@ -38,8 +46,6 @@ N-API export whose signature holds one, a `declare class`, and a class
 holding a `Secret`. wasm32, a host `--emit-dts` page module and an ASAN build compile
 it uncompressed: a pointer there is already 4 bytes, the page runs on the
 wasm runtime, or the range cannot hold the sanitizer's blocks.
-
-</scalar-callout>
 
 <scalar-detail title="Under Node">
 
@@ -64,8 +70,11 @@ interface Compact
 
 ### Wide
 
-Reserved for WP48 stage 3, which lets a class refuse a layout the
-compiler picks. Accepted today and changes nothing.
+The marker a class implements to keep its links full pointers. The
+compiler compacts a class on its own when its rule finds the saving pays
+(`--explain-layout` names each pick); `implements Wide` refuses that
+pick, the way `--compact off` refuses every one. It has no members, so it
+adds no field, and a class cannot write it with `Compact`.
 
 ```ts
 interface Wide

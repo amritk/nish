@@ -62,6 +62,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--plain", "", "the IR without LLVM's attributes")
   menu.row("--no-strict-exports", "", "keep every function externally visible")
   menu.row("--no-stack-alloc", "", "keep every value off the stack")
+  menu.row("--compact", "on|off", "off keeps every class's links full pointers")
 
   menu.section("Output")
   menu.row("-o, --output", "<file.ll>|<dir>/", "where the IR goes; a dir gets one per module")

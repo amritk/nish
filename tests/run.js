@@ -24527,6 +24527,7 @@ if (dealtHere("cliChecks")) {
       "--emit-arena",
       "--explain-memory",
       "--explain-layout",
+      "--compact",
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
@@ -25873,17 +25874,19 @@ if (dealtHere("cliChecks")) {
         .join("")
         .split(`${root}/`)
         .join("")
-    // The three design figures (§3.1): each bench file's linked node class is
-    // picked, at the size the design states. Test 1 passes only for a build that
-    // writes the executable itself (`--link`, or `nish run`), so each is linked.
+    // The three design figures (§3.1): the 24- and 32-byte node classes are
+    // picked at the size the design states, and the 16-byte `bintrees` node is
+    // refused by test 3's floor, which it measured slower narrowed (§5.5).
+    // Test 1 passes only for a build that writes the executable itself
+    // (`--link`, or `nish run`), so each is linked.
     const benchWant = {
       "bench/goose/tree.ts": [
         "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
         "explain-layout: 1 of 1 classes compact",
       ],
       "bench/goose/bintrees.ts": [
-        "bench/goose/bintrees.ts:11:7: layout: TNode: compact, 16 → 8 bytes",
-        "explain-layout: 1 of 1 classes compact",
+        "bench/goose/bintrees.ts:11:7: layout: TNode: 3 no saving that pays: TNode saves 16 → 8, under 24 bytes, 16 → 16 bytes",
+        "explain-layout: 0 of 1 classes compact",
       ],
       "bench/wp48-refs/sibling.ts": [
         "bench/wp48-refs/sibling.ts:13:7: layout: Node: compact, 32 → 20 bytes",
@@ -25913,6 +25916,71 @@ if (dealtHere("cliChecks")) {
           fs.readFileSync(plainLl, "utf8") === fs.readFileSync(explainedLl, "utf8"),
         `${shown(plain)}\n${shown(explained)}`
       )
+      // A class the rule picks gets the same `ref32` TBAA node as one marked
+      // `implements Compact` (stage 2b): some load or store in the IR carries
+      // an access tag whose type is that node. The refused 16-byte node gets
+      // no `ref32` node at all.
+      const ir = plain.status === 0 ? fs.readFileSync(plainLl, "utf8") : ""
+      const ref32 = /^(![0-9]+) = !\{!"ref32", /m.exec(ir)
+      const tags = ref32 === null ? [] : [...ir.matchAll(new RegExp(`^(![0-9]+) = !\\{![0-9]+, ${ref32[1]}, i64 [0-9]+\\}$`, "gm"))].map((m) => m[1])
+      const linkAccess = tags.some((tag) => new RegExp(`^\\s+(?:%[^ ]+ = load|store) [^\\n]*!tbaa ${tag}$`, "m").test(ir))
+      const picked = want[0].includes(": compact, ")
+      check(
+        picked
+          ? `explain layout: the link loads and stores of ${file}'s picked class carry the ref32 TBAA node`
+          : `explain layout: ${file}'s refused class has no ref32 TBAA node`,
+        plain.status === 0 && (picked ? linkAccess : ref32 === null),
+        `ref32 node: ${ref32 === null ? "none" : ref32[1]}, link tags: ${tags.join(" ") || "none"}\n${shown(plain)}`
+      )
+    }
+    // The holder-only benches of §5.5 (tests/layout/compact-bench/): #1736's
+    // rule picked each `std/` class for a holder's saving alone, and test 3
+    // refuses it because the class itself does not shrink, so the default
+    // build's IR is `--compact off`'s byte for byte.
+    const holderWant = {
+      "json-doc":
+        "std/json-tokenizer.ts:569:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 128 → 128 bytes",
+      "zlib-each":
+        "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
+      "request-slot":
+        "std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 152 → 152 bytes",
+    }
+    for (const [base, want] of Object.entries(holderWant)) {
+      const file = `tests/layout/compact-bench/${base}.ts`
+      // The bench imports `std/`, so it writes one .ll per module into a
+      // directory, and the two builds must agree on every one of them.
+      const onDir = path.join(layoutDir, `${base}.on.ir`)
+      const offDir = path.join(layoutDir, `${base}.off.ir`)
+      fs.rmSync(onDir, { recursive: true, force: true })
+      fs.rmSync(offDir, { recursive: true, force: true })
+      const exe = path.join(layoutDir, base)
+      const on = spawnSync(NISH, [file, "-o", `${onDir}/`, "--link", exe, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      const off = spawnSync(NISH, [file, "-o", `${offDir}/`, "--link", exe, "--compact", "off"], { cwd: root, encoding: "utf8" })
+      const modulesOf = (dir) =>
+        fs.existsSync(dir)
+          ? fs
+              .readdirSync(dir, { recursive: true })
+              .map(String)
+              .filter((f) => f.endsWith(".ll"))
+              .sort()
+          : []
+      const onModules = modulesOf(onDir)
+      const offModules = modulesOf(offDir)
+      const sameIr =
+        onModules.length > 1 &&
+        onModules.join("\n") === offModules.join("\n") &&
+        onModules.every((f) => fs.readFileSync(path.join(onDir, f), "utf8") === fs.readFileSync(path.join(offDir, f), "utf8"))
+      const report = layoutOf(on.stderr).split("\n")
+      check(
+        `explain layout: ${file} refuses its holder-only pick at test 3`,
+        on.status === 0 && report.includes(want) && /^explain-layout: 0 of \d+ classes compact$/.test(report.at(-1)),
+        `--- expected line\n${want}\n--- actual\n${report.join("\n")}\n${shown(on)}`
+      )
+      check(
+        `explain layout: ${file} builds the same IR as --compact off`,
+        on.status === 0 && off.status === 0 && sameIr,
+        `on: ${onModules.join(" ")}\noff: ${offModules.join(" ")}\n${shown(on)}\n${shown(off)}`
+      )
     }
     // A linked class the program makes in a loop, so only test 1 and the
     // class's own shape can refuse it.
@@ -25928,7 +25996,7 @@ if (dealtHere("cliChecks")) {
       "  }",
       "}",
       "class L {",
-      "  next: L | null = null",
+      "  next: L | null = null; prev: L | null = null",
       "  v: i32 = 0",
       "}",
       "export const main = (): i32 => {",
@@ -25951,7 +26019,7 @@ if (dealtHere("cliChecks")) {
         args: [],
         want: [
           "noSaving.ts:1:7: layout: W: 3 no saving, 24 → 24 bytes",
-          "noSaving.ts:11:7: layout: L: compact, 16 → 8 bytes",
+          "noSaving.ts:11:7: layout: L: compact, 24 → 12 bytes",
           "explain-layout: 1 of 2 classes compact",
         ],
       },
@@ -25961,7 +26029,7 @@ if (dealtHere("cliChecks")) {
         file: "madeOnce.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const l = new L()",
@@ -25970,7 +26038,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -25981,7 +26049,7 @@ if (dealtHere("cliChecks")) {
         file: "recursive.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "class Chain {",
@@ -26001,7 +26069,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "recursive.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "recursive.ts:1:7: layout: L: compact, 24 → 12 bytes",
           "recursive.ts:5:7: layout: Chain: 2 no link, 8 → 8 bytes",
           "explain-layout: 1 of 2 classes compact",
         ],
@@ -26052,10 +26120,10 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "forbidden.ts:2:15: layout: P: 5 forbidden: a declare class, 4 → 4 bytes; Holder saves 16 → 8",
+          "forbidden.ts:2:15: layout: P: 3 no saving that pays: Holder saves 16 → 8, not P itself, 4 → 4 bytes",
           "forbidden.ts:5:7: layout: Holder: 2 no link, 16 → 16 bytes",
           "forbidden.ts:9:7: layout: S: 5 forbidden: holds a Secret in k, 24 → 16 bytes",
-          "std/secret.ts:18:14: layout: Secret<u8[]> (std): 4 not made in a loop or recursion, 8 → 8 bytes; S saves 24 → 16",
+          "std/secret.ts:18:14: layout: Secret<u8[]> (std): 3 no saving that pays: S saves 24 → 16, not Secret<u8[]> itself, 8 → 8 bytes",
           "explain-layout: 0 of 4 classes compact",
         ],
       },
@@ -26066,7 +26134,7 @@ if (dealtHere("cliChecks")) {
         file: "genericRecursion.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const build = <T>(n: i32, x: T): L => {",
@@ -26082,7 +26150,7 @@ if (dealtHere("cliChecks")) {
           "",
         ].join("\n"),
         args: [],
-        want: ["genericRecursion.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+        want: ["genericRecursion.ts:1:7: layout: L: compact, 24 → 12 bytes", "explain-layout: 1 of 1 classes compact"],
       },
       // Its pair: the same generic function with no call to itself makes one `L`
       // per call from a straight-line `main`, so test 4 still refuses it.
@@ -26091,7 +26159,7 @@ if (dealtHere("cliChecks")) {
         file: "genericOnce.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const build = <T>(n: i32, x: T): L => {",
@@ -26106,7 +26174,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -26117,7 +26185,7 @@ if (dealtHere("cliChecks")) {
         file: "genericMethod.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "class Box<T> {",
@@ -26140,7 +26208,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "genericMethod.ts:1:7: layout: L: compact, 24 → 12 bytes",
           "genericMethod.ts:5:7: layout: Box<i32>: 2 no link, 4 → 4 bytes",
           "explain-layout: 1 of 2 classes compact",
         ],
@@ -26151,7 +26219,7 @@ if (dealtHere("cliChecks")) {
         file: "genericMethodOnce.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "class Box<T> {",
@@ -26175,7 +26243,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "genericMethodOnce.ts:5:7: layout: Box<i32>: 2 no link, 4 → 4 bytes",
           "explain-layout: 0 of 2 classes compact",
         ],
@@ -26183,10 +26251,11 @@ if (dealtHere("cliChecks")) {
       // A generic class is reported once per instantiation, at its template's
       // declaration: `TNode<i32>` is bench/goose/tree.ts's TNode made generic,
       // its two `TNode<T> | null` fields links to itself, and `new TNode<i32>`
-      // in the recursive `build` its made-site, so it is picked at the same
-      // 24 → 12. The template's other instantiation, `TNode<i64>`, is made by
-      // the same written `new TNode`, so test 4 counts it too: a site names the
-      // template, not the type arguments.
+      // in the recursive `build` its made-site, so it passes tests 2 to 4 at
+      // the same 24 → 12. The template's other instantiation, `TNode<i64>`, is
+      // made by the same written `new TNode`, so test 4 counts it too: a site
+      // names the template, not the type arguments. Test 5 then refuses both,
+      // as `implements Compact` is refused on a generic class.
       {
         name: "a generic self-linking node built recursively",
         file: "genericTree.ts",
@@ -26221,9 +26290,9 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericTree.ts:1:7: layout: TNode<i32>: compact, 24 → 12 bytes",
-          "genericTree.ts:1:7: layout: TNode<i64>: compact, 24 → 16 bytes",
-          "explain-layout: 2 of 2 classes compact",
+          "genericTree.ts:1:7: layout: TNode<i32>: 5 forbidden: a generic class, 24 → 12 bytes",
+          "genericTree.ts:1:7: layout: TNode<i64>: 5 forbidden: a generic class, 24 → 16 bytes",
+          "explain-layout: 0 of 2 classes compact",
         ],
       },
       // A generic node made once, outside any loop or recursion, links to
@@ -26233,7 +26302,7 @@ if (dealtHere("cliChecks")) {
         file: "genericLinkOnce.ts",
         source: [
           "class Link<T> {",
-          "  next: Link<T> | null = null",
+          "  next: Link<T> | null = null; prev: Link<T> | null = null",
           "  v: T",
           "  constructor(v: T) {",
           "    this.v = v",
@@ -26247,14 +26316,14 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericLinkOnce.ts:1:7: layout: Link<i32>: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericLinkOnce.ts:1:7: layout: Link<i32>: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
       // A plain class holding an instantiation is that instantiation's holder
       // (test 3): `Cell<i32>` links nothing to itself, `Grid`'s two
       // `Cell<i32> | null` fields are its links, and `Grid` is what narrowing
-      // them saves on.
+      // them would save on, which test 3 does not count.
       {
         name: "test 3, a plain class holds a generic instantiation",
         file: "genericHeld.ts",
@@ -26282,9 +26351,9 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericHeld.ts:1:7: layout: Cell<i32>: compact, 4 → 4 bytes; Grid saves 16 → 8",
+          "genericHeld.ts:1:7: layout: Cell<i32>: 3 no saving that pays: Grid saves 16 → 8, not Cell<i32> itself, 4 → 4 bytes",
           "genericHeld.ts:7:7: layout: Grid: 2 no link, 16 → 16 bytes",
-          "explain-layout: 1 of 2 classes compact",
+          "explain-layout: 0 of 2 classes compact",
         ],
       },
       // A parameter named like its function shadows it: `walk(n)` calls the
@@ -26294,7 +26363,7 @@ if (dealtHere("cliChecks")) {
         file: "shadowed.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const walk = (walk: (n: i32) => i32, n: i32): i32 => {",
@@ -26308,7 +26377,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -26318,7 +26387,7 @@ if (dealtHere("cliChecks")) {
         file: "shadowedLocal.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const same = (m: i32): i32 => {",
@@ -26336,7 +26405,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -26365,7 +26434,7 @@ if (dealtHere("cliChecks")) {
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
           // On wasm32, L's pointer field is 4 bytes, so its current layout is
           // already the compact 8; natively the 8-byte pointer pads it to 16.
-          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? 8 : 16} → 8 bytes`,
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? "12 → 12" : "24 → 12"} bytes`,
           "explain-layout: 0 of 2 classes compact",
         ],
       })
@@ -26380,7 +26449,7 @@ if (dealtHere("cliChecks")) {
       args: [],
       want: [
         "declared.ts:2:7: layout: W: 1 native: a declare function, so a C library is in the link, 24 → 24 bytes",
-        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 16 → 8 bytes",
+        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 24 → 12 bytes",
         "explain-layout: 0 of 2 classes compact",
       ],
     })
@@ -26391,7 +26460,7 @@ if (dealtHere("cliChecks")) {
       file: "emitTs.ts",
       source: [
         "class L {",
-        "  next: L | null = null",
+        "  next: L | null = null; prev: L | null = null",
         "  v: i32 = 0",
         "}",
         "export const main = (): i32 => {",
@@ -26407,7 +26476,108 @@ if (dealtHere("cliChecks")) {
       outputs: ["@/ts"],
       noIr: true,
       noLink: true,
-      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 24 → 12 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // Test 3 counts only `R`'s own saving (§3.1): narrowing `H`'s link to `R`
+    // would take 8 off its 40 bytes, and the refusal names that saving.
+    layoutCases.push({
+      name: "test 3, only a holder saves",
+      file: "holderOnly.ts",
+      source: [
+        "class R {",
+        "  v: i32 = 0",
+        "}",
+        "class H {",
+        "  a: i64 = 0",
+        "  b: i64 = 0",
+        "  c: i64 = 0",
+        "  x: i32 = 0",
+        "  r: R | null = null",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    const h = new H()",
+        "    h.r = new R()",
+        "    n = n + h.x",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: [
+        "holderOnly.ts:1:7: layout: R: 3 no saving that pays: H saves 40 → 32, not R itself, 4 → 4 bytes",
+        "holderOnly.ts:4:7: layout: H: 2 no link, 40 → 40 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
+    // `R`'s own saving under a quarter: seven `i32`s and a link are 40 bytes,
+    // 32 with the link narrowed, a fifth off.
+    layoutCases.push({
+      name: "test 3, a saving under a quarter",
+      file: "underQuarter.ts",
+      source: [
+        "class R {",
+        "  a: i32 = 0",
+        "  b: i32 = 0",
+        "  c: i32 = 0",
+        "  d: i32 = 0",
+        "  e: i32 = 0",
+        "  f: i32 = 0",
+        "  g: i32 = 0",
+        "  next: R | null = null",
+        "}",
+        "export const main = (): i32 => {",
+        "  let head: R | null = null",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    const r = new R()",
+        "    r.next = head",
+        "    head = r",
+        "  }",
+        "  return head === null ? 1 : head.a",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: [
+        "underQuarter.ts:1:7: layout: R: 3 no saving that pays: R saves 40 → 32, under a quarter, 40 → 40 bytes",
+        "explain-layout: 0 of 1 classes compact",
+      ],
+    })
+    // Test 5: `implements Wide` refuses a class every other test picks.
+    layoutCases.push({
+      name: "test 5, implements Wide",
+      file: "wide.ts",
+      source: [
+        "import { Wide } from \"nish:compact\"",
+        "class L implements Wide {",
+        "  next: L | null = null; prev: L | null = null",
+        "  v: i32 = 0",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    n = n + new L().v",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: ["wide.ts:2:7: layout: L: 5 forbidden: implements Wide, 24 → 12 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // `--compact off` refuses every class before test 1 asks.
+    layoutCases.push({
+      name: "--compact off",
+      file: "compactOff.ts",
+      source: loopNode,
+      args: ["--compact", "off"],
+      want: [
+        "compactOff.ts:1:7: layout: W: off: --compact off, 24 → 24 bytes",
+        "compactOff.ts:11:7: layout: L: off: --compact off, 24 → 12 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
     })
     // Every file under `out` (one file, or a directory's tree), named and in
     // order, so two outputs compare as one string.
@@ -26484,6 +26654,61 @@ if (dealtHere("cliChecks")) {
         )
       }
     }
+    // `--compact off` and `implements Wide` change the IR the way the report
+    // says: `L` is the one class the rule picks in `loopNode`, so the default
+    // build differs from `--compact off`, marking `L` `Wide` gives the
+    // `--compact off` IR, and a program whose classes the rule refuses (`W`
+    // alone) is the same IR either way. Each build is `main.ts` in its own
+    // directory, so no file name differs between the IR it writes.
+    const wideNode = ['import { Wide } from "nish:compact"', loopNode.replace("class L {", "class L implements Wide {")].join("\n")
+    const noPick = loopNode.slice(0, loopNode.indexOf("class L {")) + ["export const main = (): i32 => {", "  const w = new W()", "  return w.next === null ? 0 : 1", "};", ""].join("\n")
+    const compactIr = (variant, source, args) => {
+      const dir = path.join(layoutDir, "flag", variant)
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const main = path.join(dir, "main.ts")
+      fs.writeFileSync(main, source)
+      const r = spawnSync(NISH, [main, "-o", path.join(dir, "main.ll"), "--link", path.join(dir, "main"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const ir = r.status === 0 ? fs.readFileSync(path.join(dir, "main.ll"), "utf8").replaceAll(dir, "@") : null
+      return { r, ir }
+    }
+    const onIr = compactIr("on", loopNode, [])
+    const offIr = compactIr("off", loopNode, ["--compact", "off"])
+    const wideIr = compactIr("wide", wideNode, [])
+    // The narrowed `L` is three `i32`s, 12 bytes; under `--compact off` its
+    // two links are full pointers again. `W` is wide in both.
+    check(
+      "explain layout: the default build narrows loopNode's L, and --compact off does not",
+      onIr.ir !== null &&
+        offIr.ir !== null &&
+        onIr.ir.includes("%struct.L = type { i32, i32, i32 }") &&
+        offIr.ir.includes("%struct.L = type { %struct.L*, %struct.L*, i32 }") &&
+        onIr.ir.includes("%struct.W = type { i64, i64, %struct.W* }") &&
+        offIr.ir.includes("%struct.W = type { i64, i64, %struct.W* }"),
+      `${shown(onIr.r)}\n${shown(offIr.r)}`
+    )
+    check(
+      "explain layout: implements Wide on L gives the --compact off IR",
+      wideIr.ir !== null && offIr.ir !== null && wideIr.ir === offIr.ir,
+      `${shown(wideIr.r)}\n${shown(offIr.r)}`
+    )
+    const markedNode = ['import { Compact } from "nish:compact"', loopNode.replace("class L {", "class L implements Compact {")].join("\n")
+    const markedOffIr = compactIr("marked-off", markedNode, ["--compact", "off"])
+    check(
+      "explain layout: --compact off gives an implements Compact class the unmarked --compact off IR",
+      markedOffIr.ir !== null && offIr.ir !== null && markedOffIr.ir === offIr.ir,
+      `${shown(markedOffIr.r)}\n${shown(offIr.r)}`
+    )
+    const noPickOn = compactIr("nopick-on", noPick, [])
+    const noPickOff = compactIr("nopick-off", noPick, ["--compact", "off"])
+    check(
+      "explain layout: --compact off changes no byte of a program the rule picks nothing in",
+      noPickOn.ir !== null && noPickOn.ir === noPickOff.ir,
+      `${shown(noPickOn.r)}\n${shown(noPickOff.r)}`
+    )
     // The usage errors are `--explain-memory`'s: no checked program under
     // `--emit-ast`, no IR under `--fix`, and diagnostics only under `--json`.
     const refusedSource = path.join(layoutDir, "refused.ts")
@@ -26534,6 +26759,34 @@ if (dealtHere("cliChecks")) {
         layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
       shown(layoutRun)
     )
+    // `nish run --compact off` builds the same program wide: the output is the
+    // same and the report refuses its one class before test 1.
+    const offRun = spawnSync(NISH, ["run", "--compact", "off", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "explain layout: `nish run --compact off` runs the program with no class compact",
+      offRun.status === 0 &&
+        offRun.stdout === "2097151\n8377899684\n" &&
+        offRun.stderr.includes(": off: --compact off, ") &&
+        offRun.stderr.includes("explain-layout: 0 of 1 classes compact"),
+      shown(offRun)
+    )
+    // `--compact` takes `on` or `off` and nothing else, under `nish run` too,
+    // and a missing word is the same usage error.
+    for (const args of [
+      [refusedSource, "--compact", "wide"],
+      [refusedSource, "--compact"],
+      ["run", "--compact", "maybe", refusedSource],
+    ]) {
+      const refused = spawnSync(NISH, args, { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: \`${args.filter((a) => a !== refusedSource).join(" ")}\` is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes("compile: --compact needs on or off"),
+        shown(refused)
+      )
+    }
     // The capability line stays the last thing on stderr (WP35): the report is
     // printed ahead of it.
     const layoutCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-layout", "bench/goose/tree.ts"], {

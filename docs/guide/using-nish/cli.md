@@ -819,14 +819,17 @@ leaves the IR unchanged.
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`
   takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--explain-layout`** prints one line for each class: whether the
-  compact-class rule would pick it, or the first of the rule's five tests
-  that refuses it, with its size in bytes now and with its links narrowed
+  compact-class rule picks it, or the first of the rule's five tests
+  that refuses it (test 3 names the saving it found too small, or a holder
+  whose saving does not count; test 4 says the class itself is not made in a
+  loop or recursion), with its size in bytes now and with its links narrowed
   to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
   A generic class gets one line for each of its instantiations, named as
   written in a type (`TNode<i32>`), at the generic class's declaration. An
   instantiation from the standard library is marked `(std)`. A generic class
   that nothing instantiates gets no line.
-  Nothing uses the verdict yet, and the flag changes no byte of the build.
+  The flag changes no byte of the build: the picks it prints are the ones
+  the build makes either way.
   Only a native executable can pick a class: a build with `--link`, or
   `nish run`. Every other build refuses every class at the first test: IR
   alone (`-o` with no `--link`), which a host may link; a wasm32 target;
@@ -840,6 +843,12 @@ leaves the IR unchanged.
   refusals, so a program with errors prints none, and nor does one with no
   `main` under `--link`, `--emit-ts`, `--sandbox` or `nish run`.
   `nish run` takes the flag; `--emit-ast`, `--json` and `--fix` do not.
+- **`--compact on|off`** picks whether a native build compacts classes
+  ([Compact classes](../language/compact-classes.md#classes-the-compiler-picks-for-you)).
+  `on`, the default, compacts each class the rule picks and each written
+  `implements Compact`; `off` keeps every class's links full pointers, so the
+  IR is that of a program with no compact class. `--explain-layout` then
+  refuses every class with `off: --compact off`. `nish run` takes the flag.
 - **`--emit-ast`** and **`--emit-checked`** print what the compiler parsed and
   what its checker recorded, one line per node.
 

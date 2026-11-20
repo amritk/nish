@@ -1243,7 +1243,7 @@ const collectLayoutMembers = (ctx: CheckContext, info: StructInfo): void => {
     const clause = decl.children[1].kind !== NodeKind.Empty ? decl.children[1] : decl.children[2].children[0]
     ctx.error(
       clause,
-      namesCompact(ctx, clause)
+      namesMarker(ctx, clause, "Compact")
         ? compactLayoutMessage(info.name)
         : `\`declare class ${info.name}\` cannot \`extends\` or \`implements\`: a C struct layout is its own fields`
     )
@@ -1289,26 +1289,33 @@ const namesCompactMarker = (ctx: CheckContext, iface: Node): boolean => {
   )
 }
 
-/** Whether the class `decl` writes `implements Compact` (WP48). `Wide` marks nothing yet. */
-export const declaresCompact = (ctx: CheckContext, decl: Node): boolean => {
+/** Whether the class `decl` writes `implements Compact` (WP48). */
+export const declaresCompact = (ctx: CheckContext, decl: Node): boolean =>
+  declaresMarker(ctx, decl, "Compact")
+
+/** Whether the class `decl` writes `implements Wide` (WP48), which the compact-class rule never picks. */
+export const declaresWide = (ctx: CheckContext, decl: Node): boolean => declaresMarker(ctx, decl, "Wide")
+
+/** Whether the class `decl` names the `nish:compact` export `marker` in its heritage. */
+const declaresMarker = (ctx: CheckContext, decl: Node, marker: string): boolean => {
   if (decl.kind !== NodeKind.Class) {
     return false
   }
   for (const iface of decl.children[2].children) {
-    if (namesCompact(ctx, iface)) {
+    if (namesMarker(ctx, iface, marker)) {
       return true
     }
   }
   return false
 }
 
-/** Whether the heritage entry `iface` names `Compact` itself, not `Wide`. */
-const namesCompact = (ctx: CheckContext, iface: Node): boolean => {
+/** Whether the heritage entry `iface` names the `nish:compact` export `marker` itself. */
+const namesMarker = (ctx: CheckContext, iface: Node, marker: string): boolean => {
   if (!namesCompactMarker(ctx, iface)) {
     return false
   }
   const imported = ctx.program.importNamed(iface.text)
-  return imported !== null && imported.importedName === "Compact"
+  return imported !== null && imported.importedName === marker
 }
 
 /**
@@ -1318,6 +1325,10 @@ const namesCompact = (ctx: CheckContext, iface: Node): boolean => {
  * `collectLayoutField`, where the C-layout checks would otherwise answer first.
  */
 export const checkCompactClass = (ctx: CheckContext, info: StructInfo): void => {
+  if (info.wide && info.compact) {
+    ctx.error(info.decl.children[0], compactWideMessage(info.name))
+    return
+  }
   if (!info.compact) {
     return
   }
@@ -1347,6 +1358,9 @@ const compactLayoutMessage = (name: string): string =>
 
 const compactLayoutFieldMessage = (owner: string, field: string, target: string): string =>
   `Field \`${field}\` of \`declare class\` \`${owner}\` holds the compact class \`${target}\`, whose links C would read as pointers; a \`declare class\` holds no object of a class that implements \`Compact\``
+
+const compactWideMessage = (name: string): string =>
+  `\`${name}\` implements both \`Compact\` and \`Wide\`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker`
 
 const compactSecretMessage = (owner: string, field: string): string =>
   `\`${owner}\` implements \`Compact\` and holds the \`Secret\` field \`${field}\`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement \`Compact\`; keep the secret in a class of its own that does not`
