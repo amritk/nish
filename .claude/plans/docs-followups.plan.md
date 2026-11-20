@@ -2,6 +2,7 @@
 name: Documentation follow-ups
 overview: Open documentation gaps from closed feature runs are the Scalar sidebar and unrouted reference links, overlong pages and paragraphs, a LANGUAGE.md Builtins trim, and four stale lines in security and design notes.
 priority: 70
+issue: 1876
 stages:
   - id: s1-scalar-nav
     title: DOCS S1 — give the guide a site-wide sidebar and render reference links

@@ -4,6 +4,7 @@ overview: All 24 WP34 stages have landed. Six issues remain, one for each loose 
 roadmap: docs/roadmap/wp34-network-stack.md
 spec: docs/wp34-network-stack.md
 priority: 80
+issue: 1852
 stages:
   - id: s25-net-after-n5
     title: WP34 S25 — nish:net after N5, split what is left of the tcpConnect issue

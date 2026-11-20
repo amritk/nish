@@ -4,6 +4,7 @@ overview: Dyn<I> (a tag and a pointer, calls lowered to a per-place switch of di
 roadmap: docs/roadmap/wp60-dyn-dispatch.md
 spec: docs/wp60-dyn-dispatch.md
 priority: 60
+issue: 1872
 stages:
   - id: s1-signatures
     title: WP60 S1 — interface method signatures and T extends I, with no IR moved

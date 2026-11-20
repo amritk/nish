@@ -4,12 +4,14 @@ overview: --emit-ts, the portability pass and the fix tiers are built; what is l
 roadmap: docs/roadmap/wp33-round-trip.md
 spec: docs/wp33-round-trip.md
 priority: 40
+issue: 1877
 stages:
   - id: r6-compat
     title: WP33 R6 — compatibility mode (WP28) lands
     goal: WP28's staging is finished, which is what R6 means, and the round-trip note's R6 row is ticked.
     verification: node tests/run.js compat && npm run lint
     status: pending
+    issue: 1887
     todos:
       - id: r6-track-wp28
         content: Track WP28's remaining stages (C-lib to C7) on docs/roadmap/wp28-compatibility-mode.md and tick R6 when the last lands — see WP33 R6 — compatibility mode (WP28) lands
@@ -23,6 +25,7 @@ stages:
     verification: node tests/run.js emit-ts && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1888
     todos:
       - id: bun-adapter-file
         content: Add a Bun adapter beside the Node and browser adapters under runtime/ — see WP33 R7 — a Bun runtime adapter (deferred)

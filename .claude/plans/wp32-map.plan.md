@@ -4,6 +4,7 @@ overview: Map and Set landed; one open follow-up accepts a key/value walk, for (
 roadmap: docs/roadmap/wp32-map.md
 spec: docs/wp32-map.md
 priority: 80
+issue: 1862
 stages:
   - id: s8-map-entries-walk
     title: WP32 S8 — accept for (const [k, v] of m.entries()) and for (const [k, v] of m)

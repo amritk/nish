@@ -2,6 +2,7 @@
 name: Follow-ups collected from closed feature runs
 overview: The closed /feature trackers left acceptance passes that never ran, language gaps that were documented and not filed, stages never built, stale doc lines, and decisions on partial acceptance criteria. Each is a small stage here so none is lost when its tracker closes.
 priority: 70
+issue: 1855
 stages:
   - id: s1-accept-destructuring
     title: SWEEP S1 — run the destructuring-declarations acceptance pass on main

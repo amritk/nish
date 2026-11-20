@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp19-stage0-retirement.md
 spec: docs/wp19-stage0-retirement.md
 priority: 80
 labels: [deferred]
+issue: 1874
 stages:
   - id: s2-output-stems
     title: WP19 S2 — output file stems taken from package-relative names

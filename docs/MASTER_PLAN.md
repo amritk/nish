@@ -224,7 +224,8 @@ Sizes, where a package was given one: S = under a day of agent work, M = one
 to two days, L = several days. Each package has a note, `docs/wpN-*.md`; a
 landed package's note is a summary of what shipped and why, and an open one's
 is its plan. [README.md](README.md) indexes them, and each has a
-[roadmap](roadmap/index.md) page with its state, a box per stage.
+[roadmap](roadmap/index.md) page with what landed and a link to its
+open-work issue.
 
 | WP | Package | Note |
 | --- | --- | --- |
@@ -438,10 +439,11 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next, and every package's state
 
-The order of the work, what each package has built and what it has left,
-and its open questions are on the [roadmap](roadmap/index.md), one
-page per package with a box per stage. A pull request that lands a stage
-ticks its box there.
+What each package has built is on the [roadmap](roadmap/index.md), one
+page per package. The order of the open work, what each package has left
+and its open questions are GitHub issues under the
+[Roadmap issue](https://github.com/amritk/nish/issues/1849), a sub-issue per stage. A pull request that lands a
+stage closes its issue with `Fixes`.
 
 #### Settled, with the note that settles it
 

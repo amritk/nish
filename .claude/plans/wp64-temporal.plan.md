@@ -4,6 +4,7 @@ overview: The ISO core ships as nish/temporal and is checked against Node's own 
 roadmap: docs/roadmap/wp64-temporal.md
 spec: docs/wp64-temporal.md
 priority: 40
+issue: 1870
 stages:
   - id: s2-global
     title: WP64 S2 — the global Temporal bound to nish/temporal

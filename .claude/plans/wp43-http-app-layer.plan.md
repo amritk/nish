@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp43-http-app-layer.md
 spec: docs/wp43-http-app-layer.md
 priority: 20
 labels: [ready]
+issue: 1857
 stages:
   - id: s3-static
     title: WP43 S3 — static files, nish/net/static with MIME types, ETag, Range and traversal refused

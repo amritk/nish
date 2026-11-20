@@ -4,6 +4,7 @@ overview: Every stage is built; the one open item is acceptance issue 1377, two 
 roadmap: docs/roadmap/wp50-wasm-host.md
 spec: docs/wp50-wasm-host.md
 priority: 80
+issue: 1873
 stages:
   - id: s7-acceptance-decisions
     title: WP50 S7 — the deterministic-refusal codes and the header comment without the flag

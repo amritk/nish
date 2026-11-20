@@ -2,6 +2,7 @@
 name: LANG — Language, runtime and codegen gaps from real programs
 overview: Gaps found by real programs (a C++ formatter in Nish, a recursion benchmark, the discriminated-unions run) that the compiler still has to close — byte search and zero-fill on u8 and i32 arrays, checked-accumulator recursion beyond fib, and union shapes in the loop pre-pass.
 priority: 70
+issue: 1856
 stages:
   - id: lang3-accumulator-recursion
     title: LANG 1 — widen the checked-accumulator recursion loop beyond i32 free-function sums

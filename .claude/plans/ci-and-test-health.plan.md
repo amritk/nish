@@ -2,6 +2,7 @@
 name: CI and test-suite health — flakes, gaps and the critical path
 overview: CI still has a roughly 12 minute critical path set by shard 1, a shard 8 log that loses its summary, intermittent link test failures, and several test and measurement gaps left by closed feature runs. Each is a small stage here so the suite is trustworthy and fast again.
 priority: 70
+issue: 1851
 stages:
   - id: s1-shard8-log
     title: CI S1 — keep shard 8's test summary when the job log is truncated

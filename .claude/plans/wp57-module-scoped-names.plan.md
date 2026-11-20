@@ -4,6 +4,7 @@ overview: A struct has a symbol separate from its source name (S3a); what is lef
 roadmap: docs/roadmap/wp57-module-scoped-names.md
 spec: docs/wp57-module-scoped-names.md
 priority: 40
+issue: 1871
 stages:
   - id: s3b-struct-spelling
     title: WP57 S3b — every %struct. spelled from the struct's symbol

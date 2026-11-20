@@ -4,6 +4,7 @@ overview: Every WP39 stage is built except E9 (submit to TechEmpower, an owner d
 roadmap: docs/roadmap/wp39-http-server.md
 spec: docs/wp39-http-server.md
 priority: 80
+issue: 1850
 stages:
   - id: e9-submit
     title: WP39 E9 — submit the entry to TechEmpower
@@ -11,6 +12,7 @@ stages:
     verification: node docs/check-links.mjs && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1859
     todos:
       - id: e9-decide
         content: Record the owner's answer on submitting in docs/wp39-http-server.md E9 and docs/roadmap/wp39-http-server.md — see WP39 E9 Decision needed
@@ -21,6 +23,7 @@ stages:
     verification: node tests/run.js webtransport && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1867
     todos:
       - id: g9-pin
         content: Move the draft pin in std/net webtransport once Chrome ships past it, and rerun the Chrome interop job — see WP39 G9

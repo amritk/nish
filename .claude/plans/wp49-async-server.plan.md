@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp49-async-server.md
 spec: docs/wp49-async-server.md
 priority: 10
 labels: [ready]
+issue: 1854
 stages:
   - id: s6-gate
     title: WP49 S6 — the async entries within the explicit ones' noise band on plaintext, json and db

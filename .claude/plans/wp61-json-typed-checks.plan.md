@@ -4,6 +4,7 @@ overview: Proposed only. Decode checks a schema's constraints and optionally coe
 roadmap: docs/roadmap/wp61-json-typed-checks.md
 spec: docs/wp61-json-typed-checks.md
 priority: 60
+issue: 1869
 stages:
   - id: s1-constraints
     title: WP61 S1 — constraints in decode

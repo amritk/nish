@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp52-run-rebuilds.md
 spec: docs/wp52-run-rebuilds.md
 priority: 80
 labels: [deferred]
+issue: 1875
 stages:
   - id: s2-checked-front-end-cache
     title: WP52 S2 — caching the checked front end between runs

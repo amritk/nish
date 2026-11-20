@@ -4,6 +4,7 @@ overview: Stages 1 and 2 shipped function references in places, as arguments, | 
 roadmap: docs/roadmap/wp51-function-references.md
 spec: docs/wp51-function-references.md
 priority: 40
+issue: 1892
 stages:
   - id: s3-arrows
     title: WP51 S3 — capture-free arrows in value position

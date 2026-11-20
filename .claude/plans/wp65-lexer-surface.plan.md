@@ -4,6 +4,7 @@ overview: A C++ formatter port asked for byte search, allocation without the zer
 roadmap: docs/roadmap/wp65-lexer-surface.md
 spec: docs/wp65-lexer-surface.md
 priority: 60
+issue: 1884
 stages:
   - id: s1-byte-search
     title: WP65 S1 — byte search on u8[], indexOf with fromIndex, indexOfByte, equalBytes and compareBytes
@@ -43,6 +44,7 @@ stages:
     goal: A class field initializer such as xs i32[] = [] runs in declaration order before the constructor body.
     verification: node tests/run.js cls_field_init && npm run check && npm run lint
     status: pending
+    issue: 1889
     todos:
       - id: s3-verify-close
         content: Confirm tests/cases/cls_field_init and the reject_cls_field_init negatives cover the stage, then tick the box and note it in docs/wp65-lexer-surface.md — see WP65 S3
@@ -53,6 +55,7 @@ stages:
     verification: node tests/run.js reject_num_tostring && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1890
     todos:
       - id: s4-verify-close
         content: Confirm tests/cases/reject_num_tostring covers D1b, then tick the box and record the decision in docs/roadmap/wp65-lexer-surface.md — see WP65 S4

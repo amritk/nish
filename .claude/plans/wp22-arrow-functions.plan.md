@@ -4,6 +4,7 @@ overview: Arrows are accepted and the corpus is rewritten; the only box left is 
 roadmap: docs/roadmap/wp22-arrow-functions.md
 spec: docs/wp22-arrow-functions.md
 priority: 80
+issue: 1866
 stages:
   - id: d-reject-function
     title: WP22 D — reject a function definition

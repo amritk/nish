@@ -4,6 +4,7 @@ overview: Every WP38 stage has landed. Three follow-up issues remain from the Ad
 roadmap: docs/roadmap/wp38-simd.md
 spec: docs/wp38-simd.md
 priority: 80
+issue: 1865
 stages:
   - id: s11-checksum-ll
     title: WP38 S11 — decide whether checksum.ll may move for every nish/compress importer

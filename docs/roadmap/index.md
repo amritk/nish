@@ -1,13 +1,13 @@
 # Roadmap
 
-What Nish has built and what is left, with one page per work package. A
-checked box is built and on `main`; an unchecked one is not. An item marked
-*(open question)* waits on a decision that has not been made, and one marked
-*(deferred)* is wanted but not scheduled. Each package's design and its
-reasons are in its design note on GitHub, linked from its page; the state is
-kept here, and a pull request that lands a stage ticks its box. A package is
-listed as landed once every stage it has left is deferred or waits on a
-decision.
+What Nish has built, with one page per work package, and where the work that
+is left is tracked. A checked box on a page is built and on `main`. The open
+work is GitHub issues: the [Roadmap issue](https://github.com/amritk/nish/issues/1849) lists one parent issue per
+work package in the order agents pick them up, and each parent's sub-issues
+are its stages, one pull request each, specified by the package's plan file in
+`.claude/plans/`. Each package's design and its reasons are in its design
+note, linked from its page. A package is listed as landed once every stage it
+has left is deferred or waits on a decision.
 
 ## Milestones
 
@@ -20,27 +20,11 @@ decision.
 
 ## Up next
 
-In order. Each package's page says what its next stage is and where it is
-specified.
-
-1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.
-2. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
-3. [WP21: Packages](wp21-packages.md): S4, the build cache.
-
-## Open questions
-
-- M4: when to declare 1.0.
-- [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
-- [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md): how module storage crosses into the hidden memory, how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` (S3).
-- [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md): whether to build `Dyn<I>`; the design note measures it against the hand-written dispatch and recommends shipping interface method signatures (stage 1) now, with `Dyn<I>` in registers and in stored places each gated on its own build's timing.
-- [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md): the shape of the `constraints` option, whether to record which keyword failed, whether encode checks constraints in a `-g` build, and whether a coerce class may reach a strict one.
-- [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md): whether its typed JSON prerequisites land as its S1 or in WP61, a reverse generator, `readOnly`/`writeOnly`, unknown and `x-*` keywords, nullable `boolean` and type-discriminated unions, presence flags, field-name style, where the generator lives, and whether `format` is checked by default (S5).
-- [WP64: Temporal](wp64-temporal.md): how option bags such as `{ largestUnit: "year" }` get a layout, whether the time zone database is embedded by default, `Duration`'s field width, `epochNanoseconds` without `bigint`, and whether a `RangeError` stays a panic.
-- [WP65: The surface a lexer port asked for](wp65-lexer-surface.md): whether to build `toString()` on a number, which LANGUAGE.md refuses today, or keep the rule and make the refusal name the template literal.
-- [WP66: C libraries from their headers](wp66-c-headers.md): what C may do with a callback (S6), and the owner's decisions D1 to D7: the subcommand's name, where it lives, files per target, `i8` and `i16`, the opaque class's spelling, what linking may run, and whether `std/sqlite` is regenerated.
-- [WP68: Shared libraries, layered like atomic design](wp68-shared-libraries.md): the owner's decisions D1 to D6: the tiers' directories, whether atoms are `@internal`, whether `src/` imports them under the seed freeze, how divergent copies are unified, how the import rule is enforced, and which crypto callers keep constant-time copies.
-- [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
-- [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
+In the order of the [Roadmap issue](https://github.com/amritk/nish/issues/1849). The packages an agent may pick up
+now are its [`ready` parents](https://github.com/amritk/nish/issues?q=is%3Aopen+label%3Aplan+label%3Aready);
+`/feature --next` claims the first. The questions waiting on the owner are the
+issues labelled [`needs-decision`](https://github.com/amritk/nish/issues?q=is%3Aopen+label%3Aneeds-decision),
+which `/decide` asks; M4, when to declare 1.0, stays the owner's.
 
 ## In progress and proposed
 

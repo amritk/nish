@@ -4,6 +4,7 @@ overview: Proposed only. nish schema would write typed-JSON classes from a draft
 roadmap: docs/roadmap/wp62-json-schema-classes.md
 spec: docs/wp62-json-schema-classes.md
 priority: 60
+issue: 1860
 stages:
   - id: s1-typed-json-prereqs
     title: WP62 S1 — typed JSON prerequisites for generated classes

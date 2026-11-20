@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp31-ranged-integers.md
 spec: docs/wp31-ranged-integers.md
 priority: 80
 labels: [deferred]
+issue: 1863
 stages:
   - id: w5-lower-bound
     title: WP31 W5 — a lower-bound fact family, i >= n

@@ -42,17 +42,53 @@ per stage, and the stage to do next.
 
 ## Picking up a work package
 
-For a contributor, or an agent asked to "pick up WP50":
+The open work is GitHub issues, and the [Roadmap issue](https://github.com/amritk/nish/issues/1849) lists it in
+the order it is picked up. Each work package (or theme) is a **parent issue**
+labelled `plan`. A plan file, `.claude/plans/<slug>.plan.md`, backs it, and
+its marker names that file. Each **sub-issue** is one stage and one pull
+request, in merge order. The plan file holds the spec, the design note in
+`docs/` holds the reasons, and the issues hold the state.
 
-1. Open the package's page, `docs/roadmap/wpN-*.md`. The work is the item
-   under **Next**; if that item is an *(open question)*, ask before
-   starting.
-2. Read the section of the design note that **Next** links, and the open
-   pull requests and issues that name the package, so the work is not done twice.
-3. In the pull request that lands the stage, tick its box on the page, move
-   **Next** on, update the page's "Done" count and its row in
-   [`docs/roadmap/index.md`](./docs/roadmap/index.md), and update that
-   page's Up next list if the order changed.
+| Label | Meaning |
+| --- | --- |
+| `ready` | on a parent: the owner signed it off, and an agent may build it |
+| `needs-decision` | waits on the owner. `/decide` asks; no agent builds it |
+| `deferred` | wanted, not scheduled |
+| `in-progress` | a run has claimed it |
+
+A parent with none of the first three labels is backlog.
+
+For a contributor, or an agent asked to "pick up WP50" or "pick up what is
+next":
+
+1. Run `/feature #<parent issue>` or `/feature --next`. The lead claims the
+   parent, refines its plan, and gives each open stage its own session,
+   branch and PR. Working by hand instead, take one open sub-issue of a
+   `ready` parent that carries no `needs-decision`, `deferred` or
+   `in-progress` label, and label it `in-progress` before you start.
+2. Read the stage's section of the plan file, the design-note section it
+   links, and the issue's comments. An owner's answer recorded by `/decide`
+   opens with `<!-- decision -->` and binds the work.
+3. The pull request's body carries `Fixes #<stage issue>`, plus one `Fixes`
+   line per open sub-issue of that stage, so the merge closes them. It does
+   not edit `docs/roadmap/`. When a package's last stage closes, close its
+   parent, and in the same PR as that stage set the package's `**State:**`
+   on its roadmap page and its row in
+   [`docs/roadmap/index.md`](./docs/roadmap/index.md) to Landed.
+4. For a question only the owner can answer, label the issue
+   `needs-decision` and post a `<!-- decision-request -->` comment in the
+   shape that [`.claude/skills/decide/SKILL.md`](.claude/skills/decide/SKILL.md)
+   gives. Then go on with work that does not wait on it.
+5. New work for a package is a stage added to its plan file in a PR, then
+   `/plan-issues`. That files the sub-issue and reopens the parent if it was
+   closed. A new package gets its design note, roadmap page and plan file
+   (with a `priority`) in one PR, then `/plan-issues`.
+
+The workflow skills (`/feature`, `/plan-issues`, `/decide`, the review
+agents) are copied from `amritk/ai`, the shared skills repository. Change one
+there, then run `node scripts/sync-skills.mjs` here;
+`node scripts/sync-skills.mjs --check` refuses a vendored file edited in
+place.
 
 ## Workflow
 

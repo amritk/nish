@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp13-differential.md
 spec: docs/wp13-differential.md
 priority: 80
 labels: [deferred]
+issue: 1864
 stages:
   - id: s2-emit-checked-rewriter
     title: WP13 S2 — a rewriter driven by --emit-checked for programs added after stage0 was removed

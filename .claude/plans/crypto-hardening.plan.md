@@ -3,6 +3,7 @@ name: Crypto hardening — constant time, wiping, and the open audit follow-ups
 overview: std/crypto is constant-time by discipline plus fixture disassembly and a weekly timing run. What is open is making that checkable on the real code (types, Valgrind, DIT, full-path fixtures), one unexplained Ice Lake timing reading, and the audit follow-ups on bcrypt, x509, SHA-256, vector specs and base64.
 spec: docs/security/ct-verification.md
 priority: 70
+issue: 1853
 stages:
   - id: s1-secret-ct-type
     title: CRYPTO S1 — design Secret constant time by type, refusing branches, indexes and comparisons inside expose
@@ -27,6 +28,7 @@ stages:
     verification: node tests/run.js link && node tests/run.js secret && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1858
     todos:
       - id: s2-rule
         content: Add the rule to the checker in src/ beside the Secret checks, with a new diagnostic code and a tests/link negative with expected.err per route — see CRYPTO S2 — build the constant-time Secret rule

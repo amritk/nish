@@ -4,6 +4,7 @@ overview: The survey of duplicated helpers and the tier rule are written (S1). E
 roadmap: docs/roadmap/wp68-shared-libraries.md
 spec: docs/wp68-shared-libraries.md
 priority: 60
+issue: 1868
 stages:
   - id: s2-hex-atom
     title: WP68 S2 — the hex atom, the tier directories, the biome rule and its fixture

@@ -4,6 +4,7 @@ overview: A page that holds the module's one memory can still forge a pointer in
 roadmap: docs/roadmap/wp59-wasm-arena-memory.md
 spec: docs/wp59-wasm-arena-memory.md
 priority: 60
+issue: 1861
 stages:
   - id: s1-second-memory
     title: WP59 S1 — a second memory added after wasm-ld and exported as memory, behind a build flag
