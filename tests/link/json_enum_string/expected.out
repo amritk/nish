@@ -15,4 +15,6 @@
 0 blob {"kind":"amoeba"} true
 -26 circle {"kind":"circle","r":0} false
 -26 circle {"kind":"circle","r":0} false
+0 {"shape":"blob","shapes":["square","circle"],"past":["circle"],"figure":{"kind":"amoeba"}} true
+0 {"shape":"circle","shapes":[],"past":null,"figure":{"kind":"square","side":2}} true
 blob

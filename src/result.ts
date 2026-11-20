@@ -65,8 +65,19 @@ export class ResultLayout {
   }
 }
 
-/** Lay `Result<T, E>` out; recomputed per ask, because it is a handful of adds. */
-export const resultLayout = (table: TypeTable, type: i32): ResultLayout => {
+/**
+ * Lay `Result<T, E>` out; recomputed per ask, because it is a handful of adds.
+ * A pointer payload takes `pointer` bytes at that alignment, the target's
+ * width (four on wasm32's `p:32:32`, eight natively), as `computeLayout`
+ * gives a class's pointer field, so the offsets and size match the LLVM
+ * struct the emitter writes.
+ *
+ * @param table the type table
+ * @param type the `Result` type to lay out
+ * @param pointer bytes in one pointer on the target
+ * @returns each arm's index and offset, and the whole struct's size and alignment
+ */
+export const resultLayout = (table: TypeTable, type: i32, pointer: i32): ResultLayout => {
   const layout = new ResultLayout(table.resultStructName(type))
   const ok = table.okOf(type)
   const err = table.errOf(type)
@@ -75,7 +86,7 @@ export const resultLayout = (table: TypeTable, type: i32): ResultLayout => {
   let align = 1
   let index = 1
   if (ok !== T_VOID) {
-    const valueAlign = table.alignOf(ok)
+    const valueAlign = table.alignWithPointer(ok, pointer)
     offset = roundUpTo(offset, valueAlign)
     layout.hasValue = true
     layout.valueIndex = index
@@ -87,7 +98,7 @@ export const resultLayout = (table: TypeTable, type: i32): ResultLayout => {
     }
     index = index + 1
   }
-  const errAlign = table.alignOf(err)
+  const errAlign = table.alignWithPointer(err, pointer)
   offset = roundUpTo(offset, errAlign)
   layout.errorIndex = index
   layout.errorOffset = offset

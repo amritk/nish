@@ -354,12 +354,14 @@ Decisions from the flip that still hold:
    definition (§6).
 2. **Constant folding mirrors the emitter.** A module constant that overflows
    its width is a compile error, unless wrapping was asked for.
-3. **A function name stays unique across the program, exported or not.**
-   `internal` linkage does not buy a second namespace, because the fact
-   fixpoint is keyed by `FunctionSig.name`. The bootstrap found this within the
-   hour (`tests/link/duplicate_internal`). A module qualifier for a private
-   symbol that would clash is proposed in
-   [wp57-module-scoped-names.md](wp57-module-scoped-names.md).
+3. **A function's symbol stays unique across the program.** `internal`
+   linkage does not buy a second namespace, because the fact fixpoint is
+   keyed by `FunctionSig.name`. The bootstrap found this within the hour
+   (`tests/link/duplicate_internal`). Since WP57 S1 the *source* name of a
+   private function may repeat: the symbol that would clash is qualified by
+   its module (`@helper$.add`,
+   [wp57-module-scoped-names.md](wp57-module-scoped-names.md) §4), so the
+   symbol stays unique.
 
 The flip also produced two measurements. `bench/nbody` shrank from 12,000 to
 10,856 bytes through dead-stripping. A 4% `fib` "regression" was code layout:

@@ -6,8 +6,9 @@
 // package-scoped symbols the whole-program fact table was keyed by the name
 // alone, so the second `helper` would have been given the first one's purity,
 // escape and pointer facts; `Compilation` refused the program outright rather
-// than emit that (`tests/link/duplicate_internal` is the same rule inside one
-// package, where it still holds). Now each package's symbols carry its own
+// than emit that. Inside one package a private pair is qualified by its
+// module since WP57 S1 (`tests/link/duplicate_internal`, `@helper$.add`);
+// an exported pair is still refused. Now each package's symbols carry its own
 // prefix, the root package's prefix is empty, and the three `helper`s are
 // `@helper`, `@pkg_a.helper` and `@pkg_b.helper`.
 //

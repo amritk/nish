@@ -85,8 +85,7 @@
  * `UPDATE_GOLDENS`, which this runner deliberately cannot do.
  */
 import { Suite } from "../../std/testing";
-import { replaceAll, splitWhitespace, trim } from "../../std/text";
-import { splitLinesLanes } from "./lines";
+import { replaceAll, splitLines, splitWhitespace, trim } from "../../std/text";
 
 const CASES: string = "tests/cases";
 const LINKS: string = "tests/link";
@@ -274,14 +273,14 @@ const normaliseProducer = (ir: string): string => {
 /** The module body with the `; ModuleID` / `source_filename` header removed, as `tests/run.js` strips it. */
 const stripHeader = (ir: string): string[] => {
   const kept: string[] = [];
-  for (const line of splitLinesLanes(normaliseProducer(ir))) {
+  for (const line of splitLines(normaliseProducer(ir))) {
     if (line.startsWith(";") || line.startsWith("source_filename")) {
       continue;
     }
     kept.push(line);
   }
   // Leading and trailing blank lines are not content: the golden was trimmed.
-  return splitLinesLanes(trim(kept.join("\n")));
+  return splitLines(trim(kept.join("\n")));
 };
 
 /**
@@ -342,7 +341,7 @@ const linkCosts = (): Map<string, i32> => {
     return costs;
   }
   let inLink = false;
-  for (const raw of splitLinesLanes(text)) {
+  for (const raw of splitLines(text)) {
     const line = trim(raw);
     if (!inLink) {
       inLink = line.startsWith('"link"');
@@ -431,7 +430,7 @@ const envPrefix = (spec: string): string[] => {
   // The `NAME=value` text to hand `env`, or `""` for a name to unset. `NAME=`
   // is never `""` here, so the empty string is an unambiguous "take it away".
   const settings: string[] = [];
-  for (const line of splitLinesLanes(spec)) {
+  for (const line of splitLines(spec)) {
     const text = trim(line);
     if (text.length === 0 || text.startsWith("#")) {
       continue;
@@ -547,7 +546,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     // One fragment per line, and `containsAll` ignores the blank ones, which is
     // why the file needs no filtering here beyond the trim.
     const fragments: string[] = [];
-    for (const fragment of splitLinesLanes(expectedErr)) {
+    for (const fragment of splitLines(expectedErr)) {
       fragments.push(trim(fragment));
     }
     t.containsAll(name, diagnostics, fragments);
@@ -702,7 +701,7 @@ const speedLinkNames = (): string[] => {
     panic(`cannot read ${SPEED_LINK} (run this from the repository root)`);
   }
   const names: string[] = [];
-  for (const line of splitLinesLanes(text)) {
+  for (const line of splitLines(text)) {
     const words = splitWhitespace(line);
     if (words.length > 0 && !words[0].startsWith("#")) {
       names.push(words[0]);
@@ -724,8 +723,8 @@ const STDOUT_LINE_BYTES: i32 = 200;
  * log.
  */
 const printStdoutFrom = (stdout: string, expected: string): void => {
-  const got = splitLinesLanes(trim(stdout));
-  const wanted = splitLinesLanes(trim(expected));
+  const got = splitLines(trim(stdout));
+  const wanted = splitLines(trim(expected));
   let at: i32 = 0;
   while (at < got.length && at < wanted.length && got[at] === wanted[at]) {
     at++;
@@ -859,7 +858,7 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   const expectedIR = readFileSyncOrNull(`${dir}/expected.ir`);
   if (expectedIR !== null) {
     const wanted: string[] = [];
-    for (const line of splitLinesLanes(expectedIR)) {
+    for (const line of splitLines(expectedIR)) {
       wanted.push(trim(line));
     }
     t.containsAll(`${label}: emitted IR contains every expected.ir line`, all.join("\n"), wanted);
@@ -906,7 +905,7 @@ const sharesAFile = (name: string): boolean => name === "io_nish_import" || name
 const summaryOf = (output: string): i32[] => {
   const prefix = "golden cases: ";
   let found = "";
-  for (const line of splitLinesLanes(output)) {
+  for (const line of splitLines(output)) {
     if (line.startsWith(prefix) && line.endsWith(" skipped")) {
       found = line.substring(prefix.length, line.length);
     }

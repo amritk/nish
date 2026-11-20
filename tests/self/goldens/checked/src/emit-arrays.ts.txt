@@ -274,7 +274,7 @@ function inlineField(emitter: Emitter, expr: Node): FieldInfo | null -> @inlineF
   callee +18:17 StructInfo.field -> @StructInfo.field
   callee +19:29 FieldInfo.inline -> @FieldInfo.inline
 function inlineOwnerOf(emitter: Emitter, expr: Node): StructInfo -> @inlineOwnerOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=176
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=184
   sharedWrite: via Emitter.typeOf
   calls: CheckedProgram.struct Emitter.typeOf TypeTable.nameOf TypeTable.stripNull internalErrorFor nish_exit
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.typeOf#0
@@ -291,8 +291,8 @@ function inlineHeaderPointer(emitter: Emitter, info: StructInfo, receiver: strin
   sharedWrite: via Emitter.declareType
   calls: Emitter.declareType IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.declareType#0
-  pointer info: size=176 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.declareType -> @Emitter.declareType
   local +1:9 ty: string (const)
@@ -302,8 +302,8 @@ function inlineDataPointer(emitter: Emitter, info: StructInfo, receiver: string,
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm IRFunction.emitValue TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvm#0
-  pointer info: size=176 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   local +1:9 slot: string (const)
@@ -338,7 +338,7 @@ function initInlineArrays(emitter: Emitter, info: StructInfo, receiver: string):
   escaping: receiver
   calls: FieldInfo.inline inlineDataPointer inlineHeaderPointer nish_str_from_i32 slicePointer storeHeaderField storeSliceField
   pointer emitter: size=424 writesThrough=false captured=false passedTo=slicePointer#0 storeSliceField#0 storeSliceField#0 inlineHeaderPointer#0 storeHeaderField#0 storeHeaderField#0 storeHeaderField#0 inlineDataPointer#0
-  pointer info: size=176 writesThrough=false captured=false passedTo=slicePointer#1 inlineHeaderPointer#1 inlineDataPointer#1
+  pointer info: size=184 writesThrough=false captured=false passedTo=slicePointer#1 inlineHeaderPointer#1 inlineDataPointer#1
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   local +2:13 slice: string (const)
@@ -358,7 +358,7 @@ function emitInlineArrayAssignment(emitter: Emitter, expr: Node, field: FieldInf
   calls: CheckedProgram.inlineAssignLength Emitter.declare Emitter.emitExpression IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize inlineDataPointer inlineHeaderPointer inlineOwnerOf internalErrorFor loadHeaderField nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType storeElement storeHeaderField unwrapParens
   pointer emitter: size=424 writesThrough=true captured=false passedTo=inlineOwnerOf#0 elementSize#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 inlineHeaderPointer#0 inlineDataPointer#0 slotType#0 storeElement#0 Emitter.declare#0 elementAccess#0 loadHeaderField#0 Emitter.declare#0 elementAccess#0 storeHeaderField#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckedProgram.inlineAssignLength#1
-  pointer field: size=88 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
+  pointer field: size=104 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
   stackSites=1 stackLocals=1
   local +0:9 target: Node (const)
   callee +0:18 unwrapParens -> @unwrapParens
@@ -408,8 +408,8 @@ function slicePointer(emitter: Emitter, info: StructInfo, receiver: string, fiel
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=424 writesThrough=false captured=false
-  pointer info: size=176 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false
+  pointer info: size=184 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
   callee +1:10 IRFunction.emitValue -> @IRFunction.emitValue
@@ -459,7 +459,7 @@ function emitBoxedArrayAssignment(emitter: Emitter, expr: Node, field: FieldInfo
   calls: Emitter.declare Emitter.emitExpression IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize emitData emitNewArrayLength inlineOwnerOf loadHeaderField nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slicePointer slotType storeElement storeSliceField unwrapParens
   pointer emitter: size=424 writesThrough=true captured=false passedTo=inlineOwnerOf#0 elementSize#0 slotType#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitData#0 storeElement#0 emitNewArrayLength#0 emitData#0 Emitter.declare#0 elementAccess#0 Emitter.emitExpression#0 loadHeaderField#0 loadHeaderField#0 slicePointer#0 storeSliceField#0 storeSliceField#0
   pointer expr: size=40 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false passedTo=slicePointer#3
+  pointer field: size=104 writesThrough=false captured=false passedTo=slicePointer#3
   stackSites=1 stackLocals=1
   local +0:9 target: Node (const)
   callee +0:18 unwrapParens -> @unwrapParens
@@ -862,8 +862,8 @@ function checkedFieldElement(emitter: Emitter, info: StructInfo, receiver: strin
   escaping: arr field idx info receiver
   calls: ArrayBase.constructor Emitter.declareType FieldInfo.inline TypeTable.refOf baseLength elementPointer emitRangeCheck inlineHeaderPointer nish_alloc_struct slicePointer
   pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.declareType#0 slicePointer#0 inlineHeaderPointer#0 emitRangeCheck#0 baseLength#0 elementPointer#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=slicePointer#1 inlineHeaderPointer#1
-  pointer field: size=88 writesThrough=true captured=true passedTo=FieldInfo.inline#0 slicePointer#3 inlineHeaderPointer#3
+  pointer info: size=184 writesThrough=true captured=true passedTo=slicePointer#1 inlineHeaderPointer#1
+  pointer field: size=104 writesThrough=true captured=true passedTo=FieldInfo.inline#0 slicePointer#3 inlineHeaderPointer#3
   stackSites=0 stackLocals=0
   callee -9:3 Emitter.declareType -> @Emitter.declareType
   local -8:7 base: ArrayBase (let)

@@ -476,12 +476,12 @@ function taskFinish(emitter: Emitter, name: string, store: FunctionSig | null, p
   callee +11:3 IRFunction.emit -> @IRFunction.emit
   callee +12:3 IRFunction.emit -> @IRFunction.emit
 function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -> @lockWord
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=88
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=104
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=424 writesThrough=false captured=false
-  pointer info: size=176 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer info: size=184 writesThrough=false captured=false passedTo=StructInfo.field#0
   stackSites=0 stackLocals=0
   local +0:9 field: FieldInfo | null (const)
   callee +0:17 StructInfo.field -> @StructInfo.field
@@ -628,7 +628,7 @@ function closeHandle(emitter: Emitter, info: StructInfo, object: string): void -
   escaping: object
   calls: Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitDropped internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=424 writesThrough=true captured=false passedTo=lockWord#0 loadField#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 emitDropped#0 Emitter.llvm#0 emitDropped#0
-  pointer info: size=176 writesThrough=true captured=true passedTo=lockWord#1 loadField#1
+  pointer info: size=184 writesThrough=true captured=true passedTo=lockWord#1 loadField#1
   stackSites=0 stackLocals=0
   local +0:9 close: FunctionSig | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor

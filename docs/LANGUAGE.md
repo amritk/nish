@@ -1932,8 +1932,14 @@ having no top-level code and therefore no initialisation order.
   [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
-  There is deliberately no second, larger language inside `const`: a constant
-  can compute exactly what a runtime expression can.
+  There is deliberately no second, larger language inside `const`: what a
+  constant computes, it computes as the runtime expression would, but it
+  computes less.
+  "Arithmetic" here is `+ - * / %`, the comparisons, `!`, `&&`, `||`, unary
+  minus and string `+`. The shift and bitwise operators (`<< >> >>> & | ^ ~`)
+  are refused in a constant and in a [constant table](#constant-tables)'s
+  element alike, whatever their operands' type, not folded. Write the
+  value out (`8`, not `1 << 3`), or compute it at run time.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
   replaces computes. By default that instruction is checked, so a fold that
@@ -3267,9 +3273,36 @@ class Point {
 ```
 
 - **Fields** need a type annotation (`` Field `x` of class `Point` needs a type annotation ``,
-  `tests/cases/reject_cls_field_no_type`). An initializer must be a literal
-  (a number, a negated number, a string, or a boolean) of the field's type
-  (`initializers must be literals` *(CLI only)*; `tests/cases/cls_initializers`).
+  `tests/cases/reject_cls_field_no_type`). An initializer is one of
+  (`tests/cases/cls_initializers`, `cls_field_init`):
+  - a literal (a number, a negated number, a string, or a boolean) of the
+    field's type, or `null`, or an enum member;
+  - `[]` when the field's type is an array (`kind: i32[] = []`): a fresh,
+    empty array of the declared element type, one per object;
+  - `new C(args)` (`child: Leaf = new Leaf(0)`) where `C` is a class with no
+    type parameters and the field's type is `C` or `C | null` (not a union or
+    interface `C` converts to), and each argument is itself a literal or enum
+    member of its parameter's type.
+
+  **An initializer reads nothing.** It may not name `this`, a constructor
+  parameter, another field, a local or a module constant; an argument of its
+  `new` is a literal too. Anything else, a call that is not `new` included,
+  is `initializers must be literals` *(CLI only)*
+  (`reject_cls_field_init_call`, `reject_cls_field_init_new_arg`), and a `new`
+  of a generic, handle or layout class is refused the same way
+  (`reject_cls_field_init_new_generic`). Assign a value computed from those
+  in the constructor. The constructor stores every initializer before the
+  first statement of its body, in declaration order; a class without a
+  constructor stores them at its `new`. So a class whose initializers
+  construct the class itself, directly or through another class's
+  initializers, would construct forever, and is refused
+  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`),
+  once per loop however many classes are on it (`tests/link/cls_field_init_cycle`).
+  An exported class with no constructor, and an exported generic class, has
+  its initializers run in the module that builds it, so a class they
+  construct is exported too (`` `Pin` is not exported, but this class's
+  initializers run in the module that builds it ``,
+  `tests/link/cls_field_init_private`, `reject_cls_field_init_private`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
 - **Constructor**: at most one, with a body
@@ -10791,22 +10824,46 @@ class Cell implements Compact {
   one as a full `struct Cell *`. The C host links the range runtime
   (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
   default runtime a program fails to link as soon as one of its modules
-  allocates, an 8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
   shared library another process loads is not supported.
 - **A compact class is refused where Node or the runtime would read its
   layout as full pointers**, each with its own code: in a build with `--emit-napi` or
-  `--emit-napi-async`, also beside `--emit-header`, at the class (NL4021,
-  `compact_reject_napi`, `compact_reject_header_napi`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`), because
-  the addon runs in Node's process, which Nish does not own; as a
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and the constructor
+  of each exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
   class, whose instantiations keep full-pointer links (NL2798,
   `compact_reject_generic`).
 
-`Wide` is accepted and changes nothing yet; it is reserved for a class to
-refuse a compact layout the compiler would pick on its own.
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2819, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
 
 Reference: [`nish:compact`](reference/nish-compact.md).
 
@@ -14242,7 +14299,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program
@@ -15439,7 +15497,8 @@ by the caller.
 ### The CPU level
 
 - **`--cpu x86-64-v3`** links the program for one CPU level above the
-  baseline: the module and the runtime are both compiled, and linked, with
+  baseline: the module, the runtime and, when the program calls it, SQLite
+  (each `runtime/sqlite/*.c` unit) are all compiled, and linked, with
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
@@ -15463,6 +15522,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+  `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
+  check refuses: clang keeps a loop counter or overflow flag in a stack slot
+  there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ### Profile-guided builds
 
@@ -16314,14 +16383,22 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](#element-access): a dominating guard, a loop bounded by the length,
   or every call site proving the argument (`tests/cases/panics_index`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
+  program may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 

@@ -361,6 +361,7 @@ struct Emitter (class) size=424 align=8 exported
   method paramObject -> @Emitter.paramObject
   method llvmAbi -> @Emitter.llvmAbi
   method align -> @Emitter.align
+  method pointerBytes -> @Emitter.pointerBytes
   method alignSuffix -> @Emitter.alignSuffix
   method align8 -> @Emitter.align8
 function LoopTarget.constructor(this: LoopTarget, breakBlock: IRBlock, continueBlock: IRBlock | null): void -> @LoopTarget.constructor [exported constructor]
@@ -386,7 +387,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=424 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=168 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=248 writesThrough=true captured=true passedTo=isWasmBuild#0 isWasmBuild#0 isWasmBuild#0
+  pointer opts: size=256 writesThrough=true captured=true passedTo=isWasmBuild#0 isWasmBuild#0 isWasmBuild#0
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=24 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -1714,13 +1715,19 @@ function Emitter.llvmAbi(this: Emitter, type: i32, isPrivate: boolean): string -
 function Emitter.align(this: Emitter, type: i32): i32 -> @Emitter.align [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: TypeTable.alignWithPointer TypeTable.isVector accessAlign isWasmBuild
-  pointer this: size=424 writesThrough=false captured=false
+  calls: Emitter.pointerBytes TypeTable.alignWithPointer TypeTable.isVector accessAlign
+  pointer this: size=424 writesThrough=false captured=false passedTo=Emitter.pointerBytes#0
   stackSites=0 stackLocals=0
   callee +0:41 TypeTable.isVector -> @TypeTable.isVector
   callee +1:14 accessAlign -> @accessAlign
   callee +1:26 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
-  callee +1:60 isWasmBuild -> @isWasmBuild
+  callee +1:60 Emitter.pointerBytes -> @Emitter.pointerBytes
+function Emitter.pointerBytes(this: Emitter): i32 -> @Emitter.pointerBytes [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isWasmBuild
+  pointer this: size=424 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 isWasmBuild -> @isWasmBuild
 function Emitter.alignSuffix(this: Emitter, type: i32): string -> @Emitter.alignSuffix [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -1740,7 +1747,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   calls: Emitter.constructor Emitter.emitModule nish_alloc_struct
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
   pointer table: size=168 writesThrough=true captured=true passedTo=Emitter.constructor#2
-  pointer opts: size=248 writesThrough=true captured=true passedTo=Emitter.constructor#3
+  pointer opts: size=256 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=24 writesThrough=true captured=true passedTo=Emitter.constructor#5
   pointer libraries: size=0 writesThrough=false captured=false passedTo=Emitter.constructor#6

@@ -323,7 +323,9 @@ export const accessAlign = (align: i32): i32 => (align > 8 ? 8 : align)
  *
  * The parallel arrays are indexed by type id: `kinds[t]` is the kind, `refs`
  * is the element type of an array and the inner type of a nullable, and
- * `names` is the name of a struct. The scalars occupy 0..11 and are filled in
+ * `names` is a struct's symbol, its identity and its spelling in the IR
+ * (WP57 S3a; equal to its source name until S3d qualifies a clashing private
+ * one). The scalars occupy 0..11 and are filled in
  * by the constructor so that `T_I32` and friends are usable before anything
  * has been interned.
  */
@@ -344,9 +346,11 @@ export class TypeTable {
    */
   readonlys: boolean[]
   /**
-   * The source spelling of an instantiated struct (`Box<i32>` for `Box$i32`,
-   * WP18 §6.7) or of a second enum of one name (`Kind` for `Kind.2`), or
-   * empty. Read only by `typeName`; symbols keep the name.
+   * The source spelling of a struct (its source name, or `Box<i32>` for the
+   * instantiation `Box$i32`, WP18 §6.7) or of a second enum of one name
+   * (`Kind` for `Kind.2`), or empty. Read only by `typeName`; symbols keep the
+   * name. Every declared struct has one (WP57 S3a), so `typeName` prints what
+   * the user wrote once a struct's symbol differs from it.
    */
   displays: string[]
   /**
@@ -455,8 +459,16 @@ export class TypeTable {
     return this.refs[type]
   }
 
-  /** The name of a struct type; the empty string otherwise. */
+  /** The name of a struct type, its symbol (WP57 S3a); the empty string otherwise. */
   nameOf(type: i32): string {
+    return this.names[type]
+  }
+
+  /**
+   * The symbol of a struct type (WP57 S3a): what the IR spells it and what
+   * interns it. Today it is the source name; `typeName` gives the display.
+   */
+  symbolOf(type: i32): string {
     return this.names[type]
   }
 
@@ -517,8 +529,19 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_ARRAY && this.readonlys[type]
   }
 
-  structOf(name: string): i32 {
-    return this.intern(K_STRUCT, -1, name)
+  /** The struct type interned under the symbol `symbol`. */
+  structOf(symbol: string): i32 {
+    return this.intern(K_STRUCT, -1, symbol)
+  }
+
+  /**
+   * The struct type a declaration names (WP57 S3a): interned under `symbol`,
+   * with `display`, its source name, as the spelling `typeName` gives it.
+   */
+  declaredStructOf(symbol: string, display: string): i32 {
+    const type = this.structOf(symbol)
+    this.setDisplayName(type, display)
+    return type
   }
 
   /** Marks the struct id `type` as an opaque `declare class` (WP66 S3). */

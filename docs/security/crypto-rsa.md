@@ -23,9 +23,12 @@ it on base `2cdef4f`. No `file:line` anchor is used.
 | `std/crypto/rsa.ts` | `rsaParsePublicKey` and its DER readers (`rsaDerContents`, `rsaDerLength`, `rsaDerUnsigned`, `rsaBitLength`, `rsaBytesBelow`); `rsaVerifyPkcs1v15` and `rsaVerifyPss` and everything they reach: `rsaOpen` (RSAVP1), the Montgomery arithmetic (`rsaLimbsFromBytes`, `rsaBytesFromLimbs`, `rsaMontInverse`, `rsaAtLeast`, `rsaSubInPlace`, `rsaMontMul`, `rsaDoubleMod`, `rsaMontR2`, `rsaModPow`), and the encodings (`rsaHashSize`, `rsaDigest`, `rsaDigestInfoPrefix`, `rsaSameBytes`, `rsaMgf1`); the class `RsaPublicKey` |
 
 Out of scope: `std/crypto/sha256.ts` and `sha512.ts`, which the module calls
-(the K1 stage audits them), and every caller. Nothing in the tree calls the
-module yet. The `pki` stage of #987 will call it, and that stage imposes the
-2048-bit floor a Web PKI needs.
+(the K1 stage audits them), and every caller. Three call it, and each
+imposes its own 2048-bit floor above this module's 1,024 (`RSA_MIN_BITS`): `std/crypto/pki.ts`
+(`PKI_MIN_RSA_BITS`, a chain's signatures and the leaf's key, [its
+record](crypto-pki.md)), `std/net/tls/verify.ts` (`TLS_VERIFY_MIN_RSA_BITS`, the
+CertificateVerify's key) and `std/crypto/jwt.ts` (an RS key under 2048 bits
+answers `null`).
 
 ## Threat model
 

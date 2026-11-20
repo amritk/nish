@@ -31,7 +31,7 @@
 // nothing is checked and nothing is listed.
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
-import { unwrapBoundsParens } from "./bounds"
+import { unwrapBoundsParens, vectorAccessLanes } from "./bounds"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
@@ -234,7 +234,8 @@ export const builtinPanicKind = (name: string): i32 => {
     return PANIC_SLICE
   }
   // `nish:simd`'s load and store check their whole vector against the length
-  // once, through the index panic.
+  // once, through the index panic; the attribute pass records the site as
+  // proven where `bounds.ts` dropped that check (`noteBuiltinSite`).
   if (isSimdAccess(name)) {
     return PANIC_INDEX
   }
@@ -849,6 +850,10 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
       "proof survives that call: compute the right side into a local first"
     )
   }
+  const lanes = vectorAccessLanes(program, table, node)
+  if (lanes > 0) {
+    return vectorAdvice(program, node, lanes)
+  }
   let receiver = node
   let index = node
   if (node.kind === NodeKind.Index) {
@@ -868,6 +873,31 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
       : "this index is not proven to be in range here"
   // The guard NL9007 offers, or none where no spelling is credited.
   return `${what}: ${indexGuardAdvice(program, table, index, i, xs)}`
+}
+
+/**
+ * A `nish:simd` load or store of `lanes` elements checks `0 <= i` and
+ * `i + lanes <= xs.length` at once, so the guard `src/bounds.ts` credits
+ * (`judgeVectorAccess`) stops `i` that many lanes short of the length.
+ */
+const vectorAdvice = (program: CheckedProgram, call: Node, lanes: i32): string => {
+  const args = call.children[1].children
+  const xs = siteLocalName(program, args[args.length - 2])
+  const i = siteLocalName(program, args[args.length - 1])
+  const checks = "a vector access checks its first and its last lane at once, so guard"
+  // A guard is spelled only over names the access has; a field, call or
+  // computed index gets the rule in words rather than a made-up variable.
+  if (xs.length === 0 || i.length === 0) {
+    return (
+      `this vector access is not proven to keep all ${lanes} lanes in range here: ${checks} its index with ` +
+      `a test that reaches the access and keeps it from 0 to ${lanes} short of the array's length`
+    )
+  }
+  const length = program.f64Mode ? `toI32(${xs}.length)` : `${xs}.length`
+  return (
+    `\`${i}\` is not proven to keep all ${lanes} lanes in range for \`${xs}\` here: ${checks} it with a test that ` +
+    `reaches the access — \`if (${i} >= 0 && ${i} <= ${length} - ${lanes})\` proves both ends`
+  )
 }
 
 /** A `slice`, an array `set`, a `String.fromBytes` or a socket call whose buffer range is checked: no proof removes any of them. */

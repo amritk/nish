@@ -881,7 +881,10 @@ const checkFileFixturesLongPath = () => {
     )
   } finally {
     fs.rmSync(deep, { recursive: true, force: true })
-    if (stray.startsWith(buildDir + path.sep)) {
+    // Removed only when it is a socket (#1422): at a 107-byte build/test the
+    // 108-byte prefix is build/test/ itself, and at 108 or more it ends in an
+    // ancestor of it, so the path alone says nothing about what is there.
+    if (!stray.endsWith(path.sep) && fs.lstatSync(stray, { throwIfNoEntry: false })?.isSocket()) {
       fs.rmSync(stray, { force: true })
     }
   }
@@ -15422,6 +15425,42 @@ if (dealtHere("arrayChecks")) {
     }
   }
 
+  // #1640: a byte-class lookup in a constant table is one load once optimised.
+  // The header is a constant whose `data` field LLVM folds to the private
+  // `.data` global, and a u8 index into 256 entries needs no bounds check, so
+  // after `opt -O2` the exported `classOf` loads the element and nothing else:
+  // no `len`, no `data` pointer, no panic branch.
+  if (!only || "const_table_load".includes(only)) {
+    if (has("opt")) {
+      const dir = path.join(buildDir, "const_table_load")
+      fs.mkdirSync(dir, { recursive: true })
+      const src = path.join(dir, "main.ts")
+      const ll = path.join(dir, "main.ll")
+      const cls = (b) =>
+        b >= 48 && b < 58 ? 1 : (b >= 65 && b < 91) || (b >= 97 && b < 123) ? 2 : (b >= 9 && b <= 13) || b === 32 ? 3 : 0
+      const entries = Array.from({ length: 256 }, (_, b) => cls(b)).join(", ")
+      fs.writeFileSync(src, `const CLASS: readonly u8[] = [${entries}]\nexport const classOf = (c: u8): u8 => CLASS[c]\n`)
+      const built = spawnSync(NISH, [src, "-o", ll], { cwd: root, encoding: "utf8" })
+      const o =
+        built.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+          : { status: 1, stdout: "", stderr: built.stderr }
+      const body = o.stdout.match(/define[^\n]*@classOf\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loads = body.match(/= load /g) ?? []
+      check(
+        "const_table_load: after opt -O2 a u8 lookup in a 256-entry constant table is one load of the element",
+        o.status === 0 &&
+          loads.length === 1 &&
+          /= getelementptr inbounds i8, ptr @nish_const_\d+_CLASS\.data, i64 %\d+\n\s+%\d+ = load i8, ptr %\d+/.test(body) &&
+          !body.includes("call ") &&
+          !body.includes("br "),
+        o.status === 0 ? body || o.stdout : o.stderr
+      )
+    } else {
+      skip("const_table_load: opt is not installed")
+    }
+  }
+
   if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     if (has("opt")) {
       for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
@@ -17948,7 +17987,9 @@ if (dealtHere("runtimeChecks")) {
   // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
   // A link is a 32-bit offset in the struct, so `-g` describes the member as
   // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
-  // debugger would read past the field; the IR verifies.
+  // debugger would read past the field. Its type is a typedef of `unsigned
+  // int` named `ref32 <Class>` (stage 2b), which is what `tools/gdb` and
+  // `tools/lldb` key their printers on; the IR verifies.
   if (!only || "compact debug".includes(only)) {
     const dir = path.join(buildDir, "compact-debug")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -17960,18 +18001,233 @@ if (dealtHere("runtimeChecks")) {
     const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
     const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
     check(
-      "compact: -g describes Cell.next, a link, as a 32-bit unsigned member at offset 32",
+      "compact: -g describes Cell.next, a link, as a 32-bit `ref32 Cell` typedef member at offset 32",
       member !== null &&
         member[3] === "32" &&
         member[4] === "32" &&
         base !== null &&
-        base[1] === '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+        /^!DIDerivedType\(tag: DW_TAG_typedef, name: "ref32 Cell", file: ![0-9]+, baseType: ![0-9]+\)$/.test(base[1]),
       c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
     )
     if (has("opt") && c.status === 0) {
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(dir, "compact_list.ll")])
       check("compact: opt -passes=verify accepts the -g IR of a compact class", v.status === 0, String(v.stderr))
     }
+  }
+
+  // ---- A compact link's TBAA node (WP48 stage 2b) ---------------------------------------
+  // Two tags that both name a class decide alias by the class path, whatever
+  // their scalars, so the `ref32` node shows only on a merged tag. In
+  // tests/cases/compact_tbaa, `simplifycfg<sink-common-insts>` sinks
+  // `p.next = c` (a `Cell`) and `q.next = c` (a `Node`) into one store tagged
+  // with the bare scalar, and `gvn` then forwards `h.count = 1` (`i32`) and
+  // `h.held = t` (`ptr`) past it. The pipeline is spelled out because `-O2`
+  // forwards before it sinks. Renaming the node to `i32` or to `ptr` makes it
+  // the same node as that scalar (LLVM uniques equal nodes), and each rename
+  // must keep its reload: that is what shows the scalar decides, not the path.
+  // Under `--plain` nothing is tagged and both reloads stay.
+  if (!only || "compact tbaa".includes(only)) {
+    if (has("opt")) {
+      const dir = path.join(buildDir, "compact-tbaa")
+      fs.rmSync(dir, { recursive: true, force: true })
+      const pipeline = "function(sroa,instcombine,simplifycfg<sink-common-insts>,gvn)"
+      /** The IR of compact_tbaa under `flags`, or the failure that stopped it. */
+      const compiled = (flags, sub) => {
+        const out = path.join(dir, sub) + path.sep
+        const c = spawnSync(NISH, [path.join(casesDir, "compact_tbaa.ts"), ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+        return c.status === 0 ? { ok: true, text: fs.readFileSync(path.join(out, "compact_tbaa.ll"), "utf8") } : { ok: false, text: shown(c) }
+      }
+      /** `name`'s body after `pipeline`, or the failure that stopped it. */
+      const optimised = (ir, name) => {
+        if (!ir.ok) {
+          return ir
+        }
+        const o = spawnSync("opt", [`-passes=${pipeline}`, "-S"], { input: ir.text, encoding: "utf8", maxBuffer: 1 << 26 })
+        if (o.status !== 0) {
+          return { ok: false, text: shown(o) }
+        }
+        const body = new RegExp(`^define [^\\n]*@${name}\\([^\\n]*\\{\\n(?:[^\\n]*\\n)*?\\}$`, "m").exec(o.stdout)
+        return { ok: body !== null, text: body === null ? `no ${name} define` : body[0] }
+      }
+      const tagged = compiled([], "tagged")
+      const renamed = (scalar) => ({ ok: tagged.ok, text: tagged.text.split('!"ref32"').join(`!"${scalar}"`) })
+      check(
+        "compact: the link stores of compact_tbaa hang off a ref32 node",
+        tagged.ok && tagged.text.includes('!"ref32"'),
+        tagged.text
+      )
+      const count = optimised(tagged, "relinkCount")
+      check(
+        "compact: a merged ref32 link store does not clobber an i32 field",
+        count.ok && !/= load i32,/.test(count.text) && /\bret i32 1\b/.test(count.text),
+        count.text
+      )
+      const held = optimised(tagged, "relinkHeld")
+      check(
+        "compact: a merged ref32 link store does not clobber a pointer field",
+        held.ok && !/= load ptr,/.test(held.text) && /\bret ptr %t\b/.test(held.text),
+        held.text
+      )
+      const asI32 = optimised(renamed("i32"), "relinkCount")
+      check(
+        "compact: with the link scalar renamed i32 the i32 field is reloaded",
+        asI32.ok && /= load i32,/.test(asI32.text),
+        asI32.text
+      )
+      const asPtr = optimised(renamed("ptr"), "relinkHeld")
+      check(
+        "compact: with the link scalar renamed ptr the pointer field is reloaded",
+        asPtr.ok && /= load ptr,/.test(asPtr.text),
+        asPtr.text
+      )
+      const plain = compiled(["--plain"], "untagged")
+      const plainCount = optimised(plain, "relinkCount")
+      const plainHeld = optimised(plain, "relinkHeld")
+      check(
+        "compact: without TBAA both fields are reloaded after the link store",
+        plainCount.ok && /= load i32,/.test(plainCount.text) && plainHeld.ok && /= load ptr,/.test(plainHeld.text),
+        `${plainCount.text}\n${plainHeld.text}`
+      )
+    } else skip("compact tbaa: opt is not installed")
+  }
+
+  // ---- A compact link in gdb and lldb (WP48 stage 2b) ----------------------------------
+  // tools/gdb/ref32.py and tools/lldb/ref32.py show a `ref32 <Class>` link as
+  // the object it names. At tests/cases/compact_list.ts:56 `head` is the
+  // five-cell list 4, 3, 2, 1, 0, so following `next` four times from it
+  // through the decoded pointers must read exactly those values and end in a
+  // link the printer calls `null`. The scripts below decide that inside the
+  // debugger and exit with its status (`quit 1` in gdb, `os._exit` in lldb):
+  // the verdict is the exit status, never the debugger's text. This build is
+  // `*-linux-gnu`, so it proves the zero-based decode only.
+  if (!only || "compact debugger".includes(only)) {
+    const dir = path.join(buildDir, "compact-debugger")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "compact_list")
+    const linked = spawnSync(NISH, [path.join(casesDir, "compact_list.ts"), "-g", "--profile", "debug", "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("compact: the -g debug build of compact_list links", linked.status === 0, shown(linked))
+    if (linked.status === 0 && has("gdb")) {
+      const script = path.join(dir, "check-gdb.py")
+      fs.writeFileSync(
+        script,
+        [
+          "import gdb",
+          'gdb.execute("break compact_list.ts:56")',
+          'gdb.execute("run")',
+          "ok = True",
+          'path = "head"',
+          "cell = gdb.parse_and_eval(path)",
+          "for want in (4, 3, 2, 1, 0):",
+          '    ok = ok and int(cell["value"]) == want',
+          '    shown = str(cell["next"])',
+          '    print("value %d next %s" % (int(cell["value"]), shown))',
+          "    if want == 0:",
+          '        ok = ok and shown == "null"',
+          "    else:",
+          '        path = "$ref32(%s->next)" % path',
+          "        cell = gdb.parse_and_eval(path)",
+          '        ok = ok and shown == "(struct Cell *) 0x%x" % int(cell)',
+          'gdb.execute("kill")',
+          'gdb.execute("quit %d" % (0 if ok else 1))',
+          "",
+        ].join("\n")
+      )
+      // `check` ends in `quit 0` or `quit 1`; the `quit 3` after it is reached
+      // only when it stopped short of its verdict, so that fails the check too.
+      /** gdb on `exe` with the printers loaded, then `check`. */
+      const gdb = (check) =>
+        spawnSync("gdb", ["-batch", "-nx", "-x", path.join(root, "tools", "gdb", "ref32.py"), "-x", check, "-ex", "quit 3", exe], {
+          encoding: "utf8",
+          timeout: 60000,
+        })
+      const g = gdb(script)
+      check("compact: gdb with tools/gdb/ref32.py follows a link chain to null", g.status === 0, shown(g))
+      // A script that raises before its verdict must not read as a pass.
+      const broken = path.join(dir, "check-gdb-broken.py")
+      fs.writeFileSync(broken, 'raise RuntimeError("no verdict")\n')
+      const gb = gdb(broken)
+      check("compact: a gdb check script that raises exits non-zero", gb.status !== 0 && gb.error === undefined, shown(gb))
+    } else if (linked.status === 0) skip("compact debugger: gdb is not installed")
+    if (linked.status === 0 && has("lldb")) {
+      const script = path.join(dir, "check_lldb.py")
+      fs.writeFileSync(
+        script,
+        [
+          "import os",
+          "import sys",
+          "import traceback",
+          "",
+          "def __lldb_init_module(debugger, _internal):",
+          "    # lldb --batch exits 0 when this raises, so every path ends in os._exit.",
+          "    try:",
+          "        ok = verdict(debugger)",
+          "    except BaseException:",
+          "        traceback.print_exc()",
+          "        ok = False",
+          "    sys.stdout.flush()",
+          "    sys.stderr.flush()",
+          "    os._exit(0 if ok else 1)",
+          "",
+          "def verdict(debugger):",
+          "    import lldb",
+          "    import ref32",
+          "    target = debugger.GetSelectedTarget()",
+          '    target.BreakpointCreateByLocation("compact_list.ts", 56)',
+          "    process = target.LaunchSimple(None, None, os.getcwd())",
+          "    ok = process.GetState() == lldb.eStateStopped",
+          '    cell = process.GetSelectedThread().GetFrameAtIndex(0).FindVariable("head")',
+          "    for want in (4, 3, 2, 1, 0):",
+          "        cell = cell.Dereference() if cell is not None else None",
+          "        if cell is None:",
+          "            ok = False",
+          "            break",
+          '        ok = ok and cell.GetChildMemberWithName("value").GetValueAsSigned(-1) == want',
+          '        link = cell.GetChildMemberWithName("next")',
+          "        shown = link.GetSummary() or ''",
+          '        print("value %d next %s" % (want, shown))',
+          "        if want == 0:",
+          '            ok = ok and shown == "null"',
+          "        else:",
+          '            ok = ok and shown.startswith("(Cell *) 0x")',
+          "            # The synthetic children (LinkChildren) are the linked cell's fields.",
+          '            ok = ok and link.GetChildMemberWithName("value").GetValueAsSigned(-1) == want - 1',
+          "            cell = ref32.pointer(link.GetNonSyntheticValue())",
+          "    process.Kill()",
+          "    return ok",
+          "",
+        ].join("\n")
+      )
+      // The last command exits 3, so a script that never reaches its verdict
+      // (an import that fails, a module that raises) fails the check too.
+      /** lldb on `exe` with the printers loaded, then `check`. */
+      const lldb = (check) =>
+        spawnSync(
+          "lldb",
+          [
+            "--batch",
+            "--no-lldbinit",
+            "-o",
+            `command script import ${path.join(root, "tools", "lldb", "ref32.py")}`,
+            "-o",
+            `command script import ${check}`,
+            "-o",
+            "script import os; os._exit(3)",
+            exe,
+          ],
+          { cwd: dir, encoding: "utf8", timeout: 60000 }
+        )
+      const l = lldb(script)
+      check("compact: lldb with tools/lldb/ref32.py follows a link chain to null", l.status === 0, shown(l))
+      const broken = path.join(dir, "check_lldb_broken.py")
+      // lldb-18 --batch exits 0 when `__lldb_init_module` raises: this one did pass before the `os._exit(3)`.
+      fs.writeFileSync(broken, ["def __lldb_init_module(debugger, _internal):", '    raise RuntimeError("no verdict")', ""].join("\n"))
+      const lb = lldb(broken)
+      check("compact: an lldb check script that raises exits non-zero", lb.status !== 0 && lb.error === undefined, shown(lb))
+    } else if (linked.status === 0) skip("compact debugger: lldb is not installed")
   }
 
   // ---- A compact class under AddressSanitizer (WP48 stage 2a) ----------------------------
@@ -21844,6 +22100,39 @@ if (dealtHere("cliChecks")) {
       tableHeader.includes("const nish_array *table(void);") && !/^nish_array \*table/m.test(tableHeader),
       tableHeader || tableEmit.stdout + tableEmit.stderr
     )
+    // The wasm typings hand the same table out as a Uint8Array the loader copies,
+    // so a host's store into it never reaches the read-only data (#1640).
+    const tableDts = emit(tableSrc, ["--emit-dts", sidecar("const_table_return", "d.ts")])
+    const tableTypings =
+      tableDts.status === 0 ? fs.readFileSync(sidecar("const_table_return", "d.ts"), "utf8") : ""
+    check(
+      "a function returning a constant table is `table(): Uint8Array` in the wasm typings",
+      tableTypings.includes("  table(): Uint8Array;") && tableTypings.includes("  at(i: number): number;"),
+      tableTypings || tableDts.stderr
+    )
+    if (tableDts.status === 0 && has("wasm-ld")) {
+      const tableWasm = path.join(interopDir, "const_table_return.wasm")
+      const tw = spawnSync(
+        "bash",
+        ["scripts/build.sh", sidecar("const_table_return", "ll"), "runtime/runtime-wasm.c", "-o", tableWasm, "--profile", "wasm"],
+        { cwd: root, encoding: "utf8" }
+      )
+      const script = [
+        'import { readFileSync } from "node:fs";',
+        `const { load } = await import(${JSON.stringify(sidecar("const_table_return", "mjs"))});`,
+        `const api = await load(readFileSync(${JSON.stringify(tableWasm)}));`,
+        "const t = api.table(); t[0] = 9;",
+        "console.log(t.constructor.name, Array.from(api.table()).join(','), api.at(4));",
+      ].join("\n")
+      const tr = tw.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root, encoding: "utf8" }) : null
+      check(
+        "wasm: a returned constant table is a copy, so a store into it leaves the table as it was",
+        tr !== null && tr.stdout.trim() === "Uint8Array 1,2,3 2",
+        tw.stderr + (tr ? tr.stdout + tr.stderr : "")
+      )
+    } else {
+      skip("wasm: a returned constant table is a copy: wasm-ld is not installed")
+    }
 
     // A `Secret` is opaque at the boundary, as a `Map` is: the header names its
     // struct and keeps the layout, so a C host holds the key's pointer but has no
@@ -22089,6 +22378,50 @@ if (dealtHere("cliChecks")) {
     const nodeInclude =
       process.env.NODE_INCLUDE || path.join(path.dirname(process.execPath), "..", "include", "node")
     const hasNodeHeaders = fs.existsSync(path.join(nodeInclude, "node_api.h"))
+
+    // The N-API shim hands a returned constant table to JavaScript as a Uint8Array
+    // over a fresh ArrayBuffer it copies the elements into, so a store into the
+    // result never reaches the table's read-only data (#1640).
+    const tableNapi = emit(path.join(interopDir, "const_table_return.ts"), ["--emit-napi", sidecar("const_table_return", "napi.c")])
+    const tableShim = tableNapi.status === 0 ? fs.readFileSync(sidecar("const_table_return", "napi.c"), "utf8") : ""
+    check(
+      "napi: a function returning a constant table copies it into a new Uint8Array",
+      tableShim.includes("const nish_array *result = table();") &&
+        tableShim.includes("nish_napi_array_result(env, result, napi_uint8_array, 1, &out)") &&
+        tableShim.includes("napi_create_arraybuffer(env, a->len * elem_size, &data, &buffer);") &&
+        tableShim.includes("memcpy(data, a->data, a->len * elem_size);"),
+      tableShim || tableNapi.stderr
+    )
+    if (tableNapi.status === 0 && !hasNodeHeaders) {
+      skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the constant-table addon is not built`)
+    } else if (tableNapi.status === 0) {
+      const tableAddon = path.join(interopDir, "const_table_return.node")
+      const b = spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          sidecar("const_table_return", "ll"),
+          "runtime/runtime.c",
+          sidecar("const_table_return", "napi.c"),
+          "-o",
+          tableAddon,
+          "--profile",
+          "napi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const script = [
+        `const api = require(${JSON.stringify(tableAddon)});`,
+        "const t = api.table(); t[0] = 9;",
+        "console.log(t.constructor.name, Array.from(api.table()).join(','), api.at(4));",
+      ].join("\n")
+      const r = b.status === 0 ? spawnSync("node", ["-e", script], { cwd: root, encoding: "utf8" }) : null
+      check(
+        "napi: a returned constant table is a copy, so a store into it leaves the table as it was",
+        r !== null && r.stdout.trim() === "Uint8Array 1,2,3 2",
+        b.stderr + (r ? r.stdout + r.stderr : "")
+      )
+    }
     const shim = fs.existsSync(sidecar("add", "napi.c"))
       ? fs.readFileSync(sidecar("add", "napi.c"), "utf8")
       : ""
@@ -24194,6 +24527,7 @@ if (dealtHere("cliChecks")) {
       "--emit-arena",
       "--explain-memory",
       "--explain-layout",
+      "--compact",
       "--compat[=<feature>,...]",
       "--target",
       "--cpu",
@@ -25540,17 +25874,19 @@ if (dealtHere("cliChecks")) {
         .join("")
         .split(`${root}/`)
         .join("")
-    // The three design figures (§3.1): each bench file's linked node class is
-    // picked, at the size the design states. Test 1 passes only for a build that
-    // writes the executable itself (`--link`, or `nish run`), so each is linked.
+    // The three design figures (§3.1): the 24- and 32-byte node classes are
+    // picked at the size the design states, and the 16-byte `bintrees` node is
+    // refused by test 3's floor, which it measured slower narrowed (§5.5).
+    // Test 1 passes only for a build that writes the executable itself
+    // (`--link`, or `nish run`), so each is linked.
     const benchWant = {
       "bench/goose/tree.ts": [
         "bench/goose/tree.ts:14:7: layout: TNode: compact, 24 → 12 bytes",
         "explain-layout: 1 of 1 classes compact",
       ],
       "bench/goose/bintrees.ts": [
-        "bench/goose/bintrees.ts:11:7: layout: TNode: compact, 16 → 8 bytes",
-        "explain-layout: 1 of 1 classes compact",
+        "bench/goose/bintrees.ts:11:7: layout: TNode: 3 no saving that pays: TNode saves 16 → 8, under 24 bytes, 16 → 16 bytes",
+        "explain-layout: 0 of 1 classes compact",
       ],
       "bench/wp48-refs/sibling.ts": [
         "bench/wp48-refs/sibling.ts:13:7: layout: Node: compact, 32 → 20 bytes",
@@ -25580,6 +25916,71 @@ if (dealtHere("cliChecks")) {
           fs.readFileSync(plainLl, "utf8") === fs.readFileSync(explainedLl, "utf8"),
         `${shown(plain)}\n${shown(explained)}`
       )
+      // A class the rule picks gets the same `ref32` TBAA node as one marked
+      // `implements Compact` (stage 2b): some load or store in the IR carries
+      // an access tag whose type is that node. The refused 16-byte node gets
+      // no `ref32` node at all.
+      const ir = plain.status === 0 ? fs.readFileSync(plainLl, "utf8") : ""
+      const ref32 = /^(![0-9]+) = !\{!"ref32", /m.exec(ir)
+      const tags = ref32 === null ? [] : [...ir.matchAll(new RegExp(`^(![0-9]+) = !\\{![0-9]+, ${ref32[1]}, i64 [0-9]+\\}$`, "gm"))].map((m) => m[1])
+      const linkAccess = tags.some((tag) => new RegExp(`^\\s+(?:%[^ ]+ = load|store) [^\\n]*!tbaa ${tag}$`, "m").test(ir))
+      const picked = want[0].includes(": compact, ")
+      check(
+        picked
+          ? `explain layout: the link loads and stores of ${file}'s picked class carry the ref32 TBAA node`
+          : `explain layout: ${file}'s refused class has no ref32 TBAA node`,
+        plain.status === 0 && (picked ? linkAccess : ref32 === null),
+        `ref32 node: ${ref32 === null ? "none" : ref32[1]}, link tags: ${tags.join(" ") || "none"}\n${shown(plain)}`
+      )
+    }
+    // The holder-only benches of §5.5 (tests/layout/compact-bench/): #1736's
+    // rule picked each `std/` class for a holder's saving alone, and test 3
+    // refuses it because the class itself does not shrink, so the default
+    // build's IR is `--compact off`'s byte for byte.
+    const holderWant = {
+      "json-doc":
+        "std/json-tokenizer.ts:569:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 128 → 128 bytes",
+      "zlib-each":
+        "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
+      "request-slot":
+        "std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 3 no saving that pays: Slot saves 16 → 12, not HttpServerRequest itself, 152 → 152 bytes",
+    }
+    for (const [base, want] of Object.entries(holderWant)) {
+      const file = `tests/layout/compact-bench/${base}.ts`
+      // The bench imports `std/`, so it writes one .ll per module into a
+      // directory, and the two builds must agree on every one of them.
+      const onDir = path.join(layoutDir, `${base}.on.ir`)
+      const offDir = path.join(layoutDir, `${base}.off.ir`)
+      fs.rmSync(onDir, { recursive: true, force: true })
+      fs.rmSync(offDir, { recursive: true, force: true })
+      const exe = path.join(layoutDir, base)
+      const on = spawnSync(NISH, [file, "-o", `${onDir}/`, "--link", exe, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      const off = spawnSync(NISH, [file, "-o", `${offDir}/`, "--link", exe, "--compact", "off"], { cwd: root, encoding: "utf8" })
+      const modulesOf = (dir) =>
+        fs.existsSync(dir)
+          ? fs
+              .readdirSync(dir, { recursive: true })
+              .map(String)
+              .filter((f) => f.endsWith(".ll"))
+              .sort()
+          : []
+      const onModules = modulesOf(onDir)
+      const offModules = modulesOf(offDir)
+      const sameIr =
+        onModules.length > 1 &&
+        onModules.join("\n") === offModules.join("\n") &&
+        onModules.every((f) => fs.readFileSync(path.join(onDir, f), "utf8") === fs.readFileSync(path.join(offDir, f), "utf8"))
+      const report = layoutOf(on.stderr).split("\n")
+      check(
+        `explain layout: ${file} refuses its holder-only pick at test 3`,
+        on.status === 0 && report.includes(want) && /^explain-layout: 0 of \d+ classes compact$/.test(report.at(-1)),
+        `--- expected line\n${want}\n--- actual\n${report.join("\n")}\n${shown(on)}`
+      )
+      check(
+        `explain layout: ${file} builds the same IR as --compact off`,
+        on.status === 0 && off.status === 0 && sameIr,
+        `on: ${onModules.join(" ")}\noff: ${offModules.join(" ")}\n${shown(on)}\n${shown(off)}`
+      )
     }
     // A linked class the program makes in a loop, so only test 1 and the
     // class's own shape can refuse it.
@@ -25595,7 +25996,7 @@ if (dealtHere("cliChecks")) {
       "  }",
       "}",
       "class L {",
-      "  next: L | null = null",
+      "  next: L | null = null; prev: L | null = null",
       "  v: i32 = 0",
       "}",
       "export const main = (): i32 => {",
@@ -25618,7 +26019,7 @@ if (dealtHere("cliChecks")) {
         args: [],
         want: [
           "noSaving.ts:1:7: layout: W: 3 no saving, 24 → 24 bytes",
-          "noSaving.ts:11:7: layout: L: compact, 16 → 8 bytes",
+          "noSaving.ts:11:7: layout: L: compact, 24 → 12 bytes",
           "explain-layout: 1 of 2 classes compact",
         ],
       },
@@ -25628,7 +26029,7 @@ if (dealtHere("cliChecks")) {
         file: "madeOnce.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const l = new L()",
@@ -25637,7 +26038,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "madeOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -25648,7 +26049,7 @@ if (dealtHere("cliChecks")) {
         file: "recursive.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "class Chain {",
@@ -25668,7 +26069,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "recursive.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "recursive.ts:1:7: layout: L: compact, 24 → 12 bytes",
           "recursive.ts:5:7: layout: Chain: 2 no link, 8 → 8 bytes",
           "explain-layout: 1 of 2 classes compact",
         ],
@@ -25719,10 +26120,10 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "forbidden.ts:2:15: layout: P: 5 forbidden: a declare class, 4 → 4 bytes; Holder saves 16 → 8",
+          "forbidden.ts:2:15: layout: P: 3 no saving that pays: Holder saves 16 → 8, not P itself, 4 → 4 bytes",
           "forbidden.ts:5:7: layout: Holder: 2 no link, 16 → 16 bytes",
           "forbidden.ts:9:7: layout: S: 5 forbidden: holds a Secret in k, 24 → 16 bytes",
-          "std/secret.ts:18:14: layout: Secret<u8[]> (std): 4 not made in a loop or recursion, 8 → 8 bytes; S saves 24 → 16",
+          "std/secret.ts:18:14: layout: Secret<u8[]> (std): 3 no saving that pays: S saves 24 → 16, not Secret<u8[]> itself, 8 → 8 bytes",
           "explain-layout: 0 of 4 classes compact",
         ],
       },
@@ -25733,7 +26134,7 @@ if (dealtHere("cliChecks")) {
         file: "genericRecursion.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const build = <T>(n: i32, x: T): L => {",
@@ -25749,7 +26150,7 @@ if (dealtHere("cliChecks")) {
           "",
         ].join("\n"),
         args: [],
-        want: ["genericRecursion.ts:1:7: layout: L: compact, 16 → 8 bytes", "explain-layout: 1 of 1 classes compact"],
+        want: ["genericRecursion.ts:1:7: layout: L: compact, 24 → 12 bytes", "explain-layout: 1 of 1 classes compact"],
       },
       // Its pair: the same generic function with no call to itself makes one `L`
       // per call from a straight-line `main`, so test 4 still refuses it.
@@ -25758,7 +26159,7 @@ if (dealtHere("cliChecks")) {
         file: "genericOnce.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const build = <T>(n: i32, x: T): L => {",
@@ -25773,7 +26174,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -25784,7 +26185,7 @@ if (dealtHere("cliChecks")) {
         file: "genericMethod.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "class Box<T> {",
@@ -25807,7 +26208,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericMethod.ts:1:7: layout: L: compact, 16 → 8 bytes",
+          "genericMethod.ts:1:7: layout: L: compact, 24 → 12 bytes",
           "genericMethod.ts:5:7: layout: Box<i32>: 2 no link, 4 → 4 bytes",
           "explain-layout: 1 of 2 classes compact",
         ],
@@ -25818,7 +26219,7 @@ if (dealtHere("cliChecks")) {
         file: "genericMethodOnce.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "class Box<T> {",
@@ -25842,7 +26243,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericMethodOnce.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "genericMethodOnce.ts:5:7: layout: Box<i32>: 2 no link, 4 → 4 bytes",
           "explain-layout: 0 of 2 classes compact",
         ],
@@ -25850,10 +26251,11 @@ if (dealtHere("cliChecks")) {
       // A generic class is reported once per instantiation, at its template's
       // declaration: `TNode<i32>` is bench/goose/tree.ts's TNode made generic,
       // its two `TNode<T> | null` fields links to itself, and `new TNode<i32>`
-      // in the recursive `build` its made-site, so it is picked at the same
-      // 24 → 12. The template's other instantiation, `TNode<i64>`, is made by
-      // the same written `new TNode`, so test 4 counts it too: a site names the
-      // template, not the type arguments.
+      // in the recursive `build` its made-site, so it passes tests 2 to 4 at
+      // the same 24 → 12. The template's other instantiation, `TNode<i64>`, is
+      // made by the same written `new TNode`, so test 4 counts it too: a site
+      // names the template, not the type arguments. Test 5 then refuses both,
+      // as `implements Compact` is refused on a generic class.
       {
         name: "a generic self-linking node built recursively",
         file: "genericTree.ts",
@@ -25888,9 +26290,9 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericTree.ts:1:7: layout: TNode<i32>: compact, 24 → 12 bytes",
-          "genericTree.ts:1:7: layout: TNode<i64>: compact, 24 → 16 bytes",
-          "explain-layout: 2 of 2 classes compact",
+          "genericTree.ts:1:7: layout: TNode<i32>: 5 forbidden: a generic class, 24 → 12 bytes",
+          "genericTree.ts:1:7: layout: TNode<i64>: 5 forbidden: a generic class, 24 → 16 bytes",
+          "explain-layout: 0 of 2 classes compact",
         ],
       },
       // A generic node made once, outside any loop or recursion, links to
@@ -25900,7 +26302,7 @@ if (dealtHere("cliChecks")) {
         file: "genericLinkOnce.ts",
         source: [
           "class Link<T> {",
-          "  next: Link<T> | null = null",
+          "  next: Link<T> | null = null; prev: Link<T> | null = null",
           "  v: T",
           "  constructor(v: T) {",
           "    this.v = v",
@@ -25914,14 +26316,14 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericLinkOnce.ts:1:7: layout: Link<i32>: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "genericLinkOnce.ts:1:7: layout: Link<i32>: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
       // A plain class holding an instantiation is that instantiation's holder
       // (test 3): `Cell<i32>` links nothing to itself, `Grid`'s two
       // `Cell<i32> | null` fields are its links, and `Grid` is what narrowing
-      // them saves on.
+      // them would save on, which test 3 does not count.
       {
         name: "test 3, a plain class holds a generic instantiation",
         file: "genericHeld.ts",
@@ -25949,9 +26351,9 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "genericHeld.ts:1:7: layout: Cell<i32>: compact, 4 → 4 bytes; Grid saves 16 → 8",
+          "genericHeld.ts:1:7: layout: Cell<i32>: 3 no saving that pays: Grid saves 16 → 8, not Cell<i32> itself, 4 → 4 bytes",
           "genericHeld.ts:7:7: layout: Grid: 2 no link, 16 → 16 bytes",
-          "explain-layout: 1 of 2 classes compact",
+          "explain-layout: 0 of 2 classes compact",
         ],
       },
       // A parameter named like its function shadows it: `walk(n)` calls the
@@ -25961,7 +26363,7 @@ if (dealtHere("cliChecks")) {
         file: "shadowed.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const walk = (walk: (n: i32) => i32, n: i32): i32 => {",
@@ -25975,7 +26377,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "shadowed.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -25985,7 +26387,7 @@ if (dealtHere("cliChecks")) {
         file: "shadowedLocal.ts",
         source: [
           "class L {",
-          "  next: L | null = null",
+          "  next: L | null = null; prev: L | null = null",
           "  v: i32 = 0",
           "}",
           "const same = (m: i32): i32 => {",
@@ -26003,7 +26405,7 @@ if (dealtHere("cliChecks")) {
         ].join("\n"),
         args: [],
         want: [
-          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 16 → 8 bytes",
+          "shadowedLocal.ts:1:7: layout: L: 4 not made in a loop or recursion, 24 → 12 bytes",
           "explain-layout: 0 of 1 classes compact",
         ],
       },
@@ -26032,7 +26434,7 @@ if (dealtHere("cliChecks")) {
           `notNative.ts:1:7: layout: W: 1 native: ${reason}, 24 → 24 bytes`,
           // On wasm32, L's pointer field is 4 bytes, so its current layout is
           // already the compact 8; natively the 8-byte pointer pads it to 16.
-          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? 8 : 16} → 8 bytes`,
+          `notNative.ts:11:7: layout: L: 1 native: ${reason}, ${reason === "wasm32" ? "12 → 12" : "24 → 12"} bytes`,
           "explain-layout: 0 of 2 classes compact",
         ],
       })
@@ -26047,7 +26449,7 @@ if (dealtHere("cliChecks")) {
       args: [],
       want: [
         "declared.ts:2:7: layout: W: 1 native: a declare function, so a C library is in the link, 24 → 24 bytes",
-        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 16 → 8 bytes",
+        "declared.ts:12:7: layout: L: 1 native: a declare function, so a C library is in the link, 24 → 12 bytes",
         "explain-layout: 0 of 2 classes compact",
       ],
     })
@@ -26058,7 +26460,7 @@ if (dealtHere("cliChecks")) {
       file: "emitTs.ts",
       source: [
         "class L {",
-        "  next: L | null = null",
+        "  next: L | null = null; prev: L | null = null",
         "  v: i32 = 0",
         "}",
         "export const main = (): i32 => {",
@@ -26074,7 +26476,108 @@ if (dealtHere("cliChecks")) {
       outputs: ["@/ts"],
       noIr: true,
       noLink: true,
-      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 16 → 8 bytes", "explain-layout: 0 of 1 classes compact"],
+      want: ["emitTs.ts:1:7: layout: L: 1 native: --emit-ts, 24 → 12 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // Test 3 counts only `R`'s own saving (§3.1): narrowing `H`'s link to `R`
+    // would take 8 off its 40 bytes, and the refusal names that saving.
+    layoutCases.push({
+      name: "test 3, only a holder saves",
+      file: "holderOnly.ts",
+      source: [
+        "class R {",
+        "  v: i32 = 0",
+        "}",
+        "class H {",
+        "  a: i64 = 0",
+        "  b: i64 = 0",
+        "  c: i64 = 0",
+        "  x: i32 = 0",
+        "  r: R | null = null",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    const h = new H()",
+        "    h.r = new R()",
+        "    n = n + h.x",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: [
+        "holderOnly.ts:1:7: layout: R: 3 no saving that pays: H saves 40 → 32, not R itself, 4 → 4 bytes",
+        "holderOnly.ts:4:7: layout: H: 2 no link, 40 → 40 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
+    })
+    // `R`'s own saving under a quarter: seven `i32`s and a link are 40 bytes,
+    // 32 with the link narrowed, a fifth off.
+    layoutCases.push({
+      name: "test 3, a saving under a quarter",
+      file: "underQuarter.ts",
+      source: [
+        "class R {",
+        "  a: i32 = 0",
+        "  b: i32 = 0",
+        "  c: i32 = 0",
+        "  d: i32 = 0",
+        "  e: i32 = 0",
+        "  f: i32 = 0",
+        "  g: i32 = 0",
+        "  next: R | null = null",
+        "}",
+        "export const main = (): i32 => {",
+        "  let head: R | null = null",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    const r = new R()",
+        "    r.next = head",
+        "    head = r",
+        "  }",
+        "  return head === null ? 1 : head.a",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: [
+        "underQuarter.ts:1:7: layout: R: 3 no saving that pays: R saves 40 → 32, under a quarter, 40 → 40 bytes",
+        "explain-layout: 0 of 1 classes compact",
+      ],
+    })
+    // Test 5: `implements Wide` refuses a class every other test picks.
+    layoutCases.push({
+      name: "test 5, implements Wide",
+      file: "wide.ts",
+      source: [
+        "import { Wide } from \"nish:compact\"",
+        "class L implements Wide {",
+        "  next: L | null = null; prev: L | null = null",
+        "  v: i32 = 0",
+        "}",
+        "export const main = (): i32 => {",
+        "  let n = 0",
+        "  for (let i = 0; i < 3; i = i + 1) {",
+        "    n = n + new L().v",
+        "  }",
+        "  return n",
+        "};",
+        "",
+      ].join("\n"),
+      args: [],
+      want: ["wide.ts:2:7: layout: L: 5 forbidden: implements Wide, 24 → 12 bytes", "explain-layout: 0 of 1 classes compact"],
+    })
+    // `--compact off` refuses every class before test 1 asks.
+    layoutCases.push({
+      name: "--compact off",
+      file: "compactOff.ts",
+      source: loopNode,
+      args: ["--compact", "off"],
+      want: [
+        "compactOff.ts:1:7: layout: W: off: --compact off, 24 → 24 bytes",
+        "compactOff.ts:11:7: layout: L: off: --compact off, 24 → 12 bytes",
+        "explain-layout: 0 of 2 classes compact",
+      ],
     })
     // Every file under `out` (one file, or a directory's tree), named and in
     // order, so two outputs compare as one string.
@@ -26151,6 +26654,61 @@ if (dealtHere("cliChecks")) {
         )
       }
     }
+    // `--compact off` and `implements Wide` change the IR the way the report
+    // says: `L` is the one class the rule picks in `loopNode`, so the default
+    // build differs from `--compact off`, marking `L` `Wide` gives the
+    // `--compact off` IR, and a program whose classes the rule refuses (`W`
+    // alone) is the same IR either way. Each build is `main.ts` in its own
+    // directory, so no file name differs between the IR it writes.
+    const wideNode = ['import { Wide } from "nish:compact"', loopNode.replace("class L {", "class L implements Wide {")].join("\n")
+    const noPick = loopNode.slice(0, loopNode.indexOf("class L {")) + ["export const main = (): i32 => {", "  const w = new W()", "  return w.next === null ? 0 : 1", "};", ""].join("\n")
+    const compactIr = (variant, source, args) => {
+      const dir = path.join(layoutDir, "flag", variant)
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const main = path.join(dir, "main.ts")
+      fs.writeFileSync(main, source)
+      const r = spawnSync(NISH, [main, "-o", path.join(dir, "main.ll"), "--link", path.join(dir, "main"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const ir = r.status === 0 ? fs.readFileSync(path.join(dir, "main.ll"), "utf8").replaceAll(dir, "@") : null
+      return { r, ir }
+    }
+    const onIr = compactIr("on", loopNode, [])
+    const offIr = compactIr("off", loopNode, ["--compact", "off"])
+    const wideIr = compactIr("wide", wideNode, [])
+    // The narrowed `L` is three `i32`s, 12 bytes; under `--compact off` its
+    // two links are full pointers again. `W` is wide in both.
+    check(
+      "explain layout: the default build narrows loopNode's L, and --compact off does not",
+      onIr.ir !== null &&
+        offIr.ir !== null &&
+        onIr.ir.includes("%struct.L = type { i32, i32, i32 }") &&
+        offIr.ir.includes("%struct.L = type { %struct.L*, %struct.L*, i32 }") &&
+        onIr.ir.includes("%struct.W = type { i64, i64, %struct.W* }") &&
+        offIr.ir.includes("%struct.W = type { i64, i64, %struct.W* }"),
+      `${shown(onIr.r)}\n${shown(offIr.r)}`
+    )
+    check(
+      "explain layout: implements Wide on L gives the --compact off IR",
+      wideIr.ir !== null && offIr.ir !== null && wideIr.ir === offIr.ir,
+      `${shown(wideIr.r)}\n${shown(offIr.r)}`
+    )
+    const markedNode = ['import { Compact } from "nish:compact"', loopNode.replace("class L {", "class L implements Compact {")].join("\n")
+    const markedOffIr = compactIr("marked-off", markedNode, ["--compact", "off"])
+    check(
+      "explain layout: --compact off gives an implements Compact class the unmarked --compact off IR",
+      markedOffIr.ir !== null && offIr.ir !== null && markedOffIr.ir === offIr.ir,
+      `${shown(markedOffIr.r)}\n${shown(offIr.r)}`
+    )
+    const noPickOn = compactIr("nopick-on", noPick, [])
+    const noPickOff = compactIr("nopick-off", noPick, ["--compact", "off"])
+    check(
+      "explain layout: --compact off changes no byte of a program the rule picks nothing in",
+      noPickOn.ir !== null && noPickOn.ir === noPickOff.ir,
+      `${shown(noPickOn.r)}\n${shown(noPickOff.r)}`
+    )
     // The usage errors are `--explain-memory`'s: no checked program under
     // `--emit-ast`, no IR under `--fix`, and diagnostics only under `--json`.
     const refusedSource = path.join(layoutDir, "refused.ts")
@@ -26201,6 +26759,34 @@ if (dealtHere("cliChecks")) {
         layoutOf(layoutRun.stderr) === benchWant["bench/goose/tree.ts"].join("\n"),
       shown(layoutRun)
     )
+    // `nish run --compact off` builds the same program wide: the output is the
+    // same and the report refuses its one class before test 1.
+    const offRun = spawnSync(NISH, ["run", "--compact", "off", "--explain-layout", "bench/goose/tree.ts"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "explain layout: `nish run --compact off` runs the program with no class compact",
+      offRun.status === 0 &&
+        offRun.stdout === "2097151\n8377899684\n" &&
+        offRun.stderr.includes(": off: --compact off, ") &&
+        offRun.stderr.includes("explain-layout: 0 of 1 classes compact"),
+      shown(offRun)
+    )
+    // `--compact` takes `on` or `off` and nothing else, under `nish run` too,
+    // and a missing word is the same usage error.
+    for (const args of [
+      [refusedSource, "--compact", "wide"],
+      [refusedSource, "--compact"],
+      ["run", "--compact", "maybe", refusedSource],
+    ]) {
+      const refused = spawnSync(NISH, args, { cwd: root, encoding: "utf8" })
+      check(
+        `explain layout: \`${args.filter((a) => a !== refusedSource).join(" ")}\` is a usage error, exit 2`,
+        refused.status === 2 && refused.stdout === "" && refused.stderr.includes("compile: --compact needs on or off"),
+        shown(refused)
+      )
+    }
     // The capability line stays the last thing on stderr (WP35): the report is
     // printed ahead of it.
     const layoutCaps = spawnSync(NISH, ["run", "--capabilities", "--explain-layout", "bench/goose/tree.ts"], {
@@ -35705,6 +36291,44 @@ if (!only || "wasm-host".includes(only)) {
       }
       check("wasm-host: --memory 16 fixes the memory at 16 MiB, initial and maximum", fixedOk, fixedReading)
 
+      // A function returning a constant table, linked for a page: the module exports
+      // the function, and the loader's `loadSync` hands back a copy of the table, so
+      // a page's store into it never reaches the read-only data (#1640).
+      const tableTs = at("const_table_return.ts")
+      fs.writeFileSync(
+        tableTs,
+        "const TAB: readonly u8[] = [1, 2, 3];\nexport const table = (): readonly u8[] => TAB;\nexport const at = (i: u8): u8 => TAB[i % 3];\n"
+      )
+      const tableCompiled = spawnSync(
+        NISH,
+        [tableTs, "--target", "wasm32", "--emit-dts", at("const_table_return.d.ts"), "-o", at("const_table_return.ll")],
+        { cwd: root, encoding: "utf8" }
+      )
+      const tableLink =
+        tableCompiled.status === 0
+          ? wasmHostLink([at("const_table_return.ll"), runtimeWasm], ["-o", at("const_table_return.wasm"), "--profile", "wasm-host"])
+          : null
+      let tableReading = tableLink === null ? shown(tableCompiled) : shown(tableLink)
+      let tableOk = false
+      if (tableLink?.status === 0) {
+        const tableExports = WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(at("const_table_return.wasm")))).map(
+          (e) => e.name
+        )
+        const tableLoader = await import(pathToFileURL(at("const_table_return.mjs")).href)
+        const api = tableLoader.loadSync(fs.readFileSync(at("const_table_return.wasm")))
+        const t = api.table()
+        t[0] = 9
+        tableReading = `exports ${tableExports.sort().join(", ")}; ${t.constructor.name} ${[...api.table()].join(",")} ${api.at(4)}`
+        tableOk =
+          tableExports.includes("table") &&
+          tableExports.includes("at") &&
+          tableExports.includes("memory") &&
+          t instanceof Uint8Array &&
+          [...api.table()].join(",") === "1,2,3" &&
+          api.at(4) === 2
+      }
+      check("wasm-host: a returned constant table is exported, and loadSync hands back a copy", tableOk, tableReading)
+
       // The refusals: both flags take wasm-host alone, and the size is checked.
       for (const [flags, what] of [
         [["--profile", "wasm", "--memory", "16"], "--memory on --profile wasm"],
@@ -38439,6 +39063,8 @@ class Flat {
 
 const parse = (n: i32): Result<i32, string> => (n > 0 ? Ok(n) : Err("neg"))
 
+const find = (n: i32, at: Node, code: i64): Result<Node, i64> => (n > 0 ? Ok(at) : Err(code))
+
 class Wide {
   flag: boolean
   shape: Round | Flat
@@ -38462,7 +39088,8 @@ export const main = (): i32 => {
   const m = new Mixed(1.5, b, 3, 4, "m")
   const l = new Links(a, b, m, 2, [1, 2, 3], true)
   const w = new Wide(true, new Flat(2), ["x", "y"], [a, b], parse(3), 4)
-  return l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
+  const f = find(l.count, a, m.b)
+  return (f.ok ? f.value.value : 0) + l.count + l.head.value + m.n + l.items.length + w.tags.length + w.nodes.length
 }
 `
     )
@@ -38490,11 +39117,26 @@ export const main = (): i32 => {
     const native = layouts([])
     const ll = path.join(dir, "classes.ll")
     const emitted = spawnSync(NISH, [entry, "--target", "wasm32", "-o", ll], { cwd: root, encoding: "utf8" })
+    // A `Result` has no `--emit-checked` line: `-g` describes it from
+    // `resultLayout`, so its composite's size and member offsets are the
+    // compiler's numbers (#1749).
+    const gll = path.join(dir, "classes.g.ll")
+    const debugged = spawnSync(NISH, [entry, "--target", "wasm32", "-g", "-o", gll], { cwd: root, encoding: "utf8" })
+    // A class arm's struct name is spelled with a `$`, which a probe's own name
+    // leaves out.
+    const results = [
+      { name: "nish_result.i32.str", label: "result.i32.str" },
+      { name: "nish_result.$Node.i64", label: "result.Node.i64" },
+    ]
     if (
       check(
         "wasm32-layout: the program compiles for wasm32 and both targets print every class's layout",
-        wasm.r.status === 0 && native.r.status === 0 && emitted.status === 0 && names.every((n) => wasm.found.has(n)),
-        `${shown(wasm.r)}\n${shown(emitted)}`
+        wasm.r.status === 0 &&
+          native.r.status === 0 &&
+          emitted.status === 0 &&
+          debugged.status === 0 &&
+          names.every((n) => wasm.found.has(n)),
+        `${shown(wasm.r)}\n${shown(emitted)}\n${shown(debugged)}`
       )
     ) {
       // One probe per number, each `add`ed to 0 so instcombine folds it.
@@ -38510,12 +39152,20 @@ export const main = (): i32 => {
           probes.push(probe(`${name}.${f.name}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${f.index})`))
         }
       }
+      for (const { name, label } of results) {
+        const t = `%struct.${name}`
+        probes.push(probe(`${label}.size`, t, `(${t}, ${t}* null, i32 1)`))
+        probes.push(probe(`${label}.align`, t, `({ i1, ${t} }, { i1, ${t} }* null, i32 0, i32 1)`))
+        for (const index of [0, 1, 2]) {
+          probes.push(probe(`${label}.${index}`, "i8", `(${t}, ${t}* null, i32 0, i32 ${index})`))
+        }
+      }
       // The probes run in a module of their own: the emitted one's data layout
       // and type definitions, and nothing for instcombine to rewrite but them.
       const kept = fs
         .readFileSync(ll, "utf8")
         .split("\n")
-        .filter((line) => line.startsWith("target datalayout") || /^%[\w.]+ = type /.test(line))
+        .filter((line) => line.startsWith("target datalayout") || /^%[\w.$]+ = type /.test(line))
       const probed = path.join(dir, "probed.ll")
       fs.writeFileSync(probed, `${kept.join("\n")}\n\n${probes.join("\n")}`)
       const folded = spawnSync("opt", ["-S", "-passes=instcombine", probed], { encoding: "utf8", maxBuffer: 1 << 28 })
@@ -38553,6 +39203,42 @@ export const main = (): i32 => {
           `allocation sizes cast to %struct.${name}*: ${sites.join(", ") || "none"}; alloca: ${onStack}`
         )
       }
+      // The composite's size and alignment, then its `ok`, `value` and
+      // `error` members' offsets, in bits as DWARF spells them.
+      const dbg = fs.readFileSync(gll, "utf8")
+      for (const { name, label } of results) {
+        const composite = new RegExp(
+          `!(\\d+) = distinct !DICompositeType\\(tag: DW_TAG_structure_type, name: "${name.replace(/[.$]/g, "\\$&")}", file: !\\d+, size: (\\d+), align: (\\d+)`
+        ).exec(dbg)
+        const offsets =
+          composite === null
+            ? []
+            : [...dbg.matchAll(new RegExp(`DW_TAG_member, name: "(?:ok|value|error)", scope: !${composite[1]}, [^)]*offset: (\\d+)`, "g"))].map(
+                (m) => Number(m[1]) / 8
+              )
+        const mine =
+          composite === null ? "no composite" : `size=${composite[2] / 8} align=${composite[3] / 8} offsets=${offsets.join(",")}`
+        const theirs = `size=${llvm.get(`${label}.size`)} align=${llvm.get(`${label}.align`)} offsets=${[0, 1, 2]
+          .map((i) => llvm.get(`${label}.${i}`))
+          .join(",")}`
+        check(
+          `wasm32-layout: -g describes %struct.${name} with the size, alignment and member offsets LLVM's wasm32 DataLayout gives it`,
+          folded.status === 0 && mine === theirs,
+          `compiler: ${mine}\nLLVM:     ${theirs}`
+        )
+      }
+      // `Result<i32, string>` is `{ i1, i32, i8* }`: 12 bytes, so a pointer
+      // payload back at offset 8 fails here as well as above.
+      const resultSites = [...text.matchAll(/call i8\* @nish_alloc_struct\(i64 (\d+)\)\n\s*%\d+ = bitcast i8\* %\d+ to %struct\.nish_result\.i32\.str\*\n/g)].map(
+        (m) => Number(m[1])
+      )
+      check(
+        "wasm32-layout: `Result<i32, string>` is allocated in 12 bytes on wasm32 and `parse` claims dereferenceable(12)",
+        resultSites.length > 0 &&
+          resultSites.every((size) => size === 12) &&
+          /dereferenceable\(12\) %struct\.nish_result\.i32\.str\* @parse\(/.test(text),
+        `allocation sizes: ${resultSites.join(", ") || "none"}`
+      )
       const node = wasm.found.get("Node")
       const nativeNode = native.found.get("Node")
       check(
@@ -40790,6 +41476,32 @@ if (selects("ci-scope", "ci.yml")) {
       carriage.lines.every((l) => !l.includes("\r")) &&
       carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
     JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
+  )
+  // The why= line names the lanes that are off, in LANES order, and says so
+  // when none is; a full-run reason replaces both. The partial case is pinned
+  // to its literal text so the names come from the test, not the output.
+  const someOff = runScope(["tests/postgres/x.sql"], { PR_LABELS: "[]" })
+  const allOn = runScope(["src/x.ts"], { PR_LABELS: "[]" })
+  const whyOf = (run) => run.lines.find((l) => l.startsWith("why="))
+  const unread = "every changed path of each is on its allowlist of paths it does not read"
+  check(
+    "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off",
+    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}`,
+    JSON.stringify(someOff.lines)
+  )
+  check(
+    "ci-scope: the why= output of a docs-only change names every lane as off",
+    whyOf(goodLabels) === `why=lanes off: ${lanes.join(", ")}; ${unread}`,
+    JSON.stringify(goodLabels.lines)
+  )
+  check(
+    "ci-scope: the why= output says every lane runs when none is off, and a full-run reason replaces it",
+    allOn.ran.status === 0 &&
+      laneLines(allOn.lines).length === lanes.length &&
+      laneLines(allOn.lines).every((l) => l.endsWith("=true")) &&
+      whyOf(allOn) === "why=every lane reads a changed path" &&
+      whyOf(badLabels) === "why=the pull request has the `ci:full` label",
+    JSON.stringify({ allOn: allOn.lines, badLabels: whyOf(badLabels) })
   )
   fs.rmSync(scopeDir, { recursive: true, force: true })
 
@@ -45541,7 +46253,7 @@ if (!only || "cpu-level".includes(only)) {
   const nish = (args, env = {}) =>
     spawnSync(NISH, args, { cwd: root, encoding: "utf8", env: { ...process.env, ...env } })
   const refusals = [
-    ["`native`", ["--cpu", "native"], "unknown cpu level `native`"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["`x86-64-v4`", ["--cpu", "x86-64-v4"], "unknown cpu level `x86-64-v4`"],
     ["`armv8.2-a`", ["--cpu", "armv8.2-a"], "unknown cpu level `armv8.2-a`"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
@@ -45568,11 +46280,11 @@ if (!only || "cpu-level".includes(only)) {
     "cpu level: nish run --cpu native is refused with exit 2 before anything runs",
     runRefused.status === 2 &&
       runRefused.stdout === "" &&
-      runRefused.stderr.includes("unknown cpu level `native`"),
+      runRefused.stderr.includes("--cpu native is refused: under clang 18 the constant-time check (CT-16)"),
     `${runRefused.status}: ${runRefused.stderr}`
   )
   for (const [what, flags, says] of [
-    ["`native`", ["--cpu", "native"], "--cpu takes x86-64-v3, not 'native'"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
     ["the wasm profile", ["--profile", "wasm", "--cpu", "x86-64-v3"], "the wasm profile does not take it"],
     ["the wasi profile", ["--profile", "wasi", "--cpu", "x86-64-v3"], "the wasi profile does not take it"],
@@ -45659,6 +46371,40 @@ if (!only || "cpu-level".includes(only)) {
         "cpu level: the runtime cache keeps the level in its own entry beside the baseline's",
         entries("runtime") === 2,
         `${entries("runtime")} runtime entries`
+      )
+      // SQLite's units are compiled apart from the runtime's (build.sh's
+      // `sqlite_units`, from inside runtime/sqlite/ by their bare names), so the
+      // level reaching the nineteen runtime units says nothing about them. Each
+      // unit, every `runtime/sqlite/*.c` but sqlite3.c, has its own clang line,
+      // and that line carries the level. The amalgamation has no line of its
+      // own: nish-sqlite.c includes it, so it is compiled at that unit's level.
+      const sqliteUnits = fs
+        .readdirSync(path.join(root, "runtime", "sqlite"))
+        .filter((f) => f.endsWith(".c") && f !== "sqlite3.c")
+        .sort()
+      const sqlite = nish(
+        [
+          path.join(root, "tests", "link", "sqlite_link", "main.ts"),
+          "-o",
+          path.join(cpuDir, "sqlite.ir") + "/",
+          "--link",
+          path.join(cpuDir, "sqlite-v3"),
+          "--cpu",
+          "x86-64-v3",
+        ],
+        env
+      )
+      const sqliteLines = ccLines()
+      const unitLines = (unit) => sqliteLines.filter((l) => new RegExp(` -c ${unit.replace(".", "\\.")}( |$)`).test(l))
+      check(
+        `cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on every runtime/sqlite/ unit (${sqliteUnits.join(", ")}, which includes sqlite3.c), the module and the link`,
+        sqlite.status === 0 &&
+          sqliteUnits.includes("nish-sqlite.c") &&
+          sqliteUnits.every((unit) => unitLines(unit).length === 1) &&
+          unitLines("sqlite3.c").length === 0 &&
+          sqliteLines.some((l) => !/ -c /.test(l)) &&
+          sqliteLines.every(marched),
+        sqlite.stderr + sqliteLines.join("\n")
       )
       const flags = fs.existsSync("/proc/cpuinfo")
         ? (fs.readFileSync("/proc/cpuinfo", "utf8").match(/^flags\s*:.*$/m) ?? [""])[0]

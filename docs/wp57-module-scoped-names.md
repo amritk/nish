@@ -1,19 +1,22 @@
 # WP57: Module-scoped names
 
-**Status: S1 built; S2 and S3 not.** Two modules may each keep a private
+**Status: S1 built (#1812); S2 decided, keep refusing (§6); S3 split into
+five stages, S3a built (#1840) (§7, §8).** Two modules may each keep a private
 function or generic template of one name: a clashing one's symbol is
 qualified by its module path (§4), as
-[LANGUAGE.md](LANGUAGE.md#export-and-import) states. Exported names and
-class and interface names are still unique across the program, and where
-this note and LANGUAGE.md disagree, LANGUAGE.md wins. The stages are in §8 and on
-[the roadmap page](roadmap/wp57-module-scoped-names.md). S2 waits on a
-decision (§6).
+[LANGUAGE.md](LANGUAGE.md#export-and-import) states. Exported names stay
+unique across their package, by decision (§6). Class and interface names are
+still unique across the program until S3d. Where this note and LANGUAGE.md
+disagree, LANGUAGE.md wins. The stages are in §8 and on
+[the roadmap page](roadmap/wp57-module-scoped-names.md).
 
-Every claim about today's compiler is anchored at commit `0bf1ddbb`, on
-`main`. Read [wp5-modules.md](wp5-modules.md) first: whole-program compilation
-is why a name is global. Then read [wp21-packages.md](wp21-packages.md) §9: it
-gave every package its own symbol scope and left the root package's empty, and
-that is the gap this note is about.
+§1 to §5 were written against commit `0bf1ddbb`, on `main`, and §4 is
+corrected to what S1 merged as (`936ba0b1`). §6 to §8 are anchored at
+`936ba0b1`, `main` after S1. Read [wp5-modules.md](wp5-modules.md) first:
+whole-program compilation is why a name is global. Then read
+[wp21-packages.md](wp21-packages.md) §9: it gave every package its own symbol
+scope and left the root package's empty, and that is the gap this note is
+about.
 
 ## 1. The problem
 
@@ -137,7 +140,7 @@ others the inventory found:
 until the release that ships it becomes the seed. CI's `bootstrap` job checks
 that.
 
-## 3. The decision this note proposes
+## 3. The decision
 
 **Qualify a symbol with its module only when the bare symbol would clash.**
 Today no program that compiles has a clash, because every clash is refused. So
@@ -151,7 +154,7 @@ Three kinds of name need three different answers:
 | Name | Stage | Why separate |
 | --- | --- | --- |
 | A private function or generic template | S1 | Its symbol is the compiler's own business: `internal`, on no host's surface |
-| An exported function, or exported template, of the root package | S2 | Its symbol is the C ABI. Changing it is the maintainer's call |
+| An exported function, or exported template, of the root package | S2 | Its symbol is the C ABI. Decided: it stays unique across its package (§6) |
 | A class or interface | S3 | Its name is a *type's* identity, not only a symbol's |
 
 ## 4. S1: private functions and generic templates
@@ -190,13 +193,17 @@ machine's directory reaches a symbol.
 A new step, `Compilation.qualifyClashingSymbols`, runs once every module has
 loaded (pass 1 and `qualifySymbols` included) and before `bindImports`. At
 that point each program's `functions` and `templateList` hold only what the
-module declares. Pass 1b appends imported signatures later. The step groups
-every defined, non-foreign free function's symbol and every function
-template's symbol by spelling. A method or constructor (`sig.owner !== null`)
+module declares. Pass 1b appends imported signatures later. As built, the
+step asks one predicate, `qualifiesClashing` (`src/generics.ts`), of every
+defined, non-foreign free function: is it private, under `--strict-exports`,
+and does another free function or function template of its package (or, for
+a `main` outside the entry, the entry wrapper) take the same bare symbol? It
+counts the parties by source name in each peer module's own tables, so
+renaming one function never changes the answer for the next. A method or constructor (`sig.owner !== null`)
 is left out: its symbol is `Owner.method`, scoped by its class's name, which
 is S3's, and `--emit-header` gives it an asm label of that spelling. So is a
 generic method's template, keyed `Owner.method` in `templateList`
-(`src/generics.ts`). For each spelling held by more than one definition:
+(`src/generics.ts`). For each name held by more than one definition:
 
 - every **private** party is qualified, both of two private ones included, so
   which module keeps the bare name never depends on load order;
@@ -211,13 +218,15 @@ Two constraints decide where the step goes:
 
 - **Before any function instantiation exists.** Function instantiations are
   minted from pass 2 on (§2), so a template qualified here passes its spelling
-  to every instantiation. The prefix an instantiation reads moves from the
-  template's home program to the template itself (`src/generics.ts`, the
-  `symbolPrefix` read in the instantiation path). Class-template members are
-  minted in pass 1, but they are S3's.
-- **The rename itself stays in `src/checker.ts`.** `qualifySymbols` grows a
-  sibling, `qualifyClashing(qualifier, names)`. That way a symbol is still
-  spelled only in the checker, and `Compilation` only decides.
+  to every instantiation. As built, a template is not renamed here at all:
+  `templateSymbol` (`src/generics.ts`) asks the same predicate whenever pass 2
+  or 3 mints an instantiation, and builds the base from it. Class-template
+  members are minted in pass 1, but they are S3's.
+- **The rename of a function stays in `src/checker.ts`.** `qualifySymbols`
+  has a sibling, `qualifyClashing(peers, modulePath, entryPath)`, which spells
+  `<prefix><qualifier>$.<name>` with `moduleSymbolQualifier`
+  (`src/packages.ts`). `Compilation.qualifyClashingSymbols` only runs it for
+  each module.
 
 `--no-strict-exports` is the exception. There, every function of the root
 package is external and on the C surface (`privateAbi`), so a private function
@@ -230,10 +239,10 @@ with NL3026 and NL3027 as today.
 template loop reads the template's qualified symbol instead of
 `symbolPrefix + sourceName`. What it still refuses:
 
-- two exported functions of one package and name (NL3024, NL3025: S2's
-  question);
+- two exported functions of one package and name (NL3024, NL3025:
+  S2, kept by decision, §6);
 - two exported templates of one package and name (NL3010: their
-  instantiations are exported, so this is S2's question too);
+  instantiations are exported, so S2 keeps this too);
 - any clash under `--no-strict-exports` (NL3026, NL3027);
 - a residual collision of two qualified symbols (§4a), reported by NL3026 or
   NL3027 with both files named.
@@ -245,23 +254,38 @@ number, and `tests/wordings/` keeps a case per code.
 
 ### 4d. Tests
 
+What S1 merged (#1812): one test flipped positive, seven new link programs
+and one shared module directory, three wording fixtures changed, and two
+new refusal checks in `tests/nish/cli.ts` (`checkClashCodeWith` runs one
+under `--no-strict-exports`).
+
 | Test | Change |
 | --- | --- |
-| `tests/link/duplicate_internal` | **Turns positive**: `expected.code` (`main` returns `add(twice(20), 2)` = 42; `add` is `+` in both, so this pins only that it compiles) and `expected.ir` with `@helper$.add` and `@main$.add` |
-| `tests/link/duplicate_export` | **Stays negative**: two exported `f` are NL3024 until S2 |
-| `tests/link/module_private_helpers` (new) | Modelled on `two_packages`. Three modules, each with a private `helper` that computes something different (`n + 1`, `n - 1`, `n - 42`) and an export that calls it. The exit code is 7 only if each call reached its own. `expected.ir` pins the three qualified `define internal` lines |
-| `tests/link/module_private_generic` (new) | Two modules, each with a private `identity<T>` returning differently, so the exit code proves `a$.identity$i32` and `b$.identity$i32` are two |
-| `tests/link/module_private_mixed` (new) | A private `helper` beside another module's exported `helper`: the export keeps `@helper` and the private one is qualified |
-| `tests/link/module_private_no_strict` (new, negative) | `--no-strict-exports` with two private `helper`s: still NL3026 |
+| `tests/link/duplicate_internal` | **Turned positive**: `expected.code` 42 (`main` returns `add(twice(20), 2)`; `add` is `+` in both, so this pins only that it compiles) and `expected.ir` with `@helper$.add` and `@main$.add` |
+| `tests/link/duplicate_export` | **Stays negative**: two exported `f` are NL3024 (§6) |
+| `tests/link/module_private_helpers` (new) | Modelled on `two_packages`. Three modules, each with a private `step` that computes something different (`n + 1`, `n - 1`, `n - 42`), two of them behind an export that calls it. The exit code is 7 only if each call reached its own. `expected.ir` pins `@up$.step`, `@down$.step` and `@main$.step` |
+| `tests/link/module_private_generic` (new) | Two modules, each with a private `identity<T>` returning differently, so the exit code, 9, proves `a$.identity$i32` and `b$.identity$i32` are two |
+| `tests/link/module_private_mixed` (new) | A private `helper` beside another module's exported `helper`: the export keeps `@helper` and the private one is `@main$.helper` |
+| `tests/link/module_private_no_strict` (new, negative) | `--no-strict-exports` with two private `add`s: still NL3026 |
 | `tests/link/module_private_spawn` (new) | A task spawned from a qualified function. Its lifted arrow is `@m$.work$arrow0` in `expected.ir` |
-| `tests/wordings/nl3026_function_clash`, `nl3027_package_function_clash` | Become accepted under the default flags. Each gains a `.args` of `--no-strict-exports` so it still pins its code |
-| `tests/wordings/nl3010_generic_redeclared` | Its private `identity` meets `wordings_generic.ts`'s exported one, which S1 accepts. It is rewritten so both are exported |
+| `tests/link/module_private_residual` (new, negative) | `lib/util.ts` and `lib_util.ts` each keep a private `helper`. Both qualify to `lib_util$.helper`, and the clash check over the qualified symbols refuses it (§4a) |
+| `tests/link/module_private_outside` (new) | The entry imports `../module_private_shared/u.ts`, outside its directory, so that module's private `helper` is `@___module_private_shared_u$.helper` |
+| `tests/link/module_private_shared` (new, no `main.ts`) | The module `module_private_outside` imports. It is not a program of its own |
+| `tests/wordings/nl3026_function_clash`, `nl3027_package_function_clash` | Accepted under the default flags now. Each gained a `.args` of `--no-strict-exports` so it still pins its code |
+| `tests/wordings/nl3010_generic_redeclared` | Its private `identity` met `wordings_generic.ts`'s exported one, which S1 accepts. It was rewritten so both are exported |
 
-Then `node tests/run.js link`, `wasi` and `performance` (it changes `src/`),
-`node tests/self/goldens.js --update` (no diff expected), and nish-cmp (no
-diff expected, so no `DECLARED` entry).
+S1 also ran `node tests/run.js link`, `wasi` and `performance` (it changes
+`src/`) and `node tests/self/goldens.js --update`, which moved the checked
+goldens of five of the six `src/` modules it edited (`codes.ts`'s did not
+move) and nothing else. nish-cmp showed no diff
+for any program the seed compiles. It declares the six new positive programs
+above (`duplicate_internal` and five `module_private_*`), which the 0.42.0
+seed refuses and only the candidate compiles, as `DECLARED` entries in
+`tests/nish-cmp.js` under S1's release-note words.
 
 ### 4e. What must move with it, in the same PR
+
+S1 moved each of these in #1812.
 
 - **LANGUAGE.md**, "`export` and `import`": the bullet "A function name is
   unique across the whole program" becomes the S1 rule. Also "Calling C",
@@ -288,9 +312,9 @@ diff expected, so no `DECLARED` entry).
 
 | | |
 | --- | --- |
-| Files touched in `src/` | `compilation.ts` (the new step, the template key in `rejectSymbolClashes`, `clashMessage`), `checker.ts` (`qualifyClashing`), `generics.ts` (the instantiation's prefix read off the template), `packages.ts` (`moduleSymbolQualifier`, beside `packageSymbolPrefix`), `codes.ts` if a message is reworded. About 150 lines with comments |
-| Tests | 1 flipped positive, 5 new link tests, 3 wording fixtures changed |
-| IR | No program that compiles today moves (§3). The new tests' `expected.ir` are the only new IR |
+| Files touched in `src/` | `compilation.ts` (`qualifyClashingSymbols`, the template key in `rejectSymbolClashes`, `clashMessage`), `checker.ts` (`qualifyClashing`), `generics.ts` (`qualifiesClashing`, `templateSymbol`, the instantiation's base read off the template), `packages.ts` (`moduleSymbolQualifier`, beside `packageSymbolPrefix`), `codes.ts` (the NL3026 and NL3027 keys, for their reworded messages) and `attributes.ts` (a comment). 264 lines added and 35 removed, comments included |
+| Tests | 1 flipped positive, 7 new link programs and 1 shared module, 3 wording fixtures changed, 2 refusal checks in `tests/nish/cli.ts`, 6 nish-cmp `DECLARED` entries |
+| IR | No program that compiled before moves (§3). The new tests' `expected.ir` are the only new IR |
 | Seen by a user | A program that was refused now compiles. `perf` and the `--json` reports show `m$.helper` for a function that clashed |
 | Release note | `feat(checker): two modules may each keep a private function or generic of one name`, a minor bump. Not breaking: every program that compiled still compiles to the same IR |
 
@@ -305,18 +329,45 @@ required by it.
 
 ### 5a. Why no IR moves
 
-`rejectSymbolClashes` runs before any body is checked and refuses every
-clash. So every program on `main`, the nish-cmp corpus, `src/` and every
-golden has no two definitions with one symbol, and §4b renames only symbols
-that have two. S1 confirms this by running nish-cmp and the goldens update
-with no diff. A diff there is a bug in S1, not a declared change.
+`rejectSymbolClashes` ran before any body was checked and refused every
+clash. So every program on `main` before S1, the nish-cmp corpus, `src/` and
+every golden had no two definitions with one symbol, and §4b renames only
+symbols that have two. S1 confirmed this: nish-cmp showed no diff for any
+program the seed compiles, and the goldens update moved only the modules S1
+edited (§4d). The programs nish-cmp declares are new ones the seed refuses.
 
-## 6. S2: exported names that clash inside one package *(open question)*
+## 6. S2: exported names that clash inside one package *(decided: keep refusing)*
 
-Two modules of the root package that each export `f` are NL3024 today. Inside
-a package, `import { f } from "./a"` already says which `f` is meant, so the
-refusal protects only the C surface. Every root-package export is on that
-surface (§2), and C has one namespace. The options:
+**Decided at WP57's sign-off (#1811): option A.** An exported function's
+name stays unique across its package. NL3024's message says "across the
+program"; for a function that is the same thing, because a dependency's
+function symbols carry its package prefix and cannot meet the root's. Nothing
+is built for S2. What stays refused, with the codes S1 left (§4c):
+
+- two exported functions of the root package with one name (NL3024), and the
+  same inside a dependency (NL3025);
+- two exported generic templates of one package and name (NL3010): their
+  instantiations are exported, so they are the same question;
+- under S3, two exported classes or interfaces of one name (NL3028). Class
+  symbols carry no package prefix, so this holds across packages too: an
+  exported root class and an exported dependency class of one name stay
+  refused (`class_clash_package`, `class_clash_package_after_root`). A
+  private class keeps S1's treatment, and the header spells it by its symbol
+  (§7, S3d).
+
+A private party beside an exported one is already S1's case: the export keeps
+its bare symbol and the private one is qualified (`module_private_mixed`).
+
+**Why A.** Inside a package, `import { f } from "./a"` already says which `f`
+is meant, so the refusal protects only the C surface. Every root-package
+export is on that surface (§2), and C has one namespace. Of the options below,
+A is the only one that behaves the same in every build mode: C keeps open
+builds' surface too, but makes whether a program compiles depend on the
+flags. No program has yet needed more. The cost is that two modules cannot both export
+an `f`, so a user renames one export by hand. That is what §1 objects to, but
+only for exports, which are few and are an interface someone chose.
+
+The options that were weighed:
 
 | Option | What it does | Costs |
 | --- | --- | --- |
@@ -325,64 +376,176 @@ surface (§2), and C has one namespace. The options:
 | **C. Qualify on clash in a closed-world build only** | Under `--link`, native, no sidecar and no `declare function` (ARCHITECTURE.md's closed-world rule), `export` already means only "importable", so S1's rule applies to exports there. An open build keeps NL3024 | The rule depends on build mode: a program that links may then fail with `--emit-header`. Small in `src/` (`compilation.ts`, reading `hostVisible` in `src/visibility.ts`). One new pair of link tests |
 | **D. Qualify on clash, with a chosen C name** | Both exports are kept, and the header names each with a mangled C name and an asm label, as it does for `Point.shifted` | A host's C name for a function changes when an unrelated module adds a clashing export, which is an ABI break nobody asked for. It needs a mangling for C, `.d.ts` and N-API, and docs for all three. The largest of the four |
 
-The note's lean is A until a program needs more, then B together with
-`export { f } from`. That keeps the C surface a list someone wrote rather than
-an accident of which names clash. Exported generic templates (NL3010 between
-two exports) go with whichever option is chosen, because their instantiations
-are exported.
+**What would reopen it.** A program that needs two exported functions of
+one name in one package. The way forward then is B together with
+`export { f } from`, which the language does not have yet
+(wp21-packages.md §10d): only the entry's exports are the C surface, a module
+puts another module's function on it by re-exporting it, and S1's rule
+applies to every export that is not on it. That keeps the C surface a list
+someone wrote, not an accident of which names clash. It is breaking (B's row),
+so it is a work package of its own with a release note that says so, and the
+sidecar tests that export from a non-entry module are counted then. C was
+rejected because a program that links would then fail with `--emit-header`,
+and D because a host's C name would change when an unrelated module adds an
+export.
 
 ## 7. S3: module-scoped class and interface names
 
-A class name is a type's identity, so S3 is not a rename. Type identity
-becomes (module, name). Qualifying only on clash still keeps every existing
-program's IR, but every place that reaches a struct *by name* has to take a
-module too. What the inventory found:
+A class name is a type's identity, so S3 is not a rename. A struct gets a
+symbol, its spelling in the IR and in its members' symbols, separate from its
+source name. A private class or interface that would clash gets a qualified
+symbol, the way S1 qualifies a function, and every program with no clash keeps
+its IR. Exported classes stay unique across their package (§6).
 
-| Where | What changes |
-| --- | --- |
-| The type table: `TypeTable.names` / `displays`, `typeName` (`src/types.ts`) | A struct's key becomes (module, name). `typeName` stays the source name for diagnostics |
-| The per-module struct registry: `CheckedProgram.struct`, `addStruct`, `addStructTemplate`, `addStructInstance` (`src/program.ts`), registered from `src/structs.ts` | Lookups that cross a module boundary take the owning module |
-| Cross-module layouts: `registerForeignLayouts` (`src/generics.ts`, four callers) | Registers under the qualified identity |
-| `%struct.<name>`: 21 files of `src/` spell it. The emitters are `emit.ts`, `emit-classes.ts` (definition, opaque), `emit-arrays.ts`, `emit-json.ts`, `emit-parallel.ts`, `emit-result.ts`, `emit-root.ts`, `emit-secret.ts`, `emit-shm-window.ts` and `emit-strings.ts`. The others are `attributes.ts`, `checker.ts`, `compilation.ts`, `debug.ts`, `generics.ts`, `interop-header.ts`, `program.ts`, `result.ts`, `runtime.ts`, `structs.ts` and `types.ts` | Each spells, or matches on, the qualified struct name |
-| `Owner.method` and constructor symbols (`src/structs.ts`, one site for declared classes and one for template members) | The owner's qualified name, so S1's rule follows for members |
-| The clash checks (`src/compilation.ts`): `declaredStructs` and `rejectInstantiatedStructClashes` (NL3028), `reportTemplateClash` (NL3013), `rejectCollectionsClash` (NL3030, a module's own `Map` or `Set` beside the global one), and the member clashes NL3022 and NL3023, which those preempt (`tests/wordings/unreachable.txt`) | Rewritten over qualified names. Most of their refusals go |
-| `--emit-header` (`src/interop-header.ts`, `cStructName(info.name)`) | C has one struct namespace, so an exported class that clashes needs S2's answer. A private one is not on the header |
-| `--emit-dts` and N-API (`src/interop-dts.ts`, `src/interop-napi.ts`) | The inventory found no struct naming there by `info.name`. S3 must confirm how a class reaches a `.d.ts` or an N-API wrapper before sizing it |
-| Typed JSON (`src/json-typed.ts`, `jsonRouteCallees`, `src/emit-json.ts`) | Messages name the type, and the decoder's reach set must key on the qualified identity |
-| Renaming a class on import (`src/checker.ts`, `tests/link/class_import_rename`) | Becomes possible once the name is no longer the ABI. This is a language change in its own right: LANGUAGE.md, AI.md and the guide's "cannot be renamed on import" |
+### 7a. Inventory
 
-**Size.** In `src/`, 37 files call `typeName(` and 26 look a struct up by name
-(`.struct(`, `structs.get(`). The sets overlap, so S3 reaches on the order of
-40 of `src/`'s 128 files, the 21 that spell `%struct.` among them.
-That is several times S1, with the interop surface on top, and its class half
-depends on S2's decision. It should be split into its own stages once S1 and S2
-have landed, and it is not one PR. Release note when it ships: `feat(checker):
-two modules may each keep a private class or interface of one name`, plus
-whatever S2's option costs for exported classes.
+Re-checked against `936ba0b1`, `main` after S1. `src/` has 137 files.
+
+| Where | What reaches a struct by name | What S3 changes |
+| --- | --- | --- |
+| The type table (`src/types.ts`) | `names[]` is a struct's identity and its spelling. `structOf(name)` interns under `K_STRUCT` and the name (17 sites in 9 files). `llvmType` spells `%struct.${names[type]}*` in one place. `displays[]`, set by `setDisplayName` (3 sites, in `types.ts` and `generics.ts`), is today only an instantiation's display. `typeName` and `nameOf` (82 sites in 31 files) read them | `names[]` holds the symbol. Every struct gets a display, its source name, so `typeName` keeps printing what the user wrote |
+| The per-module registry (`CheckedProgram.struct`, `addStruct`, `addStructTemplate`, `addStructInstance` in `src/program.ts`, registered from `src/structs.ts`) | Keyed by source name inside a module. 71 `.struct(` lookups in 29 files, and one file with `structs.get(` | Unchanged inside a module. What crosses a module carries the struct, not its name |
+| Cross-module layouts (`registerForeignLayouts`, `src/generics.ts`) | Four callers (lines 1074, 1117, 1370, 1990) register a foreign struct's layout under its name | Register under the symbol |
+| `%struct.` | 21 files spell it: `attributes`, `checker`, `compilation`, `debug`, `emit`, `emit-arrays`, `emit-classes`, `emit-json`, `emit-parallel`, `emit-result`, `emit-root`, `emit-secret`, `emit-shm-window`, `emit-strings`, `generics`, `interop-header`, `program`, `result`, `runtime`, `structs` and `types` | Each spells the symbol, or matches a runtime struct whose name never changes |
+| `info.name` | 169 sites in 29 files, some a spelling and some a message | A spelling reads the symbol, a message the source name |
+| Member symbols | A method is `${owner.name}.${name}` (`src/structs.ts:926`), a constructor `${owner.name}.constructor` (`:1022`), a template's member through `collectMethodSignature` (`src/generics.ts:1535`). Each already has a separate display | Spelled from the owner's symbol, so S1's rule follows for members |
+| The clash checks (`src/compilation.ts`) | `declaredStructs` and `rejectInstantiatedStructClashes` (NL3028), `reportTemplateClash` (NL3013), `rejectCollectionsClash` (NL3030, a module's own `Map` or `Set` beside the global one), and the member clashes NL3022 and NL3023, which those preempt (`tests/wordings/unreachable.txt`) | Run over symbols. A private pair stops clashing; an exported pair, or one on the C surface, stays refused |
+| `--emit-header` (`src/interop-header.ts`, `src/interop-abi.ts`) | `cType` spells a class parameter `struct ${cStructName(nameOf(t))} *` (`interop-abi.ts:530`), and `structDefinitions` (`interop-header.ts:113`) declares **every** class of every module but a `declare class`, with `cStructName(info.name)` (`:139`, `:147`). It does not look at signatures: built with the seed, a private `class Hidden` used only by a private function still gave `struct Hidden;` and `struct Hidden {`. `cStructName` already spells any name with a `$`, an instantiation's, as `nish_gen_<name>` with the separators collapsed (`interop-abi.ts:612`) | C has one struct namespace, and two private `Node`s would both print `struct Node`. So the header spells a struct by `cStructName` of its symbol: a bare symbol stays bare, a qualified one becomes a `nish_gen_` name the way an instantiation's does, and no build flag changes whether a program compiles |
+| `--emit-dts` and N-API (`src/interop-dts.ts`, `src/interop-napi.ts`) | Neither reads `info.name`. A class reaches them only as text: `tsKeyword` gives a struct `nameOf(t)` (`interop-abi.ts:786`), which `tsSignatureLine` (`:743`) writes into a `.d.ts` comment and into N-API's "not bridged" list. N-API has no reader for a class, so a function that takes one is not bridged | These print the source name; no symbol reaches them |
+| Typed JSON (`src/json-typed.ts`, `jsonRouteCallees`, `src/emit-json.ts`) | Messages name the type; the decoder's reach set is keyed by name | The reach set keys on the struct, messages keep the source name |
+| Renaming a class on import (`src/checker.ts:1668`, `tests/link/class_import_rename`) | Refused: "the type name is part of the ABI" | Possible once the symbol, not the local name, is the ABI. A language change of its own |
+
+**Size.** 40 files call `typeName(` (441 sites) and 29 look a struct up by
+name; 50 files do one or the other, 56 counting those that spell `%struct.`.
+The spellers (`info.name`, `nameOf(`, `%struct.`) are 44 files. (`structOf(`
+and `setDisplayName` counts include their definitions: `setDisplayName` has
+two callers.) That is over a
+third of `src/` and several times S1 (§4f), so S3 is split into five stages,
+one PR each (§7b). The first three move no IR: they separate the symbol from
+the source name while the two are still equal everywhere, so each is proved by
+an unchanged build. Only S3d changes what a program may do.
+
+### 7b. Stages
+
+**S3a: a struct's symbol in the type table.** `StructInfo` and the type table
+carry a symbol beside the source name, set equal to it. Every struct gets a
+display. The per-module registry and `registerForeignLayouts` pass the struct
+across modules, not its name. Files: `types.ts`, `program.ts`, `structs.ts`,
+`generics.ts`, and the `structOf(` callers. Depends on nothing. Release note:
+`refactor(checker): give each struct a symbol separate from its source name`.
+
+*As built:* `StructInfo.symbol` is set equal to `name` in its constructor (an
+instantiation's is its mangled `Box$i32`, which `name` already held), and
+`TypeTable.symbolOf` reads the symbol a struct id is interned under. A
+declaration interns through `TypeTable.declaredStructOf(symbol, display)`, so
+every declared struct has a display, its source name, and an instantiation
+keeps `Box<i32>`. Both registries gained a type-keyed index,
+`CheckedProgram.structByType` and `StructRegistry.byType`. The cross-module
+walks, `registerForeignLayouts` and its three callers (`adoptArgumentLayouts`,
+`adoptInstanceLayouts`, `noteJsonRoute`) and the checker's
+`closeReachableStructs`, collect struct types (`noteStructTypes`,
+`signatureStructTypes`, `referencedStructTypes` in `src/structs.ts`, which
+replace the `*StructNames` walkers), find each struct by its type in the
+other module's registry, and register a foreign struct under its symbol.
+Lookups inside one module (`members.ts`'s `structOf`, the 51
+`.struct(nameOf(...))` sites) still go by name, which equals the symbol until
+S3d; S3d moves them to `structByType` where a qualified local struct would
+otherwise be missed.
+The checked goldens of 50 modules the stage does not edit move too, but
+only in `size=` and `returnDeref=` figures: `StructInfo` (176 to 184 bytes),
+`CheckedProgram` (920 to 928) and `StructRegistry` (16 to 24) each gained a
+field, and every module holding a pointer to one prints its size. Normalised
+for those figures, their diff is empty.
+
+**S3b: spell structs by their symbol.** Every `%struct.` speller and
+`llvmType` reads the symbol, and so does the header's `cStructName`, since
+the header must name the IR's struct; every message and `tsKeyword` read the
+source name. Files: the 44 spellers. Depends on S3a.
+Release note: `refactor(codegen): spell a struct's IR type from its symbol`.
+
+**S3c: member symbols from the owner's symbol.** The three member sites above
+build `<owner symbol>.<name>`; displays keep the source name. Files:
+`structs.ts`, `generics.ts`. Depends on S3a; after S3b, to keep each diff to one
+kind of site. Release note: `refactor(codegen): spell a member's symbol from its
+owner's symbol`.
+
+**S3d: qualify a clashing private class or interface.** A private class or
+interface whose source name clashes across same-prefix peers, under
+`--strict-exports`, gets `<package prefix><module qualifier>$.<name>`, and its
+instantiations `a$.Box$i32`. One predicate decides it, the way
+`qualifiesClashing` does for functions, but earlier: a struct's symbol and
+its members' symbols are minted in pass 1 (`src/structs.ts:926`, `:1022`), so
+S1's placement (`qualifyClashingSymbols`, `src/compilation.ts:1429`, before
+`bindImports`) is too late for them. The decision runs once every module has
+declared its class and interface names (`declareNames`, pass 1a) and before
+any member is collected (`collectSignatures`, pass 1,
+`src/compilation.ts:745`). An exported root class and an exported
+dependency class of one name stay NL3028 (`class_clash_package`,
+`class_clash_package_after_root`), since class symbols carry no package
+prefix. In that predicate an exported class counts as a party
+but keeps its bare symbol, since an export is on the C surface by choice. A
+private class reaches the header too, through a signature or because the
+header declares every class, but it is still private: the header spells its
+symbol (S3b). NL3028, NL3013, NL3030, NL3022 and NL3023 are
+rewritten over symbols; an exported pair, a pair under `--no-strict-exports`
+and a residual collision, in the symbol or in its `cStructName` spelling, stay
+refused. The private pairs `tests/nish/cli.ts` pins as refusals turn positive:
+`iface_clash_private` and those of `class_clash_constructor`,
+`class_clash_method`, `class_clash_fields`, `class_clash_package` (NL3028) and
+`generic_class_clash_signature` (NL3013) whose parties are private; the
+stage moves each to a positive test or keeps it refused for a stated reason. Typed JSON's
+reach set keys on the struct. Files: `compilation.ts`, `checker.ts`,
+`generics.ts`, `structs.ts`, `json-typed.ts`. Depends on S3a to S3c. This is
+the stage users see, so it lands with LANGUAGE.md, AI.md, ARCHITECTURE.md, the
+guide and a `docs/reference/` regeneration. Release note: `feat(checker): two
+modules may each keep a private class or interface of one name`.
+
+**S3e: rename a class or interface on import.** The refusal at
+`checker.ts:1668` goes and `class_import_rename` turns positive: the local
+name is a binding, the symbol is unchanged. Files: `checker.ts`. Depends on
+S3a; independent of S3b to S3d. A language change of its own, with
+LANGUAGE.md, AI.md and the guide's "cannot be renamed on import". Release
+note: `feat(checker): a class or interface may be renamed on import`.
 
 ## 8. Stages
 
 | | Stage | Status |
 | ---: | --- | --- |
-| S1 | Private functions and generic templates qualified by their module when they would clash (§4) | Proposed |
-| S2 | Exported names that clash inside one package and are not on the C surface (§6) | *(open question)* |
-| S3 | Module-scoped class and interface names, type identity (module, name) (§7) | Proposed, large; to be split |
+| S1 | Private functions and generic templates qualified by their module when they would clash (§4) | Built (#1812) |
+| S2 | Exported names that clash inside one package (§6) | Decided: keep refusing; nothing to build |
+| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Built (#1840) |
+| S3b | Structs spelled by their symbol in the IR (§7b) | Proposed |
+| S3c | Member symbols spelled from their owner's symbol (§7b) | Proposed |
+| S3d | A clashing private class or interface qualified by its module (§7b) | Proposed |
+| S3e | A class or interface renamed on import (§7b) | Proposed |
 
-**S1's gate:** `tests/link/duplicate_internal` passes as a positive test,
-`duplicate_export` still fails with NL3024, the five new link tests pass, the
-wording fixtures pin NL3010, NL3026 and NL3027, nish-cmp and
-`tests/self/goldens.js --update` show no diff, and `node tests/run.js wasi` and
-`performance` pass. Every doc in §4e says the new rule.
+Order: S3a, S3b, S3c, S3d. S3e needs only S3a.
 
-**S2's gate** depends on the option. For B or C: `duplicate_export` turns
-positive under the builds the option allows and stays NL3024 under the ones it
-does not, and every sidecar test still describes exactly the surface it did,
-or a declared, release-noted change.
+**S1's gate**, met in #1812: §4d's tests, nish-cmp with no diff for programs
+the seed compiles, and `node tests/run.js wasi` and `performance` passing.
 
-**S3's gate:** two modules each declaring a private `class Node` with
+**S2's gate:** none. `tests/link/duplicate_export` keeps failing with NL3024
+and the wording fixture keeps pinning NL3010.
+
+**S3a, S3b and S3c's gate:** no golden `.ll`, `expected.ir` or nish-cmp diff;
+`tests/self/goldens.js --update` moves only the checked goldens of the modules
+the stage edits; `--emit-header`, `--emit-dts` and `--emit-napi` output
+unchanged for the sidecar tests; `node tests/run.js wasi` and `performance`
+pass.
+
+**S3d's gate:** two modules each declaring a private `class Node` with
 different fields compile, link, and read each field at its own offset (an exit
-code that only comes out right if so), and `--emit-header`, `--emit-dts` and
-`--emit-napi` are unchanged for every program that compiles today.
+code that only comes out right if so), with symbols `a$.Node` and `b$.Node`; a
+private generic class gives `a$.Box$i32` beside `b$.Box$i32`; a private
+interface pair compiles; `--emit-header` on the `Node` program declares two
+distinct `nish_gen_` structs and the C compiler accepts the header; an exported pair stays NL3028, as does a pair
+under `--no-strict-exports`; a residual collision is refused. Every program
+that compiles today keeps its IR and its `--emit-header`, `--emit-dts` and
+`--emit-napi` output.
+
+**S3e's gate:** `tests/link/class_import_rename` passes as a positive test with
+an exit code that proves the renamed class is the imported one, and a class
+used under two local names in two modules is one type (one `%struct.`).
 
 ## 9. Not planned
 

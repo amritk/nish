@@ -1092,9 +1092,26 @@ export class FieldInfo {
    * (`cArrayField`), so every pass that sizes or walks fields sees a scalar.
    */
   cLength: i32
+  /**
+   * The class a `new` initializer constructs (`child: Leaf = new Leaf(0)`),
+   * set once every constructor's signature is known
+   * (`resolveNewInitializers` in `src/structs.ts`); `null` for any other
+   * initializer, and for a `new` the checker refused.
+   */
+  initNew: StructInfo | null
+  /**
+   * The constant arguments of `initNew`'s constructor, one per argument
+   * written, each a carrier typed as its parameter and holding its literal
+   * as `initializer`, so the emitter writes them as it writes any
+   * initializer (`initializerConstant`); a parameter left out passes its
+   * default, as at any call.
+   */
+  initArgs: FieldInfo[]
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
+    this.initNew = null
+    this.initArgs = []
     this.nested = null
     this.link = false
     this.cLength = -1
@@ -1122,9 +1139,17 @@ export class FieldInfo {
 
 /** A class or interface: one `%struct.<name>` LLVM type with fixed fields. */
 export class StructInfo {
+  /** The source name: what a module looks it up by and what a message prints. */
   name: string
+  /**
+   * The symbol (WP57 S3a): the struct's identity across modules, the name its
+   * `TypeTable` id is interned under. Equal to `name` until S3d qualifies a
+   * private class or interface that would clash; an instantiation's is its
+   * mangled name (`Box$i32`), which `name` also holds.
+   */
+  symbol: string
   kind: i32
-  /** The `TypeTable` id of `%struct.<name>*`. */
+  /** The `TypeTable` id of `%struct.<symbol>*`. */
   type: i32
   fields: FieldInfo[]
   /** Field name -> index into `fields`. */
@@ -1233,15 +1258,25 @@ export class StructInfo {
    * WP48: the class writes `implements Compact` (`nish:compact`), so a field
    * typed exactly this class or this class `| null`, in any class, is a 32-bit
    * offset into the reserved range where the target compresses
-   * (`computeLayout`, docs/wp48-ref32-classes.md §3.2).
+   * (`computeLayout`, docs/wp48-ref32-classes.md §3.2). Since stage 3 the
+   * compact-class rule (`src/compact-rule.ts`) also sets it, once every body
+   * is checked, on each class it picks (`Compilation.settleCompactClasses`).
    */
   compact: boolean
+  /**
+   * WP48: the class writes `implements Wide` (`nish:compact`), so the
+   * compact-class rule never picks it and every field typed this class stays
+   * a full pointer (`src/compact-rule.ts`, test 5).
+   */
+  wide: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
+    this.symbol = name
     this.layout = false
     this.laying = false
     this.compact = false
+    this.wide = false
     this.kind = kind
     this.origin = origin
     this.type = type
@@ -1276,6 +1311,23 @@ export class StructInfo {
   field(name: string): FieldInfo | null {
     const at = this.fieldIndex.get(name, -1)
     return at < 0 ? null : this.fields[at]
+  }
+
+  /**
+   * The first field initializer that allocates, `[]` or `new C(...)`, or
+   * `null` when every one is a constant. Constructing the class then
+   * allocates in the arena and stores what it allocated into the object,
+   * which `src/escape.ts` and `src/attributes.ts` account for as they do
+   * `this.f = []` in a constructor's body.
+   */
+  allocatingInitializer(): Node | null {
+    for (const field of this.fields) {
+      const init = field.initializer
+      if (init !== null && (init.kind === NodeKind.Array || field.initNew !== null)) {
+        return init
+      }
+    }
+    return null
   }
 
   /** The method called `name`, or `null` when there is none. */
@@ -1636,22 +1688,32 @@ export class UnsafeCall {
  */
 export class StructRegistry {
   index: StringMap
+  /** Type id (decimal) -> index into `list` (WP57 S3a), for a walk that carries types. */
+  typeIndex: StringMap
   list: StructInfo[]
 
   constructor() {
     this.index = new StringMap()
+    this.typeIndex = new StringMap()
     this.list = []
   }
 
   add(info: StructInfo): void {
     if (!this.index.has(info.name)) {
       this.index.set(info.name, this.list.length)
+      this.typeIndex.set(`${info.type}`, this.list.length)
       this.list.push(info)
     }
   }
 
   get(name: string): StructInfo | null {
     const at = this.index.get(name, -1)
+    return at < 0 ? null : this.list[at]
+  }
+
+  /** The struct whose `TypeTable` id is `type`, or `null`. */
+  byType(type: i32): StructInfo | null {
+    const at = this.typeIndex.get(`${type}`, -1)
     return at < 0 ? null : this.list[at]
   }
 }
@@ -1730,6 +1792,12 @@ export class CheckedProgram {
    * imports, and the ones an imported class dragged in through its members.
    */
   structs: StringMap
+  /**
+   * Type id (decimal) -> index into `structList` (WP57 S3a): the same structs
+   * as `structs`, found by the type a value carries rather than by a name, so
+   * a walk across modules reaches a struct by its identity.
+   */
+  structTypes: StringMap
   structList: StructInfo[]
   /** Indices into `structList` that this module never named; see stage0's `src/checker/index.ts`. */
   reachableStructs: i32[]
@@ -2158,6 +2226,7 @@ export class CheckedProgram {
     this.gathered = false
     this.indexReceiver = -1
     this.structs = new StringMap()
+    this.structTypes = new StringMap()
     this.structList = []
     this.reachableStructs = []
     this.externalInstances = []
@@ -2467,8 +2536,23 @@ export class CheckedProgram {
     return at < 0 ? null : this.structList[at]
   }
 
+  /** The struct whose `TypeTable` id is `type` (WP57 S3a), or `null`. */
+  structByType(type: i32): StructInfo | null {
+    const at = this.structTypes.get(`${type}`, -1)
+    return at < 0 ? null : this.structList[at]
+  }
+
+  /** Index of `info` in `structList` (WP57 S3a), or -1 when it is not registered here. */
+  structIndex(info: StructInfo): i32 {
+    const at = this.structTypes.get(`${info.type}`, -1)
+    return at >= 0 && this.structList[at] === info ? at : -1
+  }
+
   /** Register `info` under `name`; the caller has already checked for a clash. */
   addStruct(name: string, info: StructInfo): void {
+    if (!this.structTypes.has(`${info.type}`)) {
+      this.structTypes.set(`${info.type}`, this.structList.length)
+    }
     this.structs.set(name, this.structList.length)
     this.structList.push(info)
   }

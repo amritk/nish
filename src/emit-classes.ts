@@ -27,6 +27,7 @@ import {
   emitArrayLength,
   emitArrayMethodCall,
   emitBoxedArrayAssignment,
+  emitEmptyArray,
   emitInlineArrayAssignment,
   emitNewArray,
   initInlineArrays,
@@ -82,10 +83,10 @@ export const structFieldPointer = (
 export const loadField = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
-  if (field.link) {
-    return decodeLink(emitter, ty, emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4`))
-  }
   const tbaa = fieldTbaa(emitter, info, field)
+  if (field.link) {
+    return decodeLink(emitter, ty, emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4${tbaa}`))
+  }
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
 }
 
@@ -99,7 +100,8 @@ export const storeField = (
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
   if (field.link) {
-    emitter.fn.emit(`store i32 ${encodeLink(emitter, ty, value)}, i32* ${ptr}, align 4`)
+    const offset = encodeLink(emitter, ty, value)
+    emitter.fn.emit(`store i32 ${offset}, i32* ${ptr}, align 4${fieldTbaa(emitter, info, field)}`)
     return
   }
   const tbaa = fieldTbaa(emitter, info, field)
@@ -112,9 +114,8 @@ export const storeField = (
 // (zero-based) and null needs no test; elsewhere it is relative to
 // `@nish_ref_base`, which the runtime sets once before `main`. The based IR
 // is pinned only by its text (`tests/cases/compact_darwin.ll`): Linux CI cannot
-// run a macOS binary, so no test executes it. The slot gets
-// no TBAA tag until the `ref32` node (stage 2b): untagged, it may alias
-// anything, which is conservative.
+// run a macOS binary, so no test executes it. The slot's load and store carry
+// the `ref32` TBAA tag (`fieldTbaa`), so a link never aliases an `i32` field.
 
 /** The `ty` (a `%struct.R*`) that the 32-bit link `slot` holds. */
 const decodeLink = (emitter: Emitter, ty: string, slot: string): string => {
@@ -192,7 +193,7 @@ const arenaObject = (emitter: Emitter, info: StructInfo): string => {
  * (an imported class `new`ed without a constructor), whose type table and
  * enums this emitter does not have.
  */
-export const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
+const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer
   if (init === null) {
     process.exit(internalErrorFor("emitter: a field initializer that is not there", emitter.opts.json))
@@ -247,11 +248,42 @@ export const defaultValue = (emitter: Emitter, sig: FunctionSig, p: i32, passed:
   return field.index >= 0 ? passed[field.index] : initializerConstant(emitter, field)
 }
 
-/** Store the literal initializers of the fields `info` declares itself. */
+/**
+ * The value a field initializer stores: a fresh empty array for `[]`, a fresh
+ * arena object built by its class's constructor (or initializers) for
+ * `new C(...)`, whose arguments are constants (`FieldInfo.initArgs`), and
+ * the constant `initializerConstant` writes for anything else. Read from the
+ * field and the classes alone, as `initializerConstant` is, because a class
+ * without a constructor runs its initializers at another module's `new`.
+ * Always the arena: the object is stored into another one, which the escape
+ * analysis has not followed (`initializersAllocate`).
+ */
+export const initializerValue = (emitter: Emitter, field: FieldInfo): string => {
+  const init = field.initializer
+  if (init !== null && init.kind === NodeKind.Array) {
+    return emitEmptyArray(emitter)
+  }
+  const made = field.initNew
+  if (init === null || made === null) {
+    return initializerConstant(emitter, field)
+  }
+  const obj = arenaObject(emitter, made)
+  initInlineArrays(emitter, made, obj)
+  const ctor = made.ctor
+  if (ctor !== null) {
+    const none: Node[] = []
+    emitCall(emitter, ctor, obj, none, field.initArgs, init)
+  } else {
+    emitFieldInitializers(emitter, made, obj)
+  }
+  return obj
+}
+
+/** Store the initializers of the fields `info` declares itself, in declaration order. */
 const emitFieldInitializers = (emitter: Emitter, info: StructInfo, receiver: string): void => {
   for (const field of info.fields) {
     if (field.initializer !== null) {
-      storeField(emitter, info, receiver, field, initializerConstant(emitter, field))
+      storeField(emitter, info, receiver, field, initializerValue(emitter, field))
     }
   }
 }
@@ -269,7 +301,8 @@ const constructObject = (
 ): void => {
   const ctor = info.ctor
   if (ctor !== null) {
-    emitCall(emitter, ctor, receiver, args, site)
+    const constants: FieldInfo[] = []
+    emitCall(emitter, ctor, receiver, args, constants, site)
     return
   }
   emitFieldInitializers(emitter, info, receiver)
@@ -445,12 +478,17 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
   )
 }
 
-/** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
+/**
+ * `call <ret> @Sym(<this>, args...)` for a method or constructor. The
+ * arguments are `args`, or, for a `new` initializer, which has no node the
+ * emitter may read, the constants `constants` holds (`FieldInfo.initArgs`).
+ */
 const emitCall = (
   emitter: Emitter,
   callee: FunctionSig,
   receiver: string,
   args: Node[],
+  constants: FieldInfo[],
   site: Node
 ): string => {
   const calleePrivate = privateAbi(emitter.opts, callee.visibleOutside())
@@ -470,7 +508,9 @@ const emitCall = (
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1]
     let value = ""
-    if (i >= args.length) {
+    if (i < constants.length) {
+      value = initializerConstant(emitter, constants[i])
+    } else if (i >= args.length) {
       value = defaultValue(emitter, callee, i + 1, passed)
     } else if (emitter.table.resultByValue(want)) {
       value = emitPackedResult(emitter, args[i], want, calleePrivate)
@@ -516,7 +556,8 @@ export const emitMethodCall = (emitter: Emitter, expr: Node): string => {
     process.exit(internalErrorFor(`emitter: no method recorded for \`${access.text}\``, emitter.opts.json))
   }
   const receiver = emitter.emitExpression(access.children[0])
-  return emitCall(emitter, callee, receiver, expr.children[1].children, expr)
+  const constants: FieldInfo[] = []
+  return emitCall(emitter, callee, receiver, expr.children[1].children, constants, expr)
 }
 
 /** `recv.f = v` stores `v`; `recv.f op= v` reads the field first, as JS does. */
