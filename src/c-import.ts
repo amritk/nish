@@ -1529,13 +1529,19 @@ class Importer {
       if (close < 0) {
         return refusedType("a type whose parentheses do not match")
       }
+      const after = trimSpaces(spelling.slice(close + 1))
       if (spelling.slice(star, close).indexOf("[") >= 0) {
         const array = new CType()
         array.base = BASE_ARRAY
-        array.reason = "an array of function pointers"
+        array.reason = after.startsWith("(") ? "an array of function pointers" : "an array of pointers"
         return array
       }
-      if (trimSpaces(spelling.slice(close + 1)).startsWith("[")) {
+      if (after.startsWith("[")) {
+        // `int (*(*)(void))[4]`: a group inside the first is a function
+        // pointer whose result is the pointer to an array.
+        if (spelling.slice(star + 2, close).indexOf("(") >= 0) {
+          return refusedType("a function pointer whose result is a pointer to an array")
+        }
         return refusedType("a pointer to an array")
       }
       const fn = new CType()

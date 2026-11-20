@@ -46522,6 +46522,79 @@ export function main(): i32 {
       shown(tripRan)
     )
 
+    // A count C writes back through a pointer is bound as an out class
+    // (`OutU8` for `unsigned char *`, `OutU32` for `uint32_t *`); the module
+    // compiles, links and reads back the count C wrote.
+    const outH = path.join(cImportDir, "outcount.h")
+    fs.writeFileSync(
+      outH,
+      "#include <stdint.h>\n" +
+        "int32_t fill_u8(void *into, unsigned char *got);\n" +
+        "int32_t fill_u32(void *into, uint32_t *got);\n"
+    )
+    const outC = path.join(cImportDir, "outcount.c")
+    fs.writeFileSync(
+      outC,
+      '#include "outcount.h"\n' +
+        "int32_t fill_u8(void *into, unsigned char *got) {\n" +
+        "  uint8_t *p = into; unsigned char n = *got < 3 ? *got : 3;\n" +
+        "  for (unsigned char i = 0; i < n; i++) p[i] = (uint8_t)(7 + i);\n" +
+        "  *got = n; return 1;\n}\n" +
+        "int32_t fill_u32(void *into, uint32_t *got) {\n" +
+        "  uint8_t *p = into; uint32_t n = *got < 5 ? *got : 5;\n" +
+        "  for (uint32_t i = 0; i < n; i++) p[i] = (uint8_t)(20 + i);\n" +
+        "  *got = n; return 2;\n}\n"
+    )
+    const outJson = path.join(cImportDir, "outcount.overrides.json")
+    fs.writeFileSync(
+      outJson,
+      '{ "header": "outcount.h", "functions": { "fill_u8": { "into": { "buffer": "got" } }, "fill_u32": { "into": { "buffer": "got" } } } }'
+    )
+    const outTs = path.join(cImportDir, "outcount.ts")
+    const outGen = cImport([outH, "--overrides", outJson, "-o", outTs])
+    const outText = outGen.status === 0 ? fs.readFileSync(outTs, "utf8") : ""
+    check(
+      "c-import: a count written through `unsigned char *` or `uint32_t *` is an out class",
+      outGen.status === 0 &&
+        outText.includes('declare function fill_u8(into: CountedBy<u8[], "got">, got: OutU8): i32\n') &&
+        outText.includes('declare function fill_u32(into: CountedBy<u8[], "got">, got: OutU32): i32\n'),
+      shown(outGen) + outText
+    )
+    fs.writeFileSync(
+      outTs,
+      `${outText}
+export function main(): i32 {
+  const small: u8[] = [0, 0, 0, 0]
+  const n8 = new OutU8()
+  n8.value = 4
+  const r8 = fill_u8(small, n8)
+  console.log(\`u8 \${r8} got \${n8.value} \${small[0]} \${small[2]} \${small[3]}\`)
+  const big: u8[] = [0, 0, 0, 0, 0, 0, 0, 0]
+  const n32 = new OutU32()
+  n32.value = 8
+  const r32 = fill_u32(big, n32)
+  console.log(\`u32 \${r32} got \${n32.value} \${big[0]} \${big[4]} \${big[5]}\`)
+  return 0
+}
+`
+    )
+    const outLl = path.join(cImportDir, "outcount.ll")
+    const outExe = path.join(cImportDir, "outcount")
+    const outCompiled = spawnSync(NISH, [outTs, "-o", outLl], { encoding: "utf8" })
+    const outBuilt =
+      outCompiled.status === 0
+        ? spawnSync("bash", [path.join(root, "scripts", "build.sh"), outLl, path.join(root, "runtime", "runtime.c"), outC, "-o", outExe], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : outCompiled
+    const outRan = outBuilt.status === 0 ? spawnSync(outExe, { encoding: "utf8" }) : outBuilt
+    check(
+      "c-import: an out-class count module links with its C source and reads the count C wrote",
+      outRan.status === 0 && outRan.stdout === "u8 1 got 3 7 9 0\nu32 2 got 5 20 24 0\n",
+      shown(outRan)
+    )
+
     // `-o` naming the header itself is refused before clang runs, and the
     // header is left as it was.
     const self = path.join(cImportDir, "self.h")

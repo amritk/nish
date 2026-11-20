@@ -104,9 +104,11 @@ The defaults for pointers are the safe ones:
 - A `const char *` parameter is a `string`, which is never null; a
   `const char *` result is `string | null`. Where the C function accepts
   `NULL`, say so with `"nullable": true` (below).
-- A pointer to a struct the header defines is the struct's class as a
-  parameter, never null unless the overrides file says `"nullable": true`.
-  As a result it is a `CPtr | null`.
+- A pointer to a struct the header defines, and the command binds, is the
+  struct's class as a parameter, never null unless the overrides file says
+  `"nullable": true`. As a result it is a `CPtr | null`. A defined struct the
+  command does not bind (a bitfield, a union, a packed layout, an array it
+  cannot hold) stays a `CPtr` both ways.
 - A pointer to an opaque struct (below) is its class both ways: never null
   as a parameter unless the overrides file says `"nullable": true`, and
   nullable as a result (`counter | null`).
@@ -259,7 +261,8 @@ says so; pass it with `--overrides`:
     the overrides file cannot overrule the header;
   - `"return": { "owned": "<free function>" }`, which records above the
     declaration which function frees the result;
-  - per parameter, by name: `"nullable": true` for a pointer the defaults
+  - per parameter, by name (an unnamed parameter is `arg0`, `arg1`, ... by
+    its position, as the module writes it): `"nullable": true` for a pointer the defaults
     bind as never null (only `true` changes anything), and
     `"buffer": "<length parameter>"`, which binds a `void *` or `char *` and
     its length as a `u8[]` (a `readonly u8[]` when the header says
@@ -267,7 +270,8 @@ says so; pass it with `--overrides`:
     `size_t` length straight after the buffer on a 64-bit target keeps the
     plain form, `(data: u8[], len: u64)`. Any other length -- a `uint32_t`,
     `uint16_t` or `uint8_t`, one before the buffer, or a `uint32_t *` the
-    function writes -- is named on the buffer,
+    function writes, bound as an out class such as `OutU32` (`OutU8` for an
+    `unsigned char *`) -- is named on the buffer,
     `(len: u16, data: CountedBy<readonly u8[], "len">)`, and the call checks
     it against the buffer's length before C runs. The length must be one of
     those unsigned widths, by value or through a pointer the function writes;

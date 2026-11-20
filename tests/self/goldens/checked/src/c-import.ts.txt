@@ -1012,19 +1012,21 @@ function Importer.resolve(this: Importer, spelling: string): CType -> @Importer.
   calls: CType.constructor Importer.builtinType Importer.enumType Importer.resolve StringMap.get arrayType closingParen firstDeclarator isIdent nish_alloc_struct nish_panic_index nish_panic_overflow nish_panic_slice nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new refusedType trimSpaces typeWords
   pointer this: size=248 writesThrough=false captured=false passedTo=Importer.enumType#0 Importer.resolve#0 Importer.builtinType#0
   stackSites=0 stackLocals=0
-  callee -138:14 refusedType -> @refusedType
-  callee -135:14 refusedType -> @refusedType
-  callee -130:14 refusedType -> @refusedType
-  callee -127:14 refusedType -> @refusedType
-  callee -122:14 refusedType -> @refusedType
-  local -120:11 star: i32 (const)
-  callee -120:18 firstDeclarator -> @firstDeclarator
-  local -114:13 close: i32 (const)
-  callee -114:21 closingParen -> @closingParen
-  callee -112:16 refusedType -> @refusedType
-  local -109:15 array: CType (const)
-  callee -109:23 new CType -> @CType.constructor
-  callee -104:11 trimSpaces -> @trimSpaces
+  callee -144:14 refusedType -> @refusedType
+  callee -141:14 refusedType -> @refusedType
+  callee -136:14 refusedType -> @refusedType
+  callee -133:14 refusedType -> @refusedType
+  callee -128:14 refusedType -> @refusedType
+  local -126:11 star: i32 (const)
+  callee -126:18 firstDeclarator -> @firstDeclarator
+  local -120:13 close: i32 (const)
+  callee -120:21 closingParen -> @closingParen
+  callee -118:16 refusedType -> @refusedType
+  local -116:13 after: string (const)
+  callee -116:21 trimSpaces -> @trimSpaces
+  local -114:15 array: CType (const)
+  callee -114:23 new CType -> @CType.constructor
+  callee -105:18 refusedType -> @refusedType
   callee -103:16 refusedType -> @refusedType
   local -101:13 fn: CType (const)
   callee -101:18 new CType -> @CType.constructor

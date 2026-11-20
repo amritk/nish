@@ -34,7 +34,11 @@ struct of_table { cb_table t; int n; };
 struct to_array { int (*row)[4]; int n; };
 /* A single function pointer, even one returning another, is still a pointer field. */
 struct one_fnptr { void (*(*pick)(int))(char); int n; };
+/* An array of pointers to arrays, and a function pointer returning a pointer to an array. */
+struct of_row_ptrs { int (*rows[2])[4]; int n; };
+struct row_getter { int (*(*get)(void))[4]; int n; };
 void use_fnptrs(struct of_fnptrs *a, struct of_typedef_fnptrs *b, struct of_table *c,
-                struct to_array *d, struct one_fnptr *e);
+                struct to_array *d, struct one_fnptr *e, struct of_row_ptrs *f,
+                struct row_getter *g);
 int (*row_at(int i))[4];
 void take_row(int (*row)[4]);

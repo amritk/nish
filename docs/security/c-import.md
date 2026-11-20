@@ -186,8 +186,9 @@ with its own `aligned` attribute, leaves the struct listed. In a
 `CountedBy<u8[], "n">` the overrides file picks which parameter is the count
 (`readParamOverride` finds it among the function's parameters); the name
 written is that parameter's name from the header, after the same renaming as
-any parameter (`nishName`, or `_N` for an unnamed one), and goes through
-`word` as an identifier.
+any parameter (`nishName`; an unnamed one is `argN`, N its position from 0,
+or `argN_K` while another parameter already holds that name, in
+`uniqueArgNames`), and goes through `word` as an identifier.
 
 clang's `_Nonnull` and `_Nullable` are read on a parameter's or result's
 outermost pointer only, and `returns_nonnull` (`ReturnsNonNullAttr`) on a

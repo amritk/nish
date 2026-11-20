@@ -1,6 +1,6 @@
 # WP66: C libraries from their headers
 
-**Status: proposed, design only.** Nothing here is built. The stages are in
+**Status: S1 to S5, S7 and S8 are built; S6 is open.** The stages are in
 §11 and on [the roadmap page](roadmap/wp66-c-headers.md). S6 waits on the
 owner (§9). [LANGUAGE.md](LANGUAGE.md#calling-c) stays normative.
 
