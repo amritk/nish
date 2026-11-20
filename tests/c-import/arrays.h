@@ -24,3 +24,17 @@ struct packed_arr { char c; int a[2]; } __attribute__((packed));
 void use_all(struct of_ptrs *a, struct of_structs *b, struct of_arrays *c, struct of_bools *d,
              struct of_chars *e, struct flexible *f, struct zero *g,
              struct of_aligned *i, union in_union *j, struct packed_arr *k);
+
+/* `(*` is read after `[`: an array of function pointers is an array, never one pointer. */
+struct of_fnptrs { void (*cbs[4])(int); int n; };
+typedef void (*cb_fn)(int);
+struct of_typedef_fnptrs { cb_fn cbs[2]; int n; };
+typedef void (*cb_table[3])(int);
+struct of_table { cb_table t; int n; };
+struct to_array { int (*row)[4]; int n; };
+/* A single function pointer, even one returning another, is still a pointer field. */
+struct one_fnptr { void (*(*pick)(int))(char); int n; };
+void use_fnptrs(struct of_fnptrs *a, struct of_typedef_fnptrs *b, struct of_table *c,
+                struct to_array *d, struct one_fnptr *e);
+int (*row_at(int i))[4];
+void take_row(int (*row)[4]);

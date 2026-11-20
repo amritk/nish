@@ -104,17 +104,21 @@ The defaults for pointers are the safe ones:
 - A `const char *` parameter is a `string`, which is never null; a
   `const char *` result is `string | null`. Where the C function accepts
   `NULL`, say so with `"nullable": true` (below).
-- A pointer to a struct is the struct's class; as a parameter it is never
-  null unless the overrides file says `"nullable": true`, and as a result it
-  is nullable (`counter | null`), since C may hand back `NULL`.
+- A pointer to a struct the header defines is the struct's class as a
+  parameter, never null unless the overrides file says `"nullable": true`.
+  As a result it is a `CPtr | null`.
+- A pointer to an opaque struct (below) is its class both ways: never null
+  as a parameter unless the overrides file says `"nullable": true`, and
+  nullable as a result (`counter | null`).
 - A struct the header only names is an opaque class of its own, so a
   `counter` cannot be passed where a `chan` is wanted, and neither can a
   `CPtr`. It stays a `CPtr` where a class cannot stand for it, and the
-  comment at the end of the module says which: no bound function returns it
+  comment at the end of the module says which. For example: no bound
+  function returns it
   (no value of the class could exist), a function takes a pointer to a
   pointer to it (`counter **`, which only an `OutPtr` holds), a result is
   `"owned"` (below), a struct's field points to it, or its name is taken by
-  another declaration.
+  another declaration (or is not a name Nish can write).
 - Any other `char *` result is a `CPtr | null`: the module cannot know
   whether you must free it.
 - A `void *` or `unsigned char *` parameter is a `CPtr | null`, or a `CPtr`
@@ -189,7 +193,9 @@ bind today:
   cannot copy;
 - a struct with an array field whose element is not an `i32`, `i64`, `u8`,
   `u16`, `u32`, `u64`, `f32` or `f64` (an array of pointers, structs, arrays,
-  `_Bool` or plain `char`, or of an `aligned` typedef), a flexible array
+  `_Bool`, plain `char` where the target makes it signed, or an `aligned`
+  typedef; on AArch64 Linux an array of plain `char` is a `u8` array), a
+  flexible array
   member (`int data[]`) and a zero-length array;
 - `long double`, `__int128` and `_Complex`, in any spelling or word order;
 - `signed char` and `short`, which have no Nish width, and a plain `char`

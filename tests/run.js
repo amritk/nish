@@ -46264,6 +46264,47 @@ export function main(): i32 {
       )
     }
 
+    // A count written through a plain `char *` follows the target's `char`:
+    // refused where `char` is signed, the `OutU8` out class on aarch64, where
+    // it is unsigned. Never a bare `CPtr` the checker would refuse.
+    fs.writeFileSync(path.join(cImportDir, "char-count.h"), "int get_c(void *into, char *got);\n")
+    const charCount = path.join(cImportDir, "char-count.overrides.json")
+    fs.writeFileSync(charCount, '{ "functions": { "get_c": { "into": { "buffer": "got" } } } }')
+    const charX86 = cImport([
+      path.join(cImportDir, "char-count.h"),
+      "--overrides",
+      charCount,
+      "--target",
+      "x86_64-unknown-linux-gnu",
+      "-o",
+      out,
+    ])
+    check(
+      "c-import: a plain `char *` count is refused where `char` is signed",
+      charX86.status === 1 &&
+        charX86.stderr.includes("count `got` must be a `u8`, `u16`, `u32` or `u64`") &&
+        !fs.existsSync(out),
+      shown(charX86)
+    )
+    const charArm = cImport([
+      path.join(cImportDir, "char-count.h"),
+      "--overrides",
+      charCount,
+      "--target",
+      "aarch64-unknown-linux-gnu",
+      "-o",
+      out,
+    ])
+    const charArmText = charArm.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    fs.rmSync(out, { force: true })
+    check(
+      "c-import: a plain `char *` count is the `OutU8` out class where `char` is unsigned",
+      charArm.status === 0 &&
+        charArmText.includes('declare function get_c(into: CountedBy<u8[], "got">, got: OutU8): i32\n') &&
+        charArmText.includes("declare class OutU8"),
+      shown(charArm)
+    )
+
     // An override that would change nothing the run binds is refused too: a
     // function from an included header, one `allow` leaves out, a static,
     // inline or variadic one, one whose type the generator cannot read, a

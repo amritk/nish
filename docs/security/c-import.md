@@ -40,7 +40,7 @@ the index row.
 
 | File | Functions |
 | --- | --- |
-| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `attrWhy`, `typeWhy`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `isCountType`, `countOf`, `isNamedCount`, `selected`, `refuseDuplicate`, `functionDecl`, `whyNotClass`, `fieldType`, `arrayField`, `decideOpaque`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `emittable`, `isIdent`, `isPrintable` and `reportLine` |
+| `src/c-import.ts` | `cImport`, `parseArgs`, `unsafePath`, `importCompiler`, `runClang`, `readCapped`, `scratchBeside`, and the `Importer` methods `clang`, `parse`, `dumpAst`, `readHeader`, `readTypedef`, `readRecord`, `readEnum`, `readFunction`, `attrWhy`, `typeWhy`, `resolve`, `enumType`, `readMacros`, `readDefine`, `probeText`, `probePath`, `probeArgs`, `probeMacros`, `probeBatch`, `readProbe`, `readOverrides`, `readAllow`, `readFunctionOverrides`, `readReturnOverride`, `readParamOverride`, `isCountType`, `countOf`, `isNamedCount`, `selected`, `refuseDuplicate`, `functionDecl`, `whyNotClass`, `fieldType`, `arrayField`, `decideOpaque`, `keepCPtr`, `pointee`, `claimConst`, `decideNames`, `checkOverride`, `whyNotDeclared`, `shellWord`, `word` and `emit`, and the functions `arrayType`, `firstDeclarator`, `closingParen`, `emittable`, `isIdent`, `isPrintable` and `reportLine` |
 | `src/c-import-json.ts` | `CJson`, the JSON reader the AST, the macro probe's AST and the overrides file go through, with its depth and value limits |
 | `src/c-import-model.ts` | `dataModelOf`, `dataModelRefusal` |
 | `src/compilation.ts` | the call into `dataModelRefusal` that raises NL3062 |
@@ -178,13 +178,15 @@ declaration takes leaves it a `CPtr` with the reason listed; each such struct
 gets its own class, so two C types never share one. An array field's length
 is the decimal clang wrote in the field's type (`arrayType` reads `T [N]` and
 nothing else; a length that is not plain digits, a flexible member, a zero
-length and an array of arrays are listed), written through `word` as an
-integer, and its element is one of `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+length and an array of arrays are listed); the last index, the length less
+one, is written through `word` as an integer (`arrayField`), and its element is one of `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
 `f32` or `f64`, which a `declare class` lays out inline at C's size and
 alignment for an element of that type; any other element, and an element type
-with its own `aligned` attribute, leaves the struct listed. A
-`CountedBy<u8[], "n">` names a count the overrides file gave and
-`readParamOverride` found among the function's parameters, written through
+with its own `aligned` attribute, leaves the struct listed. In a
+`CountedBy<u8[], "n">` the overrides file picks which parameter is the count
+(`readParamOverride` finds it among the function's parameters); the name
+written is that parameter's name from the header, after the same renaming as
+any parameter (`nishName`, or `_N` for an unnamed one), and goes through
 `word` as an identifier.
 
 clang's `_Nonnull` and `_Nullable` are read on a parameter's or result's
@@ -219,9 +221,10 @@ nullable, sets `return` on a function that does not return a pointer (CI-3),
 or binds a buffer that is not a `void *` or `char *`, or whose count is not
 another parameter of the function, is the buffer itself, is another buffer,
 or is not a `u8`, `u16`, `u32` or `u64` (an `unsigned char` included) passed
-by value or through a non-`const` pointer (`isCountType`). The count's name
-comes only from the overrides file: no count is guessed from a parameter's
-name, and clang 18's JSON AST carries no `counted_by` on a parameter, so the
+by value or through a non-`const` pointer (`isCountType`). Which parameter
+is the count comes only from the overrides file (the name written is that
+parameter's own, renamed as any parameter is and checked by `word`): no count
+is guessed from a parameter's name, and clang 18's JSON AST carries no `counted_by` on a parameter, so the
 header cannot name one. `readonly` is refused on a buffer the header lets the function
 write, and on a `const` one, which is bound `readonly` already. `"return":
 "nullable"` is refused on a result the header marks `_Nonnull` or

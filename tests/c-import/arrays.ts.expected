@@ -22,12 +22,18 @@ declare class by_macro {
   w: Record<integer<0, 3>, i32>
 }
 
+declare class one_fnptr {
+  pick: CPtr | null
+  n: i32
+}
+
 export const WIDTH: i32 = 4
 
 declare function digest_init(d: digest): void
 declare function mixed_sum(m: mixed): f64
 declare function by_macro_fill(b: by_macro): void
 declare function use_all(a: CPtr, b: CPtr, c: CPtr, d: CPtr, e: CPtr, f: CPtr, g: CPtr, i: CPtr, j: CPtr, k: CPtr): void
+declare function use_fnptrs(a: CPtr, b: CPtr, c: CPtr, d: CPtr, e: one_fnptr): void
 
 /* Not bound:
  *   struct of_ptrs: field `names` is an array of pointers
@@ -40,4 +46,10 @@ declare function use_all(a: CPtr, b: CPtr, c: CPtr, d: CPtr, e: CPtr, f: CPtr, g
  *   struct of_aligned: field `a` is an array of a typedef with its own `aligned` attribute
  *   union in_union: a union, which has no Nish type
  *   struct packed_arr: packed or aligned layout (PackedAttr), which a declare class does not follow
+ *   struct of_fnptrs: field `cbs` is an array of function pointers
+ *   struct of_typedef_fnptrs: field `cbs` is an array of pointers
+ *   struct of_table: field `t` is an array of function pointers
+ *   struct to_array: field `row` is a pointer to an array
+ *   row_at: returns a pointer to an array
+ *   take_row: parameter `row` is a pointer to an array
  */
