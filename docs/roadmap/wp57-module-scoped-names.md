@@ -1,20 +1,20 @@
 # WP57: Module-scoped names
 
-**State:** In progress · **Done:** 1 of 3 · **Design note:** [`docs/wp57-module-scoped-names.md`](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md)
+**State:** In progress · **Done:** 2 of 7 · **Design note:** [`docs/wp57-module-scoped-names.md`](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md)
 
 ## Stages
 
 - [x] S1: a private function's or generic template's symbol qualified by its module path when it would clash, with the clash checks over the qualified symbols
-- [ ] S2: exported names that clash inside one package and are not on the C surface *(open question)*
-- [ ] S3: module-scoped class and interface names, with type identity (module, name)
+- [x] S2: exported names that clash inside one package: decided, they stay refused, and nothing is built
+- [ ] S3a: a struct's symbol in the type table, separate from its source name and equal to it
+- [ ] S3b: every `%struct.` spelled from the struct's symbol
+- [ ] S3c: member and constructor symbols spelled from their owner's symbol
+- [ ] S3d: a private class or interface qualified by its module path when it would clash, with the clash checks over the symbols
+- [ ] S3e: a class or interface renamed on import
 
 ## Next
 
-S3, module-scoped class and interface names ([§7](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#7-s3-module-scoped-class-and-interface-names)); S2 waits on a decision, below. S1 is built: `src/` itself can use it one release after it ships ([§5](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#5-the-compiler-benefits-one-release-later)).
-
-## Waiting on a decision
-
-S2: keep refusing, make only the entry's exports the C surface, qualify in a closed-world build only, or give each a chosen C name ([§6](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#6-s2-exported-names-that-clash-inside-one-package-open-question)).
+S3a, a struct's symbol in the type table ([§7b](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#7b-stages)). S3a to S3c move no IR; S3d is the stage users see, and S3e needs only S3a. S2 is settled as keep refusing ([§6](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#6-s2-exported-names-that-clash-inside-one-package-decided-keep-refusing)). S1 is built: `src/` itself can use it one release after it ships ([§5](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#5-the-compiler-benefits-one-release-later)).
 
 ## Not planned
 

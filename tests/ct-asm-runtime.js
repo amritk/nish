@@ -54,11 +54,17 @@
  *                                  runtime-chacha20.c and the leaky variants in
  *                                  tests/simd/aes-leaky.c, prints
  *                                  one line per check, and exits 1 on a failure
+ *   node tests/ct-asm-runtime.js --fixtures <cpu>...
+ *                                  reads every tests/cases/ct_asm_*.ll golden at
+ *                                  `-march=<cpu>` with the fixture checks
+ *                                  tests/run.js runs at x86-64-v3, one line per
+ *                                  check; how `--cpu native` was measured (CT-16)
  */
 
 import { spawnSync } from "node:child_process"
+import fs from "node:fs"
 import path from "node:path"
-import { CT_TARGETS, functionBody, settle, Taint } from "./ct-asm.js"
+import { CT_TARGETS, ctSpecs, ctViolations, functionBody, settle, Taint } from "./ct-asm.js"
 
 /**
  * The runtime's kernel units, each with its resolver and its kernels, and what
@@ -165,6 +171,63 @@ const exportGap = (lines, unit) => {
     unread: exported.filter((name) => !named.includes(name)),
     missing: named.filter((name) => !exported.includes(name)),
   }
+}
+
+/**
+ * Every `ct_asm_*` fixture's promises read at `-march=march`: the checks
+ * tests/run.js's ct_asm section makes at x86-64-v3, run on the golden `.ll`
+ * (what `nish` compiles the fixture to) at any CPU clang knows. CI reads only
+ * the levels in that section; this is for a one-off reading of another level,
+ * such as the CPUs `-march=native` names (CT-16).
+ *
+ * @param {string} root the repository root
+ * @param {string} march the CPU clang is given as `-march=`
+ * @returns {{ fixture: string, fn: string, ok: boolean, detail: string }[]} one result per promise
+ */
+export const fixtureChecks = (root, march) => {
+  const target = ctAtLevel(march)
+  const casesDir = path.join(root, "tests", "cases")
+  const results = []
+  for (const file of fs
+    .readdirSync(casesDir)
+    .filter((f) => /^ct_asm_\w+\.ll$/.test(f))
+    .sort()) {
+    const fixture = file.slice(0, -".ll".length)
+    const specs = ctSpecs(fs.readFileSync(path.join(casesDir, `${fixture}.ts`), "utf8"))
+    const cc = spawnSync(
+      "clang",
+      [
+        "-O2",
+        "-S",
+        "-Wno-override-module",
+        `--target=${target.triple}`,
+        ...target.flags,
+        path.join(casesDir, file),
+        "-o",
+        "-",
+      ],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    )
+    if (cc.status !== 0) {
+      results.push({ fixture, fn: "(clang)", ok: false, detail: cc.stderr })
+      continue
+    }
+    const lines = cc.stdout.split("\n")
+    for (const spec of specs) {
+      const body =
+        spec.problems.length === 0 ? functionBody(lines, spec.name, target, { labels: spec.loops }) : null
+      const found = body === null ? [] : ctViolations(body, spec, target)
+      const kinds = [...new Set(found.map((v) => v.kind))]
+      results.push({
+        fixture,
+        fn: spec.name,
+        ok: body !== null && (spec.expect === null ? found.length === 0 : kinds.includes(spec.expect)),
+        detail:
+          body === null ? `${spec.name} not read: ${spec.problems.join("; ") || "no symbol"}` : listed(found),
+      })
+    }
+  }
+  return results
 }
 
 /**
@@ -420,6 +483,18 @@ if (missedCorners.length > 0) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = path.join(import.meta.dirname, "..")
   let failed = 0
+  if (process.argv[2] === "--fixtures") {
+    for (const march of process.argv.slice(3)) {
+      for (const r of fixtureChecks(root, march)) {
+        console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.fixture} ${r.fn} at ${march}`)
+        if (!r.ok) {
+          failed++
+          console.log(r.detail)
+        }
+      }
+    }
+    process.exit(failed > 0 ? 1 : 0)
+  }
   for (const r of [...runtimeChecks(root), ...runtimeChecks(root, "x86-64-v3")]) {
     console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.file} ${r.fn} on ${r.target}: ${r.expect ?? r.kind}`)
     if (!r.ok) {
