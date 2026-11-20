@@ -52,7 +52,7 @@ entry:
   %2 = ptrtoint %struct.Cell* %next to i64
   %3 = lshr i64 %2, 2
   %4 = trunc i64 %3 to i32
-  store i32 %4, i32* %1, align 4
+  store i32 %4, i32* %1, align 4, !tbaa !6
   ret void
 }
 
@@ -62,14 +62,14 @@ entry:
   %1 = ptrtoint %struct.Tree* null to i64
   %2 = lshr i64 %1, 2
   %3 = trunc i64 %2 to i32
-  store i32 %3, i32* %0, align 4
+  store i32 %3, i32* %0, align 4, !tbaa !8
   %4 = getelementptr inbounds %struct.Tree, %struct.Tree* %this, i32 0, i32 1
   %5 = ptrtoint %struct.Tree* null to i64
   %6 = lshr i64 %5, 2
   %7 = trunc i64 %6 to i32
-  store i32 %7, i32* %4, align 4
+  store i32 %7, i32* %4, align 4, !tbaa !9
   %8 = getelementptr inbounds %struct.Tree, %struct.Tree* %this, i32 0, i32 2
-  store i32 %depth, i32* %8, align 4, !tbaa !7
+  store i32 %depth, i32* %8, align 4, !tbaa !10
   %9 = icmp sgt i32 %depth, 0
   br i1 %9, label %if.then, label %if.end
 
@@ -82,7 +82,7 @@ if.then:
   %14 = ptrtoint %struct.Tree* %11 to i64
   %15 = lshr i64 %14, 2
   %16 = trunc i64 %15 to i32
-  store i32 %16, i32* %13, align 4
+  store i32 %16, i32* %13, align 4, !tbaa !8
   %17 = call i8* @nish_alloc_ref(i64 12)
   %18 = bitcast i8* %17 to %struct.Tree*
   %19 = sub nsw i32 %depth, 1
@@ -91,7 +91,7 @@ if.then:
   %21 = ptrtoint %struct.Tree* %18 to i64
   %22 = lshr i64 %21, 2
   %23 = trunc i64 %22 to i32
-  store i32 %23, i32* %20, align 4
+  store i32 %23, i32* %20, align 4, !tbaa !9
   br label %if.end
 
 if.end:
@@ -104,9 +104,9 @@ entry:
   %1 = ptrtoint %struct.Cell* null to i64
   %2 = lshr i64 %1, 2
   %3 = trunc i64 %2 to i32
-  store i32 %3, i32* %0, align 4
+  store i32 %3, i32* %0, align 4, !tbaa !13
   %4 = getelementptr inbounds %struct.Holder, %struct.Holder* %this, i32 0, i32 0
-  store i8* %name, i8** %4, align 8, !tbaa !9
+  store i8* %name, i8** %4, align 8, !tbaa !14
   ret void
 }
 
@@ -136,7 +136,7 @@ ovf.ok:
 
 if.end:
   %4 = getelementptr inbounds %struct.Tree, %struct.Tree* %t, i32 0, i32 0
-  %5 = load i32, i32* %4, align 4
+  %5 = load i32, i32* %4, align 4, !tbaa !8
   %6 = zext i32 %5 to i64
   %7 = shl nuw nsw i64 %6, 2
   %8 = inttoptr i64 %7 to %struct.Tree*
@@ -148,7 +148,7 @@ if.end:
 
 ovf.ok.1:
   %13 = getelementptr inbounds %struct.Tree, %struct.Tree* %t, i32 0, i32 1
-  %14 = load i32, i32* %13, align 4
+  %14 = load i32, i32* %13, align 4, !tbaa !9
   %15 = zext i32 %14 to i64
   %16 = shl nuw nsw i64 %15, 2
   %17 = inttoptr i64 %16 to %struct.Tree*
@@ -241,7 +241,7 @@ ovf.ok:
   store i32 %16, i32* %sum.addr, align 4
   %18 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
   %19 = getelementptr inbounds %struct.Cell, %struct.Cell* %18, i32 0, i32 1
-  %20 = load i32, i32* %19, align 4
+  %20 = load i32, i32* %19, align 4, !tbaa !6
   %21 = zext i32 %20 to i64
   %22 = shl nuw nsw i64 %21, 2
   %23 = inttoptr i64 %22 to %struct.Cell*
@@ -260,10 +260,10 @@ while.end:
   %29 = ptrtoint %struct.Cell* %27 to i64
   %30 = lshr i64 %29, 2
   %31 = trunc i64 %30 to i32
-  store i32 %31, i32* %28, align 4
+  store i32 %31, i32* %28, align 4, !tbaa !13
   %32 = load %struct.Holder*, %struct.Holder** %h.addr, align 8
   %33 = getelementptr inbounds %struct.Holder, %struct.Holder* %32, i32 0, i32 1
-  %34 = load i32, i32* %33, align 4
+  %34 = load i32, i32* %33, align 4, !tbaa !13
   %35 = zext i32 %34 to i64
   %36 = shl nuw nsw i64 %35, 2
   %37 = inttoptr i64 %36 to %struct.Cell*
@@ -275,7 +275,7 @@ while.end:
 if.then:
   %40 = load %struct.Cell*, %struct.Cell** %first.addr, align 8
   %41 = getelementptr inbounds %struct.Cell, %struct.Cell* %40, i32 0, i32 1
-  %42 = load i32, i32* %41, align 4
+  %42 = load i32, i32* %41, align 4, !tbaa !6
   %43 = zext i32 %42 to i64
   %44 = shl nuw nsw i64 %43, 2
   %45 = inttoptr i64 %44 to %struct.Cell*
@@ -307,11 +307,11 @@ if.end.1:
 
 if.end:
   %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 0, i64* %58, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  store i64 0, i64* %58, align 8, !alias.scope !18, !noalias !19, !tbaa !23
   %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 0, i64* %59, align 8, !alias.scope !13, !noalias !14, !tbaa !19
+  store i64 0, i64* %59, align 8, !alias.scope !18, !noalias !19, !tbaa !24
   %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* null, i8** %60, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  store i8* null, i8** %60, align 8, !alias.scope !18, !noalias !19, !tbaa !25
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %cells.addr, align 8
   %61 = load %struct.Cell*, %struct.Cell** %head.addr, align 8
   store %struct.Cell* %61, %struct.Cell** %c.addr, align 8
@@ -326,9 +326,9 @@ while.body.1:
   %64 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
   %65 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
   %66 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %64, i64 0, i32 0
-  %67 = load i64, i64* %66, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %67 = load i64, i64* %66, align 8, !alias.scope !18, !noalias !19, !tbaa !23
   %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %64, i64 0, i32 1
-  %69 = load i64, i64* %68, align 8, !alias.scope !13, !noalias !14, !tbaa !19
+  %69 = load i64, i64* %68, align 8, !alias.scope !18, !noalias !19, !tbaa !24
   %70 = icmp eq i64 %67, %69
   br i1 %70, label %push.grow, label %push.store
 
@@ -338,16 +338,16 @@ push.grow:
 
 push.store:
   %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %64, i64 0, i32 2
-  %72 = load i8*, i8** %71, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  %72 = load i8*, i8** %71, align 8, !alias.scope !18, !noalias !19, !tbaa !25
   %73 = bitcast i8* %72 to %struct.Cell**
   %74 = getelementptr inbounds %struct.Cell*, %struct.Cell** %73, i64 %67
-  store %struct.Cell* %65, %struct.Cell** %74, align 8, !alias.scope !14, !noalias !13, !tbaa !22
+  store %struct.Cell* %65, %struct.Cell** %74, align 8, !alias.scope !19, !noalias !18, !tbaa !27
   %75 = add i64 %67, 1
-  store i64 %75, i64* %66, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  store i64 %75, i64* %66, align 8, !alias.scope !18, !noalias !19, !tbaa !23
   %76 = trunc i64 %75 to i32
   %77 = load %struct.Cell*, %struct.Cell** %c.addr, align 8
   %78 = getelementptr inbounds %struct.Cell, %struct.Cell* %77, i32 0, i32 1
-  %79 = load i32, i32* %78, align 4
+  %79 = load i32, i32* %78, align 4, !tbaa !6
   %80 = zext i32 %79 to i64
   %81 = shl nuw nsw i64 %80, 2
   %82 = inttoptr i64 %81 to %struct.Cell*
@@ -357,13 +357,13 @@ push.store:
 while.end.1:
   %83 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
   %84 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %83, i64 0, i32 0
-  %85 = load i64, i64* %84, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %85 = load i64, i64* %84, align 8, !alias.scope !18, !noalias !19, !tbaa !23
   %86 = trunc i64 %85 to i32
   %87 = call i8* @nish_str_from_i32(i32 %86)
   call void @nish_print(i8* %87)
   %88 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
   %89 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %88, i64 0, i32 0
-  %90 = load i64, i64* %89, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %90 = load i64, i64* %89, align 8, !alias.scope !18, !noalias !19, !tbaa !23
   %91 = icmp ult i64 4, %90
   br i1 %91, label %bounds.ok, label %bounds.fail
 
@@ -373,29 +373,29 @@ bounds.fail:
 
 bounds.ok:
   %92 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %88, i64 0, i32 2
-  %93 = load i8*, i8** %92, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  %93 = load i8*, i8** %92, align 8, !alias.scope !18, !noalias !19, !tbaa !25
   %94 = bitcast i8* %93 to %struct.Cell**
   %95 = getelementptr inbounds %struct.Cell*, %struct.Cell** %94, i64 4
-  %96 = load %struct.Cell*, %struct.Cell** %95, align 8, !alias.scope !14, !noalias !13, !tbaa !22
+  %96 = load %struct.Cell*, %struct.Cell** %95, align 8, !alias.scope !19, !noalias !18, !tbaa !27
   %97 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
   %98 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %97, i64 0, i32 2
-  %99 = load i8*, i8** %98, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  %99 = load i8*, i8** %98, align 8, !alias.scope !18, !noalias !19, !tbaa !25
   %100 = bitcast i8* %99 to %struct.Cell**
   %101 = getelementptr inbounds %struct.Cell*, %struct.Cell** %100, i64 0
-  %102 = load %struct.Cell*, %struct.Cell** %101, align 8, !alias.scope !14, !noalias !13, !tbaa !22
+  %102 = load %struct.Cell*, %struct.Cell** %101, align 8, !alias.scope !19, !noalias !18, !tbaa !27
   %103 = getelementptr inbounds %struct.Cell, %struct.Cell* %96, i32 0, i32 1
   %104 = ptrtoint %struct.Cell* %102 to i64
   %105 = lshr i64 %104, 2
   %106 = trunc i64 %105 to i32
-  store i32 %106, i32* %103, align 4
+  store i32 %106, i32* %103, align 4, !tbaa !6
   %107 = load %struct.nish_array*, %struct.nish_array** %cells.addr, align 8
   %108 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %107, i64 0, i32 2
-  %109 = load i8*, i8** %108, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  %109 = load i8*, i8** %108, align 8, !alias.scope !18, !noalias !19, !tbaa !25
   %110 = bitcast i8* %109 to %struct.Cell**
   %111 = getelementptr inbounds %struct.Cell*, %struct.Cell** %110, i64 4
-  %112 = load %struct.Cell*, %struct.Cell** %111, align 8, !alias.scope !14, !noalias !13, !tbaa !22
+  %112 = load %struct.Cell*, %struct.Cell** %111, align 8, !alias.scope !19, !noalias !18, !tbaa !27
   %113 = getelementptr inbounds %struct.Cell, %struct.Cell* %112, i32 0, i32 1
-  %114 = load i32, i32* %113, align 4
+  %114 = load i32, i32* %113, align 4, !tbaa !6
   %115 = zext i32 %114 to i64
   %116 = shl nuw nsw i64 %115, 2
   %117 = inttoptr i64 %116 to %struct.Cell*
@@ -445,32 +445,37 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!23, !24, !25, !26, !27}
+!llvm.module.flags = !{!28, !29, !30, !31, !32}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
-!3 = !{!"ptr", !1, i64 0}
+!3 = !{!"ref32", !1, i64 0}
 !4 = !{!"Cell", !2, i64 0, !3, i64 4}
 !5 = !{!4, !2, i64 0}
-!6 = !{!"Tree", !3, i64 0, !3, i64 4, !2, i64 8}
-!7 = !{!6, !2, i64 8}
-!8 = !{!"Holder", !3, i64 0, !3, i64 8}
-!9 = !{!8, !3, i64 0}
-!10 = !{!"nish array"}
-!11 = !{!"header", !10}
-!12 = !{!"elements", !10}
-!13 = !{!11}
-!14 = !{!12}
-!15 = !{!"header i64", !1, i64 0}
-!16 = !{!"header ptr", !1, i64 0}
-!17 = !{!"array header", !15, i64 0, !15, i64 8, !16, i64 16}
-!18 = !{!17, !15, i64 0}
-!19 = !{!17, !15, i64 8}
-!20 = !{!17, !16, i64 16}
-!21 = !{!"element ptr", !1, i64 0}
-!22 = !{!21, !21, i64 0}
-!23 = !{i32 8, !"cf-protection-branch", i32 1}
-!24 = !{i32 8, !"cf-protection-return", i32 1}
-!25 = !{i32 8, !"branch-target-enforcement", i32 1}
-!26 = !{i32 8, !"sign-return-address", i32 1}
-!27 = !{i32 4, !"probe-stack", !"inline-asm"}
+!6 = !{!4, !3, i64 4}
+!7 = !{!"Tree", !3, i64 0, !3, i64 4, !2, i64 8}
+!8 = !{!7, !3, i64 0}
+!9 = !{!7, !3, i64 4}
+!10 = !{!7, !2, i64 8}
+!11 = !{!"ptr", !1, i64 0}
+!12 = !{!"Holder", !11, i64 0, !3, i64 8}
+!13 = !{!12, !3, i64 8}
+!14 = !{!12, !11, i64 0}
+!15 = !{!"nish array"}
+!16 = !{!"header", !15}
+!17 = !{!"elements", !15}
+!18 = !{!16}
+!19 = !{!17}
+!20 = !{!"header i64", !1, i64 0}
+!21 = !{!"header ptr", !1, i64 0}
+!22 = !{!"array header", !20, i64 0, !20, i64 8, !21, i64 16}
+!23 = !{!22, !20, i64 0}
+!24 = !{!22, !20, i64 8}
+!25 = !{!22, !21, i64 16}
+!26 = !{!"element ptr", !1, i64 0}
+!27 = !{!26, !26, i64 0}
+!28 = !{i32 8, !"cf-protection-branch", i32 1}
+!29 = !{i32 8, !"cf-protection-return", i32 1}
+!30 = !{i32 8, !"branch-target-enforcement", i32 1}
+!31 = !{i32 8, !"sign-return-address", i32 1}
+!32 = !{i32 4, !"probe-stack", !"inline-asm"}
