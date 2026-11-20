@@ -64,7 +64,7 @@ function fieldScalar(emitter: Emitter, field: FieldInfo): string -> @fieldScalar
   sharedWrite: via ref32Node
   calls: ref32Node scalarNode
   pointer emitter: size=424 writesThrough=false captured=false passedTo=ref32Node#0 scalarNode#0
-  pointer field: size=88 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:16 ref32Node -> @ref32Node
   callee +0:37 scalarNode -> @scalarNode
@@ -101,7 +101,7 @@ function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string
   calls: Emitter.metadata fieldScalar nish_str_concat nish_str_from_i32 structNode
   pointer emitter: size=424 writesThrough=false captured=false passedTo=structNode#0 fieldScalar#0 Emitter.metadata#0
   pointer info: size=176 writesThrough=true captured=true passedTo=structNode#1
-  pointer field: size=88 writesThrough=false captured=false passedTo=fieldScalar#1
+  pointer field: size=104 writesThrough=false captured=false passedTo=fieldScalar#1
   stackSites=0 stackLocals=0
   local +0:9 base: string (const)
   callee +0:16 structNode -> @structNode

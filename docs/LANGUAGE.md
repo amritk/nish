@@ -1932,8 +1932,14 @@ having no top-level code and therefore no initialisation order.
   [module storage](#module-storage)'s), a local, a parameter — is
   `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
-  There is deliberately no second, larger language inside `const`: a constant
-  can compute exactly what a runtime expression can.
+  There is deliberately no second, larger language inside `const`: what a
+  constant computes, it computes as the runtime expression would, but it
+  computes less.
+  "Arithmetic" here is `+ - * / %`, the comparisons, `!`, `&&`, `||`, unary
+  minus and string `+`. The shift and bitwise operators (`<< >> >>> & | ^ ~`)
+  are refused in a constant and in a [constant table](#constant-tables)'s
+  element alike, whatever their operands' type, not folded. Write the
+  value out (`8`, not `1 << 3`), or compute it at run time.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
   replaces computes. By default that instruction is checked, so a fold that
@@ -3267,9 +3273,36 @@ class Point {
 ```
 
 - **Fields** need a type annotation (`` Field `x` of class `Point` needs a type annotation ``,
-  `tests/cases/reject_cls_field_no_type`). An initializer must be a literal
-  (a number, a negated number, a string, or a boolean) of the field's type
-  (`initializers must be literals` *(CLI only)*; `tests/cases/cls_initializers`).
+  `tests/cases/reject_cls_field_no_type`). An initializer is one of
+  (`tests/cases/cls_initializers`, `cls_field_init`):
+  - a literal (a number, a negated number, a string, or a boolean) of the
+    field's type, or `null`, or an enum member;
+  - `[]` when the field's type is an array (`kind: i32[] = []`): a fresh,
+    empty array of the declared element type, one per object;
+  - `new C(args)` (`child: Leaf = new Leaf(0)`) where `C` is a class with no
+    type parameters and the field's type is `C` or `C | null` (not a union or
+    interface `C` converts to), and each argument is itself a literal or enum
+    member of its parameter's type.
+
+  **An initializer reads nothing.** It may not name `this`, a constructor
+  parameter, another field, a local or a module constant; an argument of its
+  `new` is a literal too. Anything else, a call that is not `new` included,
+  is `initializers must be literals` *(CLI only)*
+  (`reject_cls_field_init_call`, `reject_cls_field_init_new_arg`), and a `new`
+  of a generic, handle or layout class is refused the same way
+  (`reject_cls_field_init_new_generic`). Assign a value computed from those
+  in the constructor. The constructor stores every initializer before the
+  first statement of its body, in declaration order; a class without a
+  constructor stores them at its `new`. So a class whose initializers
+  construct the class itself, directly or through another class's
+  initializers, would construct forever, and is refused
+  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`),
+  once per loop however many classes are on it (`tests/link/cls_field_init_cycle`).
+  An exported class with no constructor, and an exported generic class, has
+  its initializers run in the module that builds it, so a class they
+  construct is exported too (`` `Pin` is not exported, but this class's
+  initializers run in the module that builds it ``,
+  `tests/link/cls_field_init_private`, `reject_cls_field_init_private`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
 - **Constructor**: at most one, with a body
@@ -14266,7 +14299,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program

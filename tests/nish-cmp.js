@@ -1475,6 +1475,36 @@ const PACKAGE_LINK = "A package links a C library or its own C sources"
 const DECLARED = [
   ...scramModule(),
   {
+    program: "tests/cases/cls_field_init.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` or `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "docs/cookbook/cls-field-init.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` or `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "tests/link/cls_field_init_import/main.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` or `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "tests/cases/cls_field_init_arena.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses a `new` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
+    program: "tests/link/cls_field_init_json/main.ts",
+    file: "exit",
+    changelog: "[] and new expressions as class field initializers",
+    why: "the reference refuses an `[]` field initializer as not a literal; the candidate stores it before the constructor body",
+  },
+  {
     program: "tests/link/pkg_link_flag_library/main.ts",
     file: "exit",
     changelog: PACKAGE_LINK,

@@ -36,7 +36,7 @@ import {
   instantiateWritten,
   isGenericFunction,
 } from "./generics"
-import { isExported, collectParams } from "./declarations"
+import { isExported, collectParams, fitArguments } from "./declarations"
 import { checkNumericLiteral, memberSlotMessage } from "./expressions"
 import {
   FLAG_DEFINITE,
@@ -816,7 +816,16 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   const initializer = decl.children[2]
   if (initializer.kind !== NodeKind.Empty) {
     const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
-    checkLiteralInitializer(ctx, field, initializer, what, notLiteral, false)
+    if (initializer.kind === NodeKind.Array) {
+      // `[]`: a fresh empty array per object, of the element type the field
+      // declares, so a filled one would be a literal of no element type yet.
+      if (type !== T_ERROR && (initializer.children.length > 0 || !ctx.table.isArray(type))) {
+        ctx.error(initializer, notLiteral)
+      }
+    } else if (initializer.kind !== NodeKind.New) {
+      checkLiteralInitializer(ctx, field, initializer, what, notLiteral, false)
+    }
+    // A `new` waits for every constructor's signature (`resolveNewInitializers`).
     // The field keeps its initializer even when that initializer was refused.
     // What it is worth is nothing; what it *says* is that the programmer wrote
     // one, and the definite-assignment pass would otherwise follow the first
@@ -828,6 +837,202 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   }
   owner.fieldIndex.set(name, owner.fields.length)
   owner.fields.push(field)
+}
+
+/**
+ * The `new C(args)` initializers of `owner`'s fields, held to the rule now
+ * that every constructor's signature is known (`collectField` only kept them):
+ * `C` is a plain class, not generic, a handle or a layout, whose objects the
+ * field's type accepts, and each argument a literal or enum member of its
+ * parameter's type, so the emitter writes the call from constants alone
+ * (`initializerValue` in `src/emit-classes.ts`). A refused one leaves
+ * `initNew` null and keeps its `initializer`, as `collectField` does.
+ */
+export const resolveNewInitializers = (ctx: CheckContext, owner: StructInfo): void => {
+  for (const field of owner.fields) {
+    const init = field.initializer
+    // A field whose type was refused has said its one thing already.
+    if (init !== null && init.kind === NodeKind.New && field.type !== T_ERROR) {
+      ctx.errored = false
+      resolveNewInitializer(ctx, owner, field, init)
+    }
+  }
+  ctx.errored = false
+}
+
+/**
+ * One field's `new` initializer, for `resolveNewInitializers`: a function of
+ * its own, so the messages it builds belong to one field's call rather than
+ * to every pass of the loop over the fields.
+ */
+const resolveNewInitializer = (ctx: CheckContext, owner: StructInfo, field: FieldInfo, init: Node): void => {
+  const what = `Field \`${field.name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\``
+  const notLiteral = `${what}: initializers must be literals (assign other values in the constructor)`
+  const callee = init.children[0]
+  const name = callee.kind === NodeKind.Ident ? callee.text : ""
+  const made: StructInfo | null = name === "" ? null : ctx.program.struct(name)
+  if (
+    made === null ||
+    ctx.program.structTemplate(name) !== null ||
+    init.children[1].children.length > 0 ||
+    made.kind !== STRUCT_CLASS ||
+    made.handle ||
+    made.layout ||
+    ctx.table.isOpaque(made.type)
+  ) {
+    ctx.error(init, notLiteral)
+    return
+  }
+  if (!ctx.table.assignable(made.type, field.type)) {
+    ctx.error(
+      init,
+      `${what} is ${ctx.table.typeName(field.type)} but its initializer is ${ctx.table.typeName(made.type)}`
+    )
+    return
+  }
+  const args = init.children[2]
+  const ctor = made.ctor
+  if (ctor === null) {
+    if (args.children.length > 0) {
+      ctx.error(
+        init,
+        `\`new ${name}\` expects 0 argument(s) (the class has no constructor), got ${args.children.length}`
+      )
+      return
+    }
+  } else if (ctor.restIndex >= 0 || ctor.captures.length > 0) {
+    ctx.error(init, notLiteral)
+    return
+  } else if (!fitArguments(ctx, init, args, ctor, 1, `new ${name}`)) {
+    return
+  }
+  const carried: FieldInfo[] = []
+  let refused = false
+  let i = 0
+  while (i < args.children.length && ctor !== null) {
+    const arg = args.children[i]
+    const type = ctor.paramTypes[i + 1]
+    const slot = `Argument ${i + 1} of \`new ${name}\` in ${what}`
+    const carrier = new FieldInfo(ctor.paramNames[i + 1], type, field.decl)
+    carrier.initializer = arg
+    carrier.index = -1
+    if (ctor.isCompileTime(i + 1) || arg.kind === NodeKind.Array || arg.kind === NodeKind.New) {
+      ctx.error(arg, notLiteral)
+    } else {
+      checkLiteralInitializer(ctx, carrier, arg, slot, notLiteral, false)
+    }
+    if (ctx.errored) {
+      refused = true
+      break
+    }
+    ctx.program.nodeTypes[arg.id] = type
+    if (arg.kind === NodeKind.Unary && arg.children.length > 0) {
+      ctx.program.nodeTypes[arg.children[0].id] = type
+    }
+    carried.push(carrier)
+    i = i + 1
+  }
+  // An exported class with no constructor, or an instance of an exported
+  // generic class, has its initializers emitted where it is built, which
+  // may be another module: a private class's constructor is `internal`
+  // there and would not link.
+  const instance = owner.instance
+  const runsElsewhere = instance !== null ? instance.template.exported : owner.exported && owner.ctor === null
+  if (!refused && runsElsewhere && !made.exported) {
+    ctx.error(
+      init,
+      `${what}: \`${name}\` is not exported, but this class's initializers run in the module that builds it (export \`${name}\`)`
+    )
+    refused = true
+  }
+  if (!refused) {
+    field.initNew = made
+    field.initArgs = carried
+    ctx.program.nodeTypes[init.id] = made.type
+  }
+}
+
+/**
+ * Whether the initializers of `at`, or of a class one of them constructs,
+ * construct `target`: `seen` holds the classes already walked, so a cycle
+ * that does not pass through `target` ends the walk instead of looping.
+ */
+const constructs = (at: StructInfo, target: StructInfo, seen: StringSet): boolean => {
+  for (const field of at.fields) {
+    const made = field.initNew
+    if (made === null) {
+      continue
+    }
+    if (made === target) {
+      return true
+    }
+    if (!seen.has(made.name)) {
+      seen.add(made.name)
+      if (constructs(made, target, seen)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * Adds to `reported` every class `at`'s initializers reach that constructs
+ * `owner` again: the other members of `owner`'s cycle.
+ */
+const markCycle = (at: StructInfo, owner: StructInfo, reported: StringSet, seen: StringSet): void => {
+  for (const field of at.fields) {
+    const made = field.initNew
+    if (made === null || seen.has(made.name)) {
+      continue
+    }
+    seen.add(made.name)
+    const back = new StringSet()
+    back.add(made.name)
+    if (made === owner || constructs(made, owner, back)) {
+      reported.add(made.name)
+    }
+    markCycle(made, owner, reported, seen)
+  }
+}
+
+/** Refuse `field` of `owner`, whose initializers construct `owner` again. */
+const reportInitializerCycle = (ctx: CheckContext, owner: StructInfo, field: FieldInfo): void => {
+  const init = field.initializer
+  if (init !== null) {
+    ctx.error(
+      init,
+      `Field \`${field.name}\` of ${kindWord(owner)} \`${spelled(ctx, owner)}\`: initializers construct \`${spelled(ctx, owner)}\` again, which never ends (assign it in the constructor)`
+    )
+  }
+}
+
+/**
+ * A class whose initializers construct the class again, directly or through
+ * another class's initializers, would construct forever: each object's
+ * initializers run before its constructor's body, with no condition to stop
+ * them. The first field that starts such a chain is refused.
+ */
+export const checkInitializerCycle = (ctx: CheckContext, owner: StructInfo, reported: StringSet): void => {
+  if (reported.has(owner.name)) {
+    return
+  }
+  for (const field of owner.fields) {
+    const made = field.initNew
+    if (made === null) {
+      continue
+    }
+    const seen = new StringSet()
+    seen.add(made.name)
+    if (made === owner || constructs(made, owner, seen)) {
+      reportInitializerCycle(ctx, owner, field)
+      // One report per cycle: every class on it would say the same thing.
+      reported.add(owner.name)
+      markCycle(owner, owner, reported, new StringSet())
+      ctx.errored = false
+      return
+    }
+  }
 }
 
 /**

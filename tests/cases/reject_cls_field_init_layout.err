@@ -1,0 +1,1 @@
+Field `point` of class `Holder`: initializers must be literals (assign other values in the constructor)

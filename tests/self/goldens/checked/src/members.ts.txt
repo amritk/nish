@@ -637,8 +637,8 @@ function reportSpreadField(ctx: CheckContext, value: Node, source: StructInfo, i
   pointer value: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   pointer source: size=176 writesThrough=false captured=false
   pointer info: size=176 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false
-  pointer into: size=88 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
+  pointer into: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 target: string (const)
   callee +0:18 TypeTable.typeName -> @TypeTable.typeName
