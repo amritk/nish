@@ -1,0 +1,7 @@
+{
+  "name": "compat-nullish-never-missing",
+  "private": true,
+  "nish": {
+    "compat": ["nullish"]
+  }
+}

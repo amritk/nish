@@ -20,8 +20,13 @@ them.
 
 ## How it is linked
 
-`scripts/build.sh` compiles every `*.c` here for a link whose IR declares an
-`sqlite3_*` or `nishsqlite_*` function, and for no other link. The options are
+`nish-sqlite.c` starts with `#include "sqlite3.c"`, so SQLite and the
+`nish/sqlite` adapter are one unit: the cursors call SQLite's internal
+functions, which are `static` in the amalgamation
+([docs/sqlite-cursor.md](../../docs/sqlite-cursor.md#the-build-decision)).
+`scripts/build.sh` compiles every `*.c` here except `sqlite3.c` for a link
+whose IR declares an `sqlite3_*` or `nishsqlite_*` function, and for no other
+link. The options are
 in `build.sh`, under "SQLite's compile-time options". `NISH_SQLITE_CFLAGS` adds
 to them (`docs/guide/using-nish/cli.md`). `nish --link` and `nish run` compile
 these units once per recipe into an entry of the runtime cache of their own
@@ -40,6 +45,14 @@ for the units and the files the cache key fingerprints (`sqliteUnits`,
 3. Update the table above, the two file hashes included (`openssl dgst
    -sha3-256 sqlite3.c sqlite3.h`), the version in `THIRD_PARTY_NOTICES.md`, and the
    numbers in `tests/link/sqlite_link*/expected.out`.
-4. Run `node tests/run.js link`, `node tests/run.js sqlite-link`,
+4. Re-check every internal SQLite function the cursor adapter in
+   `nish-sqlite.c` calls, the list in
+   [`docs/sqlite-cursor.md`](../../docs/sqlite-cursor.md#what-the-adapter-calls):
+   these are `SQLITE_PRIVATE`, not SQLite's API, and a release may change one
+   without notice. Diff each one's declaration and body against the old
+   `sqlite3.c`, including what it asserts about the mutex and the cursor's
+   state, and the `KeyInfo` fields the adapter fills by hand against
+   `sqlite3KeyInfoOfIndex`. Update the adapter and that list for any change.
+5. Run `node tests/run.js link`, `node tests/run.js sqlite-link`,
    `WASI_SYSROOT=/usr node tests/run.js wasi` and the third-party-licence
    section.

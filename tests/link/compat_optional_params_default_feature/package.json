@@ -1,0 +1,7 @@
+{
+  "name": "compat-optional-params-default-feature",
+  "private": true,
+  "nish": {
+    "compat": ["nullish"]
+  }
+}

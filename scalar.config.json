@@ -3,7 +3,7 @@
   "scalar": "2.0.0",
   "info": {
     "title": "Nish",
-    "description": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector."
+    "description": "Nish compiles TypeScript ahead of time to fast native binaries for x86_64, ARM64 and WebAssembly. No interpreter, no JIT, no garbage collector: just one small executable."
   },
   "navigation": {
     "header": [
@@ -2987,6 +2987,16 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/benchmarks" }]
                 }
               },
+              "/leaderboards": {
+                "type": "page",
+                "title": "Leaderboards",
+                "filepath": "docs/LEADERBOARDS.md",
+                "head": {
+                  "title": "Leaderboards · Nish",
+                  "meta": [{ "property": "og:title", "content": "Leaderboards" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/reference/leaderboards" }]
+                }
+              },
               "/changelog": {
                 "type": "page",
                 "title": "Changelog",
@@ -3078,6 +3088,16 @@
                       "title": "Dependency capabilities · Nish",
                       "meta": [{ "property": "og:title", "content": "Dependency capabilities" }],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/security/capabilities" }]
+                    }
+                  },
+                  "/package-link": {
+                    "type": "page",
+                    "title": "A package's C link",
+                    "filepath": "docs/security/package-link.md",
+                    "head": {
+                      "title": "A package's C link · Nish",
+                      "meta": [{ "property": "og:title", "content": "A package's C link" }],
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/security/package-link" }]
                     }
                   },
                   "/supply-chain": {
@@ -4497,12 +4517,12 @@
     },
     "head": {
       "meta": [
-        { "name": "description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "name": "description", "content": "Nish compiles TypeScript ahead of time to fast native binaries for x86_64, ARM64 and WebAssembly. No interpreter, no JIT, no garbage collector: just one small executable." },
         { "name": "application-name", "content": "Nish" },
         { "property": "og:site_name", "content": "Nish" },
         { "property": "og:type", "content": "website" },
         { "property": "og:locale", "content": "en_US" },
-        { "property": "og:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "property": "og:description", "content": "Nish compiles TypeScript ahead of time to fast native binaries for x86_64, ARM64 and WebAssembly. No interpreter, no JIT, no garbage collector: just one small executable." },
         { "property": "og:image", "content": "https://nishlang.com/og.png" },
         { "property": "og:image:type", "content": "image/png" },
         { "property": "og:image:width", "content": "1200" },
@@ -4514,7 +4534,7 @@
         { "property": "og:video:width", "content": "1200" },
         { "property": "og:video:height", "content": "630" },
         { "name": "twitter:card", "content": "summary_large_image" },
-        { "name": "twitter:description", "content": "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector." },
+        { "name": "twitter:description", "content": "Nish compiles TypeScript ahead of time to fast native binaries for x86_64, ARM64 and WebAssembly. No interpreter, no JIT, no garbage collector: just one small executable." },
         { "name": "twitter:image", "content": "https://nishlang.com/og.png" },
         { "name": "twitter:image:alt", "content": "The Nish hero: a TypeScript function, sumOfSquares, compiled by Nish to x86_64, ARM64 and WebAssembly, and a terminal running it." }
       ],
@@ -4523,9 +4543,11 @@
         { "path": "docs/site/page.js", "defer": true }
       ],
       "links": [
-        { "rel": "icon", "type": "image/x-icon", "href": "/favicon.ico" },
+        { "rel": "icon", "type": "image/x-icon", "sizes": "16x16 32x32 48x48", "href": "/favicon.ico" },
         { "rel": "icon", "type": "image/svg+xml", "href": "/mark.svg" },
-        { "rel": "icon", "type": "image/png", "href": "/favicon-32.png" },
+        { "rel": "icon", "type": "image/png", "sizes": "48x48", "href": "/favicon-48.png" },
+        { "rel": "icon", "type": "image/png", "sizes": "192x192", "href": "/favicon-192.png" },
+        { "rel": "icon", "type": "image/png", "sizes": "32x32", "href": "/favicon-32.png" },
         { "rel": "apple-touch-icon", "href": "/apple-touch-icon.png" },
         { "rel": "alternate", "type": "application/rss+xml", "title": "Nish changelog", "href": "/reference/changelog/rss.xml" }
       ]

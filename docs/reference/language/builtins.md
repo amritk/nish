@@ -4543,7 +4543,8 @@ export const main = (): i32 => {
     one whose left operand is neither is refused in the words Phase 0 always
     used,
     `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-    (`reject_nullish`, `reject_nullish_nullable`).
+    (`reject_nullish`, `reject_nullish_nullable`), which the `nullish`
+    feature of [the compatibility dialect](semantics-decisions.md#the-compatibility-dialect) admits.
   - **Everywhere else a maybe is refused**, and the message names the place,
     because the rewrite differs by place. Some fail under `tsc` too (an
     operand, a `const` annotated `V`); the rest are legal TypeScript that this
@@ -5243,7 +5244,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities`, `host`, `compat` and `netRings` — is NL3036
+  than `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as

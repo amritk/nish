@@ -5,7 +5,7 @@ The files here that come from the
 are not covered by this repository's own licence, and each carries the
 challenge's copyright notice:
 
-- `main.ts` and `twin.c` run three of the challenge's `SPEC.md` queries at
+- `main.ts`, `twin.c` and `twin.rs` run three of the challenge's `SPEC.md` queries at
   `c301225`, copied verbatim: the user by id (`PK_SQL`), the article list,
   `ARTICLE_LIST_SELECT` followed by `ORDER_PAGE` (`LIST_SQL`), and the insert
   of a follow (`INSERT_SQL`). Both also take the --dev seed's number of

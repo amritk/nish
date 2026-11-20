@@ -1,0 +1,1 @@
+`Db` is an opaque `declare class`, so it has no member `x`

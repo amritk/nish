@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_string_switch_duplicate_template/main.ts","line":9,"column":10,"endLine":9,"endColumn":13,"severity":"error","code":"NL2194","message":"Duplicate `case` label `\"x\"` in this `switch`"}
