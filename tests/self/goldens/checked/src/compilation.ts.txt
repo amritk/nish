@@ -361,6 +361,8 @@ struct Compilation (class) size=224 align=8 exported
   method rejectWideSpreads -> @Compilation.rejectWideSpreads
   method reportWideSpread -> @Compilation.reportWideSpread
   method rejectForeignShadows -> @Compilation.rejectForeignShadows
+  method foreignNames -> @Compilation.foreignNames
+  method reportMissingForeign -> @Compilation.reportMissingForeign
   method reportForeignShadow -> @Compilation.reportForeignShadow
   method rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
   method isUnusedArrayModule -> @Compilation.isUnusedArrayModule
@@ -2125,6 +2127,32 @@ function Compilation.rejectForeignShadows(this: Compilation): void -> @Compilati
   local +15:15 at: i32 (const)
   callee +15:20 StringMap.get -> @StringMap.get
   callee +17:11 Compilation.reportForeignShadow -> @Compilation.reportForeignShadow
+function Compilation.foreignNames(this: Compilation): string[] -> @Compilation.foreignNames [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: FunctionSig.definedIn FunctionSig.foreign nish_array_grow nish_str_eq
+  pointer this: size=224 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 out: string[] (const)
+  local +1:16 unit: ModuleUnit (const)
+  local +2:18 sig: FunctionSig (const)
+  callee +3:13 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +3:30 FunctionSig.definedIn -> @FunctionSig.definedIn
+function Compilation.reportMissingForeign(this: Compilation, missing: string[]): void -> @Compilation.reportMissingForeign [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.report
+  calls: DiagnosticSink.report FunctionSig.definedIn FunctionSig.foreign nameNode nish_str_concat nish_str_eq
+  pointer this: size=224 writesThrough=false captured=false
+  pointer missing: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:16 name: string (const)
+  local +1:11 found: boolean (let)
+  local +2:18 unit: ModuleUnit (const)
+  local +3:20 sig: FunctionSig (const)
+  callee +4:25 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +4:42 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +6:19 at: Node (const)
+  callee +6:24 nameNode -> @nameNode
+  callee +7:13 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.reportForeignShadow(this: Compilation, unit: ModuleUnit, sig: FunctionSig, declarer: ModuleUnit): void -> @Compilation.reportForeignShadow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report

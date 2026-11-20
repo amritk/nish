@@ -3707,7 +3707,7 @@ function main(): i32 -> @nish_main [exported entry]
 function commandMain(): i32 -> @commandMain
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.explainLayoutText Compilation.explainMemoryText Compilation.panicsText EmittedProgram.constructor LinkSet.constructor Options.constructor PackageSearch.wasRefused PackageSearch.where WarningStyle.constructor acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared cImport cachedBinary capabilityListMask capabilityNames capabilityScopes capabilitySummary checkedText compatFeatureNames compatHasFeature compatKnownText emitTypeScript externalFunctions findPackage fixProgram hasCompactClass helpHint internalErrorFor isCheckout isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nearMiss nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_slice nish_print nish_realpath nish_spawn_to nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new nish_write nish_write_file pgoProblem planOutputs playBreak programOnPath readLinkSet refuseCompactSidecars report reportDeprecations reportLoadFailure reportPerformance reportPortability reportRootFailure reportToolchainFailure resolveTarget runProgram runWatch simulatedInternalError simulatedStatelessInstance simulatedUnlabelledBuiltin splitByte supportedTargets upgrade usageText watchState writeCapabilityReport writeSidecars
+  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.explainLayoutText Compilation.explainMemoryText Compilation.foreignNames Compilation.panicsText EmittedProgram.constructor LinkSet.constructor Options.constructor PackageSearch.wasRefused PackageSearch.where WarningStyle.constructor acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared cImport cachedBinary capabilityListMask capabilityNames capabilityScopes capabilitySummary checkedText compatFeatureNames compatHasFeature compatKnownText emitTypeScript externalFunctions findPackage fixProgram hasCompactClass helpHint internalErrorFor isCheckout isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nearMiss nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_slice nish_print nish_realpath nish_spawn_to nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new nish_write nish_write_file pgoProblem planOutputs playBreak programOnPath readLinkSet refuseCompactSidecars report reportDeprecations reportLoadFailure reportMissingLink reportPerformance reportPortability reportRootFailure reportToolchainFailure resolveTarget runProgram runWatch simulatedInternalError simulatedStatelessInstance simulatedUnlabelledBuiltin splitByte supportedTargets upgrade usageText watchState writeCapabilityReport writeSidecars
   stackSites=13 stackLocals=9
   callee +0:19 usageText -> @usageText
   callee +9:12 playBreak -> @playBreak
@@ -3877,23 +3877,39 @@ function commandMain(): i32 -> @commandMain
   callee +1008:18 anyCallsSqlite -> @anyCallsSqlite
   callee +1012:8 readLinkSet -> @readLinkSet
   callee +1013:5 report -> @report
-  local +1017:11 cached: CachedBinary (const)
-  callee +1017:20 cachedBinary -> @cachedBinary
-  callee +1020:7 basenameWithout -> @basenameWithout
-  callee +1031:37 watchState -> @watchState
-  callee +1031:76 isCheckout -> @isCheckout
-  callee +1036:12 runProgram -> @runProgram
-  callee +1039:7 basenameWithout -> @basenameWithout
-  local +1051:9 stems: string[] (const)
-  local +1052:9 paths: string[] (const)
-  local +1055:14 module: EmittedModule (const)
-  local +1059:9 outputs: string[] (const)
-  callee +1059:19 planOutputs -> @planOutputs
-  local +1064:7 i: i32 (let)
-  local +1066:11 file: string (const)
-  callee +1067:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +1076:22 writeSidecars -> @writeSidecars
-  callee +1082:10 linkProgram -> @linkProgram
+  callee +1016:19 Compilation.foreignNames -> @Compilation.foreignNames
+  local +1018:11 cached: CachedBinary (const)
+  callee +1018:20 cachedBinary -> @cachedBinary
+  callee +1021:7 basenameWithout -> @basenameWithout
+  callee +1032:37 watchState -> @watchState
+  callee +1032:76 isCheckout -> @isCheckout
+  callee +1034:12 reportMissingLink -> @reportMissingLink
+  local +1037:11 ran: i32 (const)
+  callee +1037:17 runProgram -> @runProgram
+  callee +1040:7 basenameWithout -> @basenameWithout
+  callee +1051:12 reportMissingLink -> @reportMissingLink
+  local +1053:9 stems: string[] (const)
+  local +1054:9 paths: string[] (const)
+  local +1057:14 module: EmittedModule (const)
+  local +1061:9 outputs: string[] (const)
+  callee +1061:19 planOutputs -> @planOutputs
+  local +1066:7 i: i32 (let)
+  local +1068:11 file: string (const)
+  callee +1069:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +1078:22 writeSidecars -> @writeSidecars
+  local +1084:9 linked: i32 (const)
+  callee +1084:18 linkProgram -> @linkProgram
+  callee +1101:10 reportMissingLink -> @reportMissingLink
+function reportMissingLink(compilation: Compilation, links: LinkSet, json: boolean, status: i32): i32 -> @reportMissingLink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Compilation.reportMissingForeign
+  escaping: json status
+  calls: Compilation.reportMissingForeign report
+  pointer compilation: size=224 writesThrough=false captured=false passedTo=Compilation.reportMissingForeign#0 report#0
+  pointer links: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 Compilation.reportMissingForeign -> @Compilation.reportMissingForeign
+  callee +1:3 report -> @report
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -3979,7 +3995,7 @@ function readLinkSet(compilation: Compilation, links: LinkSet): boolean -> @read
   sharedWrite: via Compilation.rootManifest
   calls: Compilation.libraryRoot Compilation.rootManifest DiagnosticSink.hasErrors LinkManifest.constructor addLinkRequest dirname linkPackages manifestLink manifestNish nish_alloc_struct nish_array_grow nish_realpath readDependencyLinks reportLinkProblems
   pointer compilation: size=224 writesThrough=false captured=false passedTo=Compilation.rootManifest#0 Compilation.libraryRoot#0 reportLinkProblems#0 addLinkRequest#0 readDependencyLinks#0 linkPackages#0
-  pointer links: size=32 writesThrough=false captured=false passedTo=addLinkRequest#6 readDependencyLinks#5
+  pointer links: size=48 writesThrough=false captured=false passedTo=addLinkRequest#6 readDependencyLinks#5
   stackSites=1 stackLocals=1
   local +0:9 root: SourceFile | null (const)
   callee +0:16 Compilation.rootManifest -> @Compilation.rootManifest
@@ -4008,7 +4024,7 @@ function readDependencyLinks(compilation: Compilation, packages: LinkPackage[], 
   pointer packages: size=0 writesThrough=false captured=false passedTo=readDependencyLinks#1
   pointer granted: size=32 writesThrough=false captured=false passedTo=LinkManifest.grantFor#0 readDependencyLinks#3
   pointer skip: size=0 writesThrough=true captured=false passedTo=readDependencyLinks#4
-  pointer links: size=32 writesThrough=false captured=false passedTo=addLinkRequest#6 readDependencyLinks#5
+  pointer links: size=48 writesThrough=false captured=false passedTo=addLinkRequest#6 readDependencyLinks#5
   stackSites=1 stackLocals=0
   local -5:9 dependency: LinkPackage (const)
   local -4:9 real: string | null (const)
@@ -4075,7 +4091,7 @@ function addLinkRequest(compilation: Compilation, source: SourceFile, dir: strin
   pointer source: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.report#1
   pointer asked: size=16 writesThrough=false captured=false
   pointer grant: size=16 writesThrough=false captured=false
-  pointer links: size=32 writesThrough=false captured=false passedTo=LinkSet.addLibrary#0 LinkSet.addSource#0
+  pointer links: size=48 writesThrough=false captured=false passedTo=LinkSet.addLibrary#0 LinkSet.addSource#0
   stackSites=1 stackLocals=0
   local +0:14 name: string (const)
   callee +2:7 LinkSet.addLibrary -> @LinkSet.addLibrary
@@ -4092,7 +4108,7 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   calls: cachedBinary nish_array_grow nish_panic_index nish_spawn nish_str_concat reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false passedTo=cachedBinary#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=cachedBinary#1
-  pointer links: size=32 writesThrough=true captured=false passedTo=cachedBinary#9
+  pointer links: size=48 writesThrough=true captured=false passedTo=cachedBinary#9
   stackSites=0 stackLocals=0
   local +0:9 cached: CachedBinary (const)
   callee +0:18 cachedBinary -> @cachedBinary
@@ -4105,7 +4121,7 @@ function readLinkIncludes(links: LinkSet, root: string, cacheRoot: string, profi
   sharedWrite: +0:7
   escaping: arenaRange cacheRoot cpu debugArena debugInfo profile threads
   calls: LinkSet.addInclude makeRulePaths makeScratchFile nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat pushRecipeFlags
-  pointer links: size=32 writesThrough=true captured=false passedTo=LinkSet.addInclude#0
+  pointer links: size=48 writesThrough=true captured=false passedTo=LinkSet.addInclude#0
   stackSites=0 stackLocals=0
   local -15:14 source: string (const)
   local -14:11 scratch: string (const)
@@ -4126,7 +4142,7 @@ function cachedBinary(emitted: EmittedModule[], pkg: PackageSearch, name: string
   calls: buildIntoCache cCompiler linkSetLines makePrivateRoot nish_alloc_struct nish_read_file_or_null nish_str_concat nish_str_eq nish_write_file readLinkIncludes refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex sqliteCflags sqliteFingerprint
   pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=buildIntoCache#1
-  pointer links: size=32 writesThrough=true captured=false passedTo=readLinkIncludes#0 linkSetLines#0 buildIntoCache#12
+  pointer links: size=48 writesThrough=true captured=false passedTo=readLinkIncludes#0 linkSetLines#0 buildIntoCache#12
   stackSites=0 stackLocals=0
   local +0:9 cached: CachedBinary (const)
   local +1:9 cacheRoot: string (const)
@@ -4251,7 +4267,7 @@ function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot:
   calls: linkProgram makePrivateRoot makeScratchDirectory missingToolchain nish_array_grow nish_spawn nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   pointer pkg: size=32 writesThrough=false captured=false passedTo=linkProgram#2
-  pointer links: size=32 writesThrough=false captured=false passedTo=linkProgram#10
+  pointer links: size=48 writesThrough=true captured=false passedTo=linkProgram#10
   stackSites=3 stackLocals=2
   local +0:9 problem: string (const)
   callee +0:19 missingToolchain -> @missingToolchain
@@ -4271,38 +4287,55 @@ function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot:
   local +47:9 clean: string[] (const)
 function linkProgram(outputs: string[], irs: string[], pkg: PackageSearch, link: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, debugArena: boolean, arenaRange: boolean, links: LinkSet, sqliteLines: string, pgo: string[], json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via reportToolchainFailure
+  sharedWrite: +0:3
   escaping: arenaRange cpu debugArena debugInfo json link profile sqliteLines threads
-  calls: CachedObjects.constructor PackageSearch.where cachedRuntime keepModules makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_str_from_i32 nish_write pushRecipeFlags reportToolchainFailure stageModules
+  calls: CachedObjects.constructor PackageSearch.where cachedRuntime keepModules makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_str_from_i32 nish_write pushRecipeFlags reportToolchainFailure stageModules undefinedSymbols
   pointer outputs: size=0 writesThrough=true captured=false passedTo=cachedRuntime#1 stageModules#0
   pointer irs: size=0 writesThrough=true captured=false passedTo=stageModules#1
   pointer pkg: size=32 writesThrough=false captured=false passedTo=PackageSearch.where#0
-  pointer links: size=32 writesThrough=false captured=false
+  pointer links: size=48 writesThrough=true captured=false
   pointer pgo: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=0
-  local +0:9 root: string (const)
-  callee +2:5 reportToolchainFailure -> @reportToolchainFailure
-  callee +3:48 PackageSearch.where -> @PackageSearch.where
-  callee +8:8 makeDirectoryFor -> @makeDirectoryFor
-  local +11:9 script: string (const)
-  local +18:9 cached: CachedObjects | null (const)
-  callee +20:9 new CachedObjects -> @CachedObjects.constructor
-  callee +21:9 cachedRuntime -> @cachedRuntime
-  local +37:9 runtime: string (const)
-  local +41:9 argv: string[] (const)
-  local +48:14 file: string (const)
-  local +59:7 staged: StagedModules | null (let)
-  callee +61:14 stageModules -> @stageModules
-  local +74:14 name: string (const)
-  local +78:14 path: string (const)
-  callee +84:3 pushRecipeFlags -> @pushRecipeFlags
-  local +85:14 flag: string (const)
-  local +88:9 status: i32 (const)
-  local +90:11 why: string (const)
-  local +94:11 hint: string (const)
-  callee +98:5 reportToolchainFailure -> @reportToolchainFailure
-  callee +105:5 keepModules -> @keepModules
-  local +110:9 binary: string | null (const)
+  local -43:9 root: string (const)
+  callee -41:5 reportToolchainFailure -> @reportToolchainFailure
+  callee -40:48 PackageSearch.where -> @PackageSearch.where
+  callee -35:8 makeDirectoryFor -> @makeDirectoryFor
+  local -32:9 script: string (const)
+  local -25:9 cached: CachedObjects | null (const)
+  callee -23:9 new CachedObjects -> @CachedObjects.constructor
+  callee -22:9 cachedRuntime -> @cachedRuntime
+  local -6:9 runtime: string (const)
+  local -1:9 errors: string (const)
+  local +1:9 argv: string[] (const)
+  local +10:14 file: string (const)
+  local +21:7 staged: StagedModules | null (let)
+  callee +23:14 stageModules -> @stageModules
+  local +36:14 name: string (const)
+  local +40:14 path: string (const)
+  callee +46:3 pushRecipeFlags -> @pushRecipeFlags
+  local +47:14 flag: string (const)
+  local +50:9 status: i32 (const)
+  local +51:9 said: string | null (const)
+  callee +54:21 undefinedSymbols -> @undefinedSymbols
+  local +60:11 why: string (const)
+  local +64:11 hint: string (const)
+  callee +68:5 reportToolchainFailure -> @reportToolchainFailure
+  callee +75:5 keepModules -> @keepModules
+  local +80:9 binary: string | null (const)
+function undefinedSymbols(said: string, wanted: string[]): string[] -> @undefinedSymbols
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow nish_panic_overflow nish_str_at nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  pointer wanted: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 out: string[] (const)
+  local +1:7 start: i32 (let)
+  local +3:9 end: i32 (let)
+  local +7:11 line: string (const)
+  local +9:9 name: string (let)
+  local +10:11 lld: i32 (const)
+  local +11:11 gnu: i32 (const)
+  local +18:13 rest: string (const)
+  local +19:13 close: i32 (const)
 function hasCompactClass(compilation: Compilation): boolean -> @hasCompactClass
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer compilation: size=224 writesThrough=false captured=false

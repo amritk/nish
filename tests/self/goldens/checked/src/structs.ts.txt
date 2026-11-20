@@ -305,7 +305,7 @@ function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructInfo | n
   sharedWrite: via CheckContext.error
   escaping: kind
   calls: CheckContext.error CheckedProgram.addStruct StringMap.has StringSet.add StructInfo.constructor TypeTable.markOpaque TypeTable.structOf declareHandle isExported nish_alloc_struct nish_panic_index nish_str_at nish_str_concat
-  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 declareHandle#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 declareHandle#0 CheckContext.error#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 StructInfo.constructor#4 isExported#0 declareHandle#2
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -326,10 +326,9 @@ function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructInfo | n
   callee +28:19 isExported -> @isExported
   callee +33:5 declareHandle -> @declareHandle
   callee +39:5 TypeTable.markOpaque -> @TypeTable.markOpaque
-  callee +42:5 CheckContext.error -> @CheckContext.error
-  callee +51:5 CheckContext.error -> @CheckContext.error
-  callee +56:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
-  callee +57:3 StringSet.add -> @StringSet.add
+  callee +46:5 CheckContext.error -> @CheckContext.error
+  callee +51:3 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee +52:3 StringSet.add -> @StringSet.add
 function declareHandle(ctx: CheckContext, info: StructInfo, decl: Node): void -> @declareHandle
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

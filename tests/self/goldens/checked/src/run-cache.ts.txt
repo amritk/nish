@@ -8,12 +8,14 @@ import EmittedModule from "./compilation" -> struct EmittedModule
 import dirname from "./paths" -> function @dirname
 import hexDigitLower from "./strings" -> function @hexDigitLower
 import StringBuilder from "./strings" -> struct StringBuilder
-struct LinkSet (class) size=32 align=8 exported
+struct LinkSet (class) size=48 align=8 exported
   field libraries: string[] index=0 offset=0
   field sources: string[] index=1 offset=8
   field includes: string[] index=2 offset=16
   field includesUnlisted: boolean index=3 offset=24
   field sqlite: boolean index=4 offset=25
+  field foreign: string[] index=5 offset=32
+  field missing: string[] index=6 offset=40
   constructor -> @LinkSet.constructor
   method addLibrary -> @LinkSet.addLibrary
   method addSource -> @LinkSet.addSource
@@ -73,28 +75,28 @@ function anyCallsSqlite(modules: EmittedModule[]): boolean -> @anyCallsSqlite [e
   callee +1:9 callsSqlite -> @callsSqlite
 function LinkSet.constructor(this: LinkSet): void -> @LinkSet.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function LinkSet.addLibrary(this: LinkSet, name: string): void -> @LinkSet.addLibrary [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: name
   calls: nish_array_grow nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function LinkSet.addSource(this: LinkSet, path: string): void -> @LinkSet.addSource [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: path
   calls: nish_array_grow nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function LinkSet.addInclude(this: LinkSet, path: string): void -> @LinkSet.addInclude [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: path
   calls: nish_array_grow nish_str_eq
-  pointer this: size=32 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function addBackslashes(word: StringBuilder, count: i32): void -> @addBackslashes
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -133,7 +135,7 @@ function linkSetLines(links: LinkSet): string -> @linkSetLines [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via addFileLines
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addFileLines nish_str_concat
-  pointer links: size=32 writesThrough=false captured=false
+  pointer links: size=48 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor

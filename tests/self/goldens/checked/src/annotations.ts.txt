@@ -16,6 +16,7 @@ import CheckedProgram from "./program" -> struct CheckedProgram
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
 import layoutClass from "./structs" -> function @layoutClass
+import noteStructNames from "./structs" -> function @noteStructNames
 import rejectOpaque from "./structs" -> function @rejectOpaque
 import isFractional from "./constants" -> function @isFractional
 import numericLiteralValue from "./constants" -> function @numericLiteralValue
@@ -115,17 +116,33 @@ function deferExportedLayout(ctx: CheckContext, type: i32, position: string, nod
 function checkExportedLayouts(ctx: CheckContext): void -> @checkExportedLayouts [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: StringSet.constructor TypeTable.stripNull heldLayout layoutClass refuseExportedLayout
+  calls: StringSet.constructor TypeTable.stripNull heldLayout layoutClass namesUnboundStruct nish_array_grow refuseExportedLayout
   pointer ctx: size=448 writesThrough=true captured=false passedTo=refuseExportedLayout#0
   stackSites=1 stackLocals=0
+  local -2:9 later: ExportedLayoutUse[] (const)
   local -1:14 use: ExportedLayoutUse (const)
-  local +1:11 direct: StructInfo | null (const)
-  callee +1:20 layoutClass -> @layoutClass
-  callee +1:56 TypeTable.stripNull -> @TypeTable.stripNull
-  local +2:11 layout: StructInfo | null (const)
-  callee +2:47 heldLayout -> @heldLayout
-  callee +2:92 new StringSet -> @StringSet.constructor
-  callee +4:7 refuseExportedLayout -> @refuseExportedLayout
+  callee +3:9 namesUnboundStruct -> @namesUnboundStruct
+  local +7:11 direct: StructInfo | null (const)
+  callee +7:20 layoutClass -> @layoutClass
+  callee +7:56 TypeTable.stripNull -> @TypeTable.stripNull
+  local +8:11 layout: StructInfo | null (const)
+  callee +8:47 heldLayout -> @heldLayout
+  callee +8:92 new StringSet -> @StringSet.constructor
+  callee +10:7 refuseExportedLayout -> @refuseExportedLayout
+function namesUnboundStruct(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @namesUnboundStruct
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: CheckedProgram.struct StringSet.at StringSet.constructor StringSet.size noteStructNames
+  pointer program: size=920 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=noteStructNames#0
+  stackSites=1 stackLocals=1
+  local +0:9 names: StringSet (const)
+  callee +0:17 new StringSet -> @StringSet.constructor
+  callee +1:3 noteStructNames -> @noteStructNames
+  local +2:7 i: i32 (let)
+  callee +3:14 StringSet.size -> @StringSet.size
+  callee +4:9 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +4:24 StringSet.at -> @StringSet.at
 function refuseExportedLayout(ctx: CheckContext, use: ExportedLayoutUse, layout: StructInfo, direct: boolean): void -> @refuseExportedLayout
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
