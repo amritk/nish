@@ -1,6 +1,6 @@
 # WP48: 32-bit references for linked classes
 
-**State:** In progress · **Done:** 5 of 9 · **Design note:** [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
+**State:** In progress · **Done:** 6 of 9 · **Design note:** [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
 
 ## Stages
 
