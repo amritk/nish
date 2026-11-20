@@ -1084,11 +1084,20 @@ export class FieldInfo {
    * build compresses (`CheckContext.compressLinks`); false everywhere else.
    */
   link: boolean
+  /**
+   * WP66 S4: the element count of a fixed-length array field of a layout
+   * class, `h: Record<integer<0, 4>, u32>` for C's `unsigned h[5]`, or -1
+   * for any other field. `type` is then the element's type: the LLVM member
+   * is `[N x T]` inside the object, read and written only by index
+   * (`cArrayField`), so every pass that sizes or walks fields sees a scalar.
+   */
+  cLength: i32
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
     this.nested = null
     this.link = false
+    this.cLength = -1
     this.type = type
     this.index = 0
     this.offset = 0
@@ -1681,6 +1690,13 @@ export class CheckedProgram {
    */
   gathered: boolean
   /**
+   * WP66 S4, check-time state: the id of the `Member` node an index
+   * expression is about to check as its receiver, `ctx.h` in `ctx.h[i]`, or
+   * -1. `checkMember` consumes it, so a fixed-length array field
+   * (`FieldInfo.cLength`) reads as an array only there.
+   */
+  indexReceiver: i32
+  /**
    * WP51 stage 2: the next free node id. The parser numbers the tree; a
    * reference passed for a function parameter is rewritten into an arrow
    * written at the call, whose nodes the checker numbers from here
@@ -2140,6 +2156,7 @@ export class CheckedProgram {
     this.exports = new StringMap()
     this.imports = []
     this.gathered = false
+    this.indexReceiver = -1
     this.structs = new StringMap()
     this.structList = []
     this.reachableStructs = []

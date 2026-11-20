@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 989
+export const RULE_COUNT: i32 = 995
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -423,6 +423,8 @@ const diagnosticRules = (): string[] => [
   "NL2390",
   ", which has no C layout: a field of a `declare class` is i32, i64, u8, u16, u32, u64, f32, f64, `CPtr`, `CPtr | null` or another `declare class`",
   "NL2752",
+  " is a fixed-length array, `Record<integer<0, Hi>, T>` for C's `T name[Hi + 1]`: its key must be `integer<0, Hi>`, a range from 0 with Hi below ",
+  "NL2813",
   "` takes a `MutexGuard`: a guard is handed only to a function named at the call, so a function reference cannot name it; call the helper by name",
   "NL2739",
   " mask is a value held only in a local, a parameter or a return of a function this module keeps; store the vectors it selects, or its `bitmask`",
@@ -619,6 +621,8 @@ const diagnosticRules = (): string[] => [
   "NL2786",
   "`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`",
   "NL2809",
+  ", which has no C element layout: an element of a fixed-length array is i32, i64, u8, u16, u32, u64, f32 or f64",
+  "NL2814",
   ": the block releases what it allocated before the function returns, so the caller would be handed freed memory",
   "NL2423",
   "` follows a parameter with a default, so it needs a default too: a call leaves out arguments only from the end",
@@ -673,6 +677,8 @@ const diagnosticRules = (): string[] => [
   "NL2663",
   "an arrow in value position is not yet a function reference: declare it as a top-level function and name it",
   "NL2336",
+  " is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index",
+  "NL2815",
   "` cannot be built for wasm: a task is resumed by the native event loop, which a wasm module does not have",
   "NL2652",
   "` may have been wiped already, and a wiped `Secret` holds zeros: read it before `wipe`, or make a new one",
@@ -895,6 +901,8 @@ const diagnosticRules = (): string[] => [
   "NL2613",
   "`; check the nullable side against `null` first, then compare the narrowed values",
   "NL2114",
+  "`: a fixed-length array inside a `declare class` is written element by element (`",
+  "NL2816",
   " must be a plain field: a C struct field is not `static`, optional or `readonly`",
   "NL2747",
   ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
@@ -1075,6 +1083,8 @@ const diagnosticRules = (): string[] => [
   "NL2726",
   "`wipe` zeroes a `Secret`, or an array or record of integers, and `",
   "NL2438",
+  " elements inside a `declare class`: read and write it by index (`",
+  "NL2817",
   "` takes two vectors of one type and one lane index per lane, got ",
   "NL2634",
   "`: its elements are constant data that nothing may write, and a `",
@@ -1642,6 +1652,8 @@ const diagnosticRules = (): string[] => [
   "NL2253",
   "Unsupported interface member in `",
   "NL2257",
+  " elements: its indices are 0 to ",
+  "NL2818",
   "(...)` is a `Result<T, E>`, not ",
   "NL2034",
   "`, which does not extend a class",

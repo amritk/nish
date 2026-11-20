@@ -7433,6 +7433,82 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   compiler could promise. A struct cannot embed
   itself, directly or through another (NL2749, `reject_ffi_struct_self`,
   `reject_ffi_struct_cycle`).
+- **A field typed `Record<integer<0, Hi>, T>` is a fixed-length array, C's
+  `T name[Hi + 1]`, laid out inline at `T`'s alignment**, as OpenSSL's
+  `SHA_CTX` holds `unsigned int h[5]` (`tests/cases/ffi_array_field`, whose C
+  driver fills and checks a `SHA_CTX`-shaped struct; `tests/ffi-struct.js`,
+  where clang gives that shape the offsets and size Nish's build has, natively
+  and under `--profile wasi`):
+
+  ```ts
+  declare class ShaCtx {
+    tag: u8
+    h: Record<integer<0, 4>, u32>
+  }
+  const c = new ShaCtx()
+  c.h[i] = 7
+  ```
+
+  ```llvm
+  %struct.ShaCtx = type { i8, [5 x i32] }
+    %2 = sext i32 %i to i64
+    %3 = icmp ult i64 %2, 5
+    br i1 %3, label %bounds.ok, label %bounds.fail
+  bounds.fail:
+    call void @nish_panic_index(i64 %2, i64 5)
+    unreachable
+  bounds.ok:
+    %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+    store i32 7, i32* %4, align 4
+  ```
+
+  The spelling is TypeScript's own: `tsc` checks it against
+  `runtime/nish.d.ts` with no new declaration, its key type is the index
+  type every in-range index already has, and a `Record` over a finite key
+  says every key from 0 to `Hi` is present, as every element of a C array is.
+  A `CArray<T, N>` type would need a declaration in `runtime/nish.d.ts`, a
+  tuple has no parser here, and `T[]` cannot carry its length, because `tsc`
+  refuses an initializer in a `declare class`. (A `T[]` field of a Nish
+  class is a different rule: see "Fixed-length array fields are stored
+  inline".)
+  - **It takes `(Hi + 1) × sizeof(T)` bytes**, elements back to back with no
+    padding between them, and the struct pads around the array as C pads
+    around `T name[Hi + 1]`: the array starts at `T`'s alignment, and the
+    field after it starts at its own (`tests/ffi-struct.js` holds 8-byte
+    elements after a byte, a one-element array and two arrays in a row
+    against clang).
+  - **The key is `integer<0, Hi>`**, a range from 0, with `Hi` below
+    16777216: `` its key must be `integer<0, Hi>` `` (NL2813,
+    `tests/link/ffi_array_field_key`: a range from 1, a `string` key, a
+    length past the limit).
+  - **An element is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or
+    `f64`**: `` which has no C element layout `` (NL2814,
+    `ffi_array_field_element`: a `CPtr` and a `declare class` element).
+  - **An index is checked.** The index is any value an array index takes,
+    widened to `i64` before it is compared. A constant index outside 0 to `Hi` is refused at
+    compile time: `` its indices are 0 to 4 `` (NL2818,
+    `ffi_array_field_oob`, past the end and below zero). Any other index is
+    compared, unsigned, with the length, and one outside it panics with
+    `index out of range` before memory is touched (`readH(5)`, `readH(-1)`,
+    `poke(3)` in `ffi_array_field`). An index the prover keeps inside the
+    range — a constant, an `integer<0, Hi>` value, a `for` loop's counter
+    below the length — emits no check, and `--emit-panics` lists it as proven
+    (`sumH` and `written`, pinned by `ffi_array_field.panics`, which lists
+    `readH`'s, `readData`'s and `store`'s indices as unproven). Element loads and stores carry no TBAA tag, as the struct's
+    other fields do not.
+  - **It is read and written by index and nothing else.** It is not a Nish
+    array: holding it, passing it, reading its `.length` or walking it with
+    `for...of` is `` it cannot be held, passed or measured as a value ``
+    (NL2817, `ffi_array_field_value`), replacing it whole is
+    `` is written element by element `` (NL2816, `ffi_array_field_assign`),
+    and a spread of its object is `` which a spread cannot copy `` (NL2815,
+    `ffi_array_field_spread`).
+  - **It opens no other C shape.** A union field and a bitfield stay refused:
+    `` Union types other than `T | null` are forbidden `` (NL1053,
+    `ffi_array_field_union`) and `` has type `integer<0, 7>`, which has no C
+    layout `` (NL2752, `ffi_array_field_bitfield`).
+  - Under `-g` a debugger sees C's array type, with the element count
+    (`tests/ffi-struct.js`).
 - **A field is plain and has no initializer, and a class with fields has
   nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
