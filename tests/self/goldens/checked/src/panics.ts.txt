@@ -5,6 +5,7 @@ import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import unwrapBoundsParens from "./bounds" -> function @unwrapBoundsParens
+import vectorAccessLanes from "./bounds" -> function @vectorAccessLanes
 import indexGuardAdvice from "./checker" -> function @indexGuardAdvice
 import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink
 import SourceFile from "./diagnostics" -> struct SourceFile
@@ -82,7 +83,7 @@ function builtinPanicKind(name: string): i32 -> @builtinPanicKind [exported]
   callee +0:6 isNetExport -> @isNetExport
   callee +0:27 isTermExport -> @isTermExport
   callee +1:5 netRangeBuffer -> @netRangeBuffer
-  callee +7:7 isSimdAccess -> @isSimdAccess
+  callee +8:7 isSimdAccess -> @isSimdAccess
 function sortByPosition(sites: PanicSite[]): void -> @sortByPosition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -428,22 +429,38 @@ function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): str
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexGuardAdvice
   escaping: node
-  calls: indexGuardAdvice nish_panic_index nish_str_concat siteLocalName unwrapBoundsParens
-  pointer program: size=920 writesThrough=true captured=false passedTo=siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
-  pointer table: size=168 writesThrough=false captured=false passedTo=indexGuardAdvice#1
-  pointer node: size=40 writesThrough=true captured=true
+  calls: indexGuardAdvice nish_panic_index nish_str_concat siteLocalName unwrapBoundsParens vectorAccessLanes vectorAdvice
+  pointer program: size=920 writesThrough=true captured=false passedTo=vectorAccessLanes#0 vectorAdvice#0 siteLocalName#0 siteLocalName#0 indexGuardAdvice#0
+  pointer table: size=168 writesThrough=false captured=false passedTo=vectorAccessLanes#1 indexGuardAdvice#1
+  pointer node: size=40 writesThrough=true captured=true passedTo=vectorAccessLanes#2 vectorAdvice#1
   stackSites=0 stackLocals=0
-  local +0:7 receiver: Node (let)
-  local +1:7 index: Node (let)
-  callee +6:16 unwrapBoundsParens -> @unwrapBoundsParens
-  local +9:9 holder: string (const)
-  callee +9:18 siteLocalName -> @siteLocalName
-  local +10:9 name: string (const)
-  callee +10:16 siteLocalName -> @siteLocalName
-  local +11:9 xs: string (const)
-  local +12:9 i: string (const)
-  local +13:9 what: string (const)
-  callee +18:22 indexGuardAdvice -> @indexGuardAdvice
+  local +0:9 lanes: i32 (const)
+  callee +0:17 vectorAccessLanes -> @vectorAccessLanes
+  callee +2:12 vectorAdvice -> @vectorAdvice
+  local +4:7 receiver: Node (let)
+  local +5:7 index: Node (let)
+  callee +10:16 unwrapBoundsParens -> @unwrapBoundsParens
+  local +13:9 holder: string (const)
+  callee +13:18 siteLocalName -> @siteLocalName
+  local +14:9 name: string (const)
+  callee +14:16 siteLocalName -> @siteLocalName
+  local +15:9 xs: string (const)
+  local +16:9 i: string (const)
+  local +17:9 what: string (const)
+  callee +22:22 indexGuardAdvice -> @indexGuardAdvice
+function vectorAdvice(program: CheckedProgram, call: Node, lanes: i32): string -> @vectorAdvice
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_concat nish_str_from_i32 siteLocalName
+  pointer program: size=920 writesThrough=false captured=false passedTo=siteLocalName#0 siteLocalName#0
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 args: Node[] (const)
+  local +1:9 xs: string (const)
+  callee +1:14 siteLocalName -> @siteLocalName
+  local +2:9 i: string (const)
+  callee +2:13 siteLocalName -> @siteLocalName
+  local +3:9 checks: string (const)
+  local +12:9 length: string (const)
 function sliceAdvice(program: CheckedProgram, node: Node): string -> @sliceAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName nish_str_concat nish_str_eq

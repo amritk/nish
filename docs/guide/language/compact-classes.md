@@ -133,9 +133,17 @@ not supported: Nish would reserve its range inside a process it does not own.
 Node reads a pointer as 8 bytes and runs an addon in its own process, so a
 compact class may not cross into it:
 
-- A build with `--emit-napi` or `--emit-napi-async` refuses every compact
-  class (NL4021), and an exported function whose signature holds one (NL4020).
-  Adding `--emit-header` beside it does not lift the refusal.
+- A build with `--emit-napi` or `--emit-napi-async` refuses a compact class
+  in one of two places, each with its own code:
+  - NL4020, at the name of each exported function (every function, under
+    `--no-strict-exports`), and at the constructor of each exported class,
+    whose signature holds a compact class. The signature is
+    read return type first, then each parameter in order, and the message
+    names the first compact class found. Change the signature to fix it.
+  - NL4021, at the name of each compact class no NL4020 named, naming the
+    flag. Build a C host with `--emit-header` instead, or drop the marker.
+
+  Adding `--emit-header` beside either flag lifts neither refusal.
 - A `declare class` describes a C struct, so it cannot implement `Compact`
   (NL2795) or hold a field of a compact class (NL2796).
 - A generic class cannot implement `Compact` yet (NL2798): each
@@ -163,3 +171,52 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+## Debugging a compact class
+
+A link is stored as a 4-byte offset, so a debugger on its own prints it as a
+number. A `-g` build names the type of each link `ref32 <Class>`, and the
+repository ships a printer for each debugger that shows the link as the
+object it names instead: `null` for an empty link, else a pointer to the
+object, whose fields you can expand. The printers are not in the npm
+package: they live in the repository's
+[`tools/`](https://github.com/amritk/nish/tree/main/tools) directory, so run
+the commands below from a checkout of the repository, or give the path to
+your copy of each file. Build with debug info:
+
+```sh
+nish list.ts -g --link list --profile debug
+```
+
+In gdb, load `tools/gdb/ref32.py` (or put the line in `~/.gdbinit`):
+
+```text
+(gdb) source tools/gdb/ref32.py
+(gdb) print *head
+$1 = {value = 4, next = (struct Cell *) 0x40000068}
+(gdb) print $ref32(head->next)->value
+$2 = 3
+```
+
+`print *head` shows `next` as a pointer, and `$ref32(link)` turns a link
+into one you can follow.
+
+In lldb, import `tools/lldb/ref32.py`:
+
+```text
+(lldb) command script import tools/lldb/ref32.py
+(lldb) frame variable head->next
+(ref32 Cell) head->next = 268435482 (Cell *) 0x40000068
+(lldb) frame variable head->next.value
+(int) head->next.value = 3
+```
+
+lldb shows the stored offset and the pointer it names, and the link's fields
+are its children, so `head->next.next` walks one link further.
+
+How an offset turns into an address depends on the target the program was
+built for: on Linux it is the offset times four, and on macOS it is counted
+from the runtime's `nish_ref_base`. Each printer picks the decode from the
+program it is debugging. To force one, run `set nish-ref32-shape zero` or
+`based` in gdb, or start lldb with `NISH_REF32_SHAPE=zero` or `based` in its
+environment.

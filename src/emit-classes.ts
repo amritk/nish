@@ -83,10 +83,10 @@ export const structFieldPointer = (
 export const loadField = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
-  if (field.link) {
-    return decodeLink(emitter, ty, emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4`))
-  }
   const tbaa = fieldTbaa(emitter, info, field)
+  if (field.link) {
+    return decodeLink(emitter, ty, emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4${tbaa}`))
+  }
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`)
 }
 
@@ -100,7 +100,8 @@ export const storeField = (
   const ty = emitter.llvm(field.type)
   const ptr = structFieldPointer(emitter, info, receiver, field)
   if (field.link) {
-    emitter.fn.emit(`store i32 ${encodeLink(emitter, ty, value)}, i32* ${ptr}, align 4`)
+    const offset = encodeLink(emitter, ty, value)
+    emitter.fn.emit(`store i32 ${offset}, i32* ${ptr}, align 4${fieldTbaa(emitter, info, field)}`)
     return
   }
   const tbaa = fieldTbaa(emitter, info, field)
@@ -113,9 +114,8 @@ export const storeField = (
 // (zero-based) and null needs no test; elsewhere it is relative to
 // `@nish_ref_base`, which the runtime sets once before `main`. The based IR
 // is pinned only by its text (`tests/cases/compact_darwin.ll`): Linux CI cannot
-// run a macOS binary, so no test executes it. The slot gets
-// no TBAA tag until the `ref32` node (stage 2b): untagged, it may alias
-// anything, which is conservative.
+// run a macOS binary, so no test executes it. The slot's load and store carry
+// the `ref32` TBAA tag (`fieldTbaa`), so a link never aliases an `i32` field.
 
 /** The `ty` (a `%struct.R*`) that the 32-bit link `slot` holds. */
 const decodeLink = (emitter: Emitter, ty: string, slot: string): string => {

@@ -713,7 +713,8 @@ under 1%.
 **The noise band.** Each group also times `direct` against `direct_copy`, a
 byte-identical binary. Their best times differed by 0.0%, 1.3%, 2.6%, 0.0% and
 0.0% in the five groups: **the band is ±2.6%**, and a difference inside it is
-no difference. The band measures this machine's run-to-run noise on one
+no difference: the run does not show one, and §3.3 marks such a ratio
+*n.s.*, not shown. The band measures this machine's run-to-run noise on one
 binary, not the effect of code layout: two binaries that differ only in where
 the linker placed a loop can differ by more. Serial same is the example:
 `switch` at K=2 runs 201 ms and at K=4 151 ms, though K=4 does strictly more
@@ -752,17 +753,19 @@ Each is written five ways:
 
 ### 3.3 Dispatch
 
-Best of 7, milliseconds; in brackets, the ratio to `switch`.
+Best of 7, milliseconds; in brackets, the ratio to `switch`, marked *n.s.*
+(not shown) where the two times are within §3.1's ±2.6% band of each other:
+that cell shows no difference from the hand program.
 
 **serial, same** (direct 151):
 
 | K | switch | union | table | proposed | vtable |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 150 | | | | |
-| 2 | 201 | 202 | 202 | 205 (1.02) | 250 (1.24) |
-| 4 | 151 | 148 | 152 | 150 (0.99) | 211 (1.40) |
-| 8 | 151 | 152 | 159 | 151 (1.00) | 201 (1.33) |
-| 13 | 153 | 152 | 251 | 155 (1.01) | 201 (1.31) |
+| 2 | 201 | 202 | 202 | 205 (1.02, n.s.) | 250 (1.24) |
+| 4 | 151 | 148 | 152 | 150 (0.99, n.s.) | 211 (1.40) |
+| 8 | 151 | 152 | 159 | 151 (1.00, n.s.) | 201 (1.33) |
+| 13 | 153 | 152 | 251 | 155 (1.01, n.s.) | 201 (1.31) |
 | 16 | 155 | 182 | 174 | 150 (0.97) | 200 (1.29) |
 
 **serial, periodic** (direct 151):
@@ -770,9 +773,9 @@ Best of 7, milliseconds; in brackets, the ratio to `switch`.
 | K | switch | union | table | proposed | vtable |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 151 | 152 | 152 | 150 | 254 |
-| 2 | 200 | 201 | 201 | 202 (1.01) | 963 (4.82) |
+| 2 | 200 | 201 | 201 | 202 (1.01, n.s.) | 963 (4.82) |
 | 4 | 189 | 238 | 163 | 195 (1.03) | 449 (2.38) |
-| 8 | 257 | 272 | 264 | 259 (1.01) | 812 (3.16) |
+| 8 | 257 | 272 | 264 | 259 (1.01, n.s.) | 812 (3.16) |
 | 13 | 456 | 723 | 286 | 565 (1.24) | 900 (1.97) |
 | 16 | 291 | 540 | 464 | 238 (0.82) | 906 (3.11) |
 
@@ -781,7 +784,7 @@ Best of 7, milliseconds; in brackets, the ratio to `switch`.
 | K | switch | union | table | proposed | vtable |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 150 | 153 | 150 | 151 | 201 |
-| 2 | 392 | 391 | 404 | 397 (1.01) | 1053 (2.69) |
+| 2 | 392 | 391 | 404 | 397 (1.01, n.s.) | 1053 (2.69) |
 | 4 | 1596 | 1850 | 1861 | 1210 (0.76) | 1416 (0.89) |
 | 8 | 2161 | 2047 | 2371 | 1712 (0.79) | 1620 (0.75) |
 | 13 | 2532 | 2684 | 2997 | 2130 (0.84) | 2021 (0.80) |
@@ -793,9 +796,9 @@ Best of 7, milliseconds; in brackets, the ratio to `switch`.
 | --- | --- | --- | --- | --- | --- |
 | 2 | 105 | 107 | 158 | 121 (1.15) | 207 (1.97) |
 | 4 | 123 | 144 | 146 | 132 (1.07) | 262 (2.13) |
-| 8 | 156 | 161 | 180 | 156 (1.00) | 206 (1.32) |
-| 13 | 156 | 156 | 178 | 156 (1.00) | 256 (1.64) |
-| 16 | 171 | 170 | 191 | 174 (1.02) | 257 (1.50) |
+| 8 | 156 | 161 | 180 | 156 (1.00, n.s.) | 206 (1.32) |
+| 13 | 156 | 156 | 178 | 156 (1.00, n.s.) | 256 (1.64) |
+| 16 | 171 | 170 | 191 | 174 (1.02, n.s.) | 257 (1.50) |
 
 **array, periodic** (direct 103):
 
@@ -806,7 +809,7 @@ Best of 7, milliseconds; in brackets, the ratio to `switch`.
 | 4 | 205 | 180 | 205 | 214 (1.04) | 483 (2.36) |
 | 8 | 300 | 338 | 263 | 279 (0.93) | 929 (3.10) |
 | 13 | 290 | 279 | 655 | 282 (0.97) | 932 (3.21) |
-| 16 | 264 | 791 | 282 | 262 (0.99) | 1039 (3.94) |
+| 16 | 264 | 791 | 282 | 262 (0.99, n.s.) | 1039 (3.94) |
 
 Peak RSS was 13 MB for every binary.
 
@@ -822,8 +825,9 @@ Over the 25 cases with K ≥ 2, against `switch`:
 What this says, and does not:
 
 - **The proposed lowering is the hand program's cost here, and this is not
-  stage 2's form.** Its geomean is 0.98 and 12 of its 25 cases sit within 3%
-  of `switch`; it is never the slowest variant of a row. Only the five serial
+  stage 2's form.** Its geomean is 0.98 and 11 of its 25 cases are inside
+  the ±2.6% band of `switch` (marked *n.s.*), and it is never the slowest
+  variant of a row. Only the five serial
   aperiodic cases take the tag from a register (the drawn index, 0.84x in
   geomean, a shape that favours `proposed` by construction: `switch` must
   load what `proposed` already holds). The other 20 read it from a side
@@ -912,6 +916,12 @@ in milliseconds:
 | --- | --- | --- | --- | --- | --- |
 | serial same, tp | 205/205 (1.00) | 157/158 (0.99) | 157/157 (1.00) | 157/157 (1.00) | 158/157 (1.01) |
 | serial periodic, tp | 213/208 (1.02) | 196/195 (1.01) | 368/253 (1.45) | 289/394 (0.73) | 524/382 (1.37) |
+
+This run states no band of its own: read its ratios against §3.1's ±2.6%,
+taken in another run, and against the drift between runs below (2% and 7% in
+the two cases measured), which is larger. A cell within 2.6% of `switch`
+shows no difference by either; the 1.49 and 1.66 array cells, which repeat `timing_tp`'s, are far
+outside both.
 
 Serial periodic at K ≥ 8 swings from run to run for every variant, `proposed`
 included (565 ms in §3.3 and 585 ms here at K=13, against `switch`'s 456 and
@@ -1097,6 +1107,11 @@ peak RSS in MB:
 | A | 2 ms, 13 MB | 7 ms, 13 MB | 66 ms, 13 MB |
 | B | 5 ms, 13 MB | 41 ms, 77 MB | 391 ms, 764 MB |
 | C | 2 ms, 13 MB | 9 ms, 13 MB | 77 ms, 13 MB |
+
+`e/groups.json` times no byte-identical copy (§12), so this run has no
+band of its own. B's 5.9x is read against §3.1's ±2.6% and the 2% and 7% the
+same binary drifted between runs in §3.4; it is far outside both, and the
+memory figure, 764 MB against 13, is not a timing.
 
 B is 5.9x A at 100M and its memory grows with the loop: every object the
 loop allocates is kept by the arena, because one member might keep it. A and
@@ -1812,7 +1827,7 @@ the directory it sits in (`cd "$(dirname "$0")"`), so it is copied into the
 directory being built.
 
 Each `groups*.json` maps a group name to the binaries `bench.py` interleaves
-within it; every group but the registry's and `s2/`'s opens with `empty` or the group's
+within it; every group but the registry's, `s2/`'s and `e/`'s opens with `empty` or the group's
 `direct` and closes with `direct_copy`, a `cp` of `direct`, which is where the
 band comes from:
 

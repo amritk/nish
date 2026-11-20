@@ -140,6 +140,7 @@ import routeCalleesOf from "./emit-map" -> function @routeCalleesOf
 import valueReaderOf from "./emit-map" -> function @valueReaderOf
 import walkMethodsOf from "./emit-map" -> function @walkMethodsOf
 import isCollectionStruct from "./generics" -> function @isCollectionStruct
+import isSimdAccess from "./simd" -> function @isSimdAccess
 import isSimdLoad from "./simd" -> function @isSimdLoad
 import builtinPanicKind from "./panics" -> function @builtinPanicKind
 import PANIC_ARRAY_LENGTH from "./panics" -> const PANIC_ARRAY_LENGTH
@@ -2398,16 +2399,17 @@ function FactCollector.collectNamespacePropertyFacts(this: FactCollector, node: 
   callee +2:7 StringSet.add -> @StringSet.add
   callee +4:7 StringSet.add -> @StringSet.add
 function FactCollector.noteBuiltinSite(this: FactCollector, call: Node, name: string): void -> @FactCollector.noteBuiltinSite [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteSite
   escaping: name
-  calls: FactCollector.noteSite builtinPanicKind
+  calls: FactCollector.noteSite builtinPanicKind isSimdAccess nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0
   pointer call: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1
   stackSites=0 stackLocals=0
   local +0:11 kind: i32 (const)
   callee +0:18 builtinPanicKind -> @builtinPanicKind
   callee +2:7 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +2:33 isSimdAccess -> @isSimdAccess
 function FactCollector.noteWrittenArguments(this: FactCollector, call: Node): void -> @FactCollector.noteWrittenArguments [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteArrayWrite

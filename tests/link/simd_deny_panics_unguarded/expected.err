@@ -1,0 +1,1 @@
+main.ts:16:15: error: This call to `newlineMask` may panic: it reaches the `index` site at

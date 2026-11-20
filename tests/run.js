@@ -17948,7 +17948,9 @@ if (dealtHere("runtimeChecks")) {
   // ---- A compact class's debug info (WP48 stage 2a) ------------------------------------
   // A link is a 32-bit offset in the struct, so `-g` describes the member as
   // a 32-bit unsigned integer at its real offset, not as a 64-bit pointer a
-  // debugger would read past the field; the IR verifies.
+  // debugger would read past the field. Its type is a typedef of `unsigned
+  // int` named `ref32 <Class>` (stage 2b), which is what `tools/gdb` and
+  // `tools/lldb` key their printers on; the IR verifies.
   if (!only || "compact debug".includes(only)) {
     const dir = path.join(buildDir, "compact-debug")
     fs.rmSync(dir, { recursive: true, force: true })
@@ -17960,18 +17962,233 @@ if (dealtHere("runtimeChecks")) {
     const member = /^(![0-9]+) = !DIDerivedType\(tag: DW_TAG_member, name: "next", [^\n]*baseType: (![0-9]+), size: ([0-9]+), offset: ([0-9]+)\)$/m.exec(ll)
     const base = member === null ? null : new RegExp(`^${member[2]} = (.*)$`, "m").exec(ll)
     check(
-      "compact: -g describes Cell.next, a link, as a 32-bit unsigned member at offset 32",
+      "compact: -g describes Cell.next, a link, as a 32-bit `ref32 Cell` typedef member at offset 32",
       member !== null &&
         member[3] === "32" &&
         member[4] === "32" &&
         base !== null &&
-        base[1] === '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+        /^!DIDerivedType\(tag: DW_TAG_typedef, name: "ref32 Cell", file: ![0-9]+, baseType: ![0-9]+\)$/.test(base[1]),
       c.status !== 0 ? shown(c) : `${member?.[0] ?? "no member named next"}\n${base?.[0] ?? ""}`
     )
     if (has("opt") && c.status === 0) {
       const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(dir, "compact_list.ll")])
       check("compact: opt -passes=verify accepts the -g IR of a compact class", v.status === 0, String(v.stderr))
     }
+  }
+
+  // ---- A compact link's TBAA node (WP48 stage 2b) ---------------------------------------
+  // Two tags that both name a class decide alias by the class path, whatever
+  // their scalars, so the `ref32` node shows only on a merged tag. In
+  // tests/cases/compact_tbaa, `simplifycfg<sink-common-insts>` sinks
+  // `p.next = c` (a `Cell`) and `q.next = c` (a `Node`) into one store tagged
+  // with the bare scalar, and `gvn` then forwards `h.count = 1` (`i32`) and
+  // `h.held = t` (`ptr`) past it. The pipeline is spelled out because `-O2`
+  // forwards before it sinks. Renaming the node to `i32` or to `ptr` makes it
+  // the same node as that scalar (LLVM uniques equal nodes), and each rename
+  // must keep its reload: that is what shows the scalar decides, not the path.
+  // Under `--plain` nothing is tagged and both reloads stay.
+  if (!only || "compact tbaa".includes(only)) {
+    if (has("opt")) {
+      const dir = path.join(buildDir, "compact-tbaa")
+      fs.rmSync(dir, { recursive: true, force: true })
+      const pipeline = "function(sroa,instcombine,simplifycfg<sink-common-insts>,gvn)"
+      /** The IR of compact_tbaa under `flags`, or the failure that stopped it. */
+      const compiled = (flags, sub) => {
+        const out = path.join(dir, sub) + path.sep
+        const c = spawnSync(NISH, [path.join(casesDir, "compact_tbaa.ts"), ...flags, "-o", out], { cwd: root, encoding: "utf8" })
+        return c.status === 0 ? { ok: true, text: fs.readFileSync(path.join(out, "compact_tbaa.ll"), "utf8") } : { ok: false, text: shown(c) }
+      }
+      /** `name`'s body after `pipeline`, or the failure that stopped it. */
+      const optimised = (ir, name) => {
+        if (!ir.ok) {
+          return ir
+        }
+        const o = spawnSync("opt", [`-passes=${pipeline}`, "-S"], { input: ir.text, encoding: "utf8", maxBuffer: 1 << 26 })
+        if (o.status !== 0) {
+          return { ok: false, text: shown(o) }
+        }
+        const body = new RegExp(`^define [^\\n]*@${name}\\([^\\n]*\\{\\n(?:[^\\n]*\\n)*?\\}$`, "m").exec(o.stdout)
+        return { ok: body !== null, text: body === null ? `no ${name} define` : body[0] }
+      }
+      const tagged = compiled([], "tagged")
+      const renamed = (scalar) => ({ ok: tagged.ok, text: tagged.text.split('!"ref32"').join(`!"${scalar}"`) })
+      check(
+        "compact: the link stores of compact_tbaa hang off a ref32 node",
+        tagged.ok && tagged.text.includes('!"ref32"'),
+        tagged.text
+      )
+      const count = optimised(tagged, "relinkCount")
+      check(
+        "compact: a merged ref32 link store does not clobber an i32 field",
+        count.ok && !/= load i32,/.test(count.text) && /\bret i32 1\b/.test(count.text),
+        count.text
+      )
+      const held = optimised(tagged, "relinkHeld")
+      check(
+        "compact: a merged ref32 link store does not clobber a pointer field",
+        held.ok && !/= load ptr,/.test(held.text) && /\bret ptr %t\b/.test(held.text),
+        held.text
+      )
+      const asI32 = optimised(renamed("i32"), "relinkCount")
+      check(
+        "compact: with the link scalar renamed i32 the i32 field is reloaded",
+        asI32.ok && /= load i32,/.test(asI32.text),
+        asI32.text
+      )
+      const asPtr = optimised(renamed("ptr"), "relinkHeld")
+      check(
+        "compact: with the link scalar renamed ptr the pointer field is reloaded",
+        asPtr.ok && /= load ptr,/.test(asPtr.text),
+        asPtr.text
+      )
+      const plain = compiled(["--plain"], "untagged")
+      const plainCount = optimised(plain, "relinkCount")
+      const plainHeld = optimised(plain, "relinkHeld")
+      check(
+        "compact: without TBAA both fields are reloaded after the link store",
+        plainCount.ok && /= load i32,/.test(plainCount.text) && plainHeld.ok && /= load ptr,/.test(plainHeld.text),
+        `${plainCount.text}\n${plainHeld.text}`
+      )
+    } else skip("compact tbaa: opt is not installed")
+  }
+
+  // ---- A compact link in gdb and lldb (WP48 stage 2b) ----------------------------------
+  // tools/gdb/ref32.py and tools/lldb/ref32.py show a `ref32 <Class>` link as
+  // the object it names. At tests/cases/compact_list.ts:56 `head` is the
+  // five-cell list 4, 3, 2, 1, 0, so following `next` four times from it
+  // through the decoded pointers must read exactly those values and end in a
+  // link the printer calls `null`. The scripts below decide that inside the
+  // debugger and exit with its status (`quit 1` in gdb, `os._exit` in lldb):
+  // the verdict is the exit status, never the debugger's text. This build is
+  // `*-linux-gnu`, so it proves the zero-based decode only.
+  if (!only || "compact debugger".includes(only)) {
+    const dir = path.join(buildDir, "compact-debugger")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const exe = path.join(dir, "compact_list")
+    const linked = spawnSync(NISH, [path.join(casesDir, "compact_list.ts"), "-g", "--profile", "debug", "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check("compact: the -g debug build of compact_list links", linked.status === 0, shown(linked))
+    if (linked.status === 0 && has("gdb")) {
+      const script = path.join(dir, "check-gdb.py")
+      fs.writeFileSync(
+        script,
+        [
+          "import gdb",
+          'gdb.execute("break compact_list.ts:56")',
+          'gdb.execute("run")',
+          "ok = True",
+          'path = "head"',
+          "cell = gdb.parse_and_eval(path)",
+          "for want in (4, 3, 2, 1, 0):",
+          '    ok = ok and int(cell["value"]) == want',
+          '    shown = str(cell["next"])',
+          '    print("value %d next %s" % (int(cell["value"]), shown))',
+          "    if want == 0:",
+          '        ok = ok and shown == "null"',
+          "    else:",
+          '        path = "$ref32(%s->next)" % path',
+          "        cell = gdb.parse_and_eval(path)",
+          '        ok = ok and shown == "(struct Cell *) 0x%x" % int(cell)',
+          'gdb.execute("kill")',
+          'gdb.execute("quit %d" % (0 if ok else 1))',
+          "",
+        ].join("\n")
+      )
+      // `check` ends in `quit 0` or `quit 1`; the `quit 3` after it is reached
+      // only when it stopped short of its verdict, so that fails the check too.
+      /** gdb on `exe` with the printers loaded, then `check`. */
+      const gdb = (check) =>
+        spawnSync("gdb", ["-batch", "-nx", "-x", path.join(root, "tools", "gdb", "ref32.py"), "-x", check, "-ex", "quit 3", exe], {
+          encoding: "utf8",
+          timeout: 60000,
+        })
+      const g = gdb(script)
+      check("compact: gdb with tools/gdb/ref32.py follows a link chain to null", g.status === 0, shown(g))
+      // A script that raises before its verdict must not read as a pass.
+      const broken = path.join(dir, "check-gdb-broken.py")
+      fs.writeFileSync(broken, 'raise RuntimeError("no verdict")\n')
+      const gb = gdb(broken)
+      check("compact: a gdb check script that raises exits non-zero", gb.status !== 0 && gb.error === undefined, shown(gb))
+    } else if (linked.status === 0) skip("compact debugger: gdb is not installed")
+    if (linked.status === 0 && has("lldb")) {
+      const script = path.join(dir, "check_lldb.py")
+      fs.writeFileSync(
+        script,
+        [
+          "import os",
+          "import sys",
+          "import traceback",
+          "",
+          "def __lldb_init_module(debugger, _internal):",
+          "    # lldb --batch exits 0 when this raises, so every path ends in os._exit.",
+          "    try:",
+          "        ok = verdict(debugger)",
+          "    except BaseException:",
+          "        traceback.print_exc()",
+          "        ok = False",
+          "    sys.stdout.flush()",
+          "    sys.stderr.flush()",
+          "    os._exit(0 if ok else 1)",
+          "",
+          "def verdict(debugger):",
+          "    import lldb",
+          "    import ref32",
+          "    target = debugger.GetSelectedTarget()",
+          '    target.BreakpointCreateByLocation("compact_list.ts", 56)',
+          "    process = target.LaunchSimple(None, None, os.getcwd())",
+          "    ok = process.GetState() == lldb.eStateStopped",
+          '    cell = process.GetSelectedThread().GetFrameAtIndex(0).FindVariable("head")',
+          "    for want in (4, 3, 2, 1, 0):",
+          "        cell = cell.Dereference() if cell is not None else None",
+          "        if cell is None:",
+          "            ok = False",
+          "            break",
+          '        ok = ok and cell.GetChildMemberWithName("value").GetValueAsSigned(-1) == want',
+          '        link = cell.GetChildMemberWithName("next")',
+          "        shown = link.GetSummary() or ''",
+          '        print("value %d next %s" % (want, shown))',
+          "        if want == 0:",
+          '            ok = ok and shown == "null"',
+          "        else:",
+          '            ok = ok and shown.startswith("(Cell *) 0x")',
+          "            # The synthetic children (LinkChildren) are the linked cell's fields.",
+          '            ok = ok and link.GetChildMemberWithName("value").GetValueAsSigned(-1) == want - 1',
+          "            cell = ref32.pointer(link.GetNonSyntheticValue())",
+          "    process.Kill()",
+          "    return ok",
+          "",
+        ].join("\n")
+      )
+      // The last command exits 3, so a script that never reaches its verdict
+      // (an import that fails, a module that raises) fails the check too.
+      /** lldb on `exe` with the printers loaded, then `check`. */
+      const lldb = (check) =>
+        spawnSync(
+          "lldb",
+          [
+            "--batch",
+            "--no-lldbinit",
+            "-o",
+            `command script import ${path.join(root, "tools", "lldb", "ref32.py")}`,
+            "-o",
+            `command script import ${check}`,
+            "-o",
+            "script import os; os._exit(3)",
+            exe,
+          ],
+          { cwd: dir, encoding: "utf8", timeout: 60000 }
+        )
+      const l = lldb(script)
+      check("compact: lldb with tools/lldb/ref32.py follows a link chain to null", l.status === 0, shown(l))
+      const broken = path.join(dir, "check_lldb_broken.py")
+      // lldb-18 --batch exits 0 when `__lldb_init_module` raises: this one did pass before the `os._exit(3)`.
+      fs.writeFileSync(broken, ["def __lldb_init_module(debugger, _internal):", '    raise RuntimeError("no verdict")', ""].join("\n"))
+      const lb = lldb(broken)
+      check("compact: an lldb check script that raises exits non-zero", lb.status !== 0 && lb.error === undefined, shown(lb))
+    } else if (linked.status === 0) skip("compact debugger: lldb is not installed")
   }
 
   // ---- A compact class under AddressSanitizer (WP48 stage 2a) ----------------------------
@@ -40791,6 +41008,32 @@ if (selects("ci-scope", "ci.yml")) {
       carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
     JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
   )
+  // The why= line names the lanes that are off, in LANES order, and says so
+  // when none is; a full-run reason replaces both. The partial case is pinned
+  // to its literal text so the names come from the test, not the output.
+  const someOff = runScope(["tests/postgres/x.sql"], { PR_LABELS: "[]" })
+  const allOn = runScope(["src/x.ts"], { PR_LABELS: "[]" })
+  const whyOf = (run) => run.lines.find((l) => l.startsWith("why="))
+  const unread = "every changed path of each is on its allowlist of paths it does not read"
+  check(
+    "ci-scope: the why= output of a change some lanes read names exactly the lanes that are off",
+    someOff.ran.status === 0 && whyOf(someOff) === `why=lanes off: nish_cmp, elision, bootstrap; ${unread}`,
+    JSON.stringify(someOff.lines)
+  )
+  check(
+    "ci-scope: the why= output of a docs-only change names every lane as off",
+    whyOf(goodLabels) === `why=lanes off: ${lanes.join(", ")}; ${unread}`,
+    JSON.stringify(goodLabels.lines)
+  )
+  check(
+    "ci-scope: the why= output says every lane runs when none is off, and a full-run reason replaces it",
+    allOn.ran.status === 0 &&
+      laneLines(allOn.lines).length === lanes.length &&
+      laneLines(allOn.lines).every((l) => l.endsWith("=true")) &&
+      whyOf(allOn) === "why=every lane reads a changed path" &&
+      whyOf(badLabels) === "why=the pull request has the `ci:full` label",
+    JSON.stringify({ allOn: allOn.lines, badLabels: whyOf(badLabels) })
+  )
   fs.rmSync(scopeDir, { recursive: true, force: true })
 
   // The replay passes with no miss and excuses exactly the flakes the data
@@ -45541,7 +45784,7 @@ if (!only || "cpu-level".includes(only)) {
   const nish = (args, env = {}) =>
     spawnSync(NISH, args, { cwd: root, encoding: "utf8", env: { ...process.env, ...env } })
   const refusals = [
-    ["`native`", ["--cpu", "native"], "unknown cpu level `native`"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["`x86-64-v4`", ["--cpu", "x86-64-v4"], "unknown cpu level `x86-64-v4`"],
     ["`armv8.2-a`", ["--cpu", "armv8.2-a"], "unknown cpu level `armv8.2-a`"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
@@ -45568,11 +45811,11 @@ if (!only || "cpu-level".includes(only)) {
     "cpu level: nish run --cpu native is refused with exit 2 before anything runs",
     runRefused.status === 2 &&
       runRefused.stdout === "" &&
-      runRefused.stderr.includes("unknown cpu level `native`"),
+      runRefused.stderr.includes("--cpu native is refused: under clang 18 the constant-time check (CT-16)"),
     `${runRefused.status}: ${runRefused.stderr}`
   )
   for (const [what, flags, says] of [
-    ["`native`", ["--cpu", "native"], "--cpu takes x86-64-v3, not 'native'"],
+    ["`native`", ["--cpu", "native"], "--cpu native is refused: under clang 18 the constant-time check (CT-16) refuses"],
     ["a missing level", ["--cpu"], "--cpu needs a level"],
     ["the wasm profile", ["--profile", "wasm", "--cpu", "x86-64-v3"], "the wasm profile does not take it"],
     ["the wasi profile", ["--profile", "wasi", "--cpu", "x86-64-v3"], "the wasi profile does not take it"],
@@ -45659,6 +45902,40 @@ if (!only || "cpu-level".includes(only)) {
         "cpu level: the runtime cache keeps the level in its own entry beside the baseline's",
         entries("runtime") === 2,
         `${entries("runtime")} runtime entries`
+      )
+      // SQLite's units are compiled apart from the runtime's (build.sh's
+      // `sqlite_units`, from inside runtime/sqlite/ by their bare names), so the
+      // level reaching the nineteen runtime units says nothing about them. Each
+      // unit, every `runtime/sqlite/*.c` but sqlite3.c, has its own clang line,
+      // and that line carries the level. The amalgamation has no line of its
+      // own: nish-sqlite.c includes it, so it is compiled at that unit's level.
+      const sqliteUnits = fs
+        .readdirSync(path.join(root, "runtime", "sqlite"))
+        .filter((f) => f.endsWith(".c") && f !== "sqlite3.c")
+        .sort()
+      const sqlite = nish(
+        [
+          path.join(root, "tests", "link", "sqlite_link", "main.ts"),
+          "-o",
+          path.join(cpuDir, "sqlite.ir") + "/",
+          "--link",
+          path.join(cpuDir, "sqlite-v3"),
+          "--cpu",
+          "x86-64-v3",
+        ],
+        env
+      )
+      const sqliteLines = ccLines()
+      const unitLines = (unit) => sqliteLines.filter((l) => new RegExp(` -c ${unit.replace(".", "\\.")}( |$)`).test(l))
+      check(
+        `cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on every runtime/sqlite/ unit (${sqliteUnits.join(", ")}, which includes sqlite3.c), the module and the link`,
+        sqlite.status === 0 &&
+          sqliteUnits.includes("nish-sqlite.c") &&
+          sqliteUnits.every((unit) => unitLines(unit).length === 1) &&
+          unitLines("sqlite3.c").length === 0 &&
+          sqliteLines.some((l) => !/ -c /.test(l)) &&
+          sqliteLines.every(marched),
+        sqlite.stderr + sqliteLines.join("\n")
       )
       const flags = fs.existsSync("/proc/cpuinfo")
         ? (fs.readFileSync("/proc/cpuinfo", "utf8").match(/^flags\s*:.*$/m) ?? [""])[0]
