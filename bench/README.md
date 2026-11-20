@@ -2051,8 +2051,8 @@ ns per call.
 ### Variants: PGO and the CPU level
 
 `--variant V` adds one binary to the rounds and sets it against what it
-varies. The noise band for that comparison is the varied binary against its
-byte-identical copy.
+varies: the build, or for `c-native` the C twin. The noise band for that
+comparison is that binary against its byte-identical copy.
 
 ```bash
 node bench/sqlite/run.mjs --validate --variant pgo   # the variant must read what every side reads
