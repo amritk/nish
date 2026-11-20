@@ -14,11 +14,13 @@ import { NUMBER_MODE_I32 } from "./context"
 
 /**
  * The flag that relaxes the no-panic check, spelled once: the help row
- * (`src/cli-style.ts`) and the flag loop (`src/compile.ts`) read it from
- * here, and the repository's builds pass it through `scripts/nish-compiler.sh`
- * and `tests/allow-panics.js`. Today it only undoes an earlier `--deny-panics`
- * on the same line: the scope is then the root package's `"nish".noPanic`
- * list, or nothing, as with no flag at all.
+ * (`src/cli-style.ts`), the flag loop (`src/compile.ts`) and the scope's
+ * diagnostics (`src/panics.ts`) read it from here, and the repository's
+ * builds pass it through `scripts/nish-compiler.sh` and
+ * `tests/allow-panics.js`. Without it every module of the root package is in
+ * the no-panic scope; with it the scope is the root package's
+ * `"nish".noPanic` list, or nothing, so a listed module stays held. The name
+ * is provisional: a rename is this constant, those two helpers and the docs.
  */
 export const ALLOW_PANICS_FLAG: string = "--allow-panics"
 
@@ -206,13 +208,22 @@ export class Options {
    */
   emitPanics: string
   /**
-   * `--deny-panics`: every function in the program's own modules is held to no
-   * panic site but out of memory (`reportDeniedPanics` in `src/panics.ts`).
-   * It changes no byte of the IR: a program it refuses writes none, and one it
-   * accepts is the one the build would have compiled anyway. With
-   * `ALLOW_PANICS_FLAG` on the same line the last of the two wins.
+   * Whether every function in the program's own modules is held to no panic
+   * site but out of memory (`reportDeniedPanics` in `src/panics.ts`): the
+   * default, which `--deny-panics` spells out and `ALLOW_PANICS_FLAG` turns
+   * off, the last of the two on a line winning. It changes no byte of the IR:
+   * a program it refuses writes none, and one it accepts is the one the build
+   * would have compiled anyway. True from the constructor, so a path that
+   * builds a program without reading the command line is strict unless it
+   * says why not (`src/dump-checked.ts`, `cachedTool` in `src/compile.ts`).
    */
   denyPanics: boolean
+  /**
+   * `--deny-panics` was the last of it and `ALLOW_PANICS_FLAG` on the line:
+   * the scope was asked for rather than taken by default, which is what
+   * `--emit-ast`, a dump that stops before the check, refuses.
+   */
+  denyPanicsFlag: boolean
   /**
    * `--deny-retention`: every arena-retention warning in the program's own
    * modules (NL9002, NL9003, NL9011, NL9016, NL9018, NL9019) is an error instead
@@ -248,7 +259,7 @@ export class Options {
   compact: boolean
   /**
    * The root package's `"nish".noPanic` named at least one module, which puts
-   * those modules in the scope `--deny-panics` puts all of them in. Set by
+   * those modules in the scope even under `ALLOW_PANICS_FLAG`. Set by
    * `Compilation` once it has read the manifest, before anything records.
    */
   noPanicListed: boolean
@@ -376,7 +387,8 @@ export class Options {
     this.statelessInstance = ""
     this.warnPortability = false
     this.emitPanics = ""
-    this.denyPanics = false
+    this.denyPanics = true
+    this.denyPanicsFlag = false
     this.denyRetention = false
     this.emitArena = ""
     this.explainMemory = false
