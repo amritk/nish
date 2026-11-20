@@ -1,6 +1,6 @@
 # WP66: C libraries from their headers
 
-**State:** In progress · **Done:** 7 of 8 · **Design note:** [`docs/wp66-c-headers.md`](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)
+**State:** Landed · **Done:** 7 of 8 · **Design note:** [`docs/wp66-c-headers.md`](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)
 
 ## Stages
 

@@ -5,7 +5,9 @@ checked box is built and on `main`; an unchecked one is not. An item marked
 *(open question)* waits on a decision that has not been made, and one marked
 *(deferred)* is wanted but not scheduled. Each package's design and its
 reasons are in its design note on GitHub, linked from its page; the state is
-kept here, and a pull request that lands a stage ticks its box.
+kept here, and a pull request that lands a stage ticks its box. A package is
+listed as landed once every stage it has left is deferred or waits on a
+decision.
 
 ## Milestones
 
@@ -22,15 +24,13 @@ In order. Each package's page says what its next stage is and where it is
 specified.
 
 1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.
-2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G7's one handler, the `nish/net/http-server` façade.
-3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
-4. [WP21: Packages](wp21-packages.md): S4, the build cache.
+2. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
+3. [WP21: Packages](wp21-packages.md): S4, the build cache.
 
 ## Open questions
 
 - M4: when to declare 1.0.
 - [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md): whether stage D rejects a `function` definition.
-- [WP57: Module-scoped names](wp57-module-scoped-names.md): whether two exported functions of one package may share a name, and what that does to the C surface (S2).
 - [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md): how module storage crosses into the hidden memory, how a page that must run in Safari gets a single-memory module, and how large the exchange area is under `--memory` (S3).
 - [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md): whether to build `Dyn<I>`; the design note measures it against the hand-written dispatch and recommends shipping interface method signatures (stage 1) now, with `Dyn<I>` in registers and in stored places each gated on its own build's timing.
 - [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md): the shape of the `constraints` option, whether to record which keyword failed, whether encode checks constraints in a `-g` build, and whether a coerce class may reach a strict one.
@@ -47,24 +47,20 @@ specified.
 | Work package | State | Done |
 | --- | --- | --- |
 | [WP21: Packages](wp21-packages.md) | In progress | 5 of 7 |
-| [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | In progress | 4 of 5 |
-| [WP28: Compatibility mode](wp28-compatibility-mode.md) | In progress | 5 of 13 |
+| [WP28: Compatibility mode](wp28-compatibility-mode.md) | In progress | 6 of 13 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
-| [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 5 of 9 |
-| [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 22 of 29 |
-| [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
+| [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 4 of 7 |
 | [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 5 of 9 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
-| [WP57: Module-scoped names](wp57-module-scoped-names.md) | In progress | 1 of 3 |
+| [WP57: Module-scoped names](wp57-module-scoped-names.md) | In progress | 2 of 7 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
-| [WP66: C libraries from their headers](wp66-c-headers.md) | In progress | 7 of 8 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP68: Shared libraries, layered like atomic design](wp68-shared-libraries.md) | Proposed | 1 of 9 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
 | [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md) | Proposed | 0 of 4 |
-| [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 6 |
+| [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 5 |
 | [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md) | Proposed | 0 of 3 |
 | [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md) | Proposed | 0 of 5 |
 
@@ -92,6 +88,7 @@ specified.
 | [WP18: Generics by monomorphisation](wp18-generics.md) | Landed | 2 of 6 |
 | [WP19: Stage0 retirement](wp19-stage0-retirement.md) | Landed | 1 of 2 |
 | [WP20: Threads: the runtime half](wp20-threads.md) | Landed | 1 of 1 |
+| [WP22: Arrow functions as the declaration form](wp22-arrow-functions.md) | Landed | 4 of 5 |
 | [WP23: The language surface a corpus review asked for](wp23-language-surface.md) | Landed | 1 of 1 |
 | [WP25: Remove inheritance, widen `implements`](wp25-inheritance.md) | Landed | 1 of 1 |
 | [WP26: The standard library](wp26-stdlib.md) | Landed | 1 of 1 |
@@ -103,7 +100,9 @@ specified.
 | [WP34: The network stack](wp34-network-stack.md) | Landed | 24 of 24 |
 | [WP35: The capability report](wp35-capabilities.md) | Landed | 1 of 1 |
 | [WP36: The capability policy](wp36-capability-policy.md) | Landed | 1 of 1 |
+| [WP37: The OS sandbox](wp37-os-sandbox.md) | Landed | 5 of 9 |
 | [WP38: SIMD](wp38-simd.md) | Landed | 10 of 10 |
+| [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | Landed | 27 of 29 |
 | [WP40: Dependency capabilities](wp40-dependency-capabilities.md) | Landed | 1 of 1 |
 | [WP42: A multi-core server from pre-forked processes](wp42-multicore-server.md) | Landed | 1 of 1 |
 | [WP44: Streaming file reads](wp44-streaming-files.md) | Landed | 4 of 4 |
@@ -116,6 +115,7 @@ specified.
 | [WP55: An object graph a WebAssembly module keeps between calls](wp55-persistent-root.md) | Landed | 1 of 1 |
 | [WP58: A discriminated union as a generic's type argument](wp58-generics-over-unions.md) | Landed | 1 of 1 |
 | [WP63: io_uring direct descriptors for `nish:net`](wp63-iouring-net.md) | Landed | 6 of 6 |
+| [WP66: C libraries from their headers](wp66-c-headers.md) | Landed | 7 of 8 |
 | [WP24: `async`/`await`](wp24-async.md) | Superseded | 3 of 4 |
 
 ## Not built
