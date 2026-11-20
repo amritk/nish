@@ -198,6 +198,7 @@ cases/compact_copies added after R6: no rewriter to freeze it with
 cases/compact_darwin added after R6: no rewriter to freeze it with
 cases/compact_list added after R6: no rewriter to freeze it with
 cases/compact_no_stack added after R6: no rewriter to freeze it with
+cases/compact_tbaa added after R6: no rewriter to freeze it with
 cases/compact_view added after R6: no rewriter to freeze it with
 cases/compat_for_of_string added after R6: no rewriter to freeze it with
 cases/compat_for_of_string_fresh added after R6: no rewriter to freeze it with

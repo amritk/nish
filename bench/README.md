@@ -1794,8 +1794,7 @@ sends that many messages a run. An unknown option, or a value out of
 range, exits 2 before anything builds. Each round runs every size and mode
 twice in a seeded shuffled order. The table gives the consumer's p50 and
 p99 per message (its wait for the producer left out), the consumer's wait
-for the producer's record a message (how much of the pipeline the producer
-paces), the pipeline's ns a message, and the body bytes copied in user
+for the producer's record a message, the pipeline's ns a message, and the body bytes copied in user
 space a message, to two decimals. For `sendBody`, that count is only the
 tails it keeps when the socket does not take a body whole; the table gives
 how many messages had one. The kernel's copy into the socket, the output's
@@ -1821,7 +1820,10 @@ ring sizes. Stalls do happen in full runs (the first full default run
 stalled in place at 10 KB, message 25,298); how often there is unmeasured,
 and they could account for part of the in-place pipeline cost. The sums
 are one byte at a time on the producer's and the reader's cores, so they
-raise the pipeline and p99 figures.
+add work there; no run without them was recorded, so how much they raise
+the pipeline and p99 figures is not measured. The waiting column also came
+after the full runs, and the tables below do not have it: how much of the
+pipeline the producer paces is not measured there.
 
 On 2026-11-07, 5 rounds × 2 runs × 50,000 messages, on an Intel Xeon
 Processor @ 2.30 GHz (4 cores; 48 KiB L1d and 2 MiB L2 a core, 260 MiB L3
