@@ -3938,7 +3938,12 @@
                     "filepath": "docs/roadmap/wp71-httparena.md",
                     "head": {
                       "title": "WP71: An HttpArena entry, and what it asks of std/net · Nish",
-                      "meta": [{ "property": "og:title", "content": "WP71: An HttpArena entry, and what it asks of std/net" }],
+                      "meta": [
+                        {
+                          "property": "og:title",
+                          "content": "WP71: An HttpArena entry, and what it asks of std/net"
+                        }
+                      ],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp71-httparena" }]
                     }
                   },
@@ -3958,7 +3963,12 @@
                     "filepath": "docs/roadmap/wp73-brotli.md",
                     "head": {
                       "title": "WP73: Brotli, measured first, then an encoder and br responses · Nish",
-                      "meta": [{ "property": "og:title", "content": "WP73: Brotli, measured first, then an encoder and br responses" }],
+                      "meta": [
+                        {
+                          "property": "og:title",
+                          "content": "WP73: Brotli, measured first, then an encoder and br responses"
+                        }
+                      ],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp73-brotli" }]
                     }
                   }
