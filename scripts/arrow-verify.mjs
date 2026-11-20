@@ -74,6 +74,7 @@ import fs from "node:fs"
 import path from "node:path"
 import ts from "typescript"
 import { CORPUS_DIRS, extraArgs, linkPrograms, programs, root } from "../tests/self/corpus.js"
+import { withAllowPanics } from "../tests/allow-panics.js"
 import { resolveSeed } from "../tests/self/seed.js"
 import { rewrite } from "./arrowify.mjs"
 
@@ -89,6 +90,16 @@ const work = path.join(root, "build", "arrowify")
  * sides. Set once by `main` before anything is compiled.
  */
 let compiler = { cmd: "", prefix: [] }
+
+/**
+ * One compile's whole argument list. The corpus panics on purpose, so it is
+ * built with `--allow-panics` when the compiler lists it; both sides get the
+ * same answer.
+ */
+const compileArgs = (args) => [
+  ...compiler.prefix,
+  ...withAllowPanics(compiler.prefix[0] ?? compiler.cmd, args),
+]
 
 const DEFAULT_COMPILER = path.join("build", "nish")
 const tree = path.join(work, "tree")
@@ -347,9 +358,9 @@ const diagnose = (rel) => {
   // a case which stops being one does not land its IR on top of the last.
   const out = path.join(work, "diagnose")
   fs.mkdirSync(out, { recursive: true })
-  const args = [...compiler.prefix, path.join(tree, rel), "--json", "-o", `${out}/`]
+  const args = [path.join(tree, rel), "--json", "-o", `${out}/`]
   args.push(...extraArgs(path.join(tree, rel)))
-  const run = spawnSync(compiler.cmd, args, { encoding: "utf8" })
+  const run = spawnSync(compiler.cmd, compileArgs(args), { encoding: "utf8" })
   return { status: run.status, said: (run.stdout ?? "").trim() }
 }
 
@@ -426,7 +437,7 @@ const compileAll = (relPrograms, out, debug) => {
       results.set(rel, { status: null, absent: true, stdout: "", stderr: "", dir })
       continue
     }
-    const args = [...compiler.prefix, path.join(tree, rel), "-o", `${dir}/`]
+    const args = [path.join(tree, rel), "-o", `${dir}/`]
     // The flags come out of the *copy*, not out of the working tree, so that each
     // side is compiled the way its own `.args` sidecar says. Reading them from the
     // working tree made `--applied` hand the before side the after side's flags,
@@ -435,7 +446,7 @@ const compileAll = (relPrograms, out, debug) => {
     if (debug) {
       args.push("-g")
     }
-    const run = spawnSync(compiler.cmd, args, { encoding: "utf8" })
+    const run = spawnSync(compiler.cmd, compileArgs(args), { encoding: "utf8" })
     results.set(rel, { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "", dir })
   }
   return results

@@ -29,7 +29,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -80,8 +80,7 @@ fs.mkdirSync(out, { recursive: true })
 const exe = path.join(out, "h1")
 run(
   nishc.cmd,
-  [
-    ...nishc.prefix,
+  compileArgv(nishc, [
     "bench/http1-request/main.ts",
     "-o",
     `${path.relative(root, out)}/`,
@@ -90,7 +89,7 @@ run(
     "--profile",
     "speed",
     "-g",
-  ],
+  ]),
   { cwd: root }
 )
 

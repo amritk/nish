@@ -17,7 +17,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..")
@@ -98,7 +98,7 @@ for (const name of names) {
   const exe = path.join(outDir, name)
   const build = spawnSync(
     nishc.cmd,
-    [...nishc.prefix, path.join(here, `wp68-${name}.ts`), "--link", exe, "--profile", "speed"],
+    compileArgv(nishc, [path.join(here, `wp68-${name}.ts`), "--link", exe, "--profile", "speed"]),
     { encoding: "utf8" }
   )
   if (build.status !== 0) {

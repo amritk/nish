@@ -716,7 +716,10 @@ jobs:
           NISH_REQUIRE_ATTESTATION: "1"
         run: |
           bash scripts/fetch-seed.sh
-          build/seed/bin/nish src/compile.ts --link build/nish
+          # src/ may panic on purpose: `--allow-panics` when the seed lists it.
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/seed/bin/nish
+          build/seed/bin/nish ${allow_panics[@]+"${allow_panics[@]}"} src/compile.ts --link build/nish
           node --no-warnings examples/wasm-arena/build.mjs --nish build/nish --out build/arena
           ls -l build/arena/web
 

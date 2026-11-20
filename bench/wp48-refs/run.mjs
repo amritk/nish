@@ -17,6 +17,7 @@
 // Linux only (ru_maxrss in KB), run from the repository root.
 import { execFileSync } from "node:child_process"
 import { copyFileSync, mkdirSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 const option = (name, fallback) => {
@@ -53,7 +54,11 @@ const programs = ["class", "sibling", "pool", "records", "columns"]
 const variants = ["class", "class-copy", "sibling", "pool", "records", "columns"]
 execFileSync(process.env.CC ?? "clang", ["-O2", "bench/rss.c", "-o", `${out}/rss`])
 for (const p of programs) {
-  execFileSync("build/nish", [`bench/wp48-refs/${p}.ts`, "--link", `${out}/${p}`], { stdio: "ignore" })
+  execFileSync(
+    "build/nish",
+    withAllowPanics("build/nish", [`bench/wp48-refs/${p}.ts`, "--link", `${out}/${p}`]),
+    { stdio: "ignore" }
+  )
 }
 copyFileSync(`${out}/class`, `${out}/class-copy`)
 

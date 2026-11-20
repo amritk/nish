@@ -32,6 +32,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "../allow-panics.js"
 
 /** The repository root. */
 const root = path.resolve(import.meta.dirname, "..", "..")
@@ -135,8 +136,17 @@ const seedForOracle = (argv) => {
   return resolveSeed(FETCHED)
 }
 
+/**
+ * A seed's whole argument list for `args`: its Node entry, if any, then `args`
+ * with `--allow-panics` when the seed lists it. Every build of a case, an
+ * oracle or `src/` goes through here, so a seed that knows the flag gets it
+ * and the release that exits 2 on it does not. The probe reads the entry
+ * itself, not `node`.
+ */
+const seedArgs = (seed, args) => [...seed.prefix, ...withAllowPanics(seed.prefix[0] ?? seed.cmd, args)]
+
 const spawnSeed = (seed, args, options = {}) =>
-  spawnSync(seed.cmd, [...seed.prefix, ...args], {
+  spawnSync(seed.cmd, seedArgs(seed, args), {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
@@ -159,4 +169,14 @@ const linkWith = (seed, source, out) => {
   return out
 }
 
-export { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed, root, seedForOracle, spawnSeed, withoutSeed }
+export {
+  defaultSeedSpec,
+  linkWith,
+  namedSeedSpec,
+  resolveSeed,
+  root,
+  seedArgs,
+  seedForOracle,
+  spawnSeed,
+  withoutSeed,
+}

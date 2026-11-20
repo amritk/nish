@@ -189,10 +189,13 @@ fi
 
 nish=${NISH:-build/nish}
 [ -x "$nish" ] || npm run build
+# A bench program, so its build takes `--allow-panics` from a compiler that lists it.
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$nish"
 mkdir -p build/tfb
 # Builds $1 into build/tfb/$2.
 build() {
-  "$nish" "bench/techempower/$1" --link "build/tfb/$2" --profile speed >build/tfb/compile.log 2>&1 || {
+  "$nish" ${allow_panics[@]+"${allow_panics[@]}"} "bench/techempower/$1" --link "build/tfb/$2" --profile speed >build/tfb/compile.log 2>&1 || {
     cat build/tfb/compile.log >&2
     exit 1
   }

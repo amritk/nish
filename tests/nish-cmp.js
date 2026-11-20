@@ -105,6 +105,7 @@ import path from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js"
+import { seedArgs } from "./self/seed.js"
 
 /** The two `--emit-header` comment lines the 0.37.0 seed writes. */
 const SEED_HEADER_LINES = [
@@ -9935,8 +9936,13 @@ const resolvePair = (referenceSpec, candidateSpec) => {
   return { reference, candidate }
 }
 
+/**
+ * Each side is asked on its own whether it takes `--allow-panics`: the
+ * reference is often the release that exits 2 on it, and the flag moves no
+ * IR, so the two still compare byte for byte.
+ */
 const compile = (compiler, args) =>
-  spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
+  spawnSync(compiler.cmd, seedArgs(compiler, args), {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -9945,7 +9951,7 @@ const compile = (compiler, args) =>
 /** `compile` as a promise, answering the same `{ status, stdout, stderr }` shape `spawnSync` does. */
 const compileAsync = (compiler, args) =>
   new Promise((resolve) => {
-    const child = spawn(compiler.cmd, [...compiler.prefix, ...args], { cwd: root })
+    const child = spawn(compiler.cmd, seedArgs(compiler, args), { cwd: root })
     const stdout = []
     const stderr = []
     child.stdout.on("data", (chunk) => stdout.push(chunk))

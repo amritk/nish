@@ -72,6 +72,7 @@ const CORPUS = [
   "tests/differential/**",
   "tests/link/**",
   "tests/self/**",
+  "tests/allow-panics.js",
   "tests/nish-cmp.js",
   "tests/pool.js",
   "tests/driver.c",
@@ -131,7 +132,15 @@ export const LANES = [
     // tests/nish/cli.ts contract, whose built binary compiles fixtures from
     // tests/cases and tests/link. The `test` job's fixed point is delegated
     // here, so this set holds what that check reads (tests/run.js pins it).
-    reads: [...COMPILER, "tests/nish/**", "tests/self/**", "tests/cases/**", "tests/link/**"],
+    // tests/allow-panics.js is what tests/self/seed.js hands every seed build through.
+    reads: [
+      ...COMPILER,
+      "tests/nish/**",
+      "tests/self/**",
+      "tests/allow-panics.js",
+      "tests/cases/**",
+      "tests/link/**",
+    ],
     inert: [...INERT, "tests/**", "examples/**", "bench/**", "CHANGELOG.md", "changelog/**"],
   },
   {
@@ -174,7 +183,13 @@ export const LANES = [
     // .github/actions/compiler-cache (tests/self/compiler-cache.js and
     // seed.js), tests/postgres/live/run.mjs, tls-certs.sh and the
     // bench/techempower servers.
-    reads: [...COMPILER, "tests/self/**", "tests/postgres/**", "bench/techempower/**"],
+    reads: [
+      ...COMPILER,
+      "tests/self/**",
+      "tests/allow-panics.js",
+      "tests/postgres/**",
+      "bench/techempower/**",
+    ],
     inert: [...INERT, "tests/**", "examples/**", "bench/**", "CHANGELOG.md", "changelog/**"],
   },
 ]

@@ -52,6 +52,7 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "./allow-panics.js"
 import { jobsFrom, pool, run } from "./pool.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -239,10 +240,14 @@ const compile = async (name, extra) => {
   const placed = extra.map((arg) => (arg.startsWith(WORK) ? path.join(work, arg.slice(WORK.length)) : arg))
   const source = path.join("tests", "cases", `${name}.ts`)
   // A compile that hangs is killed, and its signal is then part of its answer.
-  const r = await run(compiler, [source, "-o", path.join(work, `${name}.ll`), ...args, ...placed], {
-    cwd: root,
-    timeout: COMPILE_TIMEOUT_MS,
-  })
+  const r = await run(
+    compiler,
+    withAllowPanics(compiler, [source, "-o", path.join(work, `${name}.ll`), ...args, ...placed]),
+    {
+      cwd: root,
+      timeout: COMPILE_TIMEOUT_MS,
+    }
+  )
   return {
     status: r.status,
     signal: r.signal,

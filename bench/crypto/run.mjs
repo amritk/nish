@@ -53,7 +53,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 import { sideOf, times3 } from "../par-reading.mjs"
 import { PAIRED_MIN_RATIO, PAIRED_ROUNDS, pairedProves, pairedWant } from "./paired.mjs"
@@ -780,16 +780,19 @@ const buildFamily = (family) => {
   if (family.kernels.some((k) => k.nish === true)) {
     const exe = path.join(dir, "nish", "main")
     fs.mkdirSync(path.dirname(exe), { recursive: true })
-    build(`${family.name} (Nish)`, nishc.cmd, [
-      ...nishc.prefix,
-      path.join(family.dir, "main.ts"),
-      "-o",
-      `${path.dirname(exe)}${path.sep}`,
-      "--link",
-      exe,
-      "--profile",
-      "speed",
-    ])
+    build(
+      `${family.name} (Nish)`,
+      nishc.cmd,
+      compileArgv(nishc, [
+        path.join(family.dir, "main.ts"),
+        "-o",
+        `${path.dirname(exe)}${path.sep}`,
+        "--link",
+        exe,
+        "--profile",
+        "speed",
+      ])
+    )
     // The noise band: the same bytes under another name, timed in the same rounds.
     fs.copyFileSync(exe, `${exe}-copy`)
     add("nish", null, false, exe, [])
