@@ -338,18 +338,22 @@ edited (§4d). The programs nish-cmp declares are new ones the seed refuses.
 
 ## 6. S2: exported names that clash inside one package *(decided: keep refusing)*
 
-**Decided at WP57's sign-off: option A.** An exported name stays unique
-across its package. For the root package that is NL3024's "across the
-program", since every dependency's symbols carry its prefix. Nothing is built for S2. What stays refused, with the codes
-S1 left (§4c):
+**Decided at WP57's sign-off (#1811): option A.** An exported function's
+name stays unique across its package. NL3024's message says "across the
+program"; for a function that is the same thing, because a dependency's
+function symbols carry its package prefix and cannot meet the root's. Nothing
+is built for S2. What stays refused, with the codes S1 left (§4c):
 
 - two exported functions of the root package with one name (NL3024), and the
   same inside a dependency (NL3025);
 - two exported generic templates of one package and name (NL3010): their
   instantiations are exported, so they are the same question;
-- under S3, two exported classes or interfaces of one name (NL3028). A
-  private class keeps S1's treatment, and the header spells it by its
-  symbol (§7, S3d).
+- under S3, two exported classes or interfaces of one name (NL3028). Class
+  symbols carry no package prefix, so this holds across packages too: an
+  exported root class and an exported dependency class of one name stay
+  refused (`class_clash_package`, `class_clash_package_after_root`). A
+  private class keeps S1's treatment, and the header spells it by its symbol
+  (§7, S3d).
 
 A private party beside an exported one is already S1's case: the export keeps
 its bare symbol and the private one is qualified (`module_private_mixed`).
@@ -357,8 +361,9 @@ its bare symbol and the private one is qualified (`module_private_mixed`).
 **Why A.** Inside a package, `import { f } from "./a"` already says which `f`
 is meant, so the refusal protects only the C surface. Every root-package
 export is on that surface (§2), and C has one namespace. Of the options below,
-A is the only one that keeps that surface exactly what it is today, and no
-program has yet needed more. The cost is that two modules cannot both export
+A is the only one that behaves the same in every build mode: C keeps open
+builds' surface too, but makes whether a program compiles depend on the
+flags. No program has yet needed more. The cost is that two modules cannot both export
 an `f`, so a user renames one export by hand. That is what §1 objects to, but
 only for exports, which are few and are an interface someone chose.
 
@@ -445,7 +450,16 @@ owner's symbol`.
 interface whose source name clashes across same-prefix peers, under
 `--strict-exports`, gets `<package prefix><module qualifier>$.<name>`, and its
 instantiations `a$.Box$i32`. One predicate decides it, the way
-`qualifiesClashing` does for functions: an exported class counts as a party
+`qualifiesClashing` does for functions, but earlier: a struct's symbol and
+its members' symbols are minted in pass 1 (`src/structs.ts:926`, `:1022`), so
+S1's placement (`qualifyClashingSymbols`, `src/compilation.ts:1429`, before
+`bindImports`) is too late for them. The decision runs once every module has
+declared its class and interface names (`declareNames`, pass 1a) and before
+any member is collected (`collectSignatures`, pass 1,
+`src/compilation.ts:745`). An exported root class and an exported
+dependency class of one name stay NL3028 (`class_clash_package`,
+`class_clash_package_after_root`), since class symbols carry no package
+prefix. In that predicate an exported class counts as a party
 but keeps its bare symbol, since an export is on the C surface by choice. A
 private class reaches the header too, through a signature or because the
 header declares every class, but it is still private: the header spells its
