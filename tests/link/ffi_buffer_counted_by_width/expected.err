@@ -1,0 +1,1 @@
+Parameter `n` of `declare function signed_count` is i64, and the count `dst` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one

@@ -61,7 +61,7 @@
 import { astText } from "./ast-text"
 import { playBreak } from "./break"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
-import { CLI, VERSION } from "./branding"
+import { CLI, PACKAGE_CONDITION, VERSION } from "./branding"
 import { agentDriven, Style, styleFor } from "../std/cli"
 import { helpHint, helpText } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
@@ -75,11 +75,22 @@ import { generateHeader } from "./interop-header"
 import { generateNapiShim, napiBridges } from "./interop-napi"
 import { generateWasmLoader, wasmLoaderPath } from "./interop-wasm"
 import { unsafeModule } from "./nish-modules"
-import { Options } from "./options"
+import {
+  LINK_ENTRY,
+  LINK_SHAPE,
+  LINK_UNGRANTED,
+  LinkManifest,
+  LinkRequest,
+  ManifestList,
+  manifestLink,
+  manifestNish,
+} from "./manifest"
+import { ALLOW_PANICS_FLAG, Options } from "./options"
+import { packageDirOf, packageNameOf } from "./packages"
 import { basenameWithout, dirname, joinPath } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
-import { Diagnostic, formatList } from "./diagnostics"
+import { Diagnostic, formatList, SourceFile } from "./diagnostics"
 import { EmittedProgram, emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
 import {
@@ -89,11 +100,15 @@ import {
   simulatedUnlabelledBuiltin,
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { cImport } from "./c-import"
 import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
 import {
   anyCallsSqlite,
+  LinkSet,
+  linkSetLines,
+  makeRulePaths,
   runBinaryName,
   runCacheKey,
   runCacheRoot,
@@ -143,10 +158,21 @@ const isProfile = (name: string): boolean =>
 /**
  * The one CPU level `--cpu` accepts (docs/LANGUAGE.md, "The CPU level"): the
  * link compiles the program and the runtime for it, and the constant-time
- * check reads its assembly (CT-16). Every other level, `native` included, is
- * refused rather than passed to clang unread.
+ * check reads its assembly (CT-16). Every other level is refused rather than
+ * passed to clang unread. `native` is refused for a measured reason, which
+ * `NATIVE_REFUSED` gives: the check does not pass at every CPU it names.
  */
 const CPU_LEVEL: string = "x86-64-v3"
+
+/**
+ * Why `--cpu native` is refused (docs/security/ct-verification.md, CT-16):
+ * read under clang 18 at `-march=znver2`, `znver3`, `znver4` and
+ * `sapphirerapids`, the `ct_asm_chacha20poly1305` fixture holds a branch the
+ * checker refuses, so a native build on those CPUs could ship assembly the
+ * check does not pass.
+ */
+const NATIVE_REFUSED: string =
+  "under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids)"
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one
@@ -793,6 +819,10 @@ const commandMain = (): number => {
   if (process.argv[1] === "upgrade") {
     return upgrade()
   }
+  // `nish c-import` writes a module from a C header (src/c-import.ts).
+  if (process.argv[1] === "c-import") {
+    return cImport(process.argv)
+  }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
   opts.statelessInstance = simulatedStatelessInstance()
@@ -911,6 +941,10 @@ const commandMain = (): number => {
         return 2
       }
       cpu = process.argv[arg]
+      if (cpu === "native") {
+        console.error(`compile: --cpu native is refused: ${NATIVE_REFUSED}; the one accepted is ${CPU_LEVEL}`)
+        return 2
+      }
       if (cpu !== CPU_LEVEL) {
         console.error(`compile: unknown cpu level \`${cpu}\`; the one accepted is ${CPU_LEVEL}`)
         return 2
@@ -1009,12 +1043,25 @@ const commandMain = (): number => {
       opts.emitPanics = process.argv[arg]
     } else if (value === "--deny-panics") {
       opts.denyPanics = true
+    } else if (value === ALLOW_PANICS_FLAG) {
+      // The opposite of `--deny-panics`, and the last of the two wins: neither
+      // moves a byte of the IR, so either reading builds the same binary,
+      // unlike two `--sandbox` modes. A `noPanic` list still holds under it.
+      opts.denyPanics = false
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {
       opts.explainMemory = true
     } else if (value === "--explain-layout") {
       opts.explainLayout = true
+    } else if (value === "--compact") {
+      arg = arg + 1
+      const mode = arg < process.argv.length ? process.argv[arg] : ""
+      if (mode !== "on" && mode !== "off") {
+        console.error("compile: --compact needs on or off")
+        return 2
+      }
+      opts.compact = mode === "on"
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -1760,11 +1807,12 @@ const commandMain = (): number => {
     report(compilation, json)
     return 1
   }
-  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link.
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link,
+  // and `--emit-header` hands a C host compact classes as opaque handles. Only
+  // an N-API addon is refused, also beside `--emit-header`: it runs in Node's
+  // process, which Nish does not own.
   let hostFlag = ""
-  if (opts.emitHeader.length > 0) {
-    hostFlag = "--emit-header"
-  } else if (opts.emitNapi.length > 0) {
+  if (opts.emitNapi.length > 0) {
     hostFlag = "--emit-napi"
   } else if (opts.emitNapiAsync.length > 0) {
     hostFlag = "--emit-napi-async"
@@ -1775,6 +1823,15 @@ const commandMain = (): number => {
   }
   const emitted = compilation.emit()
   const arenaRange = hasCompactClass(compilation)
+  const links = new LinkSet()
+  links.sqlite = anyCallsSqlite(emitted)
+  // Read on every compile, not only one that links: a link a package may not
+  // have is refused by a compile to IR and by `--json` too, so a check that
+  // never links still sees it.
+  if (!readLinkSet(compilation, links)) {
+    report(compilation, json)
+    return 1
+  }
   if (runMode && watchStateFile.length > 0) {
     const cached = cachedBinary(
       emitted,
@@ -1786,6 +1843,7 @@ const commandMain = (): number => {
       opts.threads,
       debugArena,
       arenaRange,
+      links,
       json
     )
     if (cached.status === 0) {
@@ -1804,6 +1862,7 @@ const commandMain = (): number => {
       opts.threads,
       debugArena,
       arenaRange,
+      links,
       json,
       runArgsFrom
     )
@@ -1850,7 +1909,7 @@ const commandMain = (): number => {
     opts.threads,
     debugArena,
     arenaRange,
-    anyCallsSqlite(emitted),
+    links,
     "",
     pgoFlags,
     json,
@@ -2191,6 +2250,212 @@ const findPackage = (): PackageSearch => {
   return search
 }
 
+/** A package whose `nish.link` a program may carry: its name and directory. */
+class LinkPackage {
+  name: string
+  dir: string
+
+  constructor(name: string, dir: string) {
+    this.name = name
+    this.dir = dir
+  }
+}
+
+/**
+ * WP66 S7: every C library and source the program's packages link, read
+ * from each one's `nish.link` into `links`, or false with each refusal
+ * reported. `links.sqlite` is the standard library's own entry, set by the
+ * caller from the IR (`anyCallsSqlite`), so a program that calls
+ * `std/sqlite.ts` links SQLite exactly as before.
+ *
+ * The root package's link is its own to ask for. A dependency's takes effect
+ * only where the root's `nish.link.dependencies` grants that package that
+ * library or source (WP40's rule), and anything else it asks for is NL3061.
+ * A dependency is every package the program loaded a module of, by the
+ * resolver's record (`packageCopies`) and by path for one reached by a
+ * relative import, so none is missed by the way it was reached.
+ */
+const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
+  const root = compilation.rootManifest()
+  let granted = new LinkManifest()
+  const skip: string[] = []
+  const library = realpathSync(compilation.libraryRoot())
+  if (library !== null) {
+    skip.push(library)
+  }
+  if (root !== null) {
+    const rootDir = dirname(root.path)
+    const realRoot = realpathSync(rootDir.length === 0 ? "." : rootDir)
+    if (realRoot !== null) {
+      skip.push(realRoot)
+    }
+    // A refused `nish` field was reported by `Compilation.check`, which
+    // stops the build before this runs.
+    const nish = manifestNish(root.text, PACKAGE_CONDITION)
+    if (nish.problem.length === 0) {
+      granted = manifestLink(root.text, nish.linkAt, nish.linkEnd, true)
+      reportLinkProblems(compilation, root, granted)
+      addLinkRequest(compilation, root, rootDir, realRoot, granted.own, granted.own, links)
+    }
+  }
+  readDependencyLinks(compilation, linkPackages(compilation), 0, granted, skip, links)
+  return !compilation.sink.hasErrors()
+}
+
+/**
+ * `readLinkSet`'s reading of each of `packages` from `at` on: its `nish.link`
+ * checked against `granted`, and what it may link added to `links`. `skip`
+ * holds the real directories already read. Recursive rather than a loop, so
+ * each package's manifest text is given back when its call returns (NL9011).
+ */
+const readDependencyLinks = (
+  compilation: Compilation,
+  packages: LinkPackage[],
+  at: i32,
+  granted: LinkManifest,
+  skip: string[],
+  links: LinkSet
+): void => {
+  if (at < 0 || at >= packages.length) {
+    return
+  }
+  const dependency = packages[at]
+  const real = realpathSync(dependency.dir)
+  const path = joinPath([dependency.dir, "package.json"])
+  const text = readFileSyncOrNull(path)
+  if (real !== null && skip.indexOf(real) < 0 && text !== null) {
+    skip.push(real)
+    const source = new SourceFile(path, text)
+    const nish = manifestNish(text, PACKAGE_CONDITION)
+    if (nish.problem.length > 0) {
+      // Fails closed: a field this reader cannot read may hold a link.
+      if (text.indexOf("link") >= 0) {
+        compilation.sink.report(source, nish.problemStart, nish.problemEnd, `${nish.problem}${LINK_SHAPE}`)
+      }
+    } else if (nish.linkAt >= 0) {
+      const asked = manifestLink(text, nish.linkAt, nish.linkEnd, false)
+      reportLinkProblems(compilation, source, asked)
+      const grant = granted.grantFor(dependency.name)
+      refuseUngranted(
+        compilation,
+        source,
+        dependency.name,
+        "links the C library",
+        asked.own.libraries,
+        grant.libraries
+      )
+      refuseUngranted(
+        compilation,
+        source,
+        dependency.name,
+        "compiles the C source",
+        asked.own.sources,
+        grant.sources
+      )
+      addLinkRequest(compilation, source, dependency.dir, real, asked.own, grant, links)
+    }
+  }
+  readDependencyLinks(compilation, packages, at + 1, granted, skip, links)
+}
+
+/** The packages other than the root that the program loaded a module of. */
+const linkPackages = (compilation: Compilation): LinkPackage[] => {
+  const out: LinkPackage[] = []
+  const names: string[] = []
+  for (const copy of compilation.packageCopies) {
+    if (names.indexOf(copy.name) < 0) {
+      names.push(copy.name)
+      out.push(new LinkPackage(copy.name, copy.dir))
+    }
+  }
+  for (const unit of compilation.modules) {
+    const dir = packageDirOf(unit.path)
+    const name = packageNameOf(unit.path)
+    if (dir.length > 0 && dir !== compilation.rootPackageDir && names.indexOf(name) < 0) {
+      names.push(name)
+      out.push(new LinkPackage(name, dir))
+    }
+  }
+  return out
+}
+
+/** Each refusal `manifestLink` made of `source`'s `nish.link`, reported where it is written. */
+const reportLinkProblems = (compilation: Compilation, source: SourceFile, link: LinkManifest): void => {
+  for (const problem of link.problems) {
+    compilation.sink.report(source, problem.start, problem.end, problem.message)
+  }
+}
+
+/** NL3061 for each of `asked` (a dependency's `nish.link` list) that `grant` does not name. */
+const refuseUngranted = (
+  compilation: Compilation,
+  source: SourceFile,
+  name: string,
+  verb: string,
+  asked: ManifestList,
+  grant: ManifestList
+): void => {
+  let i = 0
+  while (i < asked.entries.length && i < asked.offsets.length && i < asked.ends.length) {
+    const entry = asked.entries[i]
+    if (grant.entries.indexOf(entry) < 0) {
+      compilation.sink.report(
+        source,
+        asked.offsets[i],
+        asked.ends[i],
+        `the dependency \`${name}\` ${verb} \`${entry}\`${LINK_UNGRANTED}`
+      )
+    }
+    i = i + 1
+  }
+}
+
+/**
+ * Into `links`, what `asked` names that `grant` names too (for the root,
+ * `grant` is `asked`): each library as written, and each source as its real
+ * path, refused (NL3060) unless that path is a file inside `realDir`, the
+ * package's real directory (null when it has none), so a symbolic link cannot
+ * carry a source out of the package. What each source's compile reads then
+ * keys the run cache (`readLinkIncludes`).
+ */
+const addLinkRequest = (
+  compilation: Compilation,
+  source: SourceFile,
+  dir: string,
+  realDir: string | null,
+  asked: LinkRequest,
+  grant: LinkRequest,
+  links: LinkSet
+): void => {
+  for (const name of asked.libraries.entries) {
+    if (grant.libraries.entries.indexOf(name) >= 0) {
+      links.addLibrary(name)
+    }
+  }
+  let i = 0
+  while (
+    i < asked.sources.entries.length &&
+    i < asked.sources.offsets.length &&
+    i < asked.sources.ends.length
+  ) {
+    const entry = asked.sources.entries[i]
+    if (grant.sources.entries.indexOf(entry) >= 0) {
+      const real = realpathSync(joinPath([dir, entry]))
+      if (realDir === null || real === null || !real.startsWith(`${realDir}/`) || !real.endsWith(".c")) {
+        compilation.sink.report(
+          source,
+          asked.sources.offsets[i],
+          asked.sources.ends[i],
+          `\`${entry}\` is no file inside the package${LINK_ENTRY}`
+        )
+      } else {
+        links.addSource(real)
+      }
+    }
+    i = i + 1
+  }
+}
+
 /**
  * `nish run`: the program's binary out of the cache, built into it first when
  * this IR has not been linked with this recipe before, then started with the
@@ -2217,6 +2482,7 @@ const runProgram = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
+  links: LinkSet,
   json: boolean,
   argsFrom: i32
 ): number => {
@@ -2230,6 +2496,7 @@ const runProgram = (
     threads,
     debugArena,
     arenaRange,
+    links,
     json
   )
   if (cached.status !== 0) {
@@ -2253,6 +2520,56 @@ const runProgram = (
   return status
 }
 
+/**
+ * Into `links.includes`, every file `scripts/build.sh --link-depends` lists for
+ * the compile of each of its sources with this recipe's flags (clang -M:
+ * headers and included files of any name, the system's too), so an edit to
+ * any of them is another key (docs/security/package-link.md, PL-6). A source
+ * whose list cannot be had or read, or names a file that cannot be read, sets
+ * `includesUnlisted`, and the run links afresh rather than trust a key that
+ * may miss a read.
+ */
+const readLinkIncludes = (
+  links: LinkSet,
+  root: string,
+  cacheRoot: string,
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean,
+  debugArena: boolean,
+  arenaRange: boolean
+): void => {
+  for (const source of links.sources) {
+    const scratch = makeScratchFile(cacheRoot, ".d")
+    let paths: string[] | null = null
+    if (scratch.length > 0) {
+      const argv: string[] = ["bash", `${root}/scripts/build.sh`, "--link-depends", source]
+      pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
+      const status = spawnSyncTo(argv, scratch, "/dev/null")
+      const text = readFileSyncOrNull(scratch)
+      if (status === 0 && text !== null) {
+        paths = makeRulePaths(text)
+      }
+      const forget: string[] = ["rm", "-f", "--", scratch]
+      spawnSync(forget)
+    }
+    if (paths === null) {
+      links.includesUnlisted = true
+    } else {
+      for (const path of paths) {
+        links.addInclude(path)
+        // A listed path that cannot be read keys nothing: clang writes a
+        // backslash in a directory name as `/`, so the name it lists is not
+        // the file it read.
+        if (readFileSyncOrNull(path) === null) {
+          links.includesUnlisted = true
+        }
+      }
+    }
+  }
+}
+
 /** A program in the run cache: its binary and entry, or the status a miss failed with. */
 class CachedBinary {
   binary: string = ""
@@ -2271,6 +2588,7 @@ const cachedBinary = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
+  links: LinkSet,
   json: boolean
 ): CachedBinary => {
   const cached = new CachedBinary()
@@ -2283,14 +2601,16 @@ const cachedBinary = (
     cached.status = 3
     return cached
   }
-  if (refuseCacheRoot(cacheRoot, json)) {
+  // A linked source's include list is written to a scratch file in the root,
+  // so a first run makes the root, private, before that file.
+  if (refuseCacheRoot(cacheRoot, json) || (links.sources.length > 0 && !makePrivateRoot(cacheRoot, json))) {
     cached.status = 3
     return cached
   }
   const file = runBinaryName(name)
-  const sqlite = anyCallsSqlite(emitted)
+  readLinkIncludes(links, pkg.root, cacheRoot, profile, cpu, debugInfo, threads, debugArena, arenaRange)
   // Hashed once, for this key and for the SQLite entry's below it.
-  const sqliteLines = sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
+  const sqliteLines = links.sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
   const key = runCacheKey(
     emitted,
     file,
@@ -2302,13 +2622,14 @@ const cachedBinary = (
     debugArena,
     arenaRange,
     cCompiler(),
-    sqliteLines
+    sqliteLines,
+    linkSetLines(links)
   )
   cached.entry = `${cacheRoot}/${sha256Hex(key)}`
   cached.binary = `${cached.entry}/${file}`
   const keyFile = `${cached.entry}/key`
   const stored = readFileSyncOrNull(keyFile)
-  if (stored === null || stored !== key) {
+  if (stored === null || stored !== key || links.includesUnlisted) {
     cached.status = buildIntoCache(
       emitted,
       pkg,
@@ -2322,7 +2643,7 @@ const cachedBinary = (
       threads,
       debugArena,
       arenaRange,
-      sqlite,
+      links,
       sqliteLines,
       json
     )
@@ -2412,8 +2733,13 @@ const cachedTool = (
     tool.status = internalErrorFor(`${what} did not compile`, json)
     return tool
   }
+  const emitted = compilation.emit()
+  // The compiler's own tools are std code, so the only link they can carry
+  // is std/sqlite.ts's.
+  const links = new LinkSet()
+  links.sqlite = anyCallsSqlite(emitted)
   const built = cachedBinary(
-    compilation.emit(),
+    emitted,
     pkg,
     `${CLI}-${name}`,
     "debug",
@@ -2422,6 +2748,7 @@ const cachedTool = (
     false,
     false,
     false,
+    links,
     json
   )
   tool.binary = built.binary
@@ -2576,7 +2903,7 @@ const buildIntoCache = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
-  sqlite: boolean,
+  links: LinkSet,
   sqliteLines: string,
   json: boolean
 ): number => {
@@ -2613,7 +2940,7 @@ const buildIntoCache = (
     threads,
     debugArena,
     arenaRange,
-    sqlite,
+    links,
     sqliteLines,
     [],
     json,
@@ -2662,7 +2989,7 @@ const linkProgram = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
-  sqlite: boolean,
+  links: LinkSet,
   sqliteLines: string,
   pgo: string[],
   json: boolean,
@@ -2698,7 +3025,7 @@ const linkProgram = (
           threads,
           debugArena,
           arenaRange,
-          sqlite,
+          links.sqlite,
           sqliteLines,
           json
         )
@@ -2738,6 +3065,17 @@ const linkProgram = (
   if (cached.sqlite.length > 0) {
     argv.push("--sqlite-from")
     argv.push(cached.sqlite)
+  }
+  // WP66 S7: what the packages' `nish.link` asked for and the root granted,
+  // each name and path already checked by `readLinkSet`; build.sh checks the
+  // names again, since it is a script anyone may call.
+  for (const name of links.libraries) {
+    argv.push("--link-lib")
+    argv.push(name)
+  }
+  for (const path of links.sources) {
+    argv.push("--link-source")
+    argv.push(path)
   }
   argv.push("-o")
   argv.push(link)

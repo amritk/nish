@@ -1,0 +1,8 @@
+{
+  "name": "pkg-link-dep-list-not-json",
+  "private": true,
+  "nish": {
+    "capabilities": { "dependencies": { "pkg_mul": ["ffi"] } },
+    "link": { "dependencies": { "pkg_mul": { "sources": ["c/mul.c"] } } }
+  }
+}

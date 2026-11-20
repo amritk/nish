@@ -48,6 +48,7 @@ FUZZ_SMOKE_SECONDS="${FUZZ_SMOKE_SECONDS:-20}"
 FUZZ_SEED="${FUZZ_SEED:-1}"
 FUZZ_JOBS="${FUZZ_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 CC="${CC:-clang}"
+. scripts/nish-compiler.sh
 
 # The runtime's C units: tests/run.js's RUNTIME_C, which its `fuzz` section
 # checks this list against. runtime-wasm.c is wasm32's alone.
@@ -116,6 +117,9 @@ build_runtime() {
   "$CC" "${SAN_FLAGS[@]}" -DNISH_FUZZ_ABORT -Iruntime -c tests/fuzz/harness.c \
     -o "$FUZZ_OUT/obj/harness.o"
   runtime_objs+=("$FUZZ_OUT/obj/harness.o")
+  # A target panics on purpose (a panic is a crash), so it is built with
+  # `--allow-panics` when the compiler lists the flag.
+  nish_allow_panics "$NISH"
 }
 
 build() {
@@ -125,7 +129,7 @@ build() {
   local ir="$FUZZ_OUT/ir/$name"
   rm -rf "$ir"
   mkdir -p "$ir" "$FUZZ_OUT/bin"
-  if ! "$NISH" "tests/fuzz/targets/$name.ts" -o "$ir/" >"$ir.log" 2>&1; then
+  if ! "$NISH" ${allow_panics[@]+"${allow_panics[@]}"} "tests/fuzz/targets/$name.ts" -o "$ir/" >"$ir.log" 2>&1; then
     cat "$ir.log" >&2
     die "$name: compile failed"
   fi

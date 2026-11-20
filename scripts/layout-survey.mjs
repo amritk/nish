@@ -23,6 +23,7 @@ import { spawn } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { withAllowPanics } from "../tests/allow-panics.js"
 import { extraArgs, linkPrograms, programs, root } from "../tests/self/corpus.js"
 
 const args = process.argv.slice(2)
@@ -93,7 +94,15 @@ const survey = (file, index) =>
   new Promise((resolve) => {
     const binary = path.join(scratch, `p${index}`)
     const flags = keptFlags(extraArgs(file))
-    const child = spawn(nish, [path.relative(root, file), ...flags, "--link", binary, "--explain-layout"], {
+    // The corpus and src/ panic on purpose: `--allow-panics` when the compiler lists it.
+    const argv = withAllowPanics(nish, [
+      path.relative(root, file),
+      ...flags,
+      "--link",
+      binary,
+      "--explain-layout",
+    ])
+    const child = spawn(nish, argv, {
       cwd: root,
       stdio: ["ignore", "ignore", "pipe"],
     })

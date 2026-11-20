@@ -14,6 +14,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import { hardeningProblems } from "../scripts/check-hardening.mjs"
+import { withAllowPanics } from "../tests/allow-panics.js"
 import { resolveSeed } from "../tests/self/seed.js"
 
 /**
@@ -38,6 +39,14 @@ export const compilerFrom = (argv) => {
   const rest = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv
   return { cmd: compiler.cmd, prefix: compiler.prefix, rest }
 }
+
+/**
+ * One compile's arguments after `cmd`: the compiler's `prefix`, then `args`
+ * with `--allow-panics` when the compiler lists it. A benchmark is a harness
+ * that may panic on purpose; a program under `examples/` stays strict
+ * (`tests/allow-panics.js`).
+ */
+export const compileArgv = ({ cmd, prefix }, args) => [...prefix, ...withAllowPanics(prefix[0] ?? cmd, args)]
 
 /**
  * scripts/build.sh's hardening for a C unit compiled by `cc`, read from the

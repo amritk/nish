@@ -7,12 +7,16 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "./allow-panics.js"
 
 /**
  * Runs the checks, each under `tests/run.js`'s filter: `only`, when set, is
  * matched against a group's name as `tests/run.js` matches its own sections.
  */
 export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, buildDir }) => {
+  // A fixture may panic on purpose, so a build takes `--allow-panics` from a
+  // compiler that lists it (tests/allow-panics.js).
+  const nishSync = (args, options) => spawnSync(nish, withAllowPanics(nish, args), options)
   // WP53 B1.2: a `u8[]` handed to a `declare function` is lowered as its data
   // pointer, and its length is checked against the count after every argument
   // is evaluated (`ffi-length`, docs/wp53-ffi-buffers-handles.md §3a). Only
@@ -33,7 +37,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       return file
     }
     const compileBuf = (file, extra) =>
-      spawnSync(nish, [file, "-o", path.join(bufDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
+      nishSync([file, "-o", path.join(bufDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
         cwd: root,
         encoding: "utf8",
       })
@@ -48,11 +52,10 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
 
     const exported = path.join(root, "tests", "cases", "ffi_buffer_export_written.ts")
     const exportOut = path.join(bufDir, "export_written")
-    const exportBuilt = spawnSync(
-      nish,
-      [exported, "-o", `${exportOut}.ll`, "--emit-header", `${exportOut}.h`],
-      { cwd: root, encoding: "utf8" }
-    )
+    const exportBuilt = nishSync([exported, "-o", `${exportOut}.ll`, "--emit-header", `${exportOut}.h`], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const exportText = (ext) =>
       exportBuilt.status === 0 && fs.existsSync(`${exportOut}.${ext}`)
         ? fs.readFileSync(`${exportOut}.${ext}`, "utf8")
@@ -81,7 +84,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       ].join("\n")
     )
     const pageOut = path.join(bufDir, "page_written")
-    const pageBuilt = spawnSync(nish, [pageWritten, "-o", `${pageOut}.ll`, "--emit-dts", `${pageOut}.d.ts`], {
+    const pageBuilt = nishSync([pageWritten, "-o", `${pageOut}.ll`, "--emit-dts", `${pageOut}.d.ts`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -133,6 +136,118 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
       "ffi_buffer: a proved count compiles under --deny-panics",
       provedDeny.status === 0,
       shown(provedDeny)
+    )
+
+    const counted = write(
+      "counted.ts",
+      [
+        "declare class OutLen {",
+        "  value: u64;",
+        "}",
+        'declare function fill8(dst: CountedBy<u8[], "n">, n: u8): i32;',
+        'declare function fill16(n: u16, dst: CountedBy<u8[], "n">): i32;',
+        'declare function fill32(dst: CountedBy<u8[], "n">, n: u32): i32;',
+        "",
+        "export const main = (): i32 => {",
+        "  const b: u8[] = [1, 2, 3];",
+        "  fill8(b, toU8(b.length));",
+        "  fill16(toU16(b.length), b);",
+        "  fill32(b, toU32(b.length));",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const countedSites = sitesOf(counted)
+    const countedLength =
+      countedSites.report === null
+        ? []
+        : fnSites(countedSites.report, "main").filter((p) => p.kind === "ffi-length")
+    check(
+      "ffi_buffer: a `CountedBy` count of the buffer's own length is proved at u8, u16 and u32",
+      countedLength.length === 3 && countedLength.every((p) => p.proven === true),
+      countedSites.report === null ? shown(countedSites.r) : JSON.stringify(countedSites.report)
+    )
+    const countedDeny = compileBuf(counted, ["--deny-panics"])
+    check(
+      "ffi_buffer: a proved `CountedBy` count compiles under --deny-panics",
+      countedDeny.status === 0,
+      shown(countedDeny)
+    )
+    const unproved = write(
+      "counted-unproved.ts",
+      [
+        "declare class OutLen {",
+        "  value: u64;",
+        "}",
+        'declare function fill16(n: u16, dst: CountedBy<u8[], "n">): i32;',
+        'declare function pack(dst: CountedBy<u8[], "len">, len: OutLen): i32;',
+        "",
+        "export const main = (): i32 => {",
+        "  const b: u8[] = [1, 2, 3];",
+        "  fill16(toU16(4), b);",
+        "  const len = new OutLen();",
+        "  len.value = toU64(b.length);",
+        "  pack(b, len);",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const unprovedSites = sitesOf(unproved)
+    const unprovedLength =
+      unprovedSites.report === null
+        ? []
+        : fnSites(unprovedSites.report, "main").filter((p) => p.kind === "ffi-length")
+    check(
+      "ffi_buffer: a literal `CountedBy` count and an out-class count stay checked",
+      unprovedLength.length === 2 && unprovedLength.every((p) => p.proven !== true),
+      unprovedSites.report === null ? shown(unprovedSites.r) : JSON.stringify(unprovedSites.report)
+    )
+    // A host module is the page's, not C's, so `CountedBy` on its function is
+    // refused before the checker reads it (NL2661), never silently ignored.
+    // Written here, not under tests/link: a host module keeps its
+    // `export function` spelling, which the arrow-corpus check refuses.
+    const countedHost = write(
+      "counted-host.ts",
+      [
+        'import type { i32, u8, u32 } from "nish"',
+        'export function fill(dst: CountedBy<u8[], "n">, n: u32): i32 {',
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const countedHostMain = write(
+      "counted-host-main.ts",
+      [
+        'import { fill } from "./counted-host"',
+        "",
+        "export const main = (): i32 => {",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const countedHostBuilt = nishSync(
+      [
+        countedHostMain,
+        "--target",
+        "wasm32",
+        "--host",
+        countedHost,
+        "-o",
+        path.join(bufDir, "counted-host.ll"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      "ffi_buffer: a host function's `CountedBy` parameter is refused with NL2661",
+      countedHostBuilt.status === 1 &&
+        countedHostBuilt.stderr.includes(
+          "Parameter `dst` of host function `fill` is `CountedBy`, and only a scalar, an enum or a `HostHandle` crosses between the page and wasm"
+        ),
+      shown(countedHostBuilt)
     )
     const provedFfi = compileBuf(proved, ["--deny", "ffi"])
     check(
@@ -343,7 +458,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
     fs.mkdirSync(wasmBufDir, { recursive: true })
     const bufCase = path.join(root, "tests", "cases", "ffi_buffer_write.ts")
     const w32Dir = path.join(wasmBufDir, "wasm32")
-    const w32 = spawnSync(nish, [bufCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
+    const w32 = nishSync([bufCase, "--target", "wasm32-wasi", "-o", `${w32Dir}${path.sep}`], {
       cwd: root,
       encoding: "utf8",
     })
@@ -367,7 +482,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
         /i64\.le_u/.test(asm),
       shown(w32Llc)
     )
-    const free = spawnSync(nish, [bufCase, "--target", "wasm32", "-o", path.join(wasmBufDir, "refused.ll")], {
+    const free = nishSync([bufCase, "--target", "wasm32", "-o", path.join(wasmBufDir, "refused.ll")], {
       cwd: root,
       encoding: "utf8",
     })
@@ -383,7 +498,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
 
     if (has("wasm-ld")) {
       const freeDir = path.join(wasmBufDir, "freestanding")
-      const hostBuilt = spawnSync(nish, [bufCase, "-o", `${freeDir}${path.sep}`], {
+      const hostBuilt = nishSync([bufCase, "-o", `${freeDir}${path.sep}`], {
         cwd: root,
         encoding: "utf8",
       })

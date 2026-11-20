@@ -1,0 +1,7 @@
+{
+  "name": "pkg-link-ungranted",
+  "private": true,
+  "nish": {
+    "capabilities": { "dependencies": { "pkg_mul": ["ffi"] } }
+  }
+}

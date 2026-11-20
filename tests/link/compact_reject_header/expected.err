@@ -1,1 +1,0 @@
-main.ts:4:7: error: `Cell` implements `Compact`, and `--emit-header` describes the program to C or Node

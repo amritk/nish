@@ -12,6 +12,16 @@
 
 import { NUMBER_MODE_I32 } from "./context"
 
+/**
+ * The flag that relaxes the no-panic check, spelled once: the help row
+ * (`src/cli-style.ts`) and the flag loop (`src/compile.ts`) read it from
+ * here, and the repository's builds pass it through `scripts/nish-compiler.sh`
+ * and `tests/allow-panics.js`. Today it only undoes an earlier `--deny-panics`
+ * on the same line: the scope is then the root package's `"nish".noPanic`
+ * list, or nothing, as with no flag at all.
+ */
+export const ALLOW_PANICS_FLAG: string = "--allow-panics"
+
 export class Options {
   /** How the `number` keyword is lowered: `NUMBER_MODE_I32` or `NUMBER_MODE_F64`. */
   numberMode: i32
@@ -199,7 +209,8 @@ export class Options {
    * `--deny-panics`: every function in the program's own modules is held to no
    * panic site but out of memory (`reportDeniedPanics` in `src/panics.ts`).
    * It changes no byte of the IR: a program it refuses writes none, and one it
-   * accepts is the one the build would have compiled anyway.
+   * accepts is the one the build would have compiled anyway. With
+   * `ALLOW_PANICS_FLAG` on the same line the last of the two wins.
    */
   denyPanics: boolean
   /**
@@ -228,6 +239,13 @@ export class Options {
    * (`Compilation.explainLayoutText`). It changes no byte of the IR.
    */
   explainLayout: boolean
+  /**
+   * `--compact on|off`, on by default: whether a native build narrows the
+   * classes the compact-class rule of docs/wp48-ref32-classes.md §3.1 picks.
+   * Off narrows no class, `implements Compact` ones included, so the IR is
+   * the IR of a build with no compact class.
+   */
+  compact: boolean
   /**
    * The root package's `"nish".noPanic` named at least one module, which puts
    * those modules in the scope `--deny-panics` puts all of them in. Set by
@@ -363,6 +381,7 @@ export class Options {
     this.emitArena = ""
     this.explainMemory = false
     this.explainLayout = false
+    this.compact = true
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

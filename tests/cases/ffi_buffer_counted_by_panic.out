@@ -1,0 +1,8 @@
+`c_narrow`: argument 1 (n) counts more bytes than argument 2 (src) holds
+narrow exit 1
+`c_narrow`: argument 1 (n) counts more bytes than argument 2 (src) holds
+narrowHigh exit 1
+`c_wide`: argument 2 (n) counts more bytes than argument 1 (dst) holds
+wide exit 1
+`c_out`: argument 2 (destLen) counts more bytes than argument 1 (dest) holds
+out exit 1

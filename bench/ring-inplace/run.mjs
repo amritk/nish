@@ -34,6 +34,7 @@
 // Linux only (taskset), run from the repository root.
 import { execFileSync } from "node:child_process"
 import { mkdirSync } from "node:fs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const args = process.argv.slice(2)
 /** The options that take a value, and the one that does not. */
@@ -99,7 +100,11 @@ mkdirSync(out, { recursive: true })
 // A run of 50,000 messages takes about a second; one that takes minutes has
 // hung, and the bench's own deadlines are ten seconds a wait.
 const run = (file, argv, timeout) => execFileSync(file, argv, { encoding: "utf8", timeout })
-run("build/nish", ["bench/ring-inplace/bench.ts", "--link", `${out}/bench`], 600000)
+run(
+  "build/nish",
+  withAllowPanics("build/nish", ["bench/ring-inplace/bench.ts", "--link", `${out}/bench`]),
+  600000
+)
 
 // mulberry32: a fixed seed, so a rerun shuffles in the same orders
 let seed = 0x6e697368

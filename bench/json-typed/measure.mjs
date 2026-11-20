@@ -13,7 +13,7 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const program = "tests/link/std_json_typed/main.ts"
@@ -32,7 +32,7 @@ fs.rmSync(outDir, { recursive: true, force: true })
 const build = (cmd, prefix, name) => {
   const dir = path.join(outDir, name)
   const app = path.join(dir, "app")
-  execFileSync(cmd, [...prefix, program, "-o", `${dir}/`, "--link", app], {
+  execFileSync(cmd, compileArgv({ cmd, prefix }, [program, "-o", `${dir}/`, "--link", app]), {
     cwd: root,
     stdio: ["ignore", "ignore", "pipe"],
   })

@@ -870,9 +870,11 @@ A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
 [Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
-A numeric enum crosses as its number. A string enum has no spelling in C or
-in the typings yet, so a function that takes or returns one is refused under
-`--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
+An enum does not cross. A function that takes or returns a numeric enum is
+left out of the header and the typings, and each writes a comment naming
+the signature where the declaration would be. A string enum has no spelling in C or in the typings yet either,
+and a function that takes or returns one is refused under `--emit-header`,
+`--emit-dts`, `--emit-napi` and `--emit-napi-async`:
 
 <!-- nish:err NL4019 --emit-header build/docs-ai/nl4019.h -->
 ```ts
@@ -886,6 +888,9 @@ export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest
 
 Give the host the member's text instead, a `string` from `String(r)`, or an
 `i32` of your own choosing.
+
+A compact class crosses as an opaque handle, and its host links the range
+runtime: see [A compact class in a C host](../language/compact-classes.md#a-compact-class-in-a-c-host).
 
 ## Calling C from Nish: `declare function`
 
@@ -915,8 +920,74 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 `--target wasm32-wasi` build links C, so it keeps `declare function` even with
 `--emit-dts`.
 
-A function from the C library links with `nish run` or `--link` as it is. One
-of your own goes on the build line beside the runtime:
+For a whole library, `nish c-import` writes these declarations from its
+header: see [Binding a C library](c-import.md).
+
+A function from the C library links with `nish run` or `--link` as it is.
+Your own C, and any other library, is named in the `nish.link` field of the
+nearest `package.json` above the entry file. Every compile that emits IR
+reads it, and `nish run` and `--link` link what it names:
+
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "link": { "libraries": ["z"], "sources": ["c/mylib.c"] }
+  }
+}
+```
+
+- `libraries` are passed to the linker as `-l<name>`, so `"z"` links
+  `libz`. A name is printable ASCII letters, digits, `_`, `.`, `+` and `-`,
+  and starts with a letter, digit or `_` (so not with `-`, `.` or `+`).
+  Nothing in it can become a flag. There is no pkg-config, so
+  a library outside the linker's default search path is not found unless
+  `LIBRARY_PATH` names its directory. The run cache keys the name, not the
+  file it finds: after rebuilding the library or changing `LIBRARY_PATH`,
+  clear the cache.
+- `sources` are `.c` files inside the package, by their path relative to
+  `package.json`. Each is compiled with clang beside the runtime. A path that
+  is absolute, holds a backslash or a character outside printable ASCII,
+  climbs out with `..`, or resolves outside the package through a symbolic
+  link is refused (NL3060).
+- Any other key in `link` is refused (NL3059), not skipped.
+- The run cache key holds the link set, each source's bytes and the files
+  `clang -M` lists for its compile, so editing `c/mylib.c`, a header, or any
+  other file it `#include`s makes the next `nish run` link again. A file
+  clang does not list is not in the key: one an assembler `.incbin` pulls
+  in, or a header you add later that would be found ahead of one already
+  included. After such a change, edit the source too, or clear the cache.
+- These refusals (NL3059, NL3060, NL3061) come from every compile that
+  emits IR, a compile to IR or `--json` too, not only from `nish run` and
+  `--link`.
+- Only the native profiles (`speed`, `size`, `debug`) link it. `--link
+  --profile wasi` with a `nish.link` fails the link (exit 3).
+
+A dependency's `nish.link` takes effect only when your root `package.json`
+grants it, entry by entry, under `nish.link.dependencies`. Each library or
+source a dependency names that you have not granted is refused (NL3061). The
+dependency still needs the `ffi` capability to call its C:
+
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "capabilities": { "dependencies": { "zstd-bind": ["ffi"] } },
+    "link": {
+      "dependencies": {
+        "zstd-bind": { "libraries": ["zstd"], "sources": ["c/shim.c"] }
+      }
+    }
+  }
+}
+```
+
+`nish/sqlite` needs none of this: the standard library links SQLite itself
+when a program calls it. What a link can and cannot confine is recorded in
+[`docs/security/package-link.md`](https://github.com/amritk/nish/blob/main/docs/security/package-link.md).
+
+Without a `package.json`, your own C still goes on the build line beside the
+runtime:
 
 ```console
 $ nish app.ts -o app.ll
@@ -1023,7 +1094,8 @@ The count is paired by position, so it is your word, not the compiler's proof.
 `fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
 as the third argument, so the one count is the whole size. A buffer with no
 `u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
-`u8[]` result are each refused.
+`u8[]` result are each refused; a count of another width, or one elsewhere in
+the declaration, is named with `CountedBy` (below).
 
 A call passes the array's bytes, and checks the count against each buffer
 first: a count larger than the array stops the program before C runs, with
@@ -1047,6 +1119,51 @@ C borrows the bytes for the length of the call, and may write a `u8[]` (not a
 `readonly u8[]`), so `read(fd, buf, toU64(buf.length))` fills `buf` in place.
 A task a scope spawns may not call such a function: C's body is unseen, so the
 call could write memory the parent is reading.
+
+When a library's count is not a `u64` straight after the buffer, name it.
+`CountedBy<u8[], "n">` on the buffer says which parameter is its count, and
+that count can be a `u8`, `u16`, `u32` or `u64`, sit anywhere in the
+declaration, or be an out class with one unsigned field, as zlib's `uInt`
+counts and `compress`'s `uLongf *destLen` are:
+
+<!-- nish:ok -->
+```ts
+declare class OutLen {
+  value: u64;
+}
+
+declare function crc32(crc: u32, buf: CountedBy<readonly u8[], "len">, len: u32): u32;
+declare function compress(
+  dest: CountedBy<u8[], "destLen">,
+  destLen: OutLen,
+  source: CountedBy<readonly u8[], "sourceLen">,
+  sourceLen: u64
+): i32;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
+The call checks a named count the same way, widening a narrow one or reading
+the out class's field first, and `toU32(buf.length)` of the buffer itself, at
+whatever width the count is declared, is proved and carries no check. A name
+that is not one of the declaration's parameters is refused:
+
+<!-- nish:err NL2811 -->
+```ts
+declare function fill(dst: CountedBy<u8[], "len">, n: u32): i32;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
+`CountedBy` is only for a `declare function`. `nish c-import` writes it for
+a buffer the overrides file pairs with a count
+([Binding a C library](c-import.md)). To check such a file with `tsc`,
+declare the alias in a `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
+`type CountedBy<T, N extends string> = T`.
 
 The one exception is `CPtr`, an address that C owns. A declared function can
 take or return one, a local can hold one, and nothing else can: no field, no
@@ -1234,11 +1351,56 @@ export const main = (): i32 => {
 };
 ```
 
+A C struct that holds an array, such as OpenSSL's `SHA_CTX` with its
+`unsigned int h[5]`, or Linux's `struct utsname` with its `char` arrays, spells
+that field `Record<integer<0, Hi>, T>`: `T name[Hi + 1]`, laid out inside the
+struct as C lays it out. `T` is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`
+or `f64`. Read and write it by index:
+
+<!-- nish:ok -->
+```ts
+// glibc's `struct utsname`: six `char` arrays of 65 bytes.
+declare class Utsname {
+  sysname: Record<integer<0, 64>, u8>;
+  nodename: Record<integer<0, 64>, u8>;
+  release: Record<integer<0, 64>, u8>;
+  version: Record<integer<0, 64>, u8>;
+  machine: Record<integer<0, 64>, u8>;
+  domainname: Record<integer<0, 64>, u8>;
+}
+declare function uname(buf: Utsname): i32;
+
+export const main = (): i32 => {
+  const name = new Utsname();
+  if (uname(name) !== 0) {
+    return 1;
+  }
+  let length = 0;
+  while (length < 65 && name.sysname[length] !== 0) {
+    length++;
+  }
+  console.log(length); // 5, for "Linux"
+  return 0;
+};
+```
+
+Every index is checked against the length. A constant outside it, such as
+`name.sysname[65]`, does not compile; any other index outside it panics
+before it reads or writes; and an index the compiler can prove is inside it,
+like a constant or a counter the loop keeps below 65, costs no check:
+`--emit-panics` lists the `name.sysname[length]` read above as `proven`. The
+field is part of the struct, not a Nish array: you cannot hold it in a
+variable, pass it to a function, read its `.length` or walk it with
+`for...of`, and you write it one element at a time. Unions and bitfields
+still have no spelling, so a struct with one stays out of reach. The rules
+are in [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
-`declare function` cannot return one, and it cannot be an array element or
-built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
-for `null`, under the same rule as a `CPtr | null`. The rules are in
+`declare function` cannot return one (unless it has no fields, below), and
+it cannot be an array element or built from an object literal. A parameter
+typed `Rlimit | null` passes `NULL` for `null`, under the same rule as a
+`CPtr | null`. The rules are in
 [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A C function that answers a pointer to a struct it owns, such as `localeconv`
@@ -1276,6 +1438,57 @@ capability, and a build with `--deny unsafe` refuses it. A
 at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
 [`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
+
+Many C libraries hand out a pointer to a struct they never show you:
+`sqlite3 *`, `FILE *`, `DIR *`. A `declare class` with no fields is that
+pointer's type. A `declare function` can take it and return it, as `FILE` or
+as `FILE | null`, and it is passed to C as a plain pointer. What it adds over
+`CPtr` is its name: a `FILE` cannot be passed where a `DIR` is wanted, though
+both are pointers.
+
+<!-- nish:ok -->
+```ts
+declare class FILE {}
+declare function fopen(path: string, mode: string): FILE | null;
+declare function fputs(text: string, stream: FILE): i32;
+declare function fclose(stream: FILE): i32;
+
+export const main = (): i32 => {
+  const out = fopen("/dev/null", "w");
+  if (out === null) {
+    return 1;
+  }
+  fputs("hello\n", out);
+  return fclose(out);
+};
+```
+
+It holds no fields, so it has no members and no `new`: only C makes one and
+only C reads it. Like a `CPtr`, it lives in a local and goes to and from C,
+and is refused as a field, an array element, a `Result` arm, a type argument
+of a generic, a capture of an arrow you pass to a call, or a parameter or
+return type of a function your program defines. A `declare function` that returns `FILE`
+rather than `FILE | null` promises C never answers `NULL`, and a `NULL`
+stops the program with `` `fopen` returned NULL for a `FILE` result; declare
+it `FILE | null` `` on stderr and exit status 1:
+
+<!-- nish:err NL2806 -->
+```ts
+declare class FILE {}
+declare function fclose(stream: FILE): i32;
+
+export const main = (): i32 => {
+  return fclose(new FILE());
+};
+```
+
+This is new in WP66 S3. Before it, `declare class FILE {}` was an empty
+struct your program built with `new FILE()` and lent to C. A program that
+did that now gets the error above: declare the C function that makes the
+value, or give the class the fields C lays out.
+
+The rules are in
+[An opaque `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type).
 
 A C function that fails through `errno` is checked with `cErrno` from
 `nish:unsafe`. It answers the errno the most recent `declare function` call on

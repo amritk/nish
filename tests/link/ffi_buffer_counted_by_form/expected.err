@@ -1,0 +1,1 @@
+`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal

@@ -41,7 +41,13 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, isOptionalChain, isUncheckedAccess, unwrapParens } from "./emit-util"
+import {
+  cArrayField,
+  isAssignmentOperator,
+  isOptionalChain,
+  isUncheckedAccess,
+  unwrapParens,
+} from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
@@ -835,7 +841,13 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
   if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === NodeKind.Index) {
+  if (
+    node.kind === NodeKind.Index &&
+    cArrayField(emitter.program, emitter.table, node.children[0]) !== null
+  ) {
+    // A fixed-length array field has no header to hoist: its length is the
+    // constant `N` and its elements sit inside the object.
+  } else if (node.kind === NodeKind.Index) {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
@@ -1400,8 +1412,44 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
 
 // ---- Element access -------------------------------------------------------------------
 
+/**
+ * The address of `h[i]` when `h` is a fixed-length array field of a
+ * `declare class` (WP66 S4): the element sits inside the object, C's
+ * `T h[N]`, so it is one `getelementptr` from the object with no header.
+ * The index is checked against the constant `N` unless the bounds walk
+ * proved it (`provesCArrayIndex` in `src/bounds.ts`). `null` for any other
+ * receiver.
+ */
+const cArrayElementPointer = (emitter: Emitter, site: Node): string | null => {
+  const receiver = site.children[0]
+  const field = cArrayField(emitter.program, emitter.table, receiver)
+  if (field === null) {
+    return null
+  }
+  const member = unwrapParens(receiver)
+  const holder = emitter.table.stripNull(emitter.typeOf(member.children[0]))
+  const info = emitter.program.struct(emitter.table.nameOf(holder))
+  if (info === null) {
+    process.exit(internalErrorFor(`emitter: no struct behind \`${member.text}\``, emitter.opts.json))
+  }
+  const object = emitter.emitExpression(member.children[0])
+  const idx = emitIndex(emitter, site.children[1])
+  if (!emitter.program.nodeProvenIndex[site.id]) {
+    emitRangeCheck(emitter, idx, `${field.cLength}`)
+  }
+  const ty = `%struct.${info.name}`
+  return emitter.fn.emitValue(
+    `getelementptr inbounds ${ty}, ${ty}* ${object}, i32 0, i32 ${field.index}, i64 ${idx}`
+  )
+}
+
 export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.typeOf(expr)
+  const field = cArrayElementPointer(emitter, expr)
+  if (field !== null) {
+    const ty = emitter.llvm(elem)
+    return emitter.fn.emitValue(`load ${ty}, ${ty}* ${field}${emitter.alignSuffix(elem)}`)
+  }
   emitter.declareType(ARRAY_TYPE)
   const base = emitArrayBase(emitter, expr.children[0])
   const idx = emitIndex(emitter, expr.children[1])
@@ -1509,6 +1557,10 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0]
   const elem = emitter.typeOf(target)
   const ty = emitter.llvm(elem)
+  const field = cArrayElementPointer(emitter, target)
+  if (field !== null) {
+    return emitCArrayAssignment(emitter, expr, elem, field)
+  }
   emitter.declareType(ARRAY_TYPE)
   const base = emitArrayBase(emitter, target.children[0])
   const idx = emitIndex(emitter, target.children[1])
@@ -1555,6 +1607,36 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   emitter.fn.emit(
     `store ${ty} ${value}, ${ty}* ${store}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )
+  return value
+}
+
+/**
+ * `h[i] = v` and `h[i] op= v` on a fixed-length array field of a `declare
+ * class`, once `cArrayElementPointer` checked the index and took the slot.
+ * The slot is inside the object and never moves, so the right side cannot
+ * invalidate it. The access carries no `!tbaa`: C code reaches the same
+ * bytes through its own types.
+ */
+const emitCArrayAssignment = (emitter: Emitter, expr: Node, elem: i32, slot: string): string => {
+  const ty = emitter.llvm(elem)
+  const align = emitter.alignSuffix(elem)
+  if (expr.text === "=") {
+    const value = emitter.emitExpression(expr.children[1])
+    emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${align}`)
+    return value
+  }
+  const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${slot}${align}`)
+  let value = ""
+  if (isBitwiseAssignment(expr.text)) {
+    value = emitBitwiseCombine(emitter, expr.text, elem, old, expr.children[1])
+  } else {
+    const rhs = emitter.emitExpression(expr.children[1])
+    value = isFloat(elem)
+      ? emitFloatArithmetic(emitter, withoutEquals(expr.text), elem, old, rhs, expr)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs, expr)
+  }
+  emitRangedStore(emitter, expr, value)
+  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${align}`)
   return value
 }
 

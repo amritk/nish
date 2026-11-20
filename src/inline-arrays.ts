@@ -238,7 +238,9 @@ const mayInline = (
   ) {
     return false
   }
-  if (hostVisible(mode, info.exported, false) || !table.isArray(field.type)) {
+  // A `[]` initializer stores a fresh header (`initializerValue`), which an
+  // inline array has none of a pointer to.
+  if (hostVisible(mode, info.exported, false) || !table.isArray(field.type) || field.initializer !== null) {
     return false
   }
   return inlineElementStruct(program, table, table.refOf(field.type)) === null

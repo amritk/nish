@@ -1,0 +1,1 @@
+`Db` cannot be a type argument of `same`: an opaque `declare class` is a C pointer

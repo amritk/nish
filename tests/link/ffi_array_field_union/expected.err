@@ -1,0 +1,1 @@
+Union types other than `T | null` are forbidden

@@ -20,7 +20,7 @@ import path from "node:path"
 // specialisation, with a cwd and a kill timeout the oracles do not want.
 // The seed resolution is the one the WP14 oracles use (G2.3), so "the compiler
 // that is not stage0" is spelled once in the repository.
-import { defaultSeedSpec, resolveSeed } from "../self/seed.js"
+import { defaultSeedSpec, resolveSeed, seedArgs } from "../self/seed.js"
 import { materialize, readRegister, readStore, REGISTER, staleness } from "./goldens.js"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
@@ -267,16 +267,17 @@ const runProgram = async (prog, context) => {
   fs.mkdirSync(work, { recursive: true })
   const exe = path.join(work, "app")
 
-  const { cmd, prefix } = context.compiler
-  const cc = await run(cmd, [
-    ...prefix,
-    prog.entry,
-    "-o",
-    `${path.join(work, "ir")}${path.sep}`,
-    "--link",
-    exe,
-    ...prog.args,
-  ])
+  const cc = await run(
+    context.compiler.cmd,
+    seedArgs(context.compiler, [
+      prog.entry,
+      "-o",
+      `${path.join(work, "ir")}${path.sep}`,
+      "--link",
+      exe,
+      ...prog.args,
+    ])
+  )
   if (cc.status !== 0) {
     return { prog, verdict: "compile-error", detail: String(cc.stderr), ms: Date.now() - t0 }
   }
