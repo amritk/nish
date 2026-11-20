@@ -64,6 +64,34 @@ const isTextBlankByte = (code: i32): boolean =>
   code === SPACE || code === TAB || code === NEWLINE || code === CARRIAGE_RETURN
 
 /**
+ * Scan `text` from position `at` one position at a time, pushing onto `lines`
+ * each line that ends there or later, the line in progress having begun at
+ * `lineStart`: `splitLines`'s scan for text too short for a lane-wise compare
+ * and for any text past its chunked scan. Named for the module, as above.
+ */
+const pushTextLinesFrom = (text: string, lines: string[], lineStart: i32, at: i32): void => {
+  const length: i32 = toI32(text.length)
+  let start: i32 = lineStart
+  let i: i32 = at
+  while (i >= 0 && i < length) {
+    if (toI32(text.charCodeAt(i)) === NEWLINE) {
+      // `start` is never negative and never passes `i`, which is below
+      // `length`, so this test always holds. It is written because it is what
+      // proves `start` within `text`: the clamp on that bound is dead once it
+      // is proven, and the emitter drops it.
+      if (start >= 0 && start < length) {
+        lines.push(text.substring(start, i))
+      }
+      start = i + 1
+    }
+    i += 1
+  }
+  if (start >= 0 && start < length) {
+    lines.push(text.substring(start, length))
+  }
+}
+
+/**
  * The lines of `text`, without their terminators.
  *
  * A trailing newline does **not** produce a final empty line, because a text
@@ -77,7 +105,8 @@ const isTextBlankByte = (code: i32): boolean =>
  * copied, 4096 positions at a time, as one flag byte per position into a
  * buffer the lane-wise compare reads sixteen flags at a time: a string has no
  * lane-wise load of its own. A flag rather than the character, so that a UTF-16
- * unit under Node whose low byte is 10 is not taken for a newline.
+ * unit under Node whose low byte is 10 is not taken for a newline. Text under
+ * sixteen positions is scanned one position at a time, with no buffer.
  *
  * @param text The text to split; an empty one has no lines.
  * @returns A fresh array of the lines, in order.
@@ -85,6 +114,11 @@ const isTextBlankByte = (code: i32): boolean =>
 export const splitLines = (text: string): string[] => {
   const length: i32 = toI32(text.length)
   const lines: string[] = []
+  if (length < 16) {
+    // Too short for one lane-wise compare: no buffer, one position at a time.
+    pushTextLinesFrom(text, lines, 0, 0)
+    return lines
+  }
   // 4096 positions per chunk, spelled as a literal at each use: the provers
   // read a literal's value, not a constant's.
   const flags: u8[] = new Array<u8>(4096)
@@ -145,19 +179,7 @@ export const splitLines = (text: string): string[] => {
     base = end
   }
   // Positions past the bound above, one at a time.
-  while (base >= 0 && base < length) {
-    if (toI32(text.charCodeAt(base)) === NEWLINE) {
-      // Always holds, as above; it proves `start` within `text`.
-      if (start >= 0 && start < length) {
-        lines.push(text.substring(start, base))
-      }
-      start = base + 1
-    }
-    base += 1
-  }
-  if (start >= 0 && start < length) {
-    lines.push(text.substring(start, length))
-  }
+  pushTextLinesFrom(text, lines, start, base)
   return lines
 }
 
