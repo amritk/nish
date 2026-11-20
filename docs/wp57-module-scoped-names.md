@@ -1,10 +1,11 @@
 # WP57: Module-scoped names
 
-**Status: proposed, design only.** Nothing here is built, and the rule it
-would change still holds:
-[LANGUAGE.md](LANGUAGE.md#export-and-import) says a function name is unique
-across the whole program, and where this note and LANGUAGE.md disagree,
-LANGUAGE.md wins. The stages are in §8 and on
+**Status: S1 built; S2 and S3 not.** Two modules may each keep a private
+function or generic template of one name: a clashing one's symbol is
+qualified by its module path (§4), as
+[LANGUAGE.md](LANGUAGE.md#export-and-import) states. Exported names and
+class and interface names are still unique across the program, and where
+this note and LANGUAGE.md disagree, LANGUAGE.md wins. The stages are in §8 and on
 [the roadmap page](roadmap/wp57-module-scoped-names.md). S2 waits on a
 decision (§6).
 
@@ -164,6 +165,11 @@ package), without `.ts`, with every character outside `[A-Za-z0-9_]` written
 as `_`, and a leading digit given a `_`, by the same rules as
 `packageSymbolPrefix`. A private `helper` in `lib/util.ts` becomes
 `@lib_util$.helper`. In a dependency it becomes `@pkg_a.lib_util$.helper`.
+The path is taken relative to that root, so a module outside it keeps its
+`..` steps, each `.` and `/` written as `_`: `nish app/main.ts` importing
+`../shared/u.ts` gives `@___shared_u$.helper` however the entry is named
+(`app/main.ts`, `main.ts` from inside `app/`, or an absolute path), and no
+machine's directory reaches a symbol.
 
 - The emitter writes symbols unquoted (`@${sig.name}`), so the spelling stays
   within LLVM's bare-name characters, `[A-Za-z0-9_.$]`. A `/` would need
