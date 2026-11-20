@@ -9,6 +9,7 @@ import checkExpression from "./expressions" -> function @checkExpression
 import literalOperand from "./expressions" -> function @literalOperand
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import checkIndexArgument from "./members" -> function @checkIndexArgument
+import CLZ32_TOP from "./members" -> const CLZ32_TOP
 import isFileStreamExport from "./nish-modules" -> function @isFileStreamExport
 import isNetBufferLetter from "./nish-modules" -> function @isNetBufferLetter
 import isNetExport from "./nish-modules" -> function @isNetExport
