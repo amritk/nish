@@ -211,7 +211,7 @@ rejects. This table is the highest-value part of the page.
 | `{ [k]: v }`, `[k]: i32` in a class or interface | `Computed property names are forbidden in Nish (member names are fixed at compile time)` | a `Map` for a keyed table |
 | `type Pair = { a: i32 }` (inline object type) | `` Unsupported type `{ a: i32 }` `` | declare an `interface` |
 | `A \| B` unions of anything but tagged classes and interfaces | `` Union types other than `T \| null` are forbidden `` | a [discriminated union](#discriminated-unions): a tag field first in each variant |
-| `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
+| `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32; use a template literal: `${n}` `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported; use a named `export function` `` | `export const f = …` |
@@ -3242,7 +3242,9 @@ for (const x of doubled) {
 console.log(`${sum}`);
 ```
 
-**Convert a number to a string** — there is no `toString` and no `String()`:
+**Convert a number to a string** — a number has no `toString`, and
+`String()` converts only a [string enum](#type-aliases-and-enums)'s value;
+write a template literal:
 
 <!-- nish:ok-body -->
 ```ts

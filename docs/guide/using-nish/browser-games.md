@@ -32,6 +32,8 @@ is three standard-library modules: `nish/host/game` (the framebuffer, input
 and sound queues the page reads), `nish/raster` (drawing into the
 framebuffer) and `nish/synth` (making sounds). Building needs `clang` and
 `wasm-ld`, as for any wasm build ([Installing](../getting-started/installation.md)).
+These modules first ship in nish 0.40.0: an older package has no
+`nish/page/game` and its compiler does not know the three game modules.
 
 ## The three exports
 
@@ -259,7 +261,10 @@ $ $NISH/scripts/build.sh ll/*.ll $NISH/runtime/runtime-wasm.c -o out/game.wasm \
 ```
 
 `--emit-dts` writes `game.mjs`, the loader, next to `game.d.ts`; the page
-imports it from beside the `.wasm`. `--memory 16` fixes the module's memory at
+imports it from beside the `.wasm`. The link also writes
+`game.wasm.sites.json`, the table of the module's panic sites. The page does
+not need it to run; passed to the loader as `imports: { sites }`, it makes a
+panic's message end `at path:line:col`. `--memory 16` fixes the module's memory at
 16 MiB, which the framebuffer, the sound samples and a game's own state fit in
 with room to spare: a fixed memory never moves, so the page reads the
 framebuffer in place every frame without copying it. A game that keeps its

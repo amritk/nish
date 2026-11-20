@@ -25836,7 +25836,10 @@ range's base, `@nish_ref_base`. Every object comes from `@nish_alloc_ref`,
 never an `alloca`, even one that never leaves `pairSum`, because a stack
 slot is outside the range. The module names `@nish_arena_range_abi`, so it
 links only against the runtime built with the range (`--arena-range`, which
-the CLI passes for it). On wasm32 links stay full pointers.
+the CLI passes for it). On wasm32 links stay full pointers. A link's load and
+store carry a TBAA tag whose scalar is `ref32`, a sibling of `i32` under the
+root rather than `i32` itself, so LLVM knows a store to an `i32` field of any
+object leaves a link alone, and a link store leaves an `i32` field alone.
 
 <!-- cookbook:begin mem-compact-class -->
 ```ts
@@ -25915,7 +25918,7 @@ entry:
   %2 = ptrtoint %struct.Cell* %next to i64
   %3 = lshr i64 %2, 2
   %4 = trunc i64 %3 to i32
-  store i32 %4, i32* %1, align 4
+  store i32 %4, i32* %1, align 4, !tbaa !6
   ret void
 }
 
@@ -25932,7 +25935,7 @@ entry:
   store %struct.Cell* %1, %struct.Cell** %cell.addr, align 8
   %4 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
   %5 = getelementptr inbounds %struct.Cell, %struct.Cell* %4, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4
+  %6 = load i32, i32* %5, align 4, !tbaa !6
   %7 = zext i32 %6 to i64
   %8 = shl nuw nsw i64 %7, 2
   %9 = inttoptr i64 %8 to %struct.Cell*
@@ -25995,18 +25998,19 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!6, !7, !8, !9, !10}
+!llvm.module.flags = !{!7, !8, !9, !10, !11}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
-!3 = !{!"ptr", !1, i64 0}
+!3 = !{!"ref32", !1, i64 0}
 !4 = !{!"Cell", !2, i64 0, !3, i64 4}
 !5 = !{!4, !2, i64 0}
-!6 = !{i32 8, !"cf-protection-branch", i32 1}
-!7 = !{i32 8, !"cf-protection-return", i32 1}
-!8 = !{i32 8, !"branch-target-enforcement", i32 1}
-!9 = !{i32 8, !"sign-return-address", i32 1}
-!10 = !{i32 4, !"probe-stack", !"inline-asm"}
+!6 = !{!4, !3, i64 4}
+!7 = !{i32 8, !"cf-protection-branch", i32 1}
+!8 = !{i32 8, !"cf-protection-return", i32 1}
+!9 = !{i32 8, !"branch-target-enforcement", i32 1}
+!10 = !{i32 8, !"sign-return-address", i32 1}
+!11 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-compact-class -->
 
