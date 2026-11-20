@@ -34,7 +34,12 @@ time of:
   without.
 
 The verdict is `json-comp`'s own formula applied to each: rate times size
-ratio squared, with the rate from the CPU time on one core. **Go** if a
+ratio squared. The rate is 1 ÷ (the per-request cost of serving the same body
+uncompressed + the row's compression time), with the per-request cost
+measured on the same machine: a Nish `Http1Server` answering the body
+uncompressed over loopback, driven as the existing HTTP benches are. A rate
+from compression time alone would credit the fastest coding with a speed-up
+the server never sees. **Go** if a
 Brotli quality beats the best gzip level by more than the noise band of five
 interleaved rounds; otherwise the stage records the figures and gzip's best
 level becomes `json-comp`'s, which is a change to the entry and not to
