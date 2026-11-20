@@ -23,7 +23,7 @@
     "run-reconciler",
     "verifier"
   ],
-  "commit": "0b8feedf0900e8700a07883c381e04c3758b9013",
+  "commit": "6ac2ef2fc2ad041483dd898beca878981f4d83e2",
   "files": {
     ".claude/skills/check/SKILL.md": "c51e3d3d091cc8370c75692f1c93b7e1b0deff1b395f67353299e9a801a7309f",
     ".claude/skills/check-iterate/SKILL.md": "2caeb78759408d55c82b8edd749915063b700b3c4f044fc237509a4ef58c4819",
