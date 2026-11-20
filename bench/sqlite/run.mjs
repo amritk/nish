@@ -3,7 +3,7 @@
 // through SQLite's own C API (twin.c) and through rusqlite (twin.rs), on the
 // same database, and how much of a difference this machine can see at all.
 //
-//   npm run build && node bench/sqlite/run.mjs [--validate] [--rounds N] [--no-rust] [--compiler <nish>]
+//   npm run build && node bench/sqlite/run.mjs [--validate] [--rounds N] [--no-rust] [--variant V] [--compiler <nish>]
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
 //     --rounds N  timed rounds, rounded up to a multiple of the number of
@@ -11,6 +11,25 @@
 //                 warm-up round
 //     --no-rust   leave out the THREADSAFE=2 group: twin.rs, its C twin and
 //                 the --threads build
+//     --variant V one more binary, timed in the same rounds against what it
+//                 varies and that binary's byte-identical copy, whose
+//                 difference is the comparison's noise band; the THREADSAFE=2
+//                 group is left out. V is one of
+//                   pgo            main.ts linked with --pgo-use, on a profile
+//                                  trained in a temp dir (below)
+//                   x86-64-v3      main.ts linked with --cpu x86-64-v3
+//                   pgo-x86-64-v3  both
+//                   c-native       the C twin compiled and linked with
+//                                  -march=native, against the C twin (nish
+//                                  refuses --cpu native, so this is C only)
+//                 With --validate, the variant must read what every side reads.
+//
+// PGO's training: an instrumented build (`--link --pgo-generate`, with the
+// variant's --cpu) runs lookup, feed, insert and insert-txn on a database
+// `twin seed` makes in a temp dir from another seed and at other sizes than
+// the timed one, so the profile is not fitted to the rows the timed runs read;
+// `llvm-profdata merge` writes the profile to build/bench/sqlite/, and the
+// variant is `--link --pgo-use` on it. No profile is kept in the repository.
 //
 // Two SQLite builds are timed. THREADSAFE=0 is what a `--link` build gets:
 // the build, its copy and the C twin. THREADSAFE=2 is what `--threads` gets,
@@ -82,6 +101,7 @@ const fail = (msg) => {
 let rounds = 12
 let validate = false
 let rust = true
+let variant = null
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
   if (argv[i] === "--rounds") {
@@ -90,12 +110,28 @@ for (let i = 2; i < argv.length; i++) {
     validate = true
   } else if (argv[i] === "--no-rust") {
     rust = false
+  } else if (argv[i] === "--variant") {
+    variant = argv[++i]
+    if (variant === undefined) {
+      fail("--variant needs a value")
+    }
   } else {
     fail(`unknown option ${argv[i]}`)
   }
 }
 if (!(rounds >= 2)) {
   fail("--rounds needs at least 2")
+}
+// What each --variant builds: a profile to link with, the --cpu level, or the
+// C twin's -march=native.
+const VARIANTS = {
+  pgo: { pgo: true, cpu: [] },
+  "x86-64-v3": { pgo: false, cpu: ["--cpu", "x86-64-v3"] },
+  "pgo-x86-64-v3": { pgo: true, cpu: ["--cpu", "x86-64-v3"] },
+  "c-native": { native: true },
+}
+if (variant !== null && !Object.hasOwn(VARIANTS, variant)) {
+  fail(`--variant takes ${Object.keys(VARIANTS).join(", ")}, not ${variant}`)
 }
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
@@ -185,7 +221,10 @@ const exeMt = path.join(outDir, "nish-threads")
 const twinMt = path.join(outDir, "twin-mt")
 const rustDir = path.join(outDir, "rust")
 const twinRs = path.join(rustDir, "target", "release", "twin-rs")
-for (const f of [exe, copy, twin, exeMt, twinMt, twinRs]) {
+const exeVariant = path.join(outDir, "nish-variant")
+const twinCopy = path.join(outDir, "twin-copy")
+const twinNative = path.join(outDir, "twin-native")
+for (const f of [exe, copy, twin, exeMt, twinMt, twinRs, exeVariant, twinCopy, twinNative]) {
   fs.rmSync(f, { force: true })
 }
 const nishBuild = (out, extra, what) => {
@@ -198,25 +237,37 @@ const nishBuild = (out, extra, what) => {
   )
 }
 nishBuild(exe, [], "the Nish build")
-fs.copyFileSync(exe, copy)
-if (!fs.readFileSync(exe).equals(fs.readFileSync(copy))) {
-  fail("the copy is not byte-identical to the build")
+/** `bin` copied to `to`, which must then be byte-identical to it. */
+const copyOf = (bin, to) => {
+  fs.copyFileSync(bin, to)
+  if (!fs.readFileSync(bin).equals(fs.readFileSync(to))) {
+    fail(`${path.basename(to)} is not byte-identical to ${path.basename(bin)}`)
+  }
 }
-/** twin.c built on SQLite in threading mode `mode` (`st` or `mt`); answers the SQLite object too. */
-const cTwin = (mode, out) => {
+copyOf(exe, copy)
+/**
+ * twin.c built on SQLite in threading mode `mode` (`st` or `mt`), with `extra`
+ * on every compile and the link; answers the SQLite object too.
+ */
+const cTwin = (mode, out, extra = []) => {
   const objects = []
+  const tag = extra.length > 0 ? `-${path.basename(out)}` : ""
   for (const unit of ["sqlite3.c", "twin.c"]) {
     const src = unit === "twin.c" ? path.join(here, unit) : path.join(sqliteDir, unit)
-    const obj = path.join(outDir, unit.replace(/\.c$/, `-${mode}.o`))
+    const obj = path.join(outDir, unit.replace(/\.c$/, `-${mode}${tag}.o`))
     const defs = [...SQLITE_DEFS, THREADSAFE[mode]]
     run(
       cc,
-      [...CFLAGS, ...HARDEN_CC, ...defs, "-I", sqliteDir, "-c", src, "-o", obj],
-      `${cc} ${unit} (${mode})`
+      [...CFLAGS, ...extra, ...HARDEN_CC, ...defs, "-I", sqliteDir, "-c", src, "-o", obj],
+      `${cc} ${unit} (${mode}${tag})`
     )
     objects.push(obj)
   }
-  run(cc, [...CFLAGS, ...HARDEN, ...LDFLAGS, ...objects, "-lm", "-o", out], `${cc} ${path.basename(out)}`)
+  run(
+    cc,
+    [...CFLAGS, ...extra, ...HARDEN, ...LDFLAGS, ...objects, "-lm", "-o", out],
+    `${cc} ${path.basename(out)}`
+  )
   const lacks = unhardened(out)
   if (lacks !== null) {
     fail(`the C twin ${path.basename(out)} is not built as hardened as a Nish binary\n${lacks}`)
@@ -224,10 +275,82 @@ const cTwin = (mode, out) => {
   return objects[0]
 }
 cTwin("st", twin)
+const schema = path.join(here, "schema.sql")
 
-// The THREADSAFE=2 group, when there is a cargo to build twin.rs with.
-const cargo = rust ? process.env.CARGO || which("cargo", [path.join(os.homedir(), ".cargo", "bin")]) : null
-if (rust && cargo === null) {
+/** One run of `bin`'s workload `name` on `database`, as `run` runs it: its stdout. */
+const runWorkload = (bin, name, database, count, env = process.env) =>
+  run(bin, [name, database, String(count)], `${path.basename(bin)} ${name}`, env)
+const LINE = /^rows (\d+) checksum (\d+) failed (-?\d+) count (\d+) ns (\d+)$/
+/** What a workload's run printed, refused unless it read rows and nothing failed. */
+const parsed = (bin, name, out) => {
+  const m = LINE.exec(out.trim())
+  if (m === null || m[3] !== "0" || Number(m[1]) === 0) {
+    fail(`${bin} ${name} printed ${JSON.stringify(out)}`)
+  }
+  return m
+}
+
+// PGO's training database: another seed, and other sizes, than the timed one.
+// It has more posts than lookup's ids reach, so every lookup finds its post;
+// the insert workloads, which run last, delete the posts past id 500,000.
+const TRAIN_SEED = ["7", "45000", "510000", "1800000"]
+const TRAIN = [
+  ["lookup", 50000],
+  ["feed", 2000],
+  ["insert", 5000],
+  ["insert-txn", 20000],
+]
+/** An instrumented build of main.ts with `cpu`, trained, and its runs merged: the profile's path. */
+const trainedProfile = (cpu) => {
+  const profdata = process.env.LLVM_PROFDATA || which("llvm-profdata")
+  if (profdata === null) {
+    fail(
+      "--variant pgo needs llvm-profdata on PATH, as nish --pgo-use does (Ubuntu's llvm-18 installs llvm-profdata-18)"
+    )
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nish-sqlite-pgo-"))
+  try {
+    const instrumented = path.join(tmp, "nish-instrumented")
+    nishBuild(instrumented, ["--pgo-generate", ...cpu], "the instrumented (--pgo-generate) build")
+    const trainDb = path.join(tmp, "train.db")
+    run(twin, ["seed", trainDb, schema, ...TRAIN_SEED], "the training seed")
+    const env = { ...process.env, LLVM_PROFILE_FILE: path.join(tmp, "train-%p.profraw") }
+    for (const [name, count] of TRAIN) {
+      parsed(instrumented, name, runWorkload(instrumented, name, trainDb, count, env))
+    }
+    const raws = fs
+      .readdirSync(tmp)
+      .filter((f) => f.endsWith(".profraw"))
+      .map((f) => path.join(tmp, f))
+    if (raws.length !== TRAIN.length) {
+      fail(`the training wrote ${raws.length} .profraw files, not one a run (${TRAIN.length})`)
+    }
+    const out = path.join(outDir, `${variant}.profdata`)
+    run(profdata, ["merge", "-o", out, ...raws], "llvm-profdata merge")
+    return out
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+}
+const spec = variant === null ? null : VARIANTS[variant]
+if (spec?.native === true) {
+  copyOf(twin, twinCopy)
+  cTwin("st", twinNative, ["-march=native"])
+} else if (spec !== null) {
+  const pgo = spec.pgo ? ["--pgo-use", trainedProfile(spec.cpu)] : []
+  nishBuild(exeVariant, [...pgo, ...spec.cpu], `the ${variant} build`)
+}
+
+// The THREADSAFE=2 group, when there is a cargo to build twin.rs with, and no
+// variant to time instead.
+if (rust && variant !== null) {
+  console.error(`note: --variant ${variant} leaves out the THREADSAFE=2 group (rusqlite)`)
+}
+const cargo =
+  rust && variant === null
+    ? process.env.CARGO || which("cargo", [path.join(os.homedir(), ".cargo", "bin")])
+    : null
+if (rust && variant === null && cargo === null) {
   console.error("note: cargo not found; the THREADSAFE=2 group (rusqlite) is left out (set CARGO=<path>)")
 }
 let rustVersions = null
@@ -287,7 +410,6 @@ if (cargo !== null) {
 // The seed, made again when what makes it changes.
 const db = path.join(outDir, "feed.db")
 const stamp = path.join(outDir, "feed.db.stamp")
-const schema = path.join(here, "schema.sql")
 const hash = createHash("sha256")
 for (const f of [schema, path.join(here, "twin.c"), path.join(sqliteDir, "sqlite3.c")]) {
   hash.update(fs.readFileSync(f))
@@ -302,15 +424,9 @@ if (!fs.existsSync(db) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8"
   fs.writeFileSync(stamp, want)
 }
 
-const LINE = /^rows (\d+) checksum (\d+) failed (-?\d+) count (\d+) ns (\d+)$/
-
 /** One run of `bin` on workload `w`: what it read, and its ns per call. */
 const runOnce = (bin, w) => {
-  const out = run(bin, [w.name, db, String(w.count)], `${path.basename(bin)} ${w.name}`)
-  const m = LINE.exec(out.trim())
-  if (m === null || m[3] !== "0" || Number(m[1]) === 0) {
-    fail(`${bin} ${w.name} printed ${JSON.stringify(out)}`)
-  }
+  const m = parsed(bin, w.name, runWorkload(bin, w.name, db, w.count))
   return { answer: `rows ${m[1]} checksum ${m[2]} count ${m[4]}`, ns: Number(m[5]) / w.count }
 }
 
@@ -332,8 +448,23 @@ if (cargo !== null) {
 
 const bins = [exe, copy, twin, ...(cargo !== null ? [exeMt, twinMt, twinRs] : [])]
 const labels = ["nish", "nish copy", "C", ...(cargo !== null ? ["nish mt", "C mt", "Rust mt"] : [])]
+// The binaries that run a noTwin workload: the build, its copy, and a Nish variant.
+const nishSide = [0, 1]
+// A variant's comparison, as indices into `bins`: the variant, what it
+// varies, and that binary's copy.
+let against = null
+if (spec?.native === true) {
+  bins.push(twinCopy, twinNative)
+  labels.push("C copy", "C native")
+  against = { variant: 4, base: 2, copy: 3 }
+} else if (spec !== null) {
+  bins.push(exeVariant)
+  labels.push(`nish ${variant}`)
+  nishSide.push(3)
+  against = { variant: 3, base: 0, copy: 1 }
+}
 /** The binaries that run workload `w`: index into `bins`. */
-const ranBy = (w) => (w.noTwin ? [0, 1] : bins.map((_, k) => k))
+const ranBy = (w) => (w.noTwin ? nishSide : bins.map((_, k) => k))
 const byName = new Map(WORKLOADS.map((w, i) => [w.name, i]))
 
 if (validate) {
@@ -349,7 +480,7 @@ if (validate) {
     seen.set(w.name, answers[0])
     console.log(
       w.same !== undefined
-        ? `${w.name}: ${answers[0]}, the same on the build and its copy, and the same as ${w.same}`
+        ? `${w.name}: ${answers[0]}, the same on every Nish side, and the same as ${w.same}`
         : `${w.name}: ${answers[0]}, the same on every side`
     )
   }
@@ -407,9 +538,19 @@ const version = /#define SQLITE_VERSION\s+"([^"]+)"/.exec(
   fs.readFileSync(path.join(sqliteDir, "sqlite3.h"), "utf8")
 )
 console.log(`sqlite: ${timed} rounds; SQLite ${version?.[1] ?? "of unknown version"}`)
+if (variant !== null) {
+  console.log(`  variant: ${variant}, against ${labels[against.base]} and its copy`)
+}
 if (rustVersions !== null) {
   console.log(`  mt: SQLITE_THREADSAFE=2; ${rustVersions}`)
 }
+/** The noise band line: `a`, a binary's times, against `b`, its copy's. */
+const band = (what, a, b) =>
+  console.log(
+    `  noise band (${what}): min ${ns(Math.abs(min(a) - min(b)))}` +
+      ` (${((Math.abs(min(a) - min(b)) / min(a)) * 100).toFixed(1)}%),` +
+      ` median ${ns(Math.abs(median(a) - median(b)))} (${((Math.abs(median(a) - median(b)) / median(a)) * 100).toFixed(1)}%)`
+  )
 const pct = (a, b) => `${(((median(a) - median(b)) / median(b)) * 100).toFixed(1)}%`
 for (let w = 0; w < WORKLOADS.length; w++) {
   const [n, c, t, nm, tm, rs] = times[w]
@@ -435,11 +576,17 @@ for (let w = 0; w < WORKLOADS.length; w++) {
         ` (${(((median(n) - median(t)) / median(t)) * 100).toFixed(1)}% of C's median)`
     )
   }
-  console.log(
-    `  noise band (build against its copy): min ${ns(Math.abs(min(n) - min(c)))}` +
-      ` (${((Math.abs(min(n) - min(c)) / min(n)) * 100).toFixed(1)}%),` +
-      ` median ${ns(Math.abs(median(n) - median(c)))} (${((Math.abs(median(n) - median(c)) / median(n)) * 100).toFixed(1)}%)`
-  )
+  band("build against its copy", n, c)
+  if (against !== null && ranBy(WORKLOADS[w]).includes(against.variant)) {
+    const [v, b, bc] = [times[w][against.variant], times[w][against.base], times[w][against.copy]]
+    const base = labels[against.base]
+    console.log(
+      `  ${`${labels[against.variant]} - ${base}`.padEnd(18)} min ${signed(min(v) - min(b))}, median ${signed(median(v) - median(b))} (${pct(v, b)} of ${base}'s median)`
+    )
+    if (against.base !== 0) {
+      band(`${base} against its copy`, b, bc)
+    }
+  }
   if (rs !== undefined && !WORKLOADS[w].noTwin) {
     for (const [label, a, b] of [
       ["nish mt - C mt", nm, tm],

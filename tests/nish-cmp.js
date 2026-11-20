@@ -1316,6 +1316,11 @@ const RECURSION_ARENA_WHY =
 
 const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
+/** The changelog words of the pull request that proposes WP68 and adds its `bench/wp68-*` programs. */
+const WP68_BENCH = "WP68, shared libraries layered like atomic design"
+const WP68_BENCH_WHY =
+  "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
+
 /** The changelog line of the stage that adds nish/crypto/scram. */
 const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
 // nish/net/postgres reaches its SCRAM arithmetic through the new
@@ -9272,6 +9277,49 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  {
+    program: "bench/wp68-be-load.ts",
+    file: "wp68-be-load.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-decimal.ts",
+    file: "wp68-decimal.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-hex.ts",
+    file: "wp68-hex.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "wp68-json-escape.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "wp68-utf8.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+
   // WP48 stage 2c: in a program with a compact class, `nish_alloc_struct`'s
   // slow block loads `nish_arena_range_abi` as `nish_alloc_ref`'s already did,
   // so an 8-aligned compact class fails to link against the default runtime

@@ -1,0 +1,5 @@
+@nish_const_1_HEX = constant %struct.nish_array { i64 16, i64 16, i8* bitcast ([16 x i8]* @nish_const_1_HEX.data to i8*) }, align 8
+@nish_const_1_STEPS = constant %struct.nish_array { i64 5, i64 5, i8* bitcast ([5 x i32]* @nish_const_1_STEPS.data to i8*) }, align 8
+@nish_const_1_HIDDEN = internal constant %struct.nish_array { i64 5, i64 5, i8* bitcast ([5 x i8]* @nish_const_1_HIDDEN.data to i8*) }, align 8
+@nish_const_1_HEX = external constant %struct.nish_array, align 8
+@nish_const_1_STEPS = external constant %struct.nish_array, align 8

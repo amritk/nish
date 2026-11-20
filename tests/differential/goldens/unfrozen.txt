@@ -218,6 +218,9 @@ cases/compat_string_switch added after R6: no rewriter to freeze it with
 cases/compat_string_switch_flow added after R6: no rewriter to freeze it with
 cases/const_array_numeric added after R6: no rewriter to freeze it with
 cases/const_array_u8 added after R6: no rewriter to freeze it with
+cases/const_table_byte_class added after R6: no rewriter to freeze it with
+cases/const_table_f64_folded added after R6: no rewriter to freeze it with
+cases/const_table_u16_u32 added after R6: no rewriter to freeze it with
 cases/ct_asm_p256 added after R6: no rewriter to freeze it with
 cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with
