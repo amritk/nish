@@ -25598,11 +25598,29 @@ if (dealtHere("cliChecks")) {
     }
     for (const [base, want] of Object.entries(holderWant)) {
       const file = `tests/layout/compact-bench/${base}.ts`
-      const onLl = path.join(layoutDir, `${base}.on.ll`)
-      const offLl = path.join(layoutDir, `${base}.off.ll`)
+      // The bench imports `std/`, so it writes one .ll per module into a
+      // directory, and the two builds must agree on every one of them.
+      const onDir = path.join(layoutDir, `${base}.on.ir`)
+      const offDir = path.join(layoutDir, `${base}.off.ir`)
+      fs.rmSync(onDir, { recursive: true, force: true })
+      fs.rmSync(offDir, { recursive: true, force: true })
       const exe = path.join(layoutDir, base)
-      const on = spawnSync(NISH, [file, "-o", onLl, "--link", exe, "--explain-layout"], { cwd: root, encoding: "utf8" })
-      const off = spawnSync(NISH, [file, "-o", offLl, "--link", exe, "--compact", "off"], { cwd: root, encoding: "utf8" })
+      const on = spawnSync(NISH, [file, "-o", `${onDir}/`, "--link", exe, "--explain-layout"], { cwd: root, encoding: "utf8" })
+      const off = spawnSync(NISH, [file, "-o", `${offDir}/`, "--link", exe, "--compact", "off"], { cwd: root, encoding: "utf8" })
+      const modulesOf = (dir) =>
+        fs.existsSync(dir)
+          ? fs
+              .readdirSync(dir, { recursive: true })
+              .map(String)
+              .filter((f) => f.endsWith(".ll"))
+              .sort()
+          : []
+      const onModules = modulesOf(onDir)
+      const offModules = modulesOf(offDir)
+      const sameIr =
+        onModules.length > 1 &&
+        onModules.join("\n") === offModules.join("\n") &&
+        onModules.every((f) => fs.readFileSync(path.join(onDir, f), "utf8") === fs.readFileSync(path.join(offDir, f), "utf8"))
       const report = layoutOf(on.stderr).split("\n")
       check(
         `explain layout: ${file} refuses its holder-only pick at test 3`,
@@ -25611,8 +25629,8 @@ if (dealtHere("cliChecks")) {
       )
       check(
         `explain layout: ${file} builds the same IR as --compact off`,
-        on.status === 0 && off.status === 0 && fs.readFileSync(onLl, "utf8") === fs.readFileSync(offLl, "utf8"),
-        `${shown(on)}\n${shown(off)}`
+        on.status === 0 && off.status === 0 && sameIr,
+        `on: ${onModules.join(" ")}\noff: ${offModules.join(" ")}\n${shown(on)}\n${shown(off)}`
       )
     }
     // A linked class the program makes in a loop, so only test 1 and the

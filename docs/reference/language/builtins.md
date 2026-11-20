@@ -1481,7 +1481,7 @@ it, and its size now and narrowed (`explain_layout`).
 
 - **`implements Wide` keeps one class at full pointers** (`import { Wide } from
   "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
-  both markers (NL2799, `compact_reject_wide`).
+  both markers (NL2819, `compact_reject_wide`).
 - **`--compact off` keeps every class at full pointers**, `implements Compact`
   included: its IR is byte for byte the IR of a program with no compact class.
   `--compact on` is the default.

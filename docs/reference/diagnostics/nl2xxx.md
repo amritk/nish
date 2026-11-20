@@ -15478,14 +15478,6 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
-```
-
-## NL2799
-
-The message of an error contains:
-
-```text
 A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)
 ```
 
@@ -15639,4 +15631,12 @@ The message of an error contains:
 
 ```text
 … elements: its indices are 0 to …
+```
+
+## NL2819
+
+The message of an error contains:
+
+```text
+` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
 ```

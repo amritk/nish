@@ -134,7 +134,7 @@ and `--compact off` turns the whole mechanism off for one build, classes
 marked `implements Compact` included, which is what to try first when a
 program hits the range's limit (§3.3) or runs slower. `implements Compact` on
 a class that rule 1 or 5 refuses is a compile error naming the reason, and a
-class may not write both markers (NL2799). `nish --explain-layout` prints one
+class may not write both markers (NL2819). `nish --explain-layout` prints one
 line per class: `compact` with its size before and after, `off` under
 `--compact off`, or the first test that refused it, numbered as above
 (`5 forbidden: implements Wide` for the marker), so the decision can be seen

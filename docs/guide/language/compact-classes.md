@@ -100,7 +100,7 @@ export const main = (): i32 => {
 
 `--compact off` does the same for every class in the build, those marked
 `implements Compact` included. A class may not write both `Compact` and
-`Wide` (NL2799).
+`Wide` (NL2819).
 
 ## What gets smaller
 
