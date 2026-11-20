@@ -102,6 +102,29 @@ export const main = (): i32 => {
 `implements Compact` included. A class may not write both `Compact` and
 `Wide` (NL2819).
 
+## When to override the rule
+
+The rule's choices come from timing programs both ways, and it is right for
+most programs. Two cases can go the other way:
+
+- **A picked class in a small, hot graph.** A compact link costs one more
+  instruction on every read, and a loop where each read's address is the last
+  read's result pays it on every hop. On a sibling-linked tree of 400,000
+  nodes, small enough to fit in the cache, a climb from every leaf to the
+  root ran 15% slower with 32-bit links. The whole program, whose other
+  passes gain from the smaller nodes, came out level. If your graph is that small and that
+  loop is most of the time, measure with `--compact off` and, if it wins,
+  write `implements Wide` on the class.
+- **A refused class you have measured.** A class under 24 bytes is refused
+  because narrowing measured slower: a 16-byte binary-trees node ran 19%
+  slower compact, though it took half the memory. Write `implements Compact`
+  only when memory matters more than that time, or when your own timing
+  shows a gain.
+
+Large graphs touched once, such as a tree built and then walked, are where
+the rule pays most: a 33-million-node tree of 24-byte nodes took half the
+peak memory and two thirds of the time with the rule on.
+
 ## What gets smaller
 
 Only a *link* shrinks: a field whose type is exactly the compact class, or the
