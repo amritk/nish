@@ -103,11 +103,26 @@ A class `R` is compact when all of these hold:
    with one link among wide fields that rounding gives back is left alone,
    because it would pay the decode for nothing, and so is a smaller saving:
    it pays the decode on every link read for a few percent of one class.
-   Stage 3 first also counted a quarter off a class holding the link, when
-   that holder is made in a loop; on the corpus that picked only `Deflater`,
-   for an 8-byte saving in one 256-byte `ZlibCompressor` per stream (§5.5),
-   too little to pay for a decode on every read, so only `R`'s own size
-   counts. The refusal still names the holder that would have saved.
+   Three rules are named in this note. **#1736's rule** (the
+   `--explain-layout` report that prepared this stage) passed test 3 on
+   any saving after rounding, in `R` or in any class holding a link to it,
+   with no floor on `R`'s size. On the corpus it picked seven `std/`
+   classes only through a holder (`Deflater`, whose `ZlibCompressor` holder
+   goes 8 → 4 bytes; `JsonTokenizer`, `JsonDocument` 248 → 240;
+   `HttpServerRequest`, `P256ProjectivePoint`, `QuicKeysSlot`,
+   `FetchResponse`, `PgConnection`), 19 of the compiler's 307 classes on
+   this branch's merged tree (17 of them holder-only; #1736 counted 18 on
+   its own tree, and the 19th, `SourceFile`, joins because `CheckContext`
+   has since grown to 448 bytes and narrowing its `SourceFile` link now
+   saves 448 → 440 after rounding), and the 16-byte cells of `awfy` List and `bintrees`
+   (§5.5). Two drafts of this stage came between it and the final rule:
+   a quarter off `R` or off a holder made in a loop, then a quarter off
+   `R` alone. Neither was gated on a run of its own; §5.5 times #1736's
+   rule and **the final rule**, which is the test as written above. A
+   holder-only saving is 4 to 8 bytes in one holder per stream, document or
+   request, which measured as noise and cost memory where the narrowed
+   class stopped being a stack value (§5.5), so only `R`'s own size counts.
+   The refusal still names the holder that would have saved.
 4. **`R` is made in a loop or in a recursive function**: some `new R(...)`
    is lexically inside a loop, or inside a function that can reach itself in
    the call graph. A class made once or a few times per run is left alone.
@@ -538,7 +553,9 @@ builds. Before stage 3 no class was compact without `implements Compact`.
 | `tests/link/std_json_value` | `JsonTokenizer` (held by `JsonDocument`) | holder 248 → 240 | refused, not `R` itself |
 | `tests/link/net_http_server*` | `HttpServerRequest` (held by `Taken`) | holder 24 → 16 | refused, not `R` itself |
 | `tests/link/net_http_server*` | `P256ProjectivePoint`, `QuicKeysSlot` (held by `P256PointScratch`, `QuicListener`) | holders only | refused, not `R` itself |
-| the compiler (`src/compile.ts`) | any | 19 of 291, all holder-only but `FunctionSig` 200 → 192 and `PanicSite` 56 → 48 | 0 of 291 |
+| `tests/link/net_fetch_async_https` | `FetchResponse` (held by the test's `Outcome`) | holder 24 → 16 | refused, not `R` itself |
+| `tests/link/net_serve_pg` | `PgConnection` (held by `PgPoolSlot`) | holder 64 → 56 | refused, not `R` itself |
+| the compiler (`src/compile.ts`) | any | 19 of 307 (#1736 counted 18; `SourceFile`, via `CheckContext` 448 → 440, is the 19th), all holder-only but `FunctionSig` 224 → 216 and `PanicSite` 56 → 48 | 0 of 307 |
 
 No `std/` class is picked, `std/crypto` included (ECC-9 in
 `docs/security/crypto-ecc.md`), so the compiler and every program that picks
@@ -576,20 +593,23 @@ before the next, so halving its nodes saves little traffic. Every 24- and
 and of the three it keeps, `sibling`'s 1M run sits inside its band (which
 crosses zero) and its 4M run is even, while `treesum` gains 24% and `tree`
 43%, and both halve their peak RSS. A holder-only saving is not counted
-(§3.1), and the last four rows are why.
+(§3.1), and the self-build and `compact-bench` rows are why.
 They time #1736's rule (any saving, `R`'s own or a holder's) against
 `--compact off`, in nine rounds that alternate which side runs first, on the
-head compiler with test 3 set back to #1736's. No `bench/` program picks a
-class under that rule, so the three `tests/compact-bench/` programs are minimal
-benches written for this measurement, one per `std/` class the survey found
-holder-only: `json-doc` makes a `JsonTokenizer` each round and parses into one
+head compiler with test 3 set back to #1736's. No `bench/` program makes one of
+the seven `std/` classes that rule picks only through a holder, so the three
+`tests/layout/compact-bench/` programs are minimal benches written for this
+measurement, for three of the seven: `json-doc` makes a `JsonTokenizer` each round and parses into one
 reused `JsonDocument`, `zlib-each` makes a `Deflater` each round beside one
 reused `ZlibCompressor`, and `request-slot` keeps a ring of 64 slots of its own
 (`Taken`'s shape) over `HttpServerRequest`s. Each prints the same checksum both
-ways, and the self-build writes the same 141 modules byte for byte. Every gap's
+ways, and the self-build writes the same 141 modules byte for byte. The other
+four (`FetchResponse`, `PgConnection`, `P256ProjectivePoint`, `QuicKeysSlot`)
+were not benched here; the final rule refuses them at test 3 with the rest,
+and stage 5 measures `std/`'s own classes. Every gap's
 range crosses zero: the self-build's −2.7% (19 classes picked, two of them
 shrinking themselves by 4% and 14%) and the three benches' +0.4% to +1.3% are
-noise. The memory goes the wrong way: `JsonTokenizer` in the loose build is
+noise. The memory goes the wrong way: `JsonTokenizer` in the build under #1736's rule is
 heap-allocated (`nish_alloc_struct(i64 128)` in `json-doc`'s loop), where with
 `--compact off` the same `new` is an `alloca`, so `json-doc` keeps 128 more
 bytes a round and its peak RSS doubles. `ZlibCompressor`'s 4 bytes and

@@ -817,8 +817,9 @@ leaves the IR unchanged.
   takes the flag; `--emit-ast`, `--json` and `--fix` do not.
 - **`--explain-layout`** prints one line for each class: whether the
   compact-class rule picks it, or the first of the rule's five tests
-  that refuses it (with the saving it found too small, or the holder not made
-  in a loop), with its size in bytes now and with its links narrowed
+  that refuses it (test 3 names the saving it found too small, or a holder
+  whose saving does not count; test 4 says the class itself is not made in a
+  loop or recursion), with its size in bytes now and with its links narrowed
   to 4 bytes ([Memory](../language/memory.md#a-tree-links-its-children-not-an-array-of-them)).
   A generic class gets one line for each of its instantiations, named as
   written in a type (`TNode<i32>`), at the generic class's declaration. An

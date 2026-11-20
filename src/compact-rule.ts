@@ -20,9 +20,10 @@
 //      (`narrowedSize`) takes at least a quarter off it, after rounding
 //      (`pays`): a 16-byte cell measured slower narrowed, a smaller saving pays
 //      the decode on every link read for a few percent of one class, and a
-//      saving only in a class holding the link (an 8-byte link in a 256-byte
-//      holder) is too small to pay for it (docs/wp48-ref32-classes.md §3.1,
-//      §5.5), so it is named in the refusal but does not pass;
+//      saving only in a class holding the link (4 to 8 bytes in one holder,
+//      `ZlibCompressor` 8 → 4, `JsonDocument` 248 → 240) measured as noise
+//      (docs/wp48-ref32-classes.md §3.1, §5.5), so it is named in the refusal
+//      but does not pass;
 //   4. some `new R(...)` is lexically inside a loop, or inside a function that
 //      reaches itself through direct calls by name;
 //   5. nothing forbids it: `R` is not a `declare class`, holds no `Secret`, is
