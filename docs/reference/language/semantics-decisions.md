@@ -472,7 +472,8 @@ by the caller.
 ## The CPU level
 
 - **`--cpu x86-64-v3`** links the program for one CPU level above the
-  baseline: the module and the runtime are both compiled, and linked, with
+  baseline: the module, the runtime and, when the program calls it, SQLite
+  (each `runtime/sqlite/*.c` unit) are all compiled, and linked, with
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
@@ -496,6 +497,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](../../security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+  `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
+  check refuses: clang keeps a loop counter or overflow flag in a stack slot
+  there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ## Profile-guided builds
 
@@ -1347,14 +1358,22 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](expressions.md#element-access): a dominating guard, a loop bounded by the length,
   or every call site proving the argument (`tests/cases/panics_index`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](builtins.md#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
+  program may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 

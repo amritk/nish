@@ -1590,10 +1590,11 @@ function isSimdCall(program: CheckedProgram, call: Node): boolean -> @isSimdCall
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isSimdExport -> @isSimdExport
-function vectorAccessLanes(ctx: CheckContext, call: Node): i32 -> @vectorAccessLanes
+function vectorAccessLanes(program: CheckedProgram, table: TypeTable, call: Node): i32 -> @vectorAccessLanes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: TypeTable.laneCount nish_arena_mark nish_arena_release nish_panic_index nish_str_eq simdSuffix simdTypeLane
-  pointer ctx: size=448 writesThrough=false captured=false
+  pointer program: size=920 writesThrough=false captured=false
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.laneCount#0 TypeTable.laneCount#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)

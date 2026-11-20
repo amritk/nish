@@ -172,12 +172,15 @@ likely to add to it:
   hash of the binary's bytes, so linking the same program twice gives the
   same id, while two different builds (a `-g` link and a plain one, or two
   profiles) give different ones.
-- **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
-  CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
-  tight loops faster. It is the one level `nish` accepts; anything else, and
-  the flag with `--profile wasi` or a non-x86-64 `--target`, is refused with
-  exit 2. What your program computes does not change. A binary built with it
-  **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
+- **`--cpu x86-64-v3`** — compiles your program, the runtime and SQLite (when
+  your program uses it) for x86-64 CPUs with AVX2 (Intel Haswell, AMD
+  Excavator and later), which can make tight loops faster. It is the one level
+  `nish` accepts; anything else, and the flag with `--profile wasi` or a
+  non-x86-64 `--target`, is refused with exit 2. `--cpu native` is refused
+  too: on some CPUs (AMD Zen 2 to Zen 4, Intel Sapphire Rapids) the
+  constant-time check does not pass the code clang 18 makes for that CPU, so
+  `nish` does not build it. What your program computes does not change. A
+  binary built with it **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
   that stay on machines you know; ship anything else without it.
 - **`--debug-arena`** — links a runtime that catches a stale reference to
   arena memory. Every allocation gets memory pages of its own, and when the
