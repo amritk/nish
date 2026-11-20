@@ -1,12 +1,10 @@
-@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
+@.str.0 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"a\C3\BF\00" }, align 8
 
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 
 define internal noundef i32 @next(i8* noundef nonnull noalias readonly align 8 nocapture %t, i32 noundef %i) #0 {
 entry:
@@ -40,30 +38,29 @@ if.end:
 define noundef i32 @nish_main() #1 {
 entry:
   %t.addr = alloca i8*, align 8
-  %chr = alloca i8, align 1
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = trunc i64 255 to i8
-  store i8 %0, i8* %chr, align 1
-  %1 = call i8* @nish_str_new(i8* %chr, i64 1)
-  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8* %1)
-  store i8* %2, i8** %t.addr, align 8
+  store i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8** %t.addr, align 8
+  %0 = load i8*, i8** %t.addr, align 8
+  %1 = call i32 @next(i8* %0, i32 0)
+  %2 = call i8* @nish_str_from_i32(i32 %1)
+  call void @nish_print(i8* %2)
   %3 = load i8*, i8** %t.addr, align 8
-  %4 = call i32 @next(i8* %3, i32 0)
+  %4 = call i32 @next(i8* %3, i32 1)
   %5 = call i8* @nish_str_from_i32(i32 %4)
   call void @nish_print(i8* %5)
   %6 = load i8*, i8** %t.addr, align 8
-  %7 = call i32 @next(i8* %6, i32 1)
+  %7 = call i32 @next(i8* %6, i32 2)
   %8 = call i8* @nish_str_from_i32(i32 %7)
   call void @nish_print(i8* %8)
   %9 = load i8*, i8** %t.addr, align 8
-  %10 = call i32 @next(i8* %9, i32 2)
+  %10 = call i32 @next(i8* %9, i32 3)
   %11 = call i8* @nish_str_from_i32(i32 %10)
   call void @nish_print(i8* %11)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -71,8 +68,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
-attributes #1 = { nounwind "probe-stack"="inline-asm" }
-attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
