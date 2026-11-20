@@ -13,6 +13,7 @@
 
 import { HelpMenu, Style } from "../std/cli"
 import { CLI, VERSION } from "./branding"
+import { ALLOW_PANICS_FLAG } from "./options"
 
 /** Where a help row's description starts, counted from the start of the line. */
 const DESCRIPTION_COLUMN: i32 = 35
@@ -92,6 +93,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
   menu.row("--deny-panics", "", "refuse an unproven panic in your package")
+  menu.row(ALLOW_PANICS_FLAG, "", "undo --deny-panics; a noPanic list still holds")
   menu.row("--deny-retention", "", "refuse retained arena memory in your package")
   menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
