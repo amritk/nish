@@ -133,9 +133,15 @@ not supported: Nish would reserve its range inside a process it does not own.
 Node reads a pointer as 8 bytes and runs an addon in its own process, so a
 compact class may not cross into it:
 
-- A build with `--emit-napi` or `--emit-napi-async` refuses every compact
-  class (NL4021), and an exported function whose signature holds one (NL4020).
-  Adding `--emit-header` beside it does not lift the refusal.
+- A build with `--emit-napi` or `--emit-napi-async` refuses an exported
+  function whose signature holds a compact class at the function's name
+  (NL4020), and every other compact class at the class's name (NL4021). The
+  signature is read return type first, then each parameter in order, and the
+  first compact class found there is the one NL4020 names; a compact class
+  that no NL4020 names gets NL4021, naming the flag. Change the signature to
+  fix the first; build with `--emit-header` instead, or drop the marker, to
+  fix the second. Adding `--emit-header` beside either flag lifts neither
+  refusal.
 - A `declare class` describes a C struct, so it cannot implement `Compact`
   (NL2795) or hold a field of a compact class (NL2796).
 - A generic class cannot implement `Compact` yet (NL2798): each
