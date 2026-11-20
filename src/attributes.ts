@@ -169,6 +169,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types"
+import { isWasmBuild } from "./visibility"
 import {
   fusedCalleesOf,
   isMapRoute,
@@ -1956,12 +1957,12 @@ const isStringPassthrough = (program: CheckedProgram, template: Node): boolean =
  * to claim. A `Result` layout is derived from the type, not declared (WP16),
  * so it is computed rather than looked up.
  */
-const structSize = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
+const structSize = (program: CheckedProgram, table: TypeTable, opts: Options, type: i32): i32 => {
   if (type < 0) {
     return 0
   }
   if (table.isResult(type)) {
-    return resultLayout(table, type).size
+    return resultLayout(table, type, isWasmBuild(opts) ? 4 : 8).size
   }
   if (!table.isStruct(type)) {
     return 0
@@ -4194,7 +4195,7 @@ const collectStatedFacts = (
   // none of its own; `isStackSite` reads past the end as false.
   const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
-  facts.returnDeref = structSize(program, table, sig.returnType)
+  facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)
   if (memory !== null && ownMemory) {
     facts.stackSites = memory.stackSites
@@ -4235,7 +4236,7 @@ const collectStatedFacts = (
       facts.pointerParams.push(
         new PointerParamFacts(
           sig.paramNames[i],
-          structSize(program, table, table.stripNull(type)),
+          structSize(program, table, opts, table.stripNull(type)),
           pointerAlign(program, table, type)
         )
       )

@@ -3116,12 +3116,17 @@ A slot lends its input and head buffers back too, whenever it has answered a
 request and holds no byte of the next: a server holding tens of thousands of
 keep-alive connections that each send a request now and then keeps those
 buffers only for the connections mid-request, for two pool operations a
-request, and an idle connection holds about 1.2 KB. That is
-`Http1Config.idleInput`, on by default; set it to `false` and each slot keeps
-its own buffers while it rests, about 1.9 KB more a connection. An `Http1Server` builds a
-slot's connection on the first accept into it and keeps it for the next, so a
-pool sized for 16,384 connections costs some 16 KiB until they come;
-`bench/http.mjs` load-tests that loop on one core.
+request. That is `Http1Config.idleInput`, on by default; set it to `false`
+and each connection keeps its own buffers between requests, about 1.9 KB more
+a connection. An `Http1Server` lends the connection itself the same way: a
+keep-alive slot that has answered and holds nothing of the next request gives
+its connection back and keeps only its descriptor and a few counters, and the
+next slot that reads takes a spare one, or a new one when none is spare. So
+the pool holds as many connections as were ever busy at once, not one per
+open socket, and an idle keep-alive connection costs about 100 bytes of the
+server's memory (`docs/BENCHMARKS.md`, "What an idle keep-alive connection
+costs Http1Server"). A pool sized for 16,384 connections costs some 17 KiB
+until they come; `bench/http.mjs` load-tests that loop on one core.
 
 Call `expire(now)` on an `Http1Server` or `Http1TlsServer` from your loop, with
 `monotonicNanos()`, now and then: it closes a slot that has moved no byte for

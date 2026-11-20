@@ -3139,6 +3139,35 @@ ns per request, median (min–max) and ratio of medians to `old`. `idle` shows n
 What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
+<!-- http-idle-bytes:begin -->
+## What an idle keep-alive connection costs Http1Server
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bash bench/http1-conn/idle.sh` serves `bench/http1-server.ts` (bench/handler-ring's `h1` design) on descriptors (`epoll`) and with `BENCH_RING=1` on `NET_LISTEN_RING` slots (`ring`). `bench/fd-limit/loadgen.c` holds 18,000 keep-alive connections, sends `GET /plaintext` at 30,000 requests a second for 4 seconds, then sends nothing for 5 seconds with every connection open. Its `-i` reads the server's RSS and PSS, and the box's `Slab` and TCP pages, then and before the first connect. Each figure is that difference over 18,000.
+
+| | |
+| --- | --- |
+| Date | 2026-11-18 |
+| nish | an `Http1Server` that lends a connection only to a busy slot (`new`, commit 9c39ab8c, whose `bench/http1-conn/idle.sh` and `bench/fd-limit/loadgen.c` produced this table), against `main` at b18d1bf1 (`old`), `--profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, Linux 6.18 |
+| Runs | 5 interleaved rounds, the two builds' order turned each round |
+| Command | `bash bench/http1-conn/idle.sh --rounds 5 --binary before=<old build of bench/http1-server.ts>` |
+
+| mode | build | RSS B/conn | PSS B/conn | Slab B/conn | server µs/req under load |
+| --- | --- | ---: | ---: | ---: | ---: |
+| epoll | old | 1265 (1263–1267) | 1261 (1259–1264) | 9330 (9316–9356) | 13.83 (13.42–14.00) |
+| epoll | new | 99 (96–106) | 96 (93–102) | 9329 (9311–9344) | 13.41 (13.33–13.83) |
+| ring | old | 1610 (1609–1614) | 1609 (1608–1613) | 9049 (9034–9075) | 17.92 (17.75–18.33) |
+| ring | new | 459 (448–485) | 458 (448–485) | 9053 (9034–9061) | 17.25 (16.92–18.00) |
+
+Median (min–max) of 5 runs. Every run answered every request and closed none.
+
+- **The server's resident bytes for an idle connection fall by 1157 to 1171 on epoll and by 1124 to 1166 on the ring.** These are the band edges: old's minimum less new's maximum, and old's maximum less new's minimum. A resting slot no longer holds its `Http1Connection`, which was 904 arena bytes after four requests (`HTTP1_SERVER_IDLE_BYTES`), with its pages. It keeps 32 bytes of slot arrays (`fds`, `armed`, `at` and `restedMss` as i32, `rested` and `owner` as i64). Growth by doubling can leave up to twice that allocated. The rest of new's 99 bytes is not broken down here.
+- **The ring holds about 350 bytes a connection more than epoll in both builds** (345 old, 360 new, medians). This change does not move it. It is the runtime's io_uring set (`runtime/runtime-uring.c`), not `Http1Server`.
+- **The kernel holds about 9.3 KB a connection on epoll and 9.0 KB on the ring, unchanged.** `Slab` is the box's, so it counts the client's end of each loopback socket too. TCP pages read 0 at idle, within ±112 bytes a connection.
+- **Server CPU a request under load is inside noise in both modes.** The ranges overlap. On a lent connection, the kept response head (H1-7) is reused only for the peer whose responses wrote it. Here 18,000 peers share the busy connections, so it is seldom reused, and no cost shows outside the band. `node bench/http1-request/run.mjs --instructions --base b18d1bf1` counts the same instructions per request in every case, with no change beyond 0.1%. Its path feeds one `Http1Connection`, which is never lent.
+- **`node bench/http1-conn/run.mjs --shape rss --base b18d1bf1 --connections 10000`** builds its own pool of `Http1Connection`s, not an `Http1Server`. Each connection there costs 9 bytes more: 1059 (1057–1061) against 1050 (1049–1052) with `idleInput` and one request. That is the `keptFor` field `lendTo` keys the kept head on. `Http1Server` now pays it only for a connection lent to a busy slot.
+<!-- http-idle-bytes:end -->
+
 <!-- http-lean-get:begin -->
 ## A minimal GET on Http1Server
 
