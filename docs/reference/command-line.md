@@ -254,7 +254,7 @@ refuse an unproven panic in your package
 
 <scalar-field name="--allow-panics">
 
-undo --deny-panics; a noPanic list still holds
+undo an earlier --deny-panics
 
 </scalar-field>
 
