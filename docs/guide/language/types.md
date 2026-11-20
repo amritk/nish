@@ -335,8 +335,8 @@ export const main = (): i32 => {
 ```
 
 An enum whose members are all strings is a **string enum**. Every member
-gives its string, and `String(r)` reads it back; it costs one load, not a
-copy:
+gives its string, and `String(r)` gives that string back without making a
+new one:
 
 <!-- nish:ok -->
 ```ts
