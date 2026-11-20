@@ -19,8 +19,6 @@ import FunctionSig from "./program" -> struct FunctionSig
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import StructInfo from "./program" -> struct StructInfo
 import TemplateInfo from "./program" -> struct TemplateInfo
-import ResultLayout from "./result" -> struct ResultLayout
-import resultLayout from "./result" -> function @resultLayout
 import StringBuilder from "./strings" -> struct StringBuilder
 import K_ARRAY from "./types" -> const K_ARRAY
 import K_NULLABLE from "./types" -> const K_NULLABLE
@@ -66,11 +64,10 @@ struct TypedView (class) size=32 align=8 exported
   field cElem: string index=2 offset=16
   field napiType: string index=3 offset=24
   constructor -> @TypedView.constructor
-struct ResultUse (class) size=24 align=8
+struct ResultUse (class) size=8 align=4
   field type: i32 index=0 offset=0
-  field layout: ResultLayout index=1 offset=8
-  field word: boolean index=2 offset=16
-  field object: boolean index=3 offset=17
+  field word: boolean index=1 offset=4
+  field object: boolean index=2 offset=5
   constructor -> @ResultUse.constructor
 struct CName (class) size=16 align=8 exported
   field ident: string index=0 offset=0
@@ -96,7 +93,7 @@ function externalFunctions(compilation: Compilation): ExternalFunction[] -> @ext
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via analyzeFunctions
   calls: AnalysisUnit.constructor ExternalFunction.constructor FactsTable.get FunctionSig.compileTimeOnly FunctionSig.definedIn analyzeFunctions nish_alloc_struct nish_array_grow nish_str_eq privateAbi signatureHidesRange signatureHidesVector structsHoldingRanges structsHoldingVectors writtenArrayParams
-  pointer compilation: size=224 writesThrough=false captured=false passedTo=structsHoldingRanges#0 structsHoldingVectors#0
+  pointer compilation: size=232 writesThrough=false captured=false passedTo=structsHoldingRanges#0 structsHoldingVectors#0
   stackSites=1 stackLocals=1
   local +0:9 units: AnalysisUnit[] (const)
   local +1:14 unit: ModuleUnit (const)
@@ -126,7 +123,7 @@ function externalFunctions(compilation: Compilation): ExternalFunction[] -> @ext
 function structsHoldingRanges(compilation: Compilation): StringSet -> @structsHoldingRanges
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsRange nish_alloc_struct
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   local +1:9 ranged: StringSet (const)
@@ -231,7 +228,7 @@ function typedView(table: TypeTable, t: i32): TypedView | null -> @typedView [ex
 function structsHoldingVectors(compilation: Compilation): StringSet -> @structsHoldingVectors [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsVector nish_alloc_struct
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   local +1:9 held: StringSet (const)
@@ -246,7 +243,7 @@ function structsHoldingVectors(compilation: Compilation): StringSet -> @structsH
 function structsHoldingLayouts(compilation: Compilation): StringSet -> @structsHoldingLayouts [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
   calls: StringSet.add StringSet.constructor StringSet.has holdsRecordIn nish_alloc_struct
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   local +1:9 held: StringSet (const)
@@ -381,11 +378,10 @@ function resultTypesIn(table: TypeTable, t: i32, out: i32[]): void -> @resultTyp
   callee -2:26 TypeTable.okOf -> @TypeTable.okOf
   callee -1:5 resultTypesIn -> @resultTypesIn
   callee -1:26 TypeTable.errOf -> @TypeTable.errOf
-function ResultUse.constructor(this: ResultUse, type: i32, layout: ResultLayout): void -> @ResultUse.constructor [constructor]
+function ResultUse.constructor(this: ResultUse, type: i32): void -> @ResultUse.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: layout type
-  pointer this: size=24 writesThrough=true captured=false
-  pointer layout: size=56 writesThrough=true captured=true
+  escaping: type
+  pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function resultTypesUsed(table: TypeTable, fns: ExternalFunction[], fields: i32[]): ResultUse[] -> @resultTypesUsed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -411,8 +407,8 @@ function noteResultTypes(table: TypeTable, uses: ResultUse[], index: StringMap, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: t
-  calls: ResultUse.constructor StringMap.get StringMap.set cResultName nish_alloc_struct nish_array_grow nish_panic_index resultLayout resultTypesIn
-  pointer table: size=168 writesThrough=false captured=false passedTo=resultTypesIn#0 cResultName#0 resultLayout#0
+  calls: ResultUse.constructor StringMap.get StringMap.set cResultName nish_alloc_struct nish_array_grow nish_panic_index resultTypesIn
+  pointer table: size=168 writesThrough=false captured=false passedTo=resultTypesIn#0 cResultName#0
   pointer uses: size=0 writesThrough=true captured=false
   pointer index: size=40 writesThrough=true captured=false passedTo=StringMap.get#0 StringMap.set#0
   stackSites=1 stackLocals=1
@@ -425,7 +421,6 @@ function noteResultTypes(table: TypeTable, uses: ResultUse[], index: StringMap, 
   callee -4:14 StringMap.get -> @StringMap.get
   callee -1:7 StringMap.set -> @StringMap.set
   callee +0:17 new ResultUse -> @ResultUse.constructor
-  callee +0:37 resultLayout -> @resultLayout
   local +4:11 use: ResultUse (const)
 function tsSignatureLine(table: TypeTable, sig: FunctionSig, before: string, after: string): string -> @tsSignatureLine [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -530,7 +525,7 @@ function acceptsSidecars(compilation: Compilation, fns: ExternalFunction[], cDec
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUninstantiated
   calls: DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has cFunctionName cNameClashes hasFunctionParameter nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 refuseStringEnums refuseUnions reportUninstantiated sigNameNode
-  pointer compilation: size=224 writesThrough=false captured=false passedTo=reportUninstantiated#0 reportUninstantiated#0 reportUninstantiated#0 refuseUnions#0 refuseStringEnums#0
+  pointer compilation: size=232 writesThrough=false captured=false passedTo=reportUninstantiated#0 reportUninstantiated#0 reportUninstantiated#0 refuseUnions#0 refuseStringEnums#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=refuseUnions#1 refuseStringEnums#1
   pointer cDeclared: size=0 writesThrough=false captured=false passedTo=cNameClashes#1
   stackSites=2 stackLocals=2
@@ -573,7 +568,7 @@ function refuseUnions(compilation: Compilation, fns: ExternalFunction[], laysOut
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportUnion
   calls: TypeTable.typeName nish_panic_index nish_str_concat reportUnion sigNameNode unionField unionSlot unionStruct
-  pointer compilation: size=224 writesThrough=false captured=false passedTo=reportUnion#0 reportUnion#0
+  pointer compilation: size=232 writesThrough=false captured=false passedTo=reportUnion#0 reportUnion#0
   pointer fns: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -600,7 +595,7 @@ function refuseStringEnums(compilation: Compilation, fns: ExternalFunction[]): b
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report TypeTable.typeName holdsStringEnum nish_panic_index nish_str_concat sigNameNode
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -663,7 +658,7 @@ function reportUnion(compilation: Compilation, unit: ModuleUnit, at: Node, what:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report nish_str_concat
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   pointer unit: size=96 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -672,7 +667,7 @@ function reportUninstantiated(compilation: Compilation, unit: ModuleUnit, name: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report nish_panic_index nish_str_concat
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   pointer unit: size=96 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -682,7 +677,7 @@ function refuseCompactSidecars(compilation: Compilation, fns: ExternalFunction[]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report StringSet.add StringSet.constructor StringSet.has StringSet.size compactHeld nish_panic_index nish_str_concat sigNameNode
-  pointer compilation: size=224 writesThrough=false captured=false
+  pointer compilation: size=232 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 reported: StringSet (const)
@@ -792,7 +787,7 @@ function foldByte(c: i32): i32 -> @foldByte
 function banner(compilation: Compilation, flag: string, comment: string): string -> @banner [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.entry nish_str_concat
-  pointer compilation: size=224 writesThrough=false captured=false passedTo=Compilation.entry#0
+  pointer compilation: size=232 writesThrough=false captured=false passedTo=Compilation.entry#0
   stackSites=0 stackLocals=0
   callee +0:49 Compilation.entry -> @Compilation.entry
 function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i32[]): string[] -> @resultDefinitions [exported]
@@ -811,22 +806,26 @@ function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i3
   callee +20:20 resultDefinition -> @resultDefinition
 function resultDefinition(table: TypeTable, use: ResultUse): string[] -> @resultDefinition
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: cResultName cResultWord nish_alloc_struct nish_array_grow nish_str_concat resultField tsKeyword
-  pointer table: size=168 writesThrough=false captured=false passedTo=tsKeyword#0 cResultName#0 resultField#0 resultField#0 resultField#0 resultField#0 cResultWord#0 tsKeyword#0
-  pointer use: size=24 writesThrough=false captured=false
+  calls: TypeTable.errOf TypeTable.okOf cResultName cResultWord nish_alloc_struct nish_array_grow nish_str_concat resultField tsKeyword
+  pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.okOf#0 TypeTable.errOf#0 tsKeyword#0 cResultName#0 resultField#0 resultField#0 resultField#0 resultField#0 cResultWord#0 tsKeyword#0
+  pointer use: size=8 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local +0:9 layout: ResultLayout (const)
-  local +1:9 lines: string[] (const)
-  callee +2:20 tsKeyword -> @tsKeyword
-  callee +4:26 cResultName -> @cResultName
-  callee +7:23 resultField -> @resultField
-  callee +9:21 resultField -> @resultField
-  local +13:11 arms: string[] (const)
-  callee +15:17 resultField -> @resultField
-  callee +17:15 resultField -> @resultField
-  local +18:11 name: string (const)
-  callee +18:18 cResultWord -> @cResultWord
-  callee +24:52 tsKeyword -> @tsKeyword
+  local +0:9 ok: i32 (const)
+  callee +0:14 TypeTable.okOf -> @TypeTable.okOf
+  local +1:9 hasValue: boolean (const)
+  local +2:9 err: i32 (const)
+  callee +2:15 TypeTable.errOf -> @TypeTable.errOf
+  local +3:9 lines: string[] (const)
+  callee +4:20 tsKeyword -> @tsKeyword
+  callee +6:26 cResultName -> @cResultName
+  callee +9:23 resultField -> @resultField
+  callee +11:21 resultField -> @resultField
+  local +15:11 arms: string[] (const)
+  callee +17:17 resultField -> @resultField
+  callee +19:15 resultField -> @resultField
+  local +20:11 name: string (const)
+  callee +20:18 cResultWord -> @cResultWord
+  callee +26:52 tsKeyword -> @tsKeyword
 function resultField(table: TypeTable, t: i32, name: string): string -> @resultField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: t

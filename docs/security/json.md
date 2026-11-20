@@ -56,6 +56,20 @@ answered with `JSON_TOK_ERR_WINDOW` rather than a panic.
 | JSON-2 | Low | `std/json-tokenizer.ts:317` (`JSON_TOK_END_CEILING`), `:651` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. The guard's other arm, that `off + len` is not added before `off <= src.length - len` has proven it fits, is pinned by "WINDOW: an offset and a length of 2^31 - 1, refused without overflow" and "WINDOW: a length of 2^31 - 1 from 0": with a naive `off + len > src.length` the first panics with `attempt to add with overflow`. The ceiling arm itself is not reached by any test: a window passes the first test only inside its array, so ending past 2,147,483,583 takes an array of at least that many bytes. The language allows such a `u8[]` (`NISH_ARRAY_MAX` in `runtime/runtime.c` is 2^31 − 1 elements), but it is 2 GiB of memory on the host that runs the suite, which is the reason, not a limit of the language. | **Open.** The ceiling is one compare in `reset`; a test of it would allocate 2 GiB. |
 | JSON-3 | Low | `std/json-tokenizer.ts:695` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Fixed for `jsonDecode` callers** (#573). The tokenizer itself is unchanged: it still reports what is there, and a program reading tokens itself still decides, as its module header says. `jsonDecode` refuses a duplicate of a field with `JSON_DECODE_DUPLICATE` before the second value is read, at every depth (`std/json-typed.ts`, `duplicateField`; [The typed layer](#the-typed-layer); "a duplicate key: code" and "nested: a duplicate key in an element" in `tests/link/std_json_typed`). The one exception is a key `ignoreUnknown` steps over, whose duplicates are not refused: that is JSON-4. |
 
+## Fuzzing
+
+Fuzzed by `tests/fuzz/targets/json-tokenizer.ts`, `tests/fuzz/targets/json-typed.ts` and `tests/fuzz/targets/json-value.ts`.
+
+| Target | What it drives | Executions |
+| --- | --- | ---: |
+| `json-tokenizer` | `JsonTokenizer` to its end over the window `[1, n)`, under default and tight `JsonLimits`, stepping into or `skipValue`-ing each container; every string read into a buffer of exactly `stringLength()` bytes and every number as an integer, an unsigned and an `f64` | 171,654,465 |
+| `json-typed` | `jsonDecode` into three shapes (nested arrays of a class, optional and `\| null` fields with renamed keys, maps of maps), with and without `ignoreUnknown` and tight limits; a decoded value is encoded strict, decoded into a fresh value and encoded again to the same text | 84,899,689 |
+| `json-value` | `JsonDocument.parse` with first- or last-wins duplicate keys and a 16-value cap, every reader of every value (a number's readers checked against each other), and the `stringify` round trip | 75,600,550 |
+
+Each target ran for 30 minutes (`-max_total_time=1800`, one libFuzzer process on its own GitHub-hosted runner) in the scheduled `fuzz.yml` run of 2026-11-14 on commit `55fbb2d2`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, built with `-fsanitize=fuzzer,address,undefined` and run with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). Their jobs in the three earlier `fuzz.yml` runs, on 2026-10-30 (started by hand), 10-31 and 11-07, also ended without a finding; each of those runs failed at the workflow level only because its `regex` job failed.
+
+**The one regression input.** `tests/fuzz/regressions/json-typed/f64-infinity-decode` (99 bytes) is mode 1, the `Account` shape, whose `home.w` is `-0.99e91999`: an `f64` that decodes as an infinity. An infinity has no JSON spelling, and the default writer's `null` for it (`std/json.ts`) is not a number the decoder takes back, so the target writes strict and treats `JSON_WRITE_NON_FINITE` as the round trip's one allowed refusal (`roundTrip` in the target). The input is the harness's contract, not a finding in `std/`: decoding it is correct, and "fuzz: json-typed builds and replays its corpus and regressions without a crash" replays it on every PR, so a writer that stopped refusing an infinity, or a target that stopped allowing the refusal, fails there.
+
 ## Properties verified
 
 Each property is pinned by a line of `tests/link/std_json_tokenizer`'s
@@ -293,6 +307,7 @@ three bodies (below).
 | `src/attributes.ts`, `src/inline-arrays.ts` | `markJsonRoute`, the facts every call is given; `spoilJsonRoutes`, which keeps the arrays the code reaches out of the inline layout |
 | `std/json-typed.ts`, `std/json-tokenizer.ts` | tagged unions (JSON-17; anchored on `feature/json-tagged-unions/json-tagged-unions`, #1389): `JsonDecoder.unionTag`, `unknownTag`, `enterUnion`, `tagValue`, `unionReread`; `JsonTokenizer.rewindObject` |
 | `src/json-typed.ts`, `src/emit-json.ts` | tagged unions, same anchor: `jsonVariantsOf`, `jsonUnionRefusal`, `jsonTagField`, `jsonWireTag`, `jsonReadTag`; `emitJsonDecodeUnionBody`, `emitJsonDecodeUnionArrayBody`, `emitJsonDecodeUnionInto`, `emitJsonEncodeUnionBody` |
+| `std/json-typed.ts`, `src/emit-json.ts` | string enums (anchored at `936ba0b1`, after #1627): `JsonDecoder.enumString`; `emitJsonEnumRead`, `emitJsonEncodeEnum` |
 
 ### Threat model
 
@@ -379,11 +394,12 @@ A `readonly` field is refused for decoding (`json_reject_readonly`), and so is
 a class the decoder makes whose constructor takes parameters
 (`json_reject_constructor`, `json_reject_constructor_nullable`), a class a
 `Map` holds included (`json_reject_map_value_readonly`,
-`json_reject_map_value_constructor`). An enum the language does not declare
-never reaches the rule (`json_reject_enum_string`, `json_reject_enum_mixed`,
-`json_reject_const_enum`), and neither does `Level | null`, which the checker
-refuses as a field and as a map's value (NL2010, `json_reject_enum_nullable`,
-`json_reject_map_value_enum_nullable`).
+`json_reject_map_value_constructor`). An enum the language refuses never
+reaches the rule: one that mixes numbers and strings (`json_reject_enum_mixed`)
+and a `const enum` (`json_reject_const_enum`). Neither does `Level | null`,
+which the checker refuses as a field and as a map's value (NL2010,
+`json_reject_enum_nullable`, `json_reject_map_value_enum_nullable`). A string
+enum is read, by the path below.
 
 **The kinds after the first.** A `u64` is read through
 the tokenizer's `numberU64`, so it is exact to 2^64 - 1 and every number past
@@ -396,6 +412,27 @@ An enum's number is stored only when it is a member's value, so no enum field
 or element holds a value its type cannot ("enum: 1 names no member: code",
 "enum: and the field keeps the member it held", "enum array: the members before
 it are kept").
+
+**A string enum is read without allocating** (anchored at `936ba0b1`, after
+#1627). `JsonDecoder.enumString` (`std/json-typed.ts:701`) takes one token
+and answers `true` only at a string; any other value is `JSON_DECODE_TYPE`.
+The code the compiler writes then matches the string's decoded bytes against
+the members' strings with the key dispatch a class's keys use
+(`emitJsonEnumRead`, `src/emit-json.ts:1070`, through `emitJsonDispatch`):
+by length, then by a byte, then with `keyIs`. Nothing is copied, an escaped
+string matches as its unescaped bytes, and a string that is no member's,
+a prefix of one or one byte longer, is `JSON_DECODE_TYPE` with the field,
+element or map value keeping what it held. The member's string is written
+back from the constant table `String(r)` reads (`emitJsonEncodeEnum`,
+`:1051`), escaped by `w.string`. `tests/link/json_enum_string` pins it for a
+field, an array, a `| null` array, a `Map` value and a union tag: a
+non-member, a prefix (`"admi"`), a longer string (`"admins"`), a number,
+another case (`"Admin"`) and a non-member element each answer `-20` at the
+byte the value starts, and the field, the array or the map keeps what it held; a member whose string
+needs escaping, `"a\"b\\c\n\u0001"`, is written escaped and read back as
+itself; and one document holding a field, an array, a `| null` array and a
+union tag at once decodes and encodes to the same bytes ("link/json_enum_string:
+exits with 0 and stdout matches expected.out").
 
 A `Map`'s duplicate key is refused raw and through an escape ("map: a duplicate
 key: code", "map: a duplicate key through an escape: code", "map: é and \u00e9

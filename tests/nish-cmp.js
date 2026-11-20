@@ -1316,11 +1316,164 @@ const RECURSION_ARENA_WHY =
 
 const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 
+/** The changelog words of the pull request that proposes WP68 and adds its `bench/wp68-*` programs. */
+const WP68_BENCH = "WP68, shared libraries layered like atomic design"
+const WP68_BENCH_WHY =
+  "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
+
+/** The changelog line of the stage that adds nish/crypto/scram. */
+const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
+// nish/net/postgres reaches its SCRAM arithmetic through the new
+// nish/crypto/scram, so every program that links it writes scram.ll, which
+// the seed's standard library has no module for.
+const SCRAM_LINKERS = [
+  "bench/pg-batch-clock.ts",
+  "bench/pg-decode/main.ts",
+  "tests/link/net_serve_pg/main.ts",
+  "tests/link/std_postgres/main.ts",
+  "tests/link/std_postgres_array_bindend_panic/main.ts",
+  "tests/link/std_postgres_array_element_panic/main.ts",
+  "tests/link/std_postgres_array_end_panic/main.ts",
+  "tests/link/std_postgres_array_int_panic/main.ts",
+  "tests/link/std_postgres_array_param_bytes_panic/main.ts",
+  "tests/link/std_postgres_array_param_int_array_panic/main.ts",
+  "tests/link/std_postgres_array_param_null_panic/main.ts",
+  "tests/link/std_postgres_array_param_panic/main.ts",
+  "tests/link/std_postgres_array_param_text_array_panic/main.ts",
+  "tests/link/std_postgres_array_start_panic/main.ts",
+  "tests/link/std_postgres_array_window_panic/main.ts",
+  "tests/link/std_postgres_async/main.ts",
+  "tests/link/std_postgres_async_cancel/main.ts",
+  "tests/link/std_postgres_async_caps_panic/main.ts",
+  "tests/link/std_postgres_async_depth_panic/main.ts",
+  "tests/link/std_postgres_async_double_release_panic/main.ts",
+  "tests/link/std_postgres_async_flat/main.ts",
+  "tests/link/std_postgres_async_pipeline/main.ts",
+  "tests/link/std_postgres_async_release_closed_panic/main.ts",
+  "tests/link/std_postgres_async_release_panic/main.ts",
+  "tests/link/std_postgres_async_seat_statement_panic/main.ts",
+  "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
+  "tests/link/std_postgres_async_size_panic/main.ts",
+  "tests/link/std_postgres_batch/main.ts",
+  "tests/link/std_postgres_batch_add_int_panic/main.ts",
+  "tests/link/std_postgres_batch_add_text_panic/main.ts",
+  "tests/link/std_postgres_batch_add_text_window_panic/main.ts",
+  "tests/link/std_postgres_batch_clock/main.ts",
+  "tests/link/std_postgres_batch_clock_config_panic/main.ts",
+  "tests/link/std_postgres_batch_clock_started_panic/main.ts",
+  "tests/link/std_postgres_batch_clock_take_due_panic/main.ts",
+  "tests/link/std_postgres_batch_clock_turns_panic/main.ts",
+  "tests/link/std_postgres_batch_config_cap_panic/main.ts",
+  "tests/link/std_postgres_batch_config_empty_panic/main.ts",
+  "tests/link/std_postgres_batch_config_key_panic/main.ts",
+  "tests/link/std_postgres_batch_config_name_empty_panic/main.ts",
+  "tests/link/std_postgres_batch_config_name_nul_panic/main.ts",
+  "tests/link/std_postgres_batch_config_query_panic/main.ts",
+  "tests/link/std_postgres_batch_config_queue_bytes_panic/main.ts",
+  "tests/link/std_postgres_batch_config_queue_size_panic/main.ts",
+  "tests/link/std_postgres_batch_config_requests_panic/main.ts",
+  "tests/link/std_postgres_batch_config_runs_panic/main.ts",
+  "tests/link/std_postgres_batch_config_select_nul_panic/main.ts",
+  "tests/link/std_postgres_batch_pending_panic/main.ts",
+  "tests/link/std_postgres_batch_row_pending_panic/main.ts",
+  "tests/link/std_postgres_batch_run_negative_panic/main.ts",
+  "tests/link/std_postgres_batch_run_range_panic/main.ts",
+  "tests/link/std_postgres_batch_scale/main.ts",
+  "tests/link/std_postgres_batch_unsorted/main.ts",
+  "tests/link/std_postgres_binary_array_element_panic/main.ts",
+  "tests/link/std_postgres_binary_array_int_none_panic/main.ts",
+  "tests/link/std_postgres_binary_array_int_panic/main.ts",
+  "tests/link/std_postgres_binary_array_null_none_panic/main.ts",
+  "tests/link/std_postgres_binary_array_oid_panic/main.ts",
+  "tests/link/std_postgres_binary_array_start_panic/main.ts",
+  "tests/link/std_postgres_binary_array_text_element_panic/main.ts",
+  "tests/link/std_postgres_binary_int4_range_panic/main.ts",
+  "tests/link/std_postgres_binary_window_count_panic/main.ts",
+  "tests/link/std_postgres_binary_window_panic/main.ts",
+  "tests/link/std_postgres_binary_window_start_panic/main.ts",
+  "tests/link/std_postgres_caps/main.ts",
+  "tests/link/std_postgres_carrier/main.ts",
+  "tests/link/std_postgres_carrier_attach_panic/main.ts",
+  "tests/link/std_postgres_carrier_batcher_panic/main.ts",
+  "tests/link/std_postgres_carrier_connection_panic/main.ts",
+  "tests/link/std_postgres_carrier_limits_panic/main.ts",
+  "tests/link/std_postgres_carrier_next_panic/main.ts",
+  "tests/link/std_postgres_carrier_request_panic/main.ts",
+  "tests/link/std_postgres_carrier_send_panic/main.ts",
+  "tests/link/std_postgres_config_panic/main.ts",
+  "tests/link/std_postgres_decimal/main.ts",
+  "tests/link/std_postgres_int_array_range_panic/main.ts",
+  "tests/link/std_postgres_nonce_panic/main.ts",
+  "tests/link/std_postgres_nul_panic/main.ts",
+  "tests/link/std_postgres_pool/main.ts",
+  "tests/link/std_postgres_pool_connect_dispose_panic/main.ts",
+  "tests/link/std_postgres_pool_connect_panic/main.ts",
+  "tests/link/std_postgres_pool_connect_range_panic/main.ts",
+  "tests/link/std_postgres_pool_connection_panic/main.ts",
+  "tests/link/std_postgres_pool_connection_range_panic/main.ts",
+  "tests/link/std_postgres_pool_inflight_panic/main.ts",
+  "tests/link/std_postgres_pool_next_panic/main.ts",
+  "tests/link/std_postgres_pool_queue_panic/main.ts",
+  "tests/link/std_postgres_pool_size_panic/main.ts",
+  "tests/link/std_postgres_receive_panic/main.ts",
+  "tests/link/std_postgres_replay/main.ts",
+  "tests/link/std_postgres_tls/main.ts",
+  "tests/link/std_postgres_tls_connection_panic/main.ts",
+  "tests/link/std_postgres_tls_pool_panic/main.ts",
+  "tests/link/std_postgres_tls_roots_panic/main.ts",
+  "tests/link/std_postgres_tls_unix_panic/main.ts",
+  "tests/link/std_postgres_unix_target/main.ts",
+  "tests/link/std_postgres_user_panic/main.ts",
+  "tests/link/tfb_async_db/main.ts",
+  "tests/link/tfb_db/main.ts",
+]
+// Of those, the programs that also link chacha20poly1305.ll: scram.ll now
+// instantiates `wipe` on `u8[]` first, so chacha20poly1305.ll, which wipes
+// both `u32[]` and `u8[]`, writes the two instantiations in the other order.
+const SCRAM_CHACHA_LINKERS = [
+  "tests/link/net_serve_pg/main.ts",
+  "tests/link/std_postgres_async/main.ts",
+  "tests/link/std_postgres_async_cancel/main.ts",
+  "tests/link/std_postgres_async_caps_panic/main.ts",
+  "tests/link/std_postgres_async_depth_panic/main.ts",
+  "tests/link/std_postgres_async_double_release_panic/main.ts",
+  "tests/link/std_postgres_async_flat/main.ts",
+  "tests/link/std_postgres_async_pipeline/main.ts",
+  "tests/link/std_postgres_async_release_closed_panic/main.ts",
+  "tests/link/std_postgres_async_release_panic/main.ts",
+  "tests/link/std_postgres_async_seat_statement_panic/main.ts",
+  "tests/link/std_postgres_async_seat_ticket_panic/main.ts",
+  "tests/link/std_postgres_async_size_panic/main.ts",
+  "tests/link/tfb_async_db/main.ts",
+  "tests/link/tfb_db/main.ts",
+]
+const scramModule = () => [
+  {
+    program: "tests/link/std_scram/main.ts",
+    file: "exit",
+    changelog: SCRAM_MODULE,
+    why: "the program tests nish/crypto/scram, which is new in this release, so the seed's standard library has no such module and refuses it",
+  },
+  ...SCRAM_LINKERS.map((program) => ({
+    program,
+    file: "scram.ll",
+    changelog: SCRAM_MODULE,
+    why: "nish/net/postgres computes its SCRAM proof and signature through the new nish/crypto/scram, so the program writes scram.ll and the seed does not",
+  })),
+  ...SCRAM_CHACHA_LINKERS.map((program) => ({
+    program,
+    file: "chacha20poly1305.ll",
+    changelog: SCRAM_MODULE,
+    why: "scram.ll instantiates `wipe` on `u8[]` before chacha20poly1305.ll does, so chacha20poly1305.ll writes its `u8[]` and `u32[]` wipes in the other order",
+  })),
+]
+
 const COMPAT_SIGNATURES = "optional parameters, non-constant defaults and overload signatures under --compat"
 
 const PACKAGE_LINK = "A package links a C library or its own C sources"
 
 const DECLARED = [
+  ...scramModule(),
   {
     program: "tests/link/pkg_link_flag_library/main.ts",
     file: "exit",
@@ -9101,6 +9254,49 @@ const DECLARED = [
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
     }
   ),
+  {
+    program: "bench/wp68-be-load.ts",
+    file: "wp68-be-load.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-decimal.ts",
+    file: "wp68-decimal.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-hex.ts",
+    file: "wp68-hex.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-json-escape.ts",
+    file: "wp68-json-escape.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "bytes.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+  {
+    program: "bench/wp68-utf8.ts",
+    file: "wp68-utf8.ll",
+    changelog: WP68_BENCH,
+    why: WP68_BENCH_WHY,
+  },
+
   // WP48 stage 2c: in a program with a compact class, `nish_alloc_struct`'s
   // slow block loads `nish_arena_range_abi` as `nish_alloc_ref`'s already did,
   // so an 8-aligned compact class fails to link against the default runtime

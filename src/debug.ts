@@ -342,7 +342,7 @@ export class DebugInfo {
       // `p *r` shows `ok`, `value` and `error` rather than an opaque pointer.
       // Only the arm the discriminant selects is meaningful; the other is
       // whatever the construction left there (WP16 does not zero it).
-      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
+      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type, this.pointerBits / 8)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
     } else if (this.table.isNullable(type)) {
@@ -477,20 +477,42 @@ export class DebugInfo {
         continue
       }
       if (f.link) {
-        // WP48: a compact class's link is a 32-bit offset, not a pointer;
-        // until stage 2b's pretty-printers, a debugger shows the raw offset.
-        members.push(this.member(f.name, ref, this.typeRef(T_U32), 32, f.offset * 8, file, line))
+        members.push(this.member(f.name, ref, this.linkType(f.type), 32, f.offset * 8, file, line))
         continue
       }
       const base = this.typeRef(f.type)
-      const bits = this.table.isPointerValue(f.type) ? this.pointerBits : bitsOfIn(this.table, f.type)
-      members.push(this.member(f.name, ref, base, bits, f.offset * 8, file, line))
+      members.push(this.member(f.name, ref, base, this.memberBits(f.type), f.offset * 8, file, line))
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(this.table.typeName(info.type))}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     )
+    return ref
+  }
+
+  /**
+   * A compact class's link (WP48) as DWARF sees it: the 32-bit offset it is,
+   * a typedef of `unsigned int` named `ref32 <Class>`, one per class the link
+   * names, so a debugger without the printers shows the raw offset and
+   * `tools/gdb/ref32.py` and `tools/lldb/ref32.py` find the class to decode it
+   * to by name. A typedef rather than a base type of that name, because lldb
+   * answers a base type with the builtin its encoding and size match and
+   * drops the name. Keyed under a prefix no mangled type has.
+   */
+  linkType(type: i32): string {
+    const target = this.table.stripNull(type)
+    const key = `^${this.table.mangle(target)}`
+    const known = this.typeKeys.get(key, -1)
+    if (known >= 0) {
+      return this.typeRefs[known]
+    }
+    const base = this.typeRef(T_U32)
+    const name = quote(`ref32 ${this.table.typeName(target)}`)
+    const ref = this.module.addMetadata(
+      `!DIDerivedType(tag: DW_TAG_typedef, name: ${name}, file: ${this.file}, baseType: ${base})`
+    )
+    this.setTypeRef(key, ref)
     return ref
   }
 
@@ -571,6 +593,11 @@ export class DebugInfo {
     return ref
   }
 
+  /** A member's width: a pointer is the target's, anything else its own. */
+  memberBits(type: i32): i32 {
+    return this.table.isPointerValue(type) ? this.pointerBits : bitsOfIn(this.table, type)
+  }
+
   /**
    * `%struct.nish_result.<T>.<E>` with the layout the checker derived: the
    * discriminant, the success payload (absent for `Result<void, E>`) and the
@@ -597,7 +624,7 @@ export class DebugInfo {
     let i = 0
     while (i < names.length) {
       const base = this.typeRef(types[i])
-      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0))
+      members.push(this.member(names[i], ref, base, this.memberBits(types[i]), offsets[i] * 8, "", 0))
       i = i + 1
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
@@ -640,7 +667,7 @@ export class DebugInfo {
     if (known >= 0) {
       return this.typeRefs[known]
     }
-    const layout = resultLayout(this.table, type)
+    const layout = resultLayout(this.table, type, this.pointerBits / 8)
     const ref = this.module.reserveMetadata()
     const union = this.module.reserveMetadata()
     const armNames: string[] = []

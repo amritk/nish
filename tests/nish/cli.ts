@@ -116,6 +116,7 @@ const advertisedFlags = (): string[] => [
   "--emit-arena",
   "--explain-memory",
   "--explain-layout",
+  "--compact",
   "--compat[=<feature>,...]",
   "--target",
   "--cpu",

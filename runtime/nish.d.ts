@@ -3759,6 +3759,12 @@ declare module "nish:unsafe" {
  * so a tree or list node of an `i32` and two links is 12 bytes, not 24. Locals,
  * parameters, returns, arrays, maps and other unions stay full pointers.
  *
+ * A native `--link` build also compacts, with no marker, each class whose
+ * links take at least a quarter off a class made in a loop or recursion
+ * (`--explain-layout` prints each pick and why the others are left alone).
+ * `implements Wide` keeps one class out of that, and `--compact off` keeps
+ * every class, `implements Compact` included, at full pointers.
+ *
  * A `--emit-header` build keeps a compact class, and every class holding one
  * of its links, opaque: C holds it as a full `struct X *` handle and links the
  * range runtime (`scripts/build.sh --arena-range`). The compiler refuses a
@@ -3783,8 +3789,11 @@ declare module "nish:compact" {
   export interface Compact {}
 
   /**
-   * Reserved for WP48 stage 3, which lets a class refuse a layout the
-   * compiler picks. Accepted today and changes nothing.
+   * The marker a class implements to keep its links full pointers. The
+   * compiler compacts a class on its own when its rule finds the saving pays
+   * (`--explain-layout` names each pick); `implements Wide` refuses that
+   * pick, the way `--compact off` refuses every one. It has no members, so it
+   * adds no field, and a class cannot write it with `Compact`.
    */
   export interface Wide {}
 }
@@ -5919,6 +5928,22 @@ interface Array<T> {
    */
   findIndex(predicate: (value: T, index: number) => boolean): number;
   /**
+   * Call `callbackfn` with each element in order, as `Array.prototype.forEach`
+   * does, up to the length the array had when the call began: an element the
+   * callback pushes is not visited, and one that shrinks the array ends the
+   * walk at its new length. The call answers `void`, and so does the
+   * callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its
+   * index; one that declares a third parameter, JavaScript's array, is refused
+   * (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow
+   * written at the call, which may not assign a name of the function around it
+   * (NL2586), so a running total is a `for...of` loop. The call compiles to a
+   * counted loop with the callback inlined (`std/array`'s `forEach`, or
+   * `forEachIndexed` for a two-parameter callback). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   */
+  forEach(callbackfn: (value: T, index: number) => void): void;
+  /**
    * A copy of the elements from `start` up to `end`, in a new array, with
    * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
    * length`, and anything else panics with `slice out of range: [start, end)
@@ -5942,7 +5967,7 @@ interface Array<T> {
  * nish_array *`.
  *
  * Everything that reads works (`length`, `a[i]`, `for...of`, `indexOf`, `join`,
- * `map`, `filter`, `some`, `every`, `findIndex`, `slice`, passing it on to
+ * `map`, `filter`, `some`, `every`, `findIndex`, `forEach`, `slice`, passing it on to
  * another `readonly T[]`); every write is refused under its own name, an
  * element store ("Cannot assign to an element of readonly i32[]
  * (declare it i32[] to write through it)"), `push`, `pop`, `set`, `fill` and
@@ -6028,6 +6053,22 @@ interface ReadonlyArray<T> {
    * @returns the first such index, or `-1`.
    */
   findIndex(predicate: (value: T, index: number) => boolean): number;
+  /**
+   * Call `callbackfn` with each element in order, as `Array.prototype.forEach`
+   * does, up to the length the array had when the call began: an element the
+   * callback pushes is not visited, and one that shrinks the array ends the
+   * walk at its new length. The call answers `void`, and so does the
+   * callback; what a concise arrow body computes is dropped. The callback takes the element, or the element and its
+   * index; one that declares a third parameter, JavaScript's array, is refused
+   * (NL2698). It is `map`'s callback otherwise: a top-level function or an arrow
+   * written at the call, which may not assign a name of the function around it
+   * (NL2586), so a running total is a `for...of` loop. The call compiles to a
+   * counted loop with the callback inlined (`std/array`'s `forEach`, or
+   * `forEachIndexed` for a two-parameter callback). Capability: none.
+   *
+   * @param callbackfn called once per element, with the element and its index.
+   */
+  forEach(callbackfn: (value: T, index: number) => void): void;
   /**
    * A copy of the elements from `start` up to `end`, in a new array, with
    * string `slice`'s rule: the range must satisfy `0 <= start <= end <=
@@ -6294,6 +6335,19 @@ interface Set<T> {
   delete(value: T): boolean;
   /** Remove every member. Capability: none. */
   clear(): void;
+  /**
+   * Call `callbackfn` with each member in insertion order, as
+   * `Set.prototype.forEach` does: the `for...of` walk over the set with the
+   * callback inlined (`std/collections`' `forEachElement`), so a member added
+   * during the walk is visited and one deleted before the walk reaches it is
+   * not. The callback takes the member alone; JavaScript passes it again as a
+   * second argument and the set as a third, and a callback that declares a
+   * second parameter is refused (NL2772). The callback rules are those of an
+   * array's `forEach`. Capability: none.
+   *
+   * @param callbackfn called once per member, with the member.
+   */
+  forEach(callbackfn: (value: T) => void): void;
 }
 
 // ---- What this file cannot say ----------------------------------------------

@@ -158,10 +158,21 @@ const isProfile = (name: string): boolean =>
 /**
  * The one CPU level `--cpu` accepts (docs/LANGUAGE.md, "The CPU level"): the
  * link compiles the program and the runtime for it, and the constant-time
- * check reads its assembly (CT-16). Every other level, `native` included, is
- * refused rather than passed to clang unread.
+ * check reads its assembly (CT-16). Every other level is refused rather than
+ * passed to clang unread. `native` is refused for a measured reason, which
+ * `NATIVE_REFUSED` gives: the check does not pass at every CPU it names.
  */
 const CPU_LEVEL: string = "x86-64-v3"
+
+/**
+ * Why `--cpu native` is refused (docs/security/ct-verification.md, CT-16):
+ * read under clang 18 at `-march=znver2`, `znver3`, `znver4` and
+ * `sapphirerapids`, the `ct_asm_chacha20poly1305` fixture holds a branch the
+ * checker refuses, so a native build on those CPUs could ship assembly the
+ * check does not pass.
+ */
+const NATIVE_REFUSED: string =
+  "under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids)"
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one
@@ -930,6 +941,10 @@ const commandMain = (): number => {
         return 2
       }
       cpu = process.argv[arg]
+      if (cpu === "native") {
+        console.error(`compile: --cpu native is refused: ${NATIVE_REFUSED}; the one accepted is ${CPU_LEVEL}`)
+        return 2
+      }
       if (cpu !== CPU_LEVEL) {
         console.error(`compile: unknown cpu level \`${cpu}\`; the one accepted is ${CPU_LEVEL}`)
         return 2
@@ -1034,6 +1049,14 @@ const commandMain = (): number => {
       opts.explainMemory = true
     } else if (value === "--explain-layout") {
       opts.explainLayout = true
+    } else if (value === "--compact") {
+      arg = arg + 1
+      const mode = arg < process.argv.length ? process.argv[arg] : ""
+      if (mode !== "on" && mode !== "off") {
+        console.error("compile: --compact needs on or off")
+        return 2
+      }
+      opts.compact = mode === "on"
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1

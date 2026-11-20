@@ -10791,22 +10791,46 @@ class Cell implements Compact {
   one as a full `struct Cell *`. The C host links the range runtime
   (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
   default runtime a program fails to link as soon as one of its modules
-  allocates, an 8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
+  allocates, including an 8-aligned compact class's ("compact header" in `tests/run.js`). A header build linked into a
   shared library another process loads is not supported.
 - **A compact class is refused where Node or the runtime would read its
   layout as full pointers**, each with its own code: in a build with `--emit-napi` or
-  `--emit-napi-async`, also beside `--emit-header`, at the class (NL4021,
-  `compact_reject_napi`, `compact_reject_header_napi`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`), because
-  the addon runs in Node's process, which Nish does not own; as a
+  `--emit-napi-async`, also beside `--emit-header`, because the addon runs
+  in Node's process, which Nish does not own, at the name of each exported
+  function (every function, under `--no-strict-exports`) and the constructor
+  of each exported class whose signature holds one (NL4020,
+  `compact_reject_export`, `compact_reject_header_export`), which names the
+  first compact class of its return type and then its parameters in order,
+  and at the name of each compact class no NL4020 names (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`; both codes in
+  `compact_reject_napi_async` and `compact_reject_header_napi_async`); as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
   class, whose instantiations keep full-pointer links (NL2798,
   `compact_reject_generic`).
 
-`Wide` is accepted and changes nothing yet; it is reserved for a class to
-refuse a compact layout the compiler would pick on its own.
+**The compiler also picks compact classes on its own** (WP48 stage 3,
+`docs/wp48-ref32-classes.md` §3.1). A native executable (`--link`, `nish run`)
+makes a class `R` compact with no marker when five tests hold, asked in
+order: the build is a closed-world native one; some class has a link to `R`;
+`R` is at least 24 bytes and narrowing the links takes at least a quarter off
+it, after rounding (a saving only in a class holding the link does not
+count); some
+`new R(...)` is inside a loop or a recursive function; and nothing forbids it
+(a `declare class`, a `Secret` field, a generic class, or `implements Wide`).
+A smaller saving is left alone: it pays a widening on every link read and the
+4-byte rounding of the range for a few percent of one class. So is a 16-byte
+cell, which already packs four to a cache line and measured slower narrowed.
+`--explain-layout` prints each class's verdict, the first test that refuses
+it, and its size now and narrowed (`explain_layout`).
+
+- **`implements Wide` keeps one class at full pointers** (`import { Wide } from
+  "nish:compact"`): the rule refuses it at its fifth test. A class cannot write
+  both markers (NL2819, `compact_reject_wide`).
+- **`--compact off` keeps every class at full pointers**, `implements Compact`
+  included: its IR is byte for byte the IR of a program with no compact class.
+  `--compact on` is the default.
 
 Reference: [`nish:compact`](reference/nish-compact.md).
 
@@ -15439,7 +15463,8 @@ by the caller.
 ### The CPU level
 
 - **`--cpu x86-64-v3`** links the program for one CPU level above the
-  baseline: the module and the runtime are both compiled, and linked, with
+  baseline: the module, the runtime and, when the program calls it, SQLite
+  (each `runtime/sqlite/*.c` unit) are all compiled, and linked, with
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
@@ -15463,6 +15488,16 @@ by the caller.
   `nish:crypto-ct` fixtures at this level as well as at the baseline
   ([CT-16](security/ct-verification.md)); a level it does not read is not
   offered (`tests/run.js`, the `cpu level` section).
+- **`--cpu native` is refused for a measured reason.** Read under clang 18.1.3
+  at `-march=znver2`, `znver3`, `znver4` and `sapphirerapids`, the
+  `ct_asm_chacha20poly1305` fixture's ChaCha20 functions hold a branch the
+  check refuses: clang keeps a loop counter or overflow flag in a stack slot
+  there, and under `secret=contents` the check takes a stack slot's
+  contents as secret. Whether a leak or the check's model, it does not pass,
+  so a native build on such a CPU would ship assembly the check does not pass.
+  The refusal says so (`--cpu native is refused: under clang 18 the
+  constant-time check (CT-16) refuses ...`, exit 2). The reading is
+  `node tests/ct-asm-runtime.js --fixtures <cpu>...`; CI does not repeat it.
 
 ### Profile-guided builds
 

@@ -229,6 +229,13 @@ export class Options {
    */
   explainLayout: boolean
   /**
+   * `--compact on|off`, on by default: whether a native build narrows the
+   * classes the compact-class rule of docs/wp48-ref32-classes.md §3.1 picks.
+   * Off narrows no class, `implements Compact` ones included, so the IR is
+   * the IR of a build with no compact class.
+   */
+  compact: boolean
+  /**
    * The root package's `"nish".noPanic` named at least one module, which puts
    * those modules in the scope `--deny-panics` puts all of them in. Set by
    * `Compilation` once it has read the manifest, before anything records.
@@ -363,6 +370,7 @@ export class Options {
     this.emitArena = ""
     this.explainMemory = false
     this.explainLayout = false
+    this.compact = true
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

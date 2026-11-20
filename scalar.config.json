@@ -2669,6 +2669,21 @@
                           ]
                         }
                       },
+                      "/scram": {
+                        "type": "page",
+                        "title": "scram",
+                        "filepath": "docs/reference/crypto/scram.md",
+                        "head": {
+                          "title": "scram · Nish",
+                          "meta": [{ "property": "og:title", "content": "scram" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/crypto/scram"
+                            }
+                          ]
+                        }
+                      },
                       "/sha1": {
                         "type": "page",
                         "title": "sha1",
@@ -3950,6 +3965,23 @@
                       "title": "WP66: C libraries from their headers · Nish",
                       "meta": [{ "property": "og:title", "content": "WP66: C libraries from their headers" }],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/roadmap/wp66-c-headers" }]
+                    }
+                  },
+                  "/wp68-shared-libraries": {
+                    "type": "page",
+                    "title": "WP68: Shared libraries, layered like atomic design",
+                    "filepath": "docs/roadmap/wp68-shared-libraries.md",
+                    "head": {
+                      "title": "WP68: Shared libraries, layered like atomic design · Nish",
+                      "meta": [
+                        {
+                          "property": "og:title",
+                          "content": "WP68: Shared libraries, layered like atomic design"
+                        }
+                      ],
+                      "links": [
+                        { "rel": "canonical", "href": "https://nishlang.com/roadmap/wp68-shared-libraries" }
+                      ]
                     }
                   }
                 }

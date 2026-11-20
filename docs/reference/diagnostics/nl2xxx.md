@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 810 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 811 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -3661,7 +3661,54 @@ Unknown identifier `
 The message of an error contains:
 
 ```text
-Unknown method `
+Unknown method `…
+```
+
+[`nl2249_num_tostring.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring.ts):
+
+```ts
+// NL2249: a `u8`'s `toString()` is refused, and the message names `${b}`.
+export const main = (): i32 => {
+  const b: u8 = 1;
+  console.log(b.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on u8; use a template literal: `${b}`
+```
+
+[`nl2249_num_tostring_i64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_i64.ts):
+
+```ts
+// NL2249: an `i64`'s `toString()` with no argument names `${n}`, as the other
+// numeric types do (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64; use a template literal: `${n}`
+```
+
+[`nl2249_num_tostring_radix.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_radix.ts):
+
+```ts
+// NL2249: with a radix a number's `toString` names no template literal, since
+// a template literal has no radix (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString(16));
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64
 ```
 
 ## NL2250
@@ -15631,4 +15678,12 @@ The message of an error contains:
 
 ```text
 … elements: its indices are 0 to …
+```
+
+## NL2819
+
+The message of an error contains:
+
+```text
+` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
 ```

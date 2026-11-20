@@ -104,11 +104,12 @@
  * a whole request head (`headTimeout`, against slowloris); the slots are the
  * pool's size.
  *
- *  `Http1Server` builds a slot's connection on the first accept into it and
- *  keeps it, so a pool sized for its peak costs at start-up only what does not
- *  depend on the size, and holds at most `size` connections once the peak has
- *  come; `Http1TlsServer` does the same for a slot's connection and, through
- *  `TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or
+ *  `Http1Server` lends a connection to a slot only while it is busy and builds
+ *  one only when none is spare, so a pool sized for its peak costs at start-up
+ *  only what does not depend on the size, and holds as many connections as were
+ *  busy at once; `Http1TlsServer` builds a slot's connection on its first
+ *  accept and keeps it, with its TLS state through
+ *  `TlsTcpServer`. Every buffer is allocated with its slot or
  *  grown to its cap on first use and kept, so a warmed slot serves request after
  *  request with `Arena.used()` flat. Accepting a WebSocket computes the accept
  *  key and writes the 101 into storage the slot keeps, built on its first
@@ -920,6 +921,11 @@ export class Http1Connection {
    */
   private headOff: i64 = -1
   /**
+   * The accept serial of the peer whose responses the kept head was kept
+   * for, -1 for none: `lendTo` drops a kept head lent to another peer.
+   */
+  private keptFor: i64 = -1
+  /**
    * How many heads `respond` has copied from the kept one rather than written.
    *
    * @internal Read by `tests/link/net_http1_server_head_reuse` to tell a copied head from a written one.
@@ -1027,6 +1033,7 @@ export class Http1Connection {
     this.headStatus = 0
     this.headMisses = 0
     this.headOff = -1
+    this.keptFor = -1
     this.lingerSince = 0
     this.lingered = -1
     this.mss = 0
@@ -1249,6 +1256,64 @@ export class Http1Connection {
    */
   betweenRequests(): boolean {
     return this.state === H1_S_HTTP && !this.requestOpen && !this.headTimed && !this.wantsWrite()
+  }
+
+  /**
+   * Whether the connection holds nothing its peer needs kept between
+   * requests: `betweenRequests`, with no output borrowed, no write held back
+   * or pong owed, the peer's stream not ended, no close asked for, no
+   * lingering close, no program-set `mss`, and no byte fed and unread. Such a
+   * connection is the same for any peer, so `Http1Server` lends it to the
+   * next slot that reads and keeps only the slot's `lastActive` and
+   * `socketMss` while it rests.
+   *
+   * @returns true when the connection may serve another peer's next request as it is
+   * @internal Called by `Http1Server.flush` in this module to free a resting slot's connection.
+   */
+  /**
+   * Takes the connection for the peer accepted as `owner`, dropping its kept
+   * head unless that peer's own responses wrote it, so that how long
+   * `respond` takes tells one peer nothing of another's heads (H1-7).
+   *
+   * @param owner the accept serial of the peer the connection serves next
+   * @internal Called by `Http1Server` in this module as it lends a connection to a slot.
+   */
+  lendTo(owner: i64): void {
+    if (this.keptFor !== owner) {
+      this.headLength = 0
+      this.headStatus = 0
+      this.headMisses = 0
+      this.headOff = -1
+      this.keptFor = owner
+    }
+  }
+
+  /**
+   * Whether the connection holds nothing a resting keep-alive slot must keep:
+   * speaking HTTP with no request open, no head clock started, no output
+   * borrowed or unsent, no write held or pong owed, the peer's stream not
+   * ended, no close asked for or lingering, no program-set `mss`, and its
+   * parser at rest. `Http1Server` then gives the connection back for another
+   * busy slot.
+   *
+   * @returns true when the connection may be lent to another slot.
+   * @internal Called by `Http1Server` in this module at `flush`.
+   */
+  rests(): boolean {
+    return (
+      this.state === H1_S_HTTP &&
+      !this.requestOpen &&
+      !this.headTimed &&
+      this.outputCap === 0 &&
+      this.outputEnd === this.outputStart &&
+      !this.writeHeld &&
+      !this.pongPending &&
+      !this.inputEnded &&
+      !this.closeAfter &&
+      this.lingered < 0 &&
+      this.mss === 0 &&
+      this.parser.resting()
+    )
   }
 
   /** The room at the end of the output, once what was sent is moved out of the way. */
@@ -2364,14 +2429,36 @@ const http1ExpireFloor = (config: Http1Config): i64 => {
  * A pool of HTTP/1.1 connections over plain TCP on one listening socket.
  * `slot`s are the indices `accept` answers; a slot is the program's from
  * `accept` until it calls `close`, and its descriptor is `fd(slot)`.
+ *
+ * A slot holds an `Http1Connection` only while it has something to keep: a
+ * request read or answered, bytes fed and unread, output to send, or a
+ * WebSocket. One that rests between requests (`Http1Connection.rests`) gives
+ * its connection back at `flush` and keeps only its descriptor, its
+ * interest, its `lastActive` and its socket's MSS; the next slot that reads
+ * takes a resting connection, keeping its response head only if it was kept
+ * for that slot's own peer (H1-7). So the pool builds
+ * as many connections as are busy at once, not one per open slot, and an
+ * idle keep-alive costs its slot a few words.
  */
 export class Http1Server {
   private config: Http1Config
   /**
-   * The connections built so far, slot `k`'s at `k`: one per slot ever
-   * accepted into, and slot 0's once `connection` has asked for it.
+   * The connections built so far, as many as were ever busy at once: each is
+   * a slot's (`at`) or spare.
    */
   connections: Http1Connection[]
+  /** Each used slot's connection, an index into `connections`, or -1 while the slot rests. */
+  private at: i32[]
+  /** The indices in `connections` of the connections no slot holds, a stack. */
+  private spare: i32[]
+  /** Each resting slot's `lastActive` (`monotonicNanos`), which its connection carried. */
+  private rested: i64[]
+  /** Each resting slot's `socketMss`, which its connection carried. */
+  private restedMss: i32[]
+  /** Each used slot's accept serial, which keys the kept head of a connection lent to it (H1-7). */
+  private owner: i64[]
+  /** How many connections `accept` has taken: the next one's serial. */
+  private accepts: i64 = 0
   /**
    * The `Date` every slot's responses carry, formatted once a second for all
    * of them and read from the clock once per serve call: `readable` and
@@ -2418,10 +2505,10 @@ export class Http1Server {
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`.
-   * No slot is built here: a slot's connection and its buffers are
-   * allocated by the first `accept` into it and kept, so a pool sized for a
-   * peak costs at start-up only the read scratch, the shared `Date` and the
-   * output pool, and at most `size` connections once the peak has come.
+   * No slot is built here: a connection is built the first time a slot
+   * reads and none rests spare, and kept, so a pool sized for a peak costs
+   * at start-up only the read scratch, the shared `Date` and the output
+   * pool, and at most as many connections as were ever busy at once.
    *
    * @param config the caps every slot's connection is held to
    * @param listener the listening socket from `tcpListen`, which stays the program's to close
@@ -2431,6 +2518,11 @@ export class Http1Server {
     this.config = config
     this.listener = listener
     this.connections = []
+    this.at = []
+    this.spare = []
+    this.rested = []
+    this.restedMss = []
+    this.owner = []
     this.fds = []
     this.armed = []
     this.free = []
@@ -2443,7 +2535,7 @@ export class Http1Server {
     this.peer = new Array<u8>(H1_ADDRESS_SIZE)
   }
 
-  /** A new connection on this pool's outputs and `Date`, for the next slot built. */
+  /** A new connection on this pool's outputs and `Date`, appended to `connections`. */
   private build(): Http1Connection {
     const conn: Http1Connection = new Http1Connection(this.config, this.date)
     conn.pool = this.outputs
@@ -2500,18 +2592,80 @@ export class Http1Server {
   }
 
   /**
-   * The connection of `slot`. A slot never accepted into, or out of range,
-   * names slot 0's connection, which this builds when no slot has been yet
-   * (the first `accept` then takes it, restarted).
+   * The connection of `slot`. A resting slot is given one here, a spare or
+   * a new one, which it keeps until it rests again at a `flush`: so a
+   * program holds the answer only within a serve call, and asks again in
+   * the next. A free slot, or one out of range, names the first connection
+   * built, which this builds when none has been; it is another slot's or
+   * spare, so read nothing from it.
    *
    * @param slot the slot `accept` answered
    * @returns the slot's connection, which the pool keeps; read its events and write its response through it
    */
   connection(slot: i32): Http1Connection {
-    if (slot >= 0 && slot < toI32(this.connections.length)) {
-      return this.connections[slot]
+    if (this.holds(slot) && slot < toI32(this.at.length)) {
+      return this.attach(slot)
     }
     return this.connections.length > 0 ? this.connections[0] : this.build()
+  }
+
+  /**
+   * Whether `slot` holds a connection that rests between requests and has
+   * given its `Http1Connection` back: nothing is open, unread or unsent on
+   * it, so closing it loses nothing. It does not give the slot a connection,
+   * as `connection` does.
+   *
+   * @param slot the slot index to ask about, any value
+   * @returns true when the slot is accepted into and resting; false when it is free, out of range or busy
+   */
+  resting(slot: i32): boolean {
+    return this.holds(slot) && slot < toI32(this.at.length) && this.at[slot] < 0
+  }
+
+  /**
+   * How many connections no slot holds now, of the `connections` built.
+   *
+   * @returns the count of spare connections, which a resting slot that reads takes before one is built
+   */
+  spares(): i32 {
+    return toI32(this.spare.length)
+  }
+
+  /** `slot`'s connection, which it holds, given one when it rests: carrying its descriptor, `lastActive` and MSS. */
+  private attach(slot: i32): Http1Connection {
+    const k: i32 = this.at[slot]
+    if (k >= 0) {
+      return this.connections[k]
+    }
+    const j: i32 = this.spare.length > 0 ? this.spare[this.spare.length - 1] : -1
+    if (j >= 0) {
+      this.spare.pop()
+    }
+    const conn: Http1Connection = j >= 0 ? this.connections[j] : this.build()
+    this.at[slot] = j >= 0 ? j : toI32(this.connections.length) - 1
+    conn.fd = this.fds[slot]
+    conn.lastActive = this.rested[slot]
+    conn.socketMss = this.restedMss[slot]
+    conn.lendTo(this.owner[slot])
+    return conn
+  }
+
+  /** Gives back `slot`'s connection when it rests, keeping what the slot needs of it. */
+  private rest(slot: i32): void {
+    const k: i32 = this.at[slot]
+    if (k < 0) {
+      return
+    }
+    const conn: Http1Connection = this.connections[k]
+    if (!conn.rests()) {
+      return
+    }
+    this.rested[slot] = conn.lastActive
+    this.restedMss[slot] = conn.socketMss
+    conn.fd = -1
+    conn.socketMss = 0
+    this.at[slot] = -1
+    this.spare.push(k)
   }
 
   /**
@@ -2538,23 +2692,34 @@ export class Http1Server {
       k = toI32(this.fds.length)
       this.fds.push(H1_FREE)
       this.armed.push(H1_WANT_READ)
+      this.at.push(toI32(-1))
+      this.rested.push(toI64(0))
+      this.restedMss.push(toI32(0))
+      this.owner.push(toI64(0))
     }
-    if (k < 0 || k >= toI32(this.fds.length) || k >= toI32(this.armed.length)) {
+    if (
+      k < 0 ||
+      k >= toI32(this.fds.length) ||
+      k >= toI32(this.armed.length) ||
+      k >= toI32(this.at.length) ||
+      k >= toI32(this.rested.length) ||
+      k >= toI32(this.restedMss.length) ||
+      k >= toI32(this.owner.length)
+    ) {
       netClose(fd)
       return H1_POOL_FULL
     }
-    const conn: Http1Connection = k < toI32(this.connections.length) ? this.connections[k] : this.build()
     this.fds[k] = fd
     this.armed[k] = H1_WANT_READ
-    conn.restart()
-    conn.fd = fd
+    // The slot starts resting: it is given a connection when it first reads.
+    this.at[k] = -1
+    this.rested[k] = monotonicNanos()
+    this.owner[k] = this.accepts
+    this.accepts += 1
     // Once a connection, not a request, so a keep-alive request costs no
     // syscall: a path whose MSS moves after the handshake is not followed.
     const mss: i32 = netMss(fd)
-    if (mss > 0) {
-      conn.socketMss = mss
-    }
-    conn.lastActive = monotonicNanos()
+    this.restedMss[k] = mss > 0 ? mss : 0
     return k
   }
 
@@ -2572,7 +2737,7 @@ export class Http1Server {
       return H1_DONE
     }
     this.date.hold()
-    const conn: Http1Connection = this.connections[slot]
+    const conn: Http1Connection = this.attach(slot)
     const fd: i32 = this.fds[slot]
     let moved: boolean = false
     while (true) {
@@ -2636,7 +2801,11 @@ export class Http1Server {
     if (!this.holds(slot)) {
       return H1_ERROR
     }
-    const conn: Http1Connection = this.connections[slot]
+    if (this.at[slot] < 0) {
+      // A resting slot has read nothing since it was answered.
+      return H1_NEED_MORE
+    }
+    const conn: Http1Connection = this.connections[this.at[slot]]
     if (conn.lingering()) {
       // Its `H1_ERROR` was answered before the lingering close began.
       return H1_NEED_MORE
@@ -2658,6 +2827,7 @@ export class Http1Server {
    * shut and what the client still sends is drained, answering
    * `H1_WANT_READ` until the client's end of stream, `lingerBytes`, or
    * `expire` past `lingerTimeout`; `next` answers `H1_NEED_MORE` meanwhile.
+   * A slot whose connection then rests gives it back (see the class comment).
    *
    * @param slot the slot `accept` answered
    * @returns the `H1_WANT_` bits to arm the slot with, or `H1_DONE` when the program should `close` it
@@ -2665,7 +2835,11 @@ export class Http1Server {
   flush(slot: i32): i32 {
     this.date.unhold()
     const wants: i32 = this.settle(slot)
-    if (wants !== H1_DONE || !this.holds(slot)) {
+    if (!this.holds(slot)) {
+      return wants
+    }
+    if (wants !== H1_DONE) {
+      this.rest(slot)
       return wants
     }
     // A refusal is sent: shut the write side and drain what the client still
@@ -2673,7 +2847,7 @@ export class Http1Server {
     // Closed with those bytes unread, the socket would answer them with a
     // reset that can destroy the response before the client reads it (H1-2).
     const now: i64 = monotonicNanos()
-    const conn: Http1Connection = this.connections[slot]
+    const conn: Http1Connection = this.attach(slot)
     if (!conn.lingerStart(now) || netShutdown(this.fds[slot], H1_SHUT_WRITE) < 0) {
       return H1_DONE
     }
@@ -2691,7 +2865,7 @@ export class Http1Server {
    * `lastActive` stays, and `expire` closes the slot past `lingerTimeout`.
    */
   private drain(slot: i32): i32 {
-    const conn: Http1Connection = this.connections[slot]
+    const conn: Http1Connection = this.attach(slot)
     const fd: i32 = this.fds[slot]
     while (true) {
       const n: i32 = netRead(fd, this.scratch, H1_ZERO, toI32(this.scratch.length))
@@ -2709,7 +2883,11 @@ export class Http1Server {
     if (!this.holds(slot)) {
       return H1_DONE
     }
-    const conn: Http1Connection = this.connections[slot]
+    if (this.at[slot] < 0) {
+      // A resting slot holds nothing to send and has room to read.
+      return H1_WANT_READ
+    }
+    const conn: Http1Connection = this.connections[this.at[slot]]
     if (conn.lingering()) {
       return this.drain(slot)
     }
@@ -2735,7 +2913,7 @@ export class Http1Server {
 
   /** Writes what `slot`'s connection holds, which it holds, until the socket would block. */
   private send(slot: i32): void {
-    const conn: Http1Connection = this.connections[slot]
+    const conn: Http1Connection = this.attach(slot)
     const fd: i32 = this.fds[slot]
     const pending: i32 = conn.outputEnd - conn.outputStart
     while (conn.wantsWrite()) {
@@ -2777,7 +2955,8 @@ export class Http1Server {
   }
 
   /**
-   * Closes `slot`'s socket, whatever is left unsent, and frees the slot.
+   * Closes `slot`'s socket, whatever is left unsent, and frees the slot. Its
+   * connection, when it holds one, is aborted and restarted, and is spare.
    *
    * @param slot the slot to close; a free or unknown one is ignored
    */
@@ -2788,8 +2967,13 @@ export class Http1Server {
     netClose(this.fds[slot])
     this.fds[slot] = H1_FREE
     this.free.push(slot)
-    if (slot < toI32(this.connections.length)) {
-      this.connections[slot].abort()
+    if (slot < toI32(this.at.length) && this.at[slot] >= 0) {
+      const k: i32 = this.at[slot]
+      const conn: Http1Connection = this.connections[k]
+      conn.abort()
+      conn.restart()
+      this.at[slot] = -1
+      this.spare.push(k)
     }
   }
 
@@ -2807,14 +2991,33 @@ export class Http1Server {
     this.expireScans = this.expireScans + 1
     let soonest: i64 = http1ExpireFloor(this.config)
     let n: i32 = 0
-    for (let k: i32 = 0; k < toI32(this.fds.length) && k < toI32(this.connections.length); k++) {
+    const idle: i64 = toI64(this.config.idleTimeout) * toI64(1000000)
+    const head: i64 = now + toI64(this.config.headTimeout) * toI64(1000000)
+    for (
+      let k: i32 = 0;
+      k < toI32(this.fds.length) && k < toI32(this.at.length) && k < toI32(this.rested.length);
+      k++
+    ) {
       if (this.fds[k] >= 0) {
-        const conn = this.connections[k]
-        if (conn.expired(now)) {
+        const j: i32 = this.at[k]
+        if (j < 0) {
+          // A resting slot is idle past `idleTimeout`, and a head that
+          // starts arriving no sooner than now has `headTimeout` from now.
+          const since: i64 = this.rested[k]
+          if (now - since > idle) {
+            this.close(k)
+            n = n + 1
+          } else {
+            const quiet: i64 = since + idle < head ? since + idle : head
+            if (quiet < soonest) {
+              soonest = quiet
+            }
+          }
+        } else if (this.connections[j].expired(now)) {
           this.close(k)
           n = n + 1
-        } else if (conn.expiresNoSooner(now) < soonest) {
-          soonest = conn.expiresNoSooner(now)
+        } else if (this.connections[j].expiresNoSooner(now) < soonest) {
+          soonest = this.connections[j].expiresNoSooner(now)
         }
       }
     }
