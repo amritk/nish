@@ -17,9 +17,13 @@
 //     --import ./runtime/nish.mjs -e 'import("./examples/histogram.ts").then((m) => m.main())'
 import { Mutex, scope } from "nish/threads"
 
-/** The shared tally. A field initialiser is a literal, so the array is built in the constructor. */
+/**
+ * The shared tally. A field initialiser is a literal, so the array is built in
+ * the constructor. A count is a `u32`, whose arithmetic wraps rather than
+ * panics: the most any bin holds, 800000000, is far below its 4294967295.
+ */
 class Hist {
-  bins: i32[]
+  bins: u32[]
 
   constructor() {
     this.bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -29,10 +33,10 @@ class Hist {
 /** One task's work: `n` values generated from `seed`, binned into `hist`. */
 class Shard {
   seed: i32
-  n: i32
+  n: u32
   hist: Mutex<Hist>
 
-  constructor(seed: i32, n: i32, hist: Mutex<Hist>) {
+  constructor(seed: i32, n: u32, hist: Mutex<Hist>) {
     this.seed = seed
     this.n = n
     this.hist = hist
@@ -45,10 +49,10 @@ class Shard {
  * xors only, so it wraps the same way natively and under Node. The answer is
  * how many values the task binned, which the parent prints beside the bins' total.
  */
-const binShard = (s: Shard): i32 => {
-  const tally: i32[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+const binShard = (s: Shard): u32 => {
+  const tally: u32[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   let x: i32 = s.seed
-  for (let i: i32 = 0; i < s.n; i++) {
+  for (let i: u32 = 0; i < s.n; i++) {
     x = x ^ (x << 13)
     x = x ^ (x >>> 17)
     x = x ^ (x << 5)
@@ -56,7 +60,8 @@ const binShard = (s: Shard): i32 => {
     tally[bin] += 1
   }
   using g = s.hist.lock()
-  for (let b: i32 = 0; b < toI32(tally.length); b++) {
+  // Bounded by both lengths, so the compiler proves both reads in range.
+  for (let b: i32 = 0; b < toI32(g.value.bins.length) && b < toI32(tally.length); b++) {
     g.value.bins[b] = g.value.bins[b] + tally[b]
   }
   return s.n
@@ -69,29 +74,31 @@ const PER_TASK: i32 = 25000000
 export const main = (): i32 => {
   const args = process.argv
   const sequential = args.length > 1 && args[1] === "--sequential"
-  let values: i32 = 0
-  let total: i32 = 0
-  let checksum: i32 = 0
+  let values: u32 = 0
+  let total: u32 = 0
+  let checksum: u32 = 0
   // Every round seeds its shards afresh and folds its bins into the checksum,
   // so no round repeats another's work and none of it can be skipped.
-  for (let r: i32 = 0; r < ROUNDS; r++) {
+  for (let r: u32 = 0; r < toU32(ROUNDS); r++) {
     const hist = new Mutex<Hist>(new Hist())
     if (sequential) {
-      for (let t: i32 = 0; t < TASKS; t++) {
-        values = values + binShard(new Shard(r * TASKS + t + 1, PER_TASK, hist))
+      for (let t: u32 = 0; t < toU32(TASKS); t++) {
+        values = values + binShard(new Shard(toI32(r * toU32(TASKS) + t + 1), toU32(PER_TASK), hist))
       }
     } else {
-      const binned: i32[] = [0, 0, 0, 0]
+      const binned: u32[] = [0, 0, 0, 0]
       {
         using s = scope()
-        for (let t: i32 = 0; t < TASKS; t++) {
-          s.spawn(binShard, new Shard(r * TASKS + t + 1, PER_TASK, hist), binned, t)
+        for (let t: i32 = 0; t < toI32(binned.length); t++) {
+          s.spawn(binShard, new Shard(toI32(r * toU32(TASKS) + toU32(t) + 1), toU32(PER_TASK), hist), binned, t)
         }
       }
-      values = values + binned[0] + binned[1] + binned[2] + binned[3]
+      for (const n of binned) {
+        values = values + n
+      }
     }
     using g = hist.lock()
-    for (let b: i32 = 0; b < 16; b++) {
+    for (let b: i32 = 0; b < toI32(g.value.bins.length); b++) {
       total = total + g.value.bins[b]
       checksum = (checksum * 31 + g.value.bins[b]) % 1000003
     }
