@@ -1423,6 +1423,16 @@ const DECLARED = [
     changelog: FFI_ZEROEXT,
     why: "a call to a narrow host import now carries the `zeroext` its declaration already did, on the `i8` argument and result (#1755)",
   },
+  // src/c-import-json.ts reads clang's JSON AST and the overrides file with
+  // counted loops that add a loop-invariant value to the counter.
+  ...loopGuard(
+    "src/c-import-json.ts, which nish c-import reads clang's JSON AST through, adds a loop-invariant value to a counted loop's counter, so its module gains that loop's pre-loop overflow test, its unchecked and checked additions, and renumbered values",
+    {
+      "src/c-import-json.ts": ["c-import-json.ll"],
+      "src/c-import.ts": ["c-import-json.ll"],
+      "src/compile.ts": ["c-import-json.ll"],
+    }
+  ),
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
   ...ecnEcho(

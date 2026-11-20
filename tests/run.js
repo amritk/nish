@@ -27452,6 +27452,17 @@ if (dealtHere("releaseChecks")) {
         // fails: the `pop` divergence above.
         "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
       ],
+      [
+        "ffi_buffer_counted_by.ts",
+        // WP66 S5: `CountedBy` is declared by the program's own `.d.ts`, not
+        // runtime/nish.d.ts (docs/guide/using-nish/interop.md); checked below
+        // with that declaration.
+        "`CountedBy` is declared by the program's own `.d.ts` (checked below with one)",
+      ],
+      [
+        "ffi_buffer_counted_by_panic.ts",
+        "`CountedBy` is declared by the program's own `.d.ts` (checked below with one)",
+      ],
     ])
     // The cases whose clauses fall through on purpose, checked in a project
     // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
@@ -27479,6 +27490,22 @@ if (dealtHere("releaseChecks")) {
       `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences, ${fallthroughCases.length} without the fallthrough check)`,
       everyCase.ok && fallingThrough.ok && fallthroughCases.length === FALLTHROUGH_CASES.size,
       everyCase.output + fallingThrough.output
+    )
+
+    // WP66 S5: the `CountedBy` cases, with the one-line `.d.ts` the guide tells
+    // a program to write (docs/guide/using-nish/interop.md), so tsc still
+    // checks everything else in them.
+    const countedByDts = path.join(ambientDir, "counted-by.d.ts")
+    fs.writeFileSync(countedByDts, "type CountedBy<T, N extends string> = T\n")
+    const countedByCases = ["ffi_buffer_counted_by.ts", "ffi_buffer_counted_by_panic.ts"]
+    const countedByCheck = typeCheck("counted-by", [
+      countedByDts,
+      ...countedByCases.map((f) => path.join(casesDir, f)),
+    ])
+    check(
+      `tsc accepts the CountedBy cases with the guide's one-line \`.d.ts\` (${countedByCases.length} cases)`,
+      countedByCheck.ok,
+      countedByCheck.output
     )
 
     // And on the largest Nish program there is: the compiler itself.
@@ -46225,6 +46252,438 @@ if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
     bare !== null && bare.includes("readonly"),
     bare
   )
+}
+
+// ---- WP66 S2: `nish c-import` writes a Nish module from a C header ------------
+// `tests/c-import/goldens.js` holds each header's module to its checked-in
+// golden; here it runs against the compiler under test, the vendored
+// `sqlite3.h` is imported and its module linked and run, and each refusal --
+// a usage error, a missing clang, an override that says something the header
+// does not -- is held to its exit status and its message. The D3 refusal of a
+// module written for the other data model is `tests/link/c_import_data_model`.
+if (!only || "c-import".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("c-import: no clang")
+  } else {
+    const cImportDir = path.join(buildDir, "c-import")
+    fs.rmSync(cImportDir, { recursive: true, force: true })
+    fs.mkdirSync(cImportDir, { recursive: true })
+    const fixtures = path.join(root, "tests", "c-import")
+    const cImport = (args, env) =>
+      spawnSync(NISH, ["c-import", ...args], {
+        cwd: fixtures,
+        encoding: "utf8",
+        env: env === undefined ? process.env : { ...process.env, ...env },
+      })
+    const goldens = spawnSync(process.execPath, [path.join(fixtures, "goldens.js"), "--nish", NISH], {
+      encoding: "utf8",
+    })
+    check("c-import: every tests/c-import header writes its golden module", goldens.status === 0, shown(goldens))
+
+    // The vendored amalgamation's header, bound with no override, opens a
+    // database through `sqlite3_open`'s out class and compares the library's
+    // version string with the header's `SQLITE_VERSION` macro.
+    const sqliteModule = path.join(cImportDir, "sqlite3.ts")
+    const sqlite = cImport([path.join(root, "runtime", "sqlite", "sqlite3.h"), "-o", sqliteModule])
+    const sqliteText = sqlite.status === 0 ? fs.readFileSync(sqliteModule, "utf8") : ""
+    check(
+      "c-import: sqlite3.h binds sqlite3_open with an out class and lists what it cannot bind",
+      sqlite.status === 0 &&
+        sqliteText.includes("declare function sqlite3_open(filename: string, ppDb: OutPtr): i32\n") &&
+        sqliteText.includes("export const SQLITE_OK: i32 = 0\n") &&
+        sqliteText.includes(" *   sqlite3_exec: parameter `callback` is a function pointer\n") &&
+        sqliteText.includes(" *   SQLITE_TRANSIENT: not an integer constant\n"),
+      shown(sqlite)
+    )
+    fs.writeFileSync(
+      sqliteModule,
+      `${sqliteText}
+export function main(): i32 {
+  const out = new OutPtr()
+  if (sqlite3_open(":memory:", out) !== SQLITE_OK) {
+    return 1
+  }
+  const db = out.value
+  if (db === null) {
+    return 1
+  }
+  const v = sqlite3_libversion()
+  console.log(v === null ? "none" : v === SQLITE_VERSION ? "version matches" : "version differs")
+  console.log(\`close \${sqlite3_close(db)}\`)
+  return 0
+}
+`
+    )
+    const sqliteRun = spawnSync(NISH, ["run", sqliteModule], { encoding: "utf8" })
+    check(
+      "c-import: the sqlite3.h module links and opens an in-memory database",
+      sqliteRun.status === 0 && sqliteRun.stdout === "version matches\nclose 0\n",
+      shown(sqliteRun)
+    )
+
+    const out = path.join(cImportDir, "out.ts")
+    const help = cImport(["--help"])
+    check(
+      "c-import: --help prints the usage on stdout and exits 0",
+      help.status === 0 && help.stdout.startsWith("usage: nish c-import <header> [--overrides <file>]"),
+      shown(help)
+    )
+    const refusals = [
+      [[], 2, "c-import: no header given\nusage: nish c-import"],
+      [["basic.h"], 2, "c-import: no output file given (-o)"],
+      [["basic.h", "buffers.h", "-o", out], 2, "c-import: one header at most"],
+      [["basic.h", "--bogus"], 2, "c-import: unknown flag --bogus"],
+      [["basic.h", "-o"], 2, "c-import: -o needs a value"],
+      [["basic.h", "--target", "riscv64-unknown-linux-gnu", "-o", out], 2, "c-import: unknown target riscv64"],
+      [["missing.h", "-o", out], 1, "c-import: cannot read missing.h"],
+      [["basic.h", "--overrides", "missing.json", "-o", out], 1, "c-import: cannot read missing.json"],
+      [
+        ["basic.h", "-o", path.join(cImportDir, "no-such-dir", "out.ts")],
+        1,
+        "c-import: cannot create a scratch directory beside",
+      ],
+    ]
+    for (const [args, status, message] of refusals) {
+      const run = cImport(args)
+      check(
+        `c-import: \`${args.join(" ").replaceAll(cImportDir + path.sep, "")}\` exits ${status} with "${message.split("\n")[0]}"`,
+        run.status === status && run.stderr.startsWith(message) && !fs.existsSync(out),
+        shown(run)
+      )
+    }
+    const noClang = cImport(["basic.h", "-o", out], { CC: path.join(cImportDir, "no-such-clang") })
+    check(
+      "c-import: a CC that cannot run exits 3, the toolchain status",
+      noClang.status === 3 && noClang.stderr.includes("install clang or set CC"),
+      shown(noClang)
+    )
+    const broken = path.join(cImportDir, "broken.h")
+    fs.writeFileSync(broken, "int broken(\n")
+    const refused = cImport([broken, "-o", out])
+    check(
+      "c-import: a header clang refuses exits 1 with clang's errors",
+      refused.status === 1 && refused.stderr.includes("clang refused") && refused.stderr.includes("broken.h:1:"),
+      shown(refused)
+    )
+    // The probe and clang's output go to a scratch directory beside the
+    // module, removed on success (the sqlite run) and on refusal (the runs above).
+    const leftover = fs.readdirSync(cImportDir).filter((name) => name.startsWith(".nish-c-import-"))
+    check(
+      "c-import: the scratch directory beside the module is removed after a written and a refused import",
+      leftover.length === 0,
+      leftover.join(", ")
+    )
+    const quoted = path.join(cImportDir, 'say "hi".h')
+    fs.writeFileSync(quoted, "int hi(void);\n")
+    const quote = cImport([quoted, "-o", out])
+    check(
+      "c-import: a header whose path holds a quote is refused before clang runs",
+      quote.status === 1 && quote.stderr.includes("a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII"),
+      shown(quote)
+    )
+    // Every path is named in the module's first comment lines, where a line
+    // break would start a line of code.
+    for (const [what, args] of [
+      ["an output name with a newline", ["basic.h", "-o", path.join(cImportDir, "x\nexport const evil = 1.ts")]],
+      ["an output name with U+2028", ["basic.h", "-o", path.join(cImportDir, "x\u2028y.ts")]],
+      ["an overrides path with a newline", ["buffers.h", "--overrides", "a\nb.json", "-o", out]],
+    ]) {
+      const run = cImport(args)
+      check(
+        `c-import: ${what} is refused before clang runs, and nothing is written`,
+        run.status === 1 &&
+          run.stderr.includes("a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII") &&
+          fs.readdirSync(cImportDir).every((f) => !f.startsWith("x")) &&
+          !fs.existsSync(out),
+        shown(run)
+      )
+    }
+    // Sixty thousand enumerators are about 20 MiB of clang's AST, past the
+    // 16 MiB a clang run's output is held to.
+    const big = path.join(cImportDir, "big.h")
+    fs.writeFileSync(big, `enum { ${Array.from({ length: 60000 }, (_, i) => `E${i}`).join(", ")} };\n`)
+    const tooBig = cImport([big, "-o", out])
+    check(
+      "c-import: a header whose AST is more than 16 MiB is refused",
+      tooBig.status === 1 && tooBig.stderr.includes("wrote more than 16 MiB") && !fs.existsSync(out),
+      shown(tooBig)
+    )
+    // Forty nested parentheses are eighty levels of clang's AST, past the cap
+    // of 64 the JSON reader holds a header to.
+    const deep = path.join(cImportDir, "deep.h")
+    fs.writeFileSync(deep, `enum { E = ${"(".repeat(40)}1${")".repeat(40)} };\n`)
+    const tooDeep = cImport([deep, "-o", out])
+    check(
+      "c-import: a header whose AST is deeper than 64 levels is refused",
+      tooDeep.status === 1 && tooDeep.stderr.includes("not JSON, or deeper than 64 or more than 4194304 values") && !fs.existsSync(out),
+      shown(tooDeep)
+    )
+
+    // Each mistake in an override file is a refusal naming it, never a no-op.
+    const overrideRefusals = [
+      ["[]", "is not a JSON object"],
+      ['{ "header": "other.h" }', 'overrides: "header" must be "buffers.h"'],
+      ['{ "extra": 1 }', 'overrides: unknown key "extra"'],
+      ['{ "allow": "db_*" }', 'overrides: "allow" must be an array of name globs'],
+      ['{ "allow": [1] }', 'overrides: "allow" must be an array of name globs'],
+      ['{ "functions": [] }', 'overrides: "functions" must be an object'],
+      ['{ "functions": { "nope": {} } }', "overrides: `nope` is not a function the header declares"],
+      ['{ "functions": { "db_close": 1 } }', "overrides: `db_close` must be an object"],
+      ['{ "functions": { "db_name": { "return": "maybe" } } }', '`db_name` "return" must be "nonnull" or { "owned"'],
+      ['{ "functions": { "db_close": { "return": "nullable" } } }', "`db_close` does not return a pointer"],
+      [
+        '{ "functions": { "db_error": { "return": { "owned": "free_it" } } } }',
+        "overrides: `db_error` is freed by `free_it`, which the header does not declare",
+      ],
+      ['{ "functions": { "db_close": { "e": {} } } }', "overrides: `db_close` has no parameter `e`"],
+      ['{ "functions": { "db_close": { "d": 1 } } }', "overrides: `db_close` parameter `d` must be an object"],
+      [
+        '{ "functions": { "db_close": { "d": { "owned": true } } } }',
+        'overrides: `db_close` parameter `d`: unknown or mistyped key "owned"',
+      ],
+      [
+        '{ "functions": { "db_flags": { "mask": { "nullable": true } } } }',
+        "overrides: `db_flags` parameter `mask` is not a pointer, so it cannot be nullable",
+      ],
+      [
+        '{ "functions": { "db_open": { "out": { "buffer": "x" } } } }',
+        "overrides: `db_open` parameter `out` is a buffer, so it must be a `void *` or `char *`",
+      ],
+      [
+        '{ "functions": { "db_read": { "into": { "buffer": "cap", "readonly": true } } } }',
+        "overrides: `db_read` parameter `into` is readonly, but the header lets the function write it",
+      ],
+      [
+        '{ "functions": { "db_read": { "into": { "buffer": "d" } } } }',
+        "overrides: `db_read` parameter `into`'s count `d` must be the next parameter",
+      ],
+      [
+        '{ "functions": { "db_close": { "d": { "readonly": true } } } }',
+        "overrides: `db_close` parameter `d` is readonly but not a buffer",
+      ],
+    ]
+    for (const [json, message] of overrideRefusals) {
+      const file = path.join(cImportDir, "refused.overrides.json")
+      fs.writeFileSync(file, json)
+      const run = cImport(["buffers.h", "--overrides", file, "-o", out])
+      check(
+        `c-import: the override file ${json} is refused`,
+        run.status === 1 && run.stderr.includes(message) && !fs.existsSync(out),
+        shown(run)
+      )
+    }
+
+    // An override that would change nothing the run binds is refused too: a
+    // function from an included header, one `allow` leaves out, a static,
+    // inline or variadic one, one whose type the generator cannot read, a
+    // freer that is not bound, and each key that says nothing new.
+    fs.writeFileSync(path.join(cImportDir, "refuse-inc.h"), "int inc_fn(int x);\n")
+    fs.writeFileSync(
+      path.join(cImportDir, "refuse.h"),
+      '#include "refuse-inc.h"\n' +
+        "static int s_helper(int x) { return x; }\n" +
+        "static inline int i_helper(int x) { return x; }\n" +
+        "int v_log(const char *fmt, ...);\n" +
+        "char *r_take(void);\n" +
+        "void r_free_v(char *p, ...);\n" +
+        "int nn_take(int *_Nonnull p);\n" +
+        'int t_attr(int __attribute__((btf_type_tag("x"))) *p);\n' +
+        "char *_Nonnull nn_ret(void);\n" +
+        "int i_buf(void *p, long long n);\n" +
+        'int asm_fn(int x) __asm__("real_asm");\n'
+    )
+    const noOpRefusals = [
+      ["refuse.h", '{ "functions": { "inc_fn": { "x": {} } } }', "`inc_fn` is not bound (declared in another header)"],
+      ["refuse.h", '{ "functions": { "s_helper": {} } }', "`s_helper` is not bound (static or inline)"],
+      ["refuse.h", '{ "functions": { "i_helper": {} } }', "`i_helper` is not bound (static or inline)"],
+      ["refuse.h", '{ "functions": { "v_log": {} } }', "`v_log` is not bound (variadic)"],
+      [
+        "refuse.h",
+        '{ "functions": { "r_take": { "return": { "owned": "r_free_v" } } } }',
+        "`r_take` is freed by `r_free_v`, which is not bound (variadic)",
+      ],
+      [
+        "buffers.h",
+        '{ "allow": ["db_*"], "functions": { "internal_helper": {} } }',
+        '`internal_helper` is not bound ("allow" does not name it)',
+      ],
+      ["buffers.h", '{ "allow": ["db_*", "zz_*"] }', '"allow" glob "zz_*" matches no function the header declares'],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "" } } } }',
+        '"buffer" must name the count parameter',
+      ],
+      [
+        "buffers.h",
+        '{ "functions": { "db_open": { "path": { "nullable": false } } } }',
+        '"nullable": false changes nothing; only true has an effect',
+      ],
+      [
+        "buffers.h",
+        '{ "functions": { "db_open": { "out": { "nullable": true } } } }',
+        'is bound as `OutPtr` already, so "nullable" changes nothing',
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "t_attr": {} } }',
+        "`t_attr` is not bound (declared with an attribute the generator cannot read)",
+      ],
+      ["refuse.h", '{ "functions": { "nn_take": { "p": { "nullable": true } } } }', "is `_Nonnull` in the header"],
+      ["buffers.h", '{ "functions": { "db_close": {} } }', "`db_close` is an empty object, which changes nothing"],
+      [
+        "buffers.h",
+        '{ "functions": { "db_name": { "return": "nullable" } } }',
+        'returns `string | null` already, so "return" changes nothing',
+      ],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "len", "readonly": false } } } }',
+        '"readonly": false changes nothing; only true has an effect',
+      ],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "len", "nullable": true } } } }',
+        "a `u8[]` that cannot be null, so it cannot be nullable",
+      ],
+      ["buffers.h", '{ "functions": {}, "functions": {} }', 'the file holds the key "functions" twice'],
+      [
+        "buffers.h",
+        '{ "functions": { "db_close": { "d": { "nullable": true, "nullable": true } } } }',
+        '`db_close` parameter `d` holds the key "nullable" twice',
+      ],
+    ]
+    // A file, a "functions" object or a parameter object that says nothing,
+    // and the claims a header already contradicts.
+    noOpRefusals.push(
+      ["buffers.h", "{}", 'the file holds neither "allow" nor "functions", so it changes nothing'],
+      ["buffers.h", '{ "functions": {} }', '"functions" is an empty object, which changes nothing'],
+      ["buffers.h", '{ "functions": { "db_close": { "d": {} } } }', "parameter `d` is an empty object, which changes nothing"],
+      [
+        "buffers.h",
+        '{ "functions": { "db_write": { "data": { "buffer": "len", "readonly": true } } } }',
+        'is `const` in the header, so it is bound `readonly u8[]` already and "readonly" changes nothing',
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "nn_ret": { "return": "nullable" } } }',
+        "returns a `_Nonnull` or `returns_nonnull` pointer, so it cannot be nullable",
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "i_buf": { "p": { "buffer": "n" } } } }',
+        "an unsigned 64-bit integer passed by value",
+      ],
+      ["refuse.h", '{ "functions": { "asm_fn": {} } }', "`asm_fn` is not bound (declared with an asm label or alias"]
+    )
+    for (const [header, json, message] of noOpRefusals) {
+      const file = path.join(cImportDir, "refused.overrides.json")
+      fs.writeFileSync(file, json.replace("{", `{ "header": "${header}", `).replace(", }", " }"))
+      const at = header === "refuse.h" ? path.join(cImportDir, header) : header
+      const run = cImport([at, "--overrides", file, "-o", out])
+      check(
+        `c-import: the override file ${json} for ${header} is refused`,
+        run.status === 1 && run.stderr.includes(message) && !fs.existsSync(out),
+        shown(run)
+      )
+    }
+
+    // `-o` naming the header itself is refused before clang runs, and the
+    // header is left as it was.
+    const self = path.join(cImportDir, "self.h")
+    fs.copyFileSync(path.join(fixtures, "basic.h"), self)
+    const selfRun = cImport([self, "-o", self])
+    check(
+      "c-import: -o naming the header itself is refused, and the header is kept",
+      selfRun.status === 1 &&
+        selfRun.stderr.includes("is the header itself") &&
+        fs.readFileSync(self, "utf8") === fs.readFileSync(path.join(fixtures, "basic.h"), "utf8"),
+      shown(selfRun)
+    )
+
+    // `-o` naming the overrides file is refused before clang runs, and the
+    // overrides file is left as it was.
+    const ownOverrides = path.join(cImportDir, "own.overrides.json")
+    fs.writeFileSync(ownOverrides, '{ "header": "buffers.h" }\n')
+    const ownRun = cImport(["buffers.h", "--overrides", ownOverrides, "-o", ownOverrides])
+    check(
+      "c-import: -o naming the overrides file is refused, and the file is kept",
+      ownRun.status === 1 &&
+        ownRun.stderr.includes("is the overrides file") &&
+        fs.readFileSync(ownOverrides, "utf8") === '{ "header": "buffers.h" }\n',
+      shown(ownRun)
+    )
+
+    // The D3 refusal reads the data model through CRLF line ends: an LP64
+    // module checked out with CRLF builds natively, and an ILP32 one is still
+    // refused.
+    const modelDir = path.join(cImportDir, "model")
+    fs.mkdirSync(modelDir, { recursive: true })
+    const modelMain = path.join(modelDir, "main.ts")
+    fs.writeFileSync(modelMain, 'import { LIMIT } from "./limits"\n\nexport function main(): i32 {\n  return LIMIT\n}\n')
+    const modelModule = (model) =>
+      `// Generated by nish c-import from limits.h. Do not edit; regenerate it.\r\n` +
+      `// Target: x\r\n// Data model: ${model}\r\n\r\nexport const LIMIT: i32 = 7\r\n`
+    fs.writeFileSync(path.join(modelDir, "limits.ts"), modelModule("LP64"))
+    const crlfRun = spawnSync(NISH, [modelMain], { cwd: modelDir, encoding: "utf8" })
+    fs.writeFileSync(path.join(modelDir, "limits.ts"), modelModule("ILP32"))
+    const ilpRun = spawnSync(NISH, [modelMain], { cwd: modelDir, encoding: "utf8" })
+    check(
+      "c-import: the data model is read through CRLF line ends",
+      crlfRun.status === 0 &&
+        ilpRun.status !== 0 &&
+        ilpRun.stderr.includes("written by nish c-import for ILP32, and this build is LP64"),
+      `${shown(crlfRun)}\n${shown(ilpRun)}`
+    )
+
+    // A path with a space is one quoted word in the `Regenerate:` line.
+    const spaced = path.join(cImportDir, "my lib.h")
+    fs.copyFileSync(path.join(fixtures, "lp64.h"), spaced)
+    const spacedRun = cImport([spaced, "-o", out])
+    const spacedText = spacedRun.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    fs.rmSync(out, { force: true })
+    check(
+      "c-import: a header path with a space is quoted in the Regenerate line",
+      spacedText.includes(`// Regenerate: nish c-import '${spaced}' --target `),
+      shown(spacedRun)
+    )
+
+    // The guide's wc.h example is the golden tests/c-import/wc.ts.expected.
+    const guide = fs.readFileSync(path.join(root, "docs", "guide", "using-nish", "c-import.md"), "utf8")
+    const wcAt = guide.indexOf("```ts wc.ts\n") + "```ts wc.ts\n".length
+    const wcGuide = guide.slice(wcAt, guide.indexOf("```", wcAt))
+    const wcHeaderAt = guide.indexOf("```c\n") + "```c\n".length
+    check(
+      "c-import: the guide's wc.h example is the header and module tests/c-import pins",
+      guide.slice(wcHeaderAt, guide.indexOf("```", wcHeaderAt)) ===
+        fs.readFileSync(path.join(fixtures, "wc.h"), "utf8") &&
+        wcGuide === fs.readFileSync(path.join(fixtures, "wc.ts.expected"), "utf8")
+    )
+
+    // Every function sqlite3.h declares is either bound or listed as not
+    // bound: clang's own AST names them, so a declaration the importer drops
+    // without a word fails here.
+    const sqliteAst = spawnSync(
+      "clang",
+      ["-Xclang", "-ast-dump=json", "-fsyntax-only", "-x", "c", "--", path.join(root, "runtime", "sqlite", "sqlite3.h")],
+      { encoding: "utf8", maxBuffer: 1 << 30 }
+    )
+    const declared = new Set()
+    if (sqliteAst.status === 0) {
+      for (const node of JSON.parse(sqliteAst.stdout).inner ?? []) {
+        if (node.kind === "FunctionDecl" && node.isImplicit !== true && typeof node.name === "string") {
+          declared.add(node.name)
+        }
+      }
+    }
+    const silent = [...declared].filter(
+      (name) => !sqliteText.includes(`declare function ${name}(`) && !sqliteText.includes(` *   ${name}: `)
+    )
+    check(
+      `c-import: each of the ${declared.size} functions clang finds in sqlite3.h is bound or listed as not bound`,
+      sqliteAst.status === 0 && declared.size > 200 && silent.length === 0,
+      `${sqliteAst.stderr.slice(0, 2000)}silent: ${silent.join(", ")}`
+    )
+  }
 }
 
 summarise()

@@ -25,7 +25,7 @@ import {
 } from "./secret"
 import { LANGUAGE } from "./branding"
 import { Edit } from "./diagnostics"
-import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
+import { caseValue, isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import {
   captureOuter,
@@ -99,7 +99,7 @@ import {
   refuseValueArrow,
 } from "./fnrefs"
 import { ParentTable } from "./parents"
-import { isOptionalChain, unwrapParens } from "./emit-util"
+import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { CheckedProgram, FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
@@ -916,7 +916,7 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case NodeKind.Member:
       return checkMember(ctx, expr, scope)
     case NodeKind.Index:
-      return checkIndex(ctx, expr, scope)
+      return checkElement(ctx, expr, scope)
     case NodeKind.Array:
       // `[]` and `{ ... }` are typed by their context alone, so a context that
       // was refused (`y = []` after `let y = <refused>`) repeats the refusal.
@@ -3863,6 +3863,57 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
   return present === T_ERROR ? T_ERROR : ctx.table.maybeOf(present)
 }
 
+// ---- Fixed-length array fields (WP66 S4) ----------------------------------------------
+
+/**
+ * Tell `checkMember` that `index`'s receiver is read by index, so a
+ * fixed-length array field of a `declare class` (`FieldInfo.cLength`) types
+ * as `T[]` there and nowhere else.
+ */
+const markIndexReceiver = (ctx: CheckContext, index: Node): void => {
+  const receiver = unwrapParens(index.children[0])
+  ctx.program.indexReceiver = receiver.kind === NodeKind.Member ? receiver.id : -1
+}
+
+/** `a[i]` read: `checkIndex`, with a C array field's receiver marked and its constant index range-checked. */
+const checkElement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  markIndexReceiver(ctx, expr)
+  const type = checkIndex(ctx, expr, scope)
+  ctx.program.indexReceiver = -1
+  return type === T_ERROR || refuseCArrayConstant(ctx, expr) ? T_ERROR : type
+}
+
+/** `a[i] = v` and `a[i] op= v`: `checkIndexAssignment`, marked and range-checked as `checkElement` is. */
+const checkElementAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  const target = expr.children[0]
+  markIndexReceiver(ctx, target)
+  const type = checkIndexAssignment(ctx, expr, scope)
+  ctx.program.indexReceiver = -1
+  return type === T_ERROR || refuseCArrayConstant(ctx, target) ? T_ERROR : type
+}
+
+/**
+ * A constant index outside a fixed-length array field: C's `h[5]` past
+ * `unsigned h[5]`, which no run could take, refused where it is written. A
+ * constant inside is proved by `src/bounds.ts`, and any other index is
+ * checked when it runs.
+ */
+const refuseCArrayConstant = (ctx: CheckContext, index: Node): boolean => {
+  const field = cArrayField(ctx.program, ctx.table, index.children[0])
+  if (field === null) {
+    return false
+  }
+  const at = caseValue(ctx, index.children[1])
+  if (!at.known || (at.value >= toI64(0) && at.value < toI64(field.cLength))) {
+    return false
+  }
+  ctx.error(
+    index.children[1],
+    `Index ${at.value} is outside \`${ctx.textOf(index.children[0])}\`, a fixed-length array of ${field.cLength} elements: its indices are 0 to ${field.cLength - 1}`
+  )
+  return true
+}
+
 // ---- Assignment ---------------------------------------------------------------------
 
 const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
@@ -3871,7 +3922,7 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     const stored =
       target.kind === NodeKind.Member
         ? checkMemberAssignment(ctx, expr, scope)
-        : checkIndexAssignment(ctx, expr, scope)
+        : checkElementAssignment(ctx, expr, scope)
     clearPaths(ctx, target, scope)
     const path = pathVariable(ctx, target, scope, stored, expr.text === "=")
     if (path !== null && expr.text === "=") {
@@ -4117,6 +4168,13 @@ const checkImportedBuiltin = (
     return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`)
   }
   ctx.program.nodeBuiltins[expr.id] = imported.canonical
+  // WP66 S3: an opaque class has no layout, so there is nothing to copy into.
+  if (imported.member === "readStruct" && want >= 0 && ctx.table.isOpaque(ctx.table.stripNull(want))) {
+    return ctx.errorType(
+      expr,
+      `\`readStruct(p)\` cannot copy into \`${ctx.table.typeName(ctx.table.stripNull(want))}\`: an opaque \`declare class\` has no fields, so the \`CPtr\` is the value; declare the C function to return the class itself`
+    )
+  }
   return imported.namespace.length > 0
     ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
     : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)
