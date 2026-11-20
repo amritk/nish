@@ -139,7 +139,7 @@ import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
-import { isOptionalChain, unwrapParens } from "./emit-util"
+import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
 import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringMap } from "./map"
@@ -2897,6 +2897,31 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
 }
 
 /**
+ * WP66 S4: whether `index` is inside a fixed-length array of `length`
+ * elements whatever it runs as. The length is fixed by the field's type and
+ * nothing can change it, so, as for a constant table, the index's declared
+ * range (an `integer<0, 4>` into five elements), a literal or folded
+ * constant, or the range the state gives an `i32` or `i64` index, below the
+ * length is the proof.
+ */
+const provesCArrayIndex = (walk: BoundsWalk, state: State, index: Node, length: i32): boolean => {
+  const declared = declaredValueRange(walk.ctx, index)
+  if (declared !== null) {
+    return declared.lo >= toI64(0) && declared.hi < toI64(length)
+  }
+  const written = walk.ctx.program.nodeTypes[index.id]
+  if (written < 0 || writesSomething(index)) {
+    return false
+  }
+  const type = walk.ctx.table.baseOf(written)
+  if (type !== T_I32 && type !== T_I64) {
+    return false
+  }
+  const range = valueRange(walk, state, index, type)
+  return range.lo >= toI64(0) && range.hi < toI64(length)
+}
+
+/**
  * Record the verdict for one access. A proof goes into the side table the
  * emitter reads; the absence of one inside a loop goes on the list the WP15 §8
  * walk reports from, but only for the shape the analysis could have proved —
@@ -2919,6 +2944,15 @@ const judge = (
   const ctx = walk.ctx
   if (provesTableIndex(walk, state, receiver, index)) {
     noteProof(walk, node)
+    return
+  }
+  // WP66 S4: a fixed-length array field has a length the type spells, and no
+  // holder a fact could name; a constant or a range inside it is proved here.
+  const array = cArrayField(ctx.program, ctx.table, receiver)
+  if (array !== null) {
+    if (provesCArrayIndex(walk, state, index, array.cLength)) {
+      noteProof(walk, node)
+    }
     return
   }
   const holder = holderOf(walk, receiver)

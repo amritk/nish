@@ -1423,6 +1423,16 @@ const DECLARED = [
     changelog: FFI_ZEROEXT,
     why: "a call to a narrow host import now carries the `zeroext` its declaration already did, on the `i8` argument and result (#1755)",
   },
+  // src/c-import-json.ts reads clang's JSON AST and the overrides file with
+  // counted loops that add a loop-invariant value to the counter.
+  ...loopGuard(
+    "src/c-import-json.ts, which nish c-import reads clang's JSON AST through, adds a loop-invariant value to a counted loop's counter, so its module gains that loop's pre-loop overflow test, its unchecked and checked additions, and renumbered values",
+    {
+      "src/c-import-json.ts": ["c-import-json.ll"],
+      "src/c-import.ts": ["c-import-json.ll"],
+      "src/compile.ts": ["c-import-json.ll"],
+    }
+  ),
   // QuicAckRanges counts ECT(0), ECT(1) and CE and QuicConnection and Http3Server
   // keep the arrival codepoint, so every module laying them out or writing an ACK moves.
   ...ecnEcho(
@@ -9034,6 +9044,19 @@ const DECLARED = [
       "tests/link/std_postgres_async_seat_statement_panic/main.ts": ["postgres-async.ll"],
       "tests/link/std_postgres_async_seat_ticket_panic/main.ts": ["postgres-async.ll"],
       "tests/link/tfb_async_db/main.ts": ["postgres-async.ll"],
+    }
+  ),
+  // WP48 stage 2c: in a program with a compact class, `nish_alloc_struct`'s
+  // slow block loads `nish_arena_range_abi` as `nish_alloc_ref`'s already did,
+  // so an 8-aligned compact class fails to link against the default runtime
+  // too. Compared only under `--no-sidecars`: with the WP8 sidecars on, both
+  // compilers refuse a compact class beside `--emit-napi`.
+  ...byFinding("compact class crosses --emit-header as an opaque handle")(
+    "the program has a compact class, so every module of it that allocates gains a volatile load of `nish_arena_range_abi` in `nish_alloc_struct`'s slow block, so every line after it moves down one",
+    {
+      "tests/cases/perf_padding_compact.ts": ["perf_padding_compact.ll"],
+      "tests/link/compact_json/main.ts": ["json-tokenizer.ll", "json-typed.ll", "json.ll", "main.ll"],
+      "tests/link/compact_threads/main.ts": ["main.ll", "threads.ll"],
     }
   ),
   // `reserve` splits its growth into `grow`, so a program whose own module

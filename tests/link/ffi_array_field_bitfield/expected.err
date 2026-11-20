@@ -1,0 +1,1 @@
+has type `integer<0, 7>`, which has no C layout
