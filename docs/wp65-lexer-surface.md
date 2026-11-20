@@ -129,7 +129,7 @@ negative tests for `this`, for a parameter, and for each refusing place; the
 `src/` freeze holds, since `src/` may not use the form until the release after
 it ships.
 
-## 5. `toString()` on a number (S4, decided: D1b)
+## 5. `toString()` on a number (S4, open question)
 
 LANGUAGE.md says there is no `toString`: template literals and `console.log`
 convert numbers. `String(n)` on a number is refused as
