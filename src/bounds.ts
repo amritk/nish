@@ -1396,6 +1396,84 @@ const isMinusOne = (expr: Node): boolean => {
 }
 
 /**
+ * The value of `expr` when it is a non-negative integer constant below
+ * `INT_MAX`, read as a literal is (`literalValue`), or -1. A constant is
+ *
+ *   - a literal;
+ *   - a builtin integer conversion of one that fits its target type:
+ *     `toU64(0)`, `toU8(255)`, but never `toU8(300)`, which keeps the low
+ *     byte;
+ *   - a folded module constant of an integer type (`program.nodeConstants`);
+ *   - a function-level `const` of an integer type whose initialiser is one of
+ *     these (`BoundsWalk.constLocals`). A `const` is never rebound, so its
+ *     value holds wherever it is read. A `let` never counts, even one nothing
+ *     writes again, and neither does a field.
+ */
+const constantValue = (walk: BoundsWalk, expr: Node): i32 => {
+  const e = unwrapBoundsParens(expr)
+  const n = literalValue(e)
+  if (n >= 0) {
+    return n
+  }
+  const program = walk.ctx.program
+  if (e.kind === NodeKind.Call) {
+    return convertedConstant(program, e)
+  }
+  if (e.kind !== NodeKind.Ident) {
+    return -1
+  }
+  const constant = program.nodeConstants[e.id]
+  if (constant !== null) {
+    const fits = constant.intValue >= toI64(0) && constant.intValue < I32_MAX
+    return constant.folded && isInteger(constant.type) && fits ? toI32(constant.intValue) : -1
+  }
+  const v = program.nodeLocals[e.id]
+  let k = 0
+  while (v !== null && k < walk.constLocals.length) {
+    if (walk.constLocals[k] === v) {
+      return walk.constValues[k]
+    }
+    k = k + 1
+  }
+  return -1
+}
+
+/** The literal a builtin integer conversion `call` converts, when it fits the target type, or -1. */
+const convertedConstant = (program: CheckedProgram, call: Node): i32 => {
+  const callee = call.children[0]
+  if (callee.kind !== NodeKind.Ident) {
+    return -1
+  }
+  const name = callee.text
+  let most = -1
+  if (name === "toU8") {
+    most = 255
+  } else if (name === "toU16") {
+    most = 65535
+  } else if (name === "toI32" || name === "toU32" || name === "toI64" || name === "toU64") {
+    // `literalValue` answers below `INT_MAX`, which fits each of them.
+    most = 2147483647
+  }
+  if (most < 0 || !isBuiltinConversion(program, call, name)) {
+    return -1
+  }
+  const n = literalValue(call.children[1].children[0])
+  return n >= 0 && n <= most ? n : -1
+}
+
+/**
+ * `declaredValueRange`, with a constant (`constantValue`) read as the one
+ * value it is.
+ */
+const constantOrDeclaredRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
+  const n = constantValue(walk, expr)
+  if (n >= 0) {
+    return new DeclaredRange(toI64(n), toI64(n))
+  }
+  return declaredValueRange(walk.ctx, expr)
+}
+
+/**
  * The values `expr` can have whatever the state says, or `null` when only a
  * fact could tell: one value for a literal, a negated literal or a folded
  * integer constant, and the declared range of a ranged or unsigned type.
@@ -1435,7 +1513,7 @@ const rangeExcludes = (range: DeclaredRange | null, n: i64): boolean =>
  */
 const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: Node): boolean => {
   const ctx = walk.ctx
-  const range = declaredValueRange(ctx, divisor)
+  const range = constantOrDeclaredRange(walk, divisor)
   const d = indexLocal(ctx, divisor)
   const zero: i64 = 0
   const minusOne: i64 = -1
@@ -1450,7 +1528,7 @@ const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: 
   ) {
     return true
   }
-  const top = declaredValueRange(ctx, dividend)
+  const top = constantOrDeclaredRange(walk, dividend)
   const x = indexLocal(ctx, dividend)
   return (top !== null && top.lo >= zero) || (x !== null && knownNonNegative(state, x))
 }
@@ -1704,7 +1782,7 @@ const equalityFacts = (walk: BoundsWalk, left: Node, right: Node): Fact[] => {
 }
 
 const addEqualityFacts = (walk: BoundsWalk, out: Fact[], value: Node, other: Node): void => {
-  const n = literalValue(other)
+  const n = constantValue(walk, other)
   if (n < 0) {
     return
   }
@@ -1733,7 +1811,7 @@ const disequalityFacts = (walk: BoundsWalk, state: State, left: Node, right: Nod
 }
 
 const addDisequalityFacts = (walk: BoundsWalk, state: State, out: Fact[], value: Node, other: Node): void => {
-  const n = literalValue(other)
+  const n = constantValue(walk, other)
   const v = indexLocal(walk.ctx, value)
   if (v === null) {
     return
@@ -2649,6 +2727,13 @@ export class BoundsWalk {
    */
   literalStrings: Local[]
   literalLengths: i32[]
+  /**
+   * The function-level `const` locals of an integer type this body binds to a
+   * constant, beside its value (`constantValue`). A `const` is never rebound,
+   * so nothing has to forget one.
+   */
+  constLocals: Local[]
+  constValues: i32[]
   /** Every call to a function taking entry facts, with what this site proves for it. */
   sites: RangeSite[]
   /** This body's program's callee table (`RangeTables.calleesOf`), or empty in pass 2. */
@@ -2696,6 +2781,8 @@ export class BoundsWalk {
     this.sliceClamps = null
     this.literalStrings = []
     this.literalLengths = []
+    this.constLocals = []
+    this.constValues = []
     this.sites = []
     this.callees = []
     this.stopAfter = -1
@@ -2908,7 +2995,7 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
  * length is the proof.
  */
 const provesCArrayIndex = (walk: BoundsWalk, state: State, index: Node, length: i32): boolean => {
-  const declared = declaredValueRange(walk.ctx, index)
+  const declared = constantOrDeclaredRange(walk, index)
   if (declared !== null) {
     return declared.lo >= toI64(0) && declared.hi < toI64(length)
   }
@@ -4677,6 +4764,11 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
   }
   forgetLocal(walk, state, v)
   addFacts(state, facts)
+  const value = v.mutable || !isInteger(v.type) || init.kind === NodeKind.Empty ? -1 : constantValue(walk, init)
+  if (value >= 0) {
+    walk.constLocals.push(v)
+    walk.constValues.push(value)
+  }
   // `const t = "abcdef"`: what `asciiLiteralLength` reads `t.slice(1, 3)` against.
   if (walk.sliceClamps === null || v.mutable || v.type !== T_STRING) {
     return
@@ -5026,6 +5118,10 @@ const valueRange = (walk: BoundsWalk, state: State, expr: Node, type: i32): Inte
     if (negated >= toI64(0)) {
       return new Interval(-negated, -negated)
     }
+  }
+  const named = constantValue(walk, e)
+  if (named >= 0) {
+    return new Interval(toI64(named), toI64(named))
   }
   if (e.kind === NodeKind.Ident) {
     const constant = ctx.program.nodeConstants[e.id]
