@@ -8433,6 +8433,7 @@ if (dealtHere("selfHosting")) {
   if (check("src/dump-ast.ts links", builtAst.status === 0, builtAst.stderr)) {
     // Relative, because the diagnostics quote the path they were given and
     // the golden cannot hold this machine's checkout directory.
+    // strict: the AST dumper parses the file, it builds nothing
     const recovery = spawnSync(astDumper, ["tests/parser/recovery.ts"], { cwd: root, encoding: "utf8" })
     const wantOut = fs.readFileSync(path.join(root, "tests", "parser", "recovery.out"), "utf8")
     const wantErr = fs.readFileSync(path.join(root, "tests", "parser", "recovery.err"), "utf8")
@@ -11998,11 +11999,15 @@ int main(void) {
       fs.cpSync(path.join(root, dir), path.join(sqCopy, dir), { recursive: true })
     }
     const linkSqCopy = (out, source = program) =>
-      spawnSync(path.join(sqCopy, "bin", "nish"), [source, "--link", path.join(sqDir, out), "--profile", "debug"], {
-        cwd: root,
-        encoding: "utf8",
-        env: env(),
-      })
+      spawnSync(
+        path.join(sqCopy, "bin", "nish"),
+        withAllowPanics(path.join(sqCopy, "bin", "nish"), [source, "--link", path.join(sqDir, out), "--profile", "debug"]),
+        {
+          cwd: root,
+          encoding: "utf8",
+          env: env(),
+        },
+      )
     const callsUnit = path.join(sqDir, "calls-unit.ts")
     fs.writeFileSync(
       callsUnit,
@@ -24934,7 +24939,10 @@ if (dealtHere("cliChecks")) {
     if (built.status === 0) {
       for (const name of aliasCases) {
         const out = path.join(mutDir, "out") + path.sep
-        const r = spawnSync(reverted, [path.join(casesDir, name), "-o", out], { cwd: root, encoding: "utf8" })
+        const r = spawnSync(reverted, withAllowPanics(reverted, [path.join(casesDir, name), "-o", out]), {
+          cwd: root,
+          encoding: "utf8",
+        })
         if (r.status !== 0) {
           refused.push(`${name}: ${r.stderr.split("\n")[0]}`)
         }
@@ -28206,25 +28214,112 @@ if (dealtHere("releaseChecks")) {
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
     )
     // Every compile in this file goes through the helper, or says on the line
-    // above why it stays strict: a raw compile of a case would build it strict
-    // the day the default flips. The calls are the ones whose first argument is
-    // the compiler under test (`NISH`) or a binary built from it (`compiler`).
+    // directly above why it stays strict: a raw compile of a case would build
+    // it strict the day the default flips. A call counts as a compile when it
+    // names the compiler under test (`NISH`), a binary built from it
+    // (`compiler`) or `"nish"` on PATH, whatever its arguments, or when it runs
+    // any other program, under any variable name, with a compile's arguments
+    // (a `.ts` file, `-o` or `--link`). The tools the suite drives that are not
+    // a Nish compiler (node, the shell, clang and LLVM, git, ...) are not.
     const self = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8")
-    const rawCall = /\b(?:spawnSync|spawnAsync|execFileSync|execFile|spawn)\(\s*(?:NISH|compiler)\s*,(?!\s*withAllowPanics\()/g
+    const anyCall = /\b(?:spawnSync|spawnAsync|execFileSync|execFile|spawn)\(/g
+    const isCompiler = /^(?:NISH|compiler|"nish")$/
+    const notACompiler =
+      /^(?:"(?:node|bash|sh|clang|opt|llc|git|npm|sudo|script|unshare|prlimit|curl|tar|python3|openssl|which|sleep|gdb|lldb|size|nm|objdump|strace|env|true|cat)"|process\.execPath|process\.env\.CC\b.*|.*"llvm-[\w-]+".*)$/s
+    const compileShape = /\.ts["`'\]]|"--link"|"-o"/
+    // A call's arguments, to its closing parenthesis, split at its top-level
+    // commas; a quoted string is opaque, so a bracket inside one is not counted.
+    const callArgs = (from) => {
+      const parts = []
+      let depth = 0
+      let start = from
+      for (let i = from; i < self.length && i < from + 4000; i++) {
+        const c = self[i]
+        if (c === '"' || c === "'" || c === "`") {
+          for (i++; i < self.length && self[i] !== c; i++) {
+            if (self[i] === "\\") i++
+          }
+        } else if (c === "(" || c === "[" || c === "{") {
+          depth++
+        } else if (c === ")" || c === "]" || c === "}") {
+          if (depth === 0) {
+            parts.push(self.slice(start, i).trim())
+            return parts
+          }
+          depth--
+        } else if (c === "," && depth === 0) {
+          parts.push(self.slice(start, i).trim())
+          start = i + 1
+        }
+      }
+      return parts
+    }
     const unrouted = []
     let strictCalls = 0
-    for (const m of self.matchAll(rawCall)) {
+    for (const m of self.matchAll(anyCall)) {
+      const [first = "", second = ""] = callArgs(m.index + m[0].length)
+      const compiles = isCompiler.test(first) || (!notACompiler.test(first) && compileShape.test(second))
+      if (!compiles || second.startsWith("withAllowPanics(")) {
+        continue
+      }
       const before = self.slice(0, m.index).split("\n")
-      if (`${before.slice(-3, -1).join("\n")}\n${before.at(-1)}`.includes("// strict:")) {
+      if (/\/\/ strict: \S/.test(`${before.at(-2)}\n${before.at(-1)}`)) {
         strictCalls++
       } else {
-        unrouted.push(`tests/run.js:${before.length}`)
+        unrouted.push(`tests/run.js:${before.length} ${first}`)
       }
     }
     check(
-      "allow-panics: every compile in tests/run.js goes through withAllowPanics or says why it stays strict",
+      "allow-panics: every compile in tests/run.js, under any variable name, goes through withAllowPanics or says why it stays strict",
       strictCalls > 0 && unrouted.length === 0,
-      `route these through spawnNish or withAllowPanics, or mark one \`// strict: <why>\` on the line above:\n${unrouted.join("\n")}`
+      `route these through spawnNish or withAllowPanics, or mark one \`// strict: <why>\` on the line directly above:\n${unrouted.join("\n")}`
+    )
+    // The Nish harnesses build every case and every CLI contract program with
+    // the compiler they are given: each probes that compiler's --help and adds
+    // the flag to every compile.
+    const harnesses = [
+      ["run.ts", ["listsAllowPanics(", "tools.allowPanics", '"--allow-panics"']],
+      ["cli.ts", ["withAllowPanics(", "this.allowPanics", '"--allow-panics"']],
+    ]
+    const harnessGaps = harnesses.flatMap(([name, needs]) => {
+      const text = fs.readFileSync(path.join(root, "tests", "nish", name), "utf8")
+      return needs.filter((need) => !text.includes(need)).map((need) => `tests/nish/${name}: ${need}`)
+    })
+    check(
+      "allow-panics: the Nish harnesses probe their compiler and pass the flag to every compile",
+      harnessGaps.length === 0,
+      harnessGaps.join("\n")
+    )
+    // Every Dockerfile RUN line that runs a Nish compiler on a `.ts` goes
+    // through `nish_allow_panics`, or says on the line directly above why it
+    // stays strict.
+    const dockerfiles = ["tests", "bench"].flatMap((dir) =>
+      fs
+        .readdirSync(path.join(root, dir), { recursive: true })
+        .filter((file) => /(?:^|[\\/])(?:Dockerfile[^\\/]*|[^\\/]*\.dockerfile)$/.test(file))
+        .map((file) => path.join(dir, file))
+    )
+    const strictImages = []
+    for (const file of dockerfiles) {
+      const lines = fs.readFileSync(path.join(root, file), "utf8").split("\n")
+      let run = -1
+      lines.forEach((line, i) => {
+        if (/^RUN\b/.test(line)) run = i
+        if (run < 0) return
+        const command = lines.slice(run, i + 1).join("\n")
+        const continues = /\\\s*$/.test(line)
+        if (!continues) {
+          if (/\bnish\b[^\n]*\.ts\b/.test(command) && !command.includes("nish_allow_panics") && !/^# strict: \S/.test(lines[run - 1] ?? "")) {
+            strictImages.push(`${file}:${run + 1}`)
+          }
+          run = -1
+        }
+      })
+    }
+    check(
+      "allow-panics: every Dockerfile build of a Nish program goes through nish_allow_panics or says why it stays strict",
+      dockerfiles.length > 0 && strictImages.length === 0,
+      `route these through scripts/nish-compiler.sh, or mark one \`# strict: <why>\` on the line directly above:\n${strictImages.join("\n")}`
     )
     // The seed, whatever release it is: the helper asks it, and a seed that does
     // not list the flag builds a case through the helper as it would without it.
@@ -29441,6 +29536,7 @@ if (dealtHere("releaseChecks")) {
         // `--no-optional` or a lockfile without the optional entries installs into. The
         // shape is `src/compile.ts`'s own for the same code: the object on stdout,
         // nothing on stderr, so a tool reading stdout gets objects and nothing else.
+        // strict: a user's own first program, built the way a user builds it
         const refusedJson = spawnSync(bin, ["--json", "hello.ts"], { cwd: work, encoding: "utf8" })
         let refusedObj = null
         try {
@@ -29477,6 +29573,7 @@ if (dealtHere("releaseChecks")) {
         // a command line that *would* write -- an explicit `-o` and a `--link` -- rather
         // than of an empty directory, because "no files appeared" is only an assertion
         // when something was asked for.
+        // strict: a user's own first program, built the way a user builds it
         const askedToWrite = spawnSync(bin, ["hello.ts", "-o", "out.ll", "--link", "outbin"], {
           cwd: work,
           encoding: "utf8",
@@ -29618,6 +29715,7 @@ if (dealtHere("releaseChecks")) {
               ver.status === 0 && ver.stdout.trim() === `nish ${info.version}`,
               ver.stdout + ver.stderr
             )
+            // strict: a user's own first program, built the way a user builds it
             const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" })
             check(
               "installed nish hello.ts --link works from an unrelated cwd",
@@ -29632,6 +29730,7 @@ if (dealtHere("releaseChecks")) {
                 hello.stdout + hello.stderr
               )
             }
+            // strict: a user's own first program, built the way a user builds it
             const ir = spawnSync(
               bin,
               [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")],
@@ -29670,6 +29769,7 @@ if (dealtHere("releaseChecks")) {
                 '  console.log(trim("  ok  "));\n' +
                 "  return 0;\n};\n"
             )
+            // strict: a user's own first program, built the way a user builds it
             const stdLink = spawnSync(bin, ["std.ts", "--link", "stdhello"], { cwd: work, encoding: "utf8" })
             const stdRan =
               stdLink.status === 0
@@ -31133,6 +31233,7 @@ if (dealtHere("releaseChecks")) {
           'import { trim } from "nish/text";\n\nexport const main = (): number => {\n  write(`[${trim("  padded  ")}]\\n`);\n  return 0;\n};\n'
         )
         const onPath = (args) =>
+          // strict: a user's own first program, built the way a user builds it
           spawnSync("nish", args, {
             cwd: work,
             encoding: "utf8",
@@ -31178,6 +31279,7 @@ if (dealtHere("releaseChecks")) {
           const headers = spellings.map(([label, cmd, Path]) => {
             const out = path.join(work, `out-${label.split(",")[0]}`)
             fs.rmSync(out, { recursive: true, force: true })
+            // strict: a user's own first program, built the way a user builds it
             const r = spawnSync(cmd, ["prog.ts", "-o", `${out}${path.sep}`], {
               cwd: work,
               encoding: "utf8",
@@ -31217,6 +31319,7 @@ if (dealtHere("releaseChecks")) {
         fs.mkdirSync(lonely, { recursive: true })
         fs.copyFileSync(NISH, path.join(lonely, "nish"))
         fs.chmodSync(path.join(lonely, "nish"), 0o755)
+        // strict: a user's own first program, built the way a user builds it
         const orphan = spawnSync("nish", ["plain.ts", "--link", "p2"], {
           cwd: work,
           encoding: "utf8",
@@ -31257,6 +31360,7 @@ if (dealtHere("releaseChecks")) {
 
         // An admin's link: absolute, and invoked by its own absolute path.
         const absLink = symlinkInstall(path.join(buildDir, "argv0-symlink-abs"), binary)
+        // strict: a user's own first program, built the way a user builds it
         const viaAbsLink = spawnSync(absLink, ["prog.ts", "--link", "prog-abs-link"], {
           cwd: work,
           encoding: "utf8",
@@ -31280,6 +31384,7 @@ if (dealtHere("releaseChecks")) {
         // resolved.
         const binDir = path.join(buildDir, "argv0-symlink-bin")
         symlinkInstall(binDir, path.relative(binDir, binary))
+        // strict: a user's own first program, built the way a user builds it
         const viaBinLink = spawnSync("nish", ["prog.ts", "--link", "prog-bin-link"], {
           cwd: work,
           encoding: "utf8",
