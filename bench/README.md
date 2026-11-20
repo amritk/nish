@@ -1921,6 +1921,8 @@ statement prepared once. Text is copied into one reused buffer, with
 | --- | --- | --- |
 | `lookup` | 200,000 | Reads one post by a random id, with its author and its like count. |
 | `feed` | 10,000 | Reads the 20 newest posts: 20 rows of five columns. |
+| `feed-cursor-walk` | 10,000 | Reads the same 20 posts, authors and like counts through four cursors opened once, before the timed loop. Nish only. |
+| `feed-cursor` | 10,000 | Does the same walk, but opens the read transaction and the four cursors on every call. Nish only. |
 | `insert` | 20,000 | Runs `INSERT … RETURNING id, created_at` in autocommit. |
 | `insert-txn` | 100,000 | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
 
@@ -1928,6 +1930,21 @@ The inserts run with `synchronous=NORMAL`. Every value read is folded into a
 checksum inside the timed loop on both sides, so the optimiser cannot drop a
 read. Each side's fold keeps its sum in a local variable across a column's
 bytes.
+
+**`feed-cursor-walk` and `feed-cursor`** read `feed`'s rows through the
+[cursor API](../docs/sqlite-cursor.md) instead of a statement.
+`feed-cursor-walk` takes one read transaction with `beginRead` and opens the
+four cursors before the timed loop, and calls `endRead` after it, so a call is
+the seeks and steps alone. `feed-cursor` is the shape of a request: each call
+takes a read transaction and opens the four cursors, each checking its schema,
+and `endRead` closes them. Both walk `posts_created_at_id_idx` newest first.
+For each post they seek `posts` and `users` by rowid, then count the post's
+entries in `likes_post_id_idx`. They fold each row in `POST_SQL`'s order, so
+each must print `feed`'s row count and checksum, and `--validate` checks that.
+Neither twin has a cursor path, so `run.mjs` runs both on the build and its
+copy only. Its report sets each against
+`feed`'s build times from the same rounds, not against C. Its figures are in
+[docs/BENCHMARKS.md](../docs/BENCHMARKS.md#the-feed-through-cursors-against-sql).
 
 **The builds.**
 
@@ -1963,10 +1980,13 @@ database with the same flags and PRAGMAs.
 **The protocol.**
 
 - A warm-up round runs first and is not counted. Then come `--rounds` rounds,
-  rounded up to a multiple of 3.
-- Each round runs every workload on the build, its copy and the C twin. The
-  order rotates by round, so over a multiple of 3 rounds each binary goes
-  first, second and third equally often.
+  rounded up to a multiple of 6.
+- Each round runs every workload on the build, its copy and the C twin (and
+  the THREADSAFE=2 group's three binaries when it runs). The order rotates by
+  round, so over a multiple of the number of binaries each goes first equally
+  often. `feed-cursor-walk` and `feed-cursor` run on the build and its copy
+  only, and they alternate, which balances only over an even count: hence the
+  multiple of 6, a multiple of 3, 6 and 2.
 - A run times its own loop. Every run of a workload must print the same row
   count and checksum.
 - The report is ns per call: min, median and interquartile range over the
