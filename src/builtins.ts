@@ -320,20 +320,26 @@ const checkMulHigh = (ctx: CheckContext, call: Node, scope: Scope, name: string,
   if (!checkBuiltinArity(ctx, call, name, args, 2)) {
     return T_ERROR
   }
-  let failed = false
-  for (let i = 0; i < 2; i++) {
-    const got = checkExpression(ctx, args.children[i], scope, T_U64)
-    if (got === T_ERROR) {
-      failed = true
-    } else if (got !== T_U64) {
-      ctx.error(
-        args.children[i],
-        `\`${name}\` takes u64 operands (convert with toU64), got ${ctx.table.typeName(got)}`
-      )
-      failed = true
-    }
+  const first = checkMulHighOperand(ctx, args.children[0], scope, name)
+  const second = checkMulHighOperand(ctx, args.children[1], scope, name)
+  return first && second ? T_U64 : T_ERROR
+}
+
+/**
+ * One `mulHigh` operand, checked against `u64`: true when it is one, and
+ * false after an error otherwise. Called once per operand rather than from a
+ * loop, whose passes would each keep the error's type name (NL9011).
+ */
+const checkMulHighOperand = (ctx: CheckContext, arg: Node, scope: Scope, name: string): boolean => {
+  const got = checkExpression(ctx, arg, scope, T_U64)
+  if (got === T_ERROR) {
+    return false
   }
-  return failed ? T_ERROR : T_U64
+  if (got !== T_U64) {
+    ctx.error(arg, `\`${name}\` takes u64 operands (convert with toU64), got ${ctx.table.typeName(got)}`)
+    return false
+  }
+  return true
 }
 
 /**
