@@ -12,16 +12,19 @@
 const words = (text: string): string[] => {
   const out: string[] = []
   let start: i32 = -1
-  const n: i32 = toI32(text.length)
-  for (let i: i32 = 0; i <= n; i++) {
-    const c: i32 = i < n ? toI32(text.charCodeAt(i)) : 32
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    const c: i32 = toI32(text.charCodeAt(i))
     const letter = c >= 97 && c <= 122
     if (letter && start < 0) {
       start = i
-    } else if (!letter && start >= 0 && start <= i && i <= n) {
-      out.push(text.slice(start, i))
+    } else if (!letter && start >= 0 && start < i) {
+      out.push(text.substring(start, i))
       start = -1
     }
+  }
+  // A word that runs to the end of the text ends there.
+  if (start >= 0) {
+    out.push(text.substring(start))
   }
   return out
 }
@@ -48,7 +51,8 @@ export const main = (): void => {
   }
   console.log(line.join(" "))
   const pets = ["dog", "cat", "fish"]
-  let common: i32 = 0
+  // `u32` cannot overflow-panic, and the count stays below the three pets.
+  let common: u32 = 0
   for (const pet of pets) {
     if (seen.has(pet)) {
       common++
