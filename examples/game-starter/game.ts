@@ -49,62 +49,73 @@ const SOUND_WALL: i32 = 1
 const SOUND_MISS: i32 = 2
 const RATE: i32 = 22050
 
-// The state lives in module storage: the ball's x, y, dx, dy, the paddle's x,
-// and where the ball and paddle were a step ago, for drawing between steps.
+// The state lives in module storage: BALL holds the ball's x, y, dx, dy
+// (slots 0 to 3), the paddle's x (4), and where the ball and paddle were a step
+// ago (5 to 7: x, y, paddle), for drawing between steps.
 const BALL = new Float64Array(8)
-const X: i32 = 0
-const Y: i32 = 1
-const DX: i32 = 2
-const DY: i32 = 3
-const PADDLE: i32 = 4
-const LAST_X: i32 = 5
-const LAST_Y: i32 = 6
-const LAST_PADDLE: i32 = 7
 // The score, the best score, whether the ball waits to be served, and the seed.
 const SCORE = new Int32Array(4)
 // Whether left and right are held. A module constant cannot hold a KeyState,
 // so each step rebuilds one from these and stores what it ends with.
 const HELD = new Int32Array(2)
 
+// Each exported function lends the storage to a helper below, which indexes
+// it as `ball`, `score` and `held`: the checker proves a literal index in
+// range under a test of a parameter's length, so every helper opens with one.
+// The storage is always 8, 4 and 2 long, so those tests never return early.
+
 /** This step's input: the held keys restored, then the page's events read. */
-const readInput = (nowMs: f64): StepInput => {
+const readInput = (held: Int32Array, nowMs: f64): StepInput => {
   const keys = new KeyState()
   keys.releasesAreSynthetic = false
-  const held: TermEvent[] = []
-  for (let i: i32 = 0; i < 2; i++) {
-    if (HELD[i] === 1) {
+  const pressed: TermEvent[] = []
+  for (let i: i32 = 0; i < toI32(held.length); i++) {
+    if (held[i] === 1) {
       const e = new TermEvent(EVENT_KEY)
       e.key = i === 0 ? KEY_LEFT : KEY_RIGHT
       e.action = ACTION_PRESS
-      held.push(e)
+      pressed.push(e)
     }
   }
-  keys.apply(held, nowMs)
+  keys.apply(pressed, nowMs)
   const input = new StepInput(keys)
   gameReadInput(input, nowMs)
-  HELD[0] = input.isDown(KEY_LEFT, 0) ? 1 : 0
-  HELD[1] = input.isDown(KEY_RIGHT, 0) ? 1 : 0
+  if (held.length >= 2) {
+    held[0] = input.isDown(KEY_LEFT, 0) ? 1 : 0
+    held[1] = input.isDown(KEY_RIGHT, 0) ? 1 : 0
+  }
   return input
 }
 
 /** Put the ball on the paddle, waiting for a serve; it jumps there, with no trail drawn. */
-const park = (): void => {
-  BALL[X] = BALL[PADDLE]
-  BALL[Y] = PADDLE_Y - BALL_R - 1.0
-  BALL[LAST_X] = BALL[X]
-  BALL[LAST_Y] = BALL[Y]
-  BALL[DX] = 0.0
-  BALL[DY] = 0.0
-  SCORE[2] = 1
+const park = (ball: Float64Array, score: Int32Array): void => {
+  if (ball.length < 8 || score.length < 4) {
+    return
+  }
+  ball[0] = ball[4]
+  ball[1] = PADDLE_Y - BALL_R - 1.0
+  ball[5] = ball[0]
+  ball[6] = ball[1]
+  ball[2] = 0.0
+  ball[3] = 0.0
+  score[2] = 1
+}
+
+/** A new game in `ball` and `score`, served the way `seed` leans. */
+const start = (ball: Float64Array, score: Int32Array, seed: i32): void => {
+  if (ball.length < 8 || score.length < 4) {
+    return
+  }
+  score[0] = 0
+  score[3] = seed === 0 ? 1 : seed
+  ball[4] = toF64(WIDTH) / 2.0
+  park(ball, score)
 }
 
 /** Start a game; the seed picks which way each serve leans. */
 export const init = (seed: i32): void => {
   gameSetSize(WIDTH, HEIGHT)
-  SCORE[0] = 0
-  SCORE[3] = seed === 0 ? 1 : seed
-  BALL[PADDLE] = toF64(WIDTH) / 2.0
-  park()
+  start(BALL, SCORE, seed)
 }
 
 /** One sound's samples, handed to the page through gameWriteSamples; 0 past the last id. */
@@ -124,14 +135,21 @@ export const sound = (id: i32): i32 => {
 
 /** Advance one fixed step of 1/60 s; `nowMs` is the page's step clock. */
 export const step = (nowMs: f64): void => {
-  const input = readInput(nowMs)
-  BALL[LAST_X] = BALL[X]
-  BALL[LAST_Y] = BALL[Y]
-  BALL[LAST_PADDLE] = BALL[PADDLE]
+  advance(BALL, SCORE, readInput(HELD, nowMs))
+}
+
+/** One step of `ball` and `score` under `input`. */
+const advance = (ball: Float64Array, score: Int32Array, input: StepInput): void => {
+  if (ball.length < 8 || score.length < 4) {
+    return
+  }
+  ball[5] = ball[0]
+  ball[6] = ball[1]
+  ball[7] = ball[4]
   let serve = false
   for (const e of input.events) {
     if (e.type === EVENT_MOUSE && (e.action === ACTION_MOVE || e.action === ACTION_PRESS)) {
-      BALL[PADDLE] = toF64(e.px)
+      ball[4] = toF64(e.px)
     }
     // Space, Enter (a tap on a touch screen) or a click serves.
     const key = e.type === EVENT_KEY && (e.key === KEY_SPACE || e.key === KEY_ENTER)
@@ -140,60 +158,74 @@ export const step = (nowMs: f64): void => {
     }
   }
   if (input.isDown(KEY_LEFT, 0)) {
-    BALL[PADDLE] = BALL[PADDLE] - 240.0 * STEP_S
+    ball[4] = ball[4] - 240.0 * STEP_S
   }
   if (input.isDown(KEY_RIGHT, 0)) {
-    BALL[PADDLE] = BALL[PADDLE] + 240.0 * STEP_S
+    ball[4] = ball[4] + 240.0 * STEP_S
   }
-  BALL[PADDLE] = Math.min(Math.max(BALL[PADDLE], PADDLE_W / 2.0), toF64(WIDTH) - PADDLE_W / 2.0)
-  if (SCORE[2] === 1) {
-    BALL[X] = BALL[PADDLE]
+  ball[4] = Math.min(Math.max(ball[4], PADDLE_W / 2.0), toF64(WIDTH) - PADDLE_W / 2.0)
+  if (score[2] === 1) {
+    ball[0] = ball[4]
     if (serve) {
-      SCORE[2] = 0
-      let r: i32 = SCORE[3] ^ (SCORE[3] << 13)
+      score[2] = 0
+      let r: i32 = score[3] ^ (score[3] << 13)
       r = r ^ (r >> 17)
-      SCORE[3] = r ^ (r << 5)
-      BALL[DX] = (SCORE[3] & 256) !== 0 ? 90.0 : -90.0
-      BALL[DY] = -150.0
+      score[3] = r ^ (r << 5)
+      ball[2] = (score[3] & 256) !== 0 ? 90.0 : -90.0
+      ball[3] = -150.0
     }
     return
   }
-  BALL[X] = BALL[X] + BALL[DX] * STEP_S
-  BALL[Y] = BALL[Y] + BALL[DY] * STEP_S
-  if (BALL[X] < BALL_R || BALL[X] > toF64(WIDTH) - BALL_R) {
-    BALL[DX] = -BALL[DX]
-    BALL[X] = Math.min(Math.max(BALL[X], BALL_R), toF64(WIDTH) - BALL_R)
+  ball[0] = ball[0] + ball[2] * STEP_S
+  ball[1] = ball[1] + ball[3] * STEP_S
+  if (ball[0] < BALL_R || ball[0] > toF64(WIDTH) - BALL_R) {
+    ball[2] = -ball[2]
+    ball[0] = Math.min(Math.max(ball[0], BALL_R), toF64(WIDTH) - BALL_R)
     gamePlaySound(SOUND_WALL)
   }
-  if (BALL[Y] < BALL_R) {
-    BALL[DY] = -BALL[DY]
-    BALL[Y] = BALL_R
+  if (ball[1] < BALL_R) {
+    ball[3] = -ball[3]
+    ball[1] = BALL_R
     gamePlaySound(SOUND_WALL)
   }
   // A hit is the ball's bottom crossing the paddle's top this step, however fast it falls.
-  const off: f64 = BALL[X] - BALL[PADDLE]
-  const crossed = BALL[LAST_Y] + BALL_R <= PADDLE_Y && BALL[Y] + BALL_R >= PADDLE_Y
-  if (BALL[DY] > 0.0 && crossed && Math.abs(off) <= PADDLE_W / 2.0 + BALL_R) {
-    BALL[Y] = PADDLE_Y - BALL_R
-    BALL[DY] = -Math.min(BALL[DY] * 1.04, MAX_DY)
-    BALL[DX] = Math.min(Math.max(BALL[DX] + off * 4.0, -MAX_DY), MAX_DY)
-    SCORE[0] = SCORE[0] + 1
-    SCORE[1] = Math.max(SCORE[1], SCORE[0])
+  const off: f64 = ball[0] - ball[4]
+  const crossed = ball[6] + BALL_R <= PADDLE_Y && ball[1] + BALL_R >= PADDLE_Y
+  if (ball[3] > 0.0 && crossed && Math.abs(off) <= PADDLE_W / 2.0 + BALL_R) {
+    ball[1] = PADDLE_Y - BALL_R
+    ball[3] = -Math.min(ball[3] * 1.04, MAX_DY)
+    ball[2] = Math.min(Math.max(ball[2] + off * 4.0, -MAX_DY), MAX_DY)
+    // In `u32`, which wraps rather than panics: the score stays far below
+    // 2^31, which would take a hit every frame for over a year.
+    score[0] = toI32(toU32(score[0]) + 1)
+    score[1] = Math.max(score[1], score[0])
     gamePlaySound(SOUND_HIT)
   }
-  if (BALL[Y] > toF64(HEIGHT) + BALL_R) {
-    SCORE[0] = 0
+  if (ball[1] > toF64(HEIGHT) + BALL_R) {
+    score[0] = 0
     gamePlaySound(SOUND_MISS)
-    park()
+    park(ball, score)
   }
 }
 
 /** Draw the frame `alpha` of the way from the last step to this one. */
 export const draw = (alpha: f64, frameMs: f64): void => {
+  paint(BALL, SCORE, alpha)
+}
+
+// Screen sums are taken in `f64` and truncated back with `toI32`, which
+// saturates where an `i32` sum would overflow; on screen every operand is a
+// small exact integer, so each result is the one the `i32` sum gives.
+
+/** Draw `ball` and `score` `alpha` of the way from the last step to this one. */
+const paint = (ball: Float64Array, score: Int32Array, alpha: f64): void => {
+  if (ball.length < 8 || score.length < 4) {
+    return
+  }
   const w: i32 = gameWidth()
   const h: i32 = gameHeight()
   rasterGradient(GAME_FRAME, w, h, 0x101830, 0x302040)
-  const paddle: f64 = BALL[LAST_PADDLE] + (BALL[PADDLE] - BALL[LAST_PADDLE]) * alpha
+  const paddle: f64 = ball[7] + (ball[4] - ball[7]) * alpha
   const left: i32 = toI32(paddle - PADDLE_W / 2.0)
   rasterRect(
     GAME_FRAME,
@@ -201,18 +233,20 @@ export const draw = (alpha: f64, frameMs: f64): void => {
     h,
     left,
     toI32(PADDLE_Y),
-    left + toI32(PADDLE_W),
-    toI32(PADDLE_Y) + 4,
+    toI32(toF64(left) + PADDLE_W),
+    toI32(PADDLE_Y + 4.0),
     0xf0f0f0,
     RASTER_SOLID
   )
-  const x: f64 = BALL[LAST_X] + (BALL[X] - BALL[LAST_X]) * alpha
-  const y: f64 = BALL[LAST_Y] + (BALL[Y] - BALL[LAST_Y]) * alpha
+  const x: f64 = ball[5] + (ball[0] - ball[5]) * alpha
+  const y: f64 = ball[6] + (ball[1] - ball[6]) * alpha
   rasterDisc(GAME_FRAME, w, h, x, y, BALL_R, 0xffd040, 1.0)
-  const score = `${SCORE[0]}  best ${SCORE[1]}`
-  rasterText(GAME_FRAME, w, h, w - rasterTextWidth(score, 1) - 6, 6, 1, score, 0xa0a0c0)
-  if (SCORE[2] === 1) {
+  const text = `${score[0]}  best ${score[1]}`
+  const right: i32 = toI32(toF64(w) - toF64(rasterTextWidth(text, 1)) - 6.0)
+  rasterText(GAME_FRAME, w, h, right, 6, 1, text, 0xa0a0c0)
+  if (score[2] === 1) {
     const hint = "space, click or tap to serve"
-    rasterText(GAME_FRAME, w, h, (w - rasterTextWidth(hint, 1)) / 2, 90, 1, hint, 0xf0f0f0)
+    const centre: i32 = toI32((toF64(w) - toF64(rasterTextWidth(hint, 1))) / 2.0)
+    rasterText(GAME_FRAME, w, h, centre, 90, 1, hint, 0xf0f0f0)
   }
 }
