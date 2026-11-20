@@ -555,9 +555,16 @@ What moved, and what did not:
   a parameter, so a named pair comes only from an override file, and these
   runs pass none.
 
-Before is `main` at 1d6311f8, after is this branch at db149390, each built with `bash scripts/bootstrap.sh -o build/<name>
---stages 1`. Each module was written with
+Before is `main` at 1d6311f8, after is this branch at b28937b3, each built
+with `bash scripts/bootstrap.sh -o build/<name> --stages 1`. Each module was
+written with
 `build/<name> c-import <header> --target x86_64-unknown-linux-gnu -o <name>.ts`,
 `<header>` being `runtime/sqlite/sqlite3.h`, `/usr/include/zlib.h`,
 `/usr/include/png.h` and `/usr/include/openssl/sha.h`, and counted against
-the functions clang's JSON AST lists for the same header.
+the functions clang's JSON AST lists for the same header. The three system
+headers are Ubuntu 24.04's packages in the cloud container the run used:
+`zlib1g-dev` 1.3.dfsg-3.1ubuntu2.3, `libpng-dev` 1.6.43-5ubuntu0.7 and
+`libssl-dev` 3.0.13-0ubuntu3.16; a machine without them cannot repeat those
+three rows. The "before" figures differ from §4.1's (52 exact `sqlite3.h`
+functions here, 44 there) because §4.1 counts with the Node prototype's
+simplified mapping, not with `nish c-import`.
