@@ -15425,6 +15425,42 @@ if (dealtHere("arrayChecks")) {
     }
   }
 
+  // #1640: a byte-class lookup in a constant table is one load once optimised.
+  // The header is a constant whose `data` field LLVM folds to the private
+  // `.data` global, and a u8 index into 256 entries needs no bounds check, so
+  // after `opt -O2` the exported `classOf` loads the element and nothing else:
+  // no `len`, no `data` pointer, no panic branch.
+  if (!only || "const_table_load".includes(only)) {
+    if (has("opt")) {
+      const dir = path.join(buildDir, "const_table_load")
+      fs.mkdirSync(dir, { recursive: true })
+      const src = path.join(dir, "main.ts")
+      const ll = path.join(dir, "main.ll")
+      const cls = (b) =>
+        b >= 48 && b < 58 ? 1 : (b >= 65 && b < 91) || (b >= 97 && b < 123) ? 2 : (b >= 9 && b <= 13) || b === 32 ? 3 : 0
+      const entries = Array.from({ length: 256 }, (_, b) => cls(b)).join(", ")
+      fs.writeFileSync(src, `const CLASS: readonly u8[] = [${entries}]\nexport const classOf = (c: u8): u8 => CLASS[c]\n`)
+      const built = spawnSync(NISH, [src, "-o", ll], { cwd: root, encoding: "utf8" })
+      const o =
+        built.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+          : { status: 1, stdout: "", stderr: built.stderr }
+      const body = o.stdout.match(/define[^\n]*@classOf\b[\s\S]*?\n}/)?.[0] ?? ""
+      const loads = body.match(/= load /g) ?? []
+      check(
+        "const_table_load: after opt -O2 a u8 lookup in a 256-entry constant table is one load of the element",
+        o.status === 0 &&
+          loads.length === 1 &&
+          /= getelementptr inbounds i8, ptr @nish_const_\d+_CLASS\.data, i64 %\d+\n\s+%\d+ = load i8, ptr %\d+/.test(body) &&
+          !body.includes("call ") &&
+          !body.includes("br "),
+        o.status === 0 ? body || o.stdout : o.stderr
+      )
+    } else {
+      skip("const_table_load: opt is not installed")
+    }
+  }
+
   if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     if (has("opt")) {
       for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
@@ -21847,6 +21883,39 @@ if (dealtHere("cliChecks")) {
       tableHeader.includes("const nish_array *table(void);") && !/^nish_array \*table/m.test(tableHeader),
       tableHeader || tableEmit.stdout + tableEmit.stderr
     )
+    // The wasm typings hand the same table out as a Uint8Array the loader copies,
+    // so a host's store into it never reaches the read-only data (#1640).
+    const tableDts = emit(tableSrc, ["--emit-dts", sidecar("const_table_return", "d.ts")])
+    const tableTypings =
+      tableDts.status === 0 ? fs.readFileSync(sidecar("const_table_return", "d.ts"), "utf8") : ""
+    check(
+      "a function returning a constant table is `table(): Uint8Array` in the wasm typings",
+      tableTypings.includes("  table(): Uint8Array;") && tableTypings.includes("  at(i: number): number;"),
+      tableTypings || tableDts.stderr
+    )
+    if (tableDts.status === 0 && has("wasm-ld")) {
+      const tableWasm = path.join(interopDir, "const_table_return.wasm")
+      const tw = spawnSync(
+        "bash",
+        ["scripts/build.sh", sidecar("const_table_return", "ll"), "runtime/runtime-wasm.c", "-o", tableWasm, "--profile", "wasm"],
+        { cwd: root, encoding: "utf8" }
+      )
+      const script = [
+        'import { readFileSync } from "node:fs";',
+        `const { load } = await import(${JSON.stringify(sidecar("const_table_return", "mjs"))});`,
+        `const api = await load(readFileSync(${JSON.stringify(tableWasm)}));`,
+        "const t = api.table(); t[0] = 9;",
+        "console.log(t.constructor.name, Array.from(api.table()).join(','), api.at(4));",
+      ].join("\n")
+      const tr = tw.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root, encoding: "utf8" }) : null
+      check(
+        "wasm: a returned constant table is a copy, so a store into it leaves the table as it was",
+        tr !== null && tr.stdout.trim() === "Uint8Array 1,2,3 2",
+        tw.stderr + (tr ? tr.stdout + tr.stderr : "")
+      )
+    } else {
+      skip("wasm: a returned constant table is a copy: wasm-ld is not installed")
+    }
 
     // A `Secret` is opaque at the boundary, as a `Map` is: the header names its
     // struct and keeps the layout, so a C host holds the key's pointer but has no
