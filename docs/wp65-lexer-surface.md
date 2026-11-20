@@ -153,8 +153,8 @@ D1b (#1632): a number's `toString()` with no argument is refused as
 `` Unknown method `toString` on i32; use a template literal: `${n}` ``,
 spelled with the receiver the program wrote, and its quick-fix writes that
 literal (`tests/cases/reject_num_tostring*`). With a radix the refusal names
-no spelling, since a template literal has none. `String(n)` keeps its
-refusal.
+no spelling, since a template literal has none. D1b's `String(n)` half was not
+taken: `String(n)` keeps its `` Unknown function `String` `` refusal.
 
 ## 6. Stages
 
