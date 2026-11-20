@@ -293,7 +293,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 62 | Nish classes from a JSON Schema: `nish schema` writes typed JSON classes keeping every keyword as a type, a WP61 constraint or JSDoc, or refusing it | [wp62](wp62-json-schema-classes.md) |
 | 65 | The surface a lexer port asked for: byte search through `memchr` and `memcmp`, allocation without the zero fill and a standard `grow`, non-literal field initializers, and whether a number gets `toString` | [wp65](wp65-lexer-surface.md) |
 | 66 | C libraries from their headers: `nish c-import` writes a header's functions, structs and constants as Nish declarations through clang, with the language stages that would bind the rest | [wp66](wp66-c-headers.md) |
-| 71 | An HttpArena entry, and what it asks of `std/net`: the entry, the rig on a machine HttpArena's size, and each scored profile against the package it waits on | [wp71](wp71-httparena.md) |
+| 71 | An HttpArena entry, and what it asks of `std/net`: the entry, and each scored profile against the package it waits on | [wp71](wp71-httparena.md) |
 | 72 | gRPC over the HTTP/2 server: `nish/net/protobuf`, trailers on the façade, unary calls in `nish/net/grpc` | [wp72](wp72-grpc.md) |
 | 73 | Brotli, measured first, then an encoder and `br` responses | [wp73](wp73-brotli.md) |
 

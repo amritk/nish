@@ -12,9 +12,10 @@ for an entry like ours is [HttpArena](https://www.http-arena.com/)
 ([MDA2AV/HttpArena](https://github.com/MDA2AV/HttpArena)): an open benchmark
 run on one machine, with entries added by pull request and benchmarked on
 that pull request. Its leaderboard covers HTTP/1.1, HTTP/2, HTTP/3, gRPC and
-WebSocket, not TechEmpower's seven HTTP/1.1 tests. This package is the entry,
-the rig to measure it, and the list of what the entry needs that `std/` does
-not have yet. Each such piece is planned in the package that owns its module.
+WebSocket, not TechEmpower's seven HTTP/1.1 tests. This package is the entry
+and the list of what the entry needs that `std/` does not have yet. It runs
+nothing HttpArena-specific of its own: HttpArena's `validate.sh` checks the
+entry, and HttpArena's machine measures it when it is entered. Each such piece is planned in the package that owns its module.
 
 ## 1. How HttpArena scores
 
@@ -112,42 +113,40 @@ on the same CPUs, and `nish/net/prefork` is measured at 1, 2 and 4 cores
 (`setCpuAffinity`, and the reuseport program behind `tcpListenFlags`'s
 flag 4 in `runtime/runtime-net.c`), and QUIC steers by connection ID
 ([h3-multicore.md](h3-multicore.md)). How any of it scales to 32 cores, and
-how far each profile is from its leader, is not known; S1 and S3 find out.
+how far each profile is from its leader, is not known until HttpArena
+measures the entry (S4).
 
 ## 4. Stages
 
-- **S1, the rig.** HttpArena's harness at a pinned commit (`validate.sh`,
-  `benchmark.sh`, gcannon, zrk, h2load with HTTP/3) on a machine with at least
-  64 hardware threads, its CPUs split as HttpArena splits them, and the
-  leading entries of each family measured on it. The machine is not this
-  repository's CI's; the figures go into [BENCHMARKS.md](BENCHMARKS.md) with
-  the machine and commit named, as every table there is.
-- **S2, the entry on what is built.** `bench/httparena/` in HttpArena's
+- **S1, the entry on what is built.** `bench/httparena/` in HttpArena's
   layout (`Dockerfile` from a released compiler, `meta.json`, the source on
   `nish/net/http-server` and `nish/net/prefork`), joining the 10 profiles of
-  §3 that wait on nothing, and passing `validate.sh`. A `tests/link/` case
-  checks the routes' answers over loopback, as `tfb_entry` does for
-  TechEmpower's.
-- **S3, measured at 32 workers.** One worker a core, pinned and steered, on
-  the rig; each joined profile's figure against its leader's, in
-  BENCHMARKS.md. That table decides which profile's gap is worked first.
-- **S4, the profiles that wait on other packages**, each joined as its
-  package lands: the TLS pair and the echo trio after WP39 G7, gRPC after
-  WP72, the static pair after WP43 stage 3, br for `json-comp` after WP73.
-- **S5, io_uring under the façade**, if S3's CPU-scored profiles
-  (`latency-1m`, `latency-10k`, `8gbit`) show the cost. WP63 S4 measured
-  29.5% less CPU a request under `HttpHandler` at 96,000 connections, with
-  the rings taken through the listener (`tcpListenFlags`'s flag 8,
-  `HandlerLimits.listen`). The façade also serves a listener the program
-  makes, but no `tests/link/net_http_server*` case opens its listener with
-  flag 8, so whether its carriers run on ring slots is untested;
-  this stage checks that first, and measures it.
-- **S6, the entry** *(open question)*: the pull request to HttpArena, a
+  §3 that wait on nothing, with one worker a core, pinned and steered, and
+  passing `validate.sh` in an HttpArena checkout at a named commit. A
+  `tests/link/` case checks the routes' answers over loopback, as
+  `tfb_entry` does for TechEmpower's.
+- **S2, the profiles that wait on other packages**, one stage per
+  dependency, each joined as its package lands: S2a the TLS pair and S2b the
+  echo trio after WP39 G7, S2c gRPC after WP72, S2d the static pair after
+  WP43 stage 3, S2e br for `json-comp` after WP73.
+- **S3, io_uring under the façade.** WP63 S4 measured 29.5% less CPU a
+  request under `HttpHandler` at 96,000 connections, with the rings taken
+  through the listener (`tcpListenFlags`'s flag 8, `HandlerLimits.listen`).
+  The façade also serves a listener the program makes, but no
+  `tests/link/net_http_server*` case opens its listener with flag 8, so
+  whether its carriers run on ring slots is untested; this stage checks that
+  first, then measures the CPU-scored profiles' route (`latency-1m`,
+  `latency-10k`, and `8gbit` once S2a lands) with and without the rings, on
+  the machine the [BENCHMARKS.md](BENCHMARKS.md) table names.
+- **S4, the entry** *(open question)*: the pull request to HttpArena, a
   public number. The owner's call each time.
-- **The gateway board** *(deferred)*: `gateway-h2`, `gateway-h3` and
+- **S5, the gateway board** *(deferred)*: `gateway-h2`, `gateway-h3` and
   `production-stack` run the server behind nginx or a peer, and
   `production-stack` reads Redis, which `std/` has no client for. They are
   not in the overall board.
+
+No stage builds a rig of HttpArena's size or measures the leaders on one;
+HttpArena's own machine measures the entry when it is entered.
 
 ## 5. Decisions
 
@@ -155,6 +154,6 @@ how far each profile is from its leader, is not known; S1 and S3 find out.
 | --- | --- | --- |
 | **D1** | The entry's type and mode | **A framework of type `emerging`, in standard mode first**: it uses the standard library's documented server as any program would. Tuned mode, with its own buffer sizes and worker counts, is a second entry once standard is measured |
 | **D2** | Where the entry lives | **`bench/httparena/` in this repository**, beside `bench/techempower/`, copied into `frameworks/nish/` when it is entered, as WP39 D2 did for TechEmpower |
-| **D3** | Whether and when to enter | **After S3**, with figures from the rig and every §3 profile that waits on nothing joined. A public number is the owner's call each time |
+| **D3** | Whether and when to enter | **After S1**, with every §3 profile that waits on nothing joined; HttpArena's benchmark comment on the pull request is the first figure at its size. A public number is the owner's call each time |
 | **D4** | The reference-only profiles | **`pipelined` and `async-db`**, which need nothing new (`async-db` is one query per request on `nish/net/postgres`). Not `fortunes`, which standard mode wants from "a real template engine", which `std/` does not have. None of them is scored |
 | **D5** | The completeness axes | **Declare only what is built.** Routing, request and response are; middleware is WP43 stage 5's open question, so the entry declares it missing until that lands |

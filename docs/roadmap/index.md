@@ -25,7 +25,7 @@ specified.
 2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G7's HTTP/1.1 over TLS on the `nish/net/http-server` façade.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP21: Packages](wp21-packages.md): S4, the build cache.
-5. [WP71: An HttpArena entry, and what it asks of `std/net`](wp71-httparena.md): S1, the rig on a machine HttpArena's size.
+5. [WP71: An HttpArena entry, and what it asks of `std/net`](wp71-httparena.md): S1, the entry on what is built.
 
 ## Open questions
 
