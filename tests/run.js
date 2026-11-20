@@ -12113,6 +12113,18 @@ int main(void) {
         staleRun.stdout === fs.readFileSync(path.join(root, staleDir, "expected.out"), "utf8"),
       staleDebug.stderr + (staleRun ? staleRun.stdout.slice(-2000) + staleRun.stderr : "")
     )
+    // The shape cache frees its KeyInfo references at close; SQLite asserts
+    // that a free through a connection holds that connection's mutex.
+    const shapesDir = path.join("tests", "link", "std_sqlite_cursor_shapes")
+    const shapesDebug = link(path.join(shapesDir, "main.ts"), "shapes-debug", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_DEBUG" })
+    const shapesRun = shapesDebug.status === 0 ? runOut("shapes-debug") : null
+    check(
+      "sqlite-link: std_sqlite_cursor_shapes passes with SQLite's asserts on (-DSQLITE_DEBUG)",
+      shapesRun !== null &&
+        shapesRun.status === 0 &&
+        shapesRun.stdout === fs.readFileSync(path.join(root, shapesDir, "expected.out"), "utf8"),
+      shapesDebug.stderr + (shapesRun ? shapesRun.stdout.slice(-2000) + shapesRun.stderr : "")
+    )
     // The default build has no virtual-table module, so the schema program
     // makes an rtree only when SQLite is built with one.
     const rtree = link(path.join("tests", "link", "std_sqlite_cursor_schema", "main.ts"), "schema-rtree", [], {
@@ -27223,6 +27235,17 @@ if (dealtHere("releaseChecks")) {
         // fails: the `pop` divergence above.
         "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
       ],
+      [
+        "ffi_buffer_counted_by.ts",
+        // WP66 S5: `CountedBy` is declared by the program's own `.d.ts`, not
+        // runtime/nish.d.ts (docs/guide/using-nish/interop.md); checked below
+        // with that declaration.
+        "`CountedBy` is declared by the program's own `.d.ts` (checked below with one)",
+      ],
+      [
+        "ffi_buffer_counted_by_panic.ts",
+        "`CountedBy` is declared by the program's own `.d.ts` (checked below with one)",
+      ],
     ])
     // The cases whose clauses fall through on purpose, checked in a project
     // without `noFallthroughCasesInSwitch`. Named one by one, so a new case
@@ -27250,6 +27273,22 @@ if (dealtHere("releaseChecks")) {
       `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences, ${fallthroughCases.length} without the fallthrough check)`,
       everyCase.ok && fallingThrough.ok && fallthroughCases.length === FALLTHROUGH_CASES.size,
       everyCase.output + fallingThrough.output
+    )
+
+    // WP66 S5: the `CountedBy` cases, with the one-line `.d.ts` the guide tells
+    // a program to write (docs/guide/using-nish/interop.md), so tsc still
+    // checks everything else in them.
+    const countedByDts = path.join(ambientDir, "counted-by.d.ts")
+    fs.writeFileSync(countedByDts, "type CountedBy<T, N extends string> = T\n")
+    const countedByCases = ["ffi_buffer_counted_by.ts", "ffi_buffer_counted_by_panic.ts"]
+    const countedByCheck = typeCheck("counted-by", [
+      countedByDts,
+      ...countedByCases.map((f) => path.join(casesDir, f)),
+    ])
+    check(
+      `tsc accepts the CountedBy cases with the guide's one-line \`.d.ts\` (${countedByCases.length} cases)`,
+      countedByCheck.ok,
+      countedByCheck.output
     )
 
     // And on the largest Nish program there is: the compiler itself.

@@ -4168,6 +4168,13 @@ const checkImportedBuiltin = (
     return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`)
   }
   ctx.program.nodeBuiltins[expr.id] = imported.canonical
+  // WP66 S3: an opaque class has no layout, so there is nothing to copy into.
+  if (imported.member === "readStruct" && want >= 0 && ctx.table.isOpaque(ctx.table.stripNull(want))) {
+    return ctx.errorType(
+      expr,
+      `\`readStruct(p)\` cannot copy into \`${ctx.table.typeName(ctx.table.stripNull(want))}\`: an opaque \`declare class\` has no fields, so the \`CPtr\` is the value; declare the C function to return the class itself`
+    )
+  }
   return imported.namespace.length > 0
     ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
     : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)

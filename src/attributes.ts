@@ -162,6 +162,10 @@ import {
   T_BOOL,
   T_I32,
   T_STRING,
+  T_U16,
+  T_U32,
+  T_U64,
+  T_U8,
   T_VOID,
   TypeTable,
 } from "./types"
@@ -3414,7 +3418,7 @@ class FactCollector {
               b,
               foreignBufferCount(this.table, callee, b),
               this.known,
-              "toU64"
+              foreignCountConversion(callee, foreignBufferCount(this.table, callee, b))
             )
         if (!proven) {
           const tail: string[] = []
@@ -3435,6 +3439,12 @@ class FactCollector {
       if (!nullable) {
         this.noteSite(call, PANIC_FFI_NULL, false, "")
       }
+    } else if (this.table.isOpaque(callee.returnType)) {
+      // WP66 S3: a non-null opaque class result is tested for `NULL` too.
+      const tail: string[] = []
+      panicTailCallees(tail)
+      this.addCallees(tail)
+      this.noteSite(call, PANIC_FFI_NULL, false, "")
     }
   }
 
@@ -6913,10 +6923,16 @@ export const hostWindowProven = (
 
 /**
  * The parameter that counts buffer parameter `index` of the `declare function`
- * `sig`: the `u64` that closes its run, the first parameter after it that is
- * not a buffer (WP53 §3a; `checkForeignSignature` refuses every other shape).
+ * `sig`: the one its `CountedBy` names (WP66 S5), else the `u64` that closes
+ * its run, the first parameter after it that is not a buffer (WP53 §3a;
+ * `checkForeignSignature` refuses every other shape). -1 for a name that is
+ * no parameter, which the checker has refused.
  */
 export const foreignBufferCount = (table: TypeTable, sig: FunctionSig, index: i32): i32 => {
+  const named = sig.countedBuffers.indexOf(index)
+  if (named >= 0) {
+    return sig.paramNames.indexOf(sig.countedNames[named])
+  }
   let at = index + 1
   while (at < sig.paramTypes.length && isForeignBuffer(table, sig.paramTypes[at])) {
     at = at + 1
@@ -6925,10 +6941,32 @@ export const foreignBufferCount = (table: TypeTable, sig: FunctionSig, index: i3
 }
 
 /**
+ * The conversion a call spells a buffer's count with when it passes the
+ * buffer's own length, `toU8` to `toU64` by the count's type (WP66 S5), or
+ * "" for an out class, whose field no argument spells and so no proof reads.
+ * A narrowing conversion truncates, which only lowers the count, so the
+ * credited count is still within the length it was taken from.
+ */
+export const foreignCountConversion = (sig: FunctionSig, count: i32): string => {
+  const type = sig.paramTypes[count]
+  if (type === T_U8) {
+    return "toU8"
+  }
+  if (type === T_U16) {
+    return "toU16"
+  }
+  if (type === T_U32) {
+    return "toU32"
+  }
+  return type === T_U64 ? "toU64" : ""
+}
+
+/**
  * Whether the `ffi-length` check of buffer argument `index` of the foreign
  * call `call` is proven, so that neither the attribute pass records it as a
  * panic nor the emitter writes it (WP53 B1.2, §3a). The count is spelled
- * `toU64(x.length)` in the call, where `x` is the buffer argument itself, a
+ * `toU64(x.length)` in the call (`conversion`, `toU8` to `toU64` by the
+ * count's width under WP66 S5), where `x` is the buffer argument itself, a
  * `const` local or a parameter named alone, so the count is the length it was
  * when the count ran; and no argument after the count can move an array's
  * `len` (`bodyMayExtend`, with any receiver, since aliases are not tracked),
@@ -6947,7 +6985,7 @@ export const foreignBufferCountProven = (
   known: FactsTable | null,
   conversion: string
 ): boolean => {
-  if (known !== null && known.noElision) {
+  if ((known !== null && known.noElision) || count < 0) {
     return false
   }
   const args = call.children[1].children

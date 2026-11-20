@@ -16153,6 +16153,105 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-buffer -->
 
+### `CountedBy`: a buffer that names its count
+
+A `declare function` parameter written `CountedBy<u8[], "len">` (or
+`CountedBy<readonly u8[], "len">`) is a plain `u8[]` buffer at the call: the
+`elements` pointer, loaded from the header's third field, passes as `i8*`, as
+in the section above. The name says which parameter is its count, at any
+place in the list and at any unsigned width. A `u32` count passes as `i32`,
+a `u16` as `i16 zeroext`, a `u8` as `i8 zeroext`; a count that is a
+`declare class` with one `u64` field passes as that struct's pointer, and its
+field is what is checked (zlib's `uLongf *destLen`).
+
+The check is WP53's: the count, widened with `zext` to `i64` (or loaded out
+of the class's field), against the header's `length`, `icmp ule`, and a
+failure is the `ffi-length` panic naming both arguments. Below, `sum16` is
+passed the literal `toU16(2)`, so the call keeps the check. `crc32` is passed
+`toU32(b.length)`, the buffer's own length narrowed: a `trunc` only lowers a
+count, so the prover drops the check and the call is straight-line. The
+prover does not follow a class field, so an out-class count is always checked.
+
+```ts
+declare function crc32(crc: u32, buf: CountedBy<readonly u8[], "len">, len: u32): u32
+declare function sum16(n: u16, src: CountedBy<readonly u8[], "n">): u32
+
+export const main = (): i32 => {
+  const b: u8[] = [104, 105, 10]
+  const c = crc32(toU32(0), b, toU32(b.length))
+  const s = sum16(toU16(2), b)
+  return toI32(c + s)
+}
+```
+
+The listing is an excerpt, not a generated one: the `%struct.nish_array` type,
+the `@main` wrapper, the `attributes` groups and the `!tbaa` and alias-scope
+metadata it names are left out, and no `docs/cookbook/` program regenerates
+it yet.
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [70 x i8] } { i64 69, [70 x i8] c"`sum16`: argument 1 (n) counts more bytes than argument 2 (src) holds\00" }, align 8
+
+declare i32 @crc32(i32, i8*, i32)
+declare i32 @sum16(i16 zeroext, i8*)
+declare void @nish_free_arena() #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %b.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i8], align 8
+  %c.addr = alloca i32, align 4
+  %s.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [3 x i8]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %2 to i8*
+  %5 = getelementptr inbounds i8, i8* %4, i64 0
+  store i8 104, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %6 = getelementptr inbounds i8, i8* %4, i64 1
+  store i8 105, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds i8, i8* %4, i64 2
+  store i8 10, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %b.addr, align 8
+  %8 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %9 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = trunc i64 %11 to i32
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %15 = call i32 @crc32(i32 0, i8* %14, i32 %12)
+  store i32 %15, i32* %c.addr, align 4
+  %16 = trunc i32 2 to i16
+  %17 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %18 = zext i16 %16 to i64
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %21 = icmp ule i64 %18, %20
+  br i1 %21, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [70 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.ok:
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %24 = call i32 @sum16(i16 zeroext %16, i8* %23)
+  store i32 %24, i32* %s.addr, align 4
+  %25 = load i32, i32* %c.addr, align 4
+  %26 = load i32, i32* %s.addr, align 4
+  %27 = add i32 %25, %26
+  ret i32 %27
+}
+```
+
 ### `using` of a handle class: the close at every exit
 
 A class with a `CPtr` field is a handle class (WP53 H1.2), and a `using` of
@@ -16425,7 +16524,7 @@ then the element index. An index the prover cannot place in `0..Hi` is
 checked first with one unsigned compare, so a negative `i32` index, widened
 by `sext`, fails the same `icmp ult` as one past the end and panics through
 `nish_panic_index`; a proven index (a loop over `0..Hi`) has no check, and a
-constant outside the range is NL2810 at compile time. The loads and stores
+constant outside the range is NL2818 at compile time. The loads and stores
 carry no TBAA tag: C may reach the same bytes through any pointer.
 
 This is an excerpt, not a cookbook program: the program between
@@ -16476,6 +16575,63 @@ bounds.ok:
 Tests: `tests/cases/ffi_array_field` (golden `.ll`, native round trip
 against a C `SHA_CTX` shape), `tests/ffi-struct.js` (offsets and size
 against clang, natively and under `--profile wasi`).
+
+### An opaque `declare class`: a C pointer type
+
+A `declare class` with no fields (WP66 S3) is the pointer type a C library
+hands out and takes back: SQLite's `sqlite3 *`, stdio's `FILE *`. It lowers to
+`i8*`, exactly as `CPtr` does, so the C side sees a plain pointer; the name
+lives only in the checker, which keeps a `Stmt` from being passed where a `Db`
+is wanted. `%struct.Db = type {}` is still declared and nothing uses it.
+
+```ts
+declare class Db {}
+declare class Stmt {}
+
+declare function db_open(flags: i32): Db | null;
+declare function db_close(db: Db): void;
+declare function stmt_prepare(db: Db, n: i32): Stmt;
+declare function stmt_step(stmt: Stmt): i32;
+declare function stmt_close(stmt: Stmt): void;
+```
+
+Every signature carries `i8*` where the class is named:
+
+```llvm
+%struct.Db = type {}
+%struct.Stmt = type {}
+
+declare i8* @db_open(i32)
+declare void @db_close(i8*)
+declare i8* @stmt_prepare(i8*, i32)
+declare i32 @stmt_step(i8*)
+declare void @stmt_close(i8*)
+```
+
+A `Db | null` result is stored as it comes and the `db === null` test is a
+pointer compare. A plain `Stmt` result is C's promise of a pointer, so the call
+is followed by the same `ffi.null` check a `string` result gets, which panics
+with the function's name instead of carrying `NULL` into the next call (an
+excerpt of `run`'s body, from the call on):
+
+```llvm
+  %4 = call i8* @stmt_prepare(i8* %3, i32 %n)
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  store i8* %4, i8** %stmt.addr, align 8
+```
+
+The class has no layout, so `new`, a member access, `readStruct`, a field, a
+`Result` arm and a parameter or return of a function the program defines are
+refused before any IR is written (NL2805 to NL2808). The rule is in
+[`LANGUAGE.md`](LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type); the full
+golden is `tests/cases/ffi_opaque_handle.ll`.
 
 ### `readStruct`: a C-owned struct, copied out
 

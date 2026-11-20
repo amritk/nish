@@ -277,6 +277,10 @@ const checkStructProperty = (
       ctx.errorAtProperty(expr, methodReferenceMessage(ctx.textOf(expr)))
       return T_ERROR
     }
+    if (ctx.table.isOpaque(info.type)) {
+      ctx.errorAtProperty(expr, opaqueMemberMessage(ctx.table.typeName(info.type), expr.text))
+      return T_ERROR
+    }
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
       expr,
@@ -471,6 +475,10 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     if (field !== null && nullableReference(ctx, field.type)) {
       return refuseNullableCall(ctx, access, ctx.textOf(access))
     }
+    if (ctx.table.isOpaque(info.type)) {
+      ctx.errorAtProperty(access, opaqueMemberMessage(ctx.table.typeName(info.type), access.text))
+      return T_ERROR
+    }
     const hint = field !== null ? " (it is a field, not a method)" : ""
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
@@ -641,6 +649,13 @@ const checkMethodArguments = (
   checkOverloadCall(ctx, call, callee, gotTypes, 1, what)
 }
 
+/**
+ * Refuses member `member` of the opaque `declare class` `name` (WP66 S3): C
+ * keeps its fields, so it has none here to read, write or call.
+ */
+const opaqueMemberMessage = (name: string, member: string): string =>
+  `\`${name}\` is an opaque \`declare class\`, so it has no member \`${member}\`: C keeps its fields, and only a \`declare function\` can read or change them`
+
 /** `new C(...)`, `new Array<T>(n)`, `new Int32Array(n)`. */
 export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const callee = expr.children[0]
@@ -688,6 +703,13 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return ctx.errorType(expr, dateRefusal("new Date()"))
     }
     return ctx.errorType(callee, `Unknown class \`${name}\``)
+  }
+  // WP66 S3: C makes an opaque class's values; there is nothing here to build.
+  if (ctx.table.isOpaque(info.type)) {
+    return ctx.errorType(
+      expr,
+      `Cannot \`new\` \`${name}\`: an opaque \`declare class\` has no layout to build, so only a \`declare function\` that returns one can make it`
+    )
   }
   if (info.kind !== STRUCT_CLASS) {
     return ctx.errorType(expr, `Cannot \`new\` interface \`${name}\`; use an object literal: \`{ ... }\``)
@@ -1183,6 +1205,10 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   }
   const field = info.field(target.text)
   if (field === null) {
+    if (ctx.table.isOpaque(info.type)) {
+      ctx.errorAtProperty(target, opaqueMemberMessage(ctx.table.typeName(info.type), target.text))
+      return T_ERROR
+    }
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
     ctx.errorAtProperty(
       target,

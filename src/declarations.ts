@@ -41,7 +41,7 @@ import {
   NodeKind,
 } from "./nodes"
 import { FieldInfo, FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
-import { checkLiteralInitializer, layoutClass } from "./structs"
+import { checkLiteralInitializer, foreignCountWidth, layoutClass, rejectOpaque } from "./structs"
 import {
   isForeignBuffer,
   isHostWindow,
@@ -122,7 +122,39 @@ export const collectParams = (
     const untypedDefault =
       param.children[1].kind === NodeKind.Empty &&
       (param.flags & (FLAG_DEFAULT | FLAG_SIGNATURE)) === (FLAG_DEFAULT | FLAG_SIGNATURE)
-    const type = untypedDefault ? T_ERROR : resolveType(param.children[1], ctx)
+    // WP66 S5: `CountedBy<u8[], "n">` is the buffer `u8[]`, whose count is
+    // the parameter `n`; the name is resolved once every parameter is known.
+    let annotation = param.children[1]
+    let counted = ""
+    if (annotation.kind === NodeKind.TypeRef && annotation.text === COUNTED_BY) {
+      const args = annotation.children[0]
+      const pair = args.kind === NodeKind.List && args.children.length === 2
+      if (!foreign) {
+        ctx.error(annotation, COUNTED_BY_PLACE_MESSAGE)
+        annotation = args.kind === NodeKind.List && args.children.length > 0 ? args.children[0] : annotation
+      } else if (
+        !pair ||
+        args.children[1].kind !== NodeKind.TypeLiteral ||
+        !args.children[1].text.startsWith('"')
+      ) {
+        ctx.error(annotation, COUNTED_BY_FORM_MESSAGE)
+        counted = "?"
+      } else {
+        annotation = args.children[0]
+        const count = args.children[1].text
+        counted = count.substring(1, count.length - 1)
+        // No parameter is named `""` or `"?"`, and `"?"` marks a refused
+        // spelling below, so either would otherwise pass unchecked.
+        if (counted === "" || counted === "?") {
+          ctx.error(args.children[1], COUNTED_BY_FORM_MESSAGE)
+          counted = "?"
+        }
+      }
+    }
+    const type = untypedDefault || annotation.text === COUNTED_BY ? T_ERROR : resolveType(annotation, ctx)
+    if (counted !== "" && type !== T_ERROR && !isForeignBuffer(ctx.table, type)) {
+      ctx.error(annotation, COUNTED_BY_FORM_MESSAGE)
+    }
     let duplicate = false
     for (const seen of sig.paramNames) {
       if (seen === name) {
@@ -135,6 +167,7 @@ export const collectParams = (
     }
     if (!foreign) {
       rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1])
+      rejectOpaque(ctx, type, "a parameter of a function this program defines", param.children[1])
     }
     // A mask has no layout a header, a `.d.ts` or a class describes (`simd.ts`).
     if (sig.exported || owner >= 0) {
@@ -149,6 +182,10 @@ export const collectParams = (
     if (isCompatOptional(ctx, param)) {
       collectOptional(ctx, sig, param, type)
       continue
+    }
+    if (counted !== "" && counted !== "?") {
+      sig.countedBuffers.push(sig.paramNames.length)
+      sig.countedNames.push(counted)
     }
     sig.paramNames.push(name)
     sig.paramTypes.push(type)
@@ -598,6 +635,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
       "the return type of a function this program defines",
       returnAnnotation
     )
+    rejectOpaque(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation)
     if (sig.exported) {
       rejectStoredMask(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
       deferExportedLayout(ctx, sig.returnType, "the return type of an exported function", returnAnnotation)
@@ -685,8 +723,11 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
   let i = 0
   while (i < sig.paramTypes.length) {
     if (isForeignBuffer(ctx.table, sig.paramTypes[i])) {
-      run = run + 1
-      lastBuffer = sig.paramNames[i]
+      // WP66 S5: a buffer that names its count is outside every run.
+      if (sig.countedBuffers.indexOf(i) < 0) {
+        run = run + 1
+        lastBuffer = sig.paramNames[i]
+      }
       i = i + 1
       continue
     }
@@ -745,11 +786,17 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       `\`declare function ${name}\` takes the buffer \`${lastBuffer}\` with no count after it: a run of \`u8[]\` parameters is followed by one \`u64\`, the byte count C may touch in each`
     )
   }
+  checkCountedBuffers(ctx, sig, decl, name)
   if (ctx.table.stripNull(sig.returnType) === T_STRING) {
     // S3.2: C's `const char *`, copied into the arena at the call
     // (`docs/wp27-ffi.md` §8d), so the string is the program's from then on
     // and C keeps its own. `string | null` answers `null` for `NULL`, and a
     // `string` panics on one (`ffi-null`).
+    return
+  }
+  if (ctx.table.isOpaque(ctx.table.stripNull(sig.returnType))) {
+    // WP66 S3: an opaque class is C's own pointer, handed out as a `CPtr` is,
+    // and `Name | null` answers `null` for `NULL` the way `CPtr | null` does.
     return
   }
   if (layoutClass(ctx.program, ctx.table, ctx.table.stripNull(sig.returnType)) !== null) {
@@ -768,6 +815,68 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar, a \`CPtr\` or a \`string\` it copies from a \`const char *\``
     )
   }
+}
+
+/** The type name a buffer's count is named with (WP66 S5). */
+const COUNTED_BY: string = "CountedBy"
+
+/** `CountedBy` on a parameter of a function this program defines. */
+const COUNTED_BY_PLACE_MESSAGE: string =
+  "`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`"
+
+/** `CountedBy` with other than a buffer and a string literal. */
+const COUNTED_BY_FORM_MESSAGE: string =
+  '`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`'
+
+/**
+ * WP66 S5: each `CountedBy<u8[], "n">` names a parameter `n` of the same
+ * declaration that is the buffer's byte count: `u8`, `u16`, `u32` or `u64`,
+ * or an out class holding one (`foreignCountWidth`), which C reads through
+ * its pointer. The call holds the count to the buffer's length as WP53 holds
+ * a positional `u64` (`emitForeignBuffers` in `src/emit-strings.ts`).
+ */
+const checkCountedBuffers = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
+  let k = 0
+  while (k < sig.countedBuffers.length) {
+    const count = sig.paramNames.indexOf(sig.countedNames[k])
+    if (count < 0) {
+      refuseUnknownCount(ctx, sig, decl, name, k)
+    } else if (foreignCountWidth(ctx.program, ctx.table, sig.paramTypes[count]) < 0) {
+      refuseCountWidth(ctx, sig, decl, name, k, count)
+    }
+    k = k + 1
+  }
+}
+
+/**
+ * The `k`th `CountedBy` of `declare function name` names no parameter. Its
+ * own function, so the message's strings are released when it returns rather
+ * than kept for every pass of `checkCountedBuffers`' loop (NL9011).
+ */
+const refuseUnknownCount = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string, k: i32): void => {
+  ctx.error(
+    decl,
+    `\`declare function ${name}\` counts the buffer \`${sig.paramNames[sig.countedBuffers[k]]}\` by \`${sig.countedNames[k]}\`, which is not one of its parameters`
+  )
+}
+
+/**
+ * The `k`th `CountedBy` of `declare function name` names parameter `count`,
+ * which is no unsigned scalar and no out class holding one. Its own function
+ * for the reason `refuseUnknownCount` is.
+ */
+const refuseCountWidth = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  decl: Node,
+  name: string,
+  k: i32,
+  count: i32
+): void => {
+  ctx.error(
+    decl,
+    `Parameter \`${sig.paramNames[count]}\` of \`declare function ${name}\` is ${ctx.table.typeName(sig.paramTypes[count])}, and the count \`${sig.paramNames[sig.countedBuffers[k]]}\` names is a \`u8\`, \`u16\`, \`u32\` or \`u64\`, or a \`declare class\` whose one field is one`
+  )
 }
 
 /**
