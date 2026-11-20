@@ -40791,6 +40791,29 @@ if (selects("ci-scope", "ci.yml")) {
       carriage.lines.every((l) => l.startsWith("why=") || /^[a-z0-9_]+=(true|false)$/.test(l)),
     JSON.stringify({ badLabels: badLabels.lines, goodLabels: goodLabels.lines, carriage: carriage.lines, err: carriage.ran.stderr })
   )
+  // The why= line names the lanes that are off, in the order the output
+  // lists them, and says so when none is; a full-run reason replaces both.
+  const someOff = runScope(["tests/postgres/x.sql"], { PR_LABELS: "[]" })
+  const allOn = runScope(["src/x.ts"], { PR_LABELS: "[]" })
+  const whyOf = (run) => run.lines.find((l) => l.startsWith("why="))
+  const offOf = (run) => laneLines(run.lines).filter((l) => l.endsWith("=false")).map((l) => l.split("=")[0])
+  const offWhy = (run) =>
+    `why=lanes off: ${offOf(run).join(", ")}; every changed path of each is on its allowlist of paths it does not read`
+  check(
+    "ci-scope: the why= output names the lanes that are off, says every lane runs when none is, and gives a full-run reason over both",
+    someOff.ran.status === 0 &&
+      offOf(someOff).length > 0 &&
+      offOf(someOff).length < lanes.length &&
+      whyOf(someOff) === offWhy(someOff) &&
+      offOf(goodLabels).length === lanes.length &&
+      whyOf(goodLabels) === offWhy(goodLabels) &&
+      allOn.ran.status === 0 &&
+      offOf(allOn).length === 0 &&
+      laneLines(allOn.lines).length === lanes.length &&
+      whyOf(allOn) === "why=every lane reads a changed path" &&
+      whyOf(badLabels) === "why=the pull request has the `ci:full` label",
+    JSON.stringify({ someOff: someOff.lines, goodLabels: goodLabels.lines, allOn: allOn.lines, badLabels: whyOf(badLabels) })
+  )
   fs.rmSync(scopeDir, { recursive: true, force: true })
 
   // The replay passes with no miss and excuses exactly the flakes the data
