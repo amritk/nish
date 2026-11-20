@@ -790,7 +790,8 @@ const calledName = (program: CheckedProgram, call: Node): string => {
  * every module of the package is inside it, so the advice names the flag that
  * moves a module out.
  */
-const OUT_OF_SCOPE: string = "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
+const OUT_OF_SCOPE: string =
+  "make the call from a module `noPanic` does not list, and build with `--allow-panics`"
 
 /**
  * What fails at `site`, and what removes it. The index, range and divisor

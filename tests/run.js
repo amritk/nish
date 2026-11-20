@@ -28243,8 +28243,9 @@ if (dealtHere("releaseChecks")) {
         JSON.stringify(withAllowPanics(without, optOutRun)) === JSON.stringify(["run", "examples/term-probe.ts", ALLOW_PANICS]),
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
     )
-    // Every compile in this file goes through the helper, or says on the line
-    // directly above why it stays strict: a raw compile of a case would build
+    // Every compile in this file goes through the helper (or `panicScope`, the
+    // link harness's wrapper that keeps a `strict` program strict), or says on
+    // the line directly above why it stays strict: a raw compile of a case would build
     // it strict the day the default flips. A call counts as a compile when it
     // names the compiler under test (`NISH`), a binary built from it
     // (`compiler`) or `"nish"` on PATH, whatever its arguments, or when it runs
@@ -28289,7 +28290,7 @@ if (dealtHere("releaseChecks")) {
     for (const m of self.matchAll(anyCall)) {
       const [first = "", second = ""] = callArgs(m.index + m[0].length)
       const compiles = isCompiler.test(first) || (!notACompiler.test(first) && compileShape.test(second))
-      if (!compiles || second.startsWith("withAllowPanics(")) {
+      if (!compiles || second.startsWith("withAllowPanics(") || second.startsWith("panicScope(")) {
         continue
       }
       const before = self.slice(0, m.index).split("\n")
@@ -28799,9 +28800,10 @@ if (dealtHere("releaseChecks")) {
           const target = path.resolve(dir, f.file)
           if (f.lang === "ts" && !misplaced.includes(f.line)) {
             const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
-            // A file of a program builds as its entry does: strict, unless the entry's
-            // marker opts the whole program out.
             const optOut = s.args.includes(ALLOW_PANICS) ? [ALLOW_PANICS] : []
+            // A file of a docs program builds as its entry does, unless the entry's
+            // marker opts the whole program out.
+            // strict: built with its entry's own panic scope
             const alone = spawnSync(NISH, [target, ...optOut, "-o", out], { encoding: "utf8" })
             if (alone.status !== 0) {
               misplaced.push(f.line)

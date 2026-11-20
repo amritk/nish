@@ -56,7 +56,8 @@ const CORPUS_DIRS = [
  */
 const extraArgs = (file) => {
   const sidecar = file.replace(/\.ts$/, ".args")
-  const cookbook = path.dirname(path.resolve(file)) === path.join(root, "docs", "cookbook") ? [ALLOW_PANICS] : []
+  const cookbook =
+    path.dirname(path.resolve(file)) === path.join(root, "docs", "cookbook") ? [ALLOW_PANICS] : []
   if (fs.existsSync(sidecar)) {
     return [...cookbook, ...split(fs.readFileSync(sidecar, "utf8"))]
   }
