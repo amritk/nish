@@ -1,7 +1,6 @@
 ---
 name: WP22 — arrow functions as the declaration form
 overview: Arrows are accepted and the corpus is rewritten; the only box left is stage D, rejecting a function definition, which is a breaking change awaiting the owner's decision.
-roadmap: docs/roadmap/wp22-arrow-functions.md
 spec: docs/wp22-arrow-functions.md
 priority: 80
 issue: 1866
@@ -28,7 +27,7 @@ stages:
 # WP22 — arrow functions as the declaration form
 
 ## Context
-Stages A to C landed: both compilers accept `const f = (...) => ...`, both spellings emit byte-identical IR, docs, examples, `src/`, `std/` and tooling are rewritten, a Biome rule blocks new `function` declarations, and the test corpus is arrows (the `arrow-corpus` check keeps it). See [the roadmap page](../../docs/roadmap/wp22-arrow-functions.md). Spec: [design note](../../docs/wp22-arrow-functions.md).
+Stages A to C landed: both compilers accept `const f = (...) => ...`, both spellings emit byte-identical IR, docs, examples, `src/`, `std/` and tooling are rewritten, a Biome rule blocks new `function` declarations, and the test corpus is arrows (the `arrow-corpus` check keeps it). See [the design note](../../docs/wp22-arrow-functions.md). Spec: [design note](../../docs/wp22-arrow-functions.md).
 
 ## WP22 D — reject a function definition
 Rejecting `function` withdraws an accepted construct. What is left is 101 non-`async` definitions, each a refused form under test or kept for a reason the allowlist records, and the `async` ones, which have no arrow spelling to move to ([§7](../../docs/wp22-arrow-functions.md#7-the-surfaces-measured), [§9a](../../docs/wp22-arrow-functions.md#9a-the-function-declarations-stage-d-may-not-simply-delete)). The diagnostics naming the entry still say `export function main`; rewording them retires NL2229 and NL2149 for a spelling change, which is stage D's to do.

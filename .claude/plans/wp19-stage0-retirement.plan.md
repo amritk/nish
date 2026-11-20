@@ -1,7 +1,6 @@
 ---
 name: WP19 — stage0 retirement, output stems from package-relative names
 overview: Stage0 is deleted and 0.7.0 shipped without it. The one open item is making a package module's output file stem come from its package-relative name so stems no longer depend on the install location; it is deferred.
-roadmap: docs/roadmap/wp19-stage0-retirement.md
 spec: docs/wp19-stage0-retirement.md
 priority: 80
 labels: [deferred]
@@ -32,7 +31,7 @@ stages:
 # WP19 — stage0 retirement, output stems from package-relative names
 
 ## Context
-Stage0 was deleted in #150 and 0.7.0 is the first release without it; see [the roadmap page](../../docs/roadmap/wp19-stage0-retirement.md). One box is left and it is deferred. No GitHub issue is assigned to this plan.
+Stage0 was deleted in #150 and 0.7.0 is the first release without it; see [the design note](../../docs/wp19-stage0-retirement.md). One box is left and it is deferred. No GitHub issue is assigned to this plan.
 
 ## WP19 S2 — output file stems taken from package-relative names
 Spec: [design note §5a item 5](../../docs/wp19-stage0-retirement.md) (`outputStems` under `-o <dir>/`).

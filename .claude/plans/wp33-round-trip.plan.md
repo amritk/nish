@@ -1,7 +1,6 @@
 ---
 name: WP33 — the round trip to TypeScript
 overview: --emit-ts, the portability pass and the fix tiers are built; what is left is compatibility mode (WP28, R6), a deferred Bun adapter, and two --emit-ts gaps that over-refuse or emit wrong TypeScript. Each makes the way back out to TypeScript safe enough to widen the way in.
-roadmap: docs/roadmap/wp33-round-trip.md
 spec: docs/wp33-round-trip.md
 priority: 40
 issue: 1877
@@ -14,7 +13,7 @@ stages:
     issue: 1887
     todos:
       - id: r6-track-wp28
-        content: Track WP28's remaining stages (C-lib to C7) on docs/roadmap/wp28-compatibility-mode.md and tick R6 when the last lands — see WP33 R6 — compatibility mode (WP28) lands
+        content: Track WP28's remaining stages (C-lib to C7) through its parent issue and close R6 when the last closes — see WP33 R6 — compatibility mode (WP28) lands
         status: pending
       - id: r6-note
         content: Update the R6 row and staging text in docs/wp33-round-trip.md once WP28 is done — see WP33 R6 — compatibility mode (WP28) lands
@@ -61,11 +60,11 @@ stages:
 # WP33 — the round trip to TypeScript
 
 ## Context
-R0 to R5 have landed: the note and ledger, the `portability` class behind `--warn-portability`, typed-array names without `push`/`pop`, the runtime split by host, `--emit-ts <dir>` with its live differential, and both `fix` tiers (see [the roadmap page](../../docs/roadmap/wp33-round-trip.md)). Open are R6 (compatibility mode, which is WP28 on its own staging), a deferred Bun adapter, and two `--emit-ts` issues. Spec: [design note §9](../../docs/wp33-round-trip.md#9-staging).
+R0 to R5 have landed: the note and ledger, the `portability` class behind `--warn-portability`, typed-array names without `push`/`pop`, the runtime split by host, `--emit-ts <dir>` with its live differential, and both `fix` tiers (see [the design note](../../docs/wp33-round-trip.md)). Open are R6 (compatibility mode, which is WP28 on its own staging), a deferred Bun adapter, and two `--emit-ts` issues. Spec: [design note §9](../../docs/wp33-round-trip.md#9-staging).
 
 ## WP33 R6 — compatibility mode (WP28) lands
-R6 is done when [WP28](../../docs/roadmap/wp28-compatibility-mode.md) is. C0 and C1 are built; the next stage is C-lib (`Date`, `JSON`, `RegExp`, `Buffer` under compat), then C2b to C7. This stage is a tracking stage with no code of its own: tick R6 on the roadmap page and update the note when WP28's last stage ships.
-Likely files: `docs/wp33-round-trip.md`, `docs/roadmap/wp33-round-trip.md`.
+R6 is done when [WP28](../../docs/wp28-compatibility-mode.md) is. C0 and C1 are built; the next stage is C-lib (`Date`, `JSON`, `RegExp`, `Buffer` under compat), then C2b to C7. This stage is a tracking stage with no code of its own: tick R6 on the roadmap page and update the note when WP28's last stage ships.
+Likely files: `docs/wp33-round-trip.md`.
 
 ## WP33 R7 — a Bun runtime adapter (deferred)
 The roadmap lists "A Bun runtime adapter" as deferred. R3 split the runtime into `runtime/core/` with Node and browser adapters; Bun would be a third host. Not planned until a user needs it.

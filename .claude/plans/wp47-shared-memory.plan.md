@@ -1,7 +1,6 @@
 ---
 name: WP47 — shared work across cores, regions, atomics and rings
 overview: Sleeping and waking a ring on Darwin is deferred, and the atomic-arrays acceptance (issue 1606) left three gaps in refusals, the nish-cmp header declarations and the emit-ts route.
-roadmap: docs/roadmap/wp47-shared-memory.md
 spec: docs/wp47-shared-memory.md
 priority: 80
 issue: 1903
@@ -45,7 +44,7 @@ stages:
 # WP47 — shared work across cores, regions, atomics and rings
 
 ## Context
-`nish/sync/shm` and `nish/sync/ring`, the example, the benchmarks and the security record have landed ([roadmap page](../../docs/roadmap/wp47-shared-memory.md)). One box is deferred. Issue #1606 is about the atomic arrays added to `nish/threads` (#1598) and fits this plan only loosely, since its work is in the threads checker and `std/threads.ts` rather than `nish/sync`.
+`nish/sync/shm` and `nish/sync/ring`, the example, the benchmarks and the security record have landed ([design note](../../docs/wp47-shared-memory.md)). One box is deferred. Issue #1606 is about the atomic arrays added to `nish/threads` (#1598) and fits this plan only loosely, since its work is in the threads checker and `std/threads.ts` rather than `nish/sync`.
 
 ## WP47 S2 — sleeping and waking a ring on Darwin
 Spec: [§4](../../docs/wp47-shared-memory.md#4-waking-another-process) and [§10](../../docs/wp47-shared-memory.md#10-not-done). Darwin answers `SHM_UNSUPPORTED` (-95) from the sleep and the wake, because its public wait-on-address call is not in the oldest SDK the build supports and `__ulock_wait` is private; rings poll there. Reopen when `os_sync_wait_on_address` is available in that SDK.

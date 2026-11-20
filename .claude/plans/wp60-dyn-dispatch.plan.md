@@ -1,7 +1,6 @@
 ---
 name: WP60 — dynamic dispatch over interfaces
 overview: Dyn<I> (a tag and a pointer, calls lowered to a per-place switch of direct calls) is designed and measured but unbuilt. Stage 1 can ship now with no IR moved; stages 2 and 3 are each gated on their own build's timing.
-roadmap: docs/roadmap/wp60-dyn-dispatch.md
 spec: docs/wp60-dyn-dispatch.md
 priority: 60
 issue: 1872
@@ -66,7 +65,7 @@ stages:
 # WP60 — dynamic dispatch over interfaces
 
 ## Context
-Only the design and measurement have landed (a `Dyn<I>` of a tag and a pointer, calls lowered to a per-place `switch` of direct calls, against the hand-written dispatch); see [the roadmap page](../../docs/roadmap/wp60-dyn-dispatch.md). The note recommends shipping stage 1 now, with stages 2 and 3 each gated on its own build's timing (neither passes on the note's figures yet). Every stage changes `src/`: run `node tests/self/goldens.js --update`, `node tests/differential/goldens.js --update` for new positive cases, and `wasi` and `performance` before pushing. Spec: [design note §9](../../docs/wp60-dyn-dispatch.md#9-stages).
+Only the design and measurement have landed (a `Dyn<I>` of a tag and a pointer, calls lowered to a per-place `switch` of direct calls, against the hand-written dispatch); see [the design note](../../docs/wp60-dyn-dispatch.md). The note recommends shipping stage 1 now, with stages 2 and 3 each gated on its own build's timing (neither passes on the note's figures yet). Every stage changes `src/`: run `node tests/self/goldens.js --update`, `node tests/differential/goldens.js --update` for new positive cases, and `wasi` and `performance` before pushing. Spec: [design note §9](../../docs/wp60-dyn-dispatch.md#9-stages).
 
 ## WP60 S1 — interface method signatures and T extends I, with no IR moved
 An interface may declare method signatures; `implements` checks them (NL2778); `<T extends I>` calls them on `T`; a method call on a plain `I` is NL2774. Signatures live in their own list on the interface's `StructInfo`, never in `methodSigs`, so nothing emits them. Duplicate member checks must cover the new list. The note lists the exact sites (`refuseMembers`, the interface collector, `checkImplements`, `satisfiesConstraint`, NL2556's check).

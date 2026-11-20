@@ -25856,7 +25856,7 @@ if (dealtHere("cliChecks")) {
   }
 
   // ---- `--explain-layout`: which classes the compact-class rule picks ---------------
-  // The report runs the five tests of docs/roadmap/wp48-ref32-classes.md §3.1 over
+  // The report runs the five tests of docs/wp48-ref32-classes.md §3.1 over
   // every class and prints one line per class: `compact`, or the first test that
   // refuses it. Nothing in the build reads the verdict yet, so the flag changes no
   // byte of the IR. Each refusal has a program below that stops at that test and

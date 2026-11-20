@@ -1,7 +1,6 @@
 ---
 name: WP68 — shared libraries, layered like atomic design
 overview: The survey of duplicated helpers and the tier rule are written (S1). Eight stages remain, one per cluster of duplicated helper, each shared copy benched against the fastest existing copy and every former caller proven to answer the same.
-roadmap: docs/roadmap/wp68-shared-libraries.md
 spec: docs/wp68-shared-libraries.md
 priority: 60
 issue: 1868
@@ -128,7 +127,7 @@ stages:
 # WP68 — shared libraries, layered like atomic design
 
 ## Context
-S1 landed: the survey of duplicated helpers, the benches that time each cluster's copies, the tiers (atoms, molecules, organisms, pages) and their import rule — see [the roadmap page](../../docs/roadmap/wp68-shared-libraries.md) (1 of 9 done). Design note: [docs/wp68-shared-libraries.md](../../docs/wp68-shared-libraries.md), whose [section 11](../../docs/wp68-shared-libraries.md#11-stages) gives each stage's baseline, measured gain and non-regression benches. Every stage ends with a `Measured:` trailer. No GitHub issue is assigned to this plan. The owner's decisions D1 to D6 (section 9) all carry a recommendation in the note.
+S1 landed: the survey of duplicated helpers, the benches that time each cluster's copies, the tiers (atoms, molecules, organisms, pages) and their import rule — see [the design note](../../docs/wp68-shared-libraries.md) (1 of 9 done). Design note: [docs/wp68-shared-libraries.md](../../docs/wp68-shared-libraries.md), whose [section 11](../../docs/wp68-shared-libraries.md#11-stages) gives each stage's baseline, measured gain and non-regression benches. Every stage ends with a `Measured:` trailer. No GitHub issue is assigned to this plan. The owner's decisions D1 to D6 (section 9) all carry a recommendation in the note.
 
 ## WP68 S2 — the hex atom and the tier rule
 Gain measured in the note: 4.8 to 4.9x over `lower` on mixed bytes, 5.6 to 5.7x over `manifestHexDigit` on random hex, none established on digits alone; 1.5x over `lower` behind a range guard on `i32` code units (`bench/wp68-hex.ts`). Depends on D1, D2, D5 (and D3 for `src/`). Every other stage depends on this one.

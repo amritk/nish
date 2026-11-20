@@ -1,7 +1,6 @@
 ---
 name: WP59 — the wasm arena in a second, unexported memory
 overview: A page that holds the module's one memory can still forge a pointer inside the arena. Four stages keep the program's memory unexported as memory 0 and export a second memory for the values that cross, then make it the default and close WH-10's "what stays".
-roadmap: docs/roadmap/wp59-wasm-arena-memory.md
 spec: docs/wp59-wasm-arena-memory.md
 priority: 60
 issue: 1861
@@ -73,7 +72,7 @@ stages:
 # WP59 — the wasm arena in a second, unexported memory
 
 ## Context
-Only the design landed, as a docs-only proposal ([roadmap page](../../docs/roadmap/wp59-wasm-arena-memory.md), [design note](../../docs/wp59-wasm-arena-memory.md)); no compiler code has changed. The four stages are the note's [§9](../../docs/wp59-wasm-arena-memory.md#9-stages). LLVM 18 loads and stores only memory 0, so the program's memory stays index 0 and hidden and the page's memory is added after `wasm-ld`.
+Only the design landed, as a docs-only proposal ([design note](../../docs/wp59-wasm-arena-memory.md), [design note](../../docs/wp59-wasm-arena-memory.md)); no compiler code has changed. The four stages are the note's [§9](../../docs/wp59-wasm-arena-memory.md#9-stages). LLVM 18 loads and stores only memory 0, so the program's memory stays index 0 and hidden and the page's memory is added after `wasm-ld`.
 
 ## WP59 S1 — a second memory added after wasm-ld and exported as memory, behind a build flag
 Spec: [§3](../../docs/wp59-wasm-arena-memory.md#3-the-decision-this-note-proposes). Adds `scripts/wasm-memories.mjs`, the link step behind `NISH_WASM_MEMORIES=2` (off by default, objects built with `-O` and linked with none), `nish_memory_bytes()` for tests that read `memory.buffer.byteLength`, and the copy, fill and grow functions over memory 1. Before building, check whether a forged trace descriptor reaches outside the arena ([§10](../../docs/wp59-wasm-arena-memory.md#10-open-questions), question 1).

@@ -37,8 +37,8 @@ reference documents are [`docs/LANGUAGE.md`](./docs/LANGUAGE.md) (what the langu
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (how the compiler is put
 together); [`docs/MASTER_PLAN.md`](./docs/MASTER_PLAN.md) is the work-package
 plan, with the conventions every agent follows in §7 and a brief template in §8,
-and [`docs/roadmap/`](./docs/roadmap/index.md) holds each package's state, a box
-per stage, and the stage to do next.
+and the [Roadmap issue](https://github.com/amritk/nish/issues/1849) holds the open work, a parent issue per package
+and a sub-issue per stage.
 
 ## Picking up a work package
 
@@ -60,11 +60,10 @@ issue, are the `pickup` skill's
 What nish adds to the skill:
 
 - **When a package's last stage closes**, the PR that lands that stage also
-  sets the package's `**State:**` on its roadmap page, and its row in
-  [`docs/roadmap/index.md`](./docs/roadmap/index.md), to Landed. No other PR
-  edits `docs/roadmap/`.
-- **A new package** gets its design note, roadmap page and plan file (with a
-  `priority`) in one PR, then `/plan-issues`.
+  sets the status line at the head of its design note to landed, with a
+  summary of what shipped. Nothing else under `docs/` records a package's state.
+- **A new package** gets its design note and plan file (with a `priority`) in
+  one PR, then `/plan-issues`.
 
 The workflow skills and agents (`feature`, `plan-issues`, `pickup`, `decide`,
 the review agents) are not in this repo. They come from the `ai` plugin in the

@@ -1,7 +1,6 @@
 ---
 name: WP57 — module-scoped names
 overview: A struct has a symbol separate from its source name (S3a); what is left is spelling every IR struct, member and constructor from that symbol, then qualifying a clashing private class or interface and allowing rename on import.
-roadmap: docs/roadmap/wp57-module-scoped-names.md
 spec: docs/wp57-module-scoped-names.md
 priority: 40
 issue: 1871
@@ -60,7 +59,7 @@ stages:
 # WP57 — module-scoped names
 
 ## Context
-S1 (clashing private functions and generic templates qualified by module path), S2 (exported clashes stay refused, decided) and S3a (`StructInfo.symbol`) have landed; see [the roadmap page](../../docs/roadmap/wp57-module-scoped-names.md). Left are S3b to S3e. S3a to S3c move no IR; S3d is the stage users see; S3e needs only S3a. Spec: [design note §7b](../../docs/wp57-module-scoped-names.md#7b-stages).
+S1 (clashing private functions and generic templates qualified by module path), S2 (exported clashes stay refused, decided) and S3a (`StructInfo.symbol`) have landed; see [the design note](../../docs/wp57-module-scoped-names.md). Left are S3b to S3e. S3a to S3c move no IR; S3d is the stage users see; S3e needs only S3a. Spec: [design note §7b](../../docs/wp57-module-scoped-names.md#7b-stages).
 
 ## WP57 S3b — every %struct. spelled from the struct's symbol
 Every `%struct.` speller and `llvmType` reads the symbol, and so does the header's `cStructName`; every message and `tsKeyword` read the source name. About 44 spellers. Depends on S3a. Release note in the note: `refactor(codegen): spell a struct's IR type from its symbol`. Goldens move only if a symbol differs from the name; regenerate and read the diff.

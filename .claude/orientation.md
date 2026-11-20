@@ -162,4 +162,4 @@ runs, and CI's `test` shards as the full-suite gate — and the checklist is
 | How do I test it? | [`testing.md`](./testing.md) |
 | I am copying or porting code from somewhere else | [`licensing.md`](./licensing.md) — the notice it keeps and the licences allowed |
 | What is the plan? | `docs/MASTER_PLAN.md`, `docs/wp14-selfhost.md` |
-| What is built, what is next, or "pick up WP*N*"? | Built: `docs/roadmap/index.md` and the package's page. Next: the [Roadmap issue](https://github.com/amritk/nish/issues/1849), whose sub-issues are each package's parent issue, backed by `.claude/plans/<slug>.plan.md`. The steps are `AGENTS.md`'s "Picking up a work package" |
+| What is built, what is next, or "pick up WP*N*"? | Built: the package's design note, `docs/wpN-*.md`. Next: the [Roadmap issue](https://github.com/amritk/nish/issues/1849), whose sub-issues are each package's parent issue, backed by `.claude/plans/<slug>.plan.md`. The steps are `AGENTS.md`'s "Picking up a work package" |

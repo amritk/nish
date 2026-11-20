@@ -1,7 +1,6 @@
 ---
 name: WP54 — async on wasm, with the page as the executor
 overview: Proposed and unbuilt, with all four stages open. It is worth building only for a program that must run on Cloudflare Workers, which the owner has not confirmed (Q1).
-roadmap: docs/roadmap/wp54-async-wasm.md
 spec: docs/wp54-async-wasm.md
 priority: 60
 labels: [needs-decision]
@@ -71,7 +70,7 @@ stages:
 # WP54 — async on wasm, with the page as the executor
 
 ## Context
-Nothing has landed: all 4 stages are open and the package is Proposed; see [the roadmap page](../../docs/roadmap/wp54-async-wasm.md). The whole package waits on Q1 and its four siblings in [the design note §7](../../docs/wp54-async-wasm.md#7-questions-for-the-owner), so every stage is labelled needs-decision. Stages follow [§8](../../docs/wp54-async-wasm.md#8-stages-if-it-is-built).
+Nothing has landed: all 4 stages are open and the package is Proposed; see [the design note](../../docs/wp54-async-wasm.md). The whole package waits on Q1 and its four siblings in [the design note §7](../../docs/wp54-async-wasm.md#7-questions-for-the-owner), so every stage is labelled needs-decision. Stages follow [§8](../../docs/wp54-async-wasm.md#8-stages-if-it-is-built).
 
 ## WP54 S1 — where JSPI runs, and one async export over one async host import lowered by hand on wasm32
 Size S. A survey (Q3's evidence) and a spike: lower one `async` export over one `async` import by hand, with the executor's queue split from its `epoll` half, and run it in Node and Chromium.

@@ -1,7 +1,6 @@
 ---
 name: WP63 — io_uring direct descriptors for nish:net, follow-ups
 overview: WP63 is landed with no open roadmap boxes. Open issues leave the 90,000-connection p99 control unrun and a few stale doc lines, plus a set of ring-in-place follow-ups from WP47.
-roadmap: docs/roadmap/wp63-iouring-net.md
 spec: docs/wp63-iouring-net.md
 priority: 80
 issue: 1891
@@ -52,7 +51,7 @@ stages:
 # WP63 — io_uring direct descriptors for nish:net, follow-ups
 
 ## Context
-All six stages (measurement, S1 to S5) have landed and no roadmap boxes are open; see [the roadmap page](../../docs/roadmap/wp63-iouring-net.md). The design note's [§10](../../docs/wp63-iouring-net.md#10-stages) also asks for `bench/handler-ring/wins.sh` to be rerun on the entry before it adopts `mmap_size` or the shared cache; that is not a box and is not planned here.
+All six stages (measurement, S1 to S5) have landed and no roadmap boxes are open; see [the design note](../../docs/wp63-iouring-net.md). The design note's [§10](../../docs/wp63-iouring-net.md#10-stages) also asks for `bench/handler-ring/wins.sh` to be rerun on the entry before it adopts `mmap_size` or the shared cache; that is not a box and is not planned here.
 
 ## WP63 S4 — the ring p99 control at 90,000 connections and the stale doc lines
 Issue #1728 (follow-up of the wp63-ring-gaps run, #1712, #1715 and #1717). Acceptance criterion 6 was partial: the one-epoll-process control ran at 18,000 connections because the container's hard `RLIMIT_NOFILE` is 20,000 (one epoll process holds at most 19,936). At matched load the owner's gap (65 ms ring against 20 ms for five epoll processes) did not reproduce, and the recorded cause, a queue on one core, conflicts with the owner's statement that the server was pinned to one core. Run `bash bench/handler-ring/run.sh --conns 90000 --think 4 --warmup 4 --designs "ring epoll epoll1"` on a host with a hard nofile of at least 100,000, ideally against the owner's SQLite entry.

@@ -191,8 +191,8 @@ trip, a negative test, and its LANGUAGE.md and cookbook entries; no attribute
 without a proof; layout changes touch `src/runtime.ts` and `runtime/runtime.c`
 together. CI runs the suite on Ubuntu with LLVM 18, and the bootstrap and the
 CLI contract on every platform a release ships a compiler for, macOS and ARM
-Linux included ([docs/wp10-ci.md](docs/wp10-ci.md)). What is built and what is
-next is the [roadmap](docs/roadmap/index.md); the plan itself is
+Linux included ([docs/wp10-ci.md](docs/wp10-ci.md)). What is next is the
+[Roadmap issue](https://github.com/amritk/nish/issues/1849); the plan itself is
 [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md).
 
 Commit messages are the changelog: a conventional subject

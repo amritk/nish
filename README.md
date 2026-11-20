@@ -272,7 +272,7 @@ files below are its sources.
 | [`std/` README](std/README.md) | Every standard library module |
 | [FAQ](docs/FAQ.md) | Why the design is the way it is |
 | [IR cookbook](docs/IR_COOKBOOK.md) | The exact IR of every construct |
-| [Roadmap](docs/roadmap/index.md) | What is built and what is next |
+| [Roadmap](https://github.com/amritk/nish/issues/1849) | What is next, as GitHub issues |
 | [Changelog](CHANGELOG.md) | What changed in each release |
 
 ## Project status
@@ -280,7 +280,7 @@ files below are its sources.
 Pre-alpha and on 0.x, with no compatibility promise: a construct's spelling,
 a flag's name and the IR either lowers to can change between minor releases.
 Every commit compiles, tests and rebuilds the compiler with itself. The
-[roadmap](docs/roadmap/index.md) has what is built and what is next.
+[Roadmap issue](https://github.com/amritk/nish/issues/1849) has what is next.
 
 ## Contributing, security and license
 

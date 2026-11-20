@@ -1,7 +1,6 @@
 ---
 name: WP38 — SIMD, the open acceptance follow-ups
 overview: Every WP38 stage has landed. Three follow-up issues remain from the Adler-32 and SSE4.1 rounding runs, one decision about checksum.ll moving and two bench-and-test gaps on Math.round, Math.sign and the other bench/math kernels.
-roadmap: docs/roadmap/wp38-simd.md
 spec: docs/wp38-simd.md
 priority: 80
 issue: 1865
@@ -63,7 +62,7 @@ stages:
 # WP38 — SIMD, the open acceptance follow-ups
 
 ## Context
-All 10 of 10 roadmap stages have landed (S0 to S10, `--cpu x86-64-v3`, `nish:simd`, the AES-GCM, SHA-256, ChaCha20, CRC-32 and Adler-32 kernels, and the measured-not-built `--cpu` levels) — see [the roadmap page](../../docs/roadmap/wp38-simd.md). No roadmap box is open. Design note: [docs/wp38-simd.md](../../docs/wp38-simd.md). The three stages below are open GitHub issues from acceptance runs; the test-section names in `verification` are guesses for the lead to refine.
+All 10 of 10 roadmap stages have landed (S0 to S10, `--cpu x86-64-v3`, `nish:simd`, the AES-GCM, SHA-256, ChaCha20, CRC-32 and Adler-32 kernels, and the measured-not-built `--cpu` levels) — see [the design note](../../docs/wp38-simd.md). No roadmap box is open. Design note: [docs/wp38-simd.md](../../docs/wp38-simd.md). The three stages below are open GitHub issues from acceptance runs; the test-section names in `verification` are guesses for the lead to refine.
 
 ## WP38 S11 — decide whether checksum.ll may move for every nish/compress importer
 #1494, escalated from the #1429 run: 6 of 7 acceptance criteria were met. Criterion 4 is partial: a program's own module does not move, but `checksum.ll`, which every importer of `nish/compress` writes, gains the `nish_adler32_hw` branch in `adler32Update`. `tests/nish-cmp.js` declares it; section GC drops the unused function so binaries are unaffected. CRC-32's seam (#1062) moved `checksum.ll` the same way. The wasi half was run only in the s8 worker's container (30/0); the acceptance container had no `libclang_rt.builtins-wasm32.a`.

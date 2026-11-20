@@ -131,7 +131,7 @@ stages:
     issue: 1949
     todos:
       - id: s10-check
-        content: Check std/ and docs/roadmap for what tracker 1114's s5-postgres and s10-bcrypt-pool slices would have built, and record each as covered or open — see SWEEP S10 — check the server-stack-1 slices
+        content: Check std/ and the design notes for what tracker 1114's s5-postgres and s10-bcrypt-pool slices would have built, and record each as covered or open — see SWEEP S10 — check the server-stack-1 slices
         status: pending
       - id: s10-open
         content: Add a stage or file an issue for each slice found open — see SWEEP S10 — check the server-stack-1 slices
@@ -209,7 +209,7 @@ stages:
         content: Correct the same sentence at docs/wp62-json-schema-classes.md line 96 and its docs/LANGUAGE.md line citation — see SWEEP S15 — stale initializer lines in the WP61 and WP62 notes
         status: pending
       - id: s15-wp65
-        content: Tick the S3 box in docs/roadmap/wp65-lexer-surface.md once the class field initializer PR has merged — see SWEEP S15 — stale initializer lines in the WP61 and WP62 notes
+        content: Close the WP65 S3 sub-issue once the class field initializer PR has merged — see SWEEP S15 — stale initializer lines in the WP61 and WP62 notes
         status: pending
   - id: s16-pki-26
     title: SWEEP S16 — pki accepts a non-critical nameConstraints as critical (PKI-26) and the two transient test failures
@@ -252,10 +252,10 @@ No roadmap page. Stages SWEEP S1 to S15 come from #1821, a collection issue; it 
 From tracker #1576, 11 criteria, merged as #1593. A verification pass by a session that builds `main`, not a code change; file what fails.
 
 ## SWEEP S2 — run the WP39 acceptance pass on main
-WP39 (`docs/roadmap/wp39-http-server.md`). Tracker #1433, 10 criteria. Its stale doc lines are in the DOCS plan, not here.
+WP39 (`docs/wp39-http-server.md`). Tracker #1433, 10 criteria. Its stale doc lines are in the DOCS plan, not here.
 
 ## SWEEP S3 — run the WP50 S3 storage-driven acceptance pass on main
-WP50 (`docs/roadmap/wp50-wasm-host.md`). Tracker #1270, 11 criteria, #1273 merged.
+WP50 (`docs/wp50-wasm-host.md`). Tracker #1270, 11 criteria, #1273 merged.
 
 ## SWEEP S4 — run the compiler-soundness-fuzzing acceptance pass on main
 Tracker #883, 8 criteria, #897, #902 and #924 merged.
@@ -294,7 +294,7 @@ Deferred: needs a person or hardware. #1694 og-video criterion 7 (Discord and Fa
 From the first comment on #1821. `docs/security/http1-codec.md:106-109` says the `websocket-client` target has not run under libFuzzer, and `docs/security/tls.md:212` says `tls-server-flight` has had only CI's replay. Both ran a 30-minute Fuzz step that succeeded in `fuzz.yml` runs 41088949452, 41163861432, 42333459360 and 43551037262. Check each claim ("only", "never") against the runs before editing, per `CLAUDE.md`.
 
 ## SWEEP S15 — stale initializer lines in the WP61 and WP62 notes and the unticked WP65 S3 box
-From the second comment on #1821, after the class-field-initializer PR (#1829 in the comment). WP61 `docs/wp61-json-typed-checks.md:138`, WP62 `docs/wp62-json-schema-classes.md:96` (its `LANGUAGE.md:3017` citation points at unrelated text), and WP65's S3 box in `docs/roadmap/wp65-lexer-surface.md`, still unticked on main. Tick it only if the PR has merged.
+From the second comment on #1821, after the class-field-initializer PR (#1829 in the comment). WP61 `docs/wp61-json-typed-checks.md:138`, WP62 `docs/wp62-json-schema-classes.md:96` (its `LANGUAGE.md:3017` citation points at unrelated text), and WP65 S3, still open. Close its sub-issue only if the PR has merged.
 
 ## SWEEP S16 — pki accepts a non-critical nameConstraints as critical (PKI-26) and the two transient test failures
 #1463 criterion 5 and the transient failures; criterion 2 (http-client list items) is carried by the DOCS plan's S2. Nine of ten limbo cases are refused; `rfc5280::nc::permitted-dns-match-noncritical` (PKI-26) is still accepted and keeps its row in `tests/link/crypto_pki_limbo/divergences.ts`. #1028 is reopened for it and PKI-28. Transient on main @ 06c04601, not reproduced since: clang exit 135 building `src/compile.ts` for `net_http3`, then `performance:` diagnostics in `tests/link/net_http3/arena.ts` and `tests/link/net_quic_conn/client.ts`. Belongs with WP34 (network stack).

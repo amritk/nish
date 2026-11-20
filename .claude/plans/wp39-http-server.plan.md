@@ -1,7 +1,6 @@
 ---
 name: WP39 — the HTTP server, follow-ups and open decisions
 overview: Every WP39 stage is built except E9 (submit to TechEmpower, an owner decision) and G9 (WebTransport pin, deferred). Open issues add HTTP/1 pipelining, bench-record gaps, an HTTP/3 pacer cost and a few acceptance gaps.
-roadmap: docs/roadmap/wp39-http-server.md
 spec: docs/wp39-http-server.md
 priority: 80
 issue: 1850
@@ -15,7 +14,7 @@ stages:
     issue: 1859
     todos:
       - id: e9-decide
-        content: Record the owner's answer on submitting in docs/wp39-http-server.md E9 and docs/roadmap/wp39-http-server.md — see WP39 E9 Decision needed
+        content: Record the owner's answer on submitting in docs/wp39-http-server.md E9 — see WP39 E9 Decision needed
         status: pending
   - id: g9-webtransport-pin
     title: WP39 G9 — move WebTransport's pin when Chrome moves past the draft
@@ -190,7 +189,7 @@ stages:
 # WP39 — the HTTP server, follow-ups and open decisions
 
 ## Context
-27 of 29 roadmap stages have landed (E1 to E8, G1 to G8, G10); see [the roadmap page](../../docs/roadmap/wp39-http-server.md). Unbuilt are E9 and G9. The other stages here come from open follow-up issues; every issue was read, and several items inside them are already settled, noted per stage. Spec: [design note](../../docs/wp39-http-server.md).
+27 of 29 roadmap stages have landed (E1 to E8, G1 to G8, G10); see [the design note](../../docs/wp39-http-server.md). Unbuilt are E9 and G9. The other stages here come from open follow-up issues; every issue was read, and several items inside them are already settled, noted per stage. Spec: [design note](../../docs/wp39-http-server.md).
 
 ## WP39 E9 — submit the entry to TechEmpower
 Spec: [design note E9](../../docs/wp39-http-server.md#e9-submitting-upstream).

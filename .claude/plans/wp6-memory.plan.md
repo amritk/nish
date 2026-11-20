@@ -1,7 +1,6 @@
 ---
 name: WP6 — memory, escape-analysed stack, arena scopes, T | null
 overview: Two deferred refinements remain, a stack rule for branch-assigned locals and objects stored into a local container, and precise lifetime markers on hoisted allocas. Neither is scheduled; the design note says what would reopen each.
-roadmap: docs/roadmap/wp6-memory.md
 spec: docs/wp6-memory.md
 priority: 80
 labels: [deferred]
@@ -40,7 +39,7 @@ stages:
 # WP6 — memory, escape-analysed stack, arena scopes, T | null
 
 ## Context
-The arenas, escape-analysed stack allocation, call-site, callee and loop-pass scopes, and `using a = arena()` have landed ([roadmap page](../../docs/roadmap/wp6-memory.md)). Both open boxes are deferred; the note's [Left out](../../docs/wp6-memory.md#left-out) section says what would reopen them.
+The arenas, escape-analysed stack allocation, call-site, callee and loop-pass scopes, and `using a = arena()` have landed ([design note](../../docs/wp6-memory.md)). Both open boxes are deferred; the note's [Left out](../../docs/wp6-memory.md#left-out) section says what would reopen them.
 
 ## WP6 S2 — a stack rule for branch-assigned locals and objects stored into a local container
 A `let` assigned in each arm of a branch sets `allocLeaks`, so the function loses its scope silently unless §2c's rule rescues it; an object stored into a local container never moves to the stack, and a constructor storing a parameter into `this` makes the argument a leak. The note names a "captured only into one binding" fact, which `allocEscapes` already approximates, as the way to close both. `--emit-arena` is the audit that exists today.

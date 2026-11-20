@@ -2,8 +2,8 @@
 
 What Nish is, what exists, what remains, and how the work is cut into
 packages. §5 lists the packages, each with the note that records it; each
-one's state, stage by stage, and the order of the open work are on the
-[roadmap](roadmap/index.md).
+package's open stages, and the order of the open work, are GitHub issues
+under the [Roadmap issue](https://github.com/amritk/nish/issues/1849).
 `docs/LANGUAGE.md` is normative for the language; where this plan or a
 `wp*.md` note disagrees with it, LANGUAGE.md wins.
 
@@ -223,9 +223,8 @@ profile on linux-x64.
 Sizes, where a package was given one: S = under a day of agent work, M = one
 to two days, L = several days. Each package has a note, `docs/wpN-*.md`; a
 landed package's note is a summary of what shipped and why, and an open one's
-is its plan. [README.md](README.md) indexes them, and each has a
-[roadmap](roadmap/index.md) page with what landed and a link to its
-open-work issue.
+is its plan. [README.md](README.md) indexes them, and an open package's
+work is its parent issue under the [Roadmap issue](https://github.com/amritk/nish/issues/1849).
 
 | WP | Package | Note |
 | --- | --- | --- |
@@ -397,7 +396,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M5 "Self-hosting" | WP14 | `src/` compiles `src/`, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). |
 | M6 "One compiler" | WP19 | stage0 deleted rather than frozen, after the six gates of [wp19 §3](wp19-stage0-retirement.md) closed: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. |
 
-Which milestones are met is on the [roadmap](roadmap/index.md#milestones).
+M1, M2, M3, M5 and M6 are met. M4 is open: Nish stays on 0.x, and a breaking change moves the minor, until the owner declares 1.0.
 
 ### What remains
 
@@ -439,9 +438,8 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next, and every package's state
 
-What each package has built is on the [roadmap](roadmap/index.md), one
-page per package. The order of the open work, what each package has left
-and its open questions are GitHub issues under the
+What each package has built is in its note. The order of the open work,
+what each package has left and its open questions are GitHub issues under the
 [Roadmap issue](https://github.com/amritk/nish/issues/1849), a sub-issue per stage. A pull request that lands a
 stage closes its issue with `Fixes`.
 

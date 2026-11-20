@@ -1,7 +1,6 @@
 ---
 name: WP31 — ranged integers
 overview: integer<Lo, Hi> and its proofs landed; three refinements are deferred until a program or measurement asks for them.
-roadmap: docs/roadmap/wp31-ranged-integers.md
 spec: docs/wp31-ranged-integers.md
 priority: 80
 labels: [deferred]
@@ -45,7 +44,7 @@ stages:
 # WP31 — ranged integers
 
 ## Context
-W1 to W4 landed: `integer<Lo, Hi>`, its range proofs, the host-boundary `RangeError` and the acceptance program (#261 to #274). See [the roadmap page](../../docs/roadmap/wp31-ranged-integers.md). Spec: [design note §11 Open](../../docs/wp31-ranged-integers.md#11-open). Not planned: a constant as a range bound, length floors in types. Stage ids W5 to W7 are this plan's numbering.
+W1 to W4 landed: `integer<Lo, Hi>`, its range proofs, the host-boundary `RangeError` and the acceptance program (#261 to #274). See [the design note](../../docs/wp31-ranged-integers.md). Spec: [design note §11 Open](../../docs/wp31-ranged-integers.md#11-open). Not planned: a constant as a range bound, length floors in types. Stage ids W5 to W7 are this plan's numbering.
 
 ## WP31 W5 — a lower-bound fact family, i >= n
 A fact `i >= n` for `n > 0`. No program has needed it.

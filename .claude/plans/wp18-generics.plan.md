@@ -1,7 +1,6 @@
 ---
 name: WP18 — generics by monomorphisation
 overview: Generics landed; four items were put off on purpose, each with a trigger that would reopen it. They stay deferred until the trigger fires.
-roadmap: docs/roadmap/wp18-generics.md
 spec: docs/wp18-generics.md
 priority: 80
 labels: [deferred]
@@ -56,7 +55,7 @@ stages:
 # WP18 — generics by monomorphisation
 
 ## Context
-Generic functions, classes, interfaces, constraints, generic methods, whole-program instantiation and discriminated unions have landed. See [the roadmap page](../../docs/roadmap/wp18-generics.md). All four stages below are deferred on purpose; [§16](../../docs/wp18-generics.md#16-wp18-is-closed-what-stays-deferred) says what reopens each. Stage ids G9 to G12 are this plan's numbering.
+Generic functions, classes, interfaces, constraints, generic methods, whole-program instantiation and discriminated unions have landed. See [the design note](../../docs/wp18-generics.md). All four stages below are deferred on purpose; [§16](../../docs/wp18-generics.md#16-wp18-is-closed-what-stays-deferred) says what reopens each. Stage ids G9 to G12 are this plan's numbering.
 
 ## WP18 G9 — infer a type parameter that appears only in the return type
 Today refused at the declaration ([§2a](../../docs/wp18-generics.md#2-the-surface-what-is-written), §14 question 1). Trigger: the first container library written against generics needs a factory in more than two places.

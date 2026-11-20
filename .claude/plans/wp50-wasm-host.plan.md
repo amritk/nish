@@ -1,7 +1,6 @@
 ---
 name: WP50 — a WebAssembly module a TypeScript page drives
 overview: Every stage is built; the one open item is acceptance issue 1377, two criteria where the signed-off wording was stricter than the request and the owner picks which wording stands.
-roadmap: docs/roadmap/wp50-wasm-host.md
 spec: docs/wp50-wasm-host.md
 priority: 80
 issue: 1873
@@ -25,7 +24,7 @@ stages:
 # WP50 — a WebAssembly module a TypeScript page drives
 
 ## Context
-All six stages have landed and no roadmap box is open ([roadmap page](../../docs/roadmap/wp50-wasm-host.md)). The one open item is acceptance issue #1377 from the finishing run tracked in #1352 (stages 5b and 6 landed as #1363 and #1372). Spec: [design note](../../docs/wp50-wasm-host.md).
+All six stages have landed and no roadmap box is open ([design note](../../docs/wp50-wasm-host.md)). The one open item is acceptance issue #1377 from the finishing run tracked in #1352 (stages 5b and 6 landed as #1363 and #1372). Spec: [design note](../../docs/wp50-wasm-host.md).
 
 ## WP50 S7 — the deterministic-refusal codes and the header comment without the flag
 Issue #1377 is this stage; the acceptance found 9 of 11 criteria met and 2 partial, neither a defect against the original request.

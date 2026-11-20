@@ -1,7 +1,6 @@
 ---
 name: WP49 — async/await on the server, and the TechEmpower top
 overview: Stage 6's gate is still unmet, since the async TechEmpower entries sit outside the explicit ones' noise band on plaintext and json. Two further items are left, awaitAll lane costs recorded open in the security record and the owner's decision on whether to submit to TechEmpower.
-roadmap: docs/roadmap/wp49-async-server.md
 spec: docs/wp49-async-server.md
 priority: 10
 labels: [ready]
@@ -29,7 +28,7 @@ stages:
         content: Explain or fix the /queries?queries=20 c=64 cell that fell from 31,287 to 28,382 req/s in bench/techempower — see WP49 S6
         status: pending
       - id: s6-regate
-        content: Re-gate with the unchanged run.sh before and after in one container, write the BENCHMARKS.md section, update docs/wp49-async-server.md section 10 and tick the roadmap box — see WP49 S6
+        content: Re-gate with the unchanged run.sh before and after in one container, write the BENCHMARKS.md section, update docs/wp49-async-server.md section 10 — see WP49 S6
         status: pending
   - id: awaitall-lanes
     title: WP49 S7 — awaitAll lanes, a lazy region for members that never wait and a free list for region tails
@@ -66,7 +65,7 @@ stages:
 # WP49 — async/await on the server, and the TechEmpower top
 
 ## Context
-Stages 1 to 5 and the measured async entries of stage 6 have landed; see [the roadmap page](../../docs/roadmap/wp49-async-server.md). Left are the stage 6 gate, two recorded-open costs of `awaitAll`, and the submission question. Spec: [the design note](../../docs/wp49-async-server.md), section 10 holds the stage table and section 9 the decisions.
+Stages 1 to 5 and the measured async entries of stage 6 have landed; see [the design note](../../docs/wp49-async-server.md). Left are the stage 6 gate, two recorded-open costs of `awaitAll`, and the submission question. Spec: [the design note](../../docs/wp49-async-server.md), section 10 holds the stage table and section 9 the decisions.
 
 ## WP49 S6 — the async entries within the explicit ones' noise band on plaintext, json and db
 Spec: [design note §6](../../docs/wp49-async-server.md#6-tfb-what-the-top-takes) (the gate) and [§10](../../docs/wp49-async-server.md#10-stages).

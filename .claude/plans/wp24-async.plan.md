@@ -1,7 +1,6 @@
 ---
 name: WP24 — async/await, the deferred N-API Async surface
 overview: WP24 is superseded by WP49, which built async/await. One deferred box remains, strings, arrays and a by-value Result through the N-API shim's name-Async exports.
-roadmap: docs/roadmap/wp24-async.md
 spec: docs/wp24-async.md
 priority: 80
 labels: [deferred]
@@ -26,7 +25,7 @@ stages:
 # WP24 — async/await, the deferred N-API Async surface
 
 ## Context
-`--emit-napi-async`, `async`/`await` (by WP49) and `await sleep(ms)` have landed; see [the roadmap page](../../docs/roadmap/wp24-async.md). The package is superseded, and this last box is deferred.
+`--emit-napi-async`, `async`/`await` (by WP49) and `await sleep(ms)` have landed; see [the design note](../../docs/wp24-async.md). The package is superseded, and this last box is deferred.
 
 ## WP24 S4 — strings, arrays and a by-value Result through the N-API Async exports
 Spec: [design note §5](../../docs/wp24-async.md#5-what-to-build-instead), which lists strings and arrays across `<name>Async` through a `malloc`ed copy as not built. Deferred: the note's section 8 says what would reopen it ("the trigger is I/O, not syntax"). Nothing to do until a program needs it.

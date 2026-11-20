@@ -1,7 +1,6 @@
 ---
 name: WP21 — packages
 overview: Source packages resolve and are attributed, but every build recompiles every dependency. What is left is the content-addressed build cache (S4) and, only if someone asks for it by name, prebuilt distribution (S5, deferred).
-roadmap: docs/roadmap/wp21-packages.md
 spec: docs/wp21-packages.md
 priority: 30
 labels: [ready]
@@ -42,7 +41,7 @@ stages:
 # WP21 — packages
 
 ## Context
-S1 to S3 have landed: package-scoped symbols, bare specifiers and the `nish` export condition, resolution diagnostics and package identity, the hostless-builtin refusal and dependency attribution. See [the roadmap page](../../docs/roadmap/wp21-packages.md). Spec: [design note](../../docs/wp21-packages.md). Diamond dependencies and a separate resolver tool are not planned.
+S1 to S3 have landed: package-scoped symbols, bare specifiers and the `nish` export condition, resolution diagnostics and package identity, the hostless-builtin refusal and dependency attribution. See [the design note](../../docs/wp21-packages.md). Spec: [design note](../../docs/wp21-packages.md). Diamond dependencies and a separate resolver tool are not planned.
 
 ## WP21 S4 — the build cache, keyed by package version, number mode, target, profile and compiler
 Spec: [§8 Stages](../../docs/wp21-packages.md#8-stages).

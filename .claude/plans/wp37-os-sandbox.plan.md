@@ -1,7 +1,6 @@
 ---
 name: WP37 — the OS sandbox, the deferred stages
 overview: --sandbox with Landlock and seccomp has landed, along with its scopes, dependency grants and the exec allowlist. Four stages are deferred (manifest scopes, an IFUNC link-time refusal, a sandboxed nish run by default, and a seccomp allowlist flag), each waiting on a trigger the design note names.
-roadmap: docs/roadmap/wp37-os-sandbox.md
 spec: docs/wp37-os-sandbox.md
 priority: 80
 labels: [deferred]
@@ -74,7 +73,7 @@ stages:
 # WP37 — the OS sandbox, the deferred stages
 
 ## Context
-Landed: `--sandbox` and `--sandbox=best-effort`, the `fs.read` and `fs.write` scopes, dependency-grant scopes, the exec allowlist, SBX-1 and `process.spawn=exec:<program>` — see [the roadmap page](../../docs/roadmap/wp37-os-sandbox.md) (5 of 9 done). The four boxes left are all marked deferred and none is scheduled. Design note: [docs/wp37-os-sandbox.md](../../docs/wp37-os-sandbox.md); security record: `docs/security/sandbox.md`. No GitHub issue is assigned to this plan.
+Landed: `--sandbox` and `--sandbox=best-effort`, the `fs.read` and `fs.write` scopes, dependency-grant scopes, the exec allowlist, SBX-1 and `process.spawn=exec:<program>` — see [the design note](../../docs/wp37-os-sandbox.md) (5 of 9 done). The four boxes left are all marked deferred and none is scheduled. Design note: [docs/wp37-os-sandbox.md](../../docs/wp37-os-sandbox.md); security record: `docs/security/sandbox.md`. No GitHub issue is assigned to this plan.
 
 ## WP37 S6 — scopes in the package.json manifest
 The note's section 11 question 1 recommends scopes on the command line first and the manifest later, because a relative scope in a published package names a directory on someone else's machine. The stage resolves them against the package root and fails closed (the CLAUDE.md rule on package-controlled input). Likely files: `src/` manifest reader, `docs/guide/using-nish/sandbox.md`, `docs/security/sandbox.md`.

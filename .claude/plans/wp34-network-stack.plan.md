@@ -1,7 +1,6 @@
 ---
 name: WP34 — the network stack, the open follow-ups
 overview: All 24 WP34 stages have landed. Six issues remain, one for each loose end the earlier stages left, in nish:net, the TLS server, the PostgreSQL batcher and async pool, and the PostgreSQL bench and guide.
-roadmap: docs/roadmap/wp34-network-stack.md
 spec: docs/wp34-network-stack.md
 priority: 80
 issue: 1852
@@ -110,7 +109,7 @@ stages:
 # WP34 — the network stack, the open follow-ups
 
 ## Context
-All 24 of 24 roadmap stages have landed (the crypto kernels, TLS 1.3 server and client, HTTP/1.1 to HTTP/3, WebTransport, the relay, the phase-two builtins) — see [the roadmap page](../../docs/roadmap/wp34-network-stack.md). No roadmap box is open. Design note: [docs/wp34-network-stack.md](../../docs/wp34-network-stack.md). The stages below are the six open issues assigned to this plan; the test-section names in `verification` are guesses for the lead to refine.
+All 24 of 24 roadmap stages have landed (the crypto kernels, TLS 1.3 server and client, HTTP/1.1 to HTTP/3, WebTransport, the relay, the phase-two builtins) — see [the design note](../../docs/wp34-network-stack.md). No roadmap box is open. Design note: [docs/wp34-network-stack.md](../../docs/wp34-network-stack.md). The stages below are the six open issues assigned to this plan; the test-section names in `verification` are guesses for the lead to refine.
 
 ## WP34 S25 — nish:net after N5, split what is left of the tcpConnect issue
 #357 lists what N5 scoped out. `tcpConnect` is exported and used by `std/net/dns.ts`, `fetch.ts` and `postgres-async.ts`, and `std/net/dns.ts` exists, so the "Nish client" and "DNS" items look done (the lead should confirm; `docs/security/dns.md` and `fetch.md` exist). Still unplaced: `sendmmsg` and `recvmmsg` batching (nothing in `std/net` mentions them), edge-triggered mode, timers beyond `pollWait`, Windows and WASI sockets. The issue itself says to split them when one is picked up.

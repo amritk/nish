@@ -1,7 +1,6 @@
 ---
 name: WP30 — bytes across the interop boundary
 overview: Typed arrays already cross wasm and N-API. Two deferred refinements remain, a caller-owned destination for array results and a cheaper nish_alloc_array from JavaScript.
-roadmap: docs/roadmap/wp30-bytes-interop.md
 spec: docs/wp30-bytes-interop.md
 priority: 80
 labels: [deferred]
@@ -40,7 +39,7 @@ stages:
 # WP30 — bytes across the interop boundary
 
 ## Context
-`u8[]`, `u16[]`, `u32[]` and `u64[]` cross wasm and N-API as typed arrays and have landed ([roadmap page](../../docs/roadmap/wp30-bytes-interop.md)). Both open boxes are deferred findings from [Deferred: two findings next door](../../docs/wp30-bytes-interop.md#deferred-two-findings-next-door).
+`u8[]`, `u16[]`, `u32[]` and `u64[]` cross wasm and N-API as typed arrays and have landed ([design note](../../docs/wp30-bytes-interop.md)). Both open boxes are deferred findings from [Deferred: two findings next door](../../docs/wp30-bytes-interop.md#deferred-two-findings-next-door).
 
 ## WP30 S2 — a caller-owned destination for an array result
 The loader ends an array-returning call with `new Ctor(memory.buffer, data, len).slice()`. At 25 MB that is 44.8 ms against 1.8 ms for `.set()` into a caller-owned buffer, 25x, the allocation rather than the copy. `.slice()` stays the default, since the next `memory.grow` detaches a view and the arena release lets the module overwrite it. A caller-owned destination changes a generated signature, so it is its own package.

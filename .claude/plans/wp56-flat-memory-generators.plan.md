@@ -1,7 +1,6 @@
 ---
 name: WP56 — generators whose memory stays flat, a string builder and a scope per file
 overview: All six stages are open. The design is accepted and every question decided, so the work is the baseline, the patterns, the builder, files from a builder, the diagnostics and CI gate, and object graphs in an arena block.
-roadmap: docs/roadmap/wp56-flat-memory-generators.md
 spec: docs/wp56-flat-memory-generators.md
 priority: 60
 issue: 1926
@@ -107,7 +106,7 @@ stages:
 # WP56 — generators whose memory stays flat, a string builder and a scope per file
 
 ## Context
-Nothing has landed; the design is accepted and every open question decided on 2026-11-13 ([§10](../../docs/wp56-flat-memory-generators.md#10-decisions)). See the [roadmap page](../../docs/roadmap/wp56-flat-memory-generators.md). Each stage is one PR; S5 depends on nothing after S0 and can land before or after S2 to S4. The table of stages is [§9](../../docs/wp56-flat-memory-generators.md#9-stages).
+Nothing has landed; the design is accepted and every open question decided on 2026-11-13 ([§10](../../docs/wp56-flat-memory-generators.md#10-decisions)). See the [design note](../../docs/wp56-flat-memory-generators.md). Each stage is one PR; S5 depends on nothing after S0 and can land before or after S2 to S4. The table of stages is [§9](../../docs/wp56-flat-memory-generators.md#9-stages).
 
 ## WP56 S0 — the baseline, a 25 MB spec, a generator written two ways, peak memory at 1,000 to 8,000 files
 Spec: [§8 The proof](../../docs/wp56-flat-memory-generators.md#8-the-proof). Add `bench/wp56-generator/` and record the table in `docs/BENCHMARKS.md`, naming the commit and only the fields that version prints.
@@ -126,7 +125,7 @@ Spec: [§4](../../docs/wp56-flat-memory-generators.md#4-the-api). Overloads, `fi
 Likely files: `std/`, `src/capabilities.ts`, `tests/link/`.
 
 ## WP56 S4 — the diagnostics name the builder, and the flat-memory gate runs in CI
-Spec: [§8](../../docs/wp56-flat-memory-generators.md#8-the-proof). NL9002, NL9016 and NL9018 hints, `docs/AI.md`, and `gen_flat_memory` (G3). Ticks the roadmap page.
+Spec: [§8](../../docs/wp56-flat-memory-generators.md#8-the-proof). NL9002, NL9016 and NL9018 hints, `docs/AI.md`, and `gen_flat_memory` (G3).
 Likely files: `src/`, `tests/wordings/`, `docs/AI.md`.
 
 ## WP56 S5 — an object graph made inside a using arena block belongs to the block

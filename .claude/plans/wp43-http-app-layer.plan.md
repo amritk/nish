@@ -1,7 +1,6 @@
 ---
 name: WP43 — the HTTP application layer
 overview: The router, the handler over all three HTTP versions and gzip responses are built. Left are static files, deflate as a response coding and request bodies decoded under a decompression-bomb limit.
-roadmap: docs/roadmap/wp43-http-app-layer.md
 spec: docs/wp43-http-app-layer.md
 priority: 20
 labels: [ready]
@@ -63,7 +62,7 @@ stages:
 # WP43 — the HTTP application layer
 
 ## Context
-Stages 1 and 2 (router, handler over HTTP/1.1, 2 and 3, `examples/http-app`) and gzip responses of stage 4 have landed; see [the roadmap page](../../docs/roadmap/wp43-http-app-layer.md). Spec: [design note](../../docs/wp43-http-app-layer.md), [§4 later stages](../../docs/wp43-http-app-layer.md#4-later-stages-of-485).
+Stages 1 and 2 (router, handler over HTTP/1.1, 2 and 3, `examples/http-app`) and gzip responses of stage 4 have landed; see [the design note](../../docs/wp43-http-app-layer.md). Spec: [design note](../../docs/wp43-http-app-layer.md), [§4 later stages](../../docs/wp43-http-app-layer.md#4-later-stages-of-485).
 
 ## WP43 S3 — static files, nish/net/static with MIME types, ETag, Range and traversal refused
 Issue #485 is the umbrella request for the application layer (handler interface, routing, static files, compression, logging, configuration, graceful shutdown); its remaining unbuilt part is this stage plus the two compression stages below, so closing #485 waits for all three. The issue asks for MIME types, `ETag` and `Last-Modified` (via `statMtimeSync`), `Range`, path normalisation that refuses traversal, the `fs.read` capability scoped by WP36's policy, and loopback tests plus a `curl` interop check. Large files want WP44's streaming reads, so the first cut may serve whole files. A new `std/net` module reading the filesystem for a network peer needs its `docs/security/` record in the same PR.

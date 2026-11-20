@@ -1,7 +1,6 @@
 ---
 name: WP29 — the thread surface, the deferred stages
 overview: parallelMap, scope, Mutex, Channel and atomics have landed. Three additions stay deferred — parallelSort, parallelFilter and copy-at-join for class values — and the design note says what would reopen each.
-roadmap: docs/roadmap/wp29-thread-surface.md
 spec: docs/wp29-thread-surface.md
 priority: 80
 labels: [deferred]
@@ -60,7 +59,7 @@ stages:
 # WP29 — the thread surface, the deferred stages
 
 ## Context
-Landed: P1 (`parallelMapInto`, `parallelReduce`, `parallelMap`, `parallelFrom`), P2 (`scope()`), P3 (`Mutex`, `Channel`, atomics), strings and scalar arrays copied across the join, and `nish --fix` for six refusals — see [the roadmap page](../../docs/roadmap/wp29-thread-surface.md) (5 of 8 done). Design note: [docs/wp29-thread-surface.md](../../docs/wp29-thread-surface.md); user guide `docs/guide/using-nish/threads.md`. The roadmap says unchecked items are deferred and the note says what would reopen each. No GitHub issue is assigned to this plan.
+Landed: P1 (`parallelMapInto`, `parallelReduce`, `parallelMap`, `parallelFrom`), P2 (`scope()`), P3 (`Mutex`, `Channel`, atomics), strings and scalar arrays copied across the join, and `nish --fix` for six refusals — see [the design note](../../docs/wp29-thread-surface.md) (5 of 8 done). Design note: [docs/wp29-thread-surface.md](../../docs/wp29-thread-surface.md); user guide `docs/guide/using-nish/threads.md`. The roadmap says unchecked items are deferred and the note says what would reopen each. No GitHub issue is assigned to this plan.
 
 ## WP29 S6 — parallelSort
 Deferred, not declined (note, intro). The partitioner's open question (runtime or emitted IR) in section 11 bears on it. Likely files: `std/threads.ts`, `runtime/` partitioner, `docs/LANGUAGE.md`.

@@ -1,7 +1,6 @@
 ---
 name: WP51 — references to capture-free top-level functions
 overview: Stages 1 and 2 shipped function references in places, as arguments, | null and Map values; stage 3 (capture-free arrows in value position) is left, plus the owner's decisions on stage 2's per-call-site instantiation and refused field arguments.
-roadmap: docs/roadmap/wp51-function-references.md
 spec: docs/wp51-function-references.md
 priority: 40
 issue: 1892
@@ -28,14 +27,14 @@ stages:
     labels: [needs-decision]
     todos:
       - id: acc-decide-record
-        content: Record each decision in docs/wp51-function-references.md section 9 and the roadmap page — see WP51 S2 acceptance — per-call-site instantiation and refused field or element arguments
+        content: Record each decision in docs/wp51-function-references.md section 9 — see WP51 S2 acceptance — per-call-site instantiation and refused field or element arguments
         status: pending
 ---
 
 # WP51 — references to capture-free top-level functions
 
 ## Context
-The design, the escape proof, stage 1 (references in fields, locals, arrays, returns, calls, `===`, per-place sets, the debug tag check) and stage 2 (arguments, `| null`, `Map` values) have landed; see [the roadmap page](../../docs/roadmap/wp51-function-references.md). Left is stage 3 and the decisions in #1476. Spec: [design note §9](../../docs/wp51-function-references.md#9-if-it-ships-stages).
+The design, the escape proof, stage 1 (references in fields, locals, arrays, returns, calls, `===`, per-place sets, the debug tag check) and stage 2 (arguments, `| null`, `Map` values) have landed; see [the design note](../../docs/wp51-function-references.md). Left is stage 3 and the decisions in #1476. Spec: [design note §9](../../docs/wp51-function-references.md#9-if-it-ships-stages).
 
 ## WP51 S3 — capture-free arrows in value position
 Extends references to arrows that capture nothing, in value position. Closures, `Function` and references across the C ABI stay out of scope. It is a construct stage: golden `.ll`, `llvm-as` pass, native round trip, a negative test, the `docs/LANGUAGE.md` rule, cookbook entry and guide page, and goldens regenerated (`node tests/self/goldens.js --update`). Because it touches `src/`, run `node tests/run.js wasi` and `node tests/run.js performance`.

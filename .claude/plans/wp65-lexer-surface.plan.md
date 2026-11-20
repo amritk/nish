@@ -1,7 +1,6 @@
 ---
 name: WP65 — the surface a lexer port asked for
 overview: A C++ formatter port asked for byte search, allocation without the zero fill, non-literal field initializers and a number toString. Byte search and the zero-fill work are still open; the last two were built or decided and need their boxes closed.
-roadmap: docs/roadmap/wp65-lexer-surface.md
 spec: docs/wp65-lexer-surface.md
 priority: 60
 issue: 1884
@@ -58,14 +57,14 @@ stages:
     issue: 1890
     todos:
       - id: s4-verify-close
-        content: Confirm tests/cases/reject_num_tostring covers D1b, then tick the box and record the decision in docs/roadmap/wp65-lexer-surface.md — see WP65 S4
+        content: Confirm tests/cases/reject_num_tostring covers D1b, then record the decision in docs/wp65-lexer-surface.md — see WP65 S4
         status: pending
 ---
 
 # WP65 — the surface a lexer port asked for
 
 ## Context
-Landed: array module constants for a byte-class table, as [constant tables](../../docs/LANGUAGE.md#constant-tables). See [the roadmap page](../../docs/roadmap/wp65-lexer-surface.md). Spec: [design note](../../docs/wp65-lexer-surface.md). S1 to S3 do not depend on one another. Not planned: an array whose `length` covers uninitialised slots, `memchr` for elements wider than a byte, `toString` on arrays or classes. Issues #1629 and #1630, items of the formatter tracker #1633, are S1's and S2's issues.
+Landed: array module constants for a byte-class table, as [constant tables](../../docs/LANGUAGE.md#constant-tables). See [the design note](../../docs/wp65-lexer-surface.md). Spec: [design note](../../docs/wp65-lexer-surface.md). S1 to S3 do not depend on one another. Not planned: an array whose `length` covers uninitialised slots, `memchr` for elements wider than a byte, `toString` on arrays or classes. Issues #1629 and #1630, items of the formatter tracker #1633, are S1's and S2's issues.
 
 ## WP65 S1 — byte search on u8[]
 Spec: [§2](../../docs/wp65-lexer-surface.md#2-byte-search-on-u8-s1). Reported as #1629: programs write byte loops or build a string with `String.fromBytes` to compare a token. Check that `u8[].indexOf(byte, from)` is a scalar loop and lower it to `memchr` (the string path already does for a one-byte needle, `src/emit-strings.ts`); add a non-allocating sub-range compare on `memcmp`; possibly a multi-byte `memmem`. Every new libc call is reserved in `src/c-symbols.ts`.

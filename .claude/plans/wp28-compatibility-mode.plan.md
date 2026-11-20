@@ -1,7 +1,6 @@
 ---
 name: WP28 — compatibility mode
 overview: --compat exists with six free-tier features; what is left is the library tier (Date, JSON, RegExp, Buffer) and the Tier 2 constructs that cost representation — function values, async, exceptions, generators and virtual dispatch. These decide how much unmodified TypeScript compiles.
-roadmap: docs/roadmap/wp28-compatibility-mode.md
 spec: docs/wp28-compatibility-mode.md
 priority: 40
 issue: 1907
@@ -93,7 +92,7 @@ stages:
 # WP28 — compatibility mode
 
 ## Context
-Landed: spikes S1 to S6, C0 (the `--compat` flag, allow-list and `nish.compat`), C1 (optional parameters, `?.`, string `switch`, `for...of` over a string, overloads), and C2a with labelled `break`/`continue` built in strict. See [the roadmap page](../../docs/roadmap/wp28-compatibility-mode.md). Spec: [design note §7.3](../../docs/wp28-compatibility-mode.md#73-the-stages). Not planned: the dynamic Tier 3 constructs, a storable `Promise<T>`, running npm packages, compat inside `src/`, a flag per feature.
+Landed: spikes S1 to S6, C0 (the `--compat` flag, allow-list and `nish.compat`), C1 (optional parameters, `?.`, string `switch`, `for...of` over a string, overloads), and C2a with labelled `break`/`continue` built in strict. See [the design note](../../docs/wp28-compatibility-mode.md). Spec: [design note §7.3](../../docs/wp28-compatibility-mode.md#73-the-stages). Not planned: the dynamic Tier 3 constructs, a storable `Promise<T>`, running npm packages, compat inside `src/`, a flag per feature.
 
 ## WP28 C-lib — Date, JSON, RegExp and Buffer under compat
 The library tier, under WP26's rules (`Map` and `Set` are strict already). Size L, and §4.1 says it outranks most of what follows. WP33's R6 is this package.

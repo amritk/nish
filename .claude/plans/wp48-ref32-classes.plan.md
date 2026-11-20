@@ -1,7 +1,6 @@
 ---
 name: WP48 — 32-bit references for linked classes
 overview: Stages 4 and 5 of the compact-class work are open, plus two acceptance follow-ups (the pre-merge sibling.ts measurement, and nish-cmp comparing no compact program). They finish the user-facing ports and the survey of the compiler's and std/'s own classes.
-roadmap: docs/roadmap/wp48-ref32-classes.md
 spec: docs/wp48-ref32-classes.md
 priority: 40
 issue: 1893
@@ -76,7 +75,7 @@ stages:
 # WP48 — 32-bit references for linked classes
 
 ## Context
-Stages 1, 2a, 2b, 2c, 3 and 6 and the design are done ([roadmap page](../../docs/roadmap/wp48-ref32-classes.md)); stage 3's rule is being turned on by the /feature run tracked in #1776 (plan `.claude/plans/wp48-s3-rule.plan.md`, not edited here). Open are stages 4 and 5 and two acceptance follow-ups. Spec: [design note](../../docs/wp48-ref32-classes.md).
+Stages 1, 2a, 2b, 2c, 3 and 6 and the design are done ([design note](../../docs/wp48-ref32-classes.md)); stage 3's rule is being turned on by the /feature run tracked in #1776 (plan `.claude/plans/wp48-s3-rule.plan.md`, not edited here). Open are stages 4 and 5 and two acceptance follow-ups. Spec: [design note](../../docs/wp48-ref32-classes.md).
 
 ## WP48 S4a — measure ptr-range on sibling.ts on the merged runtime
 Spec: [§5.4](../../docs/wp48-ref32-classes.md#54-stage-1s-runtime-measured). Issue #1718 is this stage: the recorded sibling.ts runs (400k at -2.8% against a 24.8% band, 4M at +1.0% against 15.1%) predate main's in-place array growth (#1697) and RT-58's realloc guard, and the widest-band definition cannot see a regression under about 15%. Run the recorded command once on main, record both band verdicts, and confirm `wasi` and `performance` pass on main (the PR body of the stage 1 merge misreported `src/` as untouched and a local `wasi` run had 49 failures, likely the container's sysroot).

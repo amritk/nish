@@ -1,7 +1,6 @@
 ---
 name: WP32 — Map and Set
 overview: Map and Set landed; one open follow-up accepts a key/value walk, for (const [k, v] of m.entries()), now that destructuring has landed, without a pair allocation or a second lookup.
-roadmap: docs/roadmap/wp32-map.md
 spec: docs/wp32-map.md
 priority: 80
 issue: 1862
@@ -30,7 +29,7 @@ stages:
 # WP32 — Map and Set
 
 ## Context
-S1 to S7 (global `Map` and `Set`, iteration, fusion, `nish/map`, `StringMap`, measured against Node) and `Map` reads inside a parallel body have landed (#227 to #244). See [the roadmap page](../../docs/roadmap/wp32-map.md). Spec: [design note](../../docs/wp32-map.md). No open roadmap boxes; stage id S8 is this plan's numbering.
+S1 to S7 (global `Map` and `Set`, iteration, fusion, `nish/map`, `StringMap`, measured against Node) and `Map` reads inside a parallel body have landed (#227 to #244). See [the design note](../../docs/wp32-map.md). Spec: [design note](../../docs/wp32-map.md). No open roadmap boxes; stage id S8 is this plan's numbering.
 
 ## WP32 S8 — accept for (const [k, v] of m.entries()) and for (const [k, v] of m)
 Issue #1575. Both forms are refused today (`reject_map_entries`, `reject_map_iter_entries_call`, NL2375 `reject_map_iter_entries`); the workaround is `keys()` plus `get`, a second lookup per key. Destructuring declarations have landed (`tests/cases/destructure_array`), so the blocker named in the issue is gone. Only the exact `[k, v]` pattern (or a hole, `[, v]`) in a `const`/`let` head is accepted; `Set` stays as is.

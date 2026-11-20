@@ -1,7 +1,7 @@
 # WP66: C libraries from their headers
 
 **Status: S1 to S5, S7 and S8 are built; S6 is open.** The stages are in
-§11 and on [the roadmap page](roadmap/wp66-c-headers.md). S6 waits on the
+§11 and on [its open-work issue](https://github.com/amritk/nish/issues/1996). S6 waits on the
 owner (§9). [LANGUAGE.md](LANGUAGE.md#calling-c) stays normative.
 
 Every claim about today's code is anchored at commit `1673f40e`, on `main`,

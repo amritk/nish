@@ -1,7 +1,6 @@
 ---
 name: WP61 — typed JSON, constraints and coercion in one pass
 overview: Proposed only. Decode checks a schema's constraints and optionally coerces in the single typed-JSON pass, with zero cost when unused. Six owner decisions are open, and the union-state cost of tagged unions is queued for a decision.
-roadmap: docs/roadmap/wp61-json-typed-checks.md
 spec: docs/wp61-json-typed-checks.md
 priority: 60
 issue: 1869
@@ -69,7 +68,7 @@ stages:
 # WP61 — typed JSON, constraints and coercion in one pass
 
 ## Context
-Only the proposal has landed (nothing is built); see [the roadmap page](../../docs/roadmap/wp61-json-typed-checks.md). Spec: [design note §11](../../docs/wp61-json-typed-checks.md#11-stages). Each stage adds a construct and follows the checklist in `docs/ARCHITECTURE.md` ("How to add a construct"). WP62 (generated classes) depends on S1 and S2.
+Only the proposal has landed (nothing is built); see [the design note](../../docs/wp61-json-typed-checks.md). Spec: [design note §11](../../docs/wp61-json-typed-checks.md#11-stages). Each stage adds a construct and follows the checklist in `docs/ARCHITECTURE.md` ("How to add a construct"). WP62 (generated classes) depends on S1 and S2.
 
 ## WP61 S1 — constraints in decode
 Spec: [§4](../../docs/wp61-json-typed-checks.md#4-constraints). Each constraint is checked right after its field's read and fails with `JSON_DECODE_CONSTRAINT` (-27) at the value; unconstrained IR stays byte-identical (a zero-cost golden). `f64` bounds are emitted as the negated ordered pass test so `NaN` fails. Includes the `docs/security/json.md` and `regex.md` updates.

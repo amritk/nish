@@ -1,7 +1,6 @@
 ---
 name: WP66 — C libraries from their headers, callbacks
 overview: nish c-import, opaque classes, array fields, named buffer pairs and package-linked C all landed. What is left is S6, C callbacks, which waits on an open question about what C may do with a callback.
-roadmap: docs/roadmap/wp66-c-headers.md
 spec: docs/wp66-c-headers.md
 priority: 80
 issue: 1996
@@ -34,7 +33,7 @@ stages:
 # WP66 — C libraries from their headers, callbacks
 
 ## Context
-Landed: S1 (`zeroext`), S2 (`nish c-import`), S3 (opaque classes), S4 (array fields), S5 (buffer pairs), S7 (a package links C) and S8 (c-import writes opaque classes, array fields and buffer pairs) — see [the roadmap page](../../docs/roadmap/wp66-c-headers.md) (7 of 8 done). Design note: [docs/wp66-c-headers.md](../../docs/wp66-c-headers.md). No GitHub issue is assigned to this plan.
+Landed: S1 (`zeroext`), S2 (`nish c-import`), S3 (opaque classes), S4 (array fields), S5 (buffer pairs), S7 (a package links C) and S8 (c-import writes opaque classes, array fields and buffer pairs) — see [the design note](../../docs/wp66-c-headers.md) (7 of 8 done). Design note: [docs/wp66-c-headers.md](../../docs/wp66-c-headers.md). No GitHub issue is assigned to this plan.
 
 ## WP66 S6 — C callbacks, a top-level function passed as a C function pointer
 Spec: [section 8, S6](../../docs/wp66-c-headers.md#s6-callbacks-open-question). 46 of `sqlite3.h`'s functions and 15 of `png.h`'s take a function pointer. A WP51 function reference is an `i32` tag that WP51 refuses to let cross the C ABI, so a callback is a separate construct: a top-level function named at the call (as a `spawn` task is), lowered to the address of a C-ABI entry, analysed like an export (C may call it from anywhere). A `void *` user-data argument stays a `CPtr`; `SQLITE_TRANSIENT` is the same question in miniature.

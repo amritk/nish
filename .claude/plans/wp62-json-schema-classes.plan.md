@@ -1,7 +1,6 @@
 ---
 name: WP62 — Nish classes from a JSON Schema
 overview: Proposed only. nish schema would write typed-JSON classes from a draft 2020-12 schema or OpenAPI 3.1 components, keeping every keyword as a type, a WP61 constraint, JSDoc, or a refusal naming its JSON Pointer. Nothing is built and several owner decisions are open.
-roadmap: docs/roadmap/wp62-json-schema-classes.md
 spec: docs/wp62-json-schema-classes.md
 priority: 60
 issue: 1860
@@ -82,7 +81,7 @@ stages:
 # WP62 — Nish classes from a JSON Schema
 
 ## Context
-Only the proposal has landed (the design note and roadmap page, no compiler code); see [the roadmap page](../../docs/roadmap/wp62-json-schema-classes.md). Spec: [design note §12](../../docs/wp62-json-schema-classes.md#12-stages); the keyword table is [§4](../../docs/wp62-json-schema-classes.md#4-the-keyword-table). S4 depends on WP61's S1 (constraints in decode) and S2 (coercion), whose plan is `wp61-json-typed-checks.plan.md`.
+Only the proposal has landed (the design note and roadmap page, no compiler code); see [the design note](../../docs/wp62-json-schema-classes.md). Spec: [design note §12](../../docs/wp62-json-schema-classes.md#12-stages); the keyword table is [§4](../../docs/wp62-json-schema-classes.md#4-the-keyword-table). S4 depends on WP61's S1 (constraints in decode) and S2 (coercion), whose plan is `wp61-json-typed-checks.plan.md`.
 
 ## WP62 S1 — typed JSON prerequisites for generated classes
 An optional field whose default the constructor assigns (`[]`, `new Map()`, `new C()`, `new JsonNumber()`) with NL2498 reworded, a per-class `unknown: "ignore" | "error"` option, `new JsonNumber()` in a coerce class, and the `docs/security/json.md` update. Whichever of this stage and WP61's coercion lands first builds the in-place reset they share.

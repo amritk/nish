@@ -42,7 +42,7 @@ stages:
 # LANG — Language, runtime and codegen gaps from real programs
 
 ## Context
-No roadmap page. These gaps came from real programs: the recursion follow-up #1605 and the unions run #800. The formatter tracker #1633's two open gaps, #1629 and #1630, are the same work as [WP65](../../docs/roadmap/wp65-lexer-surface.md) S1 and S2 and are tracked there; #1628, #1631 and #1632 are done.
+No roadmap page. These gaps came from real programs: the recursion follow-up #1605 and the unions run #800. The formatter tracker #1633's two open gaps, #1629 and #1630, are the same work as WP65 S1 and S2 ([its plan](wp65-lexer-surface.plan.md)) and are tracked there; #1628, #1631 and #1632 are done.
 
 ## LANG 1 — widen the checked-accumulator recursion loop beyond i32 free-function sums
 Issue #1605, a follow-up of #1582 and #1597. fib is at 0.93x and 0.89x of Rust, but only fib-like code moved (16 nish-cmp programs; nothing in `src/` or `std/`). Eligible set today (`src/accumulate.ts`): free `i32` functions, `+` only, no arena scope, no loops, `switch` or methods, `Y` a literal or parameter. Open: (2) overflow cases pinned by hand, not compared against the recursion byte for byte; (3) the reorder argument for `Y` lives only in `src/accumulate.ts`, and the tree-sum program is not under `bench/` (`bench/treesum.ts` exists, check whether it is that program). Recursive-descent parsers return nodes, so this technique will not reach them. The issue's proposed CLAUDE.md line is a human decision, not part of this stage.

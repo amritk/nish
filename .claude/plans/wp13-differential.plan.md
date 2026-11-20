@@ -1,7 +1,6 @@
 ---
 name: WP13 — differential testing against Node
 overview: The native-against-Node oracle runs from frozen rewrites, so every program added after stage0 was removed has no comparison with Node and the fuzzer no longer compares against Node. The one open item is a rewriter driven by stage1's --emit-checked dump; it is deferred and a project of its own.
-roadmap: docs/roadmap/wp13-differential.md
 spec: docs/wp13-differential.md
 priority: 80
 labels: [deferred]
@@ -32,7 +31,7 @@ stages:
 # WP13 — differential testing against Node
 
 ## Context
-Stage 1 landed: the native-against-Node oracle runs from frozen rewrites (`tests/differential/goldens/rewrites.txt`) and the seed-against-HEAD IR fuzzer. See [the roadmap page](../../docs/roadmap/wp13-differential.md). The one unticked box is deferred; the roadmap page says nothing is scheduled and the note says what would reopen it. No GitHub issue is assigned to this plan.
+Stage 1 landed: the native-against-Node oracle runs from frozen rewrites (`tests/differential/goldens/rewrites.txt`) and the seed-against-HEAD IR fuzzer. See [the design note](../../docs/wp13-differential.md). The one unticked box is deferred; the roadmap page says nothing is scheduled and the note says what would reopen it. No GitHub issue is assigned to this plan.
 
 ## WP13 S2 — a rewriter driven by --emit-checked for programs added after stage0 was removed
 Spec: [design note, "Not in this package"](../../docs/wp13-differential.md#not-in-this-package).
