@@ -1,0 +1,2 @@
+define internal noundef i32 @main$.helper(
+define internal noundef i32 @___module_private_shared_u$.helper(

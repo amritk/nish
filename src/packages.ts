@@ -52,7 +52,7 @@
 // agree wherever both apply, so the placeholder shrank to the cases the
 // resolver is never asked about rather than disappearing.
 
-import { dirname } from "./paths"
+import { dirname, relativePath } from "./paths"
 import { splitByte, StringBuilder } from "./strings"
 
 /** The package every ordinary program is: no prefix, so no symbol moves. */
@@ -167,6 +167,12 @@ export const packageSymbolPrefix = (packageName: string): string => {
  * directory its path names, or the entry's directory when it names none, as
  * for a package reached through a linked copy.
  *
+ * The path is taken relative to that root (`relativePath`), so a module
+ * outside it keeps its `..` steps: `nish app/main.ts` importing
+ * `../shared/u.ts` gives `___shared_u` whether the entry is named as
+ * `app/main.ts`, `main.ts` from inside `app/`, or by an absolute path, and no
+ * machine's directory reaches the symbol.
+ *
  * Not injective either (`lib/util.ts` and `lib_util.ts` give one qualifier),
  * for the same reason `packageSymbolPrefix` need not be: the clash check runs
  * over the qualified symbols, so two modules that reduce to one qualifier are
@@ -175,10 +181,7 @@ export const packageSymbolPrefix = (packageName: string): string => {
 export const moduleSymbolQualifier = (modulePath: string, entryPath: string): string => {
   const own = packageDirOf(modulePath)
   const root = own.length > 0 && own !== packageDirOf(entryPath) ? own : dirname(entryPath)
-  let path = modulePath
-  if (root.length > 0 && root !== "." && path.startsWith(`${root}/`)) {
-    path = path.substring(root.length + 1)
-  }
+  let path = relativePath(root, modulePath)
   if (path.endsWith(".ts")) {
     path = path.substring(0, path.length - 3)
   }

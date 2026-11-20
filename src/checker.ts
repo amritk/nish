@@ -580,6 +580,7 @@ export class Checker {
       }
     }
   }
+
   /**
    * Give each free function this module defines whose source name is in
    * `names` its module-qualified symbol, `<prefix><qualifier>$.<name>` (WP57

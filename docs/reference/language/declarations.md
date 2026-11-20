@@ -1567,7 +1567,11 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
   `@a$.identity$i32` (`module_private_generic`); a task's arrow follows the
   function it is written in (`@m$.work$arrow0`, `module_private_spawn`); and
   a private `helper` beside an imported, exported `helper` is `@main$.helper`
-  while the exported one keeps `@helper` (`module_private_mixed`). A name no
+  while the exported one keeps `@helper` (`module_private_mixed`). The
+  qualifier is the module's path relative to its package root (the entry's
+  directory for the program's own modules), so a module outside that
+  directory keeps its `..` steps: `../shared/u.ts` gives
+  `@___shared_u$.helper` however the entry is named. A name no
   other function shares keeps its bare symbol, so a program that built before
   emits exactly what it did, and the entry's `main` is never qualified.
 - **Everything else still needs a unique symbol.** Two exported functions of
