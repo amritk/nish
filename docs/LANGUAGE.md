@@ -10022,7 +10022,7 @@ multiplies where its hardware has one (WP41,
 - **`u64` operands only**, because the product is defined on the unsigned
   64-bit value: anything else, a `u32`, an `i64`, a `number` or a ranged
   integer, is `` `mulHigh` takes u64 operands (convert with toU64), got u32 ``
-  (NL2805, `tests/link/mul_high_reject_operand`). A bare numeric literal is
+  (NL2819, `tests/link/mul_high_reject_operand`). A bare numeric literal is
   read as a `u64`, so `mulHigh(x, 3)` works. The call takes exactly two
   arguments, and `mulHighIsNative` none.
 - **The lowering on a 64-bit target is one multiply**: `zext` both operands to

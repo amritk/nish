@@ -1321,7 +1321,7 @@ const diagnosticRules = (): string[] => [
   "` is not part of the standard library (it has: ",
   "NL3011",
   "` takes u64 operands (convert with toU64), got ",
-  "NL2805",
+  "NL2819",
   "`, and a data-parallel body cannot capture it: ",
   "NL2504",
   "`, which the capability policy does not grant (",
