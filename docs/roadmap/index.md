@@ -22,9 +22,10 @@ In order. Each package's page says what its next stage is and where it is
 specified.
 
 1. [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): meet stage 6's gate.
-2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G7's one handler, the `nish/net/http-server` façade.
+2. [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): G7's HTTP/1.1 over TLS on the `nish/net/http-server` façade.
 3. [WP43: The HTTP application layer](wp43-http-app-layer.md): stage 3, static files.
 4. [WP21: Packages](wp21-packages.md): S4, the build cache.
+5. [WP71: An HttpArena entry, and what it asks of `std/net`](wp71-httparena.md): S1, the rig on a machine HttpArena's size.
 
 ## Open questions
 
@@ -38,7 +39,9 @@ specified.
 - [WP64: Temporal](wp64-temporal.md): how option bags such as `{ largestUnit: "year" }` get a layout, whether the time zone database is embedded by default, `Duration`'s field width, `epochNanoseconds` without `bigint`, and whether a `RangeError` stays a panic.
 - [WP65: The surface a lexer port asked for](wp65-lexer-surface.md): whether to build `toString()` on a number, which LANGUAGE.md refuses today, or keep the rule and make the refusal name the template literal.
 - [WP66: C libraries from their headers](wp66-c-headers.md): what C may do with a callback (S6), and the owner's decisions D1 to D7: the subcommand's name, where it lives, files per target, `i8` and `i16`, the opaque class's spelling, what linking may run, and whether `std/sqlite` is regenerated.
-- [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) and [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md): whether and when to submit to TechEmpower.
+- [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md): whether the façade's HTTP/1.1 listener takes an h2c peer by its preface, which the one-handler note rules out. TechEmpower, which WP39 and WP49 were to submit to, archived its benchmarks on 2026-03-24.
+- [WP43: The HTTP application layer](wp43-http-app-layer.md): whether to build middleware (stage 5).
+- [WP71: An HttpArena entry, and what it asks of `std/net`](wp71-httparena.md): whether and when to enter, a public number.
 - [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md): whether to build it, which waits on a program that must run on a Worker, and its other questions.
 
 ## In progress and proposed
@@ -50,10 +53,10 @@ specified.
 | [WP28: Compatibility mode](wp28-compatibility-mode.md) | In progress | 5 of 13 |
 | [WP33: The round trip to TypeScript](wp33-round-trip.md) | In progress | 7 of 9 |
 | [WP37: The OS sandbox](wp37-os-sandbox.md) | In progress | 5 of 9 |
-| [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 22 of 29 |
-| [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 7 |
+| [WP39: The HTTP server: a TechEmpower entry, then a general-purpose server](wp39-http-server.md) | In progress | 23 of 31 |
+| [WP43: The HTTP application layer](wp43-http-app-layer.md) | In progress | 3 of 9 |
 | [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 4 of 9 |
-| [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
+| [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 5 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
 | [WP66: C libraries from their headers](wp66-c-headers.md) | In progress | 2 of 7 |
@@ -65,6 +68,9 @@ specified.
 | [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 6 |
 | [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md) | Proposed | 0 of 3 |
 | [WP62: Nish classes from a JSON Schema](wp62-json-schema-classes.md) | Proposed | 0 of 5 |
+| [WP71: An HttpArena entry, and what it asks of `std/net`](wp71-httparena.md) | Proposed | 0 of 7 |
+| [WP72: gRPC over the HTTP/2 server](wp72-grpc.md) | Proposed | 0 of 6 |
+| [WP73: Brotli, measured first, then an encoder and `br` responses](wp73-brotli.md) | Proposed | 0 of 4 |
 
 ## Landed
 

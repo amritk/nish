@@ -709,7 +709,7 @@ so this moves the minor version. 35 files under `std/`, `src/`, `examples/`,
 | **D3** | Cancellation answers every later `await` with the call's own failure, and never drops a frame halfway | **Yes.** Without `throw`, it is the only kind that keeps `using` and the region correct |
 | **D4** | The renames of §8 | **Yes**, in one PR of their own, before `fetch` becomes async |
 | **D5** | Build §7's explicit `Upstream` and the Postgres pool before §2 | **Yes.** They are the TFB database tests' critical path, and §4's `async` versions are thin wrappers over them |
-| **D6** | Submit to TFB, and when | WP39 D1 stands: after every test type passes the verifier and has numbers from a separate client machine. A public number is the owner's call each time |
+| **D6** | Submit to TFB, and when | WP39 D1 stands: after every test type passes the verifier and has numbers from a separate client machine. A public number is the owner's call each time. *Moot since 2026-03-24: TechEmpower archived the project and takes no entries ([wp39](wp39-http-server.md), E9). §6's gate is this repository's own and stands; a public number goes through [WP71](wp71-httparena.md)* |
 | **D7** | How `fetch` takes its options without `undefined` | A nullable parameter may default to `null`, so `fetch(url)` and `fetch(url, init)` are one function; optional parameters stay refused. **Accepted**; the checker allows `init: RequestInit \| null = null` ([LANGUAGE.md](LANGUAGE.md#default-and-rest-parameters)) |
 
 ## 10. Stages

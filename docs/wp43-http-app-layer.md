@@ -157,12 +157,27 @@ both runs.
 - **Stage 2, the handler interface:** `nish/net/handler`. Its HTTP/1.1 half
   is built (§5); the same `HttpRequest` and answers over `http2-tls` and
   `http3-server`, with Alt-Svc advertising h3, are the follow-up §5 explains.
-- **Stage 3, static files:** `nish/net/static`.
+- **Stage 3, static files:** `nish/net/static`. [WP71](wp71-httparena.md)'s
+  `static-h2` and `static-h3` profiles add what a benchmark entry needs of it:
+  a cache that is the module's own and follows the disk (a changed file is
+  served changed), a file's `.br` or `.gz` sibling sent when the request's
+  `Accept-Encoding` offers it, `Content-Type` for `.css`, `.js`, `.html`,
+  `.woff2`, `.svg`, `.webp` and `.json`, and every version the
+  `nish/net/http-server` façade serves.
 - **Stage 4, compression:** `nish/net/compress`. Built for responses as
   `nish/net/http-compress` (`HttpCompressor`, `httpAcceptEncoding`, on
   `nish/compress/deflate`), pinned by `tests/link/std_http_compress`;
   `deflate` as a coding and request bodies with a decompression-bomb limit
-  are not.
+  are not. `br` as a coding waits on an encoder, [WP73](wp73-brotli.md).
+- **Stage 5, middleware** *(open question)*: steps a program registers to run
+  before and after its route bodies (a request id, a check on a header, a
+  field added to every answer). Nothing in `std/net` has one today. HttpArena
+  scores a framework entry's completeness on routing, middleware, request and
+  response, and takes 2.5% off a family's score for each the entry declares
+  missing
+  ([composite score](https://www.http-arena.com/docs/scoring/composite-score/));
+  the open part is what a step may change and whether a route that uses no
+  step pays for it.
 - **The example server:** `examples/http-app`, with logging, configuration and
   graceful shutdown, is built (§5).
 
