@@ -10,9 +10,10 @@ in `std/json.ts`. E4 is `httpDateWrite` in `std/net/http-fields.ts` and
 are built too: `nish/net/postgres` with its pool and carrier, and the
 database entry (`bench/techempower/db-server.ts`) answering `db`, `query`,
 `update`, `cached-query` and `fortune`, one process a core on
-`nish/net/prefork`. E9, submitting, is the owner's (D1). Of Part B, G3's
-resumption, G4's AES kernel, G5's address change, G8's harness and G10 are
-built; §3 says what each row has left. The anchors below are at `ce9d394`;
+`nish/net/prefork`. E9, submitting, will not happen: TechEmpower archived
+TechEmpower/FrameworkBenchmarks on 2026-03-24, and it takes no entries (D1).
+Of Part B, G3's resumption, G4's AES kernel, G5's address change, G7's
+façade (#1473), G8's harness and G10 are built; §3 says what each row has left. The anchors below are at `ce9d394`;
 §1 says where each row stands now (*2026-11-08*).
 
 [WP34](wp34-network-stack.md) built a network stack for one program: a game's relay.
@@ -212,6 +213,18 @@ A pull request to TechEmpower/FrameworkBenchmarks is outward-facing and stays
 the owner's decision (§4, D1). Until then the entry is run and measured from
 this repository.
 
+*2026-11-20:* there is nothing left to submit to. TechEmpower announced the
+end of the project in
+[issue 10932](https://github.com/TechEmpower/FrameworkBenchmarks/issues/10932)
+and archived the repository on 2026-03-24, and it named no successor. The
+entry stays in `bench/techempower/` as a benchmark of this repository. A
+public comparison now goes through HttpArena, whose entry is
+[WP71](wp71-httparena.md). Its database half would not have passed
+TechEmpower's rules as written either: `db` and `queries` read their rows
+through one `PgBatcher` query per batch (`bench/techempower/db-server.ts`,
+`std/net/postgres.ts`'s `unnest(...) cross join lateral`), and the rules
+refused a multi-row select in place of one query per row.
+
 ## 3. Part B: a general-purpose server, every version
 
 None of these blocks Part A. Each one names the open finding or lane cell it
@@ -225,7 +238,7 @@ closes.
 | **G4** | Crypto speed, each part gated on its own measurement: ~~AES-GCM and AES header protection as a runtime kernel on AES-NI with PCLMULQDQ, and on AArch64's AESE with PMULL, falling back to the bitsliced Nish~~, built (`runtime/runtime-aes.c`, through `src/kernels.ts`; [WP38](wp38-simd.md)); ~~a faster P-256, with 64-bit limbs or a fixed-base table~~, built (#1516: a cached table for G and a safegcd scalar inverse for verify; #1518: 64-bit limbs) | WP34 K3 and K5 "Left" | M each |
 | **G5** | QUIC: the runner's congestion cases; a congestion controller beyond NewReno (CUBIC, or BBR), if a measurement asks for one; ECN; ~~the AEAD limits ([QUIC-6](security/quic.md)); detecting an optimistic ACK (QUIC-7)~~, closed by #784; path MTU discovery (RFC 8899), since packets stay at 1,200 bytes today; ~~following a peer's address change, which A1 records as its NAT-rebinding gap~~, built (path validation and migration in `std/net/quic.ts`, QUIC-11 in [quic.md](security/quic.md)) | WP34 Q3, Q4 and A1 "Left" | L |
 | **G6** | QUIC on more than one core: E1's pre-fork shares a UDP port today, but the kernel picks a process from the peer's address, so a rebinding peer lands on another process. The process to route to is carried in the connection ID, and the packet is steered either by a `SO_ATTACH_REUSEPORT_EBPF` program or by forwarding between processes. Design note first | — | M–L |
-| **G7** | One handler for all three versions: a façade over `Http1Server`, `Http2TlsServer` and `Http3Server`, so that a program answers a request once whatever version carried it. It advertises `Alt-Svc` for HTTP/3 from the HTTP/1.1 and HTTP/2 responses, and adds cleartext HTTP/2 with prior knowledge (h2c), which is what `h2load` and a proxy's upstream speak. The façade must keep "nothing allocates per request". Design note first | — | M–L |
+| **G7** | One handler for all three versions: a façade over `Http1Server`, `Http2TlsServer` and `Http3Server`, so that a program answers a request once whatever version carried it. It advertises `Alt-Svc` for HTTP/3 from the HTTP/1.1 and HTTP/2 responses, and adds cleartext HTTP/2 with prior knowledge (h2c), which is what `h2load` and a proxy's upstream speak. The façade must keep "nothing allocates per request". Design note first. ~~The façade~~, built: `nish/net/http-server` (#1473; [http-one-handler.md](http-one-handler.md)). Left, each asked for by [WP71](wp71-httparena.md)'s profiles: HTTP/1.1 over TLS on the façade (F2, §4.2 of the note, puts `Http1TlsServer` outside it); WebSocket on its HTTP/1.1 listener; and whether its HTTP/1.1 listener takes an h2c peer by the preface, which reverses the note's "no sniffing" (§4) and so waits on the owner | — | M–L |
 | **G8** | HTTP/2 and HTTP/3 benchmarks: an `h2load` harness in `bench/`, numbers in [BENCHMARKS.md](BENCHMARKS.md). It runs after E1 and G4, or it measures one core and software AES. The harness is built (`bench/h2load.mjs`, one build against another); no figures are in BENCHMARKS.md yet | — | S–M |
 | **G9** | WebTransport's draft: when Chrome moves past the draft `std/net/webtransport.ts` is pinned to, re-record the exchange and move the pin | [webtransport.md](security/webtransport.md), "The draft" | continuous |
 | **G10** | ~~The client role of TLS against the web PKI (WP34 N13)~~, built: `nish/net/tls/client`, chain validation against the system store in `nish/net/tls/verify`, and outbound HTTPS in `nish/net/fetch` ("The client" in [tls.md](security/tls.md)). Postgres over TLS (E6) is what is left | WP34 §8 | L |
@@ -234,7 +247,7 @@ closes.
 
 | | Question | Recommendation |
 | --- | --- | --- |
-| **D1** | Submit an entry to TechEmpower/FrameworkBenchmarks, and when | **After E5 and E8**, once `json`, `plaintext` and `fortune` pass the verifier and have numbers here. A submission is outward-facing and a public number, so it is the owner's call each time |
+| **D1** | Submit an entry to TechEmpower/FrameworkBenchmarks, and when | **After E5 and E8**, once `json`, `plaintext` and `fortune` pass the verifier and have numbers here. A submission is outward-facing and a public number, so it is the owner's call each time. *Moot since 2026-03-24, when TechEmpower archived the repository (E9); the public entry is [WP71](wp71-httparena.md)'s* |
 | **D2** | Where the entry lives | **`bench/techempower/` in this repository**, beside the other benchmarks, with E5's verifier checks in `npm test`, and copied into the upstream layout at submission time |
 | **D3** | Pre-fork from a shell launcher for TFB, or wait for N12's supervisor | **The launcher.** It needs E1 alone. N12 is for the relay and the master, and lands on its own schedule |
 | **D4** | Where the Postgres client lives | **`std/net/postgres`**, beside the other protocol modules, under WP34's decision S2: the protocols live in the standard library |
