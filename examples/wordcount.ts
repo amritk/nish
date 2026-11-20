@@ -47,7 +47,7 @@ export const main = (): void => {
     counts.set(w, (counts.get(w) ?? 0) + 1)
   }
   // Where each word first appears: the insert happens only the first time.
-  const first = new Map<string, number>()
+  const first = new Map<string, i32>()
   for (let at: i32 = 0; at < toI32(all.length); at++) {
     getOrInsert(first, all[at], at)
   }
