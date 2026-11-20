@@ -265,12 +265,12 @@ says so; pass it with `--overrides`:
     `(len: u16, data: CountedBy<readonly u8[], "len">)`, and the call checks
     it against the buffer's length before C runs. The length must be one of
     those unsigned widths, by value or through a pointer the function writes;
-    a signed one, the buffer itself, or a name that is not a parameter is
-    refused. The command never guesses a length from a parameter's name, and
+    a signed one, the buffer itself, another buffer, or a name that is not a
+    parameter is refused. The command never guesses a length from a parameter's name, and
     clang 18 drops the header's own `__counted_by` from a parameter, so the
     overrides file is where a pairing is said.
 
-With this file, `wc_new` returns `CPtr`, `wc_report` carries the comment
+With this file, `wc_new` returns `counter` rather than `counter | null`, `wc_report` carries the comment
 `// The result is owned: free it with wc_free_report.`, and `wc_feed` takes
 `string | null`. An override that would change nothing is refused, so a
 renamed C function cannot leave a stale override behind: one that names a

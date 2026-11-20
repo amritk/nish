@@ -1,6 +1,6 @@
 # WP66: C libraries from their headers
 
-**State:** In progress · **Done:** 6 of 7 · **Design note:** [`docs/wp66-c-headers.md`](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)
+**State:** In progress · **Done:** 7 of 8 · **Design note:** [`docs/wp66-c-headers.md`](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md)
 
 ## Stages
 
@@ -11,10 +11,11 @@
 - [x] S5: a buffer paired with its count by name, with a count of any unsigned width
 - [ ] S6: C callbacks: a top-level function named at the call, passed as a C function pointer *(open question)*
 - [x] S7: a package links a C library or C sources of its own, under `nish run` and `--link`
+- [x] S8: `nish c-import` writes opaque classes, array fields and named buffer pairs
 
 ## Next
 
-S6, once its open question is settled: [§8](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md#8-what-the-language-needs-in-order-of-what-it-unlocks). S1 to S5 and S7 are done.
+S6, once its open question is settled: [§8](https://github.com/amritk/nish/blob/main/docs/wp66-c-headers.md#8-what-the-language-needs-in-order-of-what-it-unlocks). S1 to S5, S7 and S8 are done.
 
 ## Open questions
 
