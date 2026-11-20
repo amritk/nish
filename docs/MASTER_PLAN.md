@@ -293,6 +293,7 @@ is its plan. [README.md](README.md) indexes them, and each has a
 | 62 | Nish classes from a JSON Schema: `nish schema` writes typed JSON classes keeping every keyword as a type, a WP61 constraint or JSDoc, or refusing it | [wp62](wp62-json-schema-classes.md) |
 | 65 | The surface a lexer port asked for: byte search through `memchr` and `memcmp`, allocation without the zero fill and a standard `grow`, non-literal field initializers, and whether a number gets `toString` | [wp65](wp65-lexer-surface.md) |
 | 66 | C libraries from their headers: `nish c-import` writes a header's functions, structs and constants as Nish declarations through clang, with the language stages that would bind the rest | [wp66](wp66-c-headers.md) |
+| 68 | Shared libraries layered like atomic design: the helpers std/ and src/ each write for themselves (character classes, digits, quoting, byte codecs, builders, hashing) measured, then extracted one cluster per stage into atoms, molecules and organisms, each the fastest existing copy or faster | [wp68](wp68-shared-libraries.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
