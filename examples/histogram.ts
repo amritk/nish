@@ -95,7 +95,12 @@ export const main = (): i32 => {
       {
         using s = scope()
         for (let t: i32 = 0; t < toI32(binned.length); t++) {
-          s.spawn(binShard, new Shard(toI32(r * toU32(TASKS) + toU32(t) + 1), toU32(PER_TASK), hist), binned, t)
+          s.spawn(
+            binShard,
+            new Shard(toI32(r * toU32(TASKS) + toU32(t) + 1), toU32(PER_TASK), hist),
+            binned,
+            t
+          )
         }
       }
       for (const n of binned) {
