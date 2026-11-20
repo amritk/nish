@@ -188,7 +188,12 @@ const bytesUtf8Length = (b: u8[], i: i32, to: i32): i32 => {
   return n
 }
 
-/** A window walked with `bytesUtf8Length`, the way std/bytes.ts's `skipJsonText` walks one. */
+/**
+ * A driver this bench wrote, not shipped code: an ASCII skip around a copy of
+ * the private `bytesUtf8Length`. std/bytes.ts's `skipJsonTextWalk` also tests
+ * each byte for a control, a quote and a backslash, and natively the kernel
+ * replaces that walk, so this side times the per-sequence decode alone.
+ */
 const bytesWalk = (buf: u8[], off: i32, len: i32): boolean => {
   const end: i32 = off + len
   let i: i32 = off
@@ -472,8 +477,10 @@ const CUT_AT_BUFFER_END: i32 = 11
  * Breaks `buf` near `at0` with case `which`, and answers where it wrote, or
  * -1 when it could not. A table case starts at the first character boundary
  * at or before `at0` and stays inside its segment; `CUT_AT_END` writes the
- * first three bytes of a four-byte form over the last three of the segment,
- * which `text` always fills with letters.
+ * first three bytes of a four-byte form over the last three of the segment.
+ * `text` writes letters there unless a symbol starting four bytes from the
+ * end crosses into them; then the overwrite also cuts that symbol short, so
+ * the window is ill-formed either way, though not always first at the cut.
  */
 const breakAt = (buf: u8[], at0: i32, which: i32): i32 => {
   const n: i32 = toI32(buf.length)

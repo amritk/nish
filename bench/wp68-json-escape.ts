@@ -58,9 +58,12 @@ const shortEscape = (code: i32): i32 => {
 const hexByte = (nibble: i32): i32 => (nibble < 10 ? 48 + nibble : 97 + nibble - 10)
 
 /**
- * `jsonWriterPutString`, std/json.ts, over a window of bytes rather than a
- * `string`, and with the cursor passed and returned rather than kept in a
- * writer: one test and one store a plain byte. -1 when `out` is full.
+ * The byte loop of `jsonWriterPutBytes`, std/json.ts, which that function
+ * runs below `JSON_PLAIN_RUN_MIN` and `jsonWriterPutString` runs over a
+ * `string` at every length, with the cursor passed and returned rather than
+ * kept in a writer: one test and one store a plain byte. -1 when `out` is
+ * full. No shipped caller runs this loop over a byte window of 16 bytes or
+ * more; `jsonWriterPutString` does over a `string`, which no side here times.
  */
 const byteA = (out: u8[], at0: i32, src: u8[], off: i32, len: i32): i32 => {
   const cap: i32 = toI32(out.length)
@@ -215,7 +218,12 @@ const runs = (out: u8[], at0: i32, src: u8[], off: i32, len: i32): i32 => {
 /** `hexDigitLower`, src/strings.ts. */
 const hexDigitLower = (n: i32): string => "0123456789abcdef".substring(n & 15, (n & 15) + 1)
 
-/** `addJsonQuoted`, src/strings.ts, verbatim but for its name, with `StringBuilder`'s `parts` as a plain array. */
+/**
+ * `addJsonQuoted`, src/strings.ts, with `StringBuilder`'s `parts` as a plain
+ * array and its `add` and `addChar` written out: each pushes the part
+ * (`addChar` as `String.fromCharCode`) as the method bodies do, without the
+ * method call.
+ */
 const builder = (parts: string[], s: string): void => {
   parts.push(String.fromCharCode(34))
   let i = 0

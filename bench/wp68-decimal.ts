@@ -11,13 +11,16 @@
 //   build/seed/bin/nish bench/wp68-decimal.ts --link build/wp68-decimal --profile speed
 //   taskset -c 2 build/wp68-decimal
 //
-// Two inputs are timed, each with its own twin band and checksums:
+// Three inputs are timed, each with its own twin band and checksums:
 //
 // - "non-negative": `i32` values of every length from one digit to ten, what
 //   the `http1` writers take. Every copy that writes such a value is a side,
 //   whatever its type; `http1B` is `http1A` byte for byte, the noise band.
 //   `compress` is `http1A`'s write with `httpDecimalDigits`
 //   (std/net/http-compress.ts) as the count, the one thing that copy does.
+//   The lengths are drawn, so a side's branch on the length mispredicts.
+// - "status": the same sides over values of three digits only, 100 to 599,
+//   the length a response's status code always has.
 // - "signed": `i64` values of every length from one digit to nineteen, half of
 //   them negative, with zero and the `i64` minimum: what `pgPutDecimal` and
 //   `jsonWriterPutDigits64` take. `pgB` is `pgA` byte for byte, the noise
@@ -416,16 +419,21 @@ const writeWide = (out: u8[], values: i64[], side: i32): i32 => {
   return at
 }
 
-/** The non-negative `i32` input: every side, the template literal last. */
-const measureNarrow = (out: u8[]): i32 => {
-  console.log("non-negative: i32 values of one to ten digits")
+/**
+ * A non-negative `i32` input: every side, the template literal last. With
+ * `status`, every value is three digits, 100 to 599, as a response's status
+ * line writes it, and a round's changed value stays three digits; otherwise
+ * the lengths are drawn from one digit to ten.
+ */
+const measureNarrow = (out: u8[], status: boolean): i32 => {
+  console.log(status ? "status: i32 values of three digits, 100 to 599" : "non-negative: i32 values of one to ten digits")
   const values: i32[] = []
   let x: u32 = 2463534242
   for (let i = 0; i < COUNT; i++) {
     x ^= x << 13
     x ^= x >> 17
     x ^= x << 5
-    values.push(drawn(x))
+    values.push(status ? 100 + toI32(x % 500) : drawn(x))
   }
   const names: string[] = ["http1A", "http1B", "pg", "json", "client", "compress", "pairs", "template"]
   const best: i64[] = [-1, -1, -1, -1, -1, -1, -1, -1]
@@ -435,7 +443,7 @@ const measureNarrow = (out: u8[]): i32 => {
     if (at < 0 || at >= values.length) {
       return 1
     }
-    values[at] = round * 1000003
+    values[at] = status ? 100 + ((round * 37) % 500) : round * 1000003
     // Each round starts at a different side, so no side always runs first.
     for (let k = 0; k < 8; k++) {
       const side: i32 = (round + k) % 8
@@ -511,7 +519,8 @@ const measureWide = (out: u8[]): i32 => {
 
 export const main = (): i32 => {
   const out = new Array<u8>(ROOM)
-  const narrow = measureNarrow(out)
+  const narrow = measureNarrow(out, false)
+  const status = measureNarrow(out, true)
   const wide = measureWide(out)
-  return narrow + wide
+  return narrow + status + wide
 }

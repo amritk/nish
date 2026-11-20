@@ -10,10 +10,18 @@
 //   build/seed/bin/nish bench/wp68-be-load.ts --link build/wp68-be-load --profile speed
 //   taskset -c 2 build/wp68-be-load
 //
-// Not timed, so unmeasured: `aesLoad32` (std/crypto/aes.ts), which is
-// `sha1LoadWord` with its shift counts written as `toU32(24)`, and the inline
-// `i32` loads that sign-extend the top byte (std/net/postgres.ts,
-// std/net/postgres-async.ts, std/net/websocket.ts:566).
+// `getU32BE` is the one the libraries run most: `getI32BE` wraps it, and the
+// postgres decoders call that per message and per column (std/net/postgres.ts,
+// std/net/postgres-async.ts). This bench times the load alone; what a change
+// is worth to those callers is bench/pg-decode's to say.
+//
+// Not timed, so unmeasured: `p256LoadWord`, `bcryptSaltWords`, and the inline
+// loads in zlib, http1-server, tls/codec and std/net/websocket.ts:432;
+// `aesLoad32` (std/crypto/aes.ts), which is `sha1LoadWord` with its shift
+// counts written as `toU32(24)`; the inline `i32` loads that sign-extend the
+// top byte (std/net/postgres.ts:1749 and :1983, std/net/postgres-async.ts:2210,
+// std/net/websocket.ts:566); and std/net/tls.ts:2403, an `i64` load narrowed
+// by `toU32`.
 import { monotonicNanos } from "nish:process"
 import { least, report } from "./wp68-report"
 
