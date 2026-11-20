@@ -513,7 +513,7 @@ note: `feat(checker): a class or interface may be renamed on import`.
 | ---: | --- | --- |
 | S1 | Private functions and generic templates qualified by their module when they would clash (§4) | Built (#1812) |
 | S2 | Exported names that clash inside one package (§6) | Decided: keep refusing; nothing to build |
-| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Built |
+| S3a | A struct's symbol in the type table, equal to its source name (§7b) | Built (#1840) |
 | S3b | Structs spelled by their symbol in the IR (§7b) | Proposed |
 | S3c | Member symbols spelled from their owner's symbol (§7b) | Proposed |
 | S3d | A clashing private class or interface qualified by its module (§7b) | Proposed |
