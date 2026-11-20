@@ -16,8 +16,8 @@ same counts, but some sites have moved lines (in `std/net/postgres.ts`, for
 one), so rerun the survey for today's.
 The survey (§3) is `node bench/wp68-survey.mjs`, rerunnable on any commit.
 The benchmarks (§4) are `bench/wp68-*.ts`, with the bench code at commit
-`38031fa9`. They were built with the released 0.42.0 compiler
-(`build/seed`), run on x86-64 Linux (4 cores, Intel Xeon @ 2.10GHz), and
+`38031fa9`. They were built with the 0.42.0 compiler, the last release when
+they ran (`build/seed`; 0.43.0 has shipped since), run on x86-64 Linux (4 cores, Intel Xeon @ 2.10GHz), and
 pinned to one core with `taskset -c 2`.
 
 The owner set the order of priorities:
@@ -133,7 +133,7 @@ cluster's marker:
   the match. It ends at the first line after which every bracket is closed
   (strings, comments and regular expressions skipped) and the next line is
   blank, unindented, or the end of the file. The definition is the copy when it
-  is at most 16 lines long, or when the match is in its first six lines.
+  is at most 16 lines long, or when the match is in its first seven lines.
 - **Otherwise the copy is inline in a larger function.** The script then counts
   the unbroken lines around the match that match the cluster's `run` pattern,
   and counts them once.
@@ -301,7 +301,7 @@ TTL once per resource record. It also runs through `getI32BE`, which wraps
 it. `std/net/postgres.ts` calls `getI32BE` per array header word and
 element length, per `int4` value and per RowDescription column; its
 per-message and per-column-value lengths are the inline loads at `:1749`
-and `:1983`. `postgres-async.ts` calls it per message length.
+and `:1983` (`:1793` and `:2027` at `ce9bfd3a`). `postgres-async.ts` calls it per message length.
 `bench/pg-decode`'s `rows` case runs the array path. Its README estimates the loads at 14% of
 `rows 100` and a fast path at about -8% (`bench/pg-decode/README.md`, item 3),
 counted in instructions, not timed. That is the README's estimate, not a
@@ -442,7 +442,7 @@ where its shape looks like a timed side's.
 | Cluster | Timed (side) | Not timed | What callers pass |
 | --- | --- | --- | --- |
 | `hex` | `http1HexValue` (`chainA`), `hexDigit` in `std/math.ts` (`lower`), `manifestHexDigit` in `src/manifest.ts` (`mask`) | `jwtHexValue`, `pkiHexDigit`, `jsonHexDigit`, `dnsHexValue`, `routerHex`, `tlsHexNibble`, `urlHexValue`, `regexHexValue`, `pixelsHex`, `yamlJsonHexValue`, `yamlHexValue`, `escapeDigit` in `src/emit-ts-strings.ts`, and the inline decoder at `src/constants.ts:168` | A `u8` widened to `i32` or -1: `jwtHexValue`, `dnsHexValue`, `http1HexValue`, `routerHex`, `urlHexValue` (the byte inputs). A `charCodeAt` code unit, which can be 256 or more: `pkiHexDigit`, `jsonHexDigit`, `hexDigit`, `tlsHexNibble`, `regexHexValue`, `yamlJsonHexValue` and `yamlHexValue` (both also -1), `escapeDigit`, `manifestHexDigit`, `src/constants.ts:168` (the code-unit input). A `string`: `pixelsHex` |
-| `be-load` | `getU32BE` (`bytesA`), `sha1LoadWord` (`shifts`), `http2FrameU32` (`wide`) | `p256LoadWord`, `bcryptSaltWords`, and the inline loads in zlib, http1-server, tls/codec and `websocket.ts:432`; `aesLoad32`, which is `sha1LoadWord` with its shift counts written as `toU32(24)`; the inline `i32` loads that sign-extend the top byte (`postgres.ts:1749` and `:1983`, `postgres-async.ts:2210`, `websocket.ts:566`); `tls.ts:2403`, an `i64` load narrowed by `toU32`. `poly1305Le64` is little-endian and not a copy | `getU32BE`: directly, `dns-message.ts:539`, once per resource record; through `getI32BE`, the postgres decoders, per array word, `int4` value and (in `postgres-async.ts`) message, which `bench/pg-decode` runs. The others: bytes of a frame, block or key, in their own module |
+| `be-load` | `getU32BE` (`bytesA`), `sha1LoadWord` (`shifts`), `http2FrameU32` (`wide`) | `p256LoadWord`, `bcryptSaltWords`, and the inline loads in zlib, http1-server, tls/codec and `websocket.ts:432`; `aesLoad32`, which is `sha1LoadWord` with its shift counts written as `toU32(24)`; the inline `i32` loads that sign-extend the top byte (`postgres.ts:1749` and `:1983` at `0eefa5e9`, `postgres-async.ts:2210`, `websocket.ts:566`); `tls.ts:2403`, an `i64` load narrowed by `toU32`. `poly1305Le64` is little-endian and not a copy | `getU32BE`: directly, `dns-message.ts:539`, once per resource record; through `getI32BE`, the postgres decoders, per array word, `int4` value and (in `postgres-async.ts`) message, which `bench/pg-decode` runs. The others: bytes of a frame, block or key, in their own module |
 | `decimal` | every site: `http1PutDecimal` and `http1DecimalDigits` (`http1A`), `pgPutDecimal` and `pgDecimalLength` (`pg`, `pgA`), `jsonWriterPutDigits` (`json`), `jsonWriterPutDigits64` (`json64`), `http1ClientPutDecimal` and its count (`client`), `httpDecimalDigits` (`compress`) | `jsonWriterPutDigits` on negative values and with its suffix | Non-negative `i32`: the `http1` writers and `httpDecimalDigits`. Non-negative `i64`: `http1ClientPutDecimal`. Signed `i32` and a suffix: `jsonWriterPutDigits`. Signed `i64`: `jsonWriterPutDigits64`, `pgPutDecimal` |
 | `json-escape` | the `jsonWriterPutString` byte loop (`byteA`), `jsonWriterPutRuns` (`runs`), `addJsonQuoted` (`builder`) | `jsonTokShortEscape` and `jsonShortEscape`, the escape tables inside the byte loops; `jsonQuote`, a wrapper over `addJsonQuoted`; the inline quoter in `src/ice.ts` `internalErrorFor` | Bytes in `std/`; a `string` in `src/` |
 | `utf8` | `urlIsUtf8` (`urlA`), `jsonTokUtf8Length` (`jsonTokLoop`, and after `skipJsonText` in `kernel`). `bytesWalk` is a driver the bench wrote around a copy of `bytesUtf8Length`, not the shipped walk | The validators `websocketUtf8Run` and `websocketIsUtf8` (resumable), `x509IsUtf8Name` (also refuses NUL), `termUtf8At` (replaces bad input with U+FFFD), `src/json-typed.ts` `jsonIsUtf8` (over a `string`), and `JwtJson.utf8Tail` (`std/crypto/jwt.ts:999`, a private method, which §3's survey does not count). The encoders `jwtUtf8Width`, `jwtUtf8Byte`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonUtf8`, `jsonUtf8Width`, `jsonUtf8Byte`, `regexPushUtf8`, `termPushUtf8` and `src/lexer.ts` `utf8Encode`. `websocketUtf8Reset` is a name match, not a copy | Bytes, as a range or a stream, in `std/`; a `string` or a code point in `src/` |
@@ -741,8 +741,8 @@ cluster, and every stage has the same parts:
 | S5 | json-escape | `jsonWriterPutRuns` on strings of 16 bytes or more, the byte loop below, as `jsonWriterPutBytes` already does | none claimed: byte callers already switch at 16. Open: a density switch, and runs for `jsonWriterPutString` over a `string`, neither measured | `bench/json-writer` (`jsonWriterPutString`), `bench/http1-request`'s JSON cases (`jsonWriterPutBytes` through `stringBytes`, and `jsonWriterPutString`) | S2, D4 |
 | S6 | utf8 | the tokenizer's kernel path, `skipJsonText` and then `jsonTokUtf8Length` | none measured. `wordSkip` is slower on both inputs; the table walk is not measured | `bench/json-tokenizer` runs `skipJsonText`, but its body is ASCII: its `\u` escapes are escape text, not non-ASCII bytes, so it never reaches `jsonTokUtf8Length`, and S6 adds a non-ASCII body before it gates on it. `bench/jwt-verify` links only the encoders and `JwtJson.utf8Tail`, which its ASCII tokens do not run, so S6 adds non-ASCII claims before it gates on it | S2, S5 |
 | S7 | digit | the one shape every copy has | none: one shape. Not yet measured | `bench/json-tokenizer` (`jsonTokIsDigit` on its numbers), `bench/lexer.ts` (`src/lexer.ts` `isDigit`) | S2 |
-| S8 | grow | not yet measured; the copies differ in policy | none proposed. Which policy the shared copy keeps is a D4 question | `bench/http1-request`, `bench/http1-conn` | S2 |
-| S9 | fnv | the one loop every copy has | none: one shape. Not yet measured | `bench/router.ts` (`routerHashWith`). No existing bench runs `src/map.ts` `fnv1a`, so S9 adds one before it gates on it | S2 |
+| S8 | grow | not yet measured; the copies differ in policy | none proposed. Which policy the shared copy keeps is a D4 question | `bench/http1-request`, `bench/http1-conn`, whose hot loops mostly take `http1Reserve`'s early return when the buffer has room, not its grow body. No existing bench grows a buffer in `handler.ts`, `serve.ts`, `websocket.ts`, `quic-packet.ts` or `http1-client-codec.ts`, so S8 adds inputs that grow before it gates those | S2 |
+| S9 | fnv | the one loop every copy has | none: one shape. Not yet measured | `bench/router.ts` (`routerHashWith`). No existing bench runs `src/map.ts` `fnv1a`: `bench/map-vs-stringmap.ts` times a private copy of it, which a shared copy does not change. S9 adds one before it gates on it | S2 |
 
 digit, grow and fnv each get their own stage, rather than one shared stage,
 because each touches different modules and records its own measurement. For
