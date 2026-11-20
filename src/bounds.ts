@@ -1275,7 +1275,10 @@ const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
  * smaller of the two sides' tops — so `x & C` is in `[0, C]` —, `x >>> k` is
  * below `2^(bits - k)` and `x % C` below `C`. A `u64`'s declared range stops
  * at 2^63 - 1 (`TypeTable.declaredRange`) where the type does not, so it
- * bounds nothing here.
+ * bounds nothing here. `maskedRange` reads the same three operators on a
+ * signed operand, from the walk's state: this one has no state to read, only
+ * the shape and the declared type, and answers in the declared domain that
+ * `convertedRange` compares with `INT_MAX`.
  */
 const unsignedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
   const ctx = walk.ctx
@@ -5462,7 +5465,9 @@ const payloadRange = (walk: BoundsWalk, state: State, arg: Node, type: i32): Int
  * cannot overflow at all: `x & c`, `x >> c`, `x >>> c`, `x % c` and `x / c`
  * for a non-negative literal `c`, or `null` for anything else. These are what
  * a hash folded into a table size or a byte pulled out of a word look like,
- * and the sum they feed is then proven.
+ * and the sum they feed is then proven. `unsignedRange` reads the same
+ * operators by shape alone, for the unsigned operand of `toI32`, where no
+ * state is at hand.
  */
 const maskedRange = (walk: BoundsWalk, state: State, e: Node, type: i32): Interval | null => {
   const ctx = walk.ctx
