@@ -339,7 +339,7 @@ The message of an error contains:
 [`nl4021_compact_napi.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4021_compact_napi.ts) (compiled with `--emit-napi build/test/wordings/nl4021_compact_napi.c`):
 
 ```ts
-// WP48 rule 1: an N-API build refuses every compact class, named at its class: the addon runs in Node's process.
+// WP48 rule 1: an N-API build refuses a compact class no refused export names, at its class: the addon runs in Node's process.
 import { Compact } from "nish:compact"
 
 class Cell implements Compact {

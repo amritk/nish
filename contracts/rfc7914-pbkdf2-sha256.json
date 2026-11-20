@@ -1,0 +1,124 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc7914-pbkdf2-sha256",
+  "source": {
+    "title": "PBKDF2-HMAC-SHA-256",
+    "main": "rfc7914-pbkdf2-sha256",
+    "sha256": "51a0a1bc7192ae62dd2744be71683d5ddfd9a3a0c2b74524abc61c3a78b20e07"
+  },
+  "sources": [
+    {
+      "id": "rfc7914-pbkdf2-sha256",
+      "path": "../specs/rfc7914-pbkdf2-sha256.xml"
+    },
+    {
+      "id": "rfc7914",
+      "rfc": 7914,
+      "path": "../rfcs/rfc7914.txt",
+      "file": "rfcs/rfc7914.txt",
+      "sha256": "df55932f8b6a5d271f36a634d91a25903724e189ba6c120bf7257cd47f10b197"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/hmac"
+  },
+  "requirements": [
+    {
+      "id": "R-PBKDF2",
+      "source": "rfc7914",
+      "section": "11",
+      "level": "DEFINITION",
+      "quote": "The test vectors below can be used to verify the PBKDF2-HMAC-SHA-256 [RFC2898] function."
+    },
+    {
+      "id": "R-ASCII",
+      "source": "rfc7914",
+      "section": "11",
+      "level": "DEFINITION",
+      "quote": "The password and salt strings are passed as sequences of ASCII [RFC20] octets."
+    }
+  ],
+  "exclusions": [],
+  "functions": [
+    {
+      "name": "pbkdf2HmacSha256",
+      "params": [
+        {
+          "name": "password",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "salt",
+          "type": "bytes"
+        },
+        {
+          "name": "iterations",
+          "type": "i32"
+        },
+        {
+          "name": "length",
+          "type": "i32"
+        }
+      ],
+      "returns": "secret-bytes?"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "PBKDF2-1",
+      "title": "RFC 7914 §11: one iteration, a 64-byte key",
+      "covers": ["R-PBKDF2", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.pbkdf2_hmac(\"sha256\", b\"passwd\", b\"salt\", 1, 64).hex())'"
+      },
+      "section": "4",
+      "call": "pbkdf2HmacSha256",
+      "args": [
+        {
+          "ascii": "passwd"
+        },
+        {
+          "ascii": "salt"
+        },
+        {
+          "int": 1
+        },
+        {
+          "int": 64
+        }
+      ],
+      "expect": {
+        "hex": "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "PBKDF2-2",
+      "title": "RFC 7914 §11: 80,000 iterations, a 64-byte key",
+      "covers": ["R-PBKDF2", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.pbkdf2_hmac(\"sha256\", b\"Password\", b\"NaCl\", 80000, 64).hex())'"
+      },
+      "section": "4",
+      "call": "pbkdf2HmacSha256",
+      "args": [
+        {
+          "ascii": "Password"
+        },
+        {
+          "ascii": "NaCl"
+        },
+        {
+          "int": 80000
+        },
+        {
+          "int": 64
+        }
+      ],
+      "expect": {
+        "hex": "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d"
+      }
+    }
+  ]
+}

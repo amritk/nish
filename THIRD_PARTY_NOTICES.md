@@ -580,13 +580,17 @@ Copied from vector (https://github.com/amritk/vector), specs/rfc5869-hkdf-sha256
 
 ## IETF RFCs
 
-`rfcs/rfc4231.txt`, `rfcs/rfc4648.txt`, `rfcs/rfc5869.txt`,
-`rfcs/rfc7748.txt`, `rfcs/rfc8032.txt` and `rfcs/rfc8439.txt` are complete,
+`rfcs/rfc4231.txt`, `rfcs/rfc4648.txt`, `rfcs/rfc5802.txt`,
+`rfcs/rfc5869.txt`, `rfcs/rfc7677.txt`, `rfcs/rfc7748.txt`,
+`rfcs/rfc7914.txt`, `rfcs/rfc8032.txt` and `rfcs/rfc8439.txt` are complete,
 unmodified copies of the RFC Editor's plain-text publications, byte-identical
 to <https://www.rfc-editor.org/rfc/rfc4231.txt>,
 <https://www.rfc-editor.org/rfc/rfc4648.txt>,
+<https://www.rfc-editor.org/rfc/rfc5802.txt>,
 <https://www.rfc-editor.org/rfc/rfc5869.txt>,
+<https://www.rfc-editor.org/rfc/rfc7677.txt>,
 <https://www.rfc-editor.org/rfc/rfc7748.txt>,
+<https://www.rfc-editor.org/rfc/rfc7914.txt>,
 <https://www.rfc-editor.org/rfc/rfc8032.txt> and
 <https://www.rfc-editor.org/rfc/rfc8439.txt>, with their copyright notices,
 legends and authors' addresses intact. vector's `spec check` reads them, and
@@ -597,8 +601,11 @@ against, so a modified copy is caught.
 | --- | --- | --- | --- |
 | 4231 | Identifiers and Test Vectors for HMAC-SHA-224, HMAC-SHA-256, HMAC-SHA-384, and HMAC-SHA-512 | IETF | © The Internet Society (2005) |
 | 4648 | The Base16, Base32, and Base64 Data Encodings | IETF | © The Internet Society (2006) |
+| 5802 | Salted Challenge Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms | IETF | © 2010 IETF Trust and the persons identified as the document authors |
 | 5869 | HMAC-based Extract-and-Expand Key Derivation Function (HKDF) | IETF | © 2010 IETF Trust and the persons identified as the document authors |
+| 7677 | SCRAM-SHA-256 and SCRAM-SHA-256-PLUS Simple Authentication and Security Layer (SASL) Mechanisms | IETF | © 2015 IETF Trust and the persons identified as the document authors |
 | 7748 | Elliptic Curves for Security | IRTF | © 2016 IETF Trust and the persons identified as the document authors |
+| 7914 | The scrypt Password-Based Key Derivation Function | IETF | © 2016 IETF Trust and the persons identified as the document authors |
 | 8032 | Edwards-Curve Digital Signature Algorithm (EdDSA) | IRTF | © 2017 IETF Trust and the persons identified as the document authors |
 | 8439 | ChaCha20 and Poly1305 for IETF Protocols | IRTF | © 2018 IETF Trust and the persons identified as the document authors |
 
