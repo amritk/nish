@@ -814,6 +814,11 @@ leaves the IR unchanged.
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
   removes
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
+- **`--allow-panics`** undoes a `--deny-panics` earlier on the same line:
+  of the two, the last one written wins, and neither changes the program
+  the compiler builds. A `"noPanic"` list in your `package.json`'s `"nish"`
+  field still holds under it, so the scope is that list, or nothing, as
+  with neither flag. `--emit-ast` takes it.
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`

@@ -252,6 +252,12 @@ refuse an unproven panic in your package
 
 </scalar-field>
 
+<scalar-field name="--allow-panics">
+
+undo --deny-panics; a noPanic list still holds
+
+</scalar-field>
+
 <scalar-field name="--deny-retention">
 
 refuse retained arena memory in your package
