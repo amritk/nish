@@ -255,7 +255,9 @@ number, and `tests/wordings/` keeps a case per code.
 ### 4d. Tests
 
 What S1 merged (#1812): one test flipped positive, seven new link programs
-and one shared module directory, and three wording fixtures changed.
+and one shared module directory, three wording fixtures changed, and two
+new refusal checks in `tests/nish/cli.ts` (`checkClashCodeWith` runs one
+under `--no-strict-exports`).
 
 | Test | Change |
 | --- | --- |
@@ -264,7 +266,7 @@ and one shared module directory, and three wording fixtures changed.
 | `tests/link/module_private_helpers` (new) | Modelled on `two_packages`. Three modules, each with a private `step` that computes something different (`n + 1`, `n - 1`, `n - 42`), two of them behind an export that calls it. The exit code is 7 only if each call reached its own. `expected.ir` pins `@up$.step`, `@down$.step` and `@main$.step` |
 | `tests/link/module_private_generic` (new) | Two modules, each with a private `identity<T>` returning differently, so the exit code, 9, proves `a$.identity$i32` and `b$.identity$i32` are two |
 | `tests/link/module_private_mixed` (new) | A private `helper` beside another module's exported `helper`: the export keeps `@helper` and the private one is `@main$.helper` |
-| `tests/link/module_private_no_strict` (new, negative) | `--no-strict-exports` with two private `helper`s: still NL3026 |
+| `tests/link/module_private_no_strict` (new, negative) | `--no-strict-exports` with two private `add`s: still NL3026 |
 | `tests/link/module_private_spawn` (new) | A task spawned from a qualified function. Its lifted arrow is `@m$.work$arrow0` in `expected.ir` |
 | `tests/link/module_private_residual` (new, negative) | `lib/util.ts` and `lib_util.ts` each keep a private `helper`. Both qualify to `lib_util$.helper`, and the clash check over the qualified symbols refuses it (§4a) |
 | `tests/link/module_private_outside` (new) | The entry imports `../module_private_shared/u.ts`, outside its directory, so that module's private `helper` is `@___module_private_shared_u$.helper` |
@@ -282,6 +284,8 @@ seed refuses and only the candidate compiles, as `DECLARED` entries in
 `tests/nish-cmp.js` under S1's release-note words.
 
 ### 4e. What must move with it, in the same PR
+
+S1 moved each of these in #1812.
 
 - **LANGUAGE.md**, "`export` and `import`": the bullet "A function name is
   unique across the whole program" becomes the S1 rule. Also "Calling C",
@@ -309,7 +313,7 @@ seed refuses and only the candidate compiles, as `DECLARED` entries in
 | | |
 | --- | --- |
 | Files touched in `src/` | `compilation.ts` (`qualifyClashingSymbols`, the template key in `rejectSymbolClashes`, `clashMessage`), `checker.ts` (`qualifyClashing`), `generics.ts` (`qualifiesClashing`, `templateSymbol`, the instantiation's base read off the template), `packages.ts` (`moduleSymbolQualifier`, beside `packageSymbolPrefix`), `codes.ts` (the NL3026 and NL3027 keys, for their reworded messages) and `attributes.ts` (a comment). 264 lines added and 35 removed, comments included |
-| Tests | 1 flipped positive, 7 new link programs and 1 shared module, 3 wording fixtures changed, 6 nish-cmp `DECLARED` entries |
+| Tests | 1 flipped positive, 7 new link programs and 1 shared module, 3 wording fixtures changed, 2 refusal checks in `tests/nish/cli.ts`, 6 nish-cmp `DECLARED` entries |
 | IR | No program that compiled before moves (§3). The new tests' `expected.ir` are the only new IR |
 | Seen by a user | A program that was refused now compiles. `perf` and the `--json` reports show `m$.helper` for a function that clashed |
 | Release note | `feat(checker): two modules may each keep a private function or generic of one name`, a minor bump. Not breaking: every program that compiled still compiles to the same IR |
@@ -335,15 +339,17 @@ edited (§4d). The programs nish-cmp declares are new ones the seed refuses.
 ## 6. S2: exported names that clash inside one package *(decided: keep refusing)*
 
 **Decided at WP57's sign-off: option A.** An exported name stays unique
-across its package. Nothing is built for S2. What stays refused, with the codes
+across its package. For the root package that is NL3024's "across the
+program", since every dependency's symbols carry its prefix. Nothing is built for S2. What stays refused, with the codes
 S1 left (§4c):
 
 - two exported functions of the root package with one name (NL3024), and the
   same inside a dependency (NL3025);
 - two exported generic templates of one package and name (NL3010): their
   instantiations are exported, so they are the same question;
-- under S3, two exported classes or interfaces of one name (NL3028), and two
-  that reach the C surface another way (§7, S3d).
+- under S3, two exported classes or interfaces of one name (NL3028). A
+  private class keeps S1's treatment, and the header spells it by its
+  symbol (§7, S3d).
 
 A private party beside an exported one is already S1's case: the export keeps
 its bare symbol and the private one is qualified (`module_private_mixed`).
@@ -399,14 +405,16 @@ Re-checked against `936ba0b1`, `main` after S1. `src/` has 137 files.
 | `info.name` | 169 sites in 29 files, some a spelling and some a message | A spelling reads the symbol, a message the source name |
 | Member symbols | A method is `${owner.name}.${name}` (`src/structs.ts:926`), a constructor `${owner.name}.constructor` (`:1022`), a template's member through `collectMethodSignature` (`src/generics.ts:1535`). Each already has a separate display | Spelled from the owner's symbol, so S1's rule follows for members |
 | The clash checks (`src/compilation.ts`) | `declaredStructs` and `rejectInstantiatedStructClashes` (NL3028), `reportTemplateClash` (NL3013), `rejectCollectionsClash` (NL3030, a module's own `Map` or `Set` beside the global one), and the member clashes NL3022 and NL3023, which those preempt (`tests/wordings/unreachable.txt`) | Run over symbols. A private pair stops clashing; an exported pair, or one on the C surface, stays refused |
-| `--emit-header` (`src/interop-header.ts`, `src/interop-abi.ts`) | `cType` spells a class parameter `struct ${cStructName(nameOf(t))} *` (`interop-abi.ts:530`), and the header declares each struct with `cStructName(info.name)` (`interop-header.ts:139`, `:147`). A **private** class reaches the header too, through an exported function that takes or returns it: built with the seed, a non-exported `class P` returned by an exported `make` gave `struct P;`, `struct P {` and `struct P *make(int32_t x);` | C has one struct namespace, so a class that reaches the header keeps its bare name, and two such classes of one name stay refused, private or not |
+| `--emit-header` (`src/interop-header.ts`, `src/interop-abi.ts`) | `cType` spells a class parameter `struct ${cStructName(nameOf(t))} *` (`interop-abi.ts:530`), and `structDefinitions` (`interop-header.ts:113`) declares **every** class of every module but a `declare class`, with `cStructName(info.name)` (`:139`, `:147`). It does not look at signatures: built with the seed, a private `class Hidden` used only by a private function still gave `struct Hidden;` and `struct Hidden {`. `cStructName` already spells any name with a `$`, an instantiation's, as `nish_gen_<name>` with the separators collapsed (`interop-abi.ts:612`) | C has one struct namespace, and two private `Node`s would both print `struct Node`. So the header spells a struct by `cStructName` of its symbol: a bare symbol stays bare, a qualified one becomes a `nish_gen_` name the way an instantiation's does, and no build flag changes whether a program compiles |
 | `--emit-dts` and N-API (`src/interop-dts.ts`, `src/interop-napi.ts`) | Neither reads `info.name`. A class reaches them only as text: `tsKeyword` gives a struct `nameOf(t)` (`interop-abi.ts:786`), which `tsSignatureLine` (`:743`) writes into a `.d.ts` comment and into N-API's "not bridged" list. N-API has no reader for a class, so a function that takes one is not bridged | These print the source name; no symbol reaches them |
 | Typed JSON (`src/json-typed.ts`, `jsonRouteCallees`, `src/emit-json.ts`) | Messages name the type; the decoder's reach set is keyed by name | The reach set keys on the struct, messages keep the source name |
 | Renaming a class on import (`src/checker.ts:1668`, `tests/link/class_import_rename`) | Refused: "the type name is part of the ABI" | Possible once the symbol, not the local name, is the ABI. A language change of its own |
 
 **Size.** 40 files call `typeName(` (441 sites) and 29 look a struct up by
 name; 50 files do one or the other, 56 counting those that spell `%struct.`.
-The spellers (`info.name`, `nameOf(`, `%struct.`) are 44 files. That is over a
+The spellers (`info.name`, `nameOf(`, `%struct.`) are 44 files. (`structOf(`
+and `setDisplayName` counts include their definitions: `setDisplayName` has
+two callers.) That is over a
 third of `src/` and several times S1 (§4f), so S3 is split into five stages,
 one PR each (§7b). The first three move no IR: they separate the symbol from
 the source name while the two are still equal everywhere, so each is proved by
@@ -422,25 +430,33 @@ across modules, not its name. Files: `types.ts`, `program.ts`, `structs.ts`,
 `refactor(checker): give each struct a symbol separate from its source name`.
 
 **S3b: spell structs by their symbol.** Every `%struct.` speller and
-`llvmType` reads the symbol; every message, `tsKeyword` and the header's
-`cStructName` read the source name. Files: the 44 spellers. Depends on S3a.
+`llvmType` reads the symbol, and so does the header's `cStructName`, since
+the header must name the IR's struct; every message and `tsKeyword` read the
+source name. Files: the 44 spellers. Depends on S3a.
 Release note: `refactor(codegen): spell a struct's IR type from its symbol`.
 
 **S3c: member symbols from the owner's symbol.** The three member sites above
 build `<owner symbol>.<name>`; displays keep the source name. Files:
-`structs.ts`, `generics.ts`. Depends on S3a; after S3b, so one PR does not
-move both. Release note: `refactor(codegen): spell a member's symbol from its
+`structs.ts`, `generics.ts`. Depends on S3a; after S3b, to keep each diff to one
+kind of site. Release note: `refactor(codegen): spell a member's symbol from its
 owner's symbol`.
 
 **S3d: qualify a clashing private class or interface.** A private class or
 interface whose source name clashes across same-prefix peers, under
 `--strict-exports`, gets `<package prefix><module qualifier>$.<name>`, and its
 instantiations `a$.Box$i32`. One predicate decides it, the way
-`qualifiesClashing` does for functions, and a class reaches it as a party
-whenever it is exported or appears in an exported function's signature, since
-those are on the C surface. NL3028, NL3013, NL3030, NL3022 and NL3023 are
-rewritten over symbols; an exported pair, a C-surface pair, a pair under
-`--no-strict-exports` and a residual collision stay refused. Typed JSON's
+`qualifiesClashing` does for functions: an exported class counts as a party
+but keeps its bare symbol, since an export is on the C surface by choice. A
+private class reaches the header too, through a signature or because the
+header declares every class, but it is still private: the header spells its
+symbol (S3b). NL3028, NL3013, NL3030, NL3022 and NL3023 are
+rewritten over symbols; an exported pair, a pair under `--no-strict-exports`
+and a residual collision, in the symbol or in its `cStructName` spelling, stay
+refused. The private pairs `tests/nish/cli.ts` pins as refusals turn positive:
+`iface_clash_private` and those of `class_clash_constructor`,
+`class_clash_method`, `class_clash_fields`, `class_clash_package` (NL3028) and
+`generic_class_clash_signature` (NL3013) whose parties are private; the
+stage moves each to a positive test or keeps it refused for a stated reason. Typed JSON's
 reach set keys on the struct. Files: `compilation.ts`, `checker.ts`,
 `generics.ts`, `structs.ts`, `json-typed.ts`. Depends on S3a to S3c. This is
 the stage users see, so it lands with LANGUAGE.md, AI.md, ARCHITECTURE.md, the
@@ -484,8 +500,8 @@ pass.
 different fields compile, link, and read each field at its own offset (an exit
 code that only comes out right if so), with symbols `a$.Node` and `b$.Node`; a
 private generic class gives `a$.Box$i32` beside `b$.Box$i32`; a private
-interface pair compiles; an exported pair stays NL3028, as does a private pair
-one of which reaches the header through an exported signature, and a pair
+interface pair compiles; `--emit-header` on the `Node` program declares two
+distinct `nish_gen_` structs and the C compiler accepts the header; an exported pair stays NL3028, as does a pair
 under `--no-strict-exports`; a residual collision is refused. Every program
 that compiles today keeps its IR and its `--emit-header`, `--emit-dts` and
 `--emit-napi` output.
