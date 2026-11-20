@@ -213,7 +213,7 @@ struct SpreadCopy (class) size=32 align=8 exported
   field into: i32 index=3 offset=20
   field fields: string[] index=4 offset=24
   constructor -> @SpreadCopy.constructor
-struct FieldInfo (class) size=88 align=8 exported
+struct FieldInfo (class) size=104 align=8 exported
   field name: string index=0 offset=0
   field type: i32 index=1 offset=8
   field index: i32 index=2 offset=12
@@ -232,6 +232,8 @@ struct FieldInfo (class) size=88 align=8 exported
   field nested: StructInfo | null index=15 offset=72
   field link: boolean index=16 offset=80
   field cLength: i32 index=17 offset=84
+  field initNew: StructInfo | null index=18 offset=88
+  field initArgs: FieldInfo[] index=19 offset=96
   constructor -> @FieldInfo.constructor
   method inline -> @FieldInfo.inline
 struct StructInfo (class) size=176 align=8 exported
@@ -269,6 +271,7 @@ struct StructInfo (class) size=176 align=8 exported
   field compact: boolean index=31 offset=171
   constructor -> @StructInfo.constructor
   method field -> @StructInfo.field
+  method allocatingInitializer -> @StructInfo.allocatingInitializer
   method method -> @StructInfo.method
   method hasMember -> @StructInfo.hasMember
   method methodTemplate -> @StructInfo.methodTemplate
@@ -763,14 +766,14 @@ function SpreadCopy.constructor(this: SpreadCopy, at: Node, file: SourceFile, so
   pointer fields: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FieldInfo.constructor(this: FieldInfo, name: string, type: i32, decl: Node): void -> @FieldInfo.constructor [exported constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl name type
-  pointer this: size=88 writesThrough=true captured=false
+  pointer this: size=104 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FieldInfo.inline(this: FieldInfo): boolean -> @FieldInfo.inline [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=88 writesThrough=false captured=false
+  pointer this: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StructInfo.constructor(this: StructInfo, name: string, kind: i32, type: i32, decl: Node, origin: SourceFile): void -> @StructInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -791,6 +794,12 @@ function StructInfo.field(this: StructInfo, name: string): FieldInfo | null -> @
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
+function StructInfo.allocatingInitializer(this: StructInfo): Node | null -> @StructInfo.allocatingInitializer [exported method]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=176 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:16 field: FieldInfo (const)
+  local +1:13 init: Node | null (const)
 function StructInfo.method(this: StructInfo, name: string): FunctionSig | null -> @StructInfo.method [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name

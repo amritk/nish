@@ -25176,6 +25176,127 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end cls-initializers -->
 
+### Empty-array and `new` field initializers
+
+`kids: number[] = []` and `left: Leaf = new Leaf(7)` are stored at `new`,
+before a constructor body would run: the empty array is a header with no
+elements, and the leaf is allocated in the same arena and passed to
+`@Leaf.constructor` with its literal argument.
+
+<!-- cookbook:begin cls-field-init -->
+```ts
+class Leaf {
+  value: number
+
+  constructor(value: number) {
+    this.value = value
+  }
+}
+
+class Tree {
+  kids: number[] = []
+  left: Leaf = new Leaf(7)
+}
+
+const make = (): Tree => new Tree()
+```
+
+```llvm
+%struct.Leaf = type { i32 }
+%struct.Tree = type { %struct.nish_array*, %struct.Leaf* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Leaf.constructor(%struct.Leaf* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %this, i32 0, i32 0
+  store i32 %value, i32* %0, align 4, !tbaa !4
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Tree* @make() #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Tree*
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 0, i64* %4, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 0, i64* %5, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* null, i8** %6, align 8, !alias.scope !8, !noalias !9, !tbaa !15
+  %7 = getelementptr inbounds %struct.Tree, %struct.Tree* %1, i32 0, i32 0
+  store %struct.nish_array* %3, %struct.nish_array** %7, align 8, !tbaa !18
+  %8 = call i8* @nish_alloc_struct(i64 4)
+  %9 = bitcast i8* %8 to %struct.Leaf*
+  call void @Leaf.constructor(%struct.Leaf* %9, i32 7)
+  %10 = getelementptr inbounds %struct.Tree, %struct.Tree* %1, i32 0, i32 1
+  store %struct.Leaf* %9, %struct.Leaf** %10, align 8, !tbaa !19
+  ret %struct.Tree* %1
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!20, !21, !22, !23, !24}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Leaf", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"nish array"}
+!6 = !{!"header", !5}
+!7 = !{!"elements", !5}
+!8 = !{!6}
+!9 = !{!7}
+!10 = !{!"header i64", !1, i64 0}
+!11 = !{!"header ptr", !1, i64 0}
+!12 = !{!"array header", !10, i64 0, !10, i64 8, !11, i64 16}
+!13 = !{!12, !10, i64 0}
+!14 = !{!12, !10, i64 8}
+!15 = !{!12, !11, i64 16}
+!16 = !{!"ptr", !1, i64 0}
+!17 = !{!"Tree", !16, i64 0, !16, i64 8}
+!18 = !{!17, !16, i64 0}
+!19 = !{!17, !16, i64 8}
+!20 = !{i32 8, !"cf-protection-branch", i32 1}
+!21 = !{i32 8, !"cf-protection-return", i32 1}
+!22 = !{i32 8, !"branch-target-enforcement", i32 1}
+!23 = !{i32 8, !"sign-return-address", i32 1}
+!24 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end cls-field-init -->
+
 ### Interfaces, object literals, `implements`
 
 An object literal allocates and stores every field; a class that `implements`

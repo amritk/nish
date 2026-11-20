@@ -1457,6 +1457,15 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.closeReachableStructs(declared)
     }
+    // A `new` field initializer may name an imported class, and a loop of
+    // them may pass through one.
+    for (const unit of this.modules) {
+      unit.checker.resolveInitializers()
+    }
+    const cycles = new StringSet()
+    for (const unit of this.modules) {
+      unit.checker.checkInitializerCycles(cycles)
+    }
     this.rejectSymbolClashes(clashed)
     if (this.sink.hasErrors()) {
       return false

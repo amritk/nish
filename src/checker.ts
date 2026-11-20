@@ -116,6 +116,8 @@ import { checkReturnValue, checkStatements, checkVoidConciseBody, refuseUnsuppor
 import { Local, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   checkCompactClass,
+  checkInitializerCycle,
+  resolveNewInitializers,
   refuseCompactTemplate,
   checkImplements,
   collectStructMembers,
@@ -147,6 +149,10 @@ export class Checker {
   program: CheckedProgram
   /** The classes `declareNames` declared, whose layout checks run at the end of pass 1. */
   declared: StructInfo[]
+  /** Set by `resolveInitializers`: a `new` initializer can be resolved at once. */
+  importsBound: boolean
+  /** Instantiations finished before then, whose initializers wait for it. */
+  unresolvedInitializers: StructInfo[]
 
   constructor(
     table: TypeTable,
@@ -162,6 +168,8 @@ export class Checker {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
     this.program.f64Mode = numberMode === NUMBER_MODE_F64
     this.declared = []
+    this.importsBound = false
+    this.unresolvedInitializers = []
     this.ctx = new CheckContext(table, this.program, sink, numberMode, strictExports)
   }
 
@@ -965,6 +973,42 @@ export class Checker {
   }
 
   /**
+   * Hold every `new` field initializer to its rule. It needs the constructor
+   * of the class it names, which may be imported, so it runs once every
+   * module's imports are bound (`Compilation`), for the declared classes and
+   * the instantiations pass 1 finished before then.
+   */
+  resolveInitializers(): void {
+    this.importsBound = true
+    for (const info of this.declared) {
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        resolveNewInitializers(this.ctx, info)
+      }
+    }
+    for (const info of this.unresolvedInitializers) {
+      resolveNewInitializers(this.ctx, info)
+    }
+    this.unresolvedInitializers = []
+    this.ctx.errored = false
+  }
+
+  /**
+   * Refuse a class whose initializers construct it again. After every
+   * module's `resolveInitializers`, because the loop may pass through an
+   * imported class. An instantiation is never in one: an initializer cannot
+   * `new` a generic class. `reported` is shared by every module, so a cycle
+   * through two of them is reported once.
+   */
+  checkInitializerCycles(reported: StringSet): void {
+    for (const info of this.declared) {
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        checkInitializerCycle(this.ctx, info, reported)
+      }
+    }
+    this.ctx.errored = false
+  }
+
+  /**
    * The `implements` and definite-assignment checks owed by struct
    * instantiations, run once every struct in the module has its members.
    *
@@ -980,6 +1024,11 @@ export class Checker {
       at = at + 1
       this.ctx.errored = false
       if (info.kind === STRUCT_CLASS && !info.poisoned) {
+        if (this.importsBound) {
+          resolveNewInitializers(this.ctx, info)
+        } else {
+          this.unresolvedInitializers.push(info)
+        }
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
       }

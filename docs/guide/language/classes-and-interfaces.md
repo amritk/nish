@@ -38,8 +38,14 @@ export const main = (): i32 => {
 ```
 
 - **Every field has a type annotation.** A field initializer, like
-  `count: i32 = 0`, must be a literal; anything computed goes in the
-  constructor.
+  `count: i32 = 0`, is a literal, an empty array (`items: i32[] = []`) or a
+  `new` of a non-generic class with literal arguments
+  (`left: Leaf = new Leaf(7)`); anything computed goes in the constructor.
+  Initializers are stored before the constructor body runs, in declaration
+  order. An initializer that constructs its own class again is refused: it
+  would never end. An exported class with no constructor (or an exported
+  generic class) runs its initializers in the module that builds it, so a
+  class one of them constructs must be exported too.
 - **Every field holds a value when the constructor returns.** The compiler
   checks this, and refuses a read of `this.f` (or a method call on `this`)
   before every field is assigned. A class with no constructor initialises

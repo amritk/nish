@@ -3280,8 +3280,9 @@ class Point {
   - `[]` when the field's type is an array (`kind: i32[] = []`): a fresh,
     empty array of the declared element type, one per object;
   - `new C(args)` (`child: Leaf = new Leaf(0)`) where `C` is a class with no
-    type parameters whose objects the field's type accepts, and each argument
-    is itself a literal or enum member of its parameter's type.
+    type parameters and the field's type is `C` or `C | null` (not a union or
+    interface `C` converts to), and each argument is itself a literal or enum
+    member of its parameter's type.
 
   **An initializer reads nothing.** It may not name `this`, a constructor
   parameter, another field, a local or a module constant; an argument of its
@@ -3295,7 +3296,13 @@ class Point {
   constructor stores them at its `new`. So a class whose initializers
   construct the class itself, directly or through another class's
   initializers, would construct forever, and is refused
-  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`).
+  (`` initializers construct `Node` again ``, `reject_cls_field_init_cycle`),
+  once per loop however many classes are on it (`tests/link/cls_field_init_cycle`).
+  An exported class with no constructor, and an exported generic class, has
+  its initializers run in the module that builds it, so a class they
+  construct is exported too (`` `Pin` is not exported, but this class's
+  initializers run in the module that builds it ``,
+  `tests/link/cls_field_init_private`, `reject_cls_field_init_private`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
 - **Constructor**: at most one, with a body
@@ -14268,7 +14275,8 @@ export const main = (): i32 => {
   one sets the field to its initializer, on a fresh object and on one decoded
   into again, so a reused object does not keep what an earlier input gave it
   ("optional: sets the missing fields back to their initializers"), and
-  allocates nothing to do it. Every other missing key is still
+  allocates nothing to do it unless an initializer is `[]` or `new`, which
+  builds a fresh array or object as the constructor would. Every other missing key is still
   `JSON_DECODE_MISSING`, and an optional key that is given is read like any
   other: once, and of its field's type. The member is not a field: it has no
   slot, the class's layout is what it would be without it, the program

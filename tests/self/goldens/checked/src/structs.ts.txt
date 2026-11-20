@@ -28,6 +28,7 @@ import instantiateWritten from "./generics" -> function @instantiateWritten
 import isGenericFunction from "./generics" -> function @isGenericFunction
 import isExported from "./declarations" -> function @isExported
 import collectParams from "./declarations" -> function @collectParams
+import fitArguments from "./declarations" -> function @fitArguments
 import checkNumericLiteral from "./expressions" -> function @checkNumericLiteral
 import memberSlotMessage from "./expressions" -> function @memberSlotMessage
 import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
@@ -92,7 +93,7 @@ function paddingWidth(ctx: CheckContext, field: FieldInfo): i32 -> @paddingWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: sizeOfField
   pointer ctx: size=448 writesThrough=false captured=false passedTo=sizeOfField#0
-  pointer field: size=88 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:20 sizeOfField -> @sizeOfField
 function roundUpTo(value: i32, align: i32): i32 -> @roundUpTo [exported]
@@ -106,7 +107,7 @@ function fieldAlign(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   escaping: pointer
   calls: FieldInfo.inline TypeTable.alignWithPointer TypeTable.refOf
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
-  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=104 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
   callee +5:12 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
@@ -120,7 +121,7 @@ function fieldWidth(table: TypeTable, field: FieldInfo, pointer: i32): i32 -> @f
   escaping: pointer
   calls: FieldInfo.inline TypeTable.alignWithPointer TypeTable.refOf fieldAlign nish_panic_overflow roundUpTo
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.alignWithPointer#0 TypeTable.alignWithPointer#0 fieldAlign#0 TypeTable.alignWithPointer#0 TypeTable.refOf#0
-  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
+  pointer field: size=104 writesThrough=false captured=false passedTo=FieldInfo.inline#0 fieldAlign#1
   stackSites=0 stackLocals=0
   local +0:9 nested: StructInfo | null (const)
   callee +5:28 TypeTable.alignWithPointer -> @TypeTable.alignWithPointer
@@ -196,7 +197,7 @@ function isLinkTo(table: TypeTable, field: FieldInfo, target: i32): boolean -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FieldInfo.inline TypeTable.stripNull
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
-  pointer field: size=88 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=104 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee +0:45 FieldInfo.inline -> @FieldInfo.inline
   callee +0:63 TypeTable.stripNull -> @TypeTable.stripNull
@@ -362,7 +363,7 @@ function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, w
   escaping: notLiteral
   calls: CheckContext.error CheckContext.errorAtProperty CheckedProgram.enumNamed EnumInfo.hasMember EnumInfo.memberValue TypeTable.assignable TypeTable.isEnumMemberType TypeTable.memberValue TypeTable.refOf TypeTable.typeName memberSlotMessage nish_panic_index nish_str_concat
   pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtProperty#0 CheckContext.error#0 memberSlotMessage#0 CheckContext.error#0
-  pointer field: size=88 writesThrough=true captured=false
+  pointer field: size=104 writesThrough=true captured=false
   pointer init: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.errorAtProperty#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   local -11:9 receiver: Node (const)
@@ -390,7 +391,7 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
   escaping: notLiteral what
   calls: CheckContext.error TypeTable.assignable TypeTable.isHostHandle TypeTable.isRanged TypeTable.typeName checkEnumInitializer checkNumericLiteral isNumeric literalInitializerType nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=448 writesThrough=true captured=false passedTo=checkEnumInitializer#0 literalInitializerType#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkNumericLiteral#0
-  pointer field: size=88 writesThrough=true captured=false passedTo=checkEnumInitializer#1
+  pointer field: size=104 writesThrough=true captured=false passedTo=checkEnumInitializer#1
   pointer init: size=40 writesThrough=false captured=false passedTo=checkEnumInitializer#2 literalInitializerType#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 checkNumericLiteral#1 checkNumericLiteral#4
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -413,48 +414,148 @@ function checkLiteralInitializer(ctx: CheckContext, field: FieldInfo, init: Node
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.holdsSecret TypeTable.stripNull admitsSecretField annotationSpelling checkLiteralInitializer deferExportedLayout handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer rejectOpaque rejectStoredMask resolveType secretFieldMessage spelled
-  pointer ctx: size=448 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectOpaque#0 rejectStoredMask#0 deferExportedLayout#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 checkLiteralInitializer#0
+  calls: CheckContext.error FieldInfo.constructor StringMap.set StructInfo.hasMember TypeTable.holdsSecret TypeTable.isArray TypeTable.stripNull admitsSecretField annotationSpelling checkLiteralInitializer deferExportedLayout handleFieldMessage handleJsonMessage isHandleFieldAnnotation kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noteJsonOptions rejectForeignPointer rejectOpaque rejectStoredMask resolveType secretFieldMessage spelled
+  pointer ctx: size=448 writesThrough=true captured=true passedTo=spelled#0 CheckContext.error#0 noteJsonOptions#0 CheckContext.error#0 spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 CheckContext.error#0 rejectForeignPointer#0 rejectOpaque#0 rejectStoredMask#0 deferExportedLayout#0 admitsSecretField#0 CheckContext.error#0 annotationSpelling#0 CheckContext.error#0 checkLiteralInitializer#0
   pointer owner: size=176 writesThrough=true captured=false passedTo=kindWord#0 spelled#1 noteJsonOptions#1 StructInfo.hasMember#0 kindWord#0 spelled#1 admitsSecretField#1
   pointer decl: size=40 writesThrough=true captured=true passedTo=noteJsonOptions#2 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 FieldInfo.constructor#3
   stackSites=0 stackLocals=0
-  local -99:9 name: string (const)
-  local -98:9 what: string (const)
-  callee -98:40 kindWord -> @kindWord
-  callee -98:61 spelled -> @spelled
-  callee -92:7 CheckContext.error -> @CheckContext.error
-  callee -92:35 handleJsonMessage -> @handleJsonMessage
-  callee -89:5 noteJsonOptions -> @noteJsonOptions
-  callee -86:7 StructInfo.hasMember -> @StructInfo.hasMember
-  callee -85:5 CheckContext.error -> @CheckContext.error
-  callee -83:42 kindWord -> @kindWord
-  callee -83:63 spelled -> @spelled
-  callee -63:5 CheckContext.error -> @CheckContext.error
+  local -108:9 name: string (const)
+  local -107:9 what: string (const)
+  callee -107:40 kindWord -> @kindWord
+  callee -107:61 spelled -> @spelled
+  callee -101:7 CheckContext.error -> @CheckContext.error
+  callee -101:35 handleJsonMessage -> @handleJsonMessage
+  callee -98:5 noteJsonOptions -> @noteJsonOptions
+  callee -95:7 StructInfo.hasMember -> @StructInfo.hasMember
+  callee -94:5 CheckContext.error -> @CheckContext.error
+  callee -92:42 kindWord -> @kindWord
+  callee -92:63 spelled -> @spelled
+  callee -72:5 CheckContext.error -> @CheckContext.error
+  callee -68:5 CheckContext.error -> @CheckContext.error
+  callee -64:5 CheckContext.error -> @CheckContext.error
+  local -61:9 type: i32 (const)
+  callee -61:16 resolveType -> @resolveType
   callee -59:5 CheckContext.error -> @CheckContext.error
-  callee -55:5 CheckContext.error -> @CheckContext.error
-  local -52:9 type: i32 (const)
-  callee -52:16 resolveType -> @resolveType
-  callee -50:5 CheckContext.error -> @CheckContext.error
-  callee -43:23 TypeTable.stripNull -> @TypeTable.stripNull
-  local -42:11 sole: boolean (const)
-  callee -42:48 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  callee -40:7 CheckContext.error -> @CheckContext.error
-  callee -40:35 handleFieldMessage -> @handleFieldMessage
-  callee -37:14 rejectForeignPointer -> @rejectForeignPointer
-  callee -35:14 rejectOpaque -> @rejectOpaque
-  callee -33:14 rejectStoredMask -> @rejectStoredMask
-  callee -30:5 deferExportedLayout -> @deferExportedLayout
-  callee -25:5 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee -24:6 admitsSecretField -> @admitsSecretField
-  callee -22:5 CheckContext.error -> @CheckContext.error
-  callee -22:33 secretFieldMessage -> @secretFieldMessage
-  local -18:9 field: FieldInfo (const)
-  callee -18:17 new FieldInfo -> @FieldInfo.constructor
-  callee -15:20 annotationSpelling -> @annotationSpelling
-  local -14:9 initializer: Node (const)
-  local -12:11 notLiteral: string (const)
-  callee -11:5 checkLiteralInitializer -> @checkLiteralInitializer
+  callee -52:23 TypeTable.stripNull -> @TypeTable.stripNull
+  local -51:11 sole: boolean (const)
+  callee -51:48 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  callee -49:7 CheckContext.error -> @CheckContext.error
+  callee -49:35 handleFieldMessage -> @handleFieldMessage
+  callee -46:14 rejectForeignPointer -> @rejectForeignPointer
+  callee -44:14 rejectOpaque -> @rejectOpaque
+  callee -42:14 rejectStoredMask -> @rejectStoredMask
+  callee -39:5 deferExportedLayout -> @deferExportedLayout
+  callee -34:5 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee -33:6 admitsSecretField -> @admitsSecretField
+  callee -31:5 CheckContext.error -> @CheckContext.error
+  callee -31:33 secretFieldMessage -> @secretFieldMessage
+  local -27:9 field: FieldInfo (const)
+  callee -27:17 new FieldInfo -> @FieldInfo.constructor
+  callee -24:20 annotationSpelling -> @annotationSpelling
+  local -23:9 initializer: Node (const)
+  local -21:11 notLiteral: string (const)
+  callee -17:68 TypeTable.isArray -> @TypeTable.isArray
+  callee -16:9 CheckContext.error -> @CheckContext.error
+  callee -13:7 checkLiteralInitializer -> @checkLiteralInitializer
   callee -1:3 StringMap.set -> @StringMap.set
+function resolveNewInitializers(ctx: CheckContext, owner: StructInfo): void -> @resolveNewInitializers [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: CheckContext.error CheckedProgram.struct CheckedProgram.structTemplate FieldInfo.constructor FunctionSig.isCompileTime TypeTable.assignable TypeTable.isOpaque TypeTable.typeName checkLiteralInitializer fitArguments kindWord nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 spelled
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=spelled#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 fitArguments#0 CheckContext.error#0 checkLiteralInitializer#0 CheckContext.error#0
+  pointer owner: size=176 writesThrough=false captured=false passedTo=kindWord#0 spelled#1
+  stackSites=0 stackLocals=0
+  local -6:14 field: FieldInfo (const)
+  local -5:11 init: Node | null (const)
+  local +1:11 what: string (const)
+  callee +1:48 kindWord -> @kindWord
+  callee +1:69 spelled -> @spelled
+  local +2:11 notLiteral: string (const)
+  local +3:11 callee: Node (const)
+  local +4:11 name: string (const)
+  local +5:11 made: StructInfo | null (const)
+  callee +5:58 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +8:7 CheckedProgram.structTemplate -> @CheckedProgram.structTemplate
+  callee +13:7 TypeTable.isOpaque -> @TypeTable.isOpaque
+  callee +15:7 CheckContext.error -> @CheckContext.error
+  callee +18:10 TypeTable.assignable -> @TypeTable.assignable
+  callee +19:7 CheckContext.error -> @CheckContext.error
+  callee +21:23 TypeTable.typeName -> @TypeTable.typeName
+  callee +21:80 TypeTable.typeName -> @TypeTable.typeName
+  local +25:11 args: Node (const)
+  local +26:11 ctor: FunctionSig | null (const)
+  callee +29:9 CheckContext.error -> @CheckContext.error
+  callee +36:7 CheckContext.error -> @CheckContext.error
+  callee +38:17 fitArguments -> @fitArguments
+  local +41:11 carried: FieldInfo[] (const)
+  local +42:9 refused: boolean (let)
+  local +43:9 i: i32 (let)
+  local +45:13 arg: Node (const)
+  local +46:13 type: i32 (const)
+  local +47:13 slot: string (const)
+  local +48:13 carrier: FieldInfo (const)
+  callee +48:23 new FieldInfo -> @FieldInfo.constructor
+  callee +51:11 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee +52:9 CheckContext.error -> @CheckContext.error
+  callee +54:9 checkLiteralInitializer -> @checkLiteralInitializer
+  local +71:11 instance: StructInstantiation | null (const)
+  local +72:11 runsElsewhere: boolean (const)
+  callee +75:7 CheckContext.error -> @CheckContext.error
+function constructs(at: StructInfo, target: StructInfo, seen: StringSet): boolean -> @constructs
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
+  calls: StringSet.add StringSet.has constructs
+  pointer at: size=176 writesThrough=false captured=false
+  pointer target: size=176 writesThrough=false captured=false passedTo=constructs#1
+  pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 StringSet.add#0 constructs#2
+  stackSites=0 stackLocals=0
+  local +0:14 field: FieldInfo (const)
+  local +1:11 made: StructInfo | null (const)
+  callee +8:10 StringSet.has -> @StringSet.has
+  callee +9:7 StringSet.add -> @StringSet.add
+  callee +10:11 constructs -> @constructs
+function markCycle(at: StructInfo, owner: StructInfo, reported: StringSet, seen: StringSet): void -> @markCycle
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
+  calls: StringSet.add StringSet.constructor StringSet.has constructs markCycle
+  pointer at: size=176 writesThrough=false captured=false
+  pointer owner: size=176 writesThrough=false captured=false passedTo=constructs#1 markCycle#1
+  pointer reported: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 markCycle#2
+  pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 StringSet.add#0 markCycle#3
+  stackSites=1 stackLocals=1
+  local +0:14 field: FieldInfo (const)
+  local +1:11 made: StructInfo | null (const)
+  callee +2:26 StringSet.has -> @StringSet.has
+  callee +5:5 StringSet.add -> @StringSet.add
+  local +6:11 back: StringSet (const)
+  callee +6:18 new StringSet -> @StringSet.constructor
+  callee +7:5 StringSet.add -> @StringSet.add
+  callee +8:27 constructs -> @constructs
+  callee +9:7 StringSet.add -> @StringSet.add
+  callee +11:5 markCycle -> @markCycle
+function checkInitializerCycle(ctx: CheckContext, owner: StructInfo, reported: StringSet): void -> @checkInitializerCycle [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: CheckContext.error StringSet.add StringSet.constructor StringSet.has constructs kindWord markCycle nish_str_concat spelled
+  pointer ctx: size=448 writesThrough=true captured=false passedTo=CheckContext.error#0 spelled#0 spelled#0
+  pointer owner: size=176 writesThrough=false captured=false passedTo=constructs#1 kindWord#0 spelled#1 spelled#1 markCycle#0 markCycle#1
+  pointer reported: size=8 writesThrough=false captured=false passedTo=StringSet.has#0 StringSet.add#0 markCycle#2
+  stackSites=2 stackLocals=1
+  callee -21:7 StringSet.has -> @StringSet.has
+  local -18:14 field: FieldInfo (const)
+  local -17:11 made: StructInfo | null (const)
+  local -13:11 seen: StringSet (const)
+  callee -13:18 new StringSet -> @StringSet.constructor
+  callee -12:5 StringSet.add -> @StringSet.add
+  callee -11:27 constructs -> @constructs
+  local -10:13 init: Node | null (const)
+  callee -8:9 CheckContext.error -> @CheckContext.error
+  callee -6:41 kindWord -> @kindWord
+  callee -6:62 spelled -> @spelled
+  callee -6:113 spelled -> @spelled
+  callee -2:7 StringSet.add -> @StringSet.add
+  callee -1:7 markCycle -> @markCycle
+  callee -1:41 new StringSet -> @StringSet.constructor
 function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boolean -> @rejectMemberModifiers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -826,7 +927,7 @@ function describeField(ctx: CheckContext, field: FieldInfo): string -> @describe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
   pointer ctx: size=448 writesThrough=false captured=false
-  pointer field: size=88 writesThrough=false captured=false
+  pointer field: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:23 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]

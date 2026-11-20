@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 810 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 812 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15631,4 +15631,20 @@ The message of an error contains:
 
 ```text
 … elements: its indices are 0 to …
+```
+
+## NL2819
+
+The message of an error contains:
+
+```text
+` again, which never ends (assign it in the constructor)
+```
+
+## NL2820
+
+The message of an error contains:
+
+```text
+` is not exported, but this class's initializers run in the module that builds it (export `
 ```

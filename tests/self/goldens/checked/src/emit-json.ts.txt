@@ -9,7 +9,7 @@ import emitSetElementAt from "./emit-arrays" -> function @emitSetElementAt
 import loadLength from "./emit-arrays" -> function @loadLength
 import storeHeaderField from "./emit-arrays" -> function @storeHeaderField
 import emitNewWithoutArguments from "./emit-classes" -> function @emitNewWithoutArguments
-import initializerConstant from "./emit-classes" -> function @initializerConstant
+import initializerValue from "./emit-classes" -> function @initializerValue
 import loadField from "./emit-classes" -> function @loadField
 import storeField from "./emit-classes" -> function @storeField
 import structInfoOf from "./emit-classes" -> function @structInfoOf
@@ -291,7 +291,7 @@ function JsonPlace.constructor(this: JsonPlace, info: StructInfo | null, object:
   escaping: field info object slot type
   pointer this: size=40 writesThrough=true captured=false
   pointer info: size=176 writesThrough=true captured=true
-  pointer field: size=88 writesThrough=true captured=true
+  pointer field: size=104 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function jsonLoad(emitter: Emitter, place: JsonPlace): string -> @jsonLoad
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -641,8 +641,8 @@ function emitJsonDispatch(emitter: Emitter, part: JsonPart, d: JsonDispatch): vo
 function emitJsonDecodeBody(emitter: Emitter, part: JsonPart): void -> @emitJsonDecodeBody
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock JsonDispatch.constructor JsonPlace.constructor emitJsonDecodeValue emitJsonDispatch initializerConstant jsonBranch jsonCallMethod jsonFieldsOf jsonPartInfo nish_array_grow nish_str_concat nish_str_eq storeField
-  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 emitJsonDispatch#0 jsonBranch#0 emitJsonDecodeValue#0 jsonCallMethod#0 jsonCallMethod#0 storeField#0 jsonBranch#0 storeField#0 initializerConstant#0 jsonBranch#0 jsonCallMethod#0
+  calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock JsonDispatch.constructor JsonPlace.constructor emitJsonDecodeValue emitJsonDispatch initializerValue jsonBranch jsonCallMethod jsonFieldsOf jsonPartInfo nish_array_grow nish_str_concat nish_str_eq storeField
+  pointer emitter: size=424 writesThrough=true captured=false passedTo=jsonPartInfo#0 jsonFieldsOf#0 jsonCallMethod#0 jsonBranch#0 jsonCallMethod#0 jsonBranch#0 emitJsonDispatch#0 jsonBranch#0 emitJsonDecodeValue#0 jsonCallMethod#0 jsonCallMethod#0 storeField#0 jsonBranch#0 storeField#0 initializerValue#0 jsonBranch#0 jsonCallMethod#0
   pointer part: size=56 writesThrough=false captured=false passedTo=jsonPartInfo#1 emitJsonDispatch#1 emitJsonDecodeValue#1
   stackSites=9 stackLocals=3
   local -11:9 fn: IRFunction (const)
@@ -724,7 +724,7 @@ function emitJsonDecodeBody(emitter: Emitter, part: JsonPart): void -> @emitJson
   callee +80:7 jsonBranch -> @jsonBranch
   callee +81:7 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee +82:7 storeField -> @storeField
-  callee +82:46 initializerConstant -> @initializerConstant
+  callee +82:46 initializerValue -> @initializerValue
   callee +83:7 IRFunction.emit -> @IRFunction.emit
   callee +85:7 jsonBranch -> @jsonBranch
   callee +87:5 IRFunction.placeBlock -> @IRFunction.placeBlock

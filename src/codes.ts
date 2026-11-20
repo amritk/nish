@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 995
+export const RULE_COUNT: i32 = 997
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -807,6 +807,8 @@ const diagnosticRules = (): string[] => [
   "NL2042",
   "` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers",
   "NL2491",
+  "` is not exported, but this class's initializers run in the module that builds it (export `",
+  "NL2820",
   "`, because that entry declares none of the conditions this compiler compiles source from (`",
   "NL3020",
   "; a class or interface name is still program-wide, so two packages cannot both declare one",
@@ -1205,6 +1207,8 @@ const diagnosticRules = (): string[] => [
   "NL2295",
   ": definite-assignment assertions (`!`) are not supported",
   "NL2029",
+  "` again, which never ends (assign it in the constructor)",
+  "NL2819",
   "` is a built-in type name and cannot be used for an enum",
   "NL2281",
   "`: a type parameter is inferred from the arguments, and ",

@@ -1092,9 +1092,26 @@ export class FieldInfo {
    * (`cArrayField`), so every pass that sizes or walks fields sees a scalar.
    */
   cLength: i32
+  /**
+   * The class a `new` initializer constructs (`child: Leaf = new Leaf(0)`),
+   * set once every constructor's signature is known
+   * (`resolveNewInitializers` in `src/structs.ts`); `null` for any other
+   * initializer, and for a `new` the checker refused.
+   */
+  initNew: StructInfo | null
+  /**
+   * The constant arguments of `initNew`'s constructor, one per argument
+   * written, each a carrier typed as its parameter and holding its literal
+   * as `initializer`, so the emitter writes them as it writes any
+   * initializer (`initializerConstant`); a parameter left out passes its
+   * default, as at any call.
+   */
+  initArgs: FieldInfo[]
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
+    this.initNew = null
+    this.initArgs = []
     this.nested = null
     this.link = false
     this.cLength = -1
@@ -1276,6 +1293,23 @@ export class StructInfo {
   field(name: string): FieldInfo | null {
     const at = this.fieldIndex.get(name, -1)
     return at < 0 ? null : this.fields[at]
+  }
+
+  /**
+   * The first field initializer that allocates, `[]` or `new C(...)`, or
+   * `null` when every one is a constant. Constructing the class then
+   * allocates in the arena and stores what it allocated into the object,
+   * which `src/escape.ts` and `src/attributes.ts` account for as they do
+   * `this.f = []` in a constructor's body.
+   */
+  allocatingInitializer(): Node | null {
+    for (const field of this.fields) {
+      const init = field.initializer
+      if (init !== null && (init.kind === NodeKind.Array || field.initNew !== null)) {
+        return init
+      }
+    }
+    return null
   }
 
   /** The method called `name`, or `null` when there is none. */

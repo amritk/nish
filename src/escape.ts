@@ -71,7 +71,14 @@ import {
   isMapEntry,
   isSpawnEntry,
 } from "./parallel"
-import { CheckedProgram, elementStride, FunctionSig, ROLE_CONSTRUCTOR, ROLE_FUNCTION } from "./program"
+import {
+  CheckedProgram,
+  elementStride,
+  FunctionSig,
+  ROLE_CONSTRUCTOR,
+  ROLE_FUNCTION,
+  StructInfo,
+} from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -552,7 +559,12 @@ class EscapeAnalysis {
     // A `new` checked into a union is recorded as the union; it allocates its class.
     const type = intrinsicType(this.unit.program, node)
     if (type >= 0 && this.table.isStruct(type)) {
-      this.sites.push(new Site(node, !this.compactType(type)))
+      // A class with no constructor runs its initializers here, and one that
+      // allocates (`[]`, `new`) stores into the object what outlives a stack
+      // slot only if the object is arena memory with the same flow.
+      const info = this.unit.program.struct(this.table.nameOf(type))
+      const allocating = info !== null && info.ctor === null && info.allocatingInitializer() !== null
+      this.sites.push(new Site(node, !this.compactType(type) && !allocating))
       return
     }
     if (type < 0 || !this.table.isArray(type)) {
@@ -1990,6 +2002,16 @@ export const analyzeEscapes = (
   }
   analysis.visit(body)
   analysis.decide()
+  // The prologue stores the initializers before the body runs
+  // (`emitConstructorPrologue`), and the walk above sees only the body. One
+  // that allocates is `this.f = []` written first: stored into the object the
+  // caller holds, so it leaks and escapes.
+  const owner: StructInfo | null = sig.role === ROLE_CONSTRUCTOR ? sig.owner : null
+  const initializer: Node | null = owner !== null ? owner.allocatingInitializer() : null
+  if (initializer !== null) {
+    analysis.result.allocLeaks = true
+    analysis.result.noteEscape(initializer)
+  }
   // An arrow's written parameters keep the conservative answer. Its captures
   // are decided, because the function that wrote the arrow reads each one as
   // an argument to it (`captureTarget`), and a capture this proves nothing

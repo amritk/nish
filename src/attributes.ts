@@ -3327,6 +3327,34 @@ class FactCollector {
   }
 
   /**
+   * What the initializers of `info` call when they allocate (`[]`, `new
+   * C(...)`): the allocator, and each `new`'s constructor, or the
+   * initializers of a class that has none, which run in its place
+   * (`initializerValue`). `site` is where they run: a constructor's first
+   * allocating initializer, or the `new` of a class without one.
+   */
+  noteInitializers(info: StructInfo, site: Node): void {
+    for (const field of info.fields) {
+      const init = field.initializer
+      const made = field.initNew
+      if (init === null || (init.kind !== NodeKind.Array && made === null)) {
+        continue
+      }
+      this.facts.effect = EFFECT_WRITE
+      this.facts.callees.add("nish_alloc_struct")
+      if (made === null) {
+        continue
+      }
+      const ctor = made.ctor
+      if (ctor !== null) {
+        this.addComposedCallee(ctor.name, site)
+      } else {
+        this.noteInitializers(made, site)
+      }
+    }
+  }
+
+  /**
    * WP53 H1.2: a `new` of a handle class is a `using`'s initialiser, and every
    * exit of its block calls the close the class's dispose names, which is C's:
    * `ffi` is exercised there, named at the `using`, as a call written there
@@ -3661,6 +3689,12 @@ class FactCollector {
         this.addComposedCallee(ctor.name, node)
         this.noteArguments(node, ctor)
         this.noteCall(node, ctor)
+      } else {
+        // No constructor: the initializers run here (`constructObject`).
+        const info = program.struct(table.nameOf(type))
+        if (info !== null) {
+          this.noteInitializers(info, node)
+        }
       }
       this.noteHandleClose(node)
       return
@@ -4327,6 +4361,14 @@ const collectStatedFacts = (
     if (self !== null) {
       self.writesThrough = true
       self.writesShared = true
+    }
+    // An initializer that allocates calls what `this.f = []` or `new C(...)`
+    // written first in the body would; the escape analysis already counted
+    // the allocation (`analyzeEscapes`).
+    const owner = sig.owner
+    const site: Node | null = owner !== null ? owner.allocatingInitializer() : null
+    if (owner !== null && site !== null) {
+      collector.noteInitializers(owner, site)
     }
   }
   // WP31 §9: the prologue that checks a host's arguments may take the panic
