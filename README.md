@@ -71,7 +71,9 @@ for (const side of sides) {
 
 The IR is readable. `examples/add.ts`, `a + b` on two `number`s (32-bit
 integers by default), compiles to a checked add: an overflow panics instead
-of wrapping, and a sum the compiler proves fits is a plain `add nsw`.
+of wrapping, and a sum the compiler proves fits is a plain `add nsw`. That
+check is a panic site, so `nish --deny-panics` refuses the file on purpose; each
+example that keeps a panic site says why in its first lines.
 
 ```llvm
 define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
