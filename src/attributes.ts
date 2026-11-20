@@ -1150,7 +1150,9 @@ export class FactsTable {
   set(name: string, facts: FunctionFacts): void {
     const at = this.index.get(name, -1)
     if (at >= 0) {
-      // A symbol is unique across a program (the driver rejects clashes), so
+      // A symbol is unique across a program (the driver qualifies a clashing
+      // private function by its module, WP57 S1, and rejects what still
+      // clashes), so
       // this only happens on the second collection round, which replaces the
       // first round's facts in place.
       this.list[at] = facts

@@ -1,0 +1,3 @@
+define hidden noundef i32 @m$.work$arrow0(
+define internal noundef i32 @m$.work(
+define internal noundef i32 @main$.work(

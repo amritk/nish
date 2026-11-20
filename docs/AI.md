@@ -2373,9 +2373,10 @@ export const main = (): i32 => {
 - Functions and enums may be renamed on import; classes and interfaces may
   not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
-- **A function name is unique across the whole program**, exported or not
-  (a proposal to relax this for private functions is
-  [WP57](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md); it has not shipped).
+- **An exported function name is unique across the whole program**; two
+  modules may each keep a *private* function or generic of one name (its
+  symbol becomes `<module>$.<name>`, e.g. `helper$.add`), except under
+  `--no-strict-exports`, where every function name is unique.
 - An `export`ed function is an external C-ABI symbol; every other function gets
   `internal` linkage so LLVM may inline or drop it.
 - **So an exported function is not named after a C library function**

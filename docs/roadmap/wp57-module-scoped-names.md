@@ -1,16 +1,16 @@
 # WP57: Module-scoped names
 
-**State:** Proposed · **Done:** 0 of 3 · **Design note:** [`docs/wp57-module-scoped-names.md`](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md)
+**State:** In progress · **Done:** 1 of 3 · **Design note:** [`docs/wp57-module-scoped-names.md`](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md)
 
 ## Stages
 
-- [ ] S1: a private function's or generic template's symbol qualified by its module path when it would clash, with the clash checks over the qualified symbols
+- [x] S1: a private function's or generic template's symbol qualified by its module path when it would clash, with the clash checks over the qualified symbols
 - [ ] S2: exported names that clash inside one package and are not on the C surface *(open question)*
 - [ ] S3: module-scoped class and interface names, with type identity (module, name)
 
 ## Next
 
-S1, private functions and generic templates: [§4](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#4-s1-private-functions-and-generic-templates). `src/` itself can use it one release after it ships ([§5](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#5-the-compiler-benefits-one-release-later)).
+S3, module-scoped class and interface names ([§7](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#7-s3-module-scoped-class-and-interface-names)); S2 waits on a decision, below. S1 is built: `src/` itself can use it one release after it ships ([§5](https://github.com/amritk/nish/blob/main/docs/wp57-module-scoped-names.md#5-the-compiler-benefits-one-release-later)).
 
 ## Waiting on a decision
 

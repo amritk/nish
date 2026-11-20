@@ -73,7 +73,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { implementsDeclaration, spellCSymbolsApart } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart, templateSymbol } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -1415,6 +1415,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // Every module's context, entry first: before any import is bound, because
+    // a clashing private function takes its module-qualified symbol here and an
+    // importer copies the symbol it finds, and before any template is
+    // instantiated, because its instantiations are named by the same rule.
+    const peers: CheckContext[] = []
+    for (const unit of this.modules) {
+      peers.push(unit.checker.ctx)
+    }
+    for (const unit of this.modules) {
+      unit.checker.ctx.peers = peers
+    }
+    this.qualifyClashingSymbols(peers)
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = []
       for (const imp of unit.checker.program.imports) {
@@ -1454,13 +1466,8 @@ export class Compilation {
     // every module needs to know whether the entry declares `main` before its
     // bodies are checked.
     const hasMain = this.entry().checker.program.entryMain !== null
-    const peers: CheckContext[] = []
-    for (const unit of this.modules) {
-      peers.push(unit.checker.ctx)
-    }
     for (const unit of this.modules) {
       unit.checker.ctx.entryHasMain = hasMain
-      unit.checker.ctx.peers = peers
     }
     // Constants fold once every module has its signatures, because an
     // initialiser may name a constant imported from a module checked later.
@@ -3837,6 +3844,27 @@ export class Compilation {
   }
 
   /**
+   * WP57 S1 (`docs/wp57-module-scoped-names.md` §4): give each private free
+   * function whose bare symbol another of its package's free functions or
+   * templates also takes -- or, for a `main` outside the entry, the entry
+   * wrapper -- its module-qualified symbol, `<prefix><qualifier>$.<name>`. An
+   * exported party keeps its bare symbol, so what a C caller or another
+   * package links against never moves, and two exported parties are still
+   * refused by `rejectSymbolClashes`, which runs over the final symbols.
+   *
+   * Nothing qualifies under `--no-strict-exports`: every function is then
+   * external, and an external symbol is the name as written. A program with no
+   * clash is not touched, which is why no existing program's IR moves.
+   * Templates are named when instantiated, by the same predicate.
+   */
+  qualifyClashingSymbols(peers: CheckContext[]): void {
+    const entryName = this.entry().name
+    for (const unit of this.modules) {
+      unit.checker.qualifyClashing(peers, unit.name, entryName)
+    }
+  }
+
+  /**
    * A function's *symbol* must be unique across the program whether or not it
    * is exported, and the entry wrapper reserves `main` as well. An external
    * symbol is global to the link, and even an `internal` one reaches
@@ -3851,6 +3879,13 @@ export class Compilation {
    * out of one name. A program of one package is every program that existed
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
+   *
+   * WP57 S1 did the same one level down: `qualifyClashingSymbols` has already
+   * given a clashing private function its module-qualified symbol, so two
+   * modules' private `add` arrive here as `helper$.add` and `main$.add` and do
+   * not clash. What still does is two exported functions, anything under
+   * `--no-strict-exports` (nothing is qualified there) and two qualified
+   * symbols that come out alike (`clashMessage` words each).
    *
    * A `declare function` is not a package's symbol but C's, so it keeps its
    * name in every package and two packages can make one key of it. That is
@@ -3898,7 +3933,7 @@ export class Compilation {
         if (template.origin !== unit.source) {
           continue
         }
-        const symbol = unit.checker.program.symbolPrefix + template.sourceName
+        const symbol = templateSymbol(entry.checker.ctx.peers, template)
         const at = owners.get(symbol, -1)
         if (at < 0) {
           owners.set(symbol, ownerSigs.length)
@@ -3962,7 +3997,8 @@ export class Compilation {
             previousSig,
             previousModule.name,
             unit.name,
-            unit.packageName
+            unit.packageName,
+            this.opts.strictExports
           )
         }
         // Reported, not thrown: every clash is listed.
@@ -4805,7 +4841,8 @@ const clashMessage = (
   previous: FunctionSig,
   previousFile: string,
   file: string,
-  packageName: string
+  packageName: string,
+  strictExports: boolean
 ): string => {
   const owner = sig.owner
   if (owner !== null) {
@@ -4826,10 +4863,24 @@ const clashMessage = (
     }
     return `Exported function ${where}; exported names must be unique within the package that declares them`
   }
-  if (packageName === ROOT_PACKAGE) {
-    return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
+  // Under `--strict-exports` a private function that clashes is qualified by
+  // its module's path (WP57 S1), so a clash left over is two paths that spell
+  // one qualifier (`lib/util.ts` and `lib_util.ts`). Without it every function
+  // keeps its bare name, so the name itself has to be unique.
+  let why = ""
+  if (strictExports) {
+    why = `, and both modules' paths qualify it to one symbol, \`${sig.name}\`, so rename one of the modules or the function`
+  } else if (packageName === ROOT_PACKAGE) {
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported"
+  } else {
+    why =
+      ", and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported"
   }
-  return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+  if (packageName === ROOT_PACKAGE) {
+    return `Function ${where}${why}; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name`
+  }
+  return `Function ${where}${why}; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol`
 }
 
 /**

@@ -27,6 +27,14 @@
 // emits is spelled exactly as it was, every golden is byte-identical, and
 // every exported name keeps the C ABI it had.
 //
+// **WP57 S1 adds a module qualifier below the package prefix**, and only where
+// it is needed: a private free function or function template whose bare
+// symbol would clash with another in its package is spelled
+// `<prefix><qualifier>$.<name>` (`symbolSpelling`), the qualifier being the
+// module's path from its package directory (or the entry's) with `.ts`
+// dropped (`moduleSymbolQualifier`). A program with no clash keeps every
+// symbol it had, which is why that stage moved no IR either.
+//
 // **How a module says which package it is in.** It does not: the path says it.
 // A module under `<...>/node_modules/<name>/` (or `.../@scope/<name>/`) is in
 // that package; everything sharing the entry's own package directory is the
@@ -44,6 +52,7 @@
 // agree wherever both apply, so the placeholder shrank to the cases the
 // resolver is never asked about rather than disappearing.
 
+import { dirname, relativePath } from "./paths"
 import { splitByte, StringBuilder } from "./strings"
 
 /** The package every ordinary program is: no prefix, so no symbol moves. */
@@ -146,13 +155,53 @@ export const packageSymbolPrefix = (packageName: string): string => {
   if (packageName === ROOT_PACKAGE) {
     return ""
   }
+  return `${symbolSpelling(packageName, true)}.`
+}
+
+/**
+ * The qualifier a module's clashing private symbols carry (WP57 S1): its path
+ * from its package root without `.ts`, spelled by `packageSymbolPrefix`'s
+ * rules, so `lib/util.ts` gives `lib_util` and a private `helper` there is
+ * `@lib_util$.helper` (`Compilation.qualifyClashingSymbols`). The root
+ * package's root is the entry's directory; a dependency's is the package
+ * directory its path names, or the entry's directory when it names none, as
+ * for a package reached through a linked copy.
+ *
+ * The path is taken relative to that root (`relativePath`), so a module
+ * outside it keeps its `..` steps: `nish app/main.ts` importing
+ * `../shared/u.ts` gives `___shared_u` whether the entry is named as
+ * `app/main.ts`, `main.ts` from inside `app/`, or by an absolute path, and no
+ * machine's directory reaches the symbol.
+ *
+ * Not injective either (`lib/util.ts` and `lib_util.ts` give one qualifier),
+ * for the same reason `packageSymbolPrefix` need not be: the clash check runs
+ * over the qualified symbols, so two modules that reduce to one qualifier are
+ * refused by name.
+ */
+export const moduleSymbolQualifier = (modulePath: string, entryPath: string): string => {
+  const own = packageDirOf(modulePath)
+  const root = own.length > 0 && own !== packageDirOf(entryPath) ? own : dirname(entryPath)
+  let path = relativePath(root, modulePath)
+  if (path.endsWith(".ts")) {
+    path = path.substring(0, path.length - 3)
+  }
+  return symbolSpelling(path, false)
+}
+
+/**
+ * `text` reduced to what an LLVM symbol and a C identifier can both hold:
+ * every character outside `[A-Za-z0-9_]` written as `_`, and a leading `@`
+ * dropped when `dropAt` says so, so `@scope/hash` reads as `scope_hash` and
+ * not as `_scope_hash`. A leading digit gets a `_` (`2fast` would otherwise
+ * produce `@2fast.f`, which LLVM reads as a numbered global), and so does a
+ * text that reduces to nothing (which would otherwise produce `@.f`).
+ */
+const symbolSpelling = (text: string, dropAt: boolean): string => {
   const out = new StringBuilder()
   let i = 0
-  while (i < packageName.length) {
-    const code = packageName.charCodeAt(i)
-    // The `@` of a scope is dropped rather than replaced, so `@scope/hash`
-    // reads as `scope_hash` and not as `_scope_hash`.
-    if (code !== AT || i !== 0) {
+  while (i < text.length) {
+    const code = text.charCodeAt(i)
+    if (code !== AT || i !== 0 || !dropAt) {
       const plain =
         (code >= DIGIT_0 && code <= DIGIT_9) ||
         (code >= UPPER_A && code <= UPPER_Z) ||
@@ -163,13 +212,11 @@ export const packageSymbolPrefix = (packageName: string): string => {
     i = i + 1
   }
   const mangled = out.toText()
-  // `2fast` would otherwise produce `@2fast.f`, which LLVM reads as a numbered
-  // global, and a name that mangles away to nothing would produce `@.f`.
   const first = mangled.length === 0 ? DIGIT_0 : mangled.charCodeAt(0)
   if (first >= DIGIT_0 && first <= DIGIT_9) {
-    return `_${mangled}.`
+    return `_${mangled}`
   }
-  return `${mangled}.`
+  return mangled
 }
 
 /**

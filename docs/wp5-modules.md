@@ -104,10 +104,18 @@ either mode.** `internal` keeps a name away from the linker, but the
 whole-program facts are keyed by symbol name, so two functions sharing one
 would get each other's attributes: a miscompile rather than a link error.
 That is why the rule does not consult the flag
-(`tests/link/duplicate_internal`; the check used to be skipped under an
-explicit `--strict-exports`). [wp57-module-scoped-names.md](wp57-module-scoped-names.md)
-proposes qualifying a private function's symbol by its module when it would
-clash; until it ships, the rule stands as stated.
+(the check used to be skipped under an explicit `--strict-exports`).
+
+**Since WP57 S1** ([wp57-module-scoped-names.md](wp57-module-scoped-names.md))
+the rule is about *symbols*, not names. Under the default `--strict-exports`, a
+private free function or function template whose bare symbol would clash is
+spelled `<package prefix><module qualifier>$.<name>` — `helper$.add` for
+`helper.ts`'s private `add` — and the clash checks run over the qualified
+symbols, so `tests/link/duplicate_internal` now builds. The symbol stays unique,
+so the facts stay keyed correctly. Still refused: two exported functions
+(NL3024/NL3025) or templates (NL3010), any clash under `--no-strict-exports`,
+where every function keeps its bare symbol (NL3026/NL3027,
+`tests/link/module_private_no_strict`), and two qualified symbols that collide.
 
 ## Output files
 

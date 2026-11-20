@@ -43,10 +43,12 @@ import isGenericStruct from "./generics" -> function @isGenericStruct
 import isTemplateFunction from "./generics" -> function @isTemplateFunction
 import refuseNestedFunctionTypes from "./generics" -> function @refuseNestedFunctionTypes
 import parameterOrigin from "./generics" -> function @parameterOrigin
+import qualifiesClashing from "./generics" -> function @qualifiesClashing
 import refuseUninferable from "./generics" -> function @refuseUninferable
 import rejectDollarInSymbolName from "./generics" -> function @rejectDollarInSymbolName
 import resolveStructTemplateConstraints from "./generics" -> function @resolveStructTemplateConstraints
 import resolveTemplateConstraints from "./generics" -> function @resolveTemplateConstraints
+import moduleSymbolQualifier from "./packages" -> function @moduleSymbolQualifier
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
 import FLAG_COMPUTED from "./nodes" -> const FLAG_COMPUTED
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
@@ -158,6 +160,7 @@ struct Checker (class) size=24 align=8 exported
   method importCollectionForEach -> @Checker.importCollectionForEach
   method importCollectionTemplate -> @Checker.importCollectionTemplate
   method qualifySymbols -> @Checker.qualifySymbols
+  method qualifyClashing -> @Checker.qualifyClashing
   method declareAlias -> @Checker.declareAlias
   method nameTaken -> @Checker.nameTaken
   method declareEnum -> @Checker.declareEnum
@@ -409,6 +412,21 @@ function Checker.qualifySymbols(this: Checker): void -> @Checker.qualifySymbols 
   local -12:16 sig: FunctionSig (const)
   callee -1:37 FunctionSig.foreign -> @FunctionSig.foreign
   callee -1:54 FunctionSig.definedIn -> @FunctionSig.definedIn
+function Checker.qualifyClashing(this: Checker, peers: CheckContext[], modulePath: string, entryPath: string): void -> @Checker.qualifyClashing [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: entryPath modulePath
+  calls: FunctionSig.definedIn FunctionSig.foreign moduleSymbolQualifier nish_str_concat qualifiesClashing
+  pointer this: size=24 writesThrough=false captured=false
+  pointer peers: size=0 writesThrough=false captured=false passedTo=qualifiesClashing#0
+  stackSites=0 stackLocals=0
+  local -13:11 prefix: string (const)
+  local -12:9 qualifier: string (let)
+  local -11:16 sig: FunctionSig (const)
+  callee -7:10 FunctionSig.foreign -> @FunctionSig.foreign
+  callee -6:9 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee -5:9 qualifiesClashing -> @qualifiesClashing
+  callee -2:23 moduleSymbolQualifier -> @moduleSymbolQualifier
 function Checker.declareAlias(this: Checker, stmt: Node): void -> @Checker.declareAlias [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error

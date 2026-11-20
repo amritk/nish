@@ -1,0 +1,2 @@
+define internal noundef i32 @a$.identity$i32(
+define internal noundef i32 @b$.identity$i32(
