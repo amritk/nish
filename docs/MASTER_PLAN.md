@@ -294,6 +294,9 @@ work is its parent issue under the [Roadmap issue](https://github.com/amritk/nis
 | 65 | The surface a lexer port asked for: byte search through `memchr` and `memcmp`, allocation without the zero fill and a standard `grow`, non-literal field initializers, and whether a number gets `toString` | [wp65](wp65-lexer-surface.md) |
 | 66 | C libraries from their headers: `nish c-import` writes a header's functions, structs and constants as Nish declarations through clang, with the language stages that would bind the rest | [wp66](wp66-c-headers.md) |
 | 68 | Shared libraries layered like atomic design: the helpers std/ and src/ each write for themselves (character classes, digits, quoting, byte codecs, builders, hashing) measured, then extracted one cluster per stage into atoms, molecules and organisms, each the fastest existing copy or faster | [wp68](wp68-shared-libraries.md) |
+| 71 | An HttpArena entry, and what it asks of `std/net`: the entry, and each scored profile against the package it waits on | [wp71](wp71-httparena.md) |
+| 72 | gRPC over the HTTP/2 server: `nish/net/protobuf`, trailers on the façade, unary calls in `nish/net/grpc` | [wp72](wp72-grpc.md) |
+| 73 | Brotli, measured first, then an encoder and `br` responses | [wp73](wp73-brotli.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each

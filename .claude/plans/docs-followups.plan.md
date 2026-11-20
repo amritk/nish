@@ -79,6 +79,19 @@ stages:
       - id: s4-regex-fuzz
         content: Fix docs/security/regex.md line 105 to say the regex fuzz target exists and add a Fuzzed line, reading the regex job of each fuzz.yml run first because it failed in all four runs since 2026-10-30 — see DOCS S4 — fix the stale lines the issue sweep missed
         status: pending
+  - id: s5-emit-ts-node
+    title: DOCS S5 — say in AI.md how Node finds the nish runtime for --emit-ts output
+    goal: Following docs/AI.md's --emit-ts check with a compiler from install.sh runs the emitted program under Node instead of failing with ERR_MODULE_NOT_FOUND.
+    verification: node docs/check-links.mjs && npm run lint
+    status: pending
+    issue: 2000
+    todos:
+      - id: s5-ai-md-step
+        content: Add the step that makes the nish package resolvable from out/ to the emit-ts block in docs/AI.md, matching docs/guide/using-nish/to-typescript.md — see DOCS S5 — say in AI.md how Node finds the nish runtime for --emit-ts output
+        status: pending
+      - id: s5-try-it
+        content: Run the AI.md commands as written against an install.sh compiler and record in the PR body that node out/entry.ts runs — see DOCS S5 — say in AI.md how Node finds the nish runtime for --emit-ts output
+        status: pending
 ---
 
 # Documentation follow-ups
@@ -107,3 +120,11 @@ Likely files: `docs/LANGUAGE.md`, `docs/reference/`, `tests/run.js`.
 ## DOCS S4 — fix the stale lines the issue sweep missed
 #1837 criterion 6 and 9. On main now: `docs/wp39-http-server.md` still says "no figures are in BENCHMARKS.md yet"; `docs/security/crypto-x509.md` still says "planned as `nish/crypto/pki`" at two places; `docs/security/regex.md:105` still says "No fuzz target is in tree" although `tests/fuzz/targets/regex.ts` exists; `docs/LANGUAGE.md` now names `p384` in its module list, so that item may already be done. The criterion 3 item (the `<<` test) is the CI plan's S6.
 Likely files: `docs/wp39-http-server.md`, `docs/security/crypto-x509.md`, `docs/security/regex.md`.
+
+## DOCS S5 — say in AI.md how Node finds the nish runtime for --emit-ts output
+
+Issue #2000. `docs/AI.md` gives `nish program.ts --emit-ts out/` then `node out/entry.ts`. With a compiler from `install.sh`, the second command fails for any program (`ERR_MODULE_NOT_FOUND: Cannot find package 'nish'`), because the emitted files import `nish/runtime` and `nish/runtime/node`, and the install tree has `runtime/core.mjs` and `runtime/node.mjs` but no `package.json`. The user guide's [to-typescript page](../../docs/guide/using-nish/to-typescript.md) says Node has to find the `nish` package from `out/`; AI.md, the page agents read first, does not.
+
+This stage takes the issue's first fix: AI.md gets the missing step (for example `npm install nish@<the compiler's version>` in or above `out/`, or a link to the guide's paragraph), and the PR shows the commands working as written. The issue's second fix, shipping a `package.json` with the runtime `exports` in the release tree so a `node_modules/nish` link to the install works offline, changes the release packaging. It is a separate stage if the owner wants it, not part of this one.
+
+Likely files: `docs/AI.md`, possibly `docs/guide/using-nish/to-typescript.md`.

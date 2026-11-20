@@ -5,6 +5,19 @@ spec: docs/wp68-shared-libraries.md
 priority: 60
 issue: 1868
 stages:
+  - id: s1-acceptance
+    title: WP68 S1 acceptance — check the proposal run's criteria and its last review round against main
+    goal: Each of the ten acceptance criteria of the WP68 proposal run (tracker 1773) is checked against main and recorded MET, PARTIAL or NOT MET, and each of round 3's six blocking findings on PR 1779 is shown fixed on main or filed.
+    verification: node docs/check-links.mjs && npm run lint && npm run lint:dead
+    status: pending
+    issue: 2001
+    todos:
+      - id: s1-acc-criteria
+        content: Check criteria 1 to 10 in tracker 1773's Acceptance table against main and record each verdict with its evidence on this issue — see WP68 S1 acceptance — check the proposal run's criteria and its last review round against main
+        status: pending
+      - id: s1-acc-round3
+        content: Read round 3's six blocking findings on PR 1779 (head f22c4224) and check each against the merged head 14b4ed61, filing any that still holds — see WP68 S1 acceptance — check the proposal run's criteria and its last review round against main
+        status: pending
   - id: s2-hex-atom
     title: WP68 S2 — the hex atom, the tier directories, the biome rule and its fixture
     goal: A hex atom from a 256-entry table exists under std/atoms/, std/molecules/ exists, biome.json enforces the tier import rule with a fixture that breaks it, and every former hex caller gives the same answers.
@@ -164,3 +177,9 @@ D4 as above, applied to growth policy: keep each copy's policy as a named varian
 
 ## WP68 S9 — the FNV-1a step
 One loop in every copy. `bench/map-vs-stringmap.ts` times a private copy, so a bench for `src/map.ts` `fnv1a` is added first. Depends on S2.
+
+## WP68 S1 acceptance — check the proposal run's criteria and its last review round against main
+
+The `/feature` run that proposed WP68 (tracker #1773) merged its one slice, #1779, after the run had already closed out with it escalated. So nothing ever checked the run's ten acceptance criteria: the survey, the benches and the tiers are all marked escalated in the tracker's Acceptance table. Round 3 of the review found six blocking problems on #1779 at head `f22c4224`. The `/pr-land` session that was meant to fix them before merge is gone, and #1779 merged at `14b4ed61`, so whether they were fixed is unknown.
+
+This stage is a check, not new work: record each criterion's verdict with evidence, show each finding fixed on main, and file what is not. It comes before S2 because S2 builds on the survey and benches the criteria cover. The owner's decisions D1 to D6 stay with S2 and the stages that need them.

@@ -161,6 +161,16 @@ stages:
       - id: s11-implement
         content: Implement the chosen option with a regression test that fails on the split write — see CI S11 — stop console.log interleaving between prefork workers
         status: pending
+  - id: s12-chacha20-link
+    title: CI S12 — find why bench/chacha20.ts stops at the link in the ECC-9 sweep
+    goal: bench/chacha20.ts builds and links in the sweep that ECC-9 runs, or the reason it cannot is recorded with an issue.
+    verification: node tests/run.js bench && npm run lint
+    status: pending
+    issue: 2002
+    todos:
+      - id: s12-reproduce
+        content: Reproduce the link failure of bench/chacha20.ts from the WP48 S3 run's ECC-9 sweep (1097 of 1098 programs built) and find its cause — see CI S12 — find why bench/chacha20.ts stops at the link in the ECC-9 sweep
+        status: pending
 ---
 
 # CI and test-suite health — flakes, gaps and the critical path
@@ -174,6 +184,8 @@ Likely files: `.github/workflows/ci.yml`, `scripts/ci-scope.mjs`.
 
 ## CI S2 — bring the critical path under 11 minutes by rebalancing shard 1 and the golden cases
 #1466: after #1456 shard 1 is the longest job (12.0 to 12.4 min against a target of 11). The golden cases are still dealt round-robin (`tests/nish/run.ts` `casesHere`). The issue's finding about cancelled main runs may be partly addressed: `ci.yml`'s concurrency group now pins a run id for some pushes; check it before changing it. Criteria 1 to 3 (file-server and crypto-bench ten runs under load) were never exercised on merged main.
+The ci-under-10 run (tracker #1791) left its first criterion unmet: five or more green PR runs, each under 10 minutes. One run took 9.1 min, and the other took 10.7 min with shard 1 at 614 s. Its second criterion (slowest ÷ median at most 1.25) is met. This stage owns that goal too. Show five green PR runs under 10 minutes, refitting with `node scripts/shard-costs.mjs` if shard 1 keeps running over.
+
 Likely files: `tests/shard-costs.json`, `tests/nish/run.ts`, `.github/workflows/ci.yml`.
 
 ## CI S3 — find why net_relay and net_relay_f64 identity checks fail intermittently on CI
@@ -220,3 +232,9 @@ Likely files: `bench/sha256-block/run.mjs`, `bench/jwt-verify/README.md`, `bench
 
 ### Decision needed
 One write per `console.log` (runtime change, so the `c-symbols` and `performance` runs and an IR move) or a `waitFor` in `tests/postgres/live/run.mjs` that accepts the token without a whole line (test only). The issue gives both without a pick.
+
+## CI S12 — find why bench/chacha20.ts stops at the link in the ECC-9 sweep
+
+Found by the WP48 S3 rule run (tracker #1776): its ECC-9 sweep built 1097 of 1098 programs, and `bench/chacha20.ts` stopped at the link. Nobody investigated it, and no issue tracks it. Reproduce it, find whether the cause is the compact rule, the bench or the toolchain, then fix it or file it.
+
+Likely files: `bench/chacha20.ts`, `src/compact-rule.ts`.
