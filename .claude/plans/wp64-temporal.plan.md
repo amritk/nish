@@ -27,6 +27,7 @@ stages:
     goal: ZonedDateTime reads TZif v1 to v4 files and their POSIX footer rules, Temporal.Now.timeZoneId reads TZ or /etc/localtime, and the stage lands with its docs/security record and a malformed-TZif fuzz corpus.
     verification: node tests/run.js temporal && node scripts/security-scope.mjs && npm run lint
     status: pending
+    issue: 1897
     todos:
       - id: s3-tzif
         content: Add a TZif v1 to v4 reader over TZDIR or /usr/share/zoneinfo with the POSIX footer rule and offset zones in std/temporal — see WP64 S3 — ZonedDateTime and IANA time zones with a security record

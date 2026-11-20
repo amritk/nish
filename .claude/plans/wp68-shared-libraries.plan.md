@@ -31,6 +31,7 @@ stages:
     goal: One decimal writer that is 4 percent or more ahead of http1PutDecimal on non-negative values replaces the copies, with the integer 1 to 20 digit count benched first and signed values left on jsonWriterPutDigits64.
     verification: node tests/run.js std && node tests/run.js performance && npm run lint
     status: pending
+    issue: 1895
     todos:
       - id: s3-bench-count
         content: Bench the integer<1, 20> digit count before adopting it and record the result in docs/wp68-shared-libraries.md — see WP68 S3 — the decimal writer

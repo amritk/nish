@@ -29,6 +29,7 @@ stages:
     verification: node tests/run.js json && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1896
     todos:
       - id: s2-conversions
         content: Add the coerce option, the conversion table, defaults and stop rules in std/json-typed.ts and src/ — see WP61 S2 — coercion

@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp54-async-wasm.md
 spec: docs/wp54-async-wasm.md
 priority: 60
 labels: [needs-decision]
+issue: 1956
 stages:
   - id: s1-spike
     title: WP54 S1 — where JSPI runs, and one async export over one async host import lowered by hand on wasm32

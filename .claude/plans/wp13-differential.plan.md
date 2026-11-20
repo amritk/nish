@@ -13,6 +13,7 @@ stages:
     verification: node tests/differential/goldens.js && node tests/differential/run.js --quick && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1921
     todos:
       - id: s2-scope-note
         content: Write the scope and cut line for the rewriter in docs/wp13-differential.md under "Not in this package", naming which unfrozen programs it must cover first — see WP13 S2 — a rewriter driven by --emit-checked

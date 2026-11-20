@@ -22,6 +22,7 @@ stages:
     goal: A session builds main and checks the 10 criteria of the wp39-complete tracker, posting a table with a verdict.
     verification: node tests/run.js http2 && node tests/run.js http3
     status: pending
+    issue: 1894
     todos:
       - id: s2-build-check
         content: Build main and check the 10 criteria of tracker 1433 (WP39) against it — see SWEEP S2 — run the WP39 acceptance pass

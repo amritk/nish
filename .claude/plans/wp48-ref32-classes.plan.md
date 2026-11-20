@@ -44,6 +44,7 @@ stages:
     goal: bench/goose tree programs, bench/wp48-refs/sibling.ts and docs/guide's memory page state what the rule picks and when to override it with implements Wide.
     verification: node tests/run.js cli && node docs/check-links.mjs && npm run lint
     status: pending
+    issue: 1900
     todos:
       - id: s4-goose
         content: Update the bench/goose tree programs to rely on the rule and show nish --explain-layout output — see WP48 S4
@@ -59,6 +60,7 @@ stages:
     goal: A survey with measurements (self-build peak RSS and time, std/ benches) lists the classes the rule picks and misses in src/ and std/, with implements Compact or Wide added where the measurement disagrees.
     verification: node tests/run.js compact && node tests/run.js explain_layout && node tests/nish-cmp.js && npm run lint
     status: pending
+    issue: 1902
     todos:
       - id: s5-survey
         content: Run nish --explain-layout over src/ and over the nish-cmp corpus's std/ imports and tabulate picked and left-wide classes — see WP48 S5

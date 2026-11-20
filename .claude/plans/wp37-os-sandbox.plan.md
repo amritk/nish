@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp37-os-sandbox.md
 spec: docs/wp37-os-sandbox.md
 priority: 80
 labels: [deferred]
+issue: 1909
 stages:
   - id: s6-manifest-scopes
     title: WP37 S6 — scopes in the package.json manifest
@@ -12,6 +13,7 @@ stages:
     verification: node tests/run.js sandbox && node tests/run.js link && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1925
     todos:
       - id: s6-decide-trigger
         content: Record in docs/wp37-os-sandbox.md section 11 question 1 what reopens the manifest-scope stage and what a relative scope means in a published package — see WP37 S6 — scopes in the package.json manifest
@@ -28,6 +30,7 @@ stages:
     verification: node tests/run.js sandbox && node tests/run.js link && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1927
     todos:
       - id: s7-symbol-scan
         content: Scan each ffi object's symbol table on the link path for STT_GNU_IFUNC and R_*_IRELATIVE under --sandbox — see WP37 S7 — refuse IFUNC resolvers at link time
@@ -44,6 +47,7 @@ stages:
     verification: node tests/run.js sandbox && node tests/run.js cli && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1928
     todos:
       - id: s8-note
         content: Write the proposal note for a default sandbox in nish run, answering open question 10 with the CI measurement of Landlock on every runner — see WP37 S8 — nish run sandboxed by default
@@ -57,6 +61,7 @@ stages:
     verification: node tests/run.js sandbox && node tests/run.js c-symbols && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1929
     todos:
       - id: s9-list
         content: Derive the allowlist from the syscalls the runtime and the compiler's computed capabilities need in runtime/runtime-sandbox.c — see WP37 S9 — a seccomp allowlist mode, as its own flag

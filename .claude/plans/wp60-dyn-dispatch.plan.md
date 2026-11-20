@@ -27,6 +27,7 @@ stages:
     goal: Dyn<I> works in locals, parameters, returns and calls with per-place sets, the escape-join refusal and the debug tag check, and a stored Dyn<I> is refused (NL2779).
     verification: node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
+    issue: 1901
     todos:
       - id: s2-gate
         content: Build the stage and measure it against the note's stage 2 gate before landing — see WP60 S2 — Dyn of an interface in locals, parameters, returns and calls

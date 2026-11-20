@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp30-bytes-interop.md
 spec: docs/wp30-bytes-interop.md
 priority: 80
 labels: [deferred]
+issue: 1913
 stages:
   - id: s2-caller-owned-result
     title: WP30 S2 — a caller-owned destination for an array result
@@ -12,6 +13,7 @@ stages:
     verification: node tests/run.js wasm-host && node tests/run.js napi && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1948
     todos:
       - id: s2-signature
         content: Design the changed generated signature for array-returning calls and add it to the loader — see WP30 S2
@@ -25,6 +27,7 @@ stages:
     verification: node tests/run.js wasm-host && node tests/run.js napi && npm run lint
     status: pending
     labels: [deferred, needs-decision]
+    issue: 1955
     todos:
       - id: s3-choose
         content: Choose between batching in the generator and a u32 companion to nish_alloc_array in runtime/ — see WP30 S3

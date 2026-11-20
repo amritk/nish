@@ -34,6 +34,7 @@ stages:
     goal: nish/net/http-compress answers an Accept-Encoding of deflate with a deflate body, alongside gzip, and the guide and reference say so.
     verification: node tests/run.js std_http_compress && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
+    issue: 1906
     todos:
       - id: deflate-coding
         content: Add deflate to HttpCompressor and httpAcceptEncoding in std/net/http-compress.ts on nish/compress/deflate — see WP43 S4 deflate
@@ -46,6 +47,7 @@ stages:
     goal: A request body with Content-Encoding gzip or deflate is decoded by the handler under a size limit, and a body that inflates past it is refused with 413.
     verification: node tests/run.js std_http_compress && node tests/run.js net_handler && node scripts/security-scope.mjs && npm run lint
     status: pending
+    issue: 1931
     todos:
       - id: bomb-limit
         content: Decode a compressed request body in std/net/handler.ts or std/net/http-compress.ts under a configurable output limit — see WP43 S4 bomb limit

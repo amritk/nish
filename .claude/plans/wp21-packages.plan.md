@@ -5,12 +5,14 @@ roadmap: docs/roadmap/wp21-packages.md
 spec: docs/wp21-packages.md
 priority: 30
 labels: [ready]
+issue: 1911
 stages:
   - id: s4-build-cache
     title: WP21 S4 — the build cache, keyed by package version, number mode, target, profile and compiler
     goal: A dependency compiled once is reused by a later build with the same package version, number mode, target, profile and compiler version, invisibly to the package author, and any key change misses.
     verification: node tests/run.js link && node tests/run.js packages && npm run check && npm run lint
     status: pending
+    issue: 1937
     todos:
       - id: s4-key
         content: Define the cache key (package version, number mode, target, profile, compiler version) and its content-addressed store in src/ and the CLI — see WP21 S4 — the build cache
@@ -30,6 +32,7 @@ stages:
     verification: node tests/run.js link && npm run check
     status: pending
     labels: [deferred]
+    issue: 1942
     todos:
       - id: s5-sidecar
         content: Design the .d.nish.json sidecar of signatures and proven attributes in docs/wp21-packages.md §7 — see WP21 S5 — prebuilt distribution

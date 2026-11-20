@@ -56,6 +56,7 @@ stages:
     verification: node docs/check-links.mjs && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1905
     todos:
       - id: submit-decide
         content: Record the owner's answer on submitting in docs/wp49-async-server.md section 9 D6 and docs/wp39-http-server.md E9 — see WP49 S8 Decision needed

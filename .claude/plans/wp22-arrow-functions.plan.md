@@ -12,6 +12,7 @@ stages:
     verification: node tests/run.js arrow-corpus && node tests/run.js link && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1923
     todos:
       - id: d-rule
         content: Add the rejection of function definitions and its code in src/ with a tests/link negative — see WP22 D

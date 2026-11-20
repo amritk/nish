@@ -4,6 +4,7 @@ overview: Sleeping and waking a ring on Darwin is deferred, and the atomic-array
 roadmap: docs/roadmap/wp47-shared-memory.md
 spec: docs/wp47-shared-memory.md
 priority: 80
+issue: 1903
 stages:
   - id: s2-darwin-wake
     title: WP47 S2 — sleeping and waking a ring on Darwin
@@ -11,6 +12,7 @@ stages:
     verification: node tests/run.js sync && node scripts/security-scope.mjs && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1908
     todos:
       - id: s2-api
         content: Use os_sync_wait_on_address once the oldest supported SDK has it, in the runtime's futex wait and wake — see WP47 S2

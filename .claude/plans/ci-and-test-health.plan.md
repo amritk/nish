@@ -153,6 +153,7 @@ stages:
     verification: node tests/run.js postgres-live && node tests/run.js c-symbols && node tests/run.js performance
     status: pending
     labels: [needs-decision]
+    issue: 1904
     todos:
       - id: s11-decide
         content: Record the choice between one write per console.log in runtime/runtime.c and a tolerant waitFor in tests/postgres/live/run.mjs — see CI S11 — stop console.log interleaving between prefork workers

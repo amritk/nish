@@ -11,6 +11,7 @@ stages:
     goal: A capture-free arrow in value position is admitted as a function reference with its own per-place set, through the same dispatcher lowering as a top-level function.
     verification: node tests/run.js fnref && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
+    issue: 1899
     todos:
       - id: s3-checker
         content: Admit a capture-free arrow as a reference member in the per-place pass and signature sets in src/ — see WP51 S3 — capture-free arrows in value position

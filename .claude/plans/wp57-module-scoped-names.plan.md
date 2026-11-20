@@ -24,6 +24,7 @@ stages:
     goal: The three member sites build owner-symbol.name while displays keep the source name, and no IR moves.
     verification: node tests/run.js link && npm run check && npm run lint
     status: pending
+    issue: 1898
     todos:
       - id: s3c-members
         content: Build member and constructor symbols from the owner's symbol in src/structs.ts and src/generics.ts — see WP57 S3c — member and constructor symbols spelled from their owner's symbol

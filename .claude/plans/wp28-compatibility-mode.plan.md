@@ -4,12 +4,14 @@ overview: --compat exists with six free-tier features; what is left is the libra
 roadmap: docs/roadmap/wp28-compatibility-mode.md
 spec: docs/wp28-compatibility-mode.md
 priority: 40
+issue: 1907
 stages:
   - id: c-lib
     title: WP28 C-lib — Date, JSON, RegExp and Buffer under compat
     goal: Date objects, JSON, RegExp and Buffer compile under --compat under WP26's rules, each behind a compat feature entry, with the erasure invariant held.
     verification: node tests/run.js compat && npm run check && npm run lint
     status: pending
+    issue: 1910
     todos:
       - id: clib-date
         content: Add a Date compat feature entry and its lowering over std — see WP28 C-lib
@@ -25,6 +27,7 @@ stages:
     goal: A function value whose target the checker cannot name compiles under --compat, with an indirect call and a captured-environment struct, and its cost is measured.
     verification: node tests/run.js compat && node tests/run.js performance && npm run lint
     status: pending
+    issue: 1912
     todos:
       - id: c2b-indirect-call
         content: Lower an indirect call and a captured-environment struct under --compat in src/ — see WP28 C2b
@@ -38,6 +41,7 @@ stages:
     verification: node tests/run.js compat && node tests/run.js differential && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1914
     todos:
       - id: c3-erasure
         content: Implement the erasure lowering and the Promise.all admission of §6.4 under --async-model sync — see WP28 C3
@@ -48,6 +52,7 @@ stages:
     verification: node tests/run.js compat && node tests/run.js threads && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1916
     todos:
       - id: c4-threads
         content: Lower async onto scope() per §6.5 and choose which Promise.all to fork — see WP28 C4
@@ -58,6 +63,7 @@ stages:
     verification: node tests/run.js compat && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1920
     todos:
       - id: c5-lowering
         content: Implement try/catch under --compat with the chosen lowering, the Result desugaring being the spike's recommendation — see WP28 C5
@@ -67,6 +73,7 @@ stages:
     goal: Generators compile under --compat in the shape wp24 §3b describes.
     verification: node tests/run.js compat && npm run lint
     status: pending
+    issue: 1922
     todos:
       - id: c6-generators-build
         content: Lower generators as iterators under --compat per wp24 §3b — see WP28 C6
@@ -76,6 +83,7 @@ stages:
     goal: extends with virtual dispatch compiles under --compat, reversing wp25 in compat only, landing on C2b's machinery.
     verification: node tests/run.js compat && npm run lint
     status: pending
+    issue: 1924
     todos:
       - id: c7-virtual
         content: Add virtual dispatch for extends under --compat, built on C2b's indirect call — see WP28 C7

@@ -12,6 +12,7 @@ stages:
     verification: node tests/run.js json && node tests/run.js wordings && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1915
     todos:
       - id: s1-default-ctor
         content: Admit an optional field whose default the constructor assigns ([], new Map(), new C(), new JsonNumber()) and reword NL2498 in src/ and std/json-typed.ts — see WP62 S1 — typed JSON prerequisites for generated classes
@@ -27,6 +28,7 @@ stages:
     goal: nish schema writes a deterministic class file, with header, Flags line and --check, for scalars, strings, arrays, required and optional fields and additionalProperties as unknown, refusing every other keyword with its JSON Pointer.
     verification: node tests/run.js schema && npm run check && npm run lint
     status: pending
+    issue: 1933
     todos:
       - id: s2-generator
         content: Add the nish schema command reading a schema with JsonLimits and writing classes, JSDoc from annotations, names and rename — see WP62 S2 — nish schema for plain objects
@@ -39,6 +41,7 @@ stages:
     goal: The generator handles $defs and $ref, maps, nullables, tagged unions from const and OpenAPI's discriminator, the flat allOf merge, and recursion through arrays, maps and | null.
     verification: node tests/run.js schema && npm run check && npm run lint
     status: pending
+    issue: 1951
     todos:
       - id: s3-refs
         content: Resolve $defs and $ref with a visiting set and a class-count limit in the generator — see WP62 S3 — $defs and $ref, maps, nullables, tagged unions and allOf
@@ -52,6 +55,7 @@ stages:
     verification: node tests/run.js schema && node tests/run.js json && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1962
     todos:
       - id: s4-constraints
         content: Map validation keywords to the constraints literal after WP61 S1 and record --formats-as-tags in Flags — see WP62 S4 — validation keywords onto WP61 constraints, and the transitive coerce switch
@@ -65,6 +69,7 @@ stages:
     verification: node tests/run.js schema && npm run lint && node docs/check-links.mjs
     status: pending
     labels: [needs-decision]
+    issue: 1971
     todos:
       - id: s5-corpus
         content: Vendor the schema corpus with per-schema counts and its licence notices in THIRD_PARTY_NOTICES.md — see WP62 S5 — the schema corpus, the guide page and the reverse generator

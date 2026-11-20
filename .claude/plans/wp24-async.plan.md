@@ -5,6 +5,7 @@ roadmap: docs/roadmap/wp24-async.md
 spec: docs/wp24-async.md
 priority: 80
 labels: [deferred]
+issue: 1918
 stages:
   - id: napi-async-values
     title: WP24 S4 — strings, arrays and a by-value Result through the N-API Async exports
@@ -12,6 +13,7 @@ stages:
     verification: node tests/run.js napi && node scripts/security-scope.mjs && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1959
     todos:
       - id: napi-async-copy
         content: Pass strings and arrays across the name-Async shim through a malloc-ed copy in the --emit-napi-async emitter — see WP24 S4 strings arrays Result

@@ -11,6 +11,7 @@ stages:
     goal: With NISH_WASM_MEMORIES=2 a wasm-host build has memory 1 exported as memory and the runtime's copy, fill and grow over it, and nothing moves without the flag.
     verification: node tests/run.js wasm-host && node tests/run.js c-symbols && node tests/run.js wasi && npm run lint
     status: pending
+    issue: 1917
     todos:
       - id: s1-check-forge
         content: Check whether a forged trace descriptor reaches outside the arena before building, and record the answer — see WP59 S1 and §10 question 1
@@ -29,6 +30,7 @@ stages:
     goal: Array and string arguments and results, host-import strings and windows, panic text and the storage mirror cross through memory 1 and the page cannot read or write memory 0.
     verification: node tests/run.js wasm-host && node tests/run.js wasm-loader && npm run lint
     status: pending
+    issue: 1934
     todos:
       - id: s2-loader
         content: Move the loader's array and string crossings onto the exchange area — see WP59 S2
@@ -45,6 +47,7 @@ stages:
     verification: node tests/run.js wasm-host && node tests/run.js performance && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1953
     todos:
       - id: s3-default-build
         content: Make two memories the default in the wasm-host link step and update the guide page — see WP59 S3
@@ -60,6 +63,7 @@ stages:
     goal: docs/security/wasm-host.md records WH-10's remaining surface as closed with a before and after test.
     verification: node scripts/security-scope.mjs && node docs/check-links.mjs && npm run lint
     status: pending
+    issue: 1964
     todos:
       - id: s4-record
         content: Close WH-10's what-stays in docs/security/wasm-host.md and update its row in docs/security/README.md — see WP59 S4

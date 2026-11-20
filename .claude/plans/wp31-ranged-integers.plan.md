@@ -13,6 +13,7 @@ stages:
     verification: node tests/run.js bounds && npm run check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1919
     todos:
       - id: w5-fact
         content: Add the i >= n fact family to src/bounds.ts with positive and negative cases — see WP31 W5
@@ -23,6 +24,7 @@ stages:
     verification: node tests/run.js generics && node tests/run.js performance && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1936
     todos:
       - id: w6-merge
         content: Merge range-only instantiations in src/generics.ts and measure code size on a real program — see WP31 W6
@@ -33,6 +35,7 @@ stages:
     verification: node tests/run.js bounds && node tests/run.js performance && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1957
     todos:
       - id: w7-sources
         content: Add the mask and Math.min fact sources to src/bounds.ts once a measurement asks — see WP31 W7

@@ -4,12 +4,14 @@ overview: All six stages are open. The design is accepted and every question dec
 roadmap: docs/roadmap/wp56-flat-memory-generators.md
 spec: docs/wp56-flat-memory-generators.md
 priority: 60
+issue: 1926
 stages:
   - id: s0-baseline
     title: WP56 S0 — the baseline, a 25 MB spec, a generator written two ways, peak memory at 1,000 to 8,000 files
     goal: bench/wp56-generator/ exists and docs/BENCHMARKS.md has both generators at four sizes with a noise band.
     verification: bash bench/wp56-generator/run.sh && npm run lint
     status: pending
+    issue: 1940
     todos:
       - id: s0-bench
         content: Add bench/wp56-generator/ with the spec maker, naive.ts, today.ts and run.sh — see WP56 S0
@@ -22,6 +24,7 @@ stages:
     goal: A guide page shows shapes 1 to 3 over parts and join, the cookbook has two entries, and file I/O inside a region is tested.
     verification: node tests/run.js region && node tests/run.js cookbook && npm run lint
     status: pending
+    issue: 1941
     todos:
       - id: s1-tests
         content: Add tests/cases and tests/link for file reads and writes inside enter and region_per_target — see WP56 S1
@@ -37,6 +40,7 @@ stages:
     goal: A builder keeps its bytes outside the arena and its appends keep a loop's scope, with the checker facts, the nish:string module, the emit-ts lowering and the wasm32 refusal in place.
     verification: node tests/run.js mem_builder && node tests/run.js wasi && node tests/run.js performance && node tests/nish-cmp.js && node scripts/gen-reference.mjs --check && node scripts/security-scope.mjs && npm run lint
     status: pending
+    issue: 1944
     todos:
       - id: s2-runtime
         content: Add the builder runtime in runtime/ with its security record rows — see WP56 S2
@@ -58,6 +62,7 @@ stages:
     goal: writeFileSync and appendFileSync take a builder, and fileCreate, fileWrite and fileWriteBytes flush within G2's bound.
     verification: node tests/run.js link && node tests/run.js capabilities && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
+    issue: 1945
     todos:
       - id: s3-api
         content: Add the writeFileSync and appendFileSync overloads and fileCreate, fileWrite, fileWriteBytes in std/ with capability rows — see WP56 S3
@@ -73,6 +78,7 @@ stages:
     goal: NL9002, NL9016 and NL9018 hints name the builder, gen_flat_memory (G3) runs in CI, and G1 to G3 are green.
     verification: node tests/run.js wordings && node tests/run.js gen_flat_memory && npm run lint
     status: pending
+    issue: 1947
     todos:
       - id: s4-hints
         content: Add builder hints to NL9002, NL9016 and NL9018 in src/ with wordings and goldens — see WP56 S4
@@ -85,6 +91,7 @@ stages:
     goal: Constructors and methods that store into a graph made inside a using arena() block are admitted, with Arena.mark() unmoved over 2,000 iterations.
     verification: node tests/run.js mem_using_arena_graph && node tests/run.js reject_using_arena && node tests/nish-cmp.js && node tests/run.js wasi && node tests/run.js performance && npm run lint
     status: pending
+    issue: 1950
     todos:
       - id: s5-analysis
         content: Add the confined-graph analysis and the split callee summary in src/escape.ts — see WP56 S5
