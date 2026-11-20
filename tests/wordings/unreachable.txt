@@ -16,6 +16,8 @@
 # compiler handed that number to a rule, so it may never be handed to another
 # one. The entry costs a string and matches nothing.
 NL2001  retired: the overload/override rule the inheritance work removed
+NL2306  retired: `export declare function` refused as "a C function this program calls"; WP66 exports it to the program's other modules (tests/link/ffi_export_import)
+NL2746  retired: `export declare class` refused as "a C struct layout is used in the module that declares it"; WP66 exports it beside the `declare function`s that take it (tests/link/ffi_export_import)
 NL2206  retired: `Generic classes are not supported`, the refusal generic classes replaced; `new` on a class that is not generic is NL2318 now
 NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal cross-module generics replaced; a template is imported and instantiated now (tests/link/generic_import)
 NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by cross-module generics (tests/link/generic_import, tests/link/package_generic_import)
@@ -152,6 +154,8 @@ NL3005  a line of the exit-70 report
 NL3007  a line of the exit-70 report
 NL3008  `unknown option:` is a usage error (exit 2), not a diagnostic
 NL3012  `--emit-napi-async requires --threads` is a usage error (exit 2), not a diagnostic
+NL3063  reported only after a failed `--link` or `run` link; the corpus compiles without linking, and `tests/link/ffi_link_undefined` provokes it
+NL3064  a `nish c-import --json` refusal of the override file, not a compile; the c-import section of `tests/run.js` provokes every one under `--json`
 NL4001  a comment in the C header `--emit-napi` writes
 NL4002  a comment in the C header `--emit-header` writes
 NL4003  an error string in the generated N-API shim

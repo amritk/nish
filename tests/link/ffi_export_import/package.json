@@ -1,0 +1,5 @@
+{
+  "name": "ffi-export-import",
+  "private": true,
+  "nish": { "link": { "sources": ["c/tally.c"] } }
+}

@@ -193,6 +193,10 @@ export class LinkSet {
   /** Whether some source's reads could not be listed, so no cached binary is trusted. */
   includesUnlisted: boolean
   sqlite: boolean
+  /** The C name of every `declare function` in the program, which a failed link reads (NL3063). */
+  foreign: string[]
+  /** The ones of `foreign` a failed link left undefined, in the linker's order; empty after a success. */
+  missing: string[]
 
   constructor() {
     this.libraries = []
@@ -200,6 +204,8 @@ export class LinkSet {
     this.includes = []
     this.includesUnlisted = false
     this.sqlite = false
+    this.foreign = []
+    this.missing = []
   }
 
   /** Add `name` unless it is there already. */

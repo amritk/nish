@@ -27,3 +27,8 @@ enum documented {
 /* `enum high;` again after its definition names the same enum, so it stays unsigned. */
 enum high;
 int take_high_again(enum high h);
+/* A bare `enum inc;` after the definition in an included header names that
+ * enum too, so it stays unsigned rather than becoming an `int`. */
+#include "enums-included.inc"
+enum inc;
+int take_inc(enum inc i);

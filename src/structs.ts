@@ -561,12 +561,7 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   if (info.layout && decl.children[3].children.length === 0 && decl.children[2].children.length === 0) {
     ctx.table.markOpaque(info.type)
   }
-  if (info.layout && info.exported) {
-    ctx.error(
-      decl.children[0],
-      `\`declare class ${name}\` cannot be exported: a C struct layout is used in the module that declares it`
-    )
-  } else if (info.layout && ctx.pageModule) {
+  if (info.layout && ctx.pageModule) {
     // A layout exists to be lent to a `declare function`, which a module a
     // page loads cannot have (`src/declarations.ts` refuses one). It would be
     // sized for the host when `scripts/build.sh` recompiles an `--emit-dts`
@@ -796,7 +791,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     return
   } else if (rejectStoredMask(ctx, type, "a field", decl.children[1])) {
     return
-  } else if (owner.exported) {
+  } else if (owner.exported && !owner.layout) {
     deferExportedLayout(ctx, type, "a field of an exported class or interface", decl.children[1])
   }
   // `nish:secret`: a field outlives the function that made the secret, unless

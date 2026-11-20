@@ -52,13 +52,13 @@ On an x86-64 Linux machine, `nish c-import wc.h -o wc.ts` writes:
 // Data model: LP64
 // Regenerate: nish c-import wc.h --target x86_64-unknown-linux-gnu -o wc.ts
 
-declare class OutI64 {
+export declare class OutI64 {
   value: i64
 }
 
-declare class counter {}
+export declare class counter {}
 
-declare class wc_span {
+export declare class wc_span {
   start: i64
   len: i64
 }
@@ -68,13 +68,13 @@ export const WC_WORDS: i32 = 2
 export const WC_MAX_WORD: i32 = 64
 export const WC_NAME: string = "wc"
 
-declare function wc_new(mode: i32): counter | null
-declare function wc_feed(c: counter, text: string): i32
-declare function wc_total(c: counter, words: OutI64): i64
-declare function wc_last(c: counter, span: wc_span): i32
-declare function wc_report(c: counter): CPtr | null
-declare function wc_free(c: counter): void
-declare function wc_free_report(r: CPtr): void
+export declare function wc_new(mode: i32): counter | null
+export declare function wc_feed(c: counter, text: string): i32
+export declare function wc_total(c: counter, words: OutI64): i64
+export declare function wc_last(c: counter, span: wc_span): i32
+export declare function wc_report(c: counter): CPtr | null
+export declare function wc_free(c: counter): void
+export declare function wc_free_report(r: CPtr): void
 
 /* Not bound:
  *   wc_log: variadic
@@ -137,33 +137,40 @@ The defaults for pointers are the safe ones:
   or `CPtr | null`, with no override needed); on an inner pointer
   (`const char * _Nonnull *`) they change nothing.
 
-A module that uses an out class or a struct declares it itself. A class name
-is unique across a program, so two generated modules that both declare
-`OutI64`, or the same struct, cannot be built together (the second is
-refused). To bind two libraries for one program, write a header that includes
-both and generate one module from it, with `allow` naming both libraries'
-functions.
+Every declaration is `export`ed, so the program's modules import the
+generated module as it is written, without copying from it. A class name is
+one C struct tag, unique across a program: a module that needs `OutI64` or a
+struct imports it, and a second module that declares it again is refused
+(`Class \`OutI64\` is also declared in ...`). Two generated modules that both
+declare the same out class or struct cannot be built together either. To bind
+two libraries for one program, write a header that includes both and generate
+one module from it, with `allow` naming both libraries' functions.
 
 ## Using the module
 
 Import what you need and call it as you would any declared function. The
 library is linked the way any other C your program calls is, as
 [Calling Nish from other languages](interop.md#calling-c-from-nish-declare-function)
-shows:
+shows. With the module above trimmed to what the program uses:
 
 <!-- nish:ok -->
-```ts
-declare class OutI64 {
-  value: i64;
+```ts wc.ts
+export declare class OutI64 {
+  value: i64
 }
 
-declare class counter {}
+export declare class counter {}
 
-declare function wc_new(mode: i32): counter | null;
-declare function wc_total(c: counter, words: OutI64): i64;
-declare function wc_free(c: counter): void;
+export const WC_WORDS: i32 = 2
 
-export const WC_WORDS: i32 = 2;
+export declare function wc_new(mode: i32): counter | null
+export declare function wc_total(c: counter, words: OutI64): i64
+export declare function wc_free(c: counter): void
+```
+
+<!-- nish:ok -->
+```ts count.ts
+import { OutI64, WC_WORDS, wc_free, wc_new, wc_total } from "./wc"
 
 export const count = (): i64 => {
   const c = wc_new(WC_WORDS);
@@ -176,6 +183,12 @@ export const count = (): i64 => {
   return bytes + words.value;
 };
 ```
+
+The `ffi` capability is the program's where it calls the library, in
+`count.ts`, not where the module declares it. A module that imports a
+generated class may use it in its own functions, but an exported function
+cannot take or return one, as with any `declare class`: no generated header
+or binding describes it.
 
 ## What is not bound
 
@@ -296,10 +309,18 @@ written twice in one object. Each function's override is checked once
 `allow` is read, wherever the keys sit in the file, against the declaration
 the module would write without it.
 
-A refused override is a plain `c-import:` or `overrides:` message on stderr
-with exit code 1, like the command's other refusals; it carries no `NL` code,
-since codes name diagnostics in a Nish program and an overrides file is not
-one.
+A refused override is a `c-import: overrides: ...` message on stderr with
+exit code 1, like the command's other refusals. Every one of them has the
+code NL3064, which `--json` shows: the refusal is then one JSON object on
+stdout, naming the overrides file, and stderr stays empty:
+
+```console
+$ nish c-import buffers.h --overrides buffers.overrides.json --json -o buffers.ts
+{"file":"buffers.overrides.json","severity":"error","code":"NL3064","message":"overrides: unknown key \"extra\""}
+```
+
+The command's other refusals print the same shape under `--json`, without a
+`file` and without NL3064.
 
 ## Targets and the data model
 

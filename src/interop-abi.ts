@@ -169,6 +169,11 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
       if (entryMain !== null && sig === entryMain) {
         continue
       }
+      // An exported `declare function` is C's, exported to the program's
+      // other modules only: the host calls the library, not this program.
+      if (sig.foreign()) {
+        continue
+      }
       // `internal`, so no host can name it (the linkage condition, WP31 §9).
       if (privateAbi(compilation.opts, sig.exported)) {
         continue

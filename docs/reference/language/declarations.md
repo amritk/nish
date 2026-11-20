@@ -5890,10 +5890,15 @@ declare i32 @clock_gettime(i32, %struct.Timespec*)
   nothing else**: no `readonly`, `static` or optional field (NL2747), no initializer,
   because `new` zero-fills (NL2748), no constructor, method, accessor or other
   member such as an index signature (NL2751, `reject_ffi_struct_index_signature`), no type parameter (NL2741, `reject_generic_declare_class`), no `extends` or `implements` (NL2750),
-  and no `export` (NL2746) — each pinned by a `reject_ffi_struct_*` case.
-- **It stays in its module.** It cannot be a parameter or the return type of an
+  each pinned by a `reject_ffi_struct_*` case.
+- **It may be `export`ed to the program's other modules**, which import it
+  like any class, so a module `nish c-import` writes is used without copying
+  (`tests/link/ffi_export_import`). Its name is still one C struct tag, so two
+  modules that both declare it are refused as a duplicate class: import it.
+- **It stays inside the program.** It cannot be a parameter or the return type of an
   exported function or an exported class's method, or a field of an exported
-  class or interface: `` `declare class Point` cannot be a parameter of an
+  class or interface, in its own module or one that imports it
+  (`tests/link/ffi_export_layout_reject`): `` `declare class Point` cannot be a parameter of an
   exported function `` (`reject_ffi_struct_export_param`, `_return`, `_method`,
   `_field`, `_interface`). A type that holds one is refused there too, however deep —
   through `Result`, `T | null`, an array, a generic instance or a class of
@@ -6130,9 +6135,14 @@ Each of these is refused, and each refusal is pinned by a case:
 - **An allocator from C memory.** `arena()` takes no argument, so `using a =
   arena(p)` is refused (`reject_ffi_allocator`).
 
-**A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
-`export`ed** (`reject_ffi_export`), because `export` offers other modules a
-function *this* module defines.
+**A foreign declaration has no body** (`reject_ffi_body`). **It may be
+`export`ed**: `export declare function f(...)` offers the C function to the
+program's other modules, which import and call it as the declaring module
+would, and the `ffi` capability is the caller's
+(`tests/link/ffi_export_import`, and from a package,
+`tests/link/pkg_link_dep_export`). It is exported to Nish modules only: the
+host calls the library itself, so `--emit-header`, `--emit-napi` and the
+library's own exports leave it out.
 
 **A declared function's symbol is its name as written, in whatever package
 declares it.** A function a package defines carries the package's prefix

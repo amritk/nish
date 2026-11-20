@@ -958,6 +958,11 @@ reads it, and `nish run` and `--link` link what it names:
 - These refusals (NL3059, NL3060, NL3061) come from every compile that
   emits IR, a compile to IR or `--json` too, not only from `nish run` and
   `--link`.
+- A link that leaves a `declare function` undefined, because no library or
+  source here defines it, is reported at that declaration (NL3063) after
+  the linker's own lines, and the compile exits 1. A library the linker
+  cannot find at all (`unable to find library -lz`) is a failed link
+  (exit 3): install it, or name its directory in `LIBRARY_PATH`.
 - Only the native profiles (`speed`, `size`, `debug`) link it. `--link
   --profile wasi` with a `nish.link` fails the link (exit 3).
 
@@ -1329,7 +1334,8 @@ A field is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `CPtr`,
 embeds one struct in another. `stamp.at.sec` reads a field of the embedded
 struct in place, and `clock_gettime(1, stamp.at)` hands C its address inside
 `stamp`. The class has fields and nothing else: no initialiser, no method or
-constructor, no `readonly`, no `extends`, no `export`. It cannot appear in
+constructor, no `readonly`, no `extends`. `export` lends it to the
+program's other modules, which import it like any class. It cannot appear in
 an exported function's or class's signature, nor can any type that holds one
 (a `Result`, an array, a generic instance or a class with such a field), so no
 generated header or binding has to describe it. A `CPtr` field is the
@@ -1522,7 +1528,9 @@ wasm32 build without `--profile wasi` has no C library, so `cErrno` is refused
 there. The rules are in
 [`cErrno`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#cerrno-the-errno-a-c-call-left).
 
-A declared function has no body and cannot be exported. Calling C has a cost
+A declared function has no body. `export declare function` offers it to the
+program's other modules, which import and call it; the host does not see it,
+since it is the library's, not your program's. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
 everything that calls it. The rules are in

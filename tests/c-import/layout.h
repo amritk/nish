@@ -14,3 +14,8 @@ typedef long long late_aligned;
 typedef late_aligned late_aligned __attribute__((aligned(16)));
 struct la { late_aligned a; };
 int use_la(struct la *v);
+/* The other order: `aligned` on the first declaration, a plain one after it. */
+typedef long long early_aligned __attribute__((aligned(16)));
+typedef early_aligned early_aligned;
+struct ea { early_aligned a; };
+int use_ea(struct ea *v);

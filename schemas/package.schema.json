@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/amritk/nish/main/schemas/package.schema.json",
   "title": "package.json",
-  "description": "Nish reads the same `package.json` npm and Node read. It looks at a handful of fields, and ignores the rest. Some are Node's own fields that Nish reads in a narrower way: `exports`, `engines` and `version`. One is Nish's own: `nish`, which only the root package's manifest may carry. This page lists every field Nish reads, what it does with each one, and the error each mistake gets.\n\nTwo kinds of `package.json` matter, and they are read differently:\n\n- **The root package's** is the `package.json` nearest above the entry file you compile. Its `nish` field grants capabilities, adds a no-panic scope and names host modules. When no `package.json` is above the entry, there is no root manifest, and nothing on this page applies to your own code.\n- **A dependency's** is the `package.json` of a package under `node_modules`. Nish reads its `exports`, `engines` and `version`: which file to compile, which compiler version the package needs, and the version to name in an error. A `nish` field in a dependency's manifest is ignored. A package cannot grant itself anything.\n\nEvery other field (`name`, `scripts`, `dependencies`, `type`, `bin` and the rest) is npm's and Node's business, and Nish leaves it alone. Install packages with npm as usual. Nish resolves imports from `node_modules` the way Node does.\n\nThe `nish` field is read **strictly**. JSON Schema cannot express two of the rules below, and the compiler holds to them anyway: a key written twice is refused, and so is a `package.json` that stops being JSON. A key is decoded as `JSON.parse` decodes it, so `\"ni\\u0073h\"` is `\"nish\"`. Each refusal is an error reported where the manifest writes the mistake, so a typo never quietly widens a policy or drops a module from a scope.\n\nThis page is generated from [`schemas/package.schema.json`](https://github.com/amritk/nish/blob/main/schemas/package.schema.json), which an editor can use to check a `package.json` and complete its `nish` field. In VS Code, add it beside the `package.json` schema the editor already applies, rather than in place of it, with a `json.schemas` entry in your settings:\n\n```json\n{\n  \"json.schemas\": [\n    {\n      \"fileMatch\": [\"package.json\"],\n      \"url\": \"https://raw.githubusercontent.com/amritk/nish/main/schemas/package.schema.json\"\n    }\n  ]\n}\n```\n\nA `\"$schema\"` key in the `package.json` itself would also work, but it replaces the editor's own schema for npm's fields.",
+  "description": "Nish reads the same `package.json` npm and Node read. It looks at a handful of fields, and ignores the rest. Some are Node's own fields that Nish reads in a narrower way: `exports`, `engines` and `version`. One is Nish's own: `nish`, whose settings come from the root package's manifest. This page lists every field Nish reads, what it does with each one, and the error each mistake gets.\n\nTwo kinds of `package.json` matter, and they are read differently:\n\n- **The root package's** is the `package.json` nearest above the entry file you compile. Its `nish` field grants capabilities, adds a no-panic scope, names host modules, picks the dialect, sizes the sandbox's ring pool and names the C to link. When no `package.json` is above the entry, there is no root manifest, and nothing on this page applies to your own code.\n- **A dependency's** is the `package.json` of a package under `node_modules`. Nish reads its `exports`, `engines` and `version`: which file to compile, which compiler version the package needs, and the version to name in an error. Of a dependency's `nish` field, only `link` and `compat` are read, and neither grants anything on its own: its `link` takes effect only for what the root's `nish.link.dependencies` grants it, and its `compat` only names the cause when the root's dialect refuses it. A package cannot grant itself anything.\n\nEvery other field (`name`, `scripts`, `dependencies`, `type`, `bin` and the rest) is npm's and Node's business, and Nish leaves it alone. Install packages with npm as usual. Nish resolves imports from `node_modules` the way Node does.\n\nThe `nish` field is read **strictly**. JSON Schema cannot express two of the rules below, and the compiler holds to them anyway: a key written twice is refused, and so is a `package.json` that stops being JSON. A key is decoded as `JSON.parse` decodes it, so `\"ni\\u0073h\"` is `\"nish\"`. Each refusal is an error reported where the manifest writes the mistake, so a typo never quietly widens a policy or drops a module from a scope.\n\nThis page is generated from [`schemas/package.schema.json`](https://github.com/amritk/nish/blob/main/schemas/package.schema.json), which an editor can use to check a `package.json` and complete its `nish` field. In VS Code, add it beside the `package.json` schema the editor already applies, rather than in place of it, with a `json.schemas` entry in your settings:\n\n```json\n{\n  \"json.schemas\": [\n    {\n      \"fileMatch\": [\"package.json\"],\n      \"url\": \"https://raw.githubusercontent.com/amritk/nish/main/schemas/package.schema.json\"\n    }\n  ]\n}\n```\n\nA `\"$schema\"` key in the `package.json` itself would also work, but it replaces the editor's own schema for npm's fields.",
   "type": "object",
   "x-mjst": {
     "markdown": {
@@ -11,7 +11,7 @@
         {
           "id": "nish",
           "title": "The `nish` field",
-          "description": "Settings for the program you compile, read from the root package's manifest only."
+          "description": "Settings for the program you compile, read from the root package's manifest. A dependency's `link` and `compat` are read too, and grant nothing on their own."
         },
         {
           "id": "node",
@@ -25,7 +25,7 @@
     "nish": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Nish's own settings: one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once.\n\nAny other key is refused, a misspelt `capabilites` included. So is a second `nish` field, a `nish` that is not an object, and a `package.json` that mentions `nish` but is not well-formed JSON. All of these are [NL3036](../diagnostics/nl3xxx.md#nl3036). A field the compiler cannot read in full would leave part of what the package says about itself unread, so it is refused rather than half applied.\n\nOnly the root package's manifest is read for this field. A dependency's `nish` field is ignored.",
+      "description": "Nish's own settings: one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once.\n\nAny other key is refused, a misspelt `capabilites` included. So is a second `nish` field, a `nish` that is not an object, and a `package.json` that mentions `nish` but is not well-formed JSON. All of these are [NL3036](../diagnostics/nl3xxx.md#nl3036). A field the compiler cannot read in full would leave part of what the package says about itself unread, so it is refused rather than half applied.\n\nThe root package's manifest is read for every key. A dependency's is read for two: `link`, which takes effect only for what the root's `nish.link.dependencies` grants it ([NL3061](../diagnostics/nl3xxx.md#nl3061) for the rest), and `compat`, which a root that does not allow it refuses ([NL3057](../diagnostics/nl3xxx.md#nl3057)). Every other key in a dependency's `nish` is ignored.",
       "examples": [
         {
           "noPanic": [
@@ -62,6 +62,15 @@
         },
         "host": {
           "$ref": "#/$defs/host"
+        },
+        "compat": {
+          "$ref": "#/$defs/compat"
+        },
+        "netRings": {
+          "$ref": "#/$defs/netRings"
+        },
+        "link": {
+          "$ref": "#/$defs/link"
         }
       }
     },
@@ -255,6 +264,138 @@
           "order": 3
         }
       }
+    },
+    "compat": {
+      "description": "The compatibility dialect: TypeScript features the strict dialect refuses, which this program accepts. `true` turns on every feature this compiler has; an array names them one by one, and `[]` is the dialect with no feature. The dialect also changes the number a bare `number` is. `--compat` and `--compat=<feature>,...` on the command line override it.\n\nA name that is no feature is [NL3056](../diagnostics/nl3xxx.md#nl3056), so a typo cannot quietly leave a feature off. A value that is neither `true` nor an array is [NL3036](../diagnostics/nl3xxx.md#nl3036).\n\nA program has one dialect, its root package's. A dependency that asks for more than the root allows is refused at its import ([NL3057](../diagnostics/nl3xxx.md#nl3057)). The [compat guide](../../guide/using-nish/compat.md) lists what each feature accepts.",
+      "oneOf": [
+        {
+          "const": true
+        },
+        {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "nullish",
+              "optional-chaining",
+              "string-switch",
+              "for-of-string",
+              "optional-params",
+              "overloads"
+            ]
+          }
+        }
+      ],
+      "examples": [
+        true,
+        [
+          "nullish",
+          "optional-chaining"
+        ]
+      ],
+      "x-mjst": {
+        "markdown": {
+          "order": 4
+        }
+      }
+    },
+    "netRings": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "description": "How many io_uring rings `--sandbox` makes for `NET_LISTEN_RING` listeners before it confines the program, when `main` reaches `net` but not `process.spawn`. It counts rings, not listeners, and is 1 when it is not written. Read from the root package only.\n\nAnything but an integer from 1 to 64 is [NL3058](../diagnostics/nl3xxx.md#nl3058). The [sandbox guide](../../guide/using-nish/sandbox.md#ring-listeners) says how to size it.",
+      "examples": [
+        2
+      ],
+      "x-mjst": {
+        "markdown": {
+          "order": 5
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The C a native link adds: libraries passed to the linker as `-l<name>`, and `.c` files compiled with clang beside the runtime. `nish run` and `--link` link it on the native profiles (`speed`, `size`, `debug`); every compile that emits IR checks it.\n\nA shape other than this one, an unknown key included, is [NL3059](../diagnostics/nl3xxx.md#nl3059). A library name or source path that breaks the rules below is [NL3060](../diagnostics/nl3xxx.md#nl3060). A link that leaves a C function undefined, because a library is missing or does not define it, is [NL3063](../diagnostics/nl3xxx.md#nl3063).\n\nA dependency's `link` is read too, but each library and source in it takes effect only once the root grants it under `dependencies`; an entry not granted is [NL3061](../diagnostics/nl3xxx.md#nl3061). The dependency still needs the `ffi` capability to call its C. The [interop guide](../../guide/using-nish/interop.md) walks through it.",
+      "properties": {
+        "libraries": {
+          "$ref": "#/$defs/linkLibraries"
+        },
+        "sources": {
+          "$ref": "#/$defs/linkSources"
+        },
+        "dependencies": {
+          "type": "object",
+          "description": "Root package only: for each dependency, by package name, the libraries and sources of its own `nish.link` that it may use. Granting an entry does not add it: the dependency's own `nish.link` still has to name it. A `dependencies` key in a dependency's `link` is NL3059.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "libraries": {
+                "$ref": "#/$defs/linkLibraries"
+              },
+              "sources": {
+                "$ref": "#/$defs/linkSources"
+              }
+            }
+          }
+        }
+      },
+      "examples": [
+        {
+          "libraries": [
+            "z"
+          ],
+          "sources": [
+            "c/mylib.c"
+          ]
+        },
+        {
+          "dependencies": {
+            "zstd-bind": {
+              "libraries": [
+                "zstd"
+              ],
+              "sources": [
+                "c/shim.c"
+              ]
+            }
+          }
+        }
+      ],
+      "x-mjst": {
+        "markdown": {
+          "order": 6
+        }
+      }
+    },
+    "linkLibraries": {
+      "type": "array",
+      "description": "Libraries to link, each passed to the linker as `-l<name>`, so `\"z\"` links `libz`. A name is letters, digits, `_`, `.`, `+` and `-`, starting with a letter, digit or `_`, so nothing in it can become a flag. There is no pkg-config: a library outside the linker's default search path is found only when `LIBRARY_PATH` names its directory.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.+-]*$",
+        "maxLength": 255
+      },
+      "examples": [
+        [
+          "z",
+          "sqlite3"
+        ]
+      ]
+    },
+    "linkSources": {
+      "type": "array",
+      "description": "C files to compile beside the runtime, each a `.c` file inside the package by its path relative to `package.json`. A path that is absolute, holds a backslash or a character outside printable ASCII, starts with `-`, climbs out with `..`, or resolves outside the package through a symbolic link is refused.",
+      "items": {
+        "type": "string",
+        "pattern": "^(?![/-])(?!.*\\\\)(?!(.*/)?\\.\\.(/|$))[ -~]+\\.c$"
+      },
+      "examples": [
+        [
+          "c/mylib.c"
+        ]
+      ]
     },
     "exports": {
       "description": "Node's `exports` map, which says which file a package offers for each import path. Nish reads it in every package under `node_modules` to find the **source** to compile, under its own conditions:\n\n| Condition | Read when |\n| --- | --- |\n| `nish-i32` | the program compiles in the default `--number-mode i32` |\n| `nish-f64` | the program compiles with `--number-mode f64` |\n| `nish` | either mode, when the mode's own condition is not there |\n\nThe mode's own condition wins wherever the package declares it, which is the one place Nish answers differently from Node's first-match order. A package that is correct in one number mode only says so with that mode's condition. Its source then fails at the import in the other mode, rather than giving a wrong answer at run time.\n\nThe value is a TypeScript file, not built JavaScript, so the package is checked and optimised as your own code is. Every other condition (`import`, `require`, `default`, `types`, `node`) is skipped, so one `exports` map can serve Node and Nish side by side. Nish reads a narrower shape than Node does:\n\n- A subpath is an exact key, `.` or `./name`. The `./*` pattern form is not read.\n- A target is a string beginning with `./`, with no `..` segment and no backslash escape. A nested condition object or an array of targets counts as no target.\n- A bare condition map for `.`, `{ \"nish\": \"./src/index.ts\" }`, is read as the map for `.`. A bare string, `\"./index.js\"`, is JavaScript and offers Nish nothing.\n\nEach way to find no file is its own error at the import. A package with no Nish condition for that entry, an ordinary npm package, is [NL3020](../diagnostics/nl3xxx.md#nl3020). A package that offers only the other mode's condition is [NL3017](../diagnostics/nl3xxx.md#nl3017). A manifest that is not well-formed JSON is [NL3021](../diagnostics/nl3xxx.md#nl3021). No `exports`, no key for the subpath, or a shape Nish does not follow is [NL3014](../diagnostics/nl3xxx.md#nl3014).\n\nThe [modules guide](../../guide/language/modules.md#packages) walks through writing a package.",

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["ffi"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["ffi"],
+      "modules": [
+        {
+          "path": "main.ts",
+          "capabilities": ["ffi"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["ffi"],
+              "witnesses": {
+                "ffi": [
+                  { "function": "main", "at": "main.ts:7:15", "calls": "pkg_link_mul" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "main.ts:7:3", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pkg_mul",
+      "capabilities": [],
+      "modules": [
+        {
+          "path": "node_modules/pkg_mul/src/index.ts",
+          "capabilities": [],
+          "functions": []
+        }
+      ]
+    }
+  ]
+}

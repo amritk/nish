@@ -4437,6 +4437,8 @@ The message of an error contains:
 ` cannot be exported: it is a C function this program calls, not one it defines
 ```
 
+**Retired**: `export declare function` refused as "a C function this program calls"; WP66 exports it to the program's other modules (tests/link/ffi_export_import)
+
 ## NL2307
 
 The message of an error contains:
@@ -14105,6 +14107,8 @@ The message of an error contains:
 ` cannot be exported: a C struct layout is used in the module that declares it
 ```
 
+**Retired**: `export declare class` refused as "a C struct layout is used in the module that declares it"; WP66 exports it beside the `declare function`s that take it (tests/link/ffi_export_import)
+
 ## NL2747
 
 The message of an error contains:
@@ -14182,7 +14186,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-…: a C struct layout stays in the module that declares it and is lent only to a `declare function`, so no header, `.d.ts` or N-API binding describes it
+…: a C struct layout is lent only to a `declare function`, so no header, `.d.ts` or N-API binding describes it
 ```
 
 ## NL2757

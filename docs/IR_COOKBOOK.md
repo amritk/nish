@@ -16633,6 +16633,53 @@ refused before any IR is written (NL2805 to NL2808). The rule is in
 [`LANGUAGE.md`](LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type); the full
 golden is `tests/cases/ffi_opaque_handle.ll`.
 
+### `export declare`: one C binding, imported by other modules
+
+A module of declarations, such as one `nish c-import` writes, exports them, and
+the program's other modules import them like any function or class:
+
+```ts
+// tally.ts
+export declare class TallyOut {
+  value: i64
+}
+export declare class tally {}
+export declare function tally_new(start: i32): tally | null
+export declare function tally_add(t: tally, n: i64): void
+export declare function tally_get(t: tally, out: TallyOut): i32
+export declare function tally_free(t: tally): void
+```
+
+```ts
+// main.ts
+import { TallyOut, tally_add, tally_free, tally_get, tally_new } from "./tally"
+```
+
+The declaring module defines nothing: `tally.ll` is the struct types and the C
+prototypes, unprefixed, since C has one namespace. The importer writes the same
+types and `declare`s, so the call is the one a declaring module would make,
+with no wrapper between it and C:
+
+```llvm
+%struct.TallyOut = type { i64 }
+%struct.tally = type {}
+
+declare i8* @tally_new(i32)
+declare void @tally_add(i8*, i64)
+declare i32 @tally_get(i8*, %struct.TallyOut*)
+declare void @tally_free(i8*)
+```
+
+```llvm
+  %7 = call i32 @tally_get(i8* %5, %struct.TallyOut* %6)
+```
+
+`ffi` is the caller's capability (`main.ts:6:13 calls tally_new` in
+`expected.caps.json`), and `--emit-header` and `--emit-napi` leave an exported
+`declare function` out: it is exported to Nish modules, not to the host. The rule
+is in [`LANGUAGE.md`](LANGUAGE.md#calling-c); the goldens are
+`tests/link/ffi_export_import/main.ll` and `tally.ll`.
+
 ### `readStruct`: a C-owned struct, copied out
 
 `readStruct(p)` from `nish:unsafe` (WP27 S4.2) is the way back from a struct

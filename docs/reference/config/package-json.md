@@ -2,12 +2,12 @@
 
 # package.json
 
-Nish reads the same `package.json` npm and Node read. It looks at a handful of fields, and ignores the rest. Some are Node's own fields that Nish reads in a narrower way: `exports`, `engines` and `version`. One is Nish's own: `nish`, which only the root package's manifest may carry. This page lists every field Nish reads, what it does with each one, and the error each mistake gets.
+Nish reads the same `package.json` npm and Node read. It looks at a handful of fields, and ignores the rest. Some are Node's own fields that Nish reads in a narrower way: `exports`, `engines` and `version`. One is Nish's own: `nish`, whose settings come from the root package's manifest. This page lists every field Nish reads, what it does with each one, and the error each mistake gets.
 
 Two kinds of `package.json` matter, and they are read differently:
 
-- **The root package's** is the `package.json` nearest above the entry file you compile. Its `nish` field grants capabilities, adds a no-panic scope and names host modules. When no `package.json` is above the entry, there is no root manifest, and nothing on this page applies to your own code.
-- **A dependency's** is the `package.json` of a package under `node_modules`. Nish reads its `exports`, `engines` and `version`: which file to compile, which compiler version the package needs, and the version to name in an error. A `nish` field in a dependency's manifest is ignored. A package cannot grant itself anything.
+- **The root package's** is the `package.json` nearest above the entry file you compile. Its `nish` field grants capabilities, adds a no-panic scope, names host modules, picks the dialect, sizes the sandbox's ring pool and names the C to link. When no `package.json` is above the entry, there is no root manifest, and nothing on this page applies to your own code.
+- **A dependency's** is the `package.json` of a package under `node_modules`. Nish reads its `exports`, `engines` and `version`: which file to compile, which compiler version the package needs, and the version to name in an error. Of a dependency's `nish` field, only `link` and `compat` are read, and neither grants anything on its own: its `link` takes effect only for what the root's `nish.link.dependencies` grants it, and its `compat` only names the cause when the root's dialect refuses it. A package cannot grant itself anything.
 
 Every other field (`name`, `scripts`, `dependencies`, `type`, `bin` and the rest) is npm's and Node's business, and Nish leaves it alone. Install packages with npm as usual. Nish resolves imports from `node_modules` the way Node does.
 
@@ -30,13 +30,13 @@ A `"$schema"` key in the `package.json` itself would also work, but it replaces 
 
 ## The `nish` field
 
-Settings for the program you compile, read from the root package's manifest only.
+Settings for the program you compile, read from the root package's manifest. A dependency's `link` and `compat` are read too, and grant nothing on their own.
 
-Nish's own settings: one object, written once, whose keys are `noPanic`, `capabilities` and `host`, each written once.
+Nish's own settings: one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once.
 
 Any other key is refused, a misspelt `capabilites` included. So is a second `nish` field, a `nish` that is not an object, and a `package.json` that mentions `nish` but is not well-formed JSON. All of these are [NL3036](../diagnostics/nl3xxx.md#nl3036). A field the compiler cannot read in full would leave part of what the package says about itself unread, so it is refused rather than half applied.
 
-Only the root package's manifest is read for this field. A dependency's `nish` field is ignored.
+The root package's manifest is read for every key. A dependency's is read for two: `link`, which takes effect only for what the root's `nish.link.dependencies` grants it ([NL3061](../diagnostics/nl3xxx.md#nl3061) for the rest), and `compat`, which a root that does not allow it refuses ([NL3057](../diagnostics/nl3xxx.md#nl3057)). Every other key in a dependency's `nish` is ignored.
 
 ```json
 {
@@ -243,6 +243,159 @@ An entry naming the program's own entry file changes nothing: the entry is compi
     "host": [
       "web/host.ts"
     ]
+  }
+}
+```
+
+### compat
+
+**Type:** `true | ("nullish" | "optional-chaining" | "string-switch" | "for-of-string" | "optional-params" | "overloads")[]`
+
+The compatibility dialect: TypeScript features the strict dialect refuses, which this program accepts. `true` turns on every feature this compiler has; an array names them one by one, and `[]` is the dialect with no feature. The dialect also changes the number a bare `number` is. `--compat` and `--compat=<feature>,...` on the command line override it.
+
+A name that is no feature is [NL3056](../diagnostics/nl3xxx.md#nl3056), so a typo cannot quietly leave a feature off. A value that is neither `true` nor an array is [NL3036](../diagnostics/nl3xxx.md#nl3036).
+
+A program has one dialect, its root package's. A dependency that asks for more than the root allows is refused at its import ([NL3057](../diagnostics/nl3xxx.md#nl3057)). The [compat guide](../../guide/using-nish/compat.md) lists what each feature accepts.
+
+**Examples:** `["nullish", "optional-chaining"]`
+
+```json
+{
+  "nish": {
+    "compat": true
+  }
+}
+```
+
+### netRings
+
+**Type:** `integer`
+
+How many io_uring rings `--sandbox` makes for `NET_LISTEN_RING` listeners before it confines the program, when `main` reaches `net` but not `process.spawn`. It counts rings, not listeners, and is 1 when it is not written. Read from the root package only.
+
+Anything but an integer from 1 to 64 is [NL3058](../diagnostics/nl3xxx.md#nl3058). The [sandbox guide](../../guide/using-nish/sandbox.md#ring-listeners) says how to size it.
+
+**Constraints:** `minimum: 1`, `maximum: 64`
+
+```json
+{
+  "nish": {
+    "netRings": 2
+  }
+}
+```
+
+### link
+
+**Type:** `object`
+
+The C a native link adds: libraries passed to the linker as `-l<name>`, and `.c` files compiled with clang beside the runtime. `nish run` and `--link` link it on the native profiles (`speed`, `size`, `debug`); every compile that emits IR checks it.
+
+A shape other than this one, an unknown key included, is [NL3059](../diagnostics/nl3xxx.md#nl3059). A library name or source path that breaks the rules below is [NL3060](../diagnostics/nl3xxx.md#nl3060). A link that leaves a C function undefined, because a library is missing or does not define it, is [NL3063](../diagnostics/nl3xxx.md#nl3063).
+
+A dependency's `link` is read too, but each library and source in it takes effect only once the root grants it under `dependencies`; an entry not granted is [NL3061](../diagnostics/nl3xxx.md#nl3061). The dependency still needs the `ffi` capability to call its C. The [interop guide](../../guide/using-nish/interop.md) walks through it.
+
+**Examples:** `{"dependencies": {"zstd-bind": {"libraries": ["zstd"], "sources": ["c/shim.c"]}}}`
+
+```json
+{
+  "nish": {
+    "link": {
+      "libraries": [
+        "z"
+      ],
+      "sources": [
+        "c/mylib.c"
+      ]
+    }
+  }
+}
+```
+
+#### libraries
+
+**Type:** `string[]`
+
+Libraries to link, each passed to the linker as `-l<name>`, so `"z"` links `libz`. A name is letters, digits, `_`, `.`, `+` and `-`, starting with a letter, digit or `_`, so nothing in it can become a flag. There is no pkg-config: a library outside the linker's default search path is found only when `LIBRARY_PATH` names its directory.
+
+```json
+{
+  "nish": {
+    "link": {
+      "libraries": [
+        "z",
+        "sqlite3"
+      ]
+    }
+  }
+}
+```
+
+#### sources
+
+**Type:** `string[]`
+
+C files to compile beside the runtime, each a `.c` file inside the package by its path relative to `package.json`. A path that is absolute, holds a backslash or a character outside printable ASCII, starts with `-`, climbs out with `..`, or resolves outside the package through a symbolic link is refused.
+
+```json
+{
+  "nish": {
+    "link": {
+      "sources": [
+        "c/mylib.c"
+      ]
+    }
+  }
+}
+```
+
+#### dependencies
+
+**Type:** `Record<string, object>`
+
+Root package only: for each dependency, by package name, the libraries and sources of its own `nish.link` that it may use. Granting an entry does not add it: the dependency's own `nish.link` still has to name it. A `dependencies` key in a dependency's `link` is NL3059.
+
+##### libraries
+
+**Type:** `string[]`
+
+Libraries to link, each passed to the linker as `-l<name>`, so `"z"` links `libz`. A name is letters, digits, `_`, `.`, `+` and `-`, starting with a letter, digit or `_`, so nothing in it can become a flag. There is no pkg-config: a library outside the linker's default search path is found only when `LIBRARY_PATH` names its directory.
+
+```json
+{
+  "nish": {
+    "link": {
+      "dependencies": {
+        "<name>": {
+          "libraries": [
+            "z",
+            "sqlite3"
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+##### sources
+
+**Type:** `string[]`
+
+C files to compile beside the runtime, each a `.c` file inside the package by its path relative to `package.json`. A path that is absolute, holds a backslash or a character outside printable ASCII, starts with `-`, climbs out with `..`, or resolves outside the package through a symbolic link is refused.
+
+```json
+{
+  "nish": {
+    "link": {
+      "dependencies": {
+        "<name>": {
+          "sources": [
+            "c/mylib.c"
+          ]
+        }
+      }
+    }
   }
 }
 ```

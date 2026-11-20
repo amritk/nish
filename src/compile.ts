@@ -1804,6 +1804,7 @@ const commandMain = (): number => {
     report(compilation, json)
     return 1
   }
+  links.foreign = compilation.foreignNames()
   if (runMode && watchStateFile.length > 0) {
     const cached = cachedBinary(
       emitted,
@@ -1821,10 +1822,10 @@ const commandMain = (): number => {
     if (cached.status === 0) {
       writeFileSync(watchStateFile, watchState(compilation, cached.binary, isCheckout(pkg)))
     }
-    return cached.status
+    return reportMissingLink(compilation, links, json, cached.status)
   }
   if (runMode) {
-    return runProgram(
+    const ran = runProgram(
       emitted,
       pkg,
       basenameWithout(roots[0], ".ts"),
@@ -1838,6 +1839,7 @@ const commandMain = (): number => {
       json,
       runArgsFrom
     )
+    return reportMissingLink(compilation, links, json, ran)
   }
   const stems: string[] = []
   const paths: string[] = []
@@ -1870,7 +1872,7 @@ const commandMain = (): number => {
   if (link.length === 0) {
     return 0
   }
-  return linkProgram(
+  const linked = linkProgram(
     outputs,
     [],
     pkg,
@@ -1887,6 +1889,26 @@ const commandMain = (): number => {
     json,
     false
   )
+  return reportMissingLink(compilation, links, json, linked)
+}
+
+/**
+ * `status`, unless the link left a `declare function` undefined: then that is
+ * reported at its declaration (NL3063) and the compile answers 1, as any
+ * other diagnostic does.
+ */
+const reportMissingLink = (
+  compilation: Compilation,
+  links: LinkSet,
+  json: boolean,
+  status: number
+): number => {
+  if (links.missing.length === 0) {
+    return status
+  }
+  compilation.reportMissingForeign(links.missing)
+  report(compilation, json)
+  return 1
 }
 
 /** `:`, the byte `$PATH` is cut on. */
@@ -2940,10 +2962,14 @@ const buildIntoCache = (
  * The script's own stdout — one `<exe>: <n> bytes (<profile>)` line — is sent
  * to `/dev/null` and re-emitted here with stage0's `linked ` prefix, from the
  * size of the file it just wrote, so both compilers print the same line on the
- * same stream. Its stderr is inherited, so a clang diagnostic reaches the
- * caller as it happens rather than after the link has finished. `quiet` drops
- * that line for `run`, whose stderr belongs to the program it is about to
- * start.
+ * same stream. Its stderr goes through `tee`, so a clang diagnostic reaches
+ * the caller as it happens rather than after the link has finished, and a
+ * copy is kept beside the output for a failed link to read: an undefined
+ * symbol that a `declare function` names (`links.foreign`) is put in
+ * `links.missing` and answered with 1 and no message of its own, for the
+ * caller to report at the declaration (NL3063, `reportMissingForeign`).
+ * `quiet` drops that line for `run`, whose stderr belongs to the program it
+ * is about to start.
  *
  * `irs` is the IR of each of `outputs`, in their order, when the caller wants
  * the module cache (`nish run`), and empty otherwise; see `stageModules`.
@@ -3005,14 +3031,19 @@ const linkProgram = (
     return 3
   }
   const runtime = cached.runtime
-  // `bash -c 'exec "$@" >/dev/null' <argv0> bash <script> ...` runs the script
-  // with its stdout dropped and nothing else changed; `$0` is the name the
-  // shell would use in its own errors.
+  // `bash -c '...' <argv0> <errors> bash <script> ...` runs the script with
+  // its stdout dropped and its stderr copied into `<errors>` on the way to
+  // ours; `$0` is the name the shell would use in its own errors, and the
+  // script's status is the pipeline's first.
+  const errors = `${link}.link-errors`
+  links.missing = []
   const argv: string[] = []
   argv.push("bash")
   argv.push("-c")
-  argv.push('exec "$@" >/dev/null')
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: a bash script for bash -c; the expansion is bash's
+  argv.push('e=$1; shift; "$@" 2>&1 >/dev/null | tee -- "$e" >&2; exit "${PIPESTATUS[0]}"')
   argv.push("nish")
+  argv.push(errors)
   argv.push("bash")
   argv.push(script)
   for (const file of outputs) {
@@ -3056,6 +3087,14 @@ const linkProgram = (
     argv.push(flag)
   }
   const status = spawnSync(argv)
+  const said = readFileSyncOrNull(errors)
+  spawnSync(["rm", "-f", "--", errors])
+  if (status !== 0 && said !== null) {
+    links.missing = undefinedSymbols(said, links.foreign)
+    if (links.missing.length > 0) {
+      return 1
+    }
+  }
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
     // An instrumented link needs compiler-rt's profile runtime, which
@@ -3082,6 +3121,41 @@ const linkProgram = (
     console.error(`linked ${link}: ${binary.length} bytes (${profile})`)
   }
   return 0
+}
+
+/**
+ * The symbols of `wanted` that a linker's `said` reports undefined, each once
+ * and in the order it first reports them: lld's `undefined symbol: <name>`
+ * and GNU ld's ``undefined reference to `<name>'``.
+ */
+const undefinedSymbols = (said: string, wanted: string[]): string[] => {
+  const out: string[] = []
+  let start = 0
+  while (start < said.length) {
+    let end = said.indexOf("\n", start)
+    if (end < 0) {
+      end = said.length
+    }
+    const line = said.substring(start, end)
+    start = end + 1
+    let name = ""
+    const lld = line.indexOf("undefined symbol: ")
+    const gnu = line.indexOf("undefined reference to `")
+    if (lld >= 0) {
+      name = line.substring(lld + 18)
+      while (name.endsWith(" ") || name.endsWith("\r")) {
+        name = name.substring(0, name.length - 1)
+      }
+    } else if (gnu >= 0) {
+      const rest = line.substring(gnu + 24)
+      const close = rest.indexOf("'")
+      name = close >= 0 ? rest.substring(0, close) : ""
+    }
+    if (name.length > 0 && wanted.indexOf(name) >= 0 && out.indexOf(name) < 0) {
+      out.push(name)
+    }
+  }
+  return out
 }
 
 /**

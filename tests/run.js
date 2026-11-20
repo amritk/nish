@@ -7907,6 +7907,11 @@ const runLinkProgram = async (name) => {
         }
       }
     }
+    // A module of `declare function`s only (`nish c-import`'s) defines
+    // nothing for its importer to declare: when the entry (the module that
+    // defines `main`) holds every define, zero declares is the right count.
+    const entryFile = defines.get("main")?.file
+    const entryDefines = [...defines.values()].filter((d) => d.file === entryFile).length
     let declares = 0
     const mismatches = []
     for (const m of modules) {
@@ -7925,7 +7930,7 @@ const runLinkProgram = async (name) => {
     }
     expect(
       `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
-      declares > 0 && mismatches.length === 0,
+      (declares > 0 || defines.size === entryDefines) && mismatches.length === 0,
       mismatches.join("\n") || "(no cross-module declares found)"
     )
 
@@ -46302,15 +46307,19 @@ if (!only || "c-import".includes(only)) {
     check(
       "c-import: sqlite3.h binds sqlite3_open with an out class and lists what it cannot bind",
       sqlite.status === 0 &&
-        sqliteText.includes("declare function sqlite3_open(filename: string, ppDb: OutPtr): i32\n") &&
+        sqliteText.includes("export declare function sqlite3_open(filename: string, ppDb: OutPtr): i32\n") &&
         sqliteText.includes("export const SQLITE_OK: i32 = 0\n") &&
         sqliteText.includes(" *   sqlite3_exec: parameter `callback` is a function pointer\n") &&
         sqliteText.includes(" *   SQLITE_TRANSIENT: not an integer constant\n"),
       shown(sqlite)
     )
+    // The program imports the module as written, uncopied: its declarations
+    // are `export`ed (WP66).
+    const sqliteMain = path.join(cImportDir, "sqlite-main.ts")
     fs.writeFileSync(
-      sqliteModule,
-      `${sqliteText}
+      sqliteMain,
+      `import { OutPtr, SQLITE_OK, SQLITE_VERSION, sqlite3_close, sqlite3_libversion, sqlite3_open } from "./sqlite3"
+
 export function main(): i32 {
   const out = new OutPtr()
   if (sqlite3_open(":memory:", out) !== SQLITE_OK) {
@@ -46327,9 +46336,9 @@ export function main(): i32 {
 }
 `
     )
-    const sqliteRun = spawnSync(NISH, ["run", sqliteModule], { encoding: "utf8" })
+    const sqliteRun = spawnSync(NISH, ["run", sqliteMain], { encoding: "utf8" })
     check(
-      "c-import: the sqlite3.h module links and opens an in-memory database",
+      "c-import: a program that imports the sqlite3.h module links and opens an in-memory database",
       sqliteRun.status === 0 && sqliteRun.stdout === "version matches\nclose 0\n",
       shown(sqliteRun)
     )
@@ -46349,7 +46358,7 @@ export function main(): i32 {
       [["basic.h", "-o"], 2, "c-import: -o needs a value"],
       [["basic.h", "--target", "riscv64-unknown-linux-gnu", "-o", out], 2, "c-import: unknown target riscv64"],
       [["missing.h", "-o", out], 1, "c-import: cannot read missing.h"],
-      [["basic.h", "--overrides", "missing.json", "-o", out], 1, "c-import: cannot read missing.json"],
+      [["basic.h", "--overrides", "missing.json", "-o", out], 1, "c-import: overrides: cannot read missing.json"],
       [
         ["basic.h", "-o", path.join(cImportDir, "no-such-dir", "out.ts")],
         1,
@@ -46492,7 +46501,44 @@ export function main(): i32 {
         run.status === 1 && run.stderr.includes(message) && !fs.existsSync(out),
         shown(run)
       )
+      // Under `--json` the same refusal is one object on stdout, nothing on
+      // stderr, and every mistake in the file carries NL3064 and names it.
+      const asJson = cImport(["buffers.h", "--overrides", file, "--json", "-o", out])
+      let got = null
+      try {
+        got = JSON.parse(asJson.stdout)
+      } catch {}
+      check(
+        `c-import --json: the override file ${json} is refused as NL3064 on stdout`,
+        asJson.status === 1 &&
+          asJson.stderr === "" &&
+          asJson.stdout.trim().split("\n").length === 1 &&
+          got !== null &&
+          got.code === "NL3064" &&
+          got.severity === "error" &&
+          got.file === file &&
+          got.message.startsWith("overrides: ") &&
+          got.message.includes(message) &&
+          !fs.existsSync(out),
+        shown(asJson)
+      )
     }
+    // A refusal that is not the override file's is JSON too, without its code.
+    const missingJson = cImport(["missing.h", "--json", "-o", out])
+    let missingGot = null
+    try {
+      missingGot = JSON.parse(missingJson.stdout)
+    } catch {}
+    check(
+      "c-import --json: a header it cannot read is one object on stdout, not NL3064",
+      missingJson.status === 1 &&
+        missingJson.stderr === "" &&
+        missingGot !== null &&
+        missingGot.message === "cannot read missing.h" &&
+        missingGot.code !== "NL3064" &&
+        missingGot.file === undefined,
+      shown(missingJson)
+    )
 
     // A count written through a plain `char *` follows the target's `char`:
     // refused where `char` is signed, the `OutU8` out class on aarch64, where
@@ -46585,6 +46631,23 @@ export function main(): i32 {
         "buffers.h",
         '{ "functions": { "db_open": { "out": { "nullable": true } } } }',
         'is bound as `OutPtr` already, so "nullable" changes nothing',
+      ],
+      // An `unsigned char *` a buffer counts is written as `OutU8`, whichever
+      // key comes first; one no buffer counts stays `CPtr | null`.
+      [
+        "refuse.h",
+        '{ "functions": { "b_pair": { "b": { "nullable": true }, "a": { "buffer": "b" } } } }',
+        '`b_pair` parameter `b` is bound as `OutU8` already, so "nullable" changes nothing',
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "b_pair": { "a": { "buffer": "b" }, "b": { "nullable": true } } } }',
+        '`b_pair` parameter `b` is bound as `OutU8` already, so "nullable" changes nothing',
+      ],
+      [
+        "refuse.h",
+        '{ "functions": { "b_pair": { "b": { "nullable": true } } } }',
+        '`b_pair` parameter `b` is bound as `CPtr | null` already, so "nullable" changes nothing',
       ],
       [
         "refuse.h",

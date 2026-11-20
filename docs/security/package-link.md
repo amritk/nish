@@ -33,12 +33,22 @@ list is not in the run cache key).
 well as under `nish run` and `--link`. `--fix`, `--emit-ast`, `--emit-ts` and
 `--emit-checked` stop before it and link nothing.
 
+NL3063 is reported after a failed link. `linkProgram` copies the link's stderr,
+through `tee`, to `<output>.link-errors` beside the output and removes the
+file once it is read. `undefinedSymbols` takes from it only the names lld
+(`undefined symbol: `) or GNU ld (``undefined reference to ` ``) reports
+that are also the C name of a `declare function` in the program
+(`Compilation.foreignNames`), so the report names only declarations the
+program already has: a library's own undefined symbols stay a failed link
+(exit 3).
+
 ## Scope
 
 | File | Functions |
 | --- | --- |
 | `src/manifest.ts` | `manifestNish` (the `link` key), `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem` (NL3059, NL3060) |
-| `src/compile.ts` | `readLinkSet`, `linkPackages`, `refuseUngranted` (NL3061), `addLinkRequest`, `readLinkIncludes`, `linkProgram` (the `--link-lib` and `--link-source` arguments) |
+| `src/compile.ts` | `readLinkSet`, `linkPackages`, `refuseUngranted` (NL3061), `addLinkRequest`, `readLinkIncludes`, `linkProgram` (the `--link-lib` and `--link-source` arguments, the copy of the link's stderr), `undefinedSymbols`, `reportMissingLink` (NL3063) |
+| `src/compilation.ts` | `foreignNames`, `reportMissingForeign` (NL3063) |
 | `src/run-cache.ts` | `LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey` |
 | `scripts/build.sh` | `--link-lib`, `--link-source`, `--link-depends` |
 

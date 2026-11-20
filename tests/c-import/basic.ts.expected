@@ -3,15 +3,15 @@
 // Data model: LP64
 // Regenerate: nish c-import basic.h --target x86_64-unknown-linux-gnu -o basic.ts
 
-declare class OutPtr {
+export declare class OutPtr {
   value: CPtr | null
 }
 
-declare class OutI32 {
+export declare class OutI32 {
   value: i32
 }
 
-declare class point {
+export declare class point {
   x: i32
   y: i64
   z: f64
@@ -19,7 +19,7 @@ declare class point {
   cb: CPtr | null
 }
 
-declare class arr {
+export declare class arr {
   a: Record<integer<0, 3>, i32>
 }
 
@@ -34,9 +34,9 @@ export const KS: string = "hello"
 export const KL: i64 = 1099511627776
 export const KU: u32 = 3000000000
 
-declare function f1(s: string, buf: CPtr, n: u64, out: OutI32, pp: OutPtr, p: point, c: i32, e: i32): u64
-declare function f2(): string | null
-declare function f6(): i64
+export declare function f1(s: string, buf: CPtr, n: u64, out: OutI32, pp: OutPtr, p: point, c: i32, e: i32): u64
+export declare function f2(): string | null
+export declare function f6(): i64
 
 /* Not bound:
  *   struct opaque: stays a `CPtr`: `f1` takes a pointer to a pointer to it, which only a `CPtr` can stand for

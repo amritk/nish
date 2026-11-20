@@ -116,8 +116,9 @@ pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 ## 4. What S1 refuses
 
 A declared function with a body (`reject_ffi_body`), an exported one
-(`reject_ffi_export`, since `export` offers a function this module defines), a
-and a generic one (`reject_ffi_generic`) are each refused by name. A `string`
+(`reject_ffi_export`, since `export` offers a function this module defines;
+WP66 later let `export` offer it to the program's other modules), and a
+generic one (`reject_ffi_generic`) are each refused by name. A `string`
 parameter was refused too (`reject_ffi_string_param`) until S3.1 accepted it,
 and a `string` return (`reject_ffi_string_return`) until S3.2 did; a
 `string[]` is refused in either position (`reject_ffi_string_array_param`,

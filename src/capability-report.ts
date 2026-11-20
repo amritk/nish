@@ -22,6 +22,7 @@ import { CLI } from "./branding"
 import {
   argumentCapabilities,
   builtinCapability,
+  CAP_FFI,
   CAPABILITY_COUNT,
   capabilityIndex,
   capabilityName,
@@ -80,7 +81,8 @@ const programCapabilities = (compilation: Compilation, facts: FactsTable): i32 =
   let mask = 0
   for (const sig of entry.checker.program.functions) {
     if (sig.exported && sig.definedIn(entry.checker.program.source)) {
-      mask = mask | capsOf(facts, sig)
+      // An exported `declare function` hands its importer C to call (WP66).
+      mask = mask | (sig.foreign() ? 1 << CAP_FFI : capsOf(facts, sig))
     }
   }
   return mask
@@ -806,7 +808,9 @@ export const writeCapabilityReport = (compilation: Compilation, file: string, cp
       const symbols: string[] = []
       const order: i32[] = []
       for (const sig of unitProgram.functions) {
-        if (sig.exported && sig.definedIn(unitProgram.source)) {
+        // An exported `declare function` is C's, so the module defines no
+        // function by it; its caller is where `ffi` is attributed (WP66).
+        if (sig.exported && sig.definedIn(unitProgram.source) && !sig.foreign()) {
           order.push(listed.length)
           listed.push(sig)
           names.push(sig.sourceName)

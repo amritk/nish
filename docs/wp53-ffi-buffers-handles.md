@@ -1073,8 +1073,9 @@ design, decided on a program that needs them.
   `reject_ffi_handle_deny`.
 
 **`--emit-header`, `--emit-dts` and `--emit-napi`.**
-- *Buffers.* A buffer parameter on a `declare function` is never exported
-  (`reject_ffi_export`, existing), so no generator renders the declaration.
+- *Buffers.* A `declare function` is never rendered by a generator: it was
+  refused `export` until WP66, and an exported one is offered to the
+  program's other modules only, so no generator renders its buffer parameter.
   The generators do see what a buffer call does to an exported program
   function's own `u8[]` parameter
   ([wp30-bytes-interop.md](wp30-bytes-interop.md)): it is written, so it

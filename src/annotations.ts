@@ -20,7 +20,7 @@ import { LANGUAGE } from "./branding"
 import { StringSet } from "./map"
 import { CheckContext, ExportedLayoutUse, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo, CheckedProgram, STRUCT_CLASS, StructInfo } from "./program"
-import { layoutClass, rejectOpaque } from "./structs"
+import { layoutClass, noteStructNames, rejectOpaque } from "./structs"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import { REGION_SPECIFIER, SIMD_SPECIFIER, simdMaskWidth } from "./nish-modules"
@@ -214,16 +214,37 @@ export const deferExportedLayout = (ctx: CheckContext, type: i32, position: stri
  * those is a type the generators would have to describe.
  */
 export const checkExportedLayouts = (ctx: CheckContext): void => {
+  const later: ExportedLayoutUse[] = []
   for (const use of ctx.exportedLayoutUses) {
     ctx.errored = false
+    // A class another module declares is registered here once every module is
+    // bound, after signatures: its use waits for the pass after that (WP66).
+    if (namesUnboundStruct(ctx.program, ctx.table, use.type)) {
+      later.push(use)
+      continue
+    }
     const direct = layoutClass(ctx.program, ctx.table, ctx.table.stripNull(use.type))
     const layout = direct !== null ? direct : heldLayout(ctx.program, ctx.table, use.type, new StringSet())
     if (layout !== null) {
       refuseExportedLayout(ctx, use, layout, direct !== null)
     }
   }
-  ctx.exportedLayoutUses = []
+  ctx.exportedLayoutUses = later
   ctx.errored = false
+}
+
+/** Whether `type` names a struct this module has not registered yet: an import still unbound. */
+const namesUnboundStruct = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  const names = new StringSet()
+  noteStructNames(table, type, names)
+  let i = 0
+  while (i < names.size()) {
+    if (program.struct(names.at(i)) === null) {
+      return true
+    }
+    i = i + 1
+  }
+  return false
 }
 
 /**
@@ -241,7 +262,7 @@ const refuseExportedLayout = (
     : `\`${ctx.table.typeName(use.type)}\` holds a \`declare class ${layout.name}\` and`
   ctx.error(
     use.node,
-    `${what} cannot be ${use.position}: a C struct layout stays in the module that declares it and is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
+    `${what} cannot be ${use.position}: a C struct layout is lent only to a \`declare function\`, so no header, \`.d.ts\` or N-API binding describes it`
   )
 }
 

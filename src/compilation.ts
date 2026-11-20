@@ -1949,7 +1949,7 @@ export class Compilation {
    * The root package's `"nish"` field, read strictly (`manifestNish`), or null
    * when there is no manifest or the field is refused: it is one object,
    * written once, whose only keys are `noPanic`, `capabilities`, `host`,
-   * `compat` and `netRings`, and anything else is NL3036 where `package.json` writes it, so that nothing
+   * `compat`, `netRings` and `link`, and anything else is NL3036 where `package.json` writes it, so that nothing
    * the reader cannot vouch for is honoured, a policy least of all.
    */
   readRootNish(source: SourceFile | null): NishManifest | null {
@@ -1964,7 +1964,7 @@ export class Compilation {
       source,
       nish.problemStart,
       nish.problemEnd,
-      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\`, \`host\`, \`compat\` and \`netRings\`, each written once`
+      `${nish.problem}: the root package's \`${PACKAGE_CONDITION}\` field is one object, written once, whose keys are \`noPanic\`, \`capabilities\`, \`host\`, \`compat\`, \`netRings\` and \`link\`, each written once`
     )
     return null
   }
@@ -4081,6 +4081,44 @@ export class Compilation {
         const at = declared.get(sig.name, -1)
         if (at >= 0 && at < declaredModules.length) {
           this.reportForeignShadow(unit, sig, declaredModules[at])
+        }
+      }
+    }
+  }
+
+  /** The C name of every `declare function` in the program, once each: what a failed link is read against (NL3063). */
+  foreignNames(): string[] {
+    const out: string[] = []
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() && sig.definedIn(unit.source) && out.indexOf(sig.name) < 0) {
+          out.push(sig.name)
+        }
+      }
+    }
+    return out
+  }
+
+  /**
+   * NL3063, at the first declaration of each of `missing`: the link left that
+   * C function undefined, so no library or C file `nish.link` names defines
+   * it. The linker's own lines have already reached stderr.
+   */
+  reportMissingForeign(missing: string[]): void {
+    for (const name of missing) {
+      let found = false
+      for (const unit of this.modules) {
+        for (const sig of unit.checker.program.functions) {
+          if (!found && sig.foreign() && sig.definedIn(unit.source) && sig.name === name) {
+            found = true
+            const at = nameNode(sig)
+            this.sink.report(
+              unit.source,
+              at.start,
+              at.end,
+              `C function \`${name}\` is declared here, but nothing the program links defines it; name the library that does in \`nish.link.libraries\` of package.json, or your own C file in \`nish.link.sources\``
+            )
+          }
         }
       }
     }

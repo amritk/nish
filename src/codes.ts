@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 995
+export const RULE_COUNT: i32 = 997
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -389,8 +389,6 @@ const diagnosticRules = (): string[] => [
   "NL2354",
   ", and a buffer window lends only `u8[]`, `u16[]`, `u32[]`, `i32[]`, `f32[]` or `f64[]` (or the typed array of each): copy the values into one of those",
   "NL2681",
-  ": a C struct layout stays in the module that declares it and is lent only to a `declare function`, so no header, `.d.ts` or N-API binding describes it",
-  "NL2756",
   "` is set again while it may still hold a `Secret`: a `Secret` field is set once, in its class's constructor, and the key it held would be lost unwiped",
   "NL2543",
   "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
@@ -467,6 +465,8 @@ const diagnosticRules = (): string[] => [
   "NL2372",
   "` does not depend on its value; one of them is probably meant to be something else (to mean it, copy the value to a second `const` first)",
   "NL2715",
+  "` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once",
+  "NL3036",
   "` has no field whose type is one enum member: `tag` is the string a tagged union's variant writes its tag as, so only a variant gives one",
   "NL2724",
   "`: which fields a spread copies depends on the variant it holds at run time, so narrow it to one variant first, or set the fields by name",
@@ -513,8 +513,6 @@ const diagnosticRules = (): string[] => [
   "NL2661",
   ", and this analysis cannot see what it does with memory, so nothing proves that what the block allocated is gone when it releases",
   "NL2425",
-  "` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once",
-  "NL3036",
   "` is `async`: a call to it is awaited where it is made (`await`), or handed to `spawn` or `awaitAll` — a promise is never a value",
   "NL2645",
   "`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds",
@@ -637,6 +635,8 @@ const diagnosticRules = (): string[] => [
   "NL2785",
   "Spread arguments are not supported: pass the array itself to a parameter of array type, or write each argument",
   "NL2606",
+  ": a C struct layout is lent only to a `declare function`, so no header, `.d.ts` or N-API binding describes it",
+  "NL2756",
   "` and cannot have a default in this version: a default is a number, a `boolean`, a `string` or an enum member",
   "NL2607",
   "` can leave this `wipe()` unwiped: a holder's `wipe()` ends every `Secret` field it holds itself, with `wipe(",
@@ -1191,6 +1191,8 @@ const diagnosticRules = (): string[] => [
   "NL2765",
   "A `Map` cannot be destructured; read each value with `get`",
   "NL2780",
+  "is declared here, but nothing the program links defines it",
+  "NL3063",
   ", and a declared C function takes scalars and `CPtr` only",
   "NL2322",
   "; compare a signed value, or against a bound other than 0",
@@ -1982,6 +1984,8 @@ const diagnosticRules = (): string[] => [
   "NL2117",
   "Cannot push ",
   "NL2186",
+  "overrides: ",
+  "NL3064",
 ]
 
 /**

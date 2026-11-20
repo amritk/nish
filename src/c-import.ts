@@ -22,9 +22,10 @@
 // The security record is `docs/security/c-import.md`.
 
 import { CLI } from "./branding"
+import { codeFor } from "./codes"
 import { StringMap, StringSet } from "./map"
 import { basename, dirname } from "./paths"
-import { StringBuilder, hexOfI64, splitByte } from "./strings"
+import { StringBuilder, hexOfI64, jsonQuote, splitByte } from "./strings"
 import { resolveTarget } from "./target"
 import { CJ_ARRAY, CJ_BOOLEAN, CJ_NUMBER, CJ_OBJECT, CJ_STRING, CJson } from "./c-import-json"
 import { C_IMPORT_MARKER, DATA_MODEL_LINE, dataModelOf } from "./c-import-model"
@@ -36,7 +37,7 @@ const PROBE_BATCH: i32 = 64
 const PROBE_PASSES: i32 = 8
 
 /** The usage line. */
-const USAGE: string = "c-import <header> [--overrides <file>] [--target <triple>] -o <file>"
+const USAGE: string = "c-import <header> [--overrides <file>] [--target <triple>] [--json] -o <file>"
 
 // What a C type's innermost, unpointed-to part is.
 const BASE_VOID: i32 = 0
@@ -769,6 +770,8 @@ class CImportArgs {
   overrides: string = ""
   target: string = "host"
   out: string = ""
+  /** `--json`: a refusal is one JSON object on stdout rather than a line on stderr. */
+  json: boolean = false
 }
 
 /** A usage error: the message and the usage line, status 2. */
@@ -777,6 +780,23 @@ const usageError = (args: CImportArgs, message: string): CImportArgs => {
   console.error(`usage: ${CLI} ${USAGE}`)
   args.status = 2
   return args
+}
+
+/**
+ * A refusal, `status` its exit status: `c-import: <message>` on stderr, or
+ * under `--json` one object on stdout with the code the registry gives it
+ * (NL3064 for every mistake in the overrides file, which is its `file`).
+ */
+const refuse = (args: CImportArgs, message: string, status: i32): i32 => {
+  if (!args.json) {
+    console.error(`c-import: ${message}`)
+    return status
+  }
+  const file = message.startsWith("overrides: ") ? `"file":${jsonQuote(args.overrides)},` : ""
+  console.log(
+    `{${file}"severity":"error","code":"${codeFor("error", message)}","message":${jsonQuote(message)}}`
+  )
+  return status
 }
 
 /** Reads `nish c-import`'s arguments, which follow `c-import` in `argv`. */
@@ -794,11 +814,15 @@ const parseArgs = (argv: string[]): CImportArgs => {
         "  --overrides <file>  the JSON that names what the header cannot say (buffers, nullability)"
       )
       console.log("  --target <triple>   the target whose ABI the module is for (default: host)")
+      console.log("  --json              a refusal is one JSON object on stdout, with its NL code")
       console.log("  -o <file>           the module to write; it may not be the header itself")
       args.status = 0
       return args
     }
-    if (arg === "-o" || arg === "--overrides" || arg === "--target") {
+    if (arg === "--json") {
+      args.json = true
+      i++
+    } else if (arg === "-o" || arg === "--overrides" || arg === "--target") {
       if (i + 1 >= argv.length) {
         return usageError(args, `${arg} needs a value`)
       }
@@ -2354,7 +2378,7 @@ class Importer {
   readOverrides(path: string, headerName: string): void {
     const text = readFileSyncOrNull(path)
     if (text === null) {
-      this.fail(`cannot read ${path}`, 1)
+      this.fail(`overrides: cannot read ${path}`, 1)
       return
     }
     this.doc.clear()
@@ -2567,6 +2591,43 @@ class Importer {
           this.readParamOverride(f, o, key, this.doc.at(body, j))
         }
       }
+      if (this.failure.length === 0) {
+        this.refuseNullableCounts(f, o)
+      }
+    }
+  }
+
+  /**
+   * Refuses "nullable" on a parameter `readParamOverride` let through because
+   * a buffer might name it as its count, naming the type the module writes:
+   * `OutU8` when a buffer does, `CPtr | null` when none does.
+   */
+  refuseNullableCounts(f: CFunc, o: FnOverride): void {
+    for (let p = 0; p < o.params.length; p++) {
+      if (!o.nullables[p]) {
+        continue
+      }
+      const at = f.paramNames.indexOf(o.params[p])
+      if (at < 0 || at >= f.paramTypes.length) {
+        continue
+      }
+      const t = this.resolve(f.paramTypes[at])
+      let counted = false
+      for (let b = 0; b < o.buffers.length; b++) {
+        if (o.buffers[b] === o.params[p]) {
+          counted = true
+        }
+      }
+      const bound = this.paramType(t, false, counted)
+      const widened = this.paramType(t, true, counted)
+      this.pendingOut = []
+      if (bound === widened) {
+        this.fail(
+          `overrides: ${this.paramWhere(f, o.params[p])} is bound as \`${bound}\` already, so "nullable" changes nothing`,
+          1
+        )
+        return
+      }
     }
   }
 
@@ -2692,8 +2753,11 @@ class Importer {
       // nullable, an out class or a refused type would ignore it.
       const before = this.paramType(t, false, false)
       const after = this.paramType(t, true, false)
+      // An `unsigned char *` a buffer names as its count is an `OutU8`, so its
+      // refusal waits until every parameter is read (`refuseNullableCounts`).
+      const asCount = this.paramType(t, false, true)
       this.pendingOut = []
-      if (before.startsWith("!") || before === after) {
+      if ((before.startsWith("!") || before === after) && asCount === before) {
         this.fail(
           `overrides: ${this.paramWhere(f, param)} is bound as \`${before.startsWith("!") ? "not bound" : before}\` already, so "nullable" changes nothing`,
           1
@@ -2905,7 +2969,7 @@ class Importer {
       o !== null && o.returnMode === RETURN_OWNED
         ? `// The result is owned: free it with ${this.word(o.ownedBy, AS_IDENT)}.\n`
         : ""
-    return `${owned}declare function ${this.word(f.name, AS_IDENT)}(${params.toText()}): ${ret}`
+    return `${owned}export declare function ${this.word(f.name, AS_IDENT)}(${params.toText()}): ${ret}`
   }
 
   /** Whether `f`'s result type is marked `_Nonnull`, as spelled or through a typedef. */
@@ -2965,7 +3029,7 @@ class Importer {
       }
       fields.push(`  ${this.word(r.fieldNames[i], AS_IDENT)}: ${this.fieldType(t)}\n`)
     }
-    out.add(`declare class ${this.word(r.className, AS_IDENT)} {\n`)
+    out.add(`export declare class ${this.word(r.className, AS_IDENT)} {\n`)
     for (let i = 0; i < fields.length; i++) {
       out.add(fields[i])
     }
@@ -3248,7 +3312,7 @@ class Importer {
           name === "OutPtr"
             ? "CPtr | null"
             : `${String.fromCharCode(name.charCodeAt(3) + 32)}${name.slice(4)}`
-        out.add(`declare class ${name} {\n  value: ${type}\n}\n\n`)
+        out.add(`export declare class ${name} {\n  value: ${type}\n}\n\n`)
       }
     }
 
@@ -3265,7 +3329,7 @@ class Importer {
           reportLines.push(r.line)
         }
       } else if (r.opaque) {
-        out.add(`declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
+        out.add(`export declare class ${this.word(r.className, AS_IDENT)} {}\n\n`)
         names.set(r.className, owners.length)
         owners.push(`the struct \`${r.key}\``)
       } else if (r.opaqueWhy.length > 0) {
@@ -3360,8 +3424,7 @@ export const cImport = (argv: string[]): i32 => {
   }
   const headerAbs = realpathSync(args.header)
   if (headerAbs === null) {
-    console.error(`c-import: cannot read ${args.header}`)
-    return 1
+    return refuse(args, `cannot read ${args.header}`, 1)
   }
   if (
     unsafePath(headerAbs) ||
@@ -3369,25 +3432,23 @@ export const cImport = (argv: string[]): i32 => {
     unsafePath(args.overrides) ||
     unsafePath(args.out)
   ) {
-    console.error(
-      "c-import: a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII, which the module cannot carry"
+    return refuse(
+      args,
+      "a path holds a quote, a backslash, a comment delimiter or a byte that is not printable ASCII, which the module cannot carry",
+      1
     )
-    return 1
   }
   const outAbs = realpathSync(args.out)
   if (outAbs !== null && outAbs === headerAbs) {
-    console.error(`c-import: -o ${args.out} is the header itself, which the module would overwrite`)
-    return 1
+    return refuse(args, `-o ${args.out} is the header itself, which the module would overwrite`, 1)
   }
   const overridesAbs: string | null = args.overrides.length > 0 ? realpathSync(args.overrides) : null
   if (outAbs !== null && overridesAbs !== null && outAbs === overridesAbs) {
-    console.error(`c-import: -o ${args.out} is the overrides file, which the module would overwrite`)
-    return 1
+    return refuse(args, `-o ${args.out} is the overrides file, which the module would overwrite`, 1)
   }
   const scratch = scratchBeside(args.out)
   if (scratch.length === 0) {
-    console.error(`c-import: cannot create a scratch directory beside ${args.out}`)
-    return 1
+    return refuse(args, `cannot create a scratch directory beside ${args.out}`, 1)
   }
   const importer = new Importer(target.triple, headerAbs)
   importer.scratch = scratch
@@ -3403,13 +3464,11 @@ export const cImport = (argv: string[]): i32 => {
   }
   spawnSync(["rm", "-rf", "--", scratch])
   if (importer.failure.length > 0) {
-    console.error(`c-import: ${importer.failure}`)
-    return importer.failureStatus
+    return refuse(args, importer.failure, importer.failureStatus)
   }
   const text = importer.emit(args)
   if (importer.refusedEmit) {
-    console.error("c-import: a name or value the module would hold is not plain ASCII; nothing written")
-    return 1
+    return refuse(args, "a name or value the module would hold is not plain ASCII; nothing written", 1)
   }
   writeFileSync(args.out, text)
   return 0

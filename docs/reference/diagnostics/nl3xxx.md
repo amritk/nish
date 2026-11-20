@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 61 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 63 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -425,7 +425,7 @@ The message of an error contains:
 The message of an error contains:
 
 ```text
-` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once
+` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once
 ```
 
 ## NL3037
@@ -750,3 +750,23 @@ The message of an error contains:
 ```text
 …: a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build
 ```
+
+## NL3063
+
+The message of an error contains:
+
+```text
+…is declared here, but nothing the program links defines it
+```
+
+**No program provokes it**: reported only after a failed `--link` or `run` link; the corpus compiles without linking, and `tests/link/ffi_link_undefined` provokes it
+
+## NL3064
+
+The message of an error contains:
+
+```text
+…overrides: …
+```
+
+**No program provokes it**: a `nish c-import --json` refusal of the override file, not a compile; the c-import section of `tests/run.js` provokes every one under `--json`

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["ffi"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["ffi"],
+      "modules": [
+        {
+          "path": "main.ts",
+          "capabilities": ["ffi"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["ffi"],
+              "witnesses": {
+                "ffi": [
+                  { "function": "main", "at": "main.ts:6:13", "calls": "tally_new" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "main.ts:6:13", "allowed": true },
+                { "kind": "oom", "at": "main.ts:14:15", "allowed": true }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "tally.ts",
+          "capabilities": [],
+          "functions": []
+        }
+      ]
+    }
+  ]
+}

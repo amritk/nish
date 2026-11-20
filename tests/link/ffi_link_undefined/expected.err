@@ -1,0 +1,1 @@
+C function `absent_c_function` is declared here, but nothing the program links defines it; name the library that does in `nish.link.libraries` of package.json

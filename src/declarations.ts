@@ -174,7 +174,10 @@ export const collectParams = (
       const where = sig.exported ? "a parameter of an exported function" : "a parameter of a method"
       rejectStoredMask(ctx, type, where, param.children[1])
     }
-    if (sig.exported) {
+    // A `declare function` is exported to other modules of the program only:
+    // no header, `.d.ts` or N-API binding describes it, so the C struct
+    // layouts it takes are free to cross with it.
+    if (sig.exported && !foreign) {
       const where =
         owner >= 0 ? "a parameter of an exported class's method" : "a parameter of an exported function"
       deferExportedLayout(ctx, type, where, param.children[1])
@@ -703,12 +706,6 @@ const refuseHostParameter = (ctx: CheckContext, sig: FunctionSig, decl: Node, na
 const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   if (sig.body() !== null) {
     ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body")
-  }
-  if (sig.exported) {
-    ctx.error(
-      decl.children[0],
-      `\`declare function ${name}\` cannot be exported: it is a C function this program calls, not one it defines`
-    )
   }
   if (name === "syscall") {
     ctx.error(

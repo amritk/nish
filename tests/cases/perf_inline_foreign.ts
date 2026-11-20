@@ -4,11 +4,11 @@
 //
 // `abs` is external because C defines it, not because this module withheld an
 // `export`. Neither rewrite the message names is available for it: `export
-// declare function` is refused outright (`reject_ffi_export`), and dropping
+// declare function` only exports it to the program's other modules, and dropping
 // `--no-strict-exports` would not make it `internal`, because there is no body
 // here to give linkage to -- the `declare` line below is the same under the
 // flag as under the default. Testing `exported` alone reported it anyway,
-// because `exported` is always false for a foreign declaration; the guard is
+// because `exported` is false for this foreign declaration; the guard is
 // `FunctionSig.foreign`, the predicate that exists for this distinction.
 //
 // `step` is the shape that must keep warning, in the same loop and on the same

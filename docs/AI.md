@@ -1590,9 +1590,10 @@ export const main = (): i32 => {
   refused by any spelling, parentheses or an alias included, because `--number-mode` picks
   its width; spell `i32` or `f64`. Fields only: no initializer, `readonly`,
   method or constructor. C borrows it for the call, may write its fields, and
-  may not keep the address. It stays in its module: no exported signature
-  holds one, however deep (NL2746, NL2756), and a page module (freestanding
-  wasm, `--emit-dts`) refuses one (NL2757).
+  may not keep the address. `export declare class` (and `export declare
+  function`) lends it to the program's other modules, which import it; no
+  exported *Nish* signature holds one, however deep (NL2756), and a page
+  module (freestanding wasm, `--emit-dts`) refuses one (NL2757).
 
 <!-- nish:ok -->
 ```ts

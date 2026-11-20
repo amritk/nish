@@ -3,22 +3,22 @@
 // Data model: LP64
 // Regenerate: nish c-import buffers.h --overrides buffers.overrides.json --target x86_64-unknown-linux-gnu -o buffers.ts
 
-declare class OutPtr {
+export declare class OutPtr {
   value: CPtr | null
 }
 
-declare function db_open(path: string, out: OutPtr): i32
-declare function db_close(d: CPtr): void
+export declare function db_open(path: string, out: OutPtr): i32
+export declare function db_close(d: CPtr): void
 // The result is owned: free it with db_free_error.
-declare function db_error(d: CPtr): CPtr | null
-declare function db_free_error(message: CPtr): void
+export declare function db_error(d: CPtr): CPtr | null
+export declare function db_free_error(message: CPtr): void
 // The result is owned: free it with db_free_error.
-declare function db_path(d: CPtr): CPtr
-declare function db_name(d: CPtr): string
-declare function db_write(d: CPtr, data: readonly u8[], len: u64): i64
-declare function db_read(d: CPtr, into: u8[], cap: u64): i64
-declare function db_rename(d: CPtr, name: string | null): i32
-declare function db_flags(d: CPtr, mask: u16, seed: u64, scale: f32): u8
+export declare function db_path(d: CPtr): CPtr
+export declare function db_name(d: CPtr): string
+export declare function db_write(d: CPtr, data: readonly u8[], len: u64): i64
+export declare function db_read(d: CPtr, into: u8[], cap: u64): i64
+export declare function db_rename(d: CPtr, name: string | null): i32
+export declare function db_flags(d: CPtr, mask: u16, seed: u64, scale: f32): u8
 
 /* Not bound:
  *   struct db: stays a `CPtr`: `db_open` takes a pointer to a pointer to it, which only a `CPtr` can stand for

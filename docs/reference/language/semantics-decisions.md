@@ -1573,7 +1573,9 @@ performance warning about the same check is not printed beside the error.
   else is an error (NL3036) where `package.json` writes it (`link`, the C
   libraries and sources a package links, has rules of its own: a bad shape is
   NL3059, a bad entry NL3060 and a dependency's entry the root does not grant
-  NL3061, [`docs/security/package-link.md`](../../security/package-link.md)): a second `"nish"`
+  NL3061, and a link that leaves a `declare function` undefined is NL3063 at
+  that declaration, `tests/link/ffi_link_undefined`;
+  [`docs/security/package-link.md`](../../security/package-link.md)): a second `"nish"`
   even when neither holds a policy (`caps_policy_manifest_repeated_nish_no_panic`),
   a `"nish"` that is not an object (`caps_policy_manifest_nish_not_object`), a
   key it does not know, a misspelt `capabilites` included

@@ -1,1 +1,1 @@
-package.json:5:5: error: `capabilites` is no key of `nish`: the root package's `nish` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat` and `netRings`, each written once
+package.json:5:5: error: `capabilites` is no key of `nish`: the root package's `nish` field is one object, written once, whose keys are `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link`, each written once
