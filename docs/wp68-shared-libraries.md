@@ -8,6 +8,12 @@ entries in `tests/nish-cmp.js` change. The stages are in §11 and on
 the owner (§9).
 
 Every claim about today's code is anchored at commit `0eefa5e9`, on `main`.
+`main` has moved since. At `ce9bfd3a` the survey finds 87 sites and 1,193
+lines: `1d6311f8` (`nish c-import`) added a sixteenth hex decoder,
+`src/c-import-json.ts` `jsonHexValue` (12 lines, -1 for a byte that is not a
+digit), which S2 owns with the other fifteen. Every other cluster has the
+same counts, but some sites have moved lines (in `std/net/postgres.ts`, for
+one), so rerun the survey for today's.
 The survey (§3) is `node bench/wp68-survey.mjs`, rerunnable on any commit.
 The benchmarks (§4) are `bench/wp68-*.ts`, with the bench code at commit
 `38031fa9`. They were built with the released 0.42.0 compiler
@@ -25,7 +31,8 @@ The owner set the order of priorities:
 ## 1. The problem
 
 `std/` keeps a private copy of every small helper it needs, under the module's
-prefix. The decoder from a hex digit to its value has 15 copies. One of them is
+prefix. The decoder from a hex digit to its value has 15 copies at `0eefa5e9`, and
+16 on `main` since. One of them is
 `http1HexValue`, another is `jwtHexValue`, and the rest follow the same
 pattern. A predicate for ASCII digits has nine copies. Code that checks UTF-8
 has nineteen copies across encoders, validators and widths, and a twentieth
@@ -173,6 +180,7 @@ The sites, at `0eefa5e9`:
   - std/net/router.ts:1081, std/net/tls/codec.ts:1258, std/net/url.ts:127
   - std/regex.ts:378, std/term-pixels.ts:143, std/yaml-json.ts:1190
   - std/yaml.ts:1136, src/constants.ts:168 (inline), src/emit-ts-strings.ts:152
+  - added after `0eefa5e9`: src/c-import-json.ts:33 (`jsonHexValue`, at `ce9bfd3a`)
 - **be-load**:
   - std/compress/zlib.ts:183, std/crypto/aes.ts:567, std/crypto/bcrypt.ts:310
   - std/crypto/chacha20poly1305.ts:398, std/crypto/p256.ts:4407, std/crypto/sha1.ts:39
@@ -731,10 +739,10 @@ cluster, and every stage has the same parts:
 | S3 | decimal | `http1PutDecimal` on non-negative values, `jsonWriterPutDigits64` on signed ones | `pairs`: 4% on values of 1 to 10 digits, 5% on three-digit status codes; none on signed ones. The `integer<1, 20>` count is not measured | `bench/http1-request` (`http1PutDecimal`, `http1DecimalDigits`, and `jsonWriterPutDigits` through `w.i32`), `bench/pg-decode` `params` (`pgPutDecimal`) | S2 |
 | S4 | be-load | `shifts` (`sha1LoadWord`), the form every surveyed site has | none established: `wide` is the same speed. In the micro-bench the shift form is 1.5x `getU32BE`, if the Node answer holds; what that is worth to `getI32BE`'s postgres callers is not timed | `bench/pg-decode` `rows`, which runs `getI32BE` | S2, D6 |
 | S5 | json-escape | `jsonWriterPutRuns` on strings of 16 bytes or more, the byte loop below, as `jsonWriterPutBytes` already does | none claimed: byte callers already switch at 16. Open: a density switch, and runs for `jsonWriterPutString` over a `string`, neither measured | `bench/json-writer` (`jsonWriterPutString`), `bench/http1-request`'s JSON cases (`jsonWriterPutBytes` through `stringBytes`, and `jsonWriterPutString`) | S2, D4 |
-| S6 | utf8 | the tokenizer's kernel path, `skipJsonText` and then `jsonTokUtf8Length` | none measured. `wordSkip` is slower on both inputs; the table walk is not measured | `bench/json-tokenizer` (runs `jsonTokUtf8Length` and `skipJsonText`). `bench/jwt-verify` links only the encoders and `JwtJson.utf8Tail`, which its ASCII tokens do not run, so S6 adds non-ASCII claims before it gates on it | S2, S5 |
-| S7 | digit | the one shape every copy has | none: one shape. Not yet measured | `bench/json-tokenizer`, `bench/compiler.mjs` | S2 |
+| S6 | utf8 | the tokenizer's kernel path, `skipJsonText` and then `jsonTokUtf8Length` | none measured. `wordSkip` is slower on both inputs; the table walk is not measured | `bench/json-tokenizer` runs `skipJsonText`, but its body is ASCII: its `\u` escapes are escape text, not non-ASCII bytes, so it never reaches `jsonTokUtf8Length`, and S6 adds a non-ASCII body before it gates on it. `bench/jwt-verify` links only the encoders and `JwtJson.utf8Tail`, which its ASCII tokens do not run, so S6 adds non-ASCII claims before it gates on it | S2, S5 |
+| S7 | digit | the one shape every copy has | none: one shape. Not yet measured | `bench/json-tokenizer` (`jsonTokIsDigit` on its numbers), `bench/lexer.ts` (`src/lexer.ts` `isDigit`) | S2 |
 | S8 | grow | not yet measured; the copies differ in policy | none proposed. Which policy the shared copy keeps is a D4 question | `bench/http1-request`, `bench/http1-conn` | S2 |
-| S9 | fnv | the one loop every copy has | none: one shape. Not yet measured | `bench/router.ts`, `bench/compiler.mjs` | S2 |
+| S9 | fnv | the one loop every copy has | none: one shape. Not yet measured | `bench/router.ts` (`routerHashWith`). No existing bench runs `src/map.ts` `fnv1a`, so S9 adds one before it gates on it | S2 |
 
 digit, grow and fnv each get their own stage, rather than one shared stage,
 because each touches different modules and records its own measurement. For
