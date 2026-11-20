@@ -73,7 +73,7 @@ import { codeFor } from "./codes"
 import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { AsyncRegistry, finalizeAsync } from "./emit-async"
 import { emitProgram } from "./emit"
-import { implementsDeclaration, qualifiesClashing, spellCSymbolsApart, templateSymbol } from "./generics"
+import { implementsDeclaration, spellCSymbolsApart, templateSymbol } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -122,7 +122,6 @@ import {
 import { CapabilityLock, capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
 import {
   PACKAGE_ROOT_SEGMENT,
-  moduleSymbolQualifier,
   packageDirOf,
   packageNameOf,
   parseBareSpecifier,

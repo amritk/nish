@@ -39,7 +39,6 @@ import AsyncRegistry from "./emit-async" -> struct AsyncRegistry
 import finalizeAsync from "./emit-async" -> function @finalizeAsync
 import emitProgram from "./emit" -> function @emitProgram
 import implementsDeclaration from "./generics" -> function @implementsDeclaration
-import qualifiesClashing from "./generics" -> function @qualifiesClashing
 import spellCSymbolsApart from "./generics" -> function @spellCSymbolsApart
 import templateSymbol from "./generics" -> function @templateSymbol
 import StringMap from "./map" -> struct StringMap
@@ -92,7 +91,6 @@ import capabilityLockName from "./capability-lock" -> function @capabilityLockNa
 import capabilityLockText from "./capability-lock" -> function @capabilityLockText
 import readCapabilityLock from "./capability-lock" -> function @readCapabilityLock
 import PACKAGE_ROOT_SEGMENT from "./packages" -> const PACKAGE_ROOT_SEGMENT
-import moduleSymbolQualifier from "./packages" -> function @moduleSymbolQualifier
 import packageDirOf from "./packages" -> function @packageDirOf
 import packageNameOf from "./packages" -> function @packageNameOf
 import parseBareSpecifier from "./packages" -> function @parseBareSpecifier
