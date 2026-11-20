@@ -1,6 +1,6 @@
 # WP22: Arrow functions as the declaration form
 
-**State:** In progress · **Done:** 4 of 5 · **Design note:** [`docs/wp22-arrow-functions.md`](https://github.com/amritk/nish/blob/main/docs/wp22-arrow-functions.md)
+**State:** Landed · **Done:** 4 of 5 · **Design note:** [`docs/wp22-arrow-functions.md`](https://github.com/amritk/nish/blob/main/docs/wp22-arrow-functions.md)
 
 ## Stages
 
