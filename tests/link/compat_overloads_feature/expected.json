@@ -1,0 +1,2 @@
+{"file":"tests/link/compat_overloads_feature/main.ts","line":3,"column":1,"endLine":3,"endColumn":36,"severity":"error","code":"NL2204","message":"Functions must have a body","notes":["this program's dialect is `compat=nullish`","add `overloads` to `nish.compat` in package.json to accept it"]}
+{"file":"tests/link/compat_overloads_feature/main.ts","line":4,"column":1,"endLine":6,"endColumn":2,"severity":"error","code":"NL2196","message":"Duplicate function `area`"}

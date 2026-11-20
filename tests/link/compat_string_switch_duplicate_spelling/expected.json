@@ -1,0 +1,2 @@
+{"file":"tests/link/compat_string_switch_duplicate_spelling/main.ts","line":7,"column":10,"endLine":7,"endColumn":13,"severity":"error","code":"NL2194","message":"Duplicate `case` label `\"é\"` in this `switch`"}
+{"file":"tests/link/compat_string_switch_duplicate_spelling/main.ts","line":18,"column":10,"endLine":18,"endColumn":14,"severity":"error","code":"NL2194","message":"Duplicate `case` label `\"😀\"` in this `switch`"}

@@ -215,12 +215,27 @@ export class FunctionSig {
    */
   defaults: (FieldInfo | null)[]
   /**
+   * WP66 S5: the parameters of a `declare function` written
+   * `CountedBy<u8[], "n">`, and, parallel, the count each names. A named
+   * buffer is outside WP53's positional runs; `foreignBufferCount` in
+   * `src/attributes.ts` answers its count's position from the name.
+   */
+  countedBuffers: i32[]
+  countedNames: string[]
+  /**
    * The position of a final rest parameter `...xs: T[]`, or -1. A call
    * gathers the arguments from there on into one array literal
    * (`gatherRest` in `src/declarations.ts`), so from the checker on
    * every pass sees a call that passes the array.
    */
   restIndex: i32
+  /**
+   * WP28 `overloads`: the bodiless signatures written before this
+   * implementation under `--compat`, each collected as a signature of its
+   * own (`src/overloads.ts`). Empty for every other function. A call is
+   * checked against the implementation and then held to one of these.
+   */
+  overloads: FunctionSig[]
 
   /**
    * How many arguments a call must write: up to the first default, or the
@@ -359,7 +374,10 @@ export class FunctionSig {
     this.returnSpelling = ""
     this.keepsLength = []
     this.defaults = []
+    this.countedBuffers = []
+    this.countedNames = []
     this.restIndex = -1
+    this.overloads = []
   }
 }
 

@@ -790,6 +790,50 @@ export class PgText {
       this.failed = true
       return 0
     }
+    // A column of at most eighteen bytes holds at most eighteen digits, below
+    // 10^18 and so inside i64 whatever they are, and is read without the
+    // overflow test. It is read as two runs, each below 10^9, which is how the
+    // prover sees that nothing here can wrap: `head` takes digits until it
+    // passes 10^8, nine of them at least, so `tail` takes nine at most. The
+    // range tests on `head`, `tail` and `scale` cannot fail; they state those
+    // bounds.
+    if (length <= 18) {
+      let head: i64 = 0
+      while (i < end && head < 100000000) {
+        const d: i32 = toI32(b[i]) - 48
+        if (d < 0 || d > 9 || head < 0) {
+          this.failed = true
+          return 0
+        }
+        head = head * 10 + toI64(d)
+        i++
+      }
+      let tail: i64 = 0
+      let scale: i64 = 1
+      while (i < end) {
+        const d: i32 = toI32(b[i]) - 48
+        if (d < 0 || d > 9 || tail < 0 || tail >= 100000000 || scale < 1 || scale > 100000000) {
+          this.failed = true
+          return 0
+        }
+        tail = tail * 10 + toI64(d)
+        scale = scale * 10
+        i++
+      }
+      if (
+        head < 0 ||
+        head >= 1000000000 ||
+        tail < 0 ||
+        tail >= 1000000000 ||
+        scale < 1 ||
+        scale > 1000000000
+      ) {
+        this.failed = true
+        return 0
+      }
+      const v: i64 = head * scale + tail
+      return negative ? -v : v
+    }
     // Accumulated as a negative number, so that the most negative i64 fits.
     const lastDigit: i64 = negative ? 8 : 7
     // The most negative i64 divided by ten, which a literal cannot spell exactly.
@@ -2328,10 +2372,17 @@ export class PgConnection {
 
   /** Makes the output buffer at least `want` bytes long. */
   private reserve(want: i32): void {
-    const size: i32 = toI32(this.out.length)
-    if (want <= size) {
-      return
+    if (want > toI32(this.out.length)) {
+      this.grow(want)
     }
+  }
+
+  /**
+   * `reserve` when the buffer is short: kept apart so that the test above,
+   * which every put makes, is small enough to inline into it.
+   */
+  private grow(want: i32): void {
+    const size: i32 = toI32(this.out.length)
     const grown: u8[] = new Array<u8>(size <= PG_MAX_CAP && want < 2 * size ? 2 * size : want)
     grown.set(this.out, 0)
     this.out = grown

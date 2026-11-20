@@ -101,6 +101,7 @@ import {
   collectStructMembers,
   noteStructNames,
   referencedStructNames,
+  rejectOpaque,
 } from "./structs"
 import { FLAG_ASYNC, FLAG_FOREIGN, FLAG_REFERENCE_ARROW, isGatheredRest, Node, NodeKind } from "./nodes"
 import {
@@ -1090,6 +1091,9 @@ const instantiateStructHere = (
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
+    if (rejectOpaque(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
     if (rejectStoredMask(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
@@ -1378,6 +1382,9 @@ const instantiateHere = (
   // message is the same, because it is the same rule.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
+    if (rejectOpaque(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
       return null
     }
     if (rejectStoredMask(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {

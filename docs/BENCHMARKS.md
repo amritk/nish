@@ -2956,6 +2956,64 @@ Run 1 put everything together 1.48 µs under main on `list`, outside that run's 
 `readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
 <!-- postgres-profile:end -->
 
+<!-- db-clients:begin -->
+## Database clients against C and Rust
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `nish/sqlite` and `nish/net/postgres` are timed against the C library each wraps or replaces and against the Rust crate most programs reach it through, on the multicore server challenge's schema. The workloads, the builds and the rules are in [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite) ([PostgreSQL](https://github.com/amritk/nish/blob/main/bench/README.md#postgresql)). A difference is claimed only when the median difference is larger than the noise band, the build against its byte-identical copy, and than the IQR of both sides; "seen" below means it is.
+
+### SQLite: nish/sqlite, SQLite's C API and rusqlite
+
+`node bench/sqlite/run.mjs --rounds 12`, the bench code at commit `f08a1674` (no later commit changes `std/sqlite.ts`, `runtime/sqlite/` or the bench's programs), on a four-core Intel Xeon virtual machine that reports 2.10 GHz, with Ubuntu clang 18.1.3, rustc 1.97.0, rusqlite 0.43.0 (libsqlite3-sys 0.40.0) and SQLite 3.54.1. rusqlite refuses a SQLite built `THREADSAFE=0`, so the "mt" columns are a second group on `THREADSAFE=2`, which a `--threads` build gets, with Rust linked to the same SQLite object as C mt. Median ns per call (IQR):
+
+| Workload | Nish | C | Nish mt | C mt | Rust mt (rusqlite) | Noise band |
+| --- | --- | --- | --- | --- | --- | --- |
+| `lookup` | 6,005 (195) | 5,987 (294) | 6,335 (370) | 6,098 (253) | 6,193 (180) | 32 |
+| `feed` | 20,894 (2,090) | 21,353 (1,616) | 22,222 (5,219) | 20,706 (702) | 22,449 (2,743) | 1,136 |
+| `insert` | 20,254 (1,203) | 20,221 (1,534) | 21,272 (2,417) | 20,764 (912) | 20,744 (2,833) | 431 |
+| `insert-txn` | 5,983 (885) | 5,981 (456) | 6,233 (1,317) | 6,084 (169) | 6,412 (689) | 88 |
+
+No difference in this table is seen: each is inside the IQR of at least one of the two sides it compares. SQLite's own work dominates every call. The one cost a finer instrument has found is on `feed`, 20 rows of five columns a call: under callgrind the build runs 4.2 % more instructions a call than C, about 7,800 of 186,300, with the adapter fix of commit `0e40dff2` in (bench/README.md has the command).
+
+### PostgreSQL: nish/net/postgres, libpq and tokio-postgres
+
+`node bench/postgres/run.mjs --rounds 12`, the bench code and `std/` at commit `df3f1023`, on a four-core Intel Xeon virtual machine that reports 2.10 GHz, with Ubuntu clang 18.1.3, rustc 1.97.0, tokio-postgres 0.7.18 on tokio 1.54.1's current-thread runtime, and PostgreSQL and libpq 18.7, the server on the same machine. `pk` is 50,000 primary-key reads at 16 in flight, `list` 3,000 reads of 20 rows at 16 in flight, `insert` 5,000 inserts one at a time. Client CPU in µs per query, min / median (IQR); system time and qps are medians:
+
+| Workload | Nish | C (libpq) | Rust (tokio-postgres) | Noise band | System, Nish / C / Rust | qps, Nish / C / Rust |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 6.50 / 7.06 (0.42) | 8.00 / 8.26 (0.32) | 9.11 / 9.32 (0.47) | 0.41 | 5.76 / 5.38 / 5.06 | 40,175 / 40,266 / 41,131 |
+| `list` | 45.84 / 49.90 (1.68) | 61.11 / 63.64 (2.74) | 59.58 / 63.39 (4.54) | 0.05 | 26.86 / 25.81 / 22.47 | 409 / 403 / 409 |
+| `insert` | 14.64 / 18.21 (2.14) | 15.95 / 19.13 (2.37) | 18.68 / 21.37 (1.88) | 1.58 | 16.53 / 17.08 / 16.59 | 4,687 / 4,603 / 4,585 |
+
+| Workload | Nish − C | Rust − C | Nish − Rust |
+| --- | --- | --- | --- |
+| `pk` | −1.20 (−14.6 %), seen | +1.06 (+12.9 %), seen | −2.26 (−24.3 %), seen |
+| `list` | −13.75 (−21.6 %), seen | −0.25 (−0.4 %), inside the noise | −13.49 (−21.3 %), seen |
+| `insert` | −0.92 (−4.8 %), inside the noise | +2.24 (+11.7 %), inside the noise | −3.16 (−14.8 %), seen |
+
+On this run the module costs the client less CPU than tokio-postgres on all three workloads, and less than libpq on `pk` and `list`; on `insert` its difference from libpq is inside the noise. tokio-postgres costs more than libpq on `pk`; on `list` and `insert` the difference is inside the noise. qps is within 2.4 % across the three sides on every row, so client CPU is not what limits throughput at these depths. On `pk` and `insert` most of each side's CPU is system time, which no client's library code spends; on `list`, where 20 rows are decoded a query, it is about half of the module's CPU and less than half of libpq's and tokio-postgres's.
+
+### The optimisation pass behind the PostgreSQL figures
+
+Commit `df3f1023` changed two things in `std/net/postgres.ts`. `PgText.int` reads a column of at most 18 bytes as two runs of digits, each below 10^9, so the bounds prover sees that nothing there can wrap and the digit loop has no overflow test. `PgConnection.reserve` keeps only its length test and calls out to grow, so the test every put makes inlines. The module's unproven panic sites under `--emit-panics` stayed at 591. Instructions per operation under callgrind, from `node bench/pg-decode/run.mjs --callgrind --base HEAD`, run with the change uncommitted on `d81c00c1`, so `base` is `std/` at `d81c00c1`. A byte-identical copy of the build agreed with it to 0.0 % on every case. The kernels are [bench/pg-decode/main.ts](https://github.com/amritk/nish/blob/main/bench/pg-decode/main.ts)'s: `rows` decodes a binary-format answer of n rows, `text` the same rows in the text format, `pool` the binary group through a one-slot `PgPool`, and `params` encodes a text-format Bind of n keys and n ids:
+
+| Case | `d81c00c1` | `df3f1023` | Change |
+| --- | ---: | ---: | ---: |
+| `rows 1` (214 B) | 3,662 | 3,350 | −8.5 % |
+| `rows 20` (2,892 B) | 26,911 | 26,599 | −1.2 % |
+| `rows 100` (14,019 B) | 123,159 | 122,847 | −0.3 % |
+| `text 1` (218 B) | 4,013 | 3,721 | −7.3 % |
+| `text 20` (2,464 B) | 40,694 | 39,909 | −1.9 % |
+| `text 100` (12,153 B) | 198,368 | 195,145 | −1.6 % |
+| `pool 1` (214 B) | 4,119 | 3,807 | −7.6 % |
+| `pool 20` (2,892 B) | 28,261 | 27,949 | −1.1 % |
+| `pool 100` (14,019 B) | 128,316 | 128,004 | −0.2 % |
+| `params 1` (104 B) | 3,923 | 3,447 | −12.1 % |
+| `params 20` (1,051 B) | 29,136 | 26,550 | −8.9 % |
+| `params 100` (5,179 B) | 138,200 | 126,734 | −8.3 % |
+
+The clock cannot resolve these changes in the end-to-end figures above, so callgrind is the evidence for them. The same bench at `5aee9afb`'s `std/`, on the same kind of machine in an earlier session, put C's own `pk` median at 7.80 µs against 8.26 µs here: an unchanged binary moved 5.9 % between runs. Tried and dropped in the same pass: rewrites of `PgText.timestamp`, which ran more instructions; a comma scan in `PgArrayWalker`, a digit count in `putDecimal` and an inlined `getI32BE`, none of which gave a measured win; and a digit loop that wraps instead of testing, which needs `nish:unsafe` and so would make every program that uses the module reach `unsafe`.
+<!-- db-clients:end -->
+
 <!-- unix-ipc:begin -->
 ## Unix sockets against loopback TCP
 
