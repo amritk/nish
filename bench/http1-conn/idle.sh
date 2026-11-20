@@ -55,7 +55,11 @@ if [ "$hard" != unlimited ] && [ "$hard" -lt "$limit" ]; then limit=$hard; fi
 
 mkdir -p "$out"
 gcc -O2 -Wall -Wextra -o "$out/loadgen" "$root/bench/fd-limit/loadgen.c"
-"$compiler" "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
+# The server is a bench program, not an example: it builds the way the suite
+# builds its cases (`scripts/nish-compiler.sh` -> `nish_allow_panics`).
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$compiler"
+"$compiler" ${allow_panics[@]+"${allow_panics[@]}"} "$root/bench/http1-server.ts" --link "$out/h1" >/dev/null
 names=(h1)
 bins=("$out/h1")
 for spec in ${extra[@]+"${extra[@]}"}; do

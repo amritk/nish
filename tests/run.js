@@ -1053,7 +1053,7 @@ const runCase = async (name) => {
   if (caseShard(name) !== SHARD) {
     return { compiled: null, steps, panicFunctions: 0, dealtTo: caseShard(name) }
   }
-  const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
+  const r = await spawnAsync(NISH, withAllowPanics(NISH, [src, "-o", outLl, ...args]), { cwd: root })
   const done = { compiled: r, steps, panicFunctions: 0, dealtTo: 0 }
   const stderr = String(r.stderr)
 
@@ -1087,7 +1087,7 @@ const runCase = async (name) => {
     // line and in report order. Paths are taken back to the repository's, as
     // for `.stdout`.
     const warnedLl = path.join(buildDir, `${name}.portability.ll`)
-    const warned = await spawnAsync(NISH, [src, "-o", warnedLl, ...args, "--warn-portability", "--json"], {
+    const warned = await spawnAsync(NISH, withAllowPanics(NISH, [src, "-o", warnedLl, ...args, "--warn-portability", "--json"]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -1119,7 +1119,7 @@ const runCase = async (name) => {
     // checkout is part of what it promises (docs/wp35-capabilities.md §5).
     const capsLl = path.join(buildDir, `${name}.caps.ll`)
     const capsJson = path.join(buildDir, `${name}.caps.json`)
-    const reported = await spawnAsync(NISH, [src, "-o", capsLl, ...args, "--emit-capabilities", capsJson], {
+    const reported = await spawnAsync(NISH, withAllowPanics(NISH, [src, "-o", capsLl, ...args, "--emit-capabilities", capsJson]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -1186,7 +1186,7 @@ const runCase = async (name) => {
   // that compile `tests/cases/` with the last release would refuse it.
   const panicsLl = path.join(buildDir, `${name}.panics.ll`)
   const panicsFile = path.join(buildDir, `${name}.panics.json`)
-  const listed = await spawnAsync(NISH, [src, "-o", panicsLl, ...args, "--emit-panics", panicsFile], {
+  const listed = await spawnAsync(NISH, withAllowPanics(NISH, [src, "-o", panicsLl, ...args, "--emit-panics", panicsFile]), {
     cwd: root,
     encoding: "utf8",
   })
@@ -1223,7 +1223,7 @@ const runCase = async (name) => {
   if (fs.existsSync(side("arena"))) {
     const arenaLl = path.join(buildDir, `${name}.arena.ll`)
     const arenaFile = path.join(buildDir, `${name}.arena.json`)
-    const placed = await spawnAsync(NISH, [src, "-o", arenaLl, ...args, "--emit-arena", arenaFile], {
+    const placed = await spawnAsync(NISH, withAllowPanics(NISH, [src, "-o", arenaLl, ...args, "--emit-arena", arenaFile]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -1251,7 +1251,7 @@ const runCase = async (name) => {
   // the golden, paths taken back to the repository's.
   if (fs.existsSync(side("memory"))) {
     const memoryLl = path.join(buildDir, `${name}.memory.ll`)
-    const explained = await spawnAsync(NISH, [src, "-o", memoryLl, ...args, "--explain-memory"], {
+    const explained = await spawnAsync(NISH, withAllowPanics(NISH, [src, "-o", memoryLl, ...args, "--explain-memory"]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -2992,8 +2992,7 @@ if (dealtHere("termWasi")) {
       ["term_restore", "true", "-25 0 -25 -7\n"],
     ]) {
       const wasm = path.join(wasiDir, `${name}.wasm`)
-      const built = spawnSync(
-        NISH,
+      const built = spawnNish(
         [
           path.join(name === "term_wait0" ? wasiDir : casesDir, `${name}.ts`),
           "-o",
@@ -4031,8 +4030,7 @@ if (dealtHere("fnref")) {
   }
 
   const ll = path.join(fnrefDir, "fnref_debug_check.ll")
-  const emitted = spawnSync(
-    NISH,
+  const emitted = spawnNish(
     [path.join(casesDir, "fnref_debug_check.ts"), "--profile", "debug", "-o", ll],
     { cwd: root, encoding: "utf8" }
   )
@@ -4350,8 +4348,7 @@ if (dealtHere("netTlsTcp")) {
   fs.rmSync(tlsDir, { recursive: true, force: true })
   fs.mkdirSync(tlsDir, { recursive: true })
   const exe = path.join(tlsDir, "app")
-  const built = spawnSync(
-    NISH,
+  const built = spawnNish(
     [
       path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
       "-o",
@@ -4557,8 +4554,7 @@ if (dealtHere("http2")) {
   fs.rmSync(h2cDir, { recursive: true, force: true })
   fs.mkdirSync(h2cDir, { recursive: true })
   const exe = path.join(h2cDir, "app")
-  const built = spawnSync(
-    NISH,
+  const built = spawnNish(
     [
       path.join(root, "tests", "link", "net_http2_cleartext", "main.ts"),
       "-o",
@@ -4668,8 +4664,7 @@ if (!only || "net_tls_record_size_limit".includes(only)) {
     fs.rmSync(rslDir, { recursive: true, force: true })
     fs.mkdirSync(rslDir, { recursive: true })
     const exe = path.join(rslDir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [
         path.join(root, "tests", "link", "net_tls_record_tcp", "main.ts"),
         "-o",
@@ -4776,8 +4771,7 @@ if (dealtHere("tlsClient")) {
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
   const exe = path.join(dir, "app")
-  const built = spawnSync(
-    NISH,
+  const built = spawnNish(
     [
       path.join(root, "tests", "link", "net_tls_client_tcp", "main.ts"),
       "-o",
@@ -5155,8 +5149,7 @@ if (!only || "reject_computed_skip".includes(only)) {
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).
 if (dealtHere("diagnostics")) {
-  const mm = spawnSync(
-    NISH,
+  const mm = spawnNish(
     [path.join(casesDir, "reject_type_mismatch.ts"), "-o", path.join(buildDir, "diag_mismatch.ll")],
     { cwd: root }
   )
@@ -5525,8 +5518,7 @@ if (dealtHere("diagnostics")) {
     Number.isFinite(uncodedCount) && uncodedCount <= UNCODED_BACKLOG,
     wordings.stdout
   )
-  const jsOk = spawnSync(
-    NISH,
+  const jsOk = spawnNish(
     [path.join(casesDir, "cf_fib.ts"), "-o", path.join(buildDir, "diag_json_ok.ll"), "--json"],
     { cwd: root, encoding: "utf8" }
   )
@@ -5552,8 +5544,7 @@ if (dealtHere("diagnostics")) {
   // debugger was sent to a line in the wrong source.
   const reachDir = path.join(buildDir, "dbg_reachable") + path.sep
   fs.rmSync(reachDir, { recursive: true, force: true })
-  const reach = spawnSync(
-    NISH,
+  const reach = spawnNish(
     [path.join(root, "tests", "link", "reachable_struct", "main.ts"), "-o", reachDir, "-g"],
     { cwd: root, encoding: "utf8" }
   )
@@ -6470,14 +6461,14 @@ if (dealtHere("performance")) {
   const gateResults = await pool(gateRuns, defaultJobs(), ({ source, mode }) =>
     spawnAsync(
       NISH,
-      [
+      withAllowPanics(NISH, [
         source,
         "-o",
         `${path.join(buildDir, "perf_gate", mode, source.replace(/[/.]/g, "_"))}/`,
         "--number-mode",
         mode,
         "--json",
-      ],
+      ]),
       { cwd: root, encoding: "utf8" }
     )
   )
@@ -6606,8 +6597,7 @@ if (dealtHere("memAwfy")) {
     const exe = path.join(dir, "harness")
     const rssExe = path.join(dir, "rss")
     fs.rmSync(dir, { recursive: true, force: true })
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [
         path.join("bench", "awfy", "main.ts"),
         "-o",
@@ -7762,7 +7752,7 @@ const runLinkProgram = async (name) => {
   // safely (CLI-5; see above).
   const r = await spawnAsync(
     NISH,
-    [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs],
+    withAllowPanics(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...linkArgs, ...linkProfile(name, linkArgs), ...capsArgs]),
     { cwd: root }
   )
   const stderr = String(r.stderr)
@@ -7775,7 +7765,7 @@ const runLinkProgram = async (name) => {
       stderr || "(compiled successfully)"
     )
     if (fs.existsSync(side("expected.json"))) {
-      const json = await spawnAsync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
+      const json = await spawnAsync(NISH, withAllowPanics(NISH, [side("main.ts"), "-o", outDir, "--json", ...args]), {
         cwd: root,
         encoding: "utf8",
       })
@@ -7797,7 +7787,7 @@ const runLinkProgram = async (name) => {
     const wasmDir = path.join(buildDir, "link", `${name}.wasm32`) + path.sep
     // Named after the program, like `outDir`.
     fs.rmSync(wasmDir, { recursive: true, force: true })
-    const w = await spawnAsync(NISH, [side("main.ts"), "-o", wasmDir, ...args], { cwd: root, encoding: "utf8" })
+    const w = await spawnAsync(NISH, withAllowPanics(NISH, [side("main.ts"), "-o", wasmDir, ...args]), { cwd: root, encoding: "utf8" })
     const wasmModules = w.status === 0 ? fs.readdirSync(wasmDir).filter((f) => f.endsWith(".ll")) : []
     const rejected = []
     for (const f of HAS_LLVM_AS ? wasmModules : []) {
@@ -7832,7 +7822,7 @@ const runLinkProgram = async (name) => {
     // compile (a function reference crosses an exported signature, which an
     // open build hands a host: WP51 §5.2), so its listing links too.
     const closedWorld = fs.existsSync(side("closed-world")) ? ["--link", path.join(panicsDir, "exe")] : []
-    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile], {
+    const listing = spawnAsync(NISH, withAllowPanics(NISH, [side("main.ts"), "-o", panicsDir, ...closedWorld, ...linkArgs, "--emit-panics", panicsFile]), {
       cwd: root,
       encoding: "utf8",
     })
@@ -7879,7 +7869,7 @@ const runLinkProgram = async (name) => {
       fs.rmSync(warnedDir, { recursive: true, force: true })
       const warned = await spawnAsync(
         NISH,
-        [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"],
+        withAllowPanics(NISH, [side("main.ts"), "-o", warnedDir, ...linkArgs, "--warn-portability", "--json"]),
         {
           cwd: root,
           encoding: "utf8",
@@ -8192,8 +8182,7 @@ if (dealtHere("selfHosting")) {
   let ratchetedRun = null
   const compileSelf = (names) => {
     const ratcheted = names.length === 1 && names[0] === RATCHETED
-    const r = spawnSync(
-      NISH,
+    const r = spawnNish(
       [...names.map((m) => path.join(selfDir, m)), "-o", `${out}/`, ...(ratcheted ? ["--json"] : [])],
       { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
     )
@@ -9454,7 +9443,7 @@ if (dealtHere("selfHosting")) {
     const dumpEntry = path.join(shipDir, "dump_checked")
     const dumpBuilt = spawnSync(
       compiler,
-      ["src/dump-checked.ts", "--link", dumpEntry, "--profile", "debug"],
+      withAllowPanics(compiler, ["src/dump-checked.ts", "--link", dumpEntry, "--profile", "debug"]),
       {
         cwd: root,
         encoding: "utf8",
@@ -9518,7 +9507,7 @@ if (dealtHere("selfHosting")) {
     const sidecarFiles = ["add.h", "add.d.ts", "add.mjs", "add.napi.c"]
     const sidecars = spawnSync(
       compiler,
-      [
+      withAllowPanics(compiler, [
         "examples/add.ts",
         "-o",
         path.join(shipDir, "add.ll"),
@@ -9528,7 +9517,7 @@ if (dealtHere("selfHosting")) {
         path.join(sidecarDir, "add.d.ts"),
         "--emit-napi",
         path.join(sidecarDir, "add.napi.c"),
-      ],
+      ]),
       { cwd: root, encoding: "utf8" }
     )
     const wrote = sidecarFiles.filter((f) => fs.existsSync(path.join(sidecarDir, f)))
@@ -9550,7 +9539,7 @@ if (dealtHere("selfHosting")) {
     // the failure mode is a program that compiles, in the other arithmetic.
     const badMode = spawnSync(
       compiler,
-      ["examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused.ll")],
+      withAllowPanics(compiler, ["examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused.ll")]),
       { cwd: root, encoding: "utf8" }
     )
     check(
@@ -9593,12 +9582,12 @@ if (dealtHere("selfHosting")) {
     // stage0's — Node names it and the runtime's read does not.
     const missing = spawnSync(
       compiler,
-      [path.join(shipDir, "no_such_file.ts"), "-o", path.join(shipDir, "nope.ll")],
+      withAllowPanics(compiler, [path.join(shipDir, "no_such_file.ts"), "-o", path.join(shipDir, "nope.ll")]),
       { cwd: root, encoding: "utf8" }
     )
     const missingJson = spawnSync(
       compiler,
-      [path.join(shipDir, "no_such_file.ts"), "--json", "-o", path.join(shipDir, "nope.ll")],
+      withAllowPanics(compiler, [path.join(shipDir, "no_such_file.ts"), "--json", "-o", path.join(shipDir, "nope.ll")]),
       { cwd: root, encoding: "utf8" }
     )
     let missingObject = null
@@ -9624,7 +9613,7 @@ if (dealtHere("selfHosting")) {
     // to main` with exit 3.
     const noMain = spawnSync(
       compiler,
-      ["tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main"), "--profile", "debug"],
+      withAllowPanics(compiler, ["tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main"), "--profile", "debug"]),
       { cwd: root, encoding: "utf8" }
     )
     check(
@@ -9637,7 +9626,7 @@ if (dealtHere("selfHosting")) {
     // stage0 validates `PROFILES` before it reads a file.
     const badProfile = spawnSync(
       compiler,
-      ["examples/hello.ts", "--link", path.join(shipDir, "bad"), "--profile", "turbo"],
+      withAllowPanics(compiler, ["examples/hello.ts", "--link", path.join(shipDir, "bad"), "--profile", "turbo"]),
       { cwd: root, encoding: "utf8" }
     )
     check(
@@ -10434,8 +10423,7 @@ if (dealtHere("bench") && (!only || "bench".includes(only) || "wp9".includes(onl
   // std/ and examples/ are: no performance warning, built as the bench builds
   // them (they spell their integers `i32` and have no `.args`).
   for (const name of ["map-wordcount", "map-presize", "map-vs-stringmap"]) {
-    const r = spawnSync(
-      NISH,
+    const r = spawnNish(
       [path.join("bench", `${name}.ts`), "--json", "-o", path.join(buildDir, `bench_${name}.ll`)],
       { cwd: root, encoding: "utf8" }
     )
@@ -10566,8 +10554,7 @@ if (dealtHere("bench") && (!only || "bench".includes(only) || "wp9".includes(onl
     )
   }
   const hostLl = path.join(buildDir, "opt_target_host.ll")
-  const host = spawnSync(
-    NISH,
+  const host = spawnNish(
     [path.join(casesDir, "opt_target_triple.ts"), "--target", "host", "-o", hostLl],
     { cwd: root, encoding: "utf8" }
   )
@@ -10585,8 +10572,7 @@ if (dealtHere("bench") && (!only || "bench".includes(only) || "wp9".includes(onl
       host.stderr
     )
   }
-  const bad = spawnSync(
-    NISH,
+  const bad = spawnNish(
     [
       path.join(casesDir, "opt_target_triple.ts"),
       "--target",
@@ -10776,8 +10762,7 @@ if (dealtHere("bench") && (!only || "json-compare".includes(only) || "bench".inc
   const dir = path.join(root, "bench", "json-compare")
   const exe = path.join(buildDir, "json-compare", "main")
   if (HAS_CLANG) {
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe],
       { cwd: root, encoding: "utf8" }
     )
@@ -10990,8 +10975,7 @@ if (dealtHere("bench") && (!only || "yaml-compare".includes(only) || "bench".inc
   const dir = path.join(root, "bench", "yaml-compare")
   const exe = path.join(buildDir, "yaml-compare", "main")
   if (HAS_CLANG) {
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe, "--profile", "speed"],
       { cwd: root, encoding: "utf8" }
     )
@@ -11401,8 +11385,7 @@ if (dealtHere("runtimeCache")) {
     // A relative XDG_CACHE_HOME is ignored, as the run cache ignores it (CLI-3);
     // with no absolute root at all, --link compiles the runtime itself.
     const home = path.join(rcDir, "home")
-    const relative = spawnSync(
-      NISH,
+    const relative = spawnNish(
       [path.join(root, "examples", "hello.ts"), "--link", path.join(rcDir, "hello-relative")],
       {
         cwd: rcDir,
@@ -12346,8 +12329,7 @@ if (dealtHere("fileServer")) {
     fs.rmSync(fsDir, { recursive: true, force: true })
     fs.mkdirSync(fsDir, { recursive: true })
     const exe = path.join(fsDir, "file-server")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [path.join(root, "examples", "file-server.ts"), "-o", fsDir + path.sep, "--link", exe, "--profile", "speed"],
       { cwd: root, encoding: "utf8", timeout: 300_000, killSignal: "SIGKILL" }
     )
@@ -12592,8 +12574,7 @@ if (dealtHere("unboundedPass")) {
           l.includes("nothing bounds how many passes")
       )
   const caseCompile = (out, extra) =>
-    spawnSync(
-      NISH,
+    spawnNish(
       [path.join(casesDir, "perf_arena_unbounded_pass.ts"), "-o", path.join(srvDir, out), ...extra],
       {
         cwd: root,
@@ -12995,8 +12976,7 @@ if (dealtHere("p256Seams")) {
     if (only !== "wasi") {
       const exe = path.join(seamDir, "app")
       // Speed, not `linkProfile`'s debug: on CI the agree corpus ran 73.7 s debug, 9.7 s speed.
-      const built = spawnSync(
-        NISH,
+      const built = spawnNish(
         [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe, "--profile", "speed"],
         { cwd: root, encoding: "utf8" }
       )
@@ -13005,8 +12985,7 @@ if (dealtHere("p256Seams")) {
     }
     if (WASI_SYSROOT && has("wasm-ld")) {
       const wasm = path.join(seamDir, "app.wasm")
-      const built = spawnSync(
-        NISH,
+      const built = spawnNish(
         [entry, "-o", path.join(seamDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
         { cwd: root, encoding: "utf8" }
       )
@@ -13105,8 +13084,7 @@ if (dealtHere("netStartup")) {
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
     const exe = path.join(dir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [
         path.join(root, "tests", "link", "net_http1_server", "startup.ts"),
         "-o",
@@ -13167,8 +13145,7 @@ if (dealtHere("netStartup")) {
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
     const exe = path.join(dir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [
         path.join(root, "tests", "link", unit, program),
         "-o",
@@ -13207,8 +13184,7 @@ if (dealtHere("netStartup")) {
     fs.rmSync(dir, { recursive: true, force: true })
     fs.mkdirSync(dir, { recursive: true })
     const exe = path.join(dir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [
         path.join(root, "tests", "link", "net_http3_server", "startup.ts"),
         "-o",
@@ -13250,8 +13226,7 @@ if (dealtHere("threadWasi")) {
       const mutexDir = path.join(buildDir, "wasi_thread_mutex_counter")
       const mutexWasm = path.join(mutexDir, "app.wasm")
       const mutexEntry = path.join(linkDir, "thread_mutex_counter", "main.ts")
-      const mutexBuilt = spawnSync(
-        NISH,
+      const mutexBuilt = spawnNish(
         [mutexEntry, "-o", `${mutexDir}${path.sep}`, "--link", mutexWasm, "--profile", "wasi"],
         { cwd: root, encoding: "utf8" }
       )
@@ -13431,8 +13406,7 @@ if (dealtHere("cryptoChecks")) {
     if (WASI_SYSROOT && has("wasm-ld")) {
       const dir = path.join(buildDir, `wasi_${program}`)
       const wasm = path.join(dir, "app.wasm")
-      const built = spawnSync(
-        NISH,
+      const built = spawnNish(
         [path.join(linkDir, program, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
         { cwd: root, encoding: "utf8" }
       )
@@ -13593,8 +13567,7 @@ if (dealtHere("cryptoChecks")) {
       const dir = path.join(buildDir, "ed25519-length-guard")
       fs.rmSync(dir, { recursive: true, force: true })
       fs.mkdirSync(dir, { recursive: true })
-      const c = spawnSync(
-        NISH,
+      const c = spawnNish(
         [path.join(root, "tests/link/crypto_ed25519_f64/main.ts"), "--number-mode", "f64", "-o", `${dir}/`],
         { cwd: root, encoding: "utf8" }
       )
@@ -14868,8 +14841,7 @@ if (dealtHere("arrayChecks")) {
   if (!only || "arr_bounds_returned_import".includes(only) || only.startsWith("arr_bounds_returned")) {
     const dir = path.join(buildDir, "arr_bounds_returned_import")
     fs.rmSync(dir, { recursive: true, force: true })
-    const r = spawnSync(
-      NISH,
+    const r = spawnNish(
       [path.join("tests", "link", "arr_bounds_returned_import", "main.ts"), "--link", path.join(dir, "exe")],
       { cwd: root, encoding: "utf8", env: { ...process.env, CC: "true" } }
     )
@@ -15304,8 +15276,7 @@ if (dealtHere("arrayChecks")) {
   // the check covers the pipeline a user's build runs.
   if (has("clang") && (!only || "attr_panic_charcodeat".includes(only))) {
     const exe = path.join(buildDir, "attr_panic_charcodeat")
-    const link = spawnSync(
-      NISH,
+    const link = spawnNish(
       [path.join(casesDir, "attr_panic_charcodeat.ts"), "--link", exe, "--profile", "speed"],
       { cwd: root, encoding: "utf8" }
     )
@@ -16127,8 +16098,7 @@ if (dealtHere("arrayChecks")) {
       )
     }
     const noStackLl = path.join(buildDir, "mem_stack_struct_nostack.ll")
-    const ns = spawnSync(
-      NISH,
+    const ns = spawnNish(
       [path.join(casesDir, "mem_stack_struct.ts"), "--no-stack-alloc", "-o", noStackLl],
       { cwd: root }
     )
@@ -17034,8 +17004,7 @@ if (dealtHere("arrayChecks")) {
       check("ovf_matrix: links", false, String(matrix.stderr))
     }
     const repro = path.join(buildDir, "ovf_repro_speed")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [path.join(casesDir, "ovf_repro.ts"), "-o", `${repro}.ll`, "--link", repro, "--profile", "speed"],
       { cwd: root, encoding: "utf8" }
     )
@@ -17341,8 +17310,7 @@ if (dealtHere("arrayChecks")) {
         loopLines[3].includes("this value is not proven to lie in integer<0, 1000>"),
       loop.stderr
     )
-    const loopJson = spawnSync(
-      NISH,
+    const loopJson = spawnNish(
       [path.join(casesDir, "perf_rng_loop.ts"), "-o", path.join(buildDir, "perf_rng_loop_json.ll"), "--json"],
       { cwd: root, encoding: "utf8" }
     )
@@ -17748,8 +17716,7 @@ if (dealtHere("runtimeChecks")) {
   if (!only || "compact page module".includes(only)) {
     const dir = path.join(buildDir, "compact-page-host")
     fs.rmSync(dir, { recursive: true, force: true })
-    const c = spawnSync(
-      NISH,
+    const c = spawnNish(
       [path.join(casesDir, "compact_root_page.ts"), "-o", `${dir}${path.sep}`, "--emit-dts", path.join(dir, "main.d.ts")],
       { cwd: root, encoding: "utf8" }
     )
@@ -18434,8 +18401,7 @@ if (dealtHere("runtimeChecks")) {
     // build must still print the `.out`.
     const nm = ["llvm-nm", "llvm-nm-18"].find(has)
     const flagLink = (exe, flags) => {
-      const linked = spawnSync(
-        NISH,
+      const linked = spawnNish(
         ["-g", ...flags, "tests/cases/arena_placement.ts", "-o", path.join(debugDir, `${path.basename(exe)}.ll`), "--link", exe],
         { cwd: root, encoding: "utf8" }
       )
@@ -18822,8 +18788,7 @@ if (dealtHere("runtimeChecks")) {
       // included, which the case's own `test()` counts.
       const minmaxLl = path.join(buildDir, "math_minmax_float_wasm.ll")
       const minmaxWasm = path.join(buildDir, "math_minmax_float.wasm")
-      const mc = spawnSync(
-        NISH,
+      const mc = spawnNish(
         [path.join(casesDir, "math_minmax_float.ts"), "--target", "wasm32-unknown-unknown", "-o", minmaxLl],
         { cwd: root }
       )
@@ -18915,8 +18880,7 @@ if (dealtHere("runtimeChecks")) {
       privateTs,
       "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
     )
-    const wasm32 = spawnSync(
-      NISH,
+    const wasm32 = spawnNish(
       [privateTs, "-o", path.join(memDir, "private-wasm32.ll"), "--target", "wasm32"],
       {
         cwd: root,
@@ -19002,7 +18966,7 @@ if (dealtHere("runtimeChecks")) {
       )
       if (linked.status === 0) {
         const referenceLl = path.join(buildDir, "web_add.ll")
-        execFileSync(NISH, ["examples/add.ts", "-o", referenceLl], { cwd: root, stdio: "pipe" })
+        execFileSync(NISH, withAllowPanics(NISH, ["examples/add.ts", "-o", referenceLl]), { cwd: root, stdio: "pipe" })
         const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], { cwd: root })
         check(
           "web: nish.wasm in a worker emits the native compiler's IR for examples/add.ts, byte for byte",
@@ -21267,8 +21231,7 @@ if (dealtHere("simd")) {
       (process.arch === "arm64" && crcFeatures.has("crc32"))
     /** The modules of tests/link/<program> compiled into a directory of their own, or none and the reason. */
     const compileCrc = (program, dir, flags) => {
-      const r = spawnSync(
-        NISH,
+      const r = spawnNish(
         [path.join("tests", "link", program, "main.ts"), "-o", `${dir}${path.sep}`, ...flags],
         {
           cwd: root,
@@ -23032,8 +22995,7 @@ if (dealtHere("cliChecks")) {
       ["--threads", "--emit-napi-async", sidecar("interop-async", "napi.c")],
       "interop-async"
     )
-    const asyncNoThreads = spawnSync(
-      NISH,
+    const asyncNoThreads = spawnNish(
       [
         asyncSrc,
         "-o",
@@ -24102,8 +24064,7 @@ if (dealtHere("cliChecks")) {
     const rngFile = (ext) => path.join(rngDir, `interop_rng_host.${ext}`)
     // Relative to the root, as a host's build would name it: the comments quote it.
     const rngSource = "tests/cases/interop_rng_host.ts"
-    const emitted = spawnSync(
-      NISH,
+    const emitted = spawnNish(
       [
         rngSource,
         "-o",
@@ -24122,8 +24083,7 @@ if (dealtHere("cliChecks")) {
       emitted.status === 0 && fs.existsSync(rngFile(ext)) ? fs.readFileSync(rngFile(ext), "utf8") : ""
     // An argument its callee checks in the prologue is not checked at the call, so a
     // loop is warned (NL9013) about the private callee's argument alone.
-    const loopJson = spawnSync(
-      NISH,
+    const loopJson = spawnNish(
       ["tests/cases/interop_rng_loop.ts", "-o", path.join(rngDir, "interop_rng_loop.ll"), "--json"],
       { cwd: root, encoding: "utf8" }
     )
@@ -24272,8 +24232,7 @@ if (dealtHere("cliChecks")) {
       // The promise-returning twins reject with the same RangeError, and their helper
       // is written only when one of them calls it, which -Werror holds it to.
       const asyncShim = path.join(rngDir, "interop_rng_async.napi.c")
-      const asyncEmit = spawnSync(
-        NISH,
+      const asyncEmit = spawnNish(
         [rngSource, "-o", `${rngDir}${path.sep}async${path.sep}`, "--threads", "--emit-napi-async", asyncShim],
         { cwd: root, encoding: "utf8" }
       )
@@ -25222,8 +25181,7 @@ if (dealtHere("cliChecks")) {
         !fs.existsSync(path.join(capsDir, "ice.ll")),
       shown(ice)
     )
-    const iceJson = spawnSync(
-      NISH,
+    const iceJson = spawnNish(
       [path.join(casesDir, "caps_fs_read.ts"), "-o", path.join(capsDir, "ice.ll"), "--json"],
       { cwd: root, encoding: "utf8", env: unlabelled }
     )
@@ -25237,8 +25195,7 @@ if (dealtHere("cliChecks")) {
           "internal compiler error: a builtin call has no capability label in src/capabilities.ts: `readFileSync`",
       shown(iceJson)
     )
-    const unaffected = spawnSync(
-      NISH,
+    const unaffected = spawnNish(
       [path.join(casesDir, "caps_pure.ts"), "-o", path.join(capsDir, "unaffected.ll")],
       { cwd: root, encoding: "utf8", env: unlabelled }
     )
@@ -25260,8 +25217,7 @@ if (dealtHere("cliChecks")) {
       noFile.status === 2 && noFile.stderr.includes("compile: --emit-capabilities needs a file"),
       shown(noFile)
     )
-    const inRun = spawnSync(
-      NISH,
+    const inRun = spawnNish(
       ["run", "--emit-capabilities", path.join(capsDir, "run.json"), path.join(casesDir, "caps_pure.ts")],
       { cwd: root, encoding: "utf8" }
     )
@@ -25290,8 +25246,7 @@ if (dealtHere("cliChecks")) {
     }
     // Under `run`, `--emit-ast` is refused as a product `run` keeps to itself,
     // and that refusal is the one a reader gets, whatever capability flag is beside it.
-    const runAst = spawnSync(
-      NISH,
+    const runAst = spawnNish(
       ["run", "--emit-ast", "--capabilities", path.join(casesDir, "caps_pure.ts")],
       {
         cwd: root,
@@ -25423,8 +25378,7 @@ if (dealtHere("cliChecks")) {
     // a call into a function a scope had emptied (`counted`'s, through `width`)
     // allocates again and is listed.
     const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
-    const explainBare = spawnSync(
-      NISH,
+    const explainBare = spawnNish(
       [explainSource, "-o", path.join(bareDir, "explain_memory.ll"), "--no-elision", "--explain-memory"],
       { cwd: root, encoding: "utf8" }
     )
@@ -25439,8 +25393,7 @@ if (dealtHere("cliChecks")) {
     // A build `--deny-retention` refuses still prints the report, which says
     // why each refused loop keeps its memory.
     const deniedDir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-explain-"))
-    const denied = spawnSync(
-      NISH,
+    const denied = spawnNish(
       [
         path.join(root, "tests", "cases", "reject_deny_retention_pass_drop.ts"),
         "-o",
@@ -25496,8 +25449,7 @@ if (dealtHere("cliChecks")) {
     // A dependency's retention stays a warning, as its panic sites stay outside
     // the no-panic scope: the program's author cannot change that code.
     const retainDep = path.join(root, "tests", "link", "deny_retention_dependency", "main.ts")
-    const depRun = spawnSync(
-      NISH,
+    const depRun = spawnNish(
       [retainDep, "--deny-retention", "-o", path.join(capsDir, "retain-dep") + "/"],
       {
         cwd: root,
@@ -25527,8 +25479,7 @@ if (dealtHere("cliChecks")) {
       shown(dumped)
     )
     // `--emit-checked` does stop after it, and both are answered before the dump.
-    const withChecked = spawnSync(
-      NISH,
+    const withChecked = spawnNish(
       [
         path.join(casesDir, "caps_env.ts"),
         "--emit-checked",
@@ -25547,8 +25498,7 @@ if (dealtHere("cliChecks")) {
       shown(withChecked)
     )
     const summaryOf = (name) =>
-      spawnSync(
-        NISH,
+      spawnNish(
         [path.join(casesDir, `${name}.ts`), "-o", path.join(capsDir, `${name}.ll`), "--capabilities"],
         {
           cwd: root,
@@ -25570,8 +25520,7 @@ if (dealtHere("cliChecks")) {
         exits.stderr.split("\n")[0] === "capabilities: exit (deterministic)",
       [quiet, loud, exits].map(shown).join("\n")
     )
-    const withReport = spawnSync(
-      NISH,
+    const withReport = spawnNish(
       [
         path.join(casesDir, "caps_env.ts"),
         "-o",
@@ -25597,6 +25546,7 @@ if (dealtHere("cliChecks")) {
       cookbookText
     )
     const cookbookJson = path.join(capsDir, "cookbook.json")
+    // strict: a docs/cookbook program builds as a user who copies it would.
     const cookbookRun = spawnSync(
       NISH,
       [
@@ -25623,6 +25573,7 @@ if (dealtHere("cliChecks")) {
       cookbookText
     )
     const cookbookSource = path.join(root, "docs", "cookbook", "builtin-capabilities.ts")
+    // strict: a docs/cookbook program builds as a user who copies it would.
     const refusedRun = spawnSync(
       NISH,
       [cookbookSource, "-o", path.join(capsDir, "refused") + path.sep, "--deny", "fs.read"],
@@ -25644,8 +25595,7 @@ if (dealtHere("cliChecks")) {
     const shownDependency = /<!-- capabilities-refusal caps_dep_net_refused -->\n```text\n([\s\S]*?)```\n/.exec(
       cookbookText
     )
-    const dependencyRun = spawnSync(
-      NISH,
+    const dependencyRun = spawnNish(
       [
         path.join(root, "tests", "link", "caps_dep_net_refused", "main.ts"),
         "-o",
@@ -25662,8 +25612,7 @@ if (dealtHere("cliChecks")) {
     )
     // WP40: and the lockfile refusal after it, from its link program.
     const shownLock = /<!-- capabilities-refusal caps_lock_growth -->\n```text\n([\s\S]*?)```\n/.exec(cookbookText)
-    const lockRefusedRun = spawnSync(
-      NISH,
+    const lockRefusedRun = spawnNish(
       [path.join(root, "tests", "link", "caps_lock_growth", "main.ts"), "-o", path.join(capsDir, "lock-cookbook") + path.sep],
       { cwd: root, encoding: "utf8" }
     )
@@ -25675,6 +25624,7 @@ if (dealtHere("cliChecks")) {
       shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
     )
     const grantedDir = path.join(capsDir, "granted") + path.sep
+    // strict: a docs/cookbook program builds as a user who copies it would.
     const grantedRun = spawnSync(
       NISH,
       [cookbookSource, "-o", grantedDir, "--allow", "fs.read", "--deny", "net"],
@@ -25783,8 +25733,7 @@ if (dealtHere("cliChecks")) {
       ["--fix", "`--update-capability-lock` cannot be used with --fix"],
       ["--emit-ast", "`--update-capability-lock` reports on a checked program, and --emit-ast stops before the check"],
     ]) {
-      const refusedFlag = spawnSync(
-        NISH,
+      const refusedFlag = spawnNish(
         [path.join(lockCopy("caps_lock_matches"), "main.ts"), "--update-capability-lock", other],
         { cwd: root, encoding: "utf8" }
       )
@@ -26620,8 +26569,7 @@ if (dealtHere("cliChecks")) {
       const outputs = c.outputs ?? []
       const placed = (arg, variant) => (arg.includes("@") ? path.join(layoutDir, arg.replace("@", variant)) : arg)
       const build = (variant, extra) =>
-        spawnSync(
-          NISH,
+        spawnNish(
           [
             file,
             ...(c.noIr ? [] : ["-o", path.join(layoutDir, variant, `${base}.ll`)]),
@@ -28197,11 +28145,12 @@ if (dealtHere("releaseChecks")) {
   // `tests/allow-panics.js` and the shell scripts through `nish_allow_panics`
   // (`scripts/nish-compiler.sh`), and both ask the compiler's `--help` first,
   // because the seed and any older release exit 2 on it. Each build below that
-  // must go without the flag calls `spawnSync(NISH, ...)` directly.
+  // must go without the flag calls the compiler directly, marked `// strict:`.
   if (!only || "no-panic scope: allow-panics deny-panics cli".includes(only)) {
     const work = path.join(buildDir, "allow-panics")
     fs.rmSync(work, { recursive: true, force: true })
     fs.mkdirSync(work, { recursive: true })
+    // strict: these builds pin what the compiler does without the flag.
     const strict = (args) => spawnSync(NISH, args, { cwd: root, encoding: "utf8" })
     const irOf = (name, source, flags) => {
       const out = path.join(work, `${name}.ll`)
@@ -28243,13 +28192,39 @@ if (dealtHere("releaseChecks")) {
       ["--version"],
       ["upgrade", "--check"],
       ["c-import", "x.h"],
+      [path.join(root, "docs", "cookbook", "builtin-capabilities.ts")],
     ]
+    // Anchored to the repository's own `examples/`: a scratch copy that merely
+    // has a directory of that name is a case, not an example.
+    const copied = [path.join(buildDir, "examples", "x.ts"), "-o", "x.ll"]
     const added = withAllowPanics(listing, ["run", "tests/cases/panics_index.ts", "--deny-panics"])
     check(
-      "allow-panics: the helper leaves a line that decides the scope, an example or no compile alone, and puts the flag after `run`",
+      "allow-panics: the helper leaves a line that decides the scope, an example, a docs program or no compile alone, and puts the flag after `run`",
       unchanged.every((args) => withAllowPanics(listing, args) === args) &&
+        JSON.stringify(withAllowPanics(listing, copied)) === JSON.stringify([ALLOW_PANICS, ...copied]) &&
         JSON.stringify(added) === JSON.stringify(["run", ALLOW_PANICS, "tests/cases/panics_index.ts", "--deny-panics"]),
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
+    )
+    // Every compile in this file goes through the helper, or says on the line
+    // above why it stays strict: a raw compile of a case would build it strict
+    // the day the default flips. The calls are the ones whose first argument is
+    // the compiler under test (`NISH`) or a binary built from it (`compiler`).
+    const self = fs.readFileSync(path.join(root, "tests", "run.js"), "utf8")
+    const rawCall = /\b(?:spawnSync|spawnAsync|execFileSync|execFile|spawn)\(\s*(?:NISH|compiler)\s*,(?!\s*withAllowPanics\()/g
+    const unrouted = []
+    let strictCalls = 0
+    for (const m of self.matchAll(rawCall)) {
+      const before = self.slice(0, m.index).split("\n")
+      if (`${before.slice(-3, -1).join("\n")}\n${before.at(-1)}`.includes("// strict:")) {
+        strictCalls++
+      } else {
+        unrouted.push(`tests/run.js:${before.length}`)
+      }
+    }
+    check(
+      "allow-panics: every compile in tests/run.js goes through withAllowPanics or says why it stays strict",
+      strictCalls > 0 && unrouted.length === 0,
+      `route these through spawnNish or withAllowPanics, or mark one \`// strict: <why>\` on the line above:\n${unrouted.join("\n")}`
     )
     // The seed, whatever release it is: the helper asks it, and a seed that does
     // not list the flag builds a case through the helper as it would without it.
@@ -28650,7 +28625,8 @@ if (dealtHere("releaseChecks")) {
           const target = path.resolve(dir, f.file)
           if (f.lang === "ts" && !misplaced.includes(f.line)) {
             const out = `${path.join(snippetDir, stem)}_${f.line}${path.sep}`
-            const alone = spawnNish([target, "-o", out], { encoding: "utf8" })
+            // strict: a docs snippet is a program a user copies, so it builds as they would.
+            const alone = spawnSync(NISH, [target, "-o", out], { encoding: "utf8" })
             if (alone.status !== 0) {
               misplaced.push(f.line)
             }
@@ -28662,7 +28638,8 @@ if (dealtHere("releaseChecks")) {
       }
       // A directory, because a snippet that imports `nish/threads` writes one module per file.
       const out = `${path.join(snippetDir, stem)}${path.sep}`
-      const run = spawnNish([file, "--json", "-o", out, ...s.args], { encoding: "utf8" })
+      // strict: a docs snippet is a program a user copies, so it builds as they would.
+      const run = spawnSync(NISH, [file, "--json", "-o", out, ...s.args], { encoding: "utf8" })
       const errors = run.stdout
         .split("\n")
         .filter(Boolean)
@@ -32757,8 +32734,7 @@ if (dealtHere("cSymbols")) {
         const napiDir = path.join(dir, "napi")
         fs.mkdirSync(napiDir, { recursive: true })
         const shim = path.join(napiDir, "shim.c")
-        const gen = spawnSync(
-          NISH,
+        const gen = spawnNish(
           [
             path.join(root, "tests", "c-symbols", "napi.ts"),
             "-o",
@@ -35502,8 +35478,7 @@ if (!only || "sandbox dependency grants".includes(only)) {
     const build = (fixture, flags, from = linkDir) => {
       const out = path.join(dir, `${fixture}${flags.length > 0 ? "-sandbox" : "-plain"}`)
       const exe = path.join(out, "app")
-      const r = spawnSync(
-        NISH,
+      const r = spawnNish(
         [path.join(from, fixture, "main.ts"), ...flags, "-o", out + path.sep, "--link", exe],
         { cwd: root, encoding: "utf8" }
       )
@@ -36218,8 +36193,7 @@ for (const name of [
   if (WASI_SYSROOT && has("wasm-ld")) {
     const dir = path.join(buildDir, `wasi_${name}`)
     const wasm = path.join(dir, "app.wasm")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [path.join(linkDir, name, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
@@ -36254,8 +36228,7 @@ for (const name of [
 const wasmHostCompile = (dir, stem) => {
   fs.mkdirSync(dir, { recursive: true })
   const ll = path.join(dir, `${stem}.ll`)
-  const r = spawnSync(
-    NISH,
+  const r = spawnNish(
     [`examples/${stem}.ts`, "--target", "wasm32", "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", ll],
     { cwd: root, encoding: "utf8" }
   )
@@ -36444,8 +36417,7 @@ if (!only || "wasm-host".includes(only)) {
         tableTs,
         "const TAB: readonly u8[] = [1, 2, 3];\nexport const table = (): readonly u8[] => TAB;\nexport const at = (i: u8): u8 => TAB[i % 3];\n"
       )
-      const tableCompiled = spawnSync(
-        NISH,
+      const tableCompiled = spawnNish(
         [tableTs, "--target", "wasm32", "--emit-dts", at("const_table_return.d.ts"), "-o", at("const_table_return.ll")],
         { cwd: root, encoding: "utf8" }
       )
@@ -37029,8 +37001,7 @@ if (!only || "float-corpus".includes(only)) {
     encoding: "utf8",
   })
   const numRun = numNative.status === 0 ? spawnSync(at("number-bin"), [], { cwd: root, encoding: "utf8" }) : numNative
-  const numFlagged = spawnSync(
-    NISH,
+  const numFlagged = spawnNish(
     [at("number.ts"), "--deterministic", "-o", at("number-d") + path.sep, "--link", at("number-d-bin")],
     { cwd: root, encoding: "utf8" }
   )
@@ -37076,8 +37047,7 @@ if (!only || "host-import-window".includes(only)) {
       fs.copyFileSync(path.join(root, "tests", "host-window", name), path.join(dir, name))
     }
     const at = (name) => path.join(dir, name)
-    const compiled = spawnSync(
-      NISH,
+    const compiled = spawnNish(
       [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
       { cwd: root, encoding: "utf8" }
     )
@@ -37169,8 +37139,7 @@ if (!only || "host-import-text".includes(only)) {
     }
     const at = (name) => path.join(dir, name)
     const runtimeWasm = "runtime/runtime-wasm.c"
-    const compiled = spawnSync(
-      NISH,
+    const compiled = spawnNish(
       [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("out") + "/"],
       { cwd: root, encoding: "utf8" }
     )
@@ -37346,8 +37315,7 @@ if (!only || "host-import-text".includes(only)) {
       nativeOut.status === 0 && nativeOut.stdout === expected,
       shown(nativeOut)
     )
-    const parityIr = spawnSync(
-      NISH,
+    const parityIr = spawnNish(
       [at("parity.ts"), "--target", "wasm32", "--emit-dts", at("parity.d.ts"), "-o", at("parity.ll")],
       { cwd: root, encoding: "utf8" }
     )
@@ -37433,8 +37401,7 @@ if (!only || "host-import".includes(only)) {
         path.join(scratch, `${name}.ts`),
         `import { first } from "./${name}.host"\nexport const f = (): i32 => {\n  return first(1)\n};\n`
       )
-      return spawnSync(
-        NISH,
+      return spawnNish(
         [
           path.join(scratch, `${name}.ts`),
           "--target",
@@ -37474,8 +37441,7 @@ if (!only || "host-import".includes(only)) {
     )
     const counterDir = path.join(hostDir, "unimported")
     const counter = (entry) =>
-      spawnSync(
-        NISH,
+      spawnNish(
         [
           path.join(counterDir, entry),
           "--target",
@@ -37506,8 +37472,7 @@ if (!only || "host-import".includes(only)) {
 
     // The page's bodies are its own TypeScript, which the build never reads.
     const bodiesDir = path.join(hostDir, "bodies")
-    const bodies = spawnSync(
-      NISH,
+    const bodies = spawnNish(
       [
         path.join(bodiesDir, "main.ts"),
         "--target",
@@ -37609,8 +37574,7 @@ if (!only || "host-import".includes(only)) {
       }
     }
     const at = (name) => path.join(dir, name)
-    const compiled = spawnSync(
-      NISH,
+    const compiled = spawnNish(
       [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
       { cwd: root, encoding: "utf8" }
     )
@@ -37877,8 +37841,7 @@ if (!only || "host-import".includes(only)) {
     // nish/vite, which passes no `host` option here, imports that file too.
     const route = path.join(dir, "route")
     fs.cpSync(path.join(root, "tests", "host-import", "route"), route, { recursive: true })
-    const routed = spawnSync(
-      NISH,
+    const routed = spawnNish(
       [path.join(route, "main.ts"), "--target", "wasm32", "--emit-dts", path.join(route, "main.d.ts"), "-o", path.join(route, "main.ll")],
       { cwd: root, encoding: "utf8" }
     )
@@ -38022,8 +37985,7 @@ if (!only || "module-storage".includes(only)) {
       }
     }
     const at = (name) => path.join(dir, name)
-    const compiled = spawnSync(
-      NISH,
+    const compiled = spawnNish(
       [at("main.ts"), "--target", "wasm32", "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
       { cwd: root, encoding: "utf8" }
     )
@@ -38183,8 +38145,7 @@ if (!only || "module-storage".includes(only)) {
     )
     const wasmMain = named("page.ts", both)
     const wasmDir = path.join(names, "wasm")
-    const twoWasm = spawnSync(
-      NISH,
+    const twoWasm = spawnNish(
       [wasmMain, "--target", "wasm32", "--emit-dts", path.join(names, "page.d.ts"), "-o", wasmDir + path.sep],
       { cwd: root, encoding: "utf8" }
     )
@@ -38236,8 +38197,7 @@ if (!only || "wasm-host-panic".includes(only)) {
       fs.copyFileSync(path.join(root, "tests", "panic", name), path.join(dir, name))
     }
     const at = (name) => path.join(dir, name)
-    const compiled = spawnSync(
-      NISH,
+    const compiled = spawnNish(
       [at("main.ts"), "--target", "wasm32", "--host", at("host.ts"), "--emit-dts", at("main.d.ts"), "-o", at("main.ll")],
       { cwd: root, encoding: "utf8" }
     )
@@ -38705,8 +38665,7 @@ if (!only || "persist".includes(only)) {
     withHeader.status !== 0 && withHeader.stderr.includes("which holds a union no sidecar can describe"),
     shown(withHeader)
   )
-  const late = spawnSync(
-    NISH,
+  const late = spawnNish(
     ["tests/module-storage/persist/late-class.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "late.d.ts"), "-o", `${unionDir}/`],
     { cwd: root, encoding: "utf8" }
   )
@@ -38724,8 +38683,7 @@ if (!only || "persist".includes(only)) {
   if (bumpWhy !== null) {
     skip(`persist: ${bumpWhy}`)
   } else {
-    const bump = spawnSync(
-      NISH,
+    const bump = spawnNish(
       ["tests/module-storage/persist/bump.ts", "--target", "wasm32", "--emit-dts", path.join(unionDir, "bump.d.ts"), "-o", `${unionDir}/`],
       { cwd: root, encoding: "utf8" }
     )
@@ -38784,8 +38742,7 @@ if (!only || "persist".includes(only)) {
       const mode = drive ?? stem
       const out = path.join(dir, stem)
       fs.mkdirSync(out, { recursive: true })
-      const compiled = spawnSync(
-        NISH,
+      const compiled = spawnNish(
         [source, "--target", "wasm32", "--emit-dts", path.join(out, `${stem}.d.ts`), "-o", `${out}/`],
         { cwd: root, encoding: "utf8" }
       )
@@ -39597,8 +39554,7 @@ if (!only || "wasm-size".includes(only)) {
       const compiled =
         lls === null
           ? null
-          : spawnSync(
-              NISH,
+          : spawnNish(
               [src, "--target", "wasm32", "--host", hostModule, "--emit-dts", path.join(dir, `${stem}.d.ts`), "-o", `${lls}/`],
               { cwd: root, encoding: "utf8" }
             )
@@ -43534,8 +43490,7 @@ if (!only || "sandbox".includes(only)) {
   fs.mkdirSync(odd, { recursive: true })
   const oddReal = fs.realpathSync(odd)
   const scopedLl = path.join(dir, "hello-scoped.ll")
-  const sc = spawnSync(
-    NISH,
+  const sc = spawnNish(
     [
       path.join(linkDir, "sandbox_fixtures", "read.ts"),
       "--sandbox",
@@ -43673,8 +43628,7 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
     }
     if (wasi) {
       const wasm = path.join(simdDir, `${name}.wasm`)
-      const built = spawnSync(
-        NISH,
+      const built = spawnNish(
         [
           path.join(casesDir, `${name}.ts`),
           "-o",
@@ -43765,8 +43719,7 @@ if (!only || "nish:simd".includes(only) || only.includes("simd")) {
   const header = path.join(simdDir, "lib.h")
   const dts = path.join(simdDir, "lib.d.ts")
   const napi = path.join(simdDir, "lib_napi.c")
-  const sides = spawnSync(
-    NISH,
+  const sides = spawnNish(
     [lib, "-o", path.join(simdDir, "lib.ll"), "--emit-header", header, "--emit-dts", dts, "--emit-napi", napi],
     { cwd: root, encoding: "utf8" }
   )
@@ -44457,8 +44410,7 @@ if (!only || "std_cli".includes(only) || "cli-under-node".includes(only)) {
 // the run on every pass. std_term's frame loop holds the placement to `pass`.
 if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
   const arenaFile = path.join(buildDir, "std_term.arena.json")
-  const placed = spawnSync(
-    NISH,
+  const placed = spawnNish(
     [path.join(linkDir, "std_term", "main.ts"), "-o", path.join(buildDir, "std_term-arena") + "/", "--emit-arena", arenaFile],
     { cwd: root, encoding: "utf8" }
   )
@@ -44801,8 +44753,7 @@ if (!only || "std_json_tokenizer".includes(only)) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "json_tokenizer_node") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [entry, "-o", outDir, "--link", exe, ...linkProfile("std_json_tokenizer")],
       { cwd: root, encoding: "utf8" }
     )
@@ -44843,8 +44794,7 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "std_url_alloc") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe, ...linkProfile("std_url")],
       {
         cwd: root,
@@ -44969,8 +44919,7 @@ if (!only || "std_text_index_of_any".includes(only)) {
     for (const name of wasiNames) {
       const wasiDir = path.join(buildDir, `wasi_${name}`)
       const wasm = path.join(wasiDir, "app.wasm")
-      const built = spawnSync(
-        NISH,
+      const built = spawnNish(
         [
           path.join(linkDir, name, "main.ts"),
           "-o",
@@ -45259,8 +45208,7 @@ if (!only || "std_json_writer".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_writer_node")
     fs.rmSync(outDir, { recursive: true, force: true })
     const exe = path.join(outDir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [entry, "-o", `${outDir}${path.sep}`, "--link", exe, ...linkProfile("std_json_writer")],
       {
         cwd: root,
@@ -45525,8 +45473,7 @@ if (!only || "std_json_typed".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_typed_readers")
     fs.rmSync(outDir, { recursive: true, force: true })
     const app = path.join(outDir, "app")
-    const built = spawnSync(
-      NISH,
+    const built = spawnNish(
       [readers, "-o", `${outDir}${path.sep}`, "--link", app, ...linkProfile("std_json_typed")],
       {
         cwd: root,
@@ -46020,8 +45967,7 @@ if (!only || "std_json_conformance".includes(only)) {
     const outDir = path.join(buildDir, "link", outName)
     fs.rmSync(outDir, { recursive: true, force: true })
     const exe = path.join(outDir, "app")
-    const r = spawnSync(
-      NISH,
+    const r = spawnNish(
       ["main.ts", second, "-o", `${outDir}${path.sep}`, "--link", exe, ...linkProfile("root_named_twice")],
       {
         cwd: twiceDir,
@@ -46164,8 +46110,7 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
   const outDir = path.join(buildDir, "link", "package_doubled") + path.sep
   fs.rmSync(outDir, { recursive: true, force: true })
   const exe = path.join(buildDir, "link", "package_doubled-app")
-  const inside = spawnSync(
-    NISH,
+  const inside = spawnNish(
     ["main.ts", "-o", outDir, "--link", exe, ...linkProfile("package_doubled")],
     {
       cwd: doubledApp,
@@ -47045,8 +46990,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeReport = (entry, extra = []) => {
     const stem = path.basename(entry, ".ts")
     const json = path.join(unsafeDir, `${stem}.caps.json`)
-    const r = spawnSync(
-      NISH,
+    const r = spawnNish(
       [
         entry,
         "-o",
@@ -47119,8 +47063,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       JSON.stringify(moduleOf(dep.report, "pure.ts")?.capabilities) === "[]",
     shown(dep.r)
   )
-  const depDenied = spawnSync(
-    NISH,
+  const depDenied = spawnNish(
     ["dep.ts", "-o", `${path.join(unsafeDir, "dep-denied.ir")}${path.sep}`, "--deny", "unsafe"],
     { cwd: unsafeDir, encoding: "utf8" }
   )

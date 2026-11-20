@@ -9,8 +9,9 @@
  * `--deny-panics` (`ALLOW_PANICS_FLAG` in `src/options.ts`). It is passed now
  * so that the day the compiler refuses an unproven panic by default, the suite
  * keeps building its cases, fixtures and fuzz targets, which panic on purpose,
- * without another pass over every call site. An example a user would copy is
- * the exception: its build stays strict, so the examples prove the default.
+ * without another pass over every call site. An example or a docs program a
+ * user would copy is the exception: its build stays strict, so they prove the
+ * default.
  *
  * It is a probe, not "the seed never gets it": the last release exits 2 on a
  * flag it does not know, and `NISH_BOOTSTRAP` or `--seed` can name any release
@@ -30,11 +31,20 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/
 /** The commands whose arguments are not a compile's: no flag goes to them. */
 const NOT_A_COMPILE = new Set(["upgrade", "c-import", "break"])
 
+/** The repository root, which `EXAMPLE` is anchored to. */
+const ROOT = path.resolve(import.meta.dirname, "..")
+
 /**
- * A program under an `examples/` directory: a user copies it, so its build
- * stays strict and proves the default rather than the harness.
+ * A program under the repository's own `examples/` or `docs/`, relative to
+ * `ROOT`: a user copies it, so its build stays strict and proves the default
+ * rather than the harness. A directory merely named `examples` elsewhere (a
+ * fixture, a scratch copy under `build/`) is not one. A relative path is read
+ * from the process's working directory, as the suite runs from the root.
  */
-const EXAMPLE = /(?:^|[\\/])examples[\\/]/
+const EXAMPLE = /^(?:examples|docs)[\\/]/
+
+/** Whether `file` is one of the repository's examples or docs programs. */
+const isExample = (file) => EXAMPLE.test(path.relative(ROOT, path.resolve(file)))
 
 /** Flags that already decide the panic scope, or ask for no compile at all. */
 const DECIDES = new Set(["--deny-panics", ALLOW_PANICS, "-h", "--help", "-v", "--version"])
@@ -66,7 +76,7 @@ const listsAllowPanics = (compiler) => {
 /**
  * `args` with `--allow-panics` added when `compiler` lists it and the call is
  * a compile or a `run` whose own flags leave the scope open: it names a `.ts`
- * file outside `examples/`, is not `upgrade`, `c-import` or `break`, and passes none of
+ * file outside the repository's `examples/` and `docs/`, is not `upgrade`, `c-import` or `break`, and passes none of
  * `--deny-panics`, `--allow-panics`, `--help` or `--version` before the
  * program. The flag goes first, or right after `run`, where the compiler's
  * flags are; a `run`'s program arguments are never read. Otherwise `args`
@@ -78,7 +88,7 @@ const withAllowPanics = (compiler, args) => {
   }
   const run = args[0] === "run" ? 1 : 0
   const program = args.findIndex((arg, i) => i >= run && arg.endsWith(".ts"))
-  if (program < 0 || EXAMPLE.test(args[program])) {
+  if (program < 0 || isExample(args[program])) {
     return args
   }
   const ownFlags = run === 1 ? args.slice(1, program) : args
