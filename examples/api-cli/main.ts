@@ -1,3 +1,8 @@
+// Opt-out from `--deny-panics`: calls into `std/cli-args`, `std/collections`
+// and `std/json` reach their index, slice and overflow panic sites; this file
+// keeps none of its own. Follow-up: make those modules panic-free, then build
+// this file with `--deny-panics`.
+//
 // A command tree for an HTTP API's command-line client, on `nish/cli-args`:
 // `users list|get|keys list|keys create` and `projects list`, with global
 // flags that may stand before, between or after the verbs. It sends no

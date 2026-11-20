@@ -1,3 +1,7 @@
+// Opt-out from `--deny-panics`: the `Map` calls reach panic sites in
+// `std/collections`; this file keeps none of its own. Follow-up: make
+// `std/collections` panic-free, then build this file with `--deny-panics`.
+//
 // Word count on the global `Map`, and the two calls `nish/map` adds to it
 // (docs/wp32-map.md §9). Each count below is one hash and one probe of the
 // table per word: `counts.set(w, (counts.get(w) ?? 0) + 1)` asks about `w`

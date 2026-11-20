@@ -1,3 +1,8 @@
+// Opt-out from `--deny-panics`: `ThreadScope.spawn` reaches the `panic` in
+// `slotOutOfRange` (std/threads.ts); this file keeps no site of its own.
+// Follow-up: make `spawn`'s slot store in `std/threads.ts` panic-free, then
+// build this file with `--deny-panics`.
+//
 // A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomic arrays"). The
 // bins are one `AtomicI32Array`, 256 atomic counters in one buffer. A task
 // counts its own values into a local `u32[]` that no other core touches, then adds each local count to its bin with one `add`, a

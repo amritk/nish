@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: calls into `std/json`, `std/net/handler`,
+// `std/net/http1-server` and `std/net/router` reach their panic sites, and
+// app.ts's `String.fromBytes` slice keeps a range check the checker cannot yet
+// discharge. Follow-up: make those modules panic-free and teach the prover that
+// slice's bound, then build this program with `--deny-panics`.
+//
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
 // SIGINT or SIGTERM.

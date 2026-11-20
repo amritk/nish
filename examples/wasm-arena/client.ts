@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: calls into `std/host/ring` and `std/math` reach
+// their panic sites, and sim.ts indexes the `BODIES` and `SHOTS` records in
+// module storage, which the checker cannot yet prove in range or lend to a
+// helper. Follow-up: make those modules panic-free and teach the prover
+// module-storage bounds, then build this file with `--deny-panics`.
+//
 // The page module of examples/wasm-arena (docs/wp50-wasm-host.md §10, W9). It
 // owns the input ring the page writes, steps sim.ts at a fixed tick, and lays
 // out one instance per body and shot in module storage, which the page hands

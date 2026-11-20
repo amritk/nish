@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: calls into `std/json`, `std/net/fetch` and
+// `std/net/tls/record-client` reach their panic sites, and the
+// `String.fromBytes` slice of the body keeps a range check the checker cannot
+// yet discharge. Follow-up: make those modules panic-free and teach the prover
+// that slice's bound, then build this file with `--deny-panics`.
+//
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when
 // none are named:

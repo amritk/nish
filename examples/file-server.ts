@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: the HTTP calls reach panic sites in
+// `std/net/http1-codec` and `std/net/http1-server`, and the slice of
+// `fileReadAt`'s window keeps a range check the checker cannot yet discharge.
+// Follow-up: make those modules panic-free and teach the prover `fileReadAt`'s
+// bound, then build this file with `--deny-panics`.
+//
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each
 // connection keeps only how far into it it has got, an i64, and every

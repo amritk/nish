@@ -1,3 +1,7 @@
+// Opt-out from `--deny-panics`: calls into `std/term-io` and `std/term-pixels`
+// reach their panic sites; this file keeps none of its own. Follow-up: make
+// those modules panic-free, then build this file with `--deny-panics`.
+//
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws
 // wrong. It opens the terminal, presents a moving picture for five seconds,

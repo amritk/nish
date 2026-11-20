@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: calls into `std/math` reach its panic sites,
+// and sim.ts indexes the `BODIES` and `SHOTS` records in module storage, which
+// the checker cannot yet prove in range or lend to a helper. Follow-up: make
+// `std/math` panic-free and teach the prover module-storage bounds, then build
+// this file with `--deny-panics`.
+//
 // The native replay of examples/wasm-arena: the same sim.ts, compiled with
 // `--deterministic`, steps the input a page recorded and prints the state's
 // hash, which the page's own hash must equal bit for bit.

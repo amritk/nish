@@ -1,3 +1,8 @@
+// Opt-out from `--deny-panics`: calls into `std/net/http1-codec`,
+// `std/net/http1-server` and `std/net/prefork` reach their panic sites; this
+// file keeps none of its own. Follow-up: make those modules panic-free, then
+// build this file with `--deny-panics`.
+//
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker
 // process per core, each binds its own SO_REUSEPORT listener on the port, and
 // the kernel spreads connections across them. Every response names the worker
