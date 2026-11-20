@@ -1,7 +1,7 @@
 # WP57: Module-scoped names
 
 **Status: S1 built (#1812); S2 decided, keep refusing (§6); S3 split into
-five stages, none built (§7, §8).** Two modules may each keep a private
+five stages, S3a built (#1840) (§7, §8).** Two modules may each keep a private
 function or generic template of one name: a clashing one's symbol is
 qualified by its module path (§4), as
 [LANGUAGE.md](LANGUAGE.md#export-and-import) states. Exported names stay
