@@ -6,7 +6,7 @@
 //   npm run build && node bench/sqlite/run.mjs [--validate] [--rounds N] [--compiler <nish>]
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
-//     --rounds N  timed rounds, rounded up to a multiple of 3 (default 12),
+//     --rounds N  timed rounds, rounded up to a multiple of 6 (default 12),
 //                 after one uncounted warm-up round
 //
 // main.ts is built with `--link` (the speed profile) and copied byte for byte;
@@ -27,8 +27,10 @@
 //
 // Each round runs every workload on the build, its copy and the C twin, in an
 // order that rotates by round, so over a multiple of 3 rounds each goes first
-// equally often; feed-cursor, which twin.c has no path for, runs on the build
-// and its copy alone, and its line is set against feed's. A run times
+// equally often; feed-cursor-walk and feed-cursor, which twin.c has no path
+// for, run on the build and its copy alone, which alternate, so over an even
+// count each goes first equally often, and their lines are set against
+// feed's. The timed count is rounded up to a multiple of 6 to balance both. A run times
 // its own loop and prints a checksum of every value it read; every run of a
 // workload must print the same rows and checksum. The report is ns per call,
 // min, median and interquartile range over the rounds; the cost of the module
@@ -70,12 +72,15 @@ if (!(rounds >= 2)) {
 }
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
-// feed-cursor reads feed's rows through cursors instead of SQL: it runs at
-// feed's count and must print feed's line (`same`), and twin.c has no cursor
-// path, so it runs on the build and its copy only (`noTwin`).
+// feed-cursor-walk and feed-cursor read feed's rows through cursors instead
+// of SQL: they run at feed's count and must print feed's line (`same`), and
+// twin.c has no cursor path, so they run on the build and its copy only
+// (`noTwin`). feed-cursor-walk opens its transaction and cursors once, outside
+// the timed loop; feed-cursor opens and closes them on every call.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
+  { name: "feed-cursor-walk", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
   { name: "insert-txn", count: validate ? 2000 : 100000 },
@@ -258,7 +263,11 @@ const iqr = (xs) => {
 const times = WORKLOADS.map(() => bins.map(() => []))
 const answers = WORKLOADS.map(() => null)
 // Round 0 warms the binaries and the page cache and is not counted.
-const timed = Math.ceil(rounds / bins.length) * bins.length
+// Every rotation must come round equally often: 3 binaries, or the build and
+// its copy alone for a noTwin workload, so a multiple of 6 when any is one.
+const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b))
+const period = WORKLOADS.map((w) => ranBy(w).length).reduce((a, n) => (a * n) / gcd(a, n), 1)
+const timed = Math.ceil(rounds / period) * period
 for (let round = 0; round <= timed; round++) {
   for (let w = 0; w < WORKLOADS.length; w++) {
     const ks = ranBy(WORKLOADS[w])

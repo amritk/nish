@@ -859,8 +859,8 @@ function feedByCursors(db: Database, f: Fold): i32 -> @feedByCursors
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Fold.add Fold.constructor Fold.post feedByCursors llvm.fptosi.sat.i32.f64 nish.Database.begin nish.Database.close nish.Database.commit nish.Database.exec nish.Database.prepare nish.Statement.bindI64 nish.Statement.bindTextBytes nish.Statement.columnI64 nish.Statement.columnInto nish.Statement.finalize nish.Statement.reset nish.Statement.step nish.openDatabase nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_from_u64 nish_write
-  stackSites=21 stackLocals=5
+  calls: Fold.add Fold.constructor Fold.post feedByCursors llvm.fptosi.sat.i32.f64 nish.Database.begin nish.Database.beginRead nish.Database.close nish.Database.commit nish.Database.endRead nish.Database.exec nish.Database.openCursor nish.Database.prepare nish.Statement.bindI64 nish.Statement.bindTextBytes nish.Statement.columnI64 nish.Statement.columnInto nish.Statement.finalize nish.Statement.reset nish.Statement.step nish.openDatabase nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 nish_str_from_u64 nish_write walkFeed
+  stackSites=23 stackLocals=5
   local +0:9 mode: string (const)
   local +1:9 count: i32 (const)
   local +2:9 opened: Result<Database, SqliteError> (const)
@@ -897,30 +897,43 @@ function main(): i32 -> @nish_main [exported entry]
   local +84:14 i: i32 (let)
   local +85:13 n: i32 (const)
   callee +85:22 feedByCursors -> @feedByCursors
-  local +94:11 txn: boolean (const)
-  local +97:11 bodies: u8[] (const)
-  local +98:14 k: i32 (let)
-  local +99:13 len: i32 (const)
-  local +100:16 j: i32 (let)
-  callee +106:9 Database.exec -> @nish.Database.exec
-  local +109:11 prepared: Result<Statement, SqliteError> (const)
-  callee +109:22 Database.prepare -> @nish.Database.prepare
-  local +114:11 st: Statement (const)
-  callee +116:16 Database.begin -> @nish.Database.begin
-  local +119:14 i: i32 (let)
-  local +120:13 k: i32 (const)
-  callee +121:11 Statement.bindI64 -> @nish.Statement.bindI64
-  callee +124:11 Statement.bindTextBytes -> @nish.Statement.bindTextBytes
-  local +127:13 r: Result<boolean, i32> (const)
-  callee +127:17 Statement.step -> @nish.Statement.step
-  callee +130:9 Fold.add -> @Fold.add
-  callee +130:21 Statement.columnI64 -> @nish.Statement.columnI64
-  local +132:15 n: Result<i32, i32> (const)
-  callee +132:19 Statement.columnInto -> @nish.Statement.columnInto
-  callee +134:11 Fold.add -> @Fold.add
-  callee +141:11 Statement.reset -> @nish.Statement.reset
-  callee +145:16 Database.commit -> @nish.Database.commit
-  callee +149:9 Statement.finalize -> @nish.Statement.finalize
-  callee +152:9 Database.exec -> @nish.Database.exec
-  callee +155:9 Database.exec -> @nish.Database.exec
-  callee +162:7 Database.close -> @nish.Database.close
+  callee +94:9 Database.beginRead -> @nish.Database.beginRead
+  local +97:11 recent: Result<Cursor, SqliteError> (const)
+  callee +97:20 Database.openCursor -> @nish.Database.openCursor
+  local +98:11 posts: Result<Cursor, SqliteError> (const)
+  callee +98:19 Database.openCursor -> @nish.Database.openCursor
+  local +99:11 users: Result<Cursor, SqliteError> (const)
+  callee +99:19 Database.openCursor -> @nish.Database.openCursor
+  local +100:11 likes: Result<Cursor, SqliteError> (const)
+  callee +100:19 Database.openCursor -> @nish.Database.openCursor
+  local +103:16 i: i32 (let)
+  local +104:15 n: i32 (const)
+  callee +104:24 walkFeed -> @walkFeed
+  callee +115:9 Database.endRead -> @nish.Database.endRead
+  local +119:11 txn: boolean (const)
+  local +122:11 bodies: u8[] (const)
+  local +123:14 k: i32 (let)
+  local +124:13 len: i32 (const)
+  local +125:16 j: i32 (let)
+  callee +131:9 Database.exec -> @nish.Database.exec
+  local +134:11 prepared: Result<Statement, SqliteError> (const)
+  callee +134:22 Database.prepare -> @nish.Database.prepare
+  local +139:11 st: Statement (const)
+  callee +141:16 Database.begin -> @nish.Database.begin
+  local +144:14 i: i32 (let)
+  local +145:13 k: i32 (const)
+  callee +146:11 Statement.bindI64 -> @nish.Statement.bindI64
+  callee +149:11 Statement.bindTextBytes -> @nish.Statement.bindTextBytes
+  local +152:13 r: Result<boolean, i32> (const)
+  callee +152:17 Statement.step -> @nish.Statement.step
+  callee +155:9 Fold.add -> @Fold.add
+  callee +155:21 Statement.columnI64 -> @nish.Statement.columnI64
+  local +157:15 n: Result<i32, i32> (const)
+  callee +157:19 Statement.columnInto -> @nish.Statement.columnInto
+  callee +159:11 Fold.add -> @Fold.add
+  callee +166:11 Statement.reset -> @nish.Statement.reset
+  callee +170:16 Database.commit -> @nish.Database.commit
+  callee +174:9 Statement.finalize -> @nish.Statement.finalize
+  callee +177:9 Database.exec -> @nish.Database.exec
+  callee +180:9 Database.exec -> @nish.Database.exec
+  callee +187:7 Database.close -> @nish.Database.close

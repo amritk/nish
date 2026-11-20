@@ -1,6 +1,6 @@
 // The challenge's three queries through `nish/sqlite`, `count` calls each:
 //
-//   main <lookup|feed|feed-cursor|insert|insert-txn> <db> <count>
+//   main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>
 //
 // `bench/sqlite/run.mjs` builds it with `--link` (the speed profile) and runs
 // it beside `twin.c`, the same loop written against SQLite's own API. Each
@@ -17,6 +17,9 @@
 //   checks its schema), walk, `endRead`, which closes them. It folds what
 //   `feed` folds in the same order, so the two print the same line; twin.c
 //   has no cursor path.
+// - feed-cursor-walk: the same walk on one read transaction and four cursors
+//   opened once, before the timed loop, and closed after it, so a call is the
+//   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -159,7 +162,7 @@ const feedByCursors = (db: Database, f: Fold): i32 => {
 
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|feed-cursor|insert|insert-txn> <db> <count>")
+    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>")
     return 2
   }
   const mode: string = process.argv[1]
@@ -255,6 +258,31 @@ export const main = (): number => {
       }
     }
     t1 = monotonicNanos()
+  } else if (mode === "feed-cursor-walk") {
+    if (db.beginRead().isErr()) {
+      return 2
+    }
+    const recent = db.openCursor("posts_created_at_id_idx", "created_at DESC,id DESC,rowid")
+    const posts = db.openCursor("posts", "id,user_id,body,created_at")
+    const users = db.openCursor("users", "id,username,created_at")
+    const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
+    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
+      t0 = monotonicNanos()
+      for (let i: i32 = 0; i < count; i += 1) {
+        const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        if (n < 0) {
+          failed += 1
+        } else {
+          rows += n
+        }
+      }
+      t1 = monotonicNanos()
+    } else {
+      failed = count
+    }
+    if (db.endRead().isErr()) {
+      failed += 1
+    }
   } else if (mode === "insert" || mode === "insert-txn") {
     const txn: boolean = mode === "insert-txn"
     // The 64 bodies the inserts cycle through, body k at k * 256, built as
