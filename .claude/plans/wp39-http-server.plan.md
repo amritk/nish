@@ -1,20 +1,58 @@
 ---
 name: WP39 — the HTTP server, follow-ups and open decisions
-overview: Every WP39 stage is built except E9 (submit to TechEmpower, an owner decision) and G9 (WebTransport pin, deferred). Open issues add HTTP/1 pipelining, bench-record gaps, an HTTP/3 pacer cost and a few acceptance gaps.
+overview: Every WP39 roadmap stage is built except G9 (WebTransport pin, deferred) and three G7 additions to the nish/net/http-server façade that WP71's HttpArena profiles need (HTTP/1.1 over TLS, WebSocket, h2c by preface). Open issues add HTTP/1 pipelining, bench-record gaps, an HTTP/3 pacer cost and a few acceptance gaps. E9, the TechEmpower submission, is retired.
 spec: docs/wp39-http-server.md
 priority: 80
+labels: [ready]
 issue: 1850
 stages:
-  - id: e9-submit
-    title: WP39 E9 — submit the entry to TechEmpower
-    goal: The owner has decided whether and when to submit the TechEmpower entry, and the answer is recorded in the design note.
-    verification: node docs/check-links.mjs && npm run lint
-    status: pending
-    labels: [needs-decision]
-    issue: 1859
+  - id: g7-h1-tls
+    title: WP39 G7 — HTTP/1.1 over TLS on the nish/net/http-server façade
+    goal: HttpServer gets listenHttp1Tls, which runs Http1TlsServer beside listenHttp2Tls on its own port, so one handler answers HTTP/1.1 over TLS as it answers every other version.
+    verification: node tests/run.js net_http_server && node tests/run.js net_http1_server && node tests/run.js net && node scripts/security-scope.mjs && npm run lint
+    issue: 2010
     todos:
-      - id: e9-decide
-        content: Record the owner's answer on submitting in docs/wp39-http-server.md E9 — see WP39 E9 Decision needed
+      - id: g7-h1-tls-listener
+        content: Add HttpServer.listenHttp1Tls in std/net/http-server.ts over Http1TlsServer, with its slots, limits, Alt-Svc and timeouts as listenHttp1 has them — see WP39 G7 HTTP/1.1 over TLS
+        status: pending
+      - id: g7-h1-tls-tests
+        content: Add tests/link/net_http_server_h1_tls with a positive round trip and an ALPN-mismatch negative, plus the warmed-request zero-allocation check — see WP39 G7 HTTP/1.1 over TLS
+        status: pending
+      - id: g7-h1-tls-docs
+        content: Amend docs/http-one-handler.md §4.2 F2, docs/security/http-server.md and the docs/guide page for the façade — see WP39 G7 HTTP/1.1 over TLS
+        status: pending
+  - id: g7-websocket
+    title: WP39 G7 — WebSocket on the façade's HTTP/1.1 listener
+    goal: A program on nish/net/http-server accepts a WebSocket upgrade on an HTTP/1.1 listener (cleartext and, once g7-h1-tls lands, TLS) and sends and receives messages through the façade, as Http1Server's acceptWebSocket does today.
+    verification: node tests/run.js net_http_server && node tests/run.js net_http1_server && node tests/run.js net && node scripts/security-scope.mjs && npm run lint
+    issue: 2011
+    todos:
+      - id: g7-ws-api
+        content: Add the façade's WebSocket surface in std/net/http-server.ts over Http1Connection.acceptWebSocket and its H1_WS_MESSAGE and H1_WS_CLOSE events — see WP39 G7 WebSocket
+        status: pending
+      - id: g7-ws-tests
+        content: Add tests/link/net_http_server_ws with an echo round trip, a refused upgrade on an HTTP/2 or HTTP/3 request and a malformed-frame close — see WP39 G7 WebSocket
+        status: pending
+      - id: g7-ws-autobahn
+        content: Run the Autobahn WebSocket suite against a façade echo server in the interop job — see WP39 G7 WebSocket
+        status: pending
+      - id: g7-ws-docs
+        content: Record it in docs/http-one-handler.md, docs/security/http-server.md and the façade's docs/guide page — see WP39 G7 WebSocket
+        status: pending
+  - id: g7-h2c-preface
+    title: WP39 G7 — an h2c peer taken by its preface on the façade's HTTP/1.1 listener
+    goal: A listenHttp1 that opts in hands a connection whose first bytes are the 24-byte HTTP/2 preface to the h2c carrier and serves every other connection as HTTP/1.1, so one port speaks HTTP/1.1, WebSocket and cleartext HTTP/2.
+    verification: node tests/run.js net_http_server && node tests/run.js net_http2_cleartext && node tests/run.js net && node scripts/security-scope.mjs && npm run lint
+    issue: 2012
+    todos:
+      - id: g7-h2c-preface-option
+        content: Add the opt-in to listenHttp1 in std/net/http-server.ts, off by default, that reads up to the preface's 24 bytes and routes the slot to Http2CleartextServer or Http1Server — see WP39 G7 h2c by preface
+        status: pending
+      - id: g7-h2c-preface-tests
+        content: Add tests/link cases for an h2c peer, an HTTP/1.1 peer and a request starting PRI on an opted-in port, and an h2c peer refused on a default port — see WP39 G7 h2c by preface
+        status: pending
+      - id: g7-h2c-preface-docs
+        content: Amend docs/http-one-handler.md §4 (no sniffing, unless opted in), docs/security/http-server.md and docs/security/http2-cleartext.md, and the façade's docs/guide page — see WP39 G7 h2c by preface
         status: pending
   - id: g9-webtransport-pin
     title: WP39 G9 — move WebTransport's pin when Chrome moves past the draft
@@ -189,13 +227,40 @@ stages:
 # WP39 — the HTTP server, follow-ups and open decisions
 
 ## Context
-27 of 29 roadmap stages have landed (E1 to E8, G1 to G8, G10); see [the design note](../../docs/wp39-http-server.md). Unbuilt are E9 and G9. The other stages here come from open follow-up issues; every issue was read, and several items inside them are already settled, noted per stage. Spec: [design note](../../docs/wp39-http-server.md).
+27 of 29 roadmap stages have landed (E1 to E8, G1 to G8, G10); see [the design note](../../docs/wp39-http-server.md). G9 is deferred and E9 is retired (see Out of scope). G7's façade, `nish/net/http-server`, landed in #1473 ([`docs/http-one-handler.md`](../../docs/http-one-handler.md)); [WP71](https://github.com/amritk/nish/pull/1809)'s HttpArena entry asks it for three more things, the first three stages below. Their spec is #1809's `docs/wp39-http-server.md` §1 to §4 (G7's row) and `docs/wp71-httparena.md` §3. The other stages here come from open follow-up issues; every issue was read, and several items inside them are already settled, noted per stage. Spec: [design note](../../docs/wp39-http-server.md).
 
-## WP39 E9 — submit the entry to TechEmpower
-Spec: [design note E9](../../docs/wp39-http-server.md#e9-submitting-upstream).
+## WP39 G7 — HTTP/1.1 over TLS on the nish/net/http-server façade
+[`docs/http-one-handler.md`](../../docs/http-one-handler.md#42-finding-f2-one-tls-port-for-http11-and-http2) §4.2, finding F2, left `Http1TlsServer` out of the façade: one TLS port that lets ALPN choose between `http/1.1` and `h2` needs a carrier change, and a second TLS port for HTTP/1.1 was judged not worth its setup. WP71 now needs it: HttpArena's `json-tls` (the JSON test over HTTP/1.1 on TLS, port 8081) and `8gbit` (`POST /echo`, 10 KiB at 50,000 req/s over HTTP/1.1 on TLS, scored on CPU per request and p99) profiles run on a port of their own, so this is the second-port shape F2 already describes, not ALPN fallback.
 
-### Decision needed
-Whether and when to submit the entry; a public number is the owner's call. An open, unmerged PR (#1809) proposes retiring the TechEmpower submission (TechEmpower archived its Framework Benchmarks on 2026-03-24) in favour of HttpArena, which moves E9 to not planned. Options: not planned via #1809, or hold. Recommended: close as not planned if #1809 merges.
+- Add `HttpServer.listenHttp1Tls(fd, tls: TlsServerConfig, config: Http1Config, slots)` beside `listenHttp2Tls` (`std/net/http-server.ts:982`), over `Http1TlsServer` (`std/net/http1-server.ts:3038`), which already takes ALPN `http/1.1` or none and shuts any other protocol down with `close_notify`.
+- It keeps the façade's rules: `Alt-Svc` for HTTP/3 on its responses, the limits (`bodyTimeout`, `idleTimeout`, the head deadline) applied as `listenHttp1` applies them, and a warmed request allocates nothing (`docs/http-one-handler.md` §6).
+- ALPN fallback on one port (`http/1.1` and `h2` together) stays out of scope: it is a change to `http2-tls.ts`, F2's deferral stands.
+- Amend F2 to say HTTP/1.1 over TLS is on the façade on its own port; add the listener to `docs/security/http-server.md`'s scope and the façade's `docs/guide/` page.
+
+Likely files: `std/net/http-server.ts`, `std/net/http1-server.ts` (read-only unless a carrier hook is missing), `tests/link/net_http_server*`, `docs/http-one-handler.md`, `docs/security/http-server.md`, `docs/guide/`.
+
+## WP39 G7 — WebSocket on the façade's HTTP/1.1 listener
+`Http1Server` and `Http1Connection` speak WebSocket today (`acceptWebSocket(protocol)` at `std/net/http1-server.ts:2173`, events `H1_WS_MESSAGE` and `H1_WS_CLOSE`, Autobahn in the interop job since G1), but `nish/net/http-server` exposes none of it, so a façade program cannot answer an upgrade. WP71's three echo profiles (`echo-ws`, `echo-ws-pipeline`, `echo-ws-limited`: an upgrade on `/ws`, port 8080, text echoed) need it on the same listener that serves HTTP/1.1.
+
+- Add a WebSocket surface to the façade: a request that asked to upgrade reaches the handler as any other; the handler accepts it, and the slot then yields message and close events and takes sends through `HttpServer`, mapped onto the carrier's existing calls without a copy beyond §3's one in and one out.
+- An upgrade on an HTTP/2 or HTTP/3 request is refused (RFC 8441 extended CONNECT is out of scope), and on a TLS listener it works once the `g7-h1-tls` stage has landed.
+- A warmed message round trip allocates nothing, as a warmed request does; the façade's slot and timeout accounting covers an upgraded slot (`idleTimeout` applies, `bodyTimeout` does not).
+- Point the interop job's Autobahn run at a façade echo server as well as the existing one.
+
+Likely files: `std/net/http-server.ts`, `std/net/websocket.ts`, `tests/link/net_http_server*`, the interop job, `docs/http-one-handler.md`, `docs/security/http-server.md`, `docs/guide/`.
+
+## WP39 G7 — an h2c peer taken by its preface on the façade's HTTP/1.1 listener
+[`docs/http-one-handler.md`](../../docs/http-one-handler.md#4-h2c-prior-knowledge-only) §4 rules sniffing out: an h2c port never falls back to HTTP/1.1, and a deployment that wants both runs two ports. HttpArena serves HTTP/1.1, WebSocket and cleartext gRPC on one port (8080), so WP71's `unary-grpc` profile (with [WP72](https://github.com/amritk/nish/pull/1809)'s gRPC) cannot be entered without it.
+
+**Decided (owner, 2026-11-20): yes, opt in per listener.** `listenHttp1` takes an option, off by default, so a listener that does not ask behaves exactly as today and §4's rule stays the default.
+
+- On an opted-in listener, a new slot reads into a 24-byte array first, as the h2c carrier does (§4.1, finding F1). The first byte that differs from `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n` sends the slot to `Http1Server` with those bytes as the start of its input; all 24 matching sends it to `Http2CleartextServer`, which feeds them to `Http2Connection` as F1's step 3 does.
+- An HTTP/1.1 request whose method is `PRI` but whose line differs from the preface goes to `Http1Server` with the bytes read so far, which answers it as it answers that request today; a peer that sends a partial preface and stops is closed by `prefaceTimeout`, as on an h2c port.
+- Neither carrier is edited if a hand-over hook can be had from the façade; if `Http1Connection` needs a way to take bytes already read, that is the one carrier change, recorded in the note.
+- No `Upgrade: h2c` (RFC 9113 §3.1 deprecates it; §4 stands on that).
+- Amend §4 to "no sniffing unless the listener opts in", and record the preface read in `docs/security/http-server.md` and `docs/security/http2-cleartext.md` (a slot held by a silent peer costs 24 bytes until `prefaceTimeout`).
+
+Likely files: `std/net/http-server.ts`, `std/net/http2-cleartext.ts`, `std/net/http1-server.ts`, `tests/link/net_http_server*`, `docs/http-one-handler.md`, `docs/security/`, `docs/guide/`.
 
 ## WP39 G9 — move WebTransport's pin when Chrome moves past the draft
 Deferred until Chrome moves past the WebTransport draft. Nothing to do until then.
@@ -246,3 +311,8 @@ Likely files: `bench/syscall-cost/`, `bench/quickack/`, the Conduit submission's
 ## WP39 H1 — the http1 plaintext codec follow-up, the /plaintext Ir target and the /json regression
 Issue #1525 (after #1416). Open: explicit `/plaintext` at 3,873 to 3,883 Ir against the 3,251 target (the owner accepted the miss); explicit `/json` worse in four cells from 128 to 512 connections, as low as −18.7%, cause not isolated (candidates #1460's section scan and #1457's head state); `varied` +1.1% wall against a ±0.9% band; `node bench/http1-parse/run.mjs` refuses to run on main because `new`'s checksum 5937a130 no longer matches the pinned `b29eddcc`; browser-shaped `/json` at c=256 is −5.9% and −11.7%. Fuzz sanitizer replays did not run in the acceptance container.
 Likely files: `std/net/http1-server.ts`, `bench/http1-parse/`, `bench/techempower/`, `docs/BENCHMARKS.md`.
+
+## Out of scope
+- **E9, submitting the entry to TechEmpower.** TechEmpower archived TechEmpower/FrameworkBenchmarks on 2026-03-24 ([its issue 10932](https://github.com/TechEmpower/FrameworkBenchmarks/issues/10932)) and takes no entries; #1859 is closed as not planned. The entry stays in `bench/techempower/` as this repository's benchmark, and a public number goes through [WP71](https://github.com/amritk/nish/pull/1809)'s HttpArena entry.
+- ALPN fallback between `http/1.1` and `h2` on one TLS port (F2's deferral), `Upgrade: h2c`, and WebSocket over HTTP/2 or HTTP/3 (RFC 8441, RFC 9220).
+- `sendfile`, kernel TLS, 0-RTT and HTTP/2 server push.
