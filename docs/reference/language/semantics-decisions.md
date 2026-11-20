@@ -1369,8 +1369,8 @@ are not all in `[0, length)`; and the second check of a compound store
   the call however the first was proved (`tests/cases/panics_index_recheck`).
   A `nish:simd` access is proven exactly where its check is left out (the
   guard on its last lane under
-  [`loadI32x4`](builtins.md#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
-  program may call a guarded load or store in a dependency outside its
+  [`loadI32x4`](builtins.md#nishsimd-sixteen-byte-vectors)), so a program held
+  to no panic may call a guarded load or store in a dependency outside its
   no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
   reaches an unguarded one is refused with NL2458
   (`tests/link/simd_deny_panics_unguarded`)
@@ -1555,16 +1555,18 @@ each is an `ffi-null` site above)
 
 ## The no-panic scope
 
-A module can be **required** to have no panic site left. `--deny-panics` puts
-every module of the program's own package in the scope; the root package's
-`package.json` — the one nearest above the entry file — puts the modules it
-lists there, by their path relative to that file:
+**Every module of the program's own package is required to have no panic
+site left, by default.** `--allow-panics` relaxes that: under it, the scope is
+only the modules the root package's `package.json` — the one nearest above the
+entry file — lists, by their path relative to that file:
 
 ```json
 { "nish": { "noPanic": ["src/parser.ts", "src/lexer.ts"] } }
 ```
 
-Both together put the union in scope; with neither, nothing changes. In a
+A listed module stays in the scope under `--allow-panics`; with the flag and
+no list, nothing is in it. `--deny-panics` spells the default out, and of the
+two flags the last one on the line wins. In a
 module of the scope, every site of a kind above that is not proven is an
 error, NL2457, which names the kind and, where a proof the checker makes would
 remove the check, the guard that gives it — the same sentence the performance
@@ -1631,9 +1633,14 @@ performance warning about the same check is not printed beside the error.
   So a module in the scope cannot *panic* except by running out of memory,
   and that is the whole claim. Nor can it reach undefined behaviour through a
   check the compiler left out, except where a `nish:unsafe` import says so.
-- `--deny-panics` changes no byte of the IR: a program it accepts is the one the
-  build compiles without it. With `--emit-ast`, which stops before the checker,
-  it is a usage error (exit 2).
+- The scope changes no byte of the IR: a program the default accepts is the
+  one `--allow-panics` compiles. `--emit-ast`, which stops before the checker,
+  holds nothing to the scope, and an explicit `--deny-panics` beside it is a
+  usage error (exit 2).
+- **The standard library is not yet panic-free**, so a module in the scope
+  cannot yet call what reaches a panic site in `std/` — `Map`, `Set`, `trim`,
+  `split` and the `JSON` reads among them — without NL2458. Such a program
+  builds with `--allow-panics` until `std/` is proven.
 
 ## The compatibility dialect
 

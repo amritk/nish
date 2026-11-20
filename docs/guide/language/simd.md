@@ -57,9 +57,10 @@ does for `xs[i]`: under `while (i <= n - 4)`, with `n` the array's length and
 guard one lane short, `i <= n - 3`, proves nothing, so that load keeps its
 check.
 
-The same guard is what lets a `--deny-panics` build use a vector access. A
+The same guard is what lets a module held to no panic, as every module of
+your package is by default, use a vector access. A
 load or store whose check the guard removes is a proven panic site, so a
-program built with `--deny-panics` may call a function that uses one. One that
+module held to no panic may call a function that uses one. One that
 keeps its check is refused, with advice that names the guard to add:
 `if (i >= 0 && i <= xs.length - 16)` for a `u8x16` read of `xs`.
 

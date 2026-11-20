@@ -5,13 +5,13 @@
  *   import { withAllowPanics } from "./allow-panics.js"
  *   spawnSync(NISH, withAllowPanics(NISH, ["case.ts", "-o", out]))
  *
- * Today the flag changes nothing a test sees: it only undoes an earlier
- * `--deny-panics` (`ALLOW_PANICS_FLAG` in `src/options.ts`). It is passed now
- * so that the day the compiler refuses an unproven panic by default, the suite
- * keeps building its cases, fixtures and fuzz targets, which panic on purpose,
- * without another pass over every call site. An example or a docs program a
- * user would copy is the exception: its build stays strict, so they prove the
- * default.
+ * The compiler holds every module of the root package to no panic by
+ * default, and the flag (`ALLOW_PANICS_FLAG` in `src/options.ts`) relaxes that
+ * to the `noPanic` list, so the suite's cases, fixtures and fuzz targets, which
+ * panic on purpose, keep building. An example or a docs program a user would
+ * copy is the exception: the helper leaves it strict, so it proves the default,
+ * unless its own source opts out with the `OPT_OUT` header, which also names
+ * the reason and the follow-up.
  *
  * It is a probe, not "the seed never gets it": the last release exits 2 on a
  * flag it does not know, and `NISH_BOOTSTRAP` or `--seed` can name any release
@@ -19,6 +19,7 @@
  * path. `scripts/nish-compiler.sh` (`nish_allow_panics`) asks the same
  * question for the shell scripts.
  */
+import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 
@@ -43,8 +44,27 @@ const ROOT = path.resolve(import.meta.dirname, "..")
  */
 const EXAMPLE = /^(?:examples|docs)[\\/]/
 
-/** Whether `file` is one of the repository's examples or docs programs. */
-const isExample = (file) => EXAMPLE.test(path.relative(ROOT, path.resolve(file)))
+/**
+ * The header line an example that keeps a panic site on purpose opens with;
+ * `scripts/smoke.sh` reads its `// smoke: args --allow-panics` instead.
+ */
+const OPT_OUT = "// Opt-out (`--allow-panics`):"
+
+/**
+ * Whether `file` is one of the repository's examples or docs programs that is
+ * held to the default: it does not carry `OPT_OUT`. A file that cannot be read
+ * is held to it, and the compile reports why.
+ */
+const isStrictExample = (file) => {
+  if (!EXAMPLE.test(path.relative(ROOT, path.resolve(file)))) {
+    return false
+  }
+  try {
+    return !fs.readFileSync(file, "utf8").includes(OPT_OUT)
+  } catch {
+    return true
+  }
+}
 
 /** Flags that already decide the panic scope, or ask for no compile at all. */
 const DECIDES = new Set(["--deny-panics", ALLOW_PANICS, "-h", "--help", "-v", "--version"])
@@ -76,7 +96,8 @@ const listsAllowPanics = (compiler) => {
 /**
  * `args` with `--allow-panics` added when `compiler` lists it and the call is
  * a compile or a `run` whose own flags leave the scope open: it names a `.ts`
- * file outside the repository's `examples/` and `docs/`, is not `upgrade`, `c-import` or `break`, and passes none of
+ * file that is not a strict example (`isStrictExample`), is not `upgrade`,
+ * `c-import` or `break`, and passes none of
  * `--deny-panics`, `--allow-panics`, `--help` or `--version` before the
  * program. The flag goes first, or right after `run`, where the compiler's
  * flags are; a `run`'s program arguments are never read. Otherwise `args`
@@ -88,7 +109,7 @@ const withAllowPanics = (compiler, args) => {
   }
   const run = args[0] === "run" ? 1 : 0
   const program = args.findIndex((arg, i) => i >= run && arg.endsWith(".ts"))
-  if (program < 0 || isExample(args[program])) {
+  if (program < 0 || isStrictExample(args[program])) {
     return args
   }
   const ownFlags = run === 1 ? args.slice(1, program) : args

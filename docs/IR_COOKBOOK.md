@@ -19823,8 +19823,9 @@ attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 ### A module with no panic site: `--deny-panics`
 
-Under `--deny-panics`, or for a module the root `package.json` lists in
-`"nish".noPanic`, every check that could still panic is a compile error
+In every module of the root package by default (`--deny-panics` spells it
+out; under `--allow-panics`, in the modules the root `package.json` lists in
+`"nish".noPanic`), every check that could still panic is a compile error
 (docs/LANGUAGE.md, "The no-panic scope"), so a module that compiles has none
 left in its IR: no `nish_panic_*` call, no `div.fail` or `pop.empty` block, no
 panic tail. Each check came off because a proof removed it, not because a flag

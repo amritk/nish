@@ -1,8 +1,8 @@
-// Opt-out from `--deny-panics`: calls into `std/json`, `std/net/fetch` and
+// Opt-out (`--allow-panics`): calls into `std/json`, `std/net/fetch` and
 // `std/net/tls/record-client` reach their panic sites, and the
 // `String.fromBytes` slice of the body keeps a range check the checker cannot
 // yet discharge. Follow-up: make those modules panic-free and teach the prover
-// that slice's bound, then build this file with `--deny-panics`.
+// that slice's bound, then build this file without `--allow-panics`.
 //
 // Fetches a JSON document over HTTP or HTTPS with `nish/net/fetch` and
 // prints the fields named on the command line, or the whole document when
@@ -16,6 +16,7 @@
 // chain is checked against the system's roots, or the PEM file
 // `SSL_CERT_FILE` names. It exits 0 on a 2xx JSON answer, 1 on any failure,
 // and 2, with how to run it, without a URL.
+// smoke: args --allow-panics
 // smoke: exit 2
 import { jsonField } from "nish/json"
 import { FetchSyncClient, HttpOptions, HttpRequest, HttpResponse } from "nish/net/fetch"

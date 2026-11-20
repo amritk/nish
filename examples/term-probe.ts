@@ -1,6 +1,6 @@
-// Opt-out from `--deny-panics`: calls into `std/term-io` and `std/term-pixels`
+// Opt-out (`--allow-panics`): calls into `std/term-io` and `std/term-pixels`
 // reach their panic sites; this file keeps none of its own. Follow-up: make
-// those modules panic-free, then build this file with `--deny-panics`.
+// those modules panic-free, then build this file without `--allow-panics`.
 //
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws
@@ -8,6 +8,7 @@
 // closes it, and prints every `TermCaps` field and one stats line per second.
 //   nish run examples/term-probe.ts
 // Off a terminal it refuses, as the smoke run's /dev/null stdin is:
+// smoke: args --allow-panics
 // smoke: exit 1
 import { monotonicNanos } from "nish:process"
 import { TermCaps } from "nish/term-probe"

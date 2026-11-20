@@ -7051,8 +7051,8 @@ ffi.copy:
   (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first, but a
   `declare function` declared to answer `CPtr` may still answer `NULL`, so
   the copy tests its pointer: the `icmp eq` and the branch to `ffi.null`
-  above. No proof removes the test, so `--deny-panics` refuses a call in its
-  scope; the copy's `oom` beside it is allowed. Declare a result that may be
+  above. No proof removes the test, so the no-panic scope refuses a call in
+  it; the copy's `oom` beside it is allowed. Declare a result that may be
   `NULL` as `CPtr | null` and narrow it, rather than lean on the panic.
 - **The copy is new on every call and is the calling function's allocation**,
   as a `string` result's is: kept past a loop's pass, returned, stored by a
@@ -7190,9 +7190,9 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
 - **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
   is a `const` local or a parameter named alone and no later argument may
   resize an array. Such a call carries no check and is not a panic site, so
-  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  `read(fd, buf, toU64(buf.length))` compiles in the no-panic scope. A field
   path, an alias of the buffer, another array's length and a literal are
-  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  checked (`tests/cases/ffi_buffer_count_proved`). The scope refuses
   any other count and names the one it accepts: `` pass `toU64(buf.length)`
   of the buffer itself, which needs no check ``.
 - **C borrows the bytes for the call, and writes through a `u8[]`.** As with
@@ -7705,7 +7705,7 @@ ffi.null:
 - **A `Name` result is checked for `NULL`.** A `declare function` that returns
   `Name` promises a pointer, so a `NULL` from C stops the program with
   `` `stmt_prepare` returned NULL for a `Stmt` result; declare it `Stmt | null` ``
-  on stderr and exit status 1, the `ffi-null` panic `--deny-panics` refuses.
+  on stderr and exit status 1, the `ffi-null` panic the no-panic scope refuses.
   A `Name | null` result is narrowed with `!== null` before it goes back to C:
   passed as it is, it is a type mismatch, `` Argument 1 of `db_close`: expected
   Db, got Db | null `` (`ffi_opaque_nullable`).
@@ -7783,7 +7783,7 @@ ffi.copy:
   `reject_unsafe_read_struct_null`), but a `declare function` declared to
   answer `CPtr` may still answer `NULL`, so the copy tests its pointer: the
   `icmp eq` and the branch to `ffi.null` above.
-  No proof removes the test, so `--deny-panics` refuses a call in its scope.
+  No proof removes the test, so the no-panic scope refuses a call in it.
 - **The rest of the pointer is not checked**: not that it is live, not the
   size it covers. The layout must be C's struct or a prefix of it. That is why
   it is in [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping):
@@ -9934,16 +9934,17 @@ Reference: [`nish:unsafe`](reference/nish-unsafe.md).
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
   rather than the source (`tests/self/goldens/checked/`, one file per module).
-- **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
-  or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
+- **The import is the opt-in the no-panic scope takes.** In the scope — every
+  module of the package by default, the `"nish".noPanic` list under
+  `--allow-panics` — `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
   `deny_panics_unsafe`). `readCString` and `readStruct` are not: each tests
   its pointer for `NULL`, an `ffi-null` site no proof removes
   (`panics_ffi_read_cstring_null`, `tests/ffi-string.js`;
-  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so `--deny-panics`
-  refuses a call to either in its scope. The
+  `panics_ffi_read_struct_null`, `tests/ffi-struct.js`), so the scope
+  refuses a call to either. The
   `wrapping*` three are not sites at all: they are defined for every pair.
 - **To the bounds proof `uncheckedGet` and `uncheckedSet` are the load and
   the store** `xs[i]` and `xs[i] = v` are, less the check: a call moves no
@@ -10990,7 +10991,7 @@ what a callee answers from outside). A number, a `boolean`, an `enum` and a
   panic and never a double free. A child's handle is dead once its parent is
   freed (`tests/link/region_child_stale`), and `child` with no region entered
   stops the program. Each call
-  is a `region` site under [`--deny-panics`](#panic-sites)
+  is a `region` site the [no-panic scope](#the-no-panic-scope) refuses
   (`reject_deny_panics_region`), and no proof removes it. Past 16,777,216 live
   regions `region` stops the program as well.
 - A program run under Node as it is written (`runtime/nish.mjs`) gets a
@@ -13259,7 +13260,7 @@ default i32 mode, and with `Number(n)` under `--number-mode f64`, where the
 message reads `expected f64`. Neither conversion works in the other mode. An array's `slice` is not a
 `slice` [panic site](#panic-sites): its check is `std/array.ts`'s own
 `panic(...)`, so a call to it is a `call` site that reaches `panic`, which no
-proof at the call removes, and `--deny-panics` refuses it
+proof at the call removes, and the no-panic scope refuses it
 (`reject_deny_panics_arr_slice`). Under Node and `--emit-ts` the call
 is the runtime's `sliceArray`, which applies the same check with the same
 words, so the two agree on every input; `map`, `filter`, `some`, `every`,
@@ -16394,8 +16395,8 @@ are not all in `[0, length)`; and the second check of a compound store
   the call however the first was proved (`tests/cases/panics_index_recheck`).
   A `nish:simd` access is proven exactly where its check is left out (the
   guard on its last lane under
-  [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
-  program may call a guarded load or store in a dependency outside its
+  [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a program held
+  to no panic may call a guarded load or store in a dependency outside its
   no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
   reaches an unguarded one is refused with NL2458
   (`tests/link/simd_deny_panics_unguarded`)
@@ -16580,16 +16581,18 @@ each is an `ffi-null` site above)
 
 ### The no-panic scope
 
-A module can be **required** to have no panic site left. `--deny-panics` puts
-every module of the program's own package in the scope; the root package's
-`package.json` — the one nearest above the entry file — puts the modules it
-lists there, by their path relative to that file:
+**Every module of the program's own package is required to have no panic
+site left, by default.** `--allow-panics` relaxes that: under it, the scope is
+only the modules the root package's `package.json` — the one nearest above the
+entry file — lists, by their path relative to that file:
 
 ```json
 { "nish": { "noPanic": ["src/parser.ts", "src/lexer.ts"] } }
 ```
 
-Both together put the union in scope; with neither, nothing changes. In a
+A listed module stays in the scope under `--allow-panics`; with the flag and
+no list, nothing is in it. `--deny-panics` spells the default out, and of the
+two flags the last one on the line wins. In a
 module of the scope, every site of a kind above that is not proven is an
 error, NL2457, which names the kind and, where a proof the checker makes would
 remove the check, the guard that gives it — the same sentence the performance
@@ -16656,9 +16659,14 @@ performance warning about the same check is not printed beside the error.
   So a module in the scope cannot *panic* except by running out of memory,
   and that is the whole claim. Nor can it reach undefined behaviour through a
   check the compiler left out, except where a `nish:unsafe` import says so.
-- `--deny-panics` changes no byte of the IR: a program it accepts is the one the
-  build compiles without it. With `--emit-ast`, which stops before the checker,
-  it is a usage error (exit 2).
+- The scope changes no byte of the IR: a program the default accepts is the
+  one `--allow-panics` compiles. `--emit-ast`, which stops before the checker,
+  holds nothing to the scope, and an explicit `--deny-panics` beside it is a
+  usage error (exit 2).
+- **The standard library is not yet panic-free**, so a module in the scope
+  cannot yet call what reaches a panic site in `std/` — `Map`, `Set`, `trim`,
+  `split` and the `JSON` reads among them — without NL2458. Such a program
+  builds with `--allow-panics` until `std/` is proven.
 
 ### The compatibility dialect
 

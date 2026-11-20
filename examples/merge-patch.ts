@@ -1,6 +1,7 @@
-// Opt-out from `--deny-panics`: calls into `std/json` and `std/json-tokenizer`
+// Opt-out (`--allow-panics`): calls into `std/json` and `std/json-tokenizer`
 // reach their panic sites; this file keeps none of its own. Follow-up: make
-// those modules panic-free, then build this file with `--deny-panics`.
+// those modules panic-free, then build this file without `--allow-panics`.
+// smoke: args --allow-panics
 //
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's
 // `presence` option telling a key that was left out from one that was given:

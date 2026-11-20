@@ -315,8 +315,11 @@ check reads the difference.
 
 A case, a fixture, a fuzz target or `src/` panics on purpose, so its build
 passes `--allow-panics`; an example under `examples/` is what a user copies,
-so its build goes without the flag and keeps the compiler's default. Today
-the flag only undoes an earlier `--deny-panics`. Pass it through the helper,
+so the helper leaves its build alone, and an example that keeps a panic site
+passes the flag visibly where it is built (its `// smoke: args` line, its
+`build.mjs`, the check that builds it) and says why in its first lines. The
+compiler's default holds every module of the root package to no panic, and
+the flag relaxes it to the `noPanic` list. Pass it through the helper,
 never by hand: the seed and any older release exit 2 on a flag they do not
 know, so the helper reads the compiler's `--help` first.
 

@@ -1,0 +1,1 @@
+main.ts:7:10: error: `index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list)

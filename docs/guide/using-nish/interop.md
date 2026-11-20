@@ -1101,8 +1101,8 @@ A call passes the array's bytes, and checks the count against each buffer
 first: a count larger than the array stops the program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
 and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
-proves the count, so the call carries no check and compiles under
-`--deny-panics`:
+proves the count, so the call carries no check and compiles in a module
+held to no panic, as every module of your package is by default:
 
 <!-- nish:ok -->
 ```ts
@@ -1216,7 +1216,7 @@ behaviour, and the import is where a module says it takes that on. It takes a
 declared to answer `CPtr` may still answer `NULL`, so `readCString` tests its
 pointer first: `NULL` stops the program with
 `` `readCString` read a NULL pointer `` on stderr and exit status 1, and
-`--deny-panics` refuses the call for that reason. Declare a result that may be
+the no-panic default refuses the call for that reason. Declare a result that may be
 `NULL` as `CPtr | null` and narrow it instead.
 
 A `NULL` reaches C only where the source spells it. A nullable pointer held in
@@ -1429,7 +1429,7 @@ export const main = (): i32 => {
 
 A `NULL` pointer stops the program before the copy, with
 `` `readStruct` read a NULL pointer into a `Lconv` `` on stderr and exit
-status 1, and `--deny-panics` refuses the call for that reason. Nothing else
+status 1, and the no-panic default refuses the call for that reason. Nothing else
 is checked: the pointer must be live, and the class must declare C's fields
 in C's order, or the copy reads the wrong bytes. That is why `readStruct`
 comes from `nish:unsafe`: a call to it gives the function the `unsafe`

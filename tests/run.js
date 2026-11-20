@@ -18971,8 +18971,11 @@ if (dealtHere("runtimeChecks")) {
       )
       if (linked.status === 0) {
         const referenceLl = path.join(buildDir, "web_add.ll")
-        execFileSync(NISH, withAllowPanics(NISH, ["examples/add.ts", "-o", referenceLl]), { cwd: root, stdio: "pipe" })
-        const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], { cwd: root })
+        // add.ts keeps a panic site on purpose (its header), so both builds pass --allow-panics.
+        execFileSync(NISH, ["examples/add.ts", "--allow-panics", "-o", referenceLl], { cwd: root, stdio: "pipe" })
+        const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts", "--allow-panics"], {
+          cwd: root,
+        })
         check(
           "web: nish.wasm in a worker emits the native compiler's IR for examples/add.ts, byte for byte",
           worker.status === 0 && String(worker.stdout) === fs.readFileSync(referenceLl, "utf8"),
@@ -28147,9 +28150,10 @@ if (dealtHere("releaseChecks")) {
     }
   }
 
-  // ---- `--allow-panics`: a no-op today, and only where a compiler lists it ----------------
-  // The flag undoes an earlier `--deny-panics` (the last of the two wins) and
-  // moves no IR; a `noPanic` list holds under it. The suite passes it through
+  // ---- `--allow-panics`: the way out of the default, where a compiler lists it -------------
+  // Every module of the root package is held to no panic by default; the flag
+  // relaxes that to the `noPanic` list, undoes an earlier `--deny-panics` (the
+  // last of the two wins) and moves no IR. The suite passes it through
   // `tests/allow-panics.js` and the shell scripts through `nish_allow_panics`
   // (`scripts/nish-compiler.sh`), and both ask the compiler's `--help` first,
   // because the seed and any older release exit 2 on it. Each build below that
@@ -28368,7 +28372,7 @@ if (dealtHere("releaseChecks")) {
       "allow-panics: with --deny-panics on the same line the last of the two wins",
       denyThenAllow.r.status === 0 &&
         allowThenDeny.r.status === 1 &&
-        allowThenDeny.r.stderr.includes("may panic here, and a module in the no-panic scope"),
+        allowThenDeny.r.stderr.includes("may panic here, and a module of this package, held to no panic by default"),
       shown(denyThenAllow.r) + shown(allowThenDeny.r)
     )
 
@@ -28391,29 +28395,40 @@ if (dealtHere("releaseChecks")) {
       shown(astAllowed) + shown(astUndone) + shown(astDenied)
     )
 
-    // A `noPanic` list is the package's own word: the flag does not lift it.
+    // A `noPanic` list is the package's own word: the flag does not lift it,
+    // and it relaxes only the modules the list leaves out. By default every
+    // module is refused; under the flag only the listed one, in its own words.
     const listed = path.join(linkDir, "no_panic_module", "main.ts")
     const listedBare = strict([listed, "-o", path.join(work, "listed.ll")])
     const listedAllowed = strict([listed, ALLOW_PANICS, "-o", path.join(work, "listed.ll")])
+    const listedSite = "parse.ts:2:60: error: `index` may panic here, and a module `noPanic` lists, which `--allow-panics` does not relax,"
     check(
-      "allow-panics: a root package's noPanic list holds under it, refused in the same words",
+      "allow-panics: a root package's noPanic list holds under it, and the modules it leaves out are relaxed",
       listedBare.status === 1 &&
+        listedBare.stderr.includes(listedSite) &&
+        listedBare.stderr.includes("util.ts:2:50: error: `index` may panic here, and a module of this package, held to no panic by default") &&
         listedAllowed.status === 1 &&
-        listedAllowed.stderr === listedBare.stderr &&
-        listedAllowed.stderr.includes("parse.ts:2:60: error: `index` may panic here"),
+        listedAllowed.stderr.includes(listedSite) &&
+        !listedAllowed.stderr.includes("util.ts") &&
+        !listedAllowed.stderr.includes("main.ts"),
       shown(listedBare) + shown(listedAllowed)
     )
 
-    // The IR is the same bytes with no flag, with it, and with --deny-panics.
+    // The IR is the same bytes with no flag, with it, and with --deny-panics;
+    // a program with panic sites builds only under the flag, and the default
+    // refuses it rather than compiling it differently.
     const clean = "tests/cases/deny_panics_clean.ts"
     const cleanIr = ["", ALLOW_PANICS, "--deny-panics"].map((flag, i) => irOf(`clean${i}`, clean, flag === "" ? [] : [flag]))
-    const panickyIr = ["", ALLOW_PANICS].map((flag, i) => irOf(`panicky${i}`, panicky, flag === "" ? [] : [flag]))
+    const panickyBare = irOf("panicky0", panicky, [])
+    const panickyAllowed = irOf("panicky1", panicky, [ALLOW_PANICS])
     check(
-      "allow-panics: the IR is byte-identical with no flag, --allow-panics and --deny-panics",
+      "allow-panics: the IR is byte-identical with no flag, --allow-panics and --deny-panics, and the default refuses what the flag builds",
       cleanIr.every(({ r, ir }) => r.status === 0 && ir.length > 0 && ir === cleanIr[0].ir) &&
-        panickyIr.every(({ r, ir }) => r.status === 0 && ir.length > 0 && ir === panickyIr[0].ir) &&
-        denyThenAllow.ir === panickyIr[0].ir,
-      [...cleanIr, ...panickyIr].map(({ r }) => shown(r)).join("")
+        panickyBare.r.status === 1 &&
+        panickyAllowed.r.status === 0 &&
+        panickyAllowed.ir.length > 0 &&
+        denyThenAllow.ir === panickyAllowed.ir,
+      [...cleanIr, { r: panickyBare.r }, panickyAllowed].map(({ r }) => shown(r)).join("")
     )
   }
 
@@ -29750,10 +29765,11 @@ if (dealtHere("releaseChecks")) {
                 hello.stdout + hello.stderr
               )
             }
-            // strict: a user's own first program, built the way a user builds it
+            // add.ts keeps its checked `a + b` on purpose (its header), so it
+            // passes --allow-panics, as its header says a user builds it
             const ir = spawnSync(
               bin,
-              [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")],
+              [path.join(root, "examples", "add.ts"), "--allow-panics", "-o", path.join(work, "add.ll")],
               { cwd: work, encoding: "utf8" }
             )
             check(

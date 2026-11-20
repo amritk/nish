@@ -247,9 +247,10 @@ plain rules.
 never made, that is freed already or that belongs to another thread stops the
 program with a message, and so does entering a region that is already entered
 or freeing one that is (or a parent whose child is entered). Freeing twice
-is a stop, never a corruption. Under
-[`--deny-panics`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panic-sites) each of these calls is
-reported.
+is a stop, never a corruption. In a module
+held to [no panic](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope),
+as every module of your package is by default, each of these calls is
+refused.
 
 `nish --emit-ts` does not translate a program that imports `nish:region` yet
 (NL4015); build it native.

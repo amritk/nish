@@ -1,6 +1,7 @@
-// Opt-out from `--deny-panics`: the `Map` and `Set` calls reach panic sites in
+// Opt-out (`--allow-panics`): the `Map` and `Set` calls reach panic sites in
 // `std/collections`; this file keeps none of its own. Follow-up: make
-// `std/collections` panic-free, then build this file with `--deny-panics`.
+// `std/collections` panic-free, then build this file without `--allow-panics`.
+// smoke: args --allow-panics
 //
 // The global `Map` and `Set` (docs/wp32-map.md): no import, JavaScript's
 // semantics, and one probe of a fingerprinted table per `set`, `add`, `has` or

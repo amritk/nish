@@ -1,7 +1,7 @@
-// Opt-out from `--deny-panics`: calls into `std/net/http1-codec`,
+// Opt-out (`--allow-panics`): calls into `std/net/http1-codec`,
 // `std/net/http1-server` and `std/net/prefork` reach their panic sites; this
 // file keeps none of its own. Follow-up: make those modules panic-free, then
-// build this file with `--deny-panics`.
+// build this file without `--allow-panics`.
 //
 // An HTTP/1.1 server on every core: `nish/net/prefork` starts one worker
 // process per core, each binds its own SO_REUSEPORT listener on the port, and
@@ -16,6 +16,7 @@
 //
 // `NISH_WORKERS=2` starts two workers instead of one a core. Without a port
 // it prints how to run it and exits 2.
+// smoke: args --allow-panics
 // smoke: exit 2
 import { pollAdd, pollCreate, pollModify, pollWait, tcpListenFlags } from "nish:net"
 import {

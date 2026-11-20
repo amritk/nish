@@ -1684,13 +1684,13 @@ export const main = (): i32 => {
   `p` into a new string; a dangling or unterminated `p` is undefined
   behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
   `CPtr | null` with `!== null` first. A `NULL` `p` panics (`ffi-null`) before
-  the copy, so `--deny-panics` refuses the call.
+  the copy, so the no-panic default refuses the call.
 - **A struct C owns is copied out with `readStruct` from `nish:unsafe`.**
   `const lc: Lconv = readStruct(p)` copies the bytes at `p` into a new
   instance of the `declare class` the context names; write the annotation,
   since `readStruct<Lconv>(p)` is refused (NL2763) and a call with no context
   is NL2764. A `NULL` `p` panics (`ffi-null`) before the copy, so
-  `--deny-panics` refuses the call; a dangling `p`, or a class that does not
+  the no-panic default refuses the call; a dangling `p`, or a class that does not
   match C's fields, is undefined behaviour.
 - **errno is read with `cErrno()` from `nish:unsafe`.** It answers the errno
   the most recent `declare function` call on this thread left; naming it makes
@@ -3482,10 +3482,16 @@ emitting code that cannot compile.
 
 ### Proving it cannot panic
 
-Under `--deny-panics`, or for a module the root `package.json` lists in
-`"nish": { "noPanic": [...] }`, every place the program could stop with a panic
-is an error (NL2457) until a proof removes it; out of memory is the one kind
-allowed. Each error names its fix, and there are five:
+Every module of the program's own package is held to no panic by default:
+every place it could stop with a panic is an error (NL2457) until a proof
+removes it; out of memory is the one kind allowed. `--allow-panics` relaxes
+that to the modules the root `package.json` lists in
+`"nish": { "noPanic": [...] }`, and `--deny-panics` spells the default out.
+**Fix a refusal; do not relax it.** Keep the default, add the guard the error
+names, and never reach for `--allow-panics`, a `nish:unsafe` import or a guard
+that proves nothing (one whose `else` branch returns a made-up value the
+caller cannot tell from a real one) to make an error go away. Each error names
+its fix, and there are five:
 
 - **Guard** what the checker cannot prove: `if (i >= 0 && i < xs.length)` before
   `xs[i]` (`if (toU32(i) < toU32(xs.length))` for a `u8`, `u16` or `u32` index,
@@ -3550,7 +3556,10 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
-that cannot panic, or make the call from a module outside the scope.
+that cannot panic. The standard library is not yet panic-free, so `Map`,
+`Set`, `trim`, `split` and the `JSON` reads are refused in the scope for now;
+a program that needs them builds with `--allow-panics`, and says why where it
+is built.
 `uncheckedGet` and `uncheckedSet` are not proofs, but
 they cannot panic, and their `nish:unsafe` import is the module's visible
 opt-in to an index out of range being undefined behaviour, so the scope allows
@@ -3632,8 +3641,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
    A package that must not touch the network says so in `package.json`
    ([Holding it to its capabilities](#holding-it-to-its-capabilities)).
-11. Must it never panic? Compile with `--deny-panics` (or list the module in
-   `package.json`'s `"nish": { "noPanic": [...] }`): every index, division,
+11. Must it never panic? It is held to that by default: every index, division,
    signed `+ - *`, `pop`, range entry, `expect` and exiting call it cannot
    prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an

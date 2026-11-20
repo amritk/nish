@@ -1,3 +1,9 @@
+// Opt-out (`--allow-panics`): the `Framebuffer` from `std/term-pixels` reaches
+// its panic sites, and the director's tables are indexed in root storage, which
+// the checker cannot yet prove in range. Follow-up: make that module panic-free
+// and teach the prover root-storage bounds, then build this file without
+// `--allow-panics`.
+//
 // The game behind the docs hero terminal, as a page runs it: the terminal
 // game's director and scenes (src/break-director.ts), stepped and drawn over
 // nish/host/game instead of a terminal. break.mjs is the page side, and

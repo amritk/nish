@@ -1,7 +1,7 @@
-// Opt-out from `--deny-panics`: calls into `std/cli-args`, `std/collections`
+// Opt-out (`--allow-panics`): calls into `std/cli-args`, `std/collections`
 // and `std/json` reach their index, slice and overflow panic sites; this file
 // keeps none of its own. Follow-up: make those modules panic-free, then build
-// this file with `--deny-panics`.
+// this file without `--allow-panics`.
 //
 // A command tree for an HTTP API's command-line client, on `nish/cli-args`:
 // `users list|get|keys list|keys create` and `projects list`, with global
@@ -11,6 +11,7 @@
 //   nish examples/api-cli/main.ts --link build/api-cli
 //   ./build/api-cli users keys list 42 --limit 5 -t ci -t deploy
 //   ./build/api-cli --help; ./build/api-cli users kyes
+// smoke: args --allow-panics
 // smoke: argv users get 7 --raw-output
 import { Cli, ParseResult, ROOT, SOURCE_ARGV, finish } from "nish/cli-args"
 import { agentDriven, styleFor } from "nish/cli"

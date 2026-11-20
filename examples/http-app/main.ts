@@ -1,8 +1,8 @@
-// Opt-out from `--deny-panics`: calls into `std/json`, `std/net/handler`,
+// Opt-out (`--allow-panics`): calls into `std/json`, `std/net/handler`,
 // `std/net/http1-server` and `std/net/router` reach their panic sites, and
 // app.ts's `String.fromBytes` slice keeps a range check the checker cannot yet
 // discharge. Follow-up: make those modules panic-free and teach the prover that
-// slice's bound, then build this program with `--deny-panics`.
+// slice's bound, then build this program without `--allow-panics`.
 //
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
@@ -21,6 +21,7 @@
 // open connections to finish, for `--drain-ms` at most; a second signal stops
 // it at once. Unknown paths and methods are RFC 9457 problems (404, or 405
 // with its `Allow`). Without a port it prints how to run it and exits 2.
+// smoke: args --allow-panics
 // smoke: exit 2
 import { HttpHandler, HandlerLimits } from "nish/net/handler"
 import { Router } from "nish/net/router"

@@ -808,17 +808,20 @@ leaves the IR unchanged.
   `package.json`'s `"nish"` field selects the dialect without the flag.
   `nish run` and `--fix` take it too
   ([The compatibility dialect](compat.md)).
-- **`--deny-panics`** turns every panic the compiler cannot prove away into an
-  error, and `--emit-panics <file.json>` lists them all. A call to
+- **Every module of your package is held to no panic by default.** A panic
+  the compiler cannot prove away is an error that names the guard which
+  proves it, and `--emit-panics <file.json>` lists every site. A call to
   `readCString` or `readStruct` from `nish:unsafe` is refused there: each
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
-  removes
+  removes. The standard library is not yet panic-free, so a call to `Map`,
+  `Set`, `trim`, `split` or a `JSON` read is refused too, for now
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
-- **`--allow-panics`** undoes a `--deny-panics` earlier on the same line:
-  of the two, the last one written wins, and neither changes the program
-  the compiler builds. A `"noPanic"` list in your `package.json`'s `"nish"`
-  field still holds under it, so the scope is that list, or nothing, as
-  with neither flag. `--emit-ast` takes it.
+- **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
+  list in your `package.json`'s `"nish"` field names are still held to no
+  panic, and with no list, none is. **`--deny-panics`** spells the default
+  out; of the two, the last one written wins, and neither changes the
+  program the compiler builds. `--emit-ast`, which stops before the check,
+  holds nothing to it and takes `--allow-panics` but not `--deny-panics`.
 - **`--explain-memory`** prints every loop and function that keeps the memory
   it allocates past its arena scope, and why
   ([Memory](../language/memory.md#what-you-do-have-to-think-about)). `nish run`

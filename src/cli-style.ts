@@ -91,8 +91,8 @@ export const helpText = (style: Style, guide: string): string => {
   menu.section("Policy")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
-  menu.row("--deny-panics", "", "refuse an unproven panic in your package")
-  menu.row("--allow-panics", "", "undo an earlier --deny-panics")
+  menu.row("--deny-panics", "", "refuse an unproven panic in your package (default)")
+  menu.row("--allow-panics", "", "hold only the noPanic list to no panic")
   menu.row("--deny-retention", "", "refuse retained arena memory in your package")
   menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
@@ -105,6 +105,8 @@ export const helpText = (style: Style, guide: string): string => {
     menu.row("--json", "", "diagnostics as JSON lines, fixes included")
     menu.row("--fix", "", "apply those fixes; read only what is left")
     menu.row(`${CLI} run <file.ts>`, "", "what the program prints, once it compiles")
+    menu.note("a panic refused (NL2457, NL2458): add the guard it names; never")
+    menu.note("--allow-panics, nish:unsafe or a guard that proves nothing")
   }
 
   menu.section("Exit codes")

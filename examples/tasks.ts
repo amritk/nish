@@ -1,7 +1,8 @@
-// Opt-out from `--deny-panics`: `ThreadScope.spawn` reaches the `panic` in
+// Opt-out (`--allow-panics`): `ThreadScope.spawn` reaches the `panic` in
 // `slotOutOfRange` (std/threads.ts), which fires when a task's destination slot is
 // not in its array. Follow-up: make `spawn`'s slot store in `std/threads.ts`
-// panic-free, then build this file with `--deny-panics`.
+// panic-free, then build this file without `--allow-panics`.
+// smoke: args --allow-panics
 //
 // Four different questions about one series, asked at once (docs/wp29-thread-surface.md
 // §4.2): a scope from `nish/threads` runs each `spawn` on a thread of its own when
