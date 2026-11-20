@@ -34,6 +34,7 @@ fast:
   ret i8* %obj
 
 slow:
+  %abi = load volatile i32, i32* @nish_arena_range_abi, align 4
   %grown = call i8* @nish_arena_grow(i64 %size.aligned)
   ret i8* %grown
 }
