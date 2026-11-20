@@ -881,7 +881,10 @@ const checkFileFixturesLongPath = () => {
     )
   } finally {
     fs.rmSync(deep, { recursive: true, force: true })
-    if (stray.startsWith(buildDir + path.sep)) {
+    // Removed only when it is a socket (#1422): at a 107-byte build/test the
+    // 108-byte prefix is build/test/ itself, and at 108 or more it ends in an
+    // ancestor of it, so the path alone says nothing about what is there.
+    if (!stray.endsWith(path.sep) && fs.lstatSync(stray, { throwIfNoEntry: false })?.isSocket()) {
       fs.rmSync(stray, { force: true })
     }
   }
