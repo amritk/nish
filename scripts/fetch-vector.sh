@@ -64,7 +64,8 @@ fi
   mkdir -p dist
   # A nish that holds the root package to no panic by default lists
   # `--allow-panics`: vector is not panic-free yet (2,459 sites refused), so it
-  # is built relaxed until it migrates. An older nish has no such flag.
+  # is built relaxed until it migrates. An older nish has no such flag. This is
+  # the POSIX twin of `nish_allow_panics` (scripts/nish-compiler.sh, bash only).
   relax=""
   help=$(NO_COLOR=1 .nish/bin/nish --help 2>/dev/null) || help=""
   case "$help" in *--allow-panics*) relax=--allow-panics ;; esac
