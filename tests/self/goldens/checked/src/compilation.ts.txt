@@ -1485,10 +1485,10 @@ function Compilation.denyPanicSites(this: Compilation, facts: FactsTable): void 
   pointer this: size=240 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=false captured=false passedTo=reportDeniedPanics#3
   stackSites=0 stackLocals=0
-  local -17:9 any: boolean (let)
-  local -16:16 scoped: boolean (const)
-  local -10:11 refused: PanicSite[] (const)
-  callee -10:21 reportDeniedPanics -> @reportDeniedPanics
+  local -24:9 any: boolean (let)
+  local -23:16 scoped: boolean (const)
+  local -17:11 refused: PanicSite[] (const)
+  callee -17:21 reportDeniedPanics -> @reportDeniedPanics
   local -6:11 kept: Diagnostic[] (const)
   local -5:16 warning: Diagnostic (const)
   callee -4:12 restatedBy -> @restatedBy

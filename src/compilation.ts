@@ -2831,7 +2831,14 @@ export class Compilation {
     if (!any) {
       return
     }
-    const refused = reportDeniedPanics(this.analysisUnits, this.panicScope, this.panicListed, facts, this.table, this.sink)
+    const refused = reportDeniedPanics(
+      this.analysisUnits,
+      this.panicScope,
+      this.panicListed,
+      facts,
+      this.table,
+      this.sink
+    )
     if (refused.length === 0) {
       return
     }

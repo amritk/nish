@@ -18972,7 +18972,7 @@ if (dealtHere("runtimeChecks")) {
       if (linked.status === 0) {
         const referenceLl = path.join(buildDir, "web_add.ll")
         // add.ts keeps a panic site on purpose (its header), so both builds pass --allow-panics.
-        execFileSync(NISH, ["examples/add.ts", "--allow-panics", "-o", referenceLl], { cwd: root, stdio: "pipe" })
+        execFileSync(NISH, withAllowPanics(NISH, ["examples/add.ts", "-o", referenceLl]), { cwd: root, stdio: "pipe" })
         const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts", "--allow-panics"], {
           cwd: root,
         })
@@ -28199,7 +28199,7 @@ if (dealtHere("releaseChecks")) {
       ["run", "--deny-panics", "tests/cases/panics_index.ts"],
       ["tests/cases/panics_index.ts", "--allow-panics"],
       ["examples/hello.ts", "-o", "x.ll"],
-      [path.join(root, "examples", "add.ts")],
+      [path.join(root, "examples", "nbody.ts")],
       ["--help"],
       ["--version"],
       ["upgrade", "--check"],
@@ -28209,11 +28209,15 @@ if (dealtHere("releaseChecks")) {
     // Anchored to the repository's own `examples/`: a scratch copy that merely
     // has a directory of that name is a case, not an example.
     const copied = [path.join(buildDir, "examples", "x.ts"), "-o", "x.ll"]
+    // An example whose header opts out (`// Opt-out (\`--allow-panics\`):`)
+    // gets the flag, as its header says a user builds it.
+    const optOut = [path.join(root, "examples", "add.ts")]
     const added = withAllowPanics(listing, ["run", "tests/cases/panics_index.ts", "--deny-panics"])
     check(
-      "allow-panics: the helper leaves a line that decides the scope, an example, a docs program or no compile alone, and puts the flag after `run`",
+      "allow-panics: the helper leaves a line that decides the scope, a strict example, a docs program or no compile alone, flags an opt-out example, and puts the flag after `run`",
       unchanged.every((args) => withAllowPanics(listing, args) === args) &&
         JSON.stringify(withAllowPanics(listing, copied)) === JSON.stringify([ALLOW_PANICS, ...copied]) &&
+        JSON.stringify(withAllowPanics(listing, optOut)) === JSON.stringify([ALLOW_PANICS, ...optOut]) &&
         JSON.stringify(added) === JSON.stringify(["run", ALLOW_PANICS, "tests/cases/panics_index.ts", "--deny-panics"]),
       JSON.stringify(unchanged.filter((args) => withAllowPanics(listing, args) !== args)) + JSON.stringify(added)
     )
@@ -29765,11 +29769,11 @@ if (dealtHere("releaseChecks")) {
                 hello.stdout + hello.stderr
               )
             }
-            // add.ts keeps its checked `a + b` on purpose (its header), so it
-            // passes --allow-panics, as its header says a user builds it
+            // add.ts keeps its checked `a + b` on purpose (its header), so the
+            // helper passes --allow-panics, as its header says a user builds it
             const ir = spawnSync(
               bin,
-              [path.join(root, "examples", "add.ts"), "--allow-panics", "-o", path.join(work, "add.ll")],
+              withAllowPanics(bin, [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")]),
               { cwd: work, encoding: "utf8" }
             )
             check(
