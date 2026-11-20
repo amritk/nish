@@ -527,7 +527,8 @@ export const labels = (rows: i32): i32 => {
 };
 
 // What NL9019 judges: only a function a loop pass that releases nothing calls
-// directly, each on what it allocates itself. Memory kept deeper in the call
+// directly, each on what it allocates itself; a call inside an arrow function
+// in the loop is not the pass's own and is not judged. Memory kept deeper in the call
 // chain, behind a direct callee that returns memory, is not reported here:
 // `nish --explain-memory` names the loop that keeps it. A direct callee that
 // does its work only once, behind a guard, still warns when it keeps an array

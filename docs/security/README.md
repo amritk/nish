@@ -471,11 +471,11 @@ the record that found it. The notes below the table name each such finding.
 
 Each parser below is a libFuzzer target in `tests/fuzz/targets/` (how to
 build, run and replay one: [`tests/fuzz/README.md`](https://github.com/amritk/nish/blob/main/tests/fuzz/README.md)),
-and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
-HPACK, X.509, JSON and URL targets each ran for at least 30 minutes from their seed
-corpora and found no crash, sanitizer report, timeout or OOM
-(`tls-server-flight` and `websocket-client` first in the scheduled `fuzz.yml`
-run of 2026-11-14 on commit `55fbb2d2`); CI replays every
+and its record says what fuzzing found. Each TLS, QUIC, HTTP/1, WebSocket,
+HPACK, X.509, JSON and URL target has run for 30 minutes from its seed corpus
+in every `fuzz.yml` run since 2026-10-30, and the JWT target in every run
+since 2026-11-07, and none found a crash, sanitizer report, timeout or OOM;
+CI replays every
 corpus on each PR and runs each target for 30 minutes weekly. RT-21 was found
 building the runtime for the harness, not by a target.
 
