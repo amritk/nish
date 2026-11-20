@@ -1,9 +1,7 @@
 // --deny-panics reads a conversion of a literal that fits its target as the
 // literal: `toI32(7)`, `toU32(3)`, `toI64(5)` and `toU8(200)` divide with no
-// zero test. A named `const` is read as its value as a mask and as a shift
-// count, so the `- 1` and `+ 1` below are `nsw` with no overflow check.
-const MASK: u32 = 255;
-const SHIFT: u32 = 24;
+// zero test. A function-level `const` is read as its value as a mask and as a
+// shift count, so the `- 1` and `+ 1` below are `nsw` with no overflow check.
 
 const divI32 = (a: i32): i32 => a / toI32(7);
 
@@ -13,9 +11,15 @@ const divI64 = (a: i64): i64 => a / toI64(5);
 
 const remU8 = (a: u8): u8 => a % toU8(200);
 
-const lowByte = (w: u32): i32 => toI32(w & MASK) - 1;
+const lowByte = (w: u32): i32 => {
+  const mask: u32 = 255;
+  return toI32(w & mask) - 1;
+};
 
-const topByte = (w: u32): i32 => toI32(w >>> SHIFT) + 1;
+const topByte = (w: u32): i32 => {
+  const shift: u32 = 24;
+  return toI32(w >>> shift) + 1;
+};
 
 export const main = (): number => {
   const top: u32 = 4294967295;
