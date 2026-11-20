@@ -240,6 +240,8 @@ cases/deny_panics_charcode added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_const_convert added after R6: no rewriter to freeze it with
 cases/deny_panics_const_names added after R6: no rewriter to freeze it with
+cases/deny_panics_downcount_step2 added after R6: no rewriter to freeze it with
+cases/deny_panics_i32_mask added after R6: no rewriter to freeze it with
 cases/deny_panics_mask added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with

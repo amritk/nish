@@ -1421,7 +1421,7 @@ const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
 }
 
 /** The largest answer of `s.charCodeAt(i)`: a byte. */
-export const CHAR_CODE_TOP: i32 = 255
+const CHAR_CODE_TOP: i32 = 255
 
 /** The largest answer of `Math.clz32(x)`, which src/builtins.ts types as `integer<0, CLZ32_TOP>`. */
 export const CLZ32_TOP: i32 = 32
