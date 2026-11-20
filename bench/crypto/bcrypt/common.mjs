@@ -13,6 +13,7 @@
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import { withAllowPanics } from "../../../tests/allow-panics.js"
 
 export const root = path.resolve(import.meta.dirname, "..", "..", "..")
 export const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: "utf8", ...opts })
@@ -101,7 +102,14 @@ export const buildNish = (compiler, dir, exe, source, flags = []) => {
   fs.writeFileSync(path.join(dir, `${exe}.ts`), source)
   const built = run(
     compiler,
-    [path.join(dir, `${exe}.ts`), ...flags, "-o", `${dir}/${exe}-out/`, "--link", path.join(dir, exe)],
+    withAllowPanics(compiler, [
+      path.join(dir, `${exe}.ts`),
+      ...flags,
+      "-o",
+      `${dir}/${exe}-out/`,
+      "--link",
+      path.join(dir, exe),
+    ]),
     { cwd: root }
   )
   if (built.status !== 0) {

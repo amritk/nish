@@ -88,7 +88,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { CACHE, fetchAll } from "./fetch.mjs"
 import { canonical, DEFAULT_ROUNDS, roundOrder, roundsFor } from "./rounds.mjs"
 
@@ -222,16 +222,19 @@ const IMPLS = [
     sources: [],
     build: () => {
       const exe = path.join(outDir, "nish", "main")
-      build("Nish", nishc.cmd, [
-        ...nishc.prefix,
-        path.join(here, "main.ts"),
-        "-o",
-        `${path.dirname(exe)}${path.sep}`,
-        "--link",
-        exe,
-        "--profile",
-        "speed",
-      ])
+      build(
+        "Nish",
+        nishc.cmd,
+        compileArgv(nishc, [
+          path.join(here, "main.ts"),
+          "-o",
+          `${path.dirname(exe)}${path.sep}`,
+          "--link",
+          exe,
+          "--profile",
+          "speed",
+        ])
+      )
       return exe
     },
   },

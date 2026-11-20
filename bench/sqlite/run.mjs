@@ -74,7 +74,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom, hardeningFlags, unhardened } from "../compiler.mjs"
+import { compileArgv, compilerFrom, hardeningFlags, unhardened } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const here = path.join(root, "bench", "sqlite")
@@ -232,7 +232,7 @@ const nishBuild = (out, extra, what) => {
   fs.rmSync(ir, { recursive: true, force: true })
   run(
     nishc.cmd,
-    [...nishc.prefix, path.join(here, "main.ts"), "-o", `${ir}${path.sep}`, "--link", out, ...extra],
+    compileArgv(nishc, [path.join(here, "main.ts"), "-o", `${ir}${path.sep}`, "--link", out, ...extra]),
     what
   )
 }

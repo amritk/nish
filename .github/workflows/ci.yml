@@ -1014,7 +1014,9 @@ jobs:
         if: needs.scope.outputs.bootstrap != 'false'
         run: |
           set -o pipefail
-          build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
@@ -1418,7 +1420,9 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
           jobs="$(nproc)"
           if [ "$jobs" -gt 8 ]; then jobs=8; fi
           node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$jobs"

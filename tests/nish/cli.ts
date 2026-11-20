@@ -233,6 +233,63 @@ const hasStackFrame = (text: string): boolean => {
   return false;
 };
 
+/** The flag a compile of a program that may panic on purpose passes, as `ALLOW_PANICS_FLAG` in `src/options.ts` spells it. */
+const ALLOW_PANICS: string = "--allow-panics";
+
+/** Whether `word`, as the first argument, is a command whose arguments are not a compile's. */
+const isNotACompile = (word: string): boolean => word === "upgrade" || word === "c-import" || word === "break";
+
+/** Whether `arg` already decides the panic scope, or asks for no compile at all. */
+const decidesPanics = (arg: string): boolean =>
+  arg === "--deny-panics" || arg === ALLOW_PANICS || arg === "-h" || arg === "--help" || arg === "-v" || arg === "--version";
+
+/**
+ * `args` with `--allow-panics` added, by the rule `withAllowPanics` in
+ * `tests/allow-panics.js` follows for the JS harnesses: the line names a `.ts`
+ * program outside the repository's `examples/` and `docs/`, is not `upgrade`,
+ * `c-import` or `break`, and passes none of `--deny-panics`, `--allow-panics`,
+ * `--help` or `--version` before the program (anywhere, for a compile). The flag
+ * goes first, or right after `run`. Otherwise `args` itself.
+ */
+const withAllowPanics = (args: string[]): string[] => {
+  if (args.length === 0 || isNotACompile(args[0])) {
+    return args;
+  }
+  const run: i32 = args[0] === "run" ? 1 : 0;
+  let program: i32 = -1;
+  let at: i32 = 0;
+  for (const arg of args) {
+    if (program < 0 && at >= run && arg.endsWith(".ts")) {
+      program = at;
+    }
+    at += 1;
+  }
+  if (program < 0) {
+    return args;
+  }
+  at = 0;
+  for (const arg of args) {
+    if (at === program) {
+      if (arg.startsWith("examples/") || arg.startsWith("docs/")) {
+        return args;
+      }
+    } else if ((run === 0 || at < program) && decidesPanics(arg)) {
+      return args;
+    }
+    at += 1;
+  }
+  const added: string[] = [];
+  at = 0;
+  for (const arg of args) {
+    if (at === run) {
+      added.push(ALLOW_PANICS);
+    }
+    added.push(arg);
+    at += 1;
+  }
+  return added;
+};
+
 /**
  * The compiler under test, as something spawnable.
  *
@@ -244,11 +301,24 @@ class Cli {
   head: string[];
   /** What the report calls it. */
   label: string;
+  /**
+   * Whether its `--help` lists `--allow-panics`: a released compiler older than
+   * the flag exits 2 on it, so a compile gets it only when this says so.
+   */
+  allowPanics: boolean;
 
   constructor(spec: string) {
     this.label = spec;
     const node = spec.endsWith(".js") || spec.endsWith(".mjs") || spec.endsWith(".cjs");
     this.head = node ? ["node", spec] : [spec];
+    const help: string[] = [];
+    for (const part of this.head) {
+      help.push(part);
+    }
+    help.push("--help");
+    const helpOut = `${WORK}/help.probe.out`;
+    this.allowPanics =
+      spawnSyncTo(help, helpOut, `${WORK}/help.probe.err`) === 0 && readOrEmpty(helpOut).indexOf(ALLOW_PANICS) >= 0;
   }
 
   /**
@@ -265,7 +335,10 @@ class Cli {
   /**
    * One run, with `env` layered over the inherited environment through `env(1)`
    * and both streams captured to `<slot>` files. Every caller passes its own slot
-   * so that a failure's output is still on disk after the run.
+   * so that a failure's output is still on disk after the run. A compile of a
+   * program that may panic gets `--allow-panics` (`withAllowPanics`), so the day
+   * the default refuses an unproven panic these checks still reach what they ask
+   * about; a line that names `--deny-panics` keeps it.
    */
   run(slot: string, env: string[], args: string[]): Run {
     const argv: string[] = [];
@@ -278,7 +351,7 @@ class Cli {
     for (const part of this.head) {
       argv.push(part);
     }
-    for (const arg of args) {
+    for (const arg of this.allowPanics ? withAllowPanics(args) : args) {
       argv.push(arg);
     }
     const outPath = `${WORK}/${slot}.out`;
@@ -1921,6 +1994,7 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
     ].join("\n")
   );
 
+  // strict: a one-line program with no panic site, refused before it compiles.
   const link = spawnSyncTo(
     inDirectory(planted, [`${lone}/nish`, "main.ts", "-o", "out/", "--link", "out/main"]),
     `${WORK}/sec_planted_link.out`,
@@ -1933,6 +2007,7 @@ const checkPackageRoot = (t: Suite, cli: Cli): void => {
   );
   t.eqI32("CLI-2: and is refused with the toolchain band, since there is no package", link, 3);
 
+  // strict: a one-line program with no panic site, refused before it compiles.
   const std = spawnSyncTo(
     inDirectory(planted, [`${lone}/nish`, "uses-std.ts", "-o", "out/"]),
     `${WORK}/sec_planted_std.out`,
@@ -2123,6 +2198,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   const linkArgs: string[] = [source, "-o", `${abs}/sec-shared.ll`, "--link", `${abs}/sec-shared`];
 
   chmodTo("777", pkg);
+  // strict: FIXTURE_OK has no panic site, and this build is refused before it compiles.
   const shared = spawnSyncTo(
     inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)),
     `${WORK}/sec_shared.out`,
@@ -2156,6 +2232,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
       "",
     ].join("\n")
   );
+  // strict: a one-line program with no panic site, refused before it compiles.
   const std = spawnSyncTo(
     inDirectory("/", [`${pkg}/bin/nish`, usesStd, "-o", `${abs}/sec-shared-std.ll`]),
     `${WORK}/sec_shared_std.out`,
@@ -2169,6 +2246,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   );
 
   chmodTo("775", pkg);
+  // strict: FIXTURE_OK has no panic site, so it builds with or without the flag.
   spawnSyncTo(inDirectory("/", followedBy([`${pkg}/bin/nish`], linkArgs)), `${WORK}/sec_group.out`, `${WORK}/sec_group.err`);
   t.eqBool(
     "CLI-9: a package root only its group can write is still the package",
@@ -2207,6 +2285,7 @@ const checkPackageRootOwner = (t: Suite, cli: Cli, env: boolean): void => {
   writeFileSync(`${decoy}/bin/nish`, "#!/bin/sh\nexit 0\n");
   writeFileSync(`${decoy}/scripts/build.sh`, `touch '${decoyMarker}'\nexit 1\n`);
   writeFileSync(`${dirDecoy}/scripts/build.sh`, `touch '${dirDecoyMarker}'\nexit 1\n`);
+  // strict: FIXTURE_OK has no panic site, so it builds with or without the flag.
   spawnSyncTo(
     inDirectory("/", followedBy(["env", `PATH=${dirDecoy}/bin:${decoy}/bin:${pkg}/bin:${path}`, "nish"], linkArgs)),
     `${WORK}/sec_path.out`,

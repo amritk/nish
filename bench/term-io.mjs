@@ -19,7 +19,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { relay } from "../tests/term-io/relay.mjs"
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(root, "build", "bench", "term-io")
@@ -39,8 +39,7 @@ fs.mkdirSync(outDir, { recursive: true })
 const exe = path.join(outDir, "app")
 const built = spawnSync(
   nishc.cmd,
-  [
-    ...nishc.prefix,
+  compileArgv(nishc, [
     path.join(root, "bench", "term-io.ts"),
     "-o",
     outDir + path.sep,
@@ -48,7 +47,7 @@ const built = spawnSync(
     exe,
     "--profile",
     "speed",
-  ],
+  ]),
   { encoding: "utf8" }
 )
 if (built.status !== 0) {

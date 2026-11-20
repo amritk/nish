@@ -37,7 +37,7 @@ import { createServer } from "node:net"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const here = path.join(root, "bench", "postgres")
@@ -100,14 +100,13 @@ const exe = path.join(outDir, "batch-scale")
 fs.rmSync(exe, { force: true })
 run(
   nishc.cmd,
-  [
-    ...nishc.prefix,
+  compileArgv(nishc, [
     path.join(here, "batch-scale.ts"),
     "-o",
     `${path.join(outDir, "batch-scale.ir")}${path.sep}`,
     "--link",
     exe,
-  ],
+  ]),
   "the Nish build"
 )
 

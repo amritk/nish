@@ -85,7 +85,7 @@ import {
   manifestLink,
   manifestNish,
 } from "./manifest"
-import { Options } from "./options"
+import { ALLOW_PANICS_FLAG, Options } from "./options"
 import { packageDirOf, packageNameOf } from "./packages"
 import { basenameWithout, dirname, joinPath } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
@@ -1043,6 +1043,11 @@ const commandMain = (): number => {
       opts.emitPanics = process.argv[arg]
     } else if (value === "--deny-panics") {
       opts.denyPanics = true
+    } else if (value === ALLOW_PANICS_FLAG) {
+      // The opposite of `--deny-panics`, and the last of the two wins: neither
+      // moves a byte of the IR, so either reading builds the same binary,
+      // unlike two `--sandbox` modes. A `noPanic` list still holds under it.
+      opts.denyPanics = false
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {

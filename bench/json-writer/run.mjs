@@ -32,7 +32,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import { resolveSeed } from "../../tests/self/seed.js"
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const outDir = path.join(root, "build", "bench", "json-writer")
@@ -75,14 +75,13 @@ const build = (compiler, bin, label) => {
   fs.mkdirSync(dir, { recursive: true })
   const built = spawnSync(
     compiler.cmd,
-    [
-      ...compiler.prefix,
+    compileArgv(compiler, [
       path.join(root, "bench", "json-writer", "main.ts"),
       "-o",
       `${dir}${path.sep}`,
       "--link",
       bin,
-    ],
+    ]),
     { cwd: root, encoding: "utf8" }
   )
   if (built.status !== 0) {

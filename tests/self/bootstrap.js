@@ -37,6 +37,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
+import { withAllowPanics } from "../allow-panics.js"
 import { linkWith, seedForOracle } from "./seed.js"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
@@ -54,7 +55,10 @@ const fresh = (dir) => {
 
 /** A stage1-or-later compiler compiles `src/` into `dir`. */
 const compileWithStage = (binary, dir) => {
-  const r = spawnSync(binary, [ENTRY, "-o", `${dir}/`], { cwd: root, encoding: "utf8" })
+  const r = spawnSync(binary, withAllowPanics(binary, [ENTRY, "-o", `${dir}/`]), {
+    cwd: root,
+    encoding: "utf8",
+  })
   return r.status === 0 ? null : `${path.basename(binary)}: ${r.stderr || r.stdout}`
 }
 

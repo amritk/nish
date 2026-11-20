@@ -29,6 +29,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { withAllowPanics } from "../allow-panics.js"
 import { wipeChecks as crypto } from "./crypto.js"
 import { wipeChecks as quic } from "./quic.js"
 import { wipeChecks as quicServer } from "./quic-server.js"
@@ -45,7 +46,7 @@ const optimisedBodies = (group, nish, root, dir) => {
   const bodies = new Map()
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
-  const c = spawnSync(nish, [path.join(root, group.program), "-o", `${dir}/`], {
+  const c = spawnSync(nish, withAllowPanics(nish, [path.join(root, group.program), "-o", `${dir}/`]), {
     cwd: root,
     encoding: "utf8",
   })

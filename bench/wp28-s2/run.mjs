@@ -26,6 +26,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CLASSES, census } from "./census.mjs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const here = import.meta.dirname
 const args = process.argv.slice(2)
@@ -255,9 +256,13 @@ if (existsSync(compiler)) {
     .filter((f) => f.endsWith(".ts"))
     .sort()
     .map((file) => {
-      const run = spawnSync(compiler, [join(here, "strict", file), "--json", "-o", join(out, "out.ll")], {
-        encoding: "utf8",
-      })
+      const run = spawnSync(
+        compiler,
+        withAllowPanics(compiler, [join(here, "strict", file), "--json", "-o", join(out, "out.ll")]),
+        {
+          encoding: "utf8",
+        }
+      )
       if (run.status === 0) {
         return [file, run.status, "accepted"]
       }
