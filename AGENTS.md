@@ -42,63 +42,34 @@ per stage, and the stage to do next.
 
 ## Picking up a work package
 
-The open work is GitHub issues, and the [Roadmap issue](https://github.com/amritk/nish/issues/1849) lists it in
-the order it is picked up. Each work package (or theme) is a **parent issue**
-labelled `plan`. A plan file, `.claude/plans/<slug>.plan.md`, backs it, and
-its marker names that file. Each **sub-issue** is one stage and one pull
-request, in merge order. The plan file holds the spec, the design note in
+The open work is GitHub issues. The [Roadmap issue](https://github.com/amritk/nish/issues/1849)
+lists one parent issue per work package (or theme) in pickup order, and each
+parent's sub-issues are its stages, one pull request each. A plan file,
+`.claude/plans/<slug>.plan.md`, specifies each parent, the design note in
 `docs/` holds the reasons, and the issues hold the state.
 
-| Label | Meaning |
-| --- | --- |
-| `ready` | on a parent: the owner signed it off, and an agent may build it |
-| `needs-decision` | waits on the owner. `/decide` asks; no agent builds it |
-| `deferred` | wanted, not scheduled |
-| `in-progress` | a run has claimed it |
+The labels, and how an agent claims, checkpoints, hands off and takes over an
+issue, are the `pickup` skill's
+([`.claude/skills/pickup/SKILL.md`](.claude/skills/pickup/SKILL.md)):
 
-A parent with none of the first three labels is backlog.
+- To build a whole package, run `/feature #<parent issue>` or `/feature --next`.
+- To work one stage by hand, run `/pickup #<stage issue>` or `/pickup next`.
+- For questions only the owner can answer, use `/decide`.
+- For new work, add a stage to the plan file in a PR, then run `/plan-issues`.
 
-For a contributor, or an agent asked to "pick up WP50" or "pick up what is
-next":
+What nish adds to the skill:
 
-1. Run `/feature #<parent issue>` or `/feature --next`. The lead claims the
-   parent, refines its plan, and gives each open stage its own session,
-   branch and PR. Working by hand instead, take one open sub-issue of a
-   `ready` parent that carries no `needs-decision`, `deferred` or
-   `in-progress` label. Claim it: label it `in-progress` and post its one
-   `<!-- status -->` comment, in the shape `/plan-issues` gives
-   ([Claiming, checkpoints and takeover](.claude/skills/plan-issues/SKILL.md#claiming-checkpoints-and-takeover)).
-2. Read the stage's section of the plan file, the design-note section it
-   links, and the issue's comments. An owner's answer recorded by `/decide`
-   opens with `<!-- decision -->` and binds the work.
-3. The pull request's body carries `Fixes #<stage issue>`, plus one `Fixes`
-   line per open sub-issue of that stage, so the merge closes them. It does
-   not edit `docs/roadmap/`. When a package's last stage closes, close its
-   parent, and in the same PR as that stage set the package's `**State:**`
-   on its roadmap page and its row in
-   [`docs/roadmap/index.md`](./docs/roadmap/index.md) to Landed.
-4. Keep the work recoverable at checkpoints, not on a timer. Push the
-   branch when a todo is finished and builds, before a long run, and before
-   you stop; until a PR exists those pushes run no CI. Edit the status
-   comment in place, never as a new comment, when the next step changes.
-   Stopping unfinished, push, write the exact next step into the status,
-   and remove `in-progress`. An `in-progress` issue whose status and branch
-   are both more than a day old, with no live session, may be taken over,
-   from its branch.
-5. For a question only the owner can answer, label the issue
-   `needs-decision` and post a `<!-- decision-request -->` comment in the
-   shape that [`.claude/skills/decide/SKILL.md`](.claude/skills/decide/SKILL.md)
-   gives. Then go on with work that does not wait on it.
-6. New work for a package is a stage added to its plan file in a PR, then
-   `/plan-issues`. That files the sub-issue and reopens the parent if it was
-   closed. A new package gets its design note, roadmap page and plan file
-   (with a `priority`) in one PR, then `/plan-issues`.
+- **When a package's last stage closes**, the PR that lands that stage also
+  sets the package's `**State:**` on its roadmap page, and its row in
+  [`docs/roadmap/index.md`](./docs/roadmap/index.md), to Landed. No other PR
+  edits `docs/roadmap/`.
+- **A new package** gets its design note, roadmap page and plan file (with a
+  `priority`) in one PR, then `/plan-issues`.
 
-The workflow skills (`/feature`, `/plan-issues`, `/decide`, the review
-agents) are copied from `amritk/ai`, the shared skills repository. Change one
-there, then run `node scripts/sync-skills.mjs` here;
-`node scripts/sync-skills.mjs --check` refuses a vendored file edited in
-place.
+The workflow skills and agents are copied from `amritk/ai`, the shared skills
+repository, because a cloud session loads only what the repo commits. Change one
+there, then run `node scripts/sync-skills.mjs` here.
+`node scripts/sync-skills.mjs --check` refuses a vendored file edited in place.
 
 ## Workflow
 
