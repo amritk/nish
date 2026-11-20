@@ -165,6 +165,19 @@
 #                            not, so the caller keeps every object it compiled
 #                            (`nish run`'s module cache, src/build-cache.ts).
 #                            The inputs' file names must differ.
+#   --link-lib <name>        debug, speed and size only: link the C library
+#                            <name> (-l<name>, after the inputs and before -lm);
+#                            <name> is [A-Za-z0-9_][A-Za-z0-9_.+-]*, so it is
+#                            never a flag. A package's `nish.link.libraries`
+#                            (WP66 S7, docs/security/package-link.md).
+#   --link-source <file.c>   debug, speed and size only: compile the C file, an
+#                            absolute path, with the profile's flags and link
+#                            it with the program. A package's `nish.link.sources`.
+#   --link-depends <file.c>  debug, speed and size only: print, as a make rule
+#                            (clang -M), the files it lists for the compile of
+#                            that source with this profile's flags, and link
+#                            nothing.
+#                            `nish run` keys its cache on them.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -187,6 +200,9 @@ modules_at=""                          # --module-objects <dir>: each X.ll's obj
 memory_mib=""                          # --memory <MiB>: wasm-host's fixed memory (WP50 stage 1)
 wasm_opt=""                            # what the build line says of wasm-opt; set only by wasm-host
 inline_to=""                           # --inline <file.mjs>: wasm-host's bytes as an ES module
+link_libs=()                           # --link-lib <name>: -l<name> on the link line (WP66 S7)
+link_sources=()                        # --link-source <file.c>: a package's own C, compiled into the link
+link_depends=""                        # --link-depends <file.c>: print what its compile reads, then stop
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -209,6 +225,21 @@ while [ $# -gt 0 ]; do
     --inline)
       [ -n "${2-}" ] || { echo "error: --inline needs a file to write" >&2; exit 2; }
       inline_to="$2"; shift 2 ;;
+    --link-lib)
+      [[ "${2-}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.+-]*$ ]] || { echo "error: --link-lib takes a library name of letters, digits, _ . + and -, not '${2-}'" >&2; exit 2; }
+      link_libs+=("-l$2"); shift 2 ;;
+    --link-source)
+      case "${2-}" in
+        /*.c) [ -f "$2" ] || { echo "error: --link-source: $2 is not a file" >&2; exit 2; } ;;
+        *) echo "error: --link-source takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
+      esac
+      link_sources+=("$2"); shift 2 ;;
+    --link-depends)
+      case "${2-}" in
+        /*.c) [ -f "$2" ] || { echo "error: --link-depends: $2 is not a file" >&2; exit 2; } ;;
+        *) echo "error: --link-depends takes the absolute path of a .c file, not '${2-}'" >&2; exit 2 ;;
+      esac
+      link_depends="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -217,8 +248,9 @@ while [ $# -gt 0 ]; do
     *) inputs+=("$1"); shift ;;
   esac
 done
-[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || { echo "error: no input files" >&2; exit 2; }
+[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: no input files" >&2; exit 2; }
 if [ -n "$cpu" ]; then
+  [ "$cpu" != native ] || { echo "error: --cpu native is refused: under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids); --cpu takes x86-64-v3" >&2; exit 2; }
   [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
   case "$profile" in
     wasm|wasm-host|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;
@@ -299,7 +331,7 @@ if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
   [ -z "$sqlite_to" ] || [ -z "$sqlite_from" ] || { echo "error: --sqlite-objects and --sqlite-from are two different builds" >&2; exit 2; }
   [ -z "$sqlite_to" ] || [ -z "$objects_to$objects_from" ] || { echo "error: --sqlite-objects compiles runtime/sqlite/ alone, without --runtime-objects or --runtime-from" >&2; exit 2; }
 fi
-[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
+[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || [ -n "$link_depends" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
 # The runtime is eighteen translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-text.c, <dir>/runtime-os.c, <dir>/runtime-parallel.c,
@@ -570,6 +602,20 @@ case "$profile" in
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
 esac
 
+# --link-depends: the files clang -M lists for a package source's compile,
+# every header and every #included file of any name, with the flags the link
+# line compiles that source with (`common` and the profile's `optimise`), so
+# `nish run` keys those rather than guessing at them by name. clang -M does
+# not list a file an assembler `.incbin` reads, nor a header that would shadow
+# a listed one if it appeared later (docs/security/package-link.md, PL-6, PL-10).
+if [ -n "$link_depends" ]; then
+  case "$profile" in
+    debug) exec "$CC" "${common[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;
+    speed|size) exec "$CC" "${common[@]}" "${optimise[@]}" -Wno-unused-command-line-argument -M "$link_depends" ;;
+    *) echo "error: --link-depends takes the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+fi
+
 # The speed link splits full LTO's code generation into one partition per core,
 # run in parallel: lld's --lto-partitions, after the whole program is optimised
 # as one module, so inlining does not change. But a partition boundary promotes
@@ -810,12 +856,22 @@ fi
 # why Linux never noticed. `pgo`, `elf`, `strip_flag` and `libs` are all empty on
 # ordinary builds, so please do not simplify these back.
 case "$profile" in debug|speed|size) sqlite_objects "${compile[@]}" ;; esac
+# A package's own C sources join the inputs here, after the runtime's halves
+# and SQLite were decided from the IR alone, so a source can neither stand in
+# for runtime.c nor be taken for one of its siblings. clang compiles each by
+# its .c name on the one link line, with the profile's flags.
+if [ ${#link_libs[@]} -gt 0 ] || [ ${#link_sources[@]} -gt 0 ]; then
+  case "$profile" in
+    debug|speed|size) inputs+=(${link_sources[@]+"${link_sources[@]}"}) ;;
+    *) echo "error: --link-lib and --link-source take the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+fi
 case "$profile" in
   debug)
-    "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
+    "$CC" "${common[@]}" "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
   speed|size)
     "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
-      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
+      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" ${link_libs[@]+"${link_libs[@]}"} -lm -o "$out" ;;
   wasm|wasm-host)
     # A region's chunks come from malloc, and the freestanding wasm runtime
     # (runtime-wasm.c) has none, so IR that makes or enters one is refused here

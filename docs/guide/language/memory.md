@@ -248,12 +248,14 @@ This prints `10`. A child is added after the parent's last one, so the
 children stay in the order they were made, and the walk reads them in that
 order.
 
-A class that links to its own kind, as `Node` does, is what a later release
-will lay out in less memory by itself: its links in 4 bytes rather than 8,
-when the program is a native executable and makes the class in a loop or a
-recursive function. To see which of your classes that rule would pick, and
-the first test that refuses each of the others, build it with `--link` (or
-`nish run` it) and add `--explain-layout`. IR alone (`-o` with no `--link`)
+A class that links to its own kind, as `Node` does, is one Nish lays out in
+less memory by itself: its links in 4 bytes rather than 8, when the program
+is a native executable, the saving is at least a quarter, and the program
+makes the class in a loop or a recursive function
+([Compact classes](compact-classes.md#classes-the-compiler-picks-for-you)).
+To see which of your classes the rule picks, and the first test that refuses
+each of the others, build it with `--link` (or `nish run` it) and add
+`--explain-layout`. IR alone (`-o` with no `--link`)
 is refused at the first test, since a host may link it. For the program
 above it prints:
 
@@ -262,7 +264,22 @@ app.ts:1:7: layout: Node: 4 not made in a loop or recursion, 32 → 16 bytes
 explain-layout: 0 of 1 classes compact
 ```
 
-Nothing uses the verdict yet: the flag changes no byte of what is built.
+`Node` is made only in `add` and `main`, outside any loop, so it keeps full
+pointers. The flag changes no byte of what is built; `--compact off` turns the
+rule off.
+
+Where the rule does pick a node, as it does for a tree built in a recursive
+function, the node takes half the memory or a little more, and the program
+is faster when its nodes do not fit in the cache: a 24-byte tree node of an
+`i32` and two links becomes 12 bytes, and a 33-million-node tree built and
+walked eight times ran in two thirds of the time. The price is one extra step
+on every link read. A small graph that stays in the cache and is mostly a
+loop that chases one link after another, such as a climb from a node to the
+root, gains nothing from the smaller node and pays that step on each hop:
+write `implements Wide` on that class. The opposite case, a class under
+24 bytes that the rule leaves alone, is better left alone unless you have
+measured your program both ways
+([Compact classes](compact-classes.md#when-to-override-the-rule)).
 
 Where some pass needs to reach a node's children by index, keep a count of
 them on the node, and fill its `Node[]` once, when the node is complete,

@@ -26,7 +26,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -76,8 +76,7 @@ fs.mkdirSync(outDir, { recursive: true })
 const exe = path.join(outDir, cpu === null ? "http1-parse" : `http1-parse-${cpu}`)
 const build = spawnSync(
   nishc.cmd,
-  [
-    ...nishc.prefix,
+  compileArgv(nishc, [
     "bench/http1-parse/main.ts",
     "-o",
     `${rel(outDir)}/`,
@@ -86,7 +85,7 @@ const build = spawnSync(
     "--profile",
     "speed",
     ...(cpu === null ? [] : ["--cpu", cpu]),
-  ],
+  ]),
   { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
 )
 if (build.status !== 0) {

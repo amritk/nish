@@ -186,6 +186,8 @@ cases/cf_label_dispose added after R6: no rewriter to freeze it with
 cases/cf_label_walks added after R6: no rewriter to freeze it with
 cases/cls_boxed_array added after R6: no rewriter to freeze it with
 cases/cls_boxed_array_push added after R6: no rewriter to freeze it with
+cases/cls_field_init added after R6: no rewriter to freeze it with
+cases/cls_field_init_arena added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with
@@ -198,6 +200,7 @@ cases/compact_copies added after R6: no rewriter to freeze it with
 cases/compact_darwin added after R6: no rewriter to freeze it with
 cases/compact_list added after R6: no rewriter to freeze it with
 cases/compact_no_stack added after R6: no rewriter to freeze it with
+cases/compact_tbaa added after R6: no rewriter to freeze it with
 cases/compact_view added after R6: no rewriter to freeze it with
 cases/compat_for_of_string added after R6: no rewriter to freeze it with
 cases/compat_for_of_string_fresh added after R6: no rewriter to freeze it with
@@ -215,6 +218,9 @@ cases/compat_string_switch added after R6: no rewriter to freeze it with
 cases/compat_string_switch_flow added after R6: no rewriter to freeze it with
 cases/const_array_numeric added after R6: no rewriter to freeze it with
 cases/const_array_u8 added after R6: no rewriter to freeze it with
+cases/const_table_byte_class added after R6: no rewriter to freeze it with
+cases/const_table_f64_folded added after R6: no rewriter to freeze it with
+cases/const_table_u16_u32 added after R6: no rewriter to freeze it with
 cases/ct_asm_p256 added after R6: no rewriter to freeze it with
 cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with

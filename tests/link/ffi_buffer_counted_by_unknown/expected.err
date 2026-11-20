@@ -1,0 +1,1 @@
+`declare function fill` counts the buffer `dst` by `len`, which is not one of its parameters

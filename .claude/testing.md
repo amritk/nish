@@ -311,6 +311,29 @@ process's own descriptors. Where a descriptor count is the claim, the program
 under test takes it from its own `/proc/self/fd`, before and after, and the
 check reads the difference.
 
+## Building a program that may panic
+
+A case, a fixture, a fuzz target or `src/` panics on purpose, so its build
+passes `--allow-panics`; an example under `examples/` is what a user copies,
+so its build goes without the flag and keeps the compiler's default. Today
+the flag only undoes an earlier `--deny-panics`. Pass it through the helper,
+never by hand: the seed and any older release exit 2 on a flag they do not
+know, so the helper reads the compiler's `--help` first.
+
+- **JS**: `withAllowPanics(compiler, args)` from `tests/allow-panics.js`
+  returns `args` with the flag added when the compiler lists it, the line
+  names a `.ts` program outside `examples/` and none of its own flags
+  already decides the scope. In `tests/run.js`, `spawnNish(args, options)` is
+  `spawnSync(NISH, ...)` through it; a check that must build without the flag
+  calls `spawnSync(NISH, ...)` directly.
+- **Shell**: `. scripts/nish-compiler.sh`, then `nish_allow_panics <cmd...>`
+  sets the array `allow_panics`; expand it as
+  `${allow_panics[@]+"${allow_panics[@]}"}` (macOS's bash 3.2).
+- **npm scripts**: `bash scripts/nish-harness.sh <program.ts> <exe>` builds a
+  harness written in Nish with `build/nish` through `nish_allow_panics` and
+  runs it (`test:nish`, `test:cli`); `tests/run.js` refuses an npm script
+  that builds a non-example program any other way.
+
 ## Testing a Nish program in Nish
 
 Everything above is the harness that tests the *compiler*. A program the

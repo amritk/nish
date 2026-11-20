@@ -2,8 +2,7 @@
 name: WP70 — the surface a Spectral-compatible linter asks for
 overview: A JSON/YAML linter written in Nish takes Spectral's inputs and reports what Spectral reports, vacuum's behaviour an option where cheap. The language needs nothing new; std needs JSON ranges checked against jsonc-parser, jsonc-parser's recovery, YAML loaded as Spectral loads it, UTF-16 columns, Unicode collation, and globs in fast-glob's and minimatch's dialects. nish/regex stays as it is; the linter rewrites and reports instead.
 spec: docs/wp70-linter-surface.md
-roadmap: docs/roadmap/wp70-linter-surface.md
-priority: 90
+priority: 100
 labels: [ready]
 stages:
   - id: s1-json-ranges
@@ -96,7 +95,7 @@ stages:
 
 ## Context
 
-A JSON/YAML style-guide linter is being written in Nish with Spectral's inputs and Spectral's output; where vacuum differs, vacuum's behaviour is an option where it costs little. The language needs nothing new; `std/` does. The [design note](../../docs/wp70-linter-surface.md) records each gap, what the reference tools do at pinned commits, and what to build; its [roadmap page](../../docs/roadmap/wp70-linter-surface.md) carries a box per stage. JSON Schema at run time is [WP69](../../docs/wp69-json-schema-runtime.md); regex is not planned ([§7](../../docs/wp70-linter-surface.md#7-regex-lookaround-backreferences-and-annex-b-not-planned)). S1 comes before S2; S3 to S6 depend on nothing here and none waits on WP69. Each stage lands in its own PR that ticks its box.
+A JSON/YAML style-guide linter is being written in Nish with Spectral's inputs and Spectral's output; where vacuum differs, vacuum's behaviour is an option where it costs little. The language needs nothing new; `std/` does. The [design note](../../docs/wp70-linter-surface.md) records each gap, what the reference tools do at pinned commits, and what to build. JSON Schema at run time is [WP69](../../docs/wp69-json-schema-runtime.md); regex is not planned ([§7](../../docs/wp70-linter-surface.md#7-regex-lookaround-backreferences-and-annex-b-not-planned)). S1 comes before S2; S3 to S6 depend on nothing here and none waits on WP69. Each stage lands in its own PR, which closes its issue.
 
 ## WP70 S1 — JSON ranges checked against jsonc-parser
 

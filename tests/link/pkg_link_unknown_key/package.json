@@ -1,0 +1,5 @@
+{
+  "name": "pkg-link-unknown-key",
+  "private": true,
+  "nish": { "link": { "libraries": ["m"], "pkgConfig": ["sqlite3"] } }
+}

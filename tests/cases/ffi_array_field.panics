@@ -1,0 +1,11 @@
+{"functions":[
+{"name":"filled","symbol":"filled","module":"tests/cases/ffi_array_field.ts","line":23,"panics":[{"kind":"oom","line":24,"column":13,"allowed":true}]},
+{"name":"readH","symbol":"readH","module":"tests/cases/ffi_array_field.ts","line":30,"panics":[{"kind":"index","line":31,"column":10,"proven":false}]},
+{"name":"readData","symbol":"readData","module":"tests/cases/ffi_array_field.ts","line":35,"panics":[{"kind":"index","line":36,"column":10,"proven":false}]},
+{"name":"sumH","symbol":"sumH","module":"tests/cases/ffi_array_field.ts","line":40,"panics":[{"kind":"overflow","line":43,"column":26,"proven":true},{"kind":"index","line":44,"column":12,"proven":true}]},
+{"name":"store","symbol":"store","module":"tests/cases/ffi_array_field.ts","line":53,"panics":[{"kind":"index","line":54,"column":3,"proven":false}]},
+{"name":"poke","symbol":"poke","module":"tests/cases/ffi_array_field.ts","line":58,"panics":[{"kind":"call","line":60,"column":3,"callee":"store","via":"index"}]},
+{"name":"readScalars","symbol":"readScalars","module":"tests/cases/ffi_array_field.ts","line":65,"panics":[]},
+{"name":"zeroed","symbol":"zeroed","module":"tests/cases/ffi_array_field.ts","line":71,"panics":[]},
+{"name":"written","symbol":"written","module":"tests/cases/ffi_array_field.ts","line":76,"panics":[{"kind":"index","line":79,"column":3,"proven":true},{"kind":"index","line":80,"column":3,"proven":true},{"kind":"index","line":81,"column":3,"proven":true},{"kind":"index","line":82,"column":3,"proven":true},{"kind":"index","line":83,"column":3,"proven":true},{"kind":"index","line":84,"column":3,"proven":true},{"kind":"index","line":87,"column":3,"proven":true},{"kind":"index","line":88,"column":3,"proven":true},{"kind":"index","line":89,"column":3,"proven":true},{"kind":"index","line":90,"column":3,"proven":true}]}
+]}

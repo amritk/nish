@@ -1,3 +1,9 @@
+// Opt-out from `--deny-panics`: the HTTP calls reach panic sites in
+// `std/net/http1-codec` and `std/net/http1-server`, and the slice of
+// `fileReadAt`'s window keeps a range check the checker cannot yet discharge.
+// Follow-up: make those modules panic-free and teach the prover `fileReadAt`'s
+// bound, then build this file with `--deny-panics`.
+//
 // An HTTP/1.1 server that answers every request with one file, streamed a
 // window at a time (WP44, #710). The file is opened once at start-up; each
 // connection keeps only how far into it it has got, an i64, and every
@@ -42,9 +48,9 @@ const HEAD_OWED: i64 = -2
 const OK: i32 = 200
 
 const bytesOf = (s: string): u8[] => {
-  const out: u8[] = new Array<u8>(s.length)
-  for (let k: i32 = 0; k < toI32(s.length) && k < toI32(out.length); k++) {
-    out[k] = toU8(s.charCodeAt(k))
+  const out: u8[] = []
+  for (let k: i32 = 0; k < toI32(s.length); k++) {
+    out.push(toU8(s.charCodeAt(k)))
   }
   return out
 }
@@ -60,7 +66,8 @@ class Served {
   constructor(file: i32, size: i64) {
     this.file = file
     this.size = size
-    this.window = new Array<u8>(WINDOW)
+    // `WINDOW` written out: `new Array` checks a length unless it is a literal.
+    this.window = new Array<u8>(65536)
     this.names = [bytesOf("Content-Type")]
     this.values = [bytesOf("application/octet-stream")]
   }
@@ -92,7 +99,9 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
     pos = 0
   }
   while (pos < served.size) {
-    const left: i64 = served.size - pos
+    // `u64` here and below, which wraps rather than panics, and cannot: in
+    // this loop 0 <= `pos` < `size` <= 2^31 - 1, which `main` makes sure of.
+    const left: i64 = toI64(toU64(served.size) - toU64(pos))
     const want: i32 = left < toI64(WINDOW) ? toI32(left) : WINDOW
     const n: i32 = fileReadAt(served.file, served.window, toI32(0), want, pos)
     if (n <= 0) {
@@ -107,7 +116,7 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
       conn.abort()
       return IDLE
     }
-    pos = pos + toI64(took)
+    pos = toI64(toU64(pos) + toU64(took))
     if (took < n) {
       // The rest of this window is read again on the next H1_WRITE.
       return pos
@@ -119,9 +128,9 @@ const pump = (conn: Http1Connection, served: Served, at: i64): i64 => {
 
 const serve = (served: Served, listener: i32): i32 => {
   const server = new Http1Server(new Http1Config(), listener, 64)
-  const at: i64[] = new Array<i64>(server.size())
-  for (let k: i32 = 0; k < toI32(at.length); k++) {
-    at[k] = IDLE
+  const at: i64[] = []
+  for (let k: i32 = 0; k < server.size(); k++) {
+    at.push(IDLE)
   }
   const loop: i32 = pollCreate()
   const ready: i32[] = new Array<i32>(128)
@@ -130,8 +139,14 @@ const serve = (served: Served, listener: i32): i32 => {
     // No timeout and no idle close: a client that stops reading keeps its
     // slot, one of 64, until it goes away. A real server would time it out.
     const n: i32 = pollWait(loop, ready, -1)
-    for (let k: i32 = 0; k < n; k++) {
-      const slot: i32 = ready[2 * k]
+    // `pollWait` fills at most 64 pairs, all inside `ready`; the tests on `k`
+    // and `word` say so, and never cut the loop short.
+    for (let k: i32 = 0; k < n && k < 64; k++) {
+      const word: i32 = 2 * k
+      if (word + 1 >= toI32(ready.length)) {
+        break
+      }
+      const slot: i32 = ready[word]
       if (slot === LISTENER) {
         let next: i32 = server.accept()
         while (next >= 0 || next === H1_POOL_FULL) {
@@ -143,7 +158,7 @@ const serve = (served: Served, listener: i32): i32 => {
         }
       } else if (server.holds(slot)) {
         // Only the I/O matters here; `flush` below answers what to wait for next.
-        if ((ready[2 * k + 1] & 5) !== 0) {
+        if ((ready[word + 1] & 5) !== 0) {
           server.readable(slot)
         } else {
           server.writable(slot)

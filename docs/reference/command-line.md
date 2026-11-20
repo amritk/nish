@@ -102,6 +102,12 @@ keep every value off the stack
 
 </scalar-field>
 
+<scalar-field name="--compact" type="on|off">
+
+off keeps every class's links full pointers
+
+</scalar-field>
+
 ## Output
 
 <scalar-field name="-o, --output" type="&lt;file.ll&gt;|&lt;dir&gt;/">
@@ -243,6 +249,12 @@ refuse a program that reaches these
 <scalar-field name="--deny-panics">
 
 refuse an unproven panic in your package
+
+</scalar-field>
+
+<scalar-field name="--allow-panics">
+
+undo an earlier --deny-panics
 
 </scalar-field>
 

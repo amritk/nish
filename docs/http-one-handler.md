@@ -1,6 +1,6 @@
 # One handler across HTTP/1.1, 2 and 3 (WP39 G7)
 
-**Status: g7-h2c built (#1461); g7-facade not yet built.** The note fixes
+**Status: both stages built: g7-h2c (#1461) and g7-facade (#1473).** The note fixes
 the API, the mapping onto the four carriers, Alt-Svc, h2c, the allocation
 argument and the tests and security records for two stages: **g7-h2c**,
 which added `std/net/http2-cleartext.ts`, and **g7-facade**, which adds

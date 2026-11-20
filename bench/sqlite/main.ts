@@ -1,6 +1,6 @@
 // The challenge's three queries through `nish/sqlite`, `count` calls each:
 //
-//   main <lookup|feed|insert|insert-txn> <db> <count>
+//   main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>
 //
 // `bench/sqlite/run.mjs` builds it with `--link` (the speed profile) and runs
 // it beside `twin.c`, the same loop written against SQLite's own API. Each
@@ -9,6 +9,17 @@
 //
 // - lookup: one post by a random id, its author and its like count.
 // - feed: the 20 newest posts, every row read.
+// - feed-cursor: the same 20 rows, read through B-tree cursors and no SQL, as
+//   tests/link/std_sqlite_cursor_feed walks them: the (created_at DESC, id
+//   DESC) index from its first entry, each post and its author by rowid, and
+//   its likes counted by seeking the likes index on the post's id. A call is
+//   what a request would do: `beginRead`, open the four cursors (each open
+//   checks its schema), walk, `endRead`, which closes them. It folds what
+//   `feed` folds in the same order, so the two print the same line; twin.c
+//   has no cursor path.
+// - feed-cursor-walk: the same walk on one read transaction and four cursors
+//   opened once, before the timed loop, and closed after it, so a call is the
+//   seeks and steps alone. feed-cursor less it is what the per-call opens cost.
 // - insert: `INSERT … RETURNING id, created_at` in autocommit, WAL with
 //   `synchronous=NORMAL`; `insert-txn` the same calls inside one transaction,
 //   which tells a call's cost from its commit's.
@@ -24,10 +35,12 @@
 // SPEC.md.
 // Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
 // see bench/sqlite/LICENSE.md.
-import { OPEN_READWRITE, Statement, openDatabase } from "nish/sqlite"
+import { OPEN_READWRITE, SEEK_GE, Cursor, Database, Statement, openDatabase } from "nish/sqlite"
 
 const USERS: i32 = 50000
 const POSTS: i32 = 500000
+/** The rows a feed answers: POST_SQL's LIMIT. */
+const FEED: i32 = 20
 const POST_SQL: string =
   "SELECT p.id, p.body, p.created_at, u.username, (SELECT count(*) FROM likes l WHERE l.post_id = p.id) FROM posts p JOIN users u ON u.id = p.user_id"
 const INSERT_SQL: string = "INSERT INTO posts (user_id, body) VALUES (?, ?) RETURNING id, created_at"
@@ -45,13 +58,28 @@ class Fold {
     this.sum = this.sum * 31 + v
   }
 
-  /** Column `c` copied into `buf`, its length and every byte folded; false when the read failed. */
+  /** Column `c` of a statement copied into `buf` and folded; false when the read failed. */
   text(st: Statement, c: i32): boolean {
     const r = st.columnInto(c, this.buf, 0)
     if (r.isErr()) {
       return false
     }
-    const n: i32 = r.value
+    this.bytes(r.value)
+    return true
+  }
+
+  /** Column `c` of a cursor copied into `buf` and folded, as `text` folds a statement's. */
+  cursorText(cur: Cursor, c: i32): boolean {
+    const r = cur.columnInto(c, this.buf, 0)
+    if (r.isErr()) {
+      return false
+    }
+    this.bytes(r.value)
+    return true
+  }
+
+  /** A text value's length `n` and its bytes in `buf` folded. */
+  bytes(n: i32): void {
     // The sum is kept in a local across the loop, as twin.c's stays in a
     // register: a store to `this.sum` each byte would make the optimiser
     // reload `this.buf` each byte too, and time the fold, not the module.
@@ -61,7 +89,6 @@ class Fold {
       sum = sum * 31 + toU32(buf[k])
     }
     this.sum = sum
-    return true
   }
 
   /** One row of POST_SQL: id, body, created_at, username, like count. */
@@ -73,9 +100,69 @@ class Fold {
   }
 }
 
+/**
+ * The 20 newest posts read through the four cursors, each folded as
+ * `Fold.post` folds a row of POST_SQL. Answers the rows read, or -1 when a
+ * read failed.
+ */
+const walkFeed = (ix: Cursor, post: Cursor, user: Cursor, like: Cursor, f: Fold): i32 => {
+  let rows: i32 = 0
+  let ok: boolean = true
+  let r = ix.first()
+  while (ok && r.isOk() && r.value && rows < FEED) {
+    const id: i64 = ix.rowid()
+    const p = post.seekRowid(id)
+    ok = p.isOk() && p.value
+    if (ok) {
+      const u = user.seekRowid(post.columnI64(1))
+      ok = u.isOk() && u.value
+    }
+    // The fold order is POST_SQL's: id, body, created_at, username, likes.
+    f.add(toU32(id))
+    ok = ok && f.cursorText(post, 2) && f.cursorText(post, 3) && f.cursorText(user, 1)
+    let n: i64 = 0
+    ok = ok && like.keyReset().isOk() && like.keyI64(id).isOk()
+    if (ok) {
+      let l = like.seek(SEEK_GE)
+      while (l.isOk() && l.value && like.columnI64(0) === id) {
+        n += 1
+        l = like.next()
+      }
+      ok = l.isOk()
+    }
+    f.add(toU32(n))
+    rows += 1
+    r = ix.next()
+  }
+  return ok && r.isOk() ? rows : -1
+}
+
+/**
+ * One feed call through cursors, as a request makes it: `beginRead`, open the
+ * four cursors, walk them, `endRead`, which closes them. Answers the rows
+ * read, or -1 when any step failed.
+ */
+const feedByCursors = (db: Database, f: Fold): i32 => {
+  if (db.beginRead().isErr()) {
+    return -1
+  }
+  const recent = db.openCursor("posts_created_at_id_idx", "created_at DESC,id DESC,rowid")
+  const posts = db.openCursor("posts", "id,user_id,body,created_at")
+  const users = db.openCursor("users", "id,username,created_at")
+  const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
+  let rows: i32 = -1
+  if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
+    rows = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+  }
+  if (db.endRead().isErr()) {
+    return -1
+  }
+  return rows
+}
+
 export const main = (): number => {
   if (toI32(process.argv.length) !== 4) {
-    console.error("usage: main <lookup|feed|insert|insert-txn> <db> <count>")
+    console.error("usage: main <lookup|feed|feed-cursor-walk|feed-cursor|insert|insert-txn> <db> <count>")
     return 2
   }
   const mode: string = process.argv[1]
@@ -129,7 +216,7 @@ export const main = (): number => {
       failed += 1
     }
   } else if (mode === "feed") {
-    const prepared = db.prepare(`${POST_SQL} ORDER BY p.created_at DESC, p.id DESC LIMIT 20`)
+    const prepared = db.prepare(`${POST_SQL} ORDER BY p.created_at DESC, p.id DESC LIMIT ${FEED}`)
     if (prepared.isErr()) {
       console.error(`main: ${prepared.error.message}`)
       return 2
@@ -158,6 +245,42 @@ export const main = (): number => {
     }
     t1 = monotonicNanos()
     if (st.finalize().isErr()) {
+      failed += 1
+    }
+  } else if (mode === "feed-cursor") {
+    t0 = monotonicNanos()
+    for (let i: i32 = 0; i < count; i += 1) {
+      const n: i32 = feedByCursors(db, f)
+      if (n < 0) {
+        failed += 1
+      } else {
+        rows += n
+      }
+    }
+    t1 = monotonicNanos()
+  } else if (mode === "feed-cursor-walk") {
+    if (db.beginRead().isErr()) {
+      return 2
+    }
+    const recent = db.openCursor("posts_created_at_id_idx", "created_at DESC,id DESC,rowid")
+    const posts = db.openCursor("posts", "id,user_id,body,created_at")
+    const users = db.openCursor("users", "id,username,created_at")
+    const likes = db.openCursor("likes_post_id_idx", "post_id,rowid")
+    if (recent.isOk() && posts.isOk() && users.isOk() && likes.isOk()) {
+      t0 = monotonicNanos()
+      for (let i: i32 = 0; i < count; i += 1) {
+        const n: i32 = walkFeed(recent.value, posts.value, users.value, likes.value, f)
+        if (n < 0) {
+          failed += 1
+        } else {
+          rows += n
+        }
+      }
+      t1 = monotonicNanos()
+    } else {
+      failed = count
+    }
+    if (db.endRead().isErr()) {
       failed += 1
     }
   } else if (mode === "insert" || mode === "insert-txn") {

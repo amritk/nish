@@ -1,0 +1,5 @@
+{
+  "name": "pkg-link-source-absolute",
+  "private": true,
+  "nish": { "link": { "sources": ["/etc/c/add.c"] } }
+}

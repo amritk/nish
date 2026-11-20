@@ -1204,7 +1204,7 @@ cannot be written without it.
 
 Every item below is built, and the Notes column is the record of how each
 was answered; their state is kept on the
-[roadmap page](roadmap/wp34-network-stack.md).
+[open-work issue](https://github.com/amritk/nish/issues/1852).
 
 | Item | For | Notes |
 | --- | --- | --- |

@@ -1370,6 +1370,10 @@ function termDecodeEvents(d: KeyDecoder, bytes: u8[], last: boolean, events: Ter
   callee +30:25 termUtf8At -> @nish.termUtf8At
   callee +34:19 termKeyEvent -> @nish.termKeyEvent
 module std/text.ts [package nish]
+import bitmask from "nish:simd" -> builtin bitmask
+import eq from "nish:simd" -> builtin eq
+import loadU8x16 from "nish:simd" -> builtin loadU8x16
+import splatU8x16 from "nish:simd" -> builtin splatU8x16
 const NEWLINE: i32 = 10
 const CARRIAGE_RETURN: i32 = 13
 const SPACE: i32 = 32
@@ -1397,13 +1401,23 @@ function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function splitLines(text: string): string[] -> @nish.splitLines [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_str_new
-  stackSites=0 stackLocals=0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32 nish_array_grow nish_panic_index nish_str_new
+  stackSites=1 stackLocals=1
   local +0:9 length: i32 (const)
   local +1:9 lines: string[] (const)
   local +2:7 start: i32 (let)
-  local +3:7 i: i32 (let)
+  local +3:7 base: i32 (let)
+  local +9:11 flags: u8[] (const)
+  local +10:11 one: u8x16 (const)
+  local +14:11 n: i32 (let)
+  local +15:11 end: i32 (let)
+  local +21:11 i: i32 (let)
+  local +28:13 bits: i32 (let)
+  local +33:17 zeros: i32 (const)
+  local +34:17 lane: i32 (const)
+  local +35:17 at: i32 (const)
+  local +51:17 at: i32 (const)
 function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.isTextBlankByte nish_array_grow nish_str_new
@@ -3168,16 +3182,17 @@ const BACKGROUND: i32 = 2109504
 const BAND: i32 = 16763904
 struct Probe (class) size=32 align=8
   field start: i64 index=0 offset=0 initialized
-  field second: i32 index=1 offset=8 initialized
-  field frames: i32 index=2 offset=12 initialized
+  field second: u32 index=1 offset=8 initialized
+  field frames: u32 index=2 offset=12 initialized
   field caps: TermCaps | null index=3 offset=16 initialized
   field lines: string[] index=4 offset=24
   constructor -> @Probe.constructor
 function backendName(backend: i32): string -> @backendName
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: backend
-  calls: nish_panic_index
-  stackSites=1 stackLocals=0
+  calls: nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local +0:9 names: string[] (const)
 function round2(x: f64): f64 -> @round2
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.copysign.f64 nish_floor
@@ -3194,20 +3209,23 @@ function update(p: Probe, input: TermInput): boolean -> @update$
 function render(p: Probe, frame: Frame): void -> @render$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: backendName llvm.copysign.f64 nish.Framebuffer.fill nish.Framebuffer.set nish_array_grow nish_floor nish_monotonic_nanos nish_panic_div nish_panic_overflow nish_str_concat nish_str_from_f64 nish_str_from_i32 round2
+  calls: backendName llvm.copysign.f64 nish.Framebuffer.fill nish.Framebuffer.set nish_array_grow nish_floor nish_monotonic_nanos nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 round2
   pointer p: size=32 writesThrough=true captured=false
   pointer frame: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +2:9 fb: Framebuffer (const)
   callee +3:3 Framebuffer.fill -> @nish.Framebuffer.fill
-  local +4:9 x0: i32 (const)
-  local +5:12 y: i32 (let)
-  local +6:14 x: i32 (let)
-  callee +7:7 Framebuffer.set -> @nish.Framebuffer.set
-  local +11:11 s: TermStats (const)
-  callee +13:65 backendName -> @backendName
-  callee +13:95 round2 -> @round2
-  callee +14:49 round2 -> @round2
+  local +4:9 width: i32 (const)
+  local +5:9 height: i32 (const)
+  local +9:11 span: i32 (const)
+  local +10:11 x0: i32 (const)
+  local +12:16 y: i32 (let)
+  local +13:18 x: i32 (let)
+  callee +14:11 Framebuffer.set -> @nish.Framebuffer.set
+  local +20:11 s: TermStats (const)
+  callee +22:65 backendName -> @backendName
+  callee +22:95 round2 -> @round2
+  callee +23:49 round2 -> @round2
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3

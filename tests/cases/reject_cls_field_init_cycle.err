@@ -1,0 +1,1 @@
+Field `next` of class `Node`: initializers construct `Node` again, which never ends (assign it in the constructor)

@@ -42,7 +42,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(import.meta.dirname, "..")
 const outDir = path.join(root, "build", "bench", "unix-ipc")
@@ -123,14 +123,13 @@ fs.rmSync(exe, { force: true })
 fs.rmSync(path.join(outDir, "unix-ipc.ir"), { recursive: true, force: true })
 run(
   nishc.cmd,
-  [
-    ...nishc.prefix,
+  compileArgv(nishc, [
     path.join(root, "bench", "unix-ipc.ts"),
     "-o",
     `${path.join(outDir, "unix-ipc.ir")}${path.sep}`,
     "--link",
     exe,
-  ],
+  ]),
   "the Nish build"
 )
 

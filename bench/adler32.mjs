@@ -36,7 +36,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "./compiler.mjs"
+import { compileArgv, compilerFrom } from "./compiler.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(root, "build", "bench", "adler32")
@@ -91,16 +91,10 @@ const run = (cmd, args) => {
 }
 fs.mkdirSync(outDir, { recursive: true })
 const exe = path.join(outDir, "adler32")
-run(nishc.cmd, [
-  ...nishc.prefix,
-  "bench/adler32.ts",
-  "-o",
-  `${rel(outDir)}/`,
-  "--link",
-  rel(exe),
-  "--profile",
-  "speed",
-])
+run(
+  nishc.cmd,
+  compileArgv(nishc, ["bench/adler32.ts", "-o", `${rel(outDir)}/`, "--link", rel(exe), "--profile", "speed"])
+)
 const copy = path.join(outDir, "adler32-copy")
 fs.copyFileSync(exe, copy)
 const kernel = path.join(outDir, "kernel")

@@ -16153,6 +16153,105 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end decl-ffi-buffer -->
 
+### `CountedBy`: a buffer that names its count
+
+A `declare function` parameter written `CountedBy<u8[], "len">` (or
+`CountedBy<readonly u8[], "len">`) is a plain `u8[]` buffer at the call: the
+`elements` pointer, loaded from the header's third field, passes as `i8*`, as
+in the section above. The name says which parameter is its count, at any
+place in the list and at any unsigned width. A `u32` count passes as `i32`,
+a `u16` as `i16 zeroext`, a `u8` as `i8 zeroext`; a count that is a
+`declare class` with one `u64` field passes as that struct's pointer, and its
+field is what is checked (zlib's `uLongf *destLen`).
+
+The check is WP53's: the count, widened with `zext` to `i64` (or loaded out
+of the class's field), against the header's `length`, `icmp ule`, and a
+failure is the `ffi-length` panic naming both arguments. Below, `sum16` is
+passed the literal `toU16(2)`, so the call keeps the check. `crc32` is passed
+`toU32(b.length)`, the buffer's own length narrowed: a `trunc` only lowers a
+count, so the prover drops the check and the call is straight-line. The
+prover does not follow a class field, so an out-class count is always checked.
+
+```ts
+declare function crc32(crc: u32, buf: CountedBy<readonly u8[], "len">, len: u32): u32
+declare function sum16(n: u16, src: CountedBy<readonly u8[], "n">): u32
+
+export const main = (): i32 => {
+  const b: u8[] = [104, 105, 10]
+  const c = crc32(toU32(0), b, toU32(b.length))
+  const s = sum16(toU16(2), b)
+  return toI32(c + s)
+}
+```
+
+The listing is an excerpt, not a generated one: the `%struct.nish_array` type,
+the `@main` wrapper, the `attributes` groups and the `!tbaa` and alias-scope
+metadata it names are left out, and no `docs/cookbook/` program regenerates
+it yet.
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [70 x i8] } { i64 69, [70 x i8] c"`sum16`: argument 1 (n) counts more bytes than argument 2 (src) holds\00" }, align 8
+
+declare i32 @crc32(i32, i8*, i32)
+declare i32 @sum16(i16 zeroext, i8*)
+declare void @nish_free_arena() #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %b.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i8], align 8
+  %c.addr = alloca i32, align 4
+  %s.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [3 x i8]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %2 to i8*
+  %5 = getelementptr inbounds i8, i8* %4, i64 0
+  store i8 104, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %6 = getelementptr inbounds i8, i8* %4, i64 1
+  store i8 105, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds i8, i8* %4, i64 2
+  store i8 10, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %b.addr, align 8
+  %8 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %9 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = trunc i64 %11 to i32
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %15 = call i32 @crc32(i32 0, i8* %14, i32 %12)
+  store i32 %15, i32* %c.addr, align 4
+  %16 = trunc i32 2 to i16
+  %17 = load %struct.nish_array*, %struct.nish_array** %b.addr, align 8
+  %18 = zext i16 %16 to i64
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %21 = icmp ule i64 %18, %20
+  br i1 %21, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [70 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.ok:
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %24 = call i32 @sum16(i16 zeroext %16, i8* %23)
+  store i32 %24, i32* %s.addr, align 4
+  %25 = load i32, i32* %c.addr, align 4
+  %26 = load i32, i32* %s.addr, align 4
+  %27 = add i32 %25, %26
+  ret i32 %27
+}
+```
+
 ### `using` of a handle class: the close at every exit
 
 A class with a `CPtr` field is a handle class (WP53 H1.2), and a `using` of
@@ -16414,6 +16513,125 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 !4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-struct -->
+
+#### A fixed-length array field
+
+A field spelled `Record<integer<0, Hi>, T>`, with `T` a C scalar (WP66 S4),
+is C's `T name[Hi + 1]`: the struct holds `[N x T]` inline, at `T`'s
+alignment, and `new` zeroes it with the rest of the struct in the one
+`memset`. An element is a `getelementptr inbounds` with the field index and
+then the element index. An index the prover cannot place in `0..Hi` is
+checked first with one unsigned compare, so a negative `i32` index, widened
+by `sext`, fails the same `icmp ult` as one past the end and panics through
+`nish_panic_index`; a proven index (a loop over `0..Hi`) has no check, and a
+constant outside the range is NL2818 at compile time. The loads and stores
+carry no TBAA tag: C may reach the same bytes through any pointer.
+
+This is an excerpt, not a cookbook program: the program between
+`cookbook:begin`/`cookbook:end` markers that `docs/cookbook/` checks is still
+to be written. The source, and `nish doc.ts`'s whole `@set`:
+
+```ts
+declare class ShaCtx {
+  tag: u8
+  h: Record<integer<0, 4>, u32>
+}
+declare function use(c: ShaCtx): i32
+export const set = (i: i32): i32 => {
+  const c = new ShaCtx()
+  c.h[i] = 7
+  return use(c)
+}
+```
+
+```llvm
+%struct.ShaCtx = type { i8, [5 x i32] }
+
+define noundef i32 @set(i32 noundef %i) #0 {
+entry:
+  %c.addr = alloca %struct.ShaCtx*, align 8
+  %ShaCtx.obj = alloca %struct.ShaCtx, align 8
+  %0 = bitcast %struct.ShaCtx* %ShaCtx.obj to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %0, i8 0, i64 24, i1 false)
+  store %struct.ShaCtx* %ShaCtx.obj, %struct.ShaCtx** %c.addr, align 8
+  %1 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  %2 = sext i32 %i to i64
+  %3 = icmp ult i64 %2, 5
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %2, i64 5)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.ShaCtx, %struct.ShaCtx* %1, i32 0, i32 1, i64 %2
+  store i32 7, i32* %4, align 4
+  %5 = load %struct.ShaCtx*, %struct.ShaCtx** %c.addr, align 8
+  %6 = call i32 @use(%struct.ShaCtx* %5)
+  ret i32 %6
+}
+```
+
+Tests: `tests/cases/ffi_array_field` (golden `.ll`, native round trip
+against a C `SHA_CTX` shape), `tests/ffi-struct.js` (offsets and size
+against clang, natively and under `--profile wasi`).
+
+### An opaque `declare class`: a C pointer type
+
+A `declare class` with no fields (WP66 S3) is the pointer type a C library
+hands out and takes back: SQLite's `sqlite3 *`, stdio's `FILE *`. It lowers to
+`i8*`, exactly as `CPtr` does, so the C side sees a plain pointer; the name
+lives only in the checker, which keeps a `Stmt` from being passed where a `Db`
+is wanted. `%struct.Db = type {}` is still declared and nothing uses it.
+
+```ts
+declare class Db {}
+declare class Stmt {}
+
+declare function db_open(flags: i32): Db | null;
+declare function db_close(db: Db): void;
+declare function stmt_prepare(db: Db, n: i32): Stmt;
+declare function stmt_step(stmt: Stmt): i32;
+declare function stmt_close(stmt: Stmt): void;
+```
+
+Every signature carries `i8*` where the class is named:
+
+```llvm
+%struct.Db = type {}
+%struct.Stmt = type {}
+
+declare i8* @db_open(i32)
+declare void @db_close(i8*)
+declare i8* @stmt_prepare(i8*, i32)
+declare i32 @stmt_step(i8*)
+declare void @stmt_close(i8*)
+```
+
+A `Db | null` result is stored as it comes and the `db === null` test is a
+pointer compare. A plain `Stmt` result is C's promise of a pointer, so the call
+is followed by the same `ffi.null` check a `string` result gets, which panics
+with the function's name instead of carrying `NULL` into the next call (an
+excerpt of `run`'s body, from the call on):
+
+```llvm
+  %4 = call i8* @stmt_prepare(i8* %3, i32 %n)
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  store i8* %4, i8** %stmt.addr, align 8
+```
+
+The class has no layout, so `new`, a member access, `readStruct`, a field, a
+`Result` arm and a parameter or return of a function the program defines are
+refused before any IR is written (NL2805 to NL2808). The rule is in
+[`LANGUAGE.md`](LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type); the full
+golden is `tests/cases/ffi_opaque_handle.ll`.
 
 ### `readStruct`: a C-owned struct, copied out
 
@@ -24958,6 +25176,127 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end cls-initializers -->
 
+### Empty-array and `new` field initializers
+
+`kids: number[] = []` and `left: Leaf = new Leaf(7)` are stored at `new`,
+before a constructor body would run: the empty array is a header with no
+elements, and the leaf is allocated in the same arena and passed to
+`@Leaf.constructor` with its literal argument.
+
+<!-- cookbook:begin cls-field-init -->
+```ts
+class Leaf {
+  value: number
+
+  constructor(value: number) {
+    this.value = value
+  }
+}
+
+class Tree {
+  kids: number[] = []
+  left: Leaf = new Leaf(7)
+}
+
+const make = (): Tree => new Tree()
+```
+
+```llvm
+%struct.Leaf = type { i32 }
+%struct.Tree = type { %struct.nish_array*, %struct.Leaf* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @Leaf.constructor(%struct.Leaf* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Leaf, %struct.Leaf* %this, i32 0, i32 0
+  store i32 %value, i32* %0, align 4, !tbaa !4
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Tree* @make() #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Tree*
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 0, i64* %4, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 0, i64* %5, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* null, i8** %6, align 8, !alias.scope !8, !noalias !9, !tbaa !15
+  %7 = getelementptr inbounds %struct.Tree, %struct.Tree* %1, i32 0, i32 0
+  store %struct.nish_array* %3, %struct.nish_array** %7, align 8, !tbaa !18
+  %8 = call i8* @nish_alloc_struct(i64 4)
+  %9 = bitcast i8* %8 to %struct.Leaf*
+  call void @Leaf.constructor(%struct.Leaf* %9, i32 7)
+  %10 = getelementptr inbounds %struct.Tree, %struct.Tree* %1, i32 0, i32 1
+  store %struct.Leaf* %9, %struct.Leaf** %10, align 8, !tbaa !19
+  ret %struct.Tree* %1
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!20, !21, !22, !23, !24}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Leaf", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"nish array"}
+!6 = !{!"header", !5}
+!7 = !{!"elements", !5}
+!8 = !{!6}
+!9 = !{!7}
+!10 = !{!"header i64", !1, i64 0}
+!11 = !{!"header ptr", !1, i64 0}
+!12 = !{!"array header", !10, i64 0, !10, i64 8, !11, i64 16}
+!13 = !{!12, !10, i64 0}
+!14 = !{!12, !10, i64 8}
+!15 = !{!12, !11, i64 16}
+!16 = !{!"ptr", !1, i64 0}
+!17 = !{!"Tree", !16, i64 0, !16, i64 8}
+!18 = !{!17, !16, i64 0}
+!19 = !{!17, !16, i64 8}
+!20 = !{i32 8, !"cf-protection-branch", i32 1}
+!21 = !{i32 8, !"cf-protection-return", i32 1}
+!22 = !{i32 8, !"branch-target-enforcement", i32 1}
+!23 = !{i32 8, !"sign-return-address", i32 1}
+!24 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end cls-field-init -->
+
 ### Interfaces, object literals, `implements`
 
 An object literal allocates and stores every field; a class that `implements`
@@ -25618,7 +25957,10 @@ range's base, `@nish_ref_base`. Every object comes from `@nish_alloc_ref`,
 never an `alloca`, even one that never leaves `pairSum`, because a stack
 slot is outside the range. The module names `@nish_arena_range_abi`, so it
 links only against the runtime built with the range (`--arena-range`, which
-the CLI passes for it). On wasm32 links stay full pointers.
+the CLI passes for it). On wasm32 links stay full pointers. A link's load and
+store carry a TBAA tag whose scalar is `ref32`, a sibling of `i32` under the
+root rather than `i32` itself, so LLVM knows a store to an `i32` field of any
+object leaves a link alone, and a link store leaves an `i32` field alone.
 
 <!-- cookbook:begin mem-compact-class -->
 ```ts
@@ -25697,7 +26039,7 @@ entry:
   %2 = ptrtoint %struct.Cell* %next to i64
   %3 = lshr i64 %2, 2
   %4 = trunc i64 %3 to i32
-  store i32 %4, i32* %1, align 4
+  store i32 %4, i32* %1, align 4, !tbaa !6
   ret void
 }
 
@@ -25714,7 +26056,7 @@ entry:
   store %struct.Cell* %1, %struct.Cell** %cell.addr, align 8
   %4 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
   %5 = getelementptr inbounds %struct.Cell, %struct.Cell* %4, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4
+  %6 = load i32, i32* %5, align 4, !tbaa !6
   %7 = zext i32 %6 to i64
   %8 = shl nuw nsw i64 %7, 2
   %9 = inttoptr i64 %8 to %struct.Cell*
@@ -25777,18 +26119,19 @@ attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
-!llvm.module.flags = !{!6, !7, !8, !9, !10}
+!llvm.module.flags = !{!7, !8, !9, !10, !11}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
-!3 = !{!"ptr", !1, i64 0}
+!3 = !{!"ref32", !1, i64 0}
 !4 = !{!"Cell", !2, i64 0, !3, i64 4}
 !5 = !{!4, !2, i64 0}
-!6 = !{i32 8, !"cf-protection-branch", i32 1}
-!7 = !{i32 8, !"cf-protection-return", i32 1}
-!8 = !{i32 8, !"branch-target-enforcement", i32 1}
-!9 = !{i32 8, !"sign-return-address", i32 1}
-!10 = !{i32 4, !"probe-stack", !"inline-asm"}
+!6 = !{!4, !3, i64 4}
+!7 = !{i32 8, !"cf-protection-branch", i32 1}
+!8 = !{i32 8, !"cf-protection-return", i32 1}
+!9 = !{i32 8, !"branch-target-enforcement", i32 1}
+!10 = !{i32 8, !"sign-return-address", i32 1}
+!11 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-compact-class -->
 

@@ -139,7 +139,7 @@ import { typedArrayElement } from "./annotations"
 import { terminatesControlFlow } from "./builtins"
 import { parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
-import { isOptionalChain, unwrapParens } from "./emit-util"
+import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
 import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringMap } from "./map"
@@ -2773,17 +2773,20 @@ const isSimdCall = (program: CheckedProgram, call: Node): boolean =>
  * record of the imported name is the whole test (`isVectorAccess` in
  * `src/emit-arrays.ts`).
  */
-const vectorAccessLanes = (ctx: CheckContext, call: Node): i32 => {
-  const args = call.children[1].children
-  if (call.kind !== NodeKind.Call || args.length < 2) {
+export const vectorAccessLanes = (program: CheckedProgram, table: TypeTable, call: Node): i32 => {
+  if (call.kind !== NodeKind.Call) {
     return 0
   }
-  const name = ctx.program.nodeBuiltins[call.id]
+  const args = call.children[1].children
+  if (args.length < 2) {
+    return 0
+  }
+  const name = program.nodeBuiltins[call.id]
   if (name === "store" && args.length === 3) {
-    return ctx.table.laneCount(ctx.program.nodeTypes[args[0].id])
+    return table.laneCount(program.nodeTypes[args[0].id])
   }
   if (simdTypeLane(simdSuffix(name, "load")).length > 0) {
-    return ctx.table.laneCount(ctx.program.nodeTypes[call.id])
+    return table.laneCount(program.nodeTypes[call.id])
   }
   return 0
 }
@@ -2897,6 +2900,31 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
 }
 
 /**
+ * WP66 S4: whether `index` is inside a fixed-length array of `length`
+ * elements whatever it runs as. The length is fixed by the field's type and
+ * nothing can change it, so, as for a constant table, the index's declared
+ * range (an `integer<0, 4>` into five elements), a literal or folded
+ * constant, or the range the state gives an `i32` or `i64` index, below the
+ * length is the proof.
+ */
+const provesCArrayIndex = (walk: BoundsWalk, state: State, index: Node, length: i32): boolean => {
+  const declared = declaredValueRange(walk.ctx, index)
+  if (declared !== null) {
+    return declared.lo >= toI64(0) && declared.hi < toI64(length)
+  }
+  const written = walk.ctx.program.nodeTypes[index.id]
+  if (written < 0 || writesSomething(index)) {
+    return false
+  }
+  const type = walk.ctx.table.baseOf(written)
+  if (type !== T_I32 && type !== T_I64) {
+    return false
+  }
+  const range = valueRange(walk, state, index, type)
+  return range.lo >= toI64(0) && range.hi < toI64(length)
+}
+
+/**
  * Record the verdict for one access. A proof goes into the side table the
  * emitter reads; the absence of one inside a loop goes on the list the WP15 §8
  * walk reports from, but only for the shape the analysis could have proved —
@@ -2919,6 +2947,15 @@ const judge = (
   const ctx = walk.ctx
   if (provesTableIndex(walk, state, receiver, index)) {
     noteProof(walk, node)
+    return
+  }
+  // WP66 S4: a fixed-length array field has a length the type spells, and no
+  // holder a fact could name; a constant or a range inside it is proved here.
+  const array = cArrayField(ctx.program, ctx.table, receiver)
+  if (array !== null) {
+    if (provesCArrayIndex(walk, state, index, array.cLength)) {
+      noteProof(walk, node)
+    }
     return
   }
   const holder = holderOf(walk, receiver)
@@ -3478,7 +3515,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
-    const lanes = vectorAccessLanes(ctx, e)
+    const lanes = vectorAccessLanes(ctx.program, ctx.table, e)
     if (lanes > 0) {
       judgeVectorAccess(walk, state, e, lanes)
     }

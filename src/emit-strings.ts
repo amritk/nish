@@ -14,6 +14,7 @@
 
 import {
   foreignBufferCount,
+  foreignCountConversion,
   foreignBufferCountProven,
   hostFunction,
   hostWindowProven,
@@ -23,6 +24,7 @@ import { unwrapBoundsParens } from "./bounds"
 import { Emitter, LoopTarget } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
 import { emitFfiNullTest, emitPanicTail, panicTailCallees } from "./emit-builtins"
+import { loadField, structInfoOf } from "./emit-classes"
 import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
@@ -30,6 +32,7 @@ import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { Local } from "./symbols"
 import { irEscape } from "./strings"
+import { foreignCountWidth } from "./structs"
 import {
   isFloat,
   isForeignBuffer,
@@ -40,6 +43,7 @@ import {
   T_I32,
   T_I64,
   T_STRING,
+  T_U64,
   TypeTable,
 } from "./types"
 
@@ -761,13 +765,14 @@ export const emitForeignBuffers = (
     } else if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
       const buffer = values[i]
       const count = foreignBufferCount(emitter.table, callee, i)
-      // The checker gave every buffer a count parameter after it, so `count`
-      // always names an argument.
+      // The checker gave every buffer a count parameter, named or after it,
+      // so `count` always names an argument.
       if (count >= 0 && count < values.length) {
-        const counted = values[count]
+        const conversion = foreignCountConversion(callee, count)
         if (
-          !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, "toU64")
+          !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, conversion)
         ) {
+          const counted = foreignCountValue(emitter, callee.paramTypes[count], values[count])
           const len = loadLength(emitter, buffer)
           const fits = fn.emitValue(`icmp ule i64 ${counted}, ${len}`)
           const okBlock = fn.newBlock("ffi.ok")
@@ -788,6 +793,22 @@ export const emitForeignBuffers = (
     }
     i = i + 1
   }
+}
+
+/**
+ * A buffer's count as the `i64` its `len` is compared with (WP66 S5): a `u64`
+ * as it is, a narrower count widened with `zext` (every count is unsigned),
+ * and an out class's one field loaded through the pointer C is lent, after
+ * every argument ran, so the value checked is the value C reads.
+ */
+const foreignCountValue = (emitter: Emitter, type: i32, value: string): string => {
+  const width = foreignCountWidth(emitter.program, emitter.table, type)
+  let counted = value
+  if (width !== type) {
+    const info = structInfoOf(emitter, type)
+    counted = loadField(emitter, info, value, info.fields[0])
+  }
+  return width === T_U64 ? counted : emitter.fn.emitValue(`zext ${emitter.llvm(width)} ${counted} to i64`)
 }
 
 /**

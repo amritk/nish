@@ -834,6 +834,12 @@ const ints = (t: Suite): void => {
   t.eqStr("int: a sign alone", intOf(p, "-"), "failed");
   t.eqStr("int: a letter", intOf(p, "12a"), "failed");
   t.eqStr("int: a plus sign", intOf(p, "+1"), "failed");
+  t.eqStr("int: eighteen digits", intOf(p, "999999999999999999"), "999999999999999999");
+  t.eqStr("int: a sign and seventeen digits", intOf(p, "-99999999999999999"), "-99999999999999999");
+  t.eqStr("int: a letter in eighteen bytes", intOf(p, "12345678901234567a"), "failed");
+  t.eqStr("int: eighteen bytes of leading zeros", intOf(p, "000000000000000017"), "17");
+  t.eqStr("int: nineteen digits", intOf(p, "1234567890123456789"), "1234567890123456789");
+  t.eqStr("int: a sign and eighteen digits", intOf(p, "-123456789012345678"), "-123456789012345678");
   p.reset();
   p.int(z("1"), 0, 2);
   t.ok("int: a window past the buffer", p.failed);

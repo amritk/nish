@@ -477,14 +477,36 @@ jobs:
       # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
       # sysroot directory of its own, so none of the default locations
       # scripts/build.sh and tests/run.js look in exists.
+      #
+      # The log is kept for the steps below that require a line of it, and for
+      # the step summary after this step (#1836). The step's status is npm's;
+      # tee's is written beside the log rather than folded into it. On these
+      # runners tee is uutils', which by default stops writing to a broken
+      # console pipe without a word and exits 0: had the pipe broken, the run
+      # stayed green with no sign of it. `--output-error=warn` keeps it
+      # writing the file and makes that case `tee=1` in the summary.
       - name: Test
         env:
           WASI_SYSROOT: /usr
           SHARD: ${{ matrix.shard }}
-        # The log is kept for the steps below that require a line of it.
         run: |
-          set -o pipefail
-          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee "$RUNNER_TEMP/test.log"
+          set +e
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --delegate-sanitizers --delegate-bench-timing --shard "$SHARD/9" | tee --output-error=warn "$RUNNER_TEMP/test.log"
+          status=("${PIPESTATUS[@]}")
+          echo "npm=${status[0]} tee=${status[1]}" > "$RUNNER_TEMP/test.status"
+          exit "${status[0]}"
+
+      # The shard's summary line, every FAIL line with its detail and every
+      # SKIP line, copied into the job's step summary from the log the Test
+      # step kept. The stored console log of shard 8 has lost its last minutes
+      # in green runs (#1836); the step summary is a separate upload, so these
+      # survive it. It reports and never fails, and runs after a failed Test
+      # step too, which is when the FAIL lines are wanted.
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node scripts/ci-test-summary.mjs "$RUNNER_TEMP/test.log" "$RUNNER_TEMP/test.status"
 
       # The steps from here on run in one shard each: each answers once for
       # the commit, and every shard built the same compiler. Those that read
@@ -1014,7 +1036,9 @@ jobs:
         if: needs.scope.outputs.bootstrap != 'false'
         run: |
           set -o pipefail
-          build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
@@ -1418,7 +1442,9 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
+          . scripts/nish-compiler.sh
+          nish_allow_panics build/nish
+          build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner
           jobs="$(nproc)"
           if [ "$jobs" -gt 8 ]; then jobs=8; fi
           node scripts/shard-costs.mjs --check-runner build/nish-runner 3 "$jobs"

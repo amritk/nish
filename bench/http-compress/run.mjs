@@ -21,6 +21,7 @@ import http from "node:http"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { feedJson } from "../gzip/feed.mjs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -103,7 +104,16 @@ for (let i = 0; i < 16; i++) {
   fs.writeFileSync(file, feedJson(n))
   bodyFiles.push(file)
 }
-run(compiler, [path.join(here, "server.ts"), "-o", `${out}/`, "--link", path.join(out, "server")])
+run(
+  compiler,
+  withAllowPanics(compiler, [
+    path.join(here, "server.ts"),
+    "-o",
+    `${out}/`,
+    "--link",
+    path.join(out, "server"),
+  ])
+)
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]
 const results = new Map()
