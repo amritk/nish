@@ -735,8 +735,8 @@ function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation
   local +16:9 prefix: string (const)
   local +17:7 i: i32 (let)
   local +19:11 sig: FunctionSig (const)
-  local +31:11 member: Instantiation (const)
-  callee +31:20 new Instantiation -> @Instantiation.constructor
+  local +32:11 member: Instantiation (const)
+  callee +32:20 new Instantiation -> @Instantiation.constructor
 function instantiate(ctx: CheckContext, template: TemplateInfo, args: i32[], functions: FunctionSig[], at: Node): FunctionSig | null -> @instantiate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via instantiateHere
