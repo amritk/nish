@@ -591,6 +591,11 @@ review.
   K1-8).
 - **`std/crypto/hkdf.ts`**: `hkdfSalt`, `hkdfAppend`, `hkdfExtractSha256`,
   `hkdfExtractSha384`, `hkdfExpandSha256`, `hkdfExpandSha384`.
+- **`std/crypto/scram.ts`**: `scramSha256SaltedPassword`,
+  `scramSha256ClientProof`, `scramSha256ServerSignature` and their helpers
+  `scramSha256Wiped`, `scramClientProofExposed` and
+  `scramServerSignatureExposed`: HMACs over SaltedPassword and ClientKey, and
+  the proof's XOR, all of fixed length ([postgres.md](postgres.md), PG-12).
 - **`std/crypto/sha256.ts`**: `sha256Compress`, `sha256LoadWord`,
   `sha256CopyBytes`, `sha256` (secret whenever they hash a key, as in HMAC).
 - **`std/crypto/sha512.ts`**: `loadWord`, `storeWord`, the round helpers,
