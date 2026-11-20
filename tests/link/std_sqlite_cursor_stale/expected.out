@@ -1,0 +1,124 @@
+PASS  freed slot: beginRead
+PASS  freed slot: the first cursor closes
+PASS  freed slot: the new cursor is on row 7
+PASS  freed slot: the old handle is dead
+PASS  freed slot: the new cursor is still on row 7
+PASS  freed slot: and steps to row 8
+PASS  freed slot: the new cursor closes
+PASS  freed slot: endRead
+PASS  exec COMMIT: beginRead
+PASS  exec COMMIT: the table cursor is on row 5
+PASS  exec COMMIT: the index cursor is on an entry
+PASS  exec COMMIT: runs
+PASS  exec COMMIT: leaves the table cursor dead
+PASS  exec COMMIT: and the index cursor
+PASS  exec COMMIT: then t holds
+PASS  exec ROLLBACK: beginRead
+PASS  exec ROLLBACK: the table cursor is on row 5
+PASS  exec ROLLBACK: the index cursor is on an entry
+PASS  exec ROLLBACK: runs
+PASS  exec ROLLBACK: leaves the table cursor dead
+PASS  exec ROLLBACK: and the index cursor
+PASS  exec ROLLBACK: then t holds
+PASS  commit(): beginRead
+PASS  commit(): the table cursor is on row 5
+PASS  commit(): the index cursor is on an entry
+PASS  commit(): runs
+PASS  commit(): leaves the table cursor dead
+PASS  commit(): and the index cursor
+PASS  commit(): then t holds
+PASS  rollback(): beginRead
+PASS  rollback(): the table cursor is on row 5
+PASS  rollback(): the index cursor is on an entry
+PASS  rollback(): runs
+PASS  rollback(): leaves the table cursor dead
+PASS  rollback(): and the index cursor
+PASS  rollback(): then t holds
+PASS  exec INSERT: beginRead
+PASS  exec INSERT: the table cursor is on row 5
+PASS  exec INSERT: the index cursor is on an entry
+PASS  exec INSERT: runs
+PASS  exec INSERT: leaves the table cursor dead
+PASS  exec INSERT: and the index cursor
+PASS  exec INSERT: then t holds
+PASS  prepared INSERT: beginRead
+PASS  prepared INSERT: the table cursor is on row 5
+PASS  prepared INSERT: the index cursor is on an entry
+PASS  prepared INSERT: runs
+PASS  prepared INSERT: leaves the table cursor dead
+PASS  prepared INSERT: and the index cursor
+PASS  prepared INSERT: then t holds
+PASS  prepared ROLLBACK: beginRead
+PASS  prepared ROLLBACK: the table cursor is on row 5
+PASS  prepared ROLLBACK: the index cursor is on an entry
+PASS  prepared ROLLBACK: runs
+PASS  prepared ROLLBACK: leaves the table cursor dead
+PASS  prepared ROLLBACK: and the index cursor
+PASS  prepared ROLLBACK: then t holds
+PASS  endRead: beginRead
+PASS  endRead: the table cursor is on row 5
+PASS  endRead: the index cursor is on an entry
+PASS  endRead: runs
+PASS  endRead: leaves the table cursor dead
+PASS  endRead: and the index cursor
+PASS  endRead: then t holds
+PASS  prepared UPDATE: beginRead
+PASS  prepared UPDATE: the table cursor is on row 5
+PASS  prepared UPDATE: the index cursor is on an entry
+PASS  prepared UPDATE: runs
+PASS  prepared UPDATE: leaves the table cursor dead
+PASS  prepared UPDATE: and the index cursor
+PASS  prepared UPDATE: left the read open for endRead
+PASS  prepared UPDATE: then t holds
+PASS  exec DELETE: beginRead
+PASS  exec DELETE: the table cursor is on row 5
+PASS  exec DELETE: the index cursor is on an entry
+PASS  exec DELETE: runs
+PASS  exec DELETE: leaves the table cursor dead
+PASS  exec DELETE: and the index cursor
+PASS  exec DELETE: left the read open for endRead
+PASS  exec DELETE: then t holds
+PASS  exec DDL: beginRead
+PASS  exec DDL: the table cursor is on row 5
+PASS  exec DDL: the index cursor is on an entry
+PASS  exec DDL: runs
+PASS  exec DDL: leaves the table cursor dead
+PASS  exec DDL: and the index cursor
+PASS  exec DDL: left the read open for endRead
+PASS  exec DDL: then t holds
+PASS  prepared DDL: beginRead
+PASS  prepared DDL: the table cursor is on row 5
+PASS  prepared DDL: the index cursor is on an entry
+PASS  prepared DDL: runs
+PASS  prepared DDL: leaves the table cursor dead
+PASS  prepared DDL: and the index cursor
+PASS  prepared DDL: left the read open for endRead
+PASS  prepared DDL: then t holds
+PASS  SAVEPOINT then RELEASE: beginRead
+PASS  SAVEPOINT then RELEASE: the table cursor is on row 5
+PASS  SAVEPOINT then RELEASE: the index cursor is on an entry
+PASS  SAVEPOINT then RELEASE: runs
+PASS  SAVEPOINT then RELEASE: leaves the table cursor dead
+PASS  SAVEPOINT then RELEASE: and the index cursor
+PASS  SAVEPOINT then RELEASE: left the read open for endRead
+PASS  SAVEPOINT then RELEASE: then t holds
+PASS  PRAGMA x = y: beginRead
+PASS  PRAGMA x = y: the table cursor is on row 5
+PASS  PRAGMA x = y: the index cursor is on an entry
+PASS  PRAGMA x = y: runs
+PASS  PRAGMA x = y: leaves the table cursor dead
+PASS  PRAGMA x = y: and the index cursor
+PASS  PRAGMA x = y: left the read open for endRead
+PASS  PRAGMA x = y: then t holds
+PASS  pragma SELECT: beginRead
+PASS  pragma SELECT: the table cursor is on row 5
+PASS  pragma SELECT: answers t's 2 columns
+PASS  pragma SELECT: finalize
+PASS  pragma SELECT: leaves the cursor dead
+PASS  pragma SELECT: inside a read that endRead still ends
+PASS  close: beginRead
+PASS  close: on a row
+PASS  close: closes the connection
+PASS  close: leaves the table cursor dead
+PASS  close: and the index cursor
+std_sqlite_cursor_stale: 123 passed, 0 failed, 0 skipped

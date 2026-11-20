@@ -61,7 +61,7 @@ npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the full suite: goldens, llvm-as, native, runtime, differential; CI runs eight shards
+npm test                    # the full suite: goldens, llvm-as, native, runtime, differential; CI runs nine shards
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
 npm run lint                # file names + biome, formatting included; any finding fails CI
@@ -197,7 +197,7 @@ find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
 this does not happen silently.
 
-**CI's eight `test (…, shard N/8)` rows are the full-suite run a pull request
+**CI's nine `test (…, shard N/9)` rows are the full-suite run a pull request
 is judged by** ([definition of done](./CLAUDE.md#definition-of-done)). Read
 each shard's summary as you would a local one — no `DEGRADED:` banner, no skip
 outside the environmental ones below — because eight green rows with skips in

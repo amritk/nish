@@ -34,7 +34,7 @@
 // in `src/emit-map.ts`).
 
 import { CheckContext } from "./context"
-import { isAssignmentOperator, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isOptionalChain, unwrapParens } from "./emit-util"
 import { isCollectionStruct, isMapOwner } from "./generics"
 import { Node, NodeKind } from "./nodes"
 import {
@@ -131,13 +131,16 @@ export const recordGuardFusion = (ctx: CheckContext, stmt: Node): void => {
 /**
  * The table `call` is a call of `name` on, when it is one on the global `Map`
  * or `Set`, or `null`. A `get` is checked as a call of the table's `probe`
- * (`checkMapGet`), so it is recognised by its spelling and that callee.
+ * (`checkMapGet`), so it is recognised by its spelling and that callee. A
+ * call in a `?.` chain (`m?.set(k, v)`, WP28 C1) is never one: it may be
+ * skipped, so no probe can be kept for it or through it.
  */
 const collectionOwnerOf = (program: CheckedProgram, call: Node, name: string): StructInfo | null => {
   if (
     call.kind !== NodeKind.Call ||
     call.children[0].kind !== NodeKind.Member ||
-    call.children[0].text !== name
+    call.children[0].text !== name ||
+    isOptionalChain(call)
   ) {
     return null
   }

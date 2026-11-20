@@ -36,10 +36,14 @@
  *   check to its last one, looked for after the golden cases' checks (from
  *   `PRE_LINK_STARTS`); one after them runs until the next section that
  *   shard ran starts, or its summary.
- * - `shardOne` is what only shard 1 runs: from its first check after the
- *   dealt sections to its summary, plus its job's steps after the suite. A
- *   `pinned` section likewise takes its shard's steps after the suite, since
- *   they are there to read it.
+ * - `shardOne` is what only shard 1 runs: each stretch of its own checks
+ *   after the link programs (`SHARD_ONE_STARTS`) until the next section or
+ *   stretch starts, plus its job's steps after the suite less the ones that
+ *   moved to the `examples` job (`MOVED_STEPS`). A `pinned` section likewise
+ *   takes its shard's steps after the suite, since they are there to read it.
+ *   Measured by stretch, a run from before a `tail` group was dealt, when
+ *   shard 1 ran it between blocks of its own, gives the same pieces as one
+ *   after.
  *
  * **`--drop <regex>`** (repeatable) measures the runs as though every check
  * whose name the regex matches had taken no time: the gap before each such
@@ -201,6 +205,16 @@ const RECOGNIZERS = {
   releaseChecks: /^runtime\/nish\.d\.ts type-checks/,
   cSymbols: /^c-symbols:/,
   runCache: /^module cache:/,
+  netLimits: /^thread_stack: /,
+  sandboxGrants: /^sandbox dependency grants: /,
+  // Not thread_mutex_counter's line, which is `threadWasi`'s.
+  wasiLinks: /^(skipped: )?link\/(?!thread_mutex_counter:)\w+: (the `--profile wasi` build|no WASI sysroot)/,
+  wasmHost: /^(wasm-host: |wasm-ld not installed)/,
+  persist: /^persist: /,
+  wasmPages: /^page-frame: /,
+  sizeBudgets: /^wasm-size: /,
+  pgo: /^pgo: /,
+  licences: /^third-party-licence: /,
   osHost: /^(os_[a-z_]+|waitPid): /,
   term: /^(term_(calls|import|pty|restore)|caps_tty): (?!(under )?the `--profile wasi`)/,
   termWasi: /^(term_\w+: (under )?the `--profile wasi`|skipped: term_[\w, ]+: no WASI sysroot)/,
@@ -226,8 +240,32 @@ const RECOGNIZERS = {
  * as some sections' (`os_now_i32: IR matches golden` against `os_host`'s).
  */
 const PRE_LINK_STARTS = /^native run limit: /
-/** Shard 1's first check after every dealt section: where `shardOne` starts. */
-const SHARD_ONE_STARTS = /^every program LINK_READ_LATER keeps in shard 1/
+/**
+ * Where each stretch of what only shard 1 runs starts: its first check after
+ * the stop, and, for a run from before the `tail` groups from `netLimits` to
+ * `licences` were dealt, the first check of each stretch of shard 1's own
+ * code those groups' blocks sat between (run 44481754425). In a run after
+ * that every one of these prints after the first, so the stretches simply sum.
+ */
+const SHARD_ONE_STARTS = [
+  /^every program LINK_READ_LATER keeps in shard 1/,
+  /^sandbox: /,
+  /^unsafe_get_set: /,
+  /^kernels: /,
+  /^cpu level: /,
+  /^hardening: /,
+  /^WP22 arrow-corpus: /,
+]
+/**
+ * The steps after the suite that the `test` job's shard 1 ran until they moved
+ * to the `examples` job: the smoke script, the cookbook check and the size
+ * report. A run from before the move paid them in shard 1, and they are no
+ * longer its cost.
+ */
+const MOVED_STEPS =
+  /^##\[group\]Run (bash scripts\/smoke\.sh|bash docs\/cookbook\/regen\.sh --check|build\/nish examples\/add\.ts -o build\/add\.ll)/
+/** What a shard that stops prints for every section after the link programs it does not run. */
+const STOPPED = "every section after the tests/link programs that is not dealt"
 
 const fail = (message) => {
   console.error(`shard-costs: ${message}`)
@@ -325,31 +363,53 @@ const measureShard = (lines, shard, shards, linkCount) => {
     return lines[j].t
   }
   const out = {}
-  const after = owned.filter((s) => !s.beforeLink)
-  // Each section after the link programs, in the order they run: where it starts.
+  // Each section after the link programs, in the order they run: where it
+  // starts. A shard that stopped and ran a `tail` group under no name of its
+  // own is from a run before that group was dealt, when shard 1 ran it.
+  const stopped = delegated.has(STOPPED)
+  const after = []
   const starts = []
-  let from = 0
-  for (const s of after) {
+  // The golden cases print first, under their own names, and a case's name
+  // can match a section's recognizer (`arr_range_call_generic: IR matches
+  // golden` against `arrayChecks`), so no section is looked for before them.
+  let from = Math.max(0, find(PRE_LINK_STARTS, 0, summary))
+  for (const s of owned.filter((o) => !o.beforeLink)) {
     const i = find(RECOGNIZERS[s.key], from, summary)
+    if (i < 0 && s.tail && stopped && shard > 1) {
+      continue
+    }
     if (i < 0) {
       fail(
         `shard ${shard}/${shards} ran ${s.key} (it does not delegate it) but prints nothing ${RECOGNIZERS[s.key]} matches`
       )
     }
+    after.push(s)
     starts.push(i)
     from = i + 1
   }
+  // Shard 1's own stretches: the first prints once, after its link programs,
+  // and the rest are looked for from there.
+  const pieces = []
   if (shard === 1) {
-    const i = find(SHARD_ONE_STARTS, from, summary)
-    if (i < 0) {
-      fail(`shard 1/${shards} prints no check ${SHARD_ONE_STARTS} matches`)
+    const first = find(SHARD_ONE_STARTS[0], 0, summary)
+    for (const re of SHARD_ONE_STARTS) {
+      const i = find(re, first, summary)
+      if (i < 0) {
+        fail(`shard 1/${shards} prints no check ${re} matches after its link programs`)
+      }
+      pieces.push(i)
     }
-    starts.push(i)
+  }
+  // Every start, sorted: each piece runs until the next one starts, or the summary.
+  const bounds = [...starts, ...pieces].sort((a, b) => a - b)
+  const until = (i) => {
+    const next = bounds.find((b) => b > i)
+    return next === undefined ? lines[summary].t : before(next)
   }
   // The link programs end where the first section after them starts, or where
   // the shard stops; they are the run of `link/` checks just before that, with
   // whatever else prints between them (a delegation, a failure's detail).
-  const linkEnd = starts.length > 0 ? starts[0] : summary
+  const linkEnd = bounds.length > 0 ? bounds[0] : summary
   let linkStart = linkEnd
   for (let i = linkEnd - 1; i > 0; i--) {
     if (lines[i].check !== null) {
@@ -404,19 +464,26 @@ const measureShard = (lines, shard, shards, linkCount) => {
     out[s.key] = lines[last].t - before(first)
   }
   const jobEnd = lines.findLast((l) => !Number.isNaN(l.t)).t
-  const afterSuite = jobEnd - lines[summary].t
+  // Each moved step lasts until the next step's group, or the job's cleanup.
+  let moved = 0
+  for (let i = summary; i < lines.length; i++) {
+    if (MOVED_STEPS.test(lines[i].body)) {
+      const next = lines.findIndex((l, j) => j > i && /^(##\[group\]Run |Post job cleanup\.)/.test(l.body))
+      moved += (next < 0 ? jobEnd : lines[next].t) - lines[i].t
+    }
+  }
+  const afterSuite = jobEnd - lines[summary].t - moved
   after.forEach((s, k) => {
-    const end = k + 1 < starts.length ? before(starts[k + 1]) : lines[summary].t
-    out[s.key] = end - before(starts[k]) + (s.pinned ? afterSuite : 0)
+    out[s.key] = until(starts[k]) - before(starts[k]) + (s.pinned ? afterSuite : 0)
   })
   if (shard === 1) {
-    out.shardOne = lines[summary].t - before(starts.at(-1)) + afterSuite
+    out.shardOne = pieces.reduce((sum, i) => sum + until(i) - before(i), 0) + afterSuite
   }
   const total = (lines[summary].t - lines.find((l) => !Number.isNaN(l.t)).t) / 60
   const toLink = (before(linkStart) - lines.find((l) => !Number.isNaN(l.t)).t) / 60
   console.error(
     `  shard ${shard}/${shards}: ${total.toFixed(1)} min to its summary, ${toLink.toFixed(1)} min before its ` +
-      `${names.size} link programs; ran ${owned.map((s) => s.key).join(", ") || "no dealt section"}`
+      `${names.size} link programs; ran ${[...owned.filter((o) => o.beforeLink), ...after].map((s) => s.key).join(", ") || "no dealt section"}`
   )
   return out
 }

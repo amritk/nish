@@ -1,0 +1,5 @@
+{
+  "name": "pkg-link-dep-key-nonascii",
+  "private": true,
+  "nish": { "link": { "dependencies": { "pkg_m\u00fcl": { "libraries": ["m"] } } } }
+}
