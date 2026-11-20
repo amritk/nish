@@ -119,7 +119,7 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   calls: DebugInfo.fileOf IRModule.addModuleFlag IRModule.addNamedMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.constructor nish_alloc_struct nish_str_concat quote
   pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.fileOf#0
   pointer module: size=112 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addModuleFlag#0 IRModule.addModuleFlag#0
-  pointer program: size=912 writesThrough=true captured=true
+  pointer program: size=920 writesThrough=true captured=true
   pointer table: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:21 new StringMap -> @StringMap.constructor
@@ -292,7 +292,7 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
   calls: DebugInfo.arrayHeader DebugInfo.arraySlice DebugInfo.byValue DebugInfo.fileOf DebugInfo.lineOf DebugInfo.linkType DebugInfo.member DebugInfo.pointerTo DebugInfo.setTypeRef DebugInfo.typeRef FieldInfo.inline IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata TypeTable.isPointerValue TypeTable.mangle TypeTable.refOf TypeTable.typeName bitsOfIn nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 quote
-  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.setTypeRef#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.member#0 DebugInfo.arraySlice#0 DebugInfo.member#0 DebugInfo.arrayHeader#0 DebugInfo.member#0 DebugInfo.byValue#0 DebugInfo.member#0 DebugInfo.linkType#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.lineOf#0
+  pointer this: size=104 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.setTypeRef#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.member#0 DebugInfo.arraySlice#0 DebugInfo.member#0 DebugInfo.arrayHeader#0 DebugInfo.member#0 DebugInfo.byValue#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.member#0 DebugInfo.linkType#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.lineOf#0
   pointer info: size=176 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 ref: string (const)
@@ -320,20 +320,29 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   local +22:13 nested: StructInfo | null (const)
   callee +25:11 DebugInfo.member -> @DebugInfo.member
   callee +25:36 DebugInfo.byValue -> @DebugInfo.byValue
-  callee +30:22 DebugInfo.member -> @DebugInfo.member
-  callee +30:47 DebugInfo.linkType -> @DebugInfo.linkType
-  local +33:13 base: string (const)
-  callee +33:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  local +34:13 bits: i32 (const)
-  callee +34:20 TypeTable.isPointerValue -> @TypeTable.isPointerValue
-  callee +34:75 bitsOfIn -> @bitsOfIn
-  callee +35:20 DebugInfo.member -> @DebugInfo.member
-  local +37:11 elements: string (const)
-  callee +37:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +38:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee +40:70 quote -> @quote
-  callee +40:76 TypeTable.typeName -> @TypeTable.typeName
-  callee +40:133 DebugInfo.lineOf -> @DebugInfo.lineOf
+  local +31:15 bits: i32 (const)
+  callee +31:22 bitsOfIn -> @bitsOfIn
+  local +32:15 range: string (const)
+  callee +32:23 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +33:16 IRModule.addMetadata -> @IRModule.addMetadata
+  local +35:15 array: string (const)
+  callee +35:23 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +36:65 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee +38:22 DebugInfo.member -> @DebugInfo.member
+  callee +42:22 DebugInfo.member -> @DebugInfo.member
+  callee +42:47 DebugInfo.linkType -> @DebugInfo.linkType
+  local +45:13 base: string (const)
+  callee +45:20 DebugInfo.typeRef -> @DebugInfo.typeRef
+  local +46:13 bits: i32 (const)
+  callee +46:20 TypeTable.isPointerValue -> @TypeTable.isPointerValue
+  callee +46:75 bitsOfIn -> @bitsOfIn
+  callee +47:20 DebugInfo.member -> @DebugInfo.member
+  local +49:11 elements: string (const)
+  callee +49:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee +50:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee +52:70 quote -> @quote
+  callee +52:76 TypeTable.typeName -> @TypeTable.typeName
+  callee +52:133 DebugInfo.lineOf -> @DebugInfo.lineOf
 function DebugInfo.linkType(this: DebugInfo, type: i32): string -> @DebugInfo.linkType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DebugInfo.typeRef

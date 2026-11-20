@@ -301,7 +301,7 @@ export const fallback = (): Role => Role.Guest
 The message of an error contains:
 
 ```text
-…`, which implements `Compact`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object
+…`, which implements `Compact`: an N-API addon runs in Node's process, which Nish does not own, so nothing keeps free the range its links count from; an export to Node takes and returns no compact object
 ```
 
 [`nl4020_compact_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4020_compact_export.ts) (compiled with `--emit-napi build/test/wordings/nl4020_compact_export.c`):
@@ -325,7 +325,7 @@ export const main = (): number => push(3, null).value
 ```
 
 ```text
-`Cell.constructor` is exported to C or Node and its signature holds `Cell`, which implements `Compact`: a compact class's links have no C or N-API spelling, so an export takes and returns no compact object
+`Cell.constructor` is exported to Node and its signature holds `Cell`, which implements `Compact`: an N-API addon runs in Node's process, which Nish does not own, so nothing keeps free the range its links count from; an export to Node takes and returns no compact object
 ```
 
 ## NL4021
@@ -333,13 +333,13 @@ export const main = (): number => push(3, null).value
 The message of an error contains:
 
 ```text
-…` describes the program to C or Node, which would read its 32-bit links as pointers; build without `…
+…` builds an addon Node loads into its own process, which Nish does not own, so nothing keeps free the range its 32-bit links count from; build a C host with `--emit-header`, or drop the marker
 ```
 
-[`nl4021_compact_header.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4021_compact_header.ts) (compiled with `--emit-header build/test/wordings/nl4021_compact_header.h`):
+[`nl4021_compact_napi.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4021_compact_napi.ts) (compiled with `--emit-napi build/test/wordings/nl4021_compact_napi.c`):
 
 ```ts
-// WP48 rule 1: a build C or Node reads refuses every compact class, named at its class.
+// WP48 rule 1: an N-API build refuses every compact class, named at its class: the addon runs in Node's process.
 import { Compact } from "nish:compact"
 
 class Cell implements Compact {
@@ -373,5 +373,5 @@ export const main = (): number => total(4)
 ```
 
 ```text
-`Cell` implements `Compact`, and `--emit-header` describes the program to C or Node, which would read its 32-bit links as pointers; build without `--emit-header`, or drop the marker
+`Cell` implements `Compact`, and `--emit-napi` builds an addon Node loads into its own process, which Nish does not own, so nothing keeps free the range its 32-bit links count from; build a C host with `--emit-header`, or drop the marker
 ```

@@ -52,14 +52,14 @@ function LayoutModule.constructor(this: LayoutModule, program: CheckedProgram, s
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: program std
   pointer this: size=16 writesThrough=true captured=false
-  pointer program: size=912 writesThrough=true captured=true
+  pointer program: size=920 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CallNode.constructor(this: CallNode, key: string, program: CheckedProgram, owner: StructInfo | null, body: Node): void -> @CallNode.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: body key owner program
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=64 writesThrough=true captured=false
-  pointer program: size=912 writesThrough=true captured=true
+  pointer program: size=920 writesThrough=true captured=true
   pointer owner: size=176 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -164,7 +164,7 @@ function calleeIndex(graph: CallGraph, self: CallNode, callee: Node): i32 -> @ca
 function madeClass(program: CheckedProgram, node: Node): string -> @madeClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct CheckedProgram.structTemplate classKey nish_panic_index nish_str_concat
-  pointer program: size=912 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
+  pointer program: size=920 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 CheckedProgram.structTemplate#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -245,7 +245,7 @@ function collectClasses(m: i32, program: CheckedProgram, instances: StructInfo[]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_array_grow nish_panic_index nish_panic_overflow reportable
-  pointer program: size=912 writesThrough=false captured=false
+  pointer program: size=920 writesThrough=false captured=false
   pointer instances: size=0 writesThrough=false captured=false
   pointer homes: size=0 writesThrough=false captured=false
   pointer into: size=0 writesThrough=true captured=false
