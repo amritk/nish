@@ -28,7 +28,7 @@ The type checker: 811 codes.
 
 <scalar-card title="NL3xxx" icon="phosphor/regular/warning-circle" href="diagnostics/nl3xxx.md">
 
-Modules and the driver: 60 codes.
+Modules and the driver: 61 codes.
 
 </scalar-card>
 

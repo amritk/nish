@@ -1,0 +1,1 @@
+main.ts:4:7: error: `Cell` implements `Compact`, and `--emit-napi` builds an addon Node loads into its own process

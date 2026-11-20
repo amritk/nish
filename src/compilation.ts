@@ -245,6 +245,7 @@ import {
   isFreestandingWasmBuild,
   isWasmBuild,
 } from "./visibility"
+import { dataModelRefusal } from "./c-import-model"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47
@@ -893,6 +894,12 @@ export class Compilation {
     this.markDependency(source, packageName, path)
     if (read !== null && read.problem.length > 0) {
       this.sink.report(source, read.start, read.end, read.problem)
+      return false
+    }
+    // A module `nish c-import` wrote for another data model (WP66 D3).
+    const modelRefusal = dataModelRefusal(source.text, isWasmBuild(this.opts))
+    if (modelRefusal !== null) {
+      this.sink.report(source, modelRefusal.start, modelRefusal.end, modelRefusal.message)
       return false
     }
     const parser = new Parser(source)

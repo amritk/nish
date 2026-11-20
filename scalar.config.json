@@ -321,6 +321,16 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/interop" }]
                 }
               },
+              "/c-import": {
+                "type": "page",
+                "title": "Binding a C library",
+                "filepath": "docs/guide/using-nish/c-import.md",
+                "head": {
+                  "title": "Binding a C library · Nish",
+                  "meta": [{ "property": "og:title", "content": "Binding a C library" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/c-import" }]
+                }
+              },
               "/browser-games": {
                 "type": "page",
                 "title": "Writing a browser game",
@@ -3068,6 +3078,16 @@
                       "title": "Update notice and upgrade · Nish",
                       "meta": [{ "property": "og:title", "content": "Update notice and upgrade" }],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/security/release" }]
+                    }
+                  },
+                  "/c-import": {
+                    "type": "page",
+                    "title": "Header import",
+                    "filepath": "docs/security/c-import.md",
+                    "head": {
+                      "title": "Header import · Nish",
+                      "meta": [{ "property": "og:title", "content": "Header import" }],
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/security/c-import" }]
                     }
                   },
                   "/sandbox": {

@@ -887,6 +887,9 @@ export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest
 Give the host the member's text instead, a `string` from `String(r)`, or an
 `i32` of your own choosing.
 
+A compact class crosses as an opaque handle, and its host links the range
+runtime: see [A compact class in a C host](../language/compact-classes.md#a-compact-class-in-a-c-host).
+
 ## Calling C from Nish: `declare function`
 
 `declare function` names a C function the program calls but does not define.
@@ -914,6 +917,9 @@ A build that makes a page module, `--target wasm32` or `--emit-dts` with no
 through a [host module](#functions-the-page-supplies-host-modules) instead. A
 `--target wasm32-wasi` build links C, so it keeps `declare function` even with
 `--emit-dts`.
+
+For a whole library, `nish c-import` writes these declarations from its
+header: see [Binding a C library](c-import.md).
 
 A function from the C library links with `nish run` or `--link` as it is.
 Your own C, and any other library, is named in the `nish.link` field of the
@@ -1151,9 +1157,10 @@ export const main = (): i32 => {
 };
 ```
 
-`CountedBy` is only for a `declare function`, and `nish c-import` does not
-write it yet. To check such a file with `tsc`, declare the alias in a
-`.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
+`CountedBy` is only for a `declare function`. `nish c-import` writes it for
+a buffer the overrides file pairs with a count
+([Binding a C library](c-import.md)). To check such a file with `tsc`,
+declare the alias in a `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
 `type CountedBy<T, N extends string> = T`.
 
 The one exception is `CPtr`, an address that C owns. A declared function can

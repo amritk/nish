@@ -3765,10 +3765,13 @@ declare module "nish:unsafe" {
  * `implements Wide` keeps one class out of that, and `--compact off` keeps
  * every class, `implements Compact` included, at full pointers.
  *
- * The compiler refuses a compact class where C or Node would see its layout:
- * a build with `--emit-header`, `--emit-napi` or `--emit-napi-async`, a
- * `declare class`, a class holding a `Secret`, and a class a C or N-API surface
- * exports. wasm32, a host `--emit-dts` page module and an ASAN build compile
+ * A `--emit-header` build keeps a compact class, and every class holding one
+ * of its links, opaque: C holds it as a full `struct X *` handle and links the
+ * range runtime (`scripts/build.sh --arena-range`). The compiler refuses a
+ * compact class where Node or the runtime would read its layout: a build with
+ * `--emit-napi` or `--emit-napi-async` (also beside `--emit-header`), an
+ * N-API export whose signature holds one, a `declare class`, and a class
+ * holding a `Secret`. wasm32, a host `--emit-dts` page module and an ASAN build compile
  * it uncompressed: a pointer there is already 4 bytes, the page runs on the
  * wasm runtime, or the range cannot hold the sanitizer's blocks.
  *
