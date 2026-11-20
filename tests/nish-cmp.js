@@ -1965,6 +1965,45 @@ const DECLARED = [
     changelog: APPEND_RANGE,
     why: "tests/link/net_http3/peer.ts copies a byte range with a push loop, so the peer module this program imports gains the guarded memcpy before the loop and renumbered values",
   })),
+  // WP57 S1: a private function or generic whose bare symbol would clash is
+  // qualified by its module, so the 0.42.0 seed refuses these programs with
+  // its whole-program uniqueness rule and only the candidate compiles them.
+  {
+    program: "tests/link/duplicate_internal/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts and helper.ts each keep a private `add`, which the candidate spells `@main$.add` and `@helper$.add`; the 0.42.0 seed refuses the second definition ("Function `add` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_generic/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'a.ts and b.ts each keep a private generic `identity<T>`, whose instantiations the candidate prefixes with each module\'s qualifier; the 0.42.0 seed refuses the second template ("Generic function `identity` is also defined in a.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_helpers/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts, up.ts and down.ts each keep a private `step`, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `step` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_mixed/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: "main.ts keeps a private `helper` beside lib.ts's exported one, which the candidate spells `@main$.helper` while `@helper` stays lib's; the 0.42.0 seed refuses the pair (\"Function `helper` is also defined in main.ts\"), so only the candidate compiles it (WP57 S1)",
+  },
+  {
+    program: "tests/link/module_private_spawn/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts and m.ts each keep a private `work` that a spawn names, which the candidate qualifies per module; the 0.42.0 seed refuses the second definition ("Function `work` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
+  {
+    program: "tests/link/module_private_outside/main.ts",
+    file: "exit",
+    changelog: "Two modules may each keep a private function or generic of one name",
+    why: 'main.ts keeps a private `helper` and imports ../module_private_shared/u.ts, which keeps one too; the candidate spells them `@main$.helper` and `@___module_private_shared_u$.helper`, and the 0.42.0 seed refuses the pair ("Function `helper` is also defined in main.ts"), so only the candidate compiles it (WP57 S1)',
+  },
   // WP63 S2: `NET_LISTEN_RING` and the ring builtins are new to `nish:net`, so
   // the 0.41.0 seed refuses the program that calls them.
   {
@@ -1972,6 +2011,15 @@ const DECLARED = [
     file: "exit",
     changelog: "io_uring slot handles in nish:net",
     why: "`NET_LISTEN_RING` is new to `nish:net` in this release, so the 0.41.0 seed has no such export and refuses the program (WP63 S2)",
+  },
+  // #1778 stage A: a guarded `nish:simd` access is a proven index site, so the
+  // `--deny-panics` program that calls one compiles; the 0.42.0 seed records
+  // it as unproven and stops while it words the advice.
+  {
+    program: "tests/link/simd_deny_panics_guarded/main.ts",
+    file: "exit",
+    changelog: "a guarded nish:simd access as a proven panic site",
+    why: "the program is built with --deny-panics and the `loadU8x16` and `store` in its `simd_mask` dependency are guarded, which the candidate records as proven sites; the 0.42.0 seed records it as unproven and fails on it, so only the candidate compiles it",
   },
   // WP64 S1: `nish/temporal` is a new module, so the 0.40.1 seed's standard
   // library has none and refuses the program that tests it.

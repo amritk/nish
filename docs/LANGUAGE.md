@@ -3184,15 +3184,40 @@ const name = (r: Role): string => String(r); // name(Role.Admin) is "admin"
     (`tests/link/package_hidden_class_import`), and naming it in an annotation
     is `` Unsupported type reference `Space` ``
     (`tests/link/package_hidden_class_annotation`).
-- **A function name is unique across the whole program**, exported or not, in
-  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
-  `internal` linkage keeps a name out of the linker's way but it does not buy a
-  second namespace: the whole-program attribute analysis is keyed by symbol
-  name, so two functions sharing one would be emitted with each other's
-  attributes — a miscompile rather than a link error, which is why the rule
-  does not depend on the flag. A proposal to qualify a private function's
-  symbol by its module when it would clash is
-  [WP57](wp57-module-scoped-names.md); the rule above holds until it ships.
+- **Two modules may each keep a private function of one name** (WP57 S1).
+  A non-exported free function or generic function whose name another
+  function of its package also defines — in another module, exported or not —
+  is emitted under a symbol qualified by its module's path:
+  `<package prefix><module>$.<name>`, where `<module>` is the module's path
+  from its package's root (the entry's directory, for the program's own
+  package) without `.ts`, every character outside `[A-Za-z0-9_]` spelled `_`.
+  So `helper.ts` and `main.ts` may each keep a private `add`, emitted as
+  `@helper$.add` and `@main$.add` (`tests/link/duplicate_internal`,
+  `module_private_helpers`); a private generic's instantiations are
+  `@a$.identity$i32` (`module_private_generic`); a task's arrow follows the
+  function it is written in (`@m$.work$arrow0`, `module_private_spawn`); and
+  a private `helper` beside an imported, exported `helper` is `@main$.helper`
+  while the exported one keeps `@helper` (`module_private_mixed`). The
+  qualifier is the module's path relative to its package root (the entry's
+  directory for the program's own modules), so a module outside that
+  directory keeps its `..` steps: `../shared/u.ts` gives
+  `@___shared_u$.helper` however the entry is named. A name no
+  other function shares keeps its bare symbol, so a program that built before
+  emits exactly what it did, and the entry's `main` is never qualified.
+- **Everything else still needs a unique symbol.** Two exported functions of
+  one name are refused (`tests/link/duplicate_export`), and so are two
+  exported generic functions. Under `--no-strict-exports` every function is
+  external and keeps its bare name, so there a function name is unique across
+  the program, exported or not
+  (`` under `--no-strict-exports` every function keeps its bare name as its symbol ``,
+  `tests/link/module_private_no_strict`). Two module paths that spell one
+  qualifier (`lib/util.ts` and `lib_util.ts`) are refused too, naming both
+  files: `` both modules' paths qualify it to one symbol ``. Each refusal is
+  the same reason: `internal` linkage keeps a name out of the linker's way but
+  the whole-program attribute analysis is keyed by symbol, so two functions
+  sharing one would be emitted with each other's attributes — a miscompile
+  rather than a link error. The design is
+  [`docs/wp57-module-scoped-names.md`](wp57-module-scoped-names.md).
 
 ### `main`
 
@@ -5059,8 +5084,10 @@ export const main = (): i32 => {
   `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
   (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
   reads only its own parameters and the module's top-level names (NL2501, `_nested`). The arrow is lifted into a function
-  named after the one it is written in and a counter (`main$arrow0`), which
-  is the name a debugger or a profiler shows for the task's thread.
+  named after the symbol of the one it is written in and a counter
+  (`nish_main$arrow0` in the entry's `main`, `m$.work$arrow0` in a private
+  `work` that WP57 S1 qualified by its module `m.ts`), which is the name a
+  debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -7779,7 +7806,9 @@ or a private one whose name is not reserved to C:
 rename the defined function `` (`tests/link/ffi_package_declare_root_clash`).
 A private function named like a C library function is emitted as `abs$`, and a
 generic one's instantiations as `labs$i32`, so neither takes the C symbol and
-both are accepted (`tests/link/ffi_package_declare_apart`). The two refusals
+both are accepted (`tests/link/ffi_package_declare_apart`). A private function
+qualified by its module because another module defines its name (WP57 S1,
+`helper$.add`) holds a `$` already, so it is never one of these. The two refusals
 are refused rather than linked because the whole-program analysis keeps one
 set of facts per symbol, and the two would share it.
 
@@ -16285,14 +16314,22 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 (`tests/panics-oracle.js`). The kinds:
 
 **`index`**: `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside
-`[0, length)`; and the second check of a compound store `a[i] += f()` whose
-right side may resize the array
+`[0, length)`; a `nish:simd` load or store whose lanes `i` to `i + N - 1`
+are not all in `[0, length)`; and the second check of a compound store
+`a[i] += f()` whose right side may resize the array
 
 - *What proves it away:* the bounds proof of [Element
   access](#element-access): a dominating guard, a loop bounded by the length,
   or every call site proving the argument (`tests/cases/panics_index`);
   nothing removes the second check of a compound store, which is made after
-  the call however the first was proved (`tests/cases/panics_index_recheck`)
+  the call however the first was proved (`tests/cases/panics_index_recheck`).
+  A `nish:simd` access is proven exactly where its check is left out (the
+  guard on its last lane under
+  [`loadI32x4`](#nishsimd-sixteen-byte-vectors)), so a `--deny-panics`
+  program may call a guarded load or store in a dependency outside its
+  no-panic scope (`tests/link/simd_deny_panics_guarded`), and a call that
+  reaches an unguarded one is refused with NL2458
+  (`tests/link/simd_deny_panics_unguarded`)
 
 **`pop`**: `a.pop()` on an empty array
 
