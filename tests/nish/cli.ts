@@ -1487,7 +1487,9 @@ const checkClashCodeWith = (t: Suite, cli: Cli, name: string, file: string, code
  * NL3024 for an exported function and NL3026 for a private one, whose package
  * spellings, NL3025 and NL3027, are pinned by `tests/wordings/`. Two private
  * functions clash only under `--no-strict-exports`: by default each is
- * qualified by its module's path (WP57 S1), so `duplicate_internal` builds. A class's
+ * qualified by its module's path (WP57 S1), so `duplicate_internal` builds, and
+ * two whose paths qualify them to one symbol (`module_private_residual`) are
+ * NL3026 even so. A class's
  * constructor or method is one too, but two classes that share one share a name,
  * and since #193 that is refused first and alone, as NL3028 — one object for one
  * mistake, whether the classes declare a constructor, a method, fields only, or
@@ -1505,6 +1507,7 @@ const checkSymbolClashes = (t: Suite, cli: Cli): void => {
   checkClashCode(t, cli, "class_clash_package", "node_modules/shapes/other.ts", "NL3028");
   checkClashCode(t, cli, "duplicate_export", "b.ts", "NL3024");
   checkClashCodeWith(t, cli, "module_private_no_strict", "helper.ts", "NL3026", ["--no-strict-exports"]);
+  checkClashCode(t, cli, "module_private_residual", "lib_util.ts", "NL3026");
   checkClashCode(t, cli, "generic_class_clash_signature", "a.ts", "NL3013");
   checkClashCode(t, cli, "class_dollar_name", "main.ts", "NL2296");
   checkClashCode(t, cli, "class_dollar_name_imported", "lib.ts", "NL2296");

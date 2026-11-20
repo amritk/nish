@@ -1295,8 +1295,9 @@ const collectInstanceMembers = (ctx: CheckContext, instance: StructInstantiation
       continue
     }
     // WP21 S1: an instantiation's symbol is complete from the moment it is
-    // minted, because `qualifySymbols` runs once at the end of pass 1 and an
-    // instantiation may be created on either side of it.
+    // minted, because `qualifySymbols` runs once at the end of pass 1 (and
+    // `qualifyClashing`, WP57 S1, once per module after it) while an
+    // instantiation may be created on either side of either.
     sig.name = `${prefix}${sig.name}`
     const member = new Instantiation(
       null,
