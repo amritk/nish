@@ -44,6 +44,8 @@
  * immutable, so its length cannot change underneath the local.
  */
 
+import { bitmask, eq, loadU8x16, splatU8x16 } from "nish:simd"
+
 const NEWLINE: i32 = 10
 const CARRIAGE_RETURN: i32 = 13
 const SPACE: i32 = 32
@@ -71,28 +73,88 @@ const isTextBlankByte = (code: i32): boolean =>
  * function guess at the file's provenance, and a caller that needs it gone can
  * `trimEnd` each line.
  *
+ * The scan runs sixteen positions at a time with `nish:simd`. The text is
+ * copied, 4096 positions at a time, as one flag byte per position into a
+ * buffer the lane-wise compare reads sixteen flags at a time: a string has no
+ * lane-wise load of its own. A flag rather than the character, so that a UTF-16
+ * unit under Node whose low byte is 10 is not taken for a newline.
+ *
  * @param text The text to split; an empty one has no lines.
  * @returns A fresh array of the lines, in order.
  */
 export const splitLines = (text: string): string[] => {
   const length: i32 = toI32(text.length)
   const lines: string[] = []
+  // 4096 positions per chunk, spelled as a literal at each use: the provers
+  // read a literal's value, not a constant's.
+  const flags: u8[] = new Array<u8>(4096)
+  const one = splatU8x16(1)
   let start: i32 = 0
-  let i: i32 = 0
-  while (i < length) {
-    if (toI32(text.charCodeAt(i)) === NEWLINE) {
-      // `start` is never negative and never passes `i`, which is below
-      // `length`, so this test always holds. It is written because it is what
-      // proves `start` within `text`: the clamp on that bound is dead once it
-      // is proven, and the emitter drops it.
-      if (start >= 0 && start < length) {
-        lines.push(text.substring(start, i))
-      }
-      start = i + 1
+  let base: i32 = 0
+  // `base` is where the chunk starts. Its bound leaves room for `base + 4095`
+  // below `2 ** 31`; the scalar loop after this one takes any text past it.
+  while (base >= 0 && base < length && base <= 2147479551) {
+    let n: i32 = 0
+    let end: i32 = base
+    while (end >= 0 && end < length && n >= 0 && n < toI32(flags.length)) {
+      flags[n] = toU8(toI32(text.charCodeAt(end)) === NEWLINE ? 1 : 0)
+      end += 1
+      n += 1
     }
-    i += 1
+    let i: i32 = 0
+    while (i >= 0 && i <= 4080 && i <= n - 16) {
+      // Each set bit is one newline in these sixteen flags, lowest first. The
+      // length test always holds; it is what proves the load's lanes in range,
+      // so the load is a proven index site and `--deny-panics` callers build.
+      // The masks keep `bits`, the leading-zero count and `lane` in ranges the
+      // overflow prover can see.
+      let bits: i32 = 0
+      if (i <= toI32(flags.length) - 16) {
+        bits = bitmask(eq(loadU8x16(flags, i), one)) & 0xffff
+      }
+      while (bits !== 0) {
+        const lane: i32 = (31 - (toI32(Math.clz32(bits & (0 - bits))) & 31)) & 15
+        const at: i32 = base + i + lane
+        // `start` is never negative and never passes `at`, which is below
+        // `length`, so this always holds: it is what proves both bounds
+        // within `text` and `at + 1` free of overflow.
+        if (start >= 0 && start < length && at >= 0 && at < length) {
+          lines.push(text.substring(start, at))
+          start = at + 1
+        }
+        bits = bits & (bits - 1) & 0xffff
+      }
+      i += 16
+    }
+    // The chunk's last fewer-than-sixteen flags, one at a time; the tests
+    // always hold, as above.
+    while (i >= 0 && i < 4096 && i < n && i < toI32(flags.length)) {
+      if (flags[i] === toU8(1)) {
+        const at: i32 = base + i
+        if (start >= 0 && start < length && at >= 0 && at < length) {
+          lines.push(text.substring(start, at))
+          start = at + 1
+        }
+      }
+      i += 1
+    }
+    if (n <= 0) {
+      break
+    }
+    base = end
   }
-  if (start < length) {
+  // Positions past the bound above, one at a time.
+  while (base >= 0 && base < length) {
+    if (toI32(text.charCodeAt(base)) === NEWLINE) {
+      // Always holds, as above; it proves `start` within `text`.
+      if (start >= 0 && start < length) {
+        lines.push(text.substring(start, base))
+      }
+      start = base + 1
+    }
+    base += 1
+  }
+  if (start >= 0 && start < length) {
     lines.push(text.substring(start, length))
   }
   return lines
