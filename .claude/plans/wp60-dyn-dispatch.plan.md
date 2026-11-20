@@ -11,6 +11,7 @@ stages:
     goal: An interface may declare method signatures, implements checks them (NL2778), T extends I calls them, and a method call on a plain I is NL2774, with no IR change.
     verification: node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
+    issue: 1883
     todos:
       - id: s1-collector
         content: Record interface method signatures in a list on StructInfo in src/structs.ts and admit them in refuseMembers in src/statements.ts — see WP60 S1 — interface method signatures and T extends I, with no IR moved

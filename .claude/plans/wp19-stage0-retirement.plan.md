@@ -13,6 +13,7 @@ stages:
     verification: node tests/run.js link && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1885
     todos:
       - id: s2-stem-rule
         content: Specify the package-relative stem rule and how it stays distinct from the existing _n suffix in docs/wp19-stage0-retirement.md section 5a item 5 — see WP19 S2 — output file stems taken from package-relative names

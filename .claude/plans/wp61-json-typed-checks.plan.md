@@ -12,6 +12,7 @@ stages:
     verification: node tests/run.js json && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1880
     todos:
       - id: s1-option
         content: Add jsonReadConstraints and its diagnostics in the checker and the emitted checks for every keyword in std/json-typed.ts and src/ — see WP61 S1 — constraints in decode

@@ -12,6 +12,7 @@ stages:
     verification: node tests/run.js std && node tests/run.js link && node scripts/gen-reference.mjs --check && npm run lint
     status: pending
     labels: [needs-decision]
+    issue: 1879
     todos:
       - id: s2-decide
         content: Record the owner's answers to D1 directory and names, D2 public or internal, D3 whether src imports the tiers and D5 enforcement in docs/wp68-shared-libraries.md section 9 — see WP68 S2 — the hex atom and the tier rule

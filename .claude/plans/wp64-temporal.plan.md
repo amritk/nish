@@ -11,6 +11,7 @@ stages:
     goal: Temporal.X.from, new Temporal.X and Temporal.Now resolve to nish/temporal, a dotted type name Temporal.PlainDate is accepted, and the differential corpus runs under Node's Temporal.
     verification: node tests/run.js temporal && node tests/run.js wasi && node tests/run.js performance && npm run check && npm run lint
     status: pending
+    issue: 1881
     todos:
       - id: s2-checker
         content: Bind the Temporal global to nish/temporal as Math.atan2 is bound and accept a dotted type reference in src/ — see WP64 S2 — the global Temporal bound to nish/temporal

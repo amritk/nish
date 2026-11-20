@@ -4,6 +4,7 @@ overview: Stages 4 and 5 of the compact-class work are open, plus two acceptance
 roadmap: docs/roadmap/wp48-ref32-classes.md
 spec: docs/wp48-ref32-classes.md
 priority: 40
+issue: 1893
 stages:
   - id: s4a-measure-sibling
     title: WP48 S4a — measure ptr-range on sibling.ts on the merged runtime

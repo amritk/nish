@@ -9,6 +9,7 @@ stages:
     goal: A session builds main and checks the 11 criteria of the destructuring-decls tracker, posting a criteria table with a verdict, and files what fails.
     verification: node tests/run.js destructuring
     status: pending
+    issue: 1878
     todos:
       - id: s1-build-check
         content: Build main and check the 11 criteria of tracker 1576 (merged as 1593) against it — see SWEEP S1 — run the destructuring-declarations acceptance pass

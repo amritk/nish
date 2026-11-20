@@ -11,6 +11,7 @@ stages:
     goal: Every struct IR type spelling and the header's cStructName read the symbol, messages read the source name, and no IR moves.
     verification: node tests/run.js link && npm run check && node tests/self/goldens.js --update && npm run lint
     status: pending
+    issue: 1882
     todos:
       - id: s3b-spellers
         content: Switch the 44 %struct. spellers and llvmType in src/ to read StructInfo.symbol — see WP57 S3b — every %struct. spelled from the struct's symbol

@@ -13,6 +13,7 @@ stages:
     verification: node tests/run.js cli && node tests/run.js performance && npm run lint
     status: pending
     labels: [deferred]
+    issue: 1886
     todos:
       - id: s2-design
         content: Define the checked form's serialization and cache key across the checker's inputs and outputs in src/ — see WP52 S2
