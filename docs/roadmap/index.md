@@ -55,12 +55,12 @@ specified.
 | [WP48: 32-bit references for linked classes](wp48-ref32-classes.md) | In progress | 5 of 9 |
 | [WP49: `async`/`await` on the server, and the TechEmpower top](wp49-async-server.md) | In progress | 4 of 6 |
 | [WP51: References to capture-free top-level functions](wp51-function-references.md) | In progress | 3 of 4 |
+| [WP57: Module-scoped names](wp57-module-scoped-names.md) | In progress | 1 of 3 |
 | [WP64: Temporal — dates, times and time zones](wp64-temporal.md) | In progress | 1 of 6 |
 | [WP66: C libraries from their headers](wp66-c-headers.md) | In progress | 7 of 8 |
 | [WP65: The surface a lexer port asked for](wp65-lexer-surface.md) | Proposed | 1 of 5 |
 | [WP54: `async` on wasm, with the page as the executor](wp54-async-wasm.md) | Proposed | 0 of 4 |
 | [WP56: Generators whose memory stays flat: a string builder, and a scope per file](wp56-flat-memory-generators.md) | Proposed | 0 of 6 |
-| [WP57: Module-scoped names](wp57-module-scoped-names.md) | Proposed | 0 of 3 |
 | [WP59: The wasm arena in a second, unexported memory](wp59-wasm-arena-memory.md) | Proposed | 0 of 4 |
 | [WP60: Dynamic dispatch over interfaces](wp60-dyn-dispatch.md) | Proposed | 1 of 6 |
 | [WP61: Typed JSON, constraints and coercion in one pass](wp61-json-typed-checks.md) | Proposed | 0 of 3 |

@@ -7,7 +7,8 @@
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
 //     --rounds N  timed rounds, rounded up to a multiple of the number of
-//                 binaries (default 12), after one uncounted warm-up round
+//                 binaries and of 2 (default 12), after one uncounted
+//                 warm-up round
 //     --no-rust   leave out the THREADSAFE=2 group: twin.rs, its C twin and
 //                 the --threads build
 //
@@ -36,12 +37,15 @@
 // mode, made once in build/bench/sqlite/ and made again only when schema.sql,
 // twin.c, sqlite3.c or the flags change. Nothing is downloaded.
 //
-// Each round runs every workload on the build, its copy and the C twin, in an
-// order that rotates by round, so over a multiple of 3 rounds each goes first
-// equally often. A run times
-// its own loop and prints a checksum of every value it read; every run of a
-// workload must print the same rows and checksum. The report is ns per call,
-// min, median and interquartile range over the rounds; the cost of the module
+// Each round runs every workload on every binary, in an order that rotates by
+// round, so over a multiple of their number each goes first equally often;
+// feed-cursor-walk and feed-cursor, which the twins have no path for, run on
+// the build and its copy alone, which alternate, so balance needs an even
+// count: the timed count is rounded up to a multiple of both, and their lines
+// are set against feed's. A run times its own loop and prints a checksum of
+// every value it read; every run of a workload must print the same rows and
+// checksum. The report is ns per call, min, median and interquartile range
+// over the rounds; the cost of the module
 // (and of the adapter's checks) is the build less the twin, and the noise band
 // is the build against its byte-identical copy: a difference inside it is one
 // this machine cannot see.
@@ -95,9 +99,16 @@ if (!(rounds >= 2)) {
 }
 
 // Calls a run: each timed run is a fraction of a second on a 2020s core.
+// feed-cursor-walk and feed-cursor read feed's rows through cursors instead
+// of SQL: they run at feed's count and must print feed's line (`same`), and
+// neither twin has a cursor path, so they run on the build and its copy only
+// (`noTwin`). feed-cursor-walk opens its transaction and cursors once, outside
+// the timed loop; feed-cursor opens and closes them on every call.
 const WORKLOADS = [
   { name: "lookup", count: validate ? 2000 : 200000 },
   { name: "feed", count: validate ? 50 : 10000 },
+  { name: "feed-cursor-walk", count: validate ? 50 : 10000, same: "feed", noTwin: true },
+  { name: "feed-cursor", count: validate ? 50 : 10000, same: "feed", noTwin: true },
   { name: "insert", count: validate ? 500 : 20000 },
   { name: "insert-txn", count: validate ? 2000 : 100000 },
 ]
@@ -321,14 +332,26 @@ if (cargo !== null) {
 
 const bins = [exe, copy, twin, ...(cargo !== null ? [exeMt, twinMt, twinRs] : [])]
 const labels = ["nish", "nish copy", "C", ...(cargo !== null ? ["nish mt", "C mt", "Rust mt"] : [])]
+/** The binaries that run workload `w`: index into `bins`. */
+const ranBy = (w) => (w.noTwin ? [0, 1] : bins.map((_, k) => k))
+const byName = new Map(WORKLOADS.map((w, i) => [w.name, i]))
 
 if (validate) {
+  const seen = new Map()
   for (const w of WORKLOADS) {
-    const answers = bins.map((b) => runOnce(b, w).answer)
+    const answers = ranBy(w).map((k) => runOnce(bins[k], w).answer)
     if (answers.some((a) => a !== answers[0])) {
       fail(`${w.name}: the sides disagree\n${answers.map((a, k) => `  ${labels[k]}: ${a}`).join("\n")}`)
     }
-    console.log(`${w.name}: ${answers[0]}, the same on every side`)
+    if (w.same !== undefined && answers[0] !== seen.get(w.same)) {
+      fail(`${w.name} printed ${answers[0]}, not ${w.same}'s ${seen.get(w.same)}`)
+    }
+    seen.set(w.name, answers[0])
+    console.log(
+      w.same !== undefined
+        ? `${w.name}: ${answers[0]}, the same on the build and its copy, and the same as ${w.same}`
+        : `${w.name}: ${answers[0]}, the same on every side`
+    )
   }
   console.log("bench/sqlite: valid")
   process.exit(0)
@@ -354,14 +377,21 @@ const iqr = (xs) => {
 const times = WORKLOADS.map(() => bins.map(() => []))
 const answers = WORKLOADS.map(() => null)
 // Round 0 warms the binaries and the page cache and is not counted.
-const timed = Math.ceil(rounds / bins.length) * bins.length
+// Every rotation must come round equally often: all the binaries, or the
+// build and its copy alone for a noTwin workload, so the lcm of the two.
+const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b))
+const period = WORKLOADS.map((w) => ranBy(w).length).reduce((a, n) => (a * n) / gcd(a, n), 1)
+const timed = Math.ceil(rounds / period) * period
 for (let round = 0; round <= timed; round++) {
   for (let w = 0; w < WORKLOADS.length; w++) {
-    for (let j = 0; j < bins.length; j++) {
-      const k = (j + round) % bins.length
+    const ks = ranBy(WORKLOADS[w])
+    for (let j = 0; j < ks.length; j++) {
+      const k = ks[(j + round) % ks.length]
       const r = runOnce(bins[k], WORKLOADS[w])
-      if (answers[w] !== null && r.answer !== answers[w]) {
-        fail(`round ${round}: ${labels[k]} ${WORKLOADS[w].name} printed ${r.answer}, not ${answers[w]}`)
+      const same = WORKLOADS[w].same
+      const expected = answers[w] ?? (same === undefined ? null : answers[byName.get(same)])
+      if (expected !== null && r.answer !== expected) {
+        fail(`round ${round}: ${labels[k]} ${WORKLOADS[w].name} printed ${r.answer}, not ${expected}`)
       }
       answers[w] = r.answer
       if (round > 0) {
@@ -384,22 +414,33 @@ const pct = (a, b) => `${(((median(a) - median(b)) / median(b)) * 100).toFixed(1
 for (let w = 0; w < WORKLOADS.length; w++) {
   const [n, c, t, nm, tm, rs] = times[w]
   console.log(`${WORKLOADS[w].name}: ${answers[w]}`)
-  for (let k = 0; k < bins.length; k++) {
+  for (const k of ranBy(WORKLOADS[w])) {
     console.log(
       `  ${labels[k].padEnd(10)} min ${ns(min(times[w][k]))}/call, median ${ns(median(times[w][k]))}/call,` +
         ` IQR ${ns(iqr(times[w][k]))}`
     )
   }
-  console.log(
-    `  nish - C   min ${signed(min(n) - min(t))}, median ${signed(median(n) - median(t))}` +
-      ` (${(((median(n) - median(t)) / median(t)) * 100).toFixed(1)}% of C's median)`
-  )
+  const same = WORKLOADS[w].same
+  if (same !== undefined) {
+    // Against the other workload's build, timed in the same rounds.
+    const s = times[byName.get(same)][0]
+    console.log(
+      `  - ${same.padEnd(8)} min ${signed(min(n) - min(s))}, median ${signed(median(n) - median(s))}` +
+        ` (${(((median(n) - median(s)) / median(s)) * 100).toFixed(1)}% of ${same}'s median)`
+    )
+  }
+  if (!WORKLOADS[w].noTwin) {
+    console.log(
+      `  nish - C   min ${signed(min(n) - min(t))}, median ${signed(median(n) - median(t))}` +
+        ` (${(((median(n) - median(t)) / median(t)) * 100).toFixed(1)}% of C's median)`
+    )
+  }
   console.log(
     `  noise band (build against its copy): min ${ns(Math.abs(min(n) - min(c)))}` +
       ` (${((Math.abs(min(n) - min(c)) / min(n)) * 100).toFixed(1)}%),` +
       ` median ${ns(Math.abs(median(n) - median(c)))} (${((Math.abs(median(n) - median(c)) / median(n)) * 100).toFixed(1)}%)`
   )
-  if (rs !== undefined) {
+  if (rs !== undefined && !WORKLOADS[w].noTwin) {
     for (const [label, a, b] of [
       ["nish mt - C mt", nm, tm],
       ["Rust mt - C mt", rs, tm],
