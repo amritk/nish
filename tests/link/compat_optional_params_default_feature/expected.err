@@ -1,0 +1,1 @@
+main.ts:5:48: error: Default of parameter `factor`: a default is a literal, an enum member or the name of an earlier parameter of the same number, `boolean` or enum type, because each call that leaves the argument out passes it as a constant

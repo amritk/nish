@@ -1,0 +1,5 @@
+{
+  "name": "pkg-link-source-nonascii",
+  "private": true,
+  "nish": { "link": { "sources": ["c/\u00e9.c"] } }
+}

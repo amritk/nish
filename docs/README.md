@@ -196,23 +196,35 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
 
 - [`mark.svg`](site/mark.svg) is the logo, and the source of every other
   image there: `logo-dark.png` and `logo-light.png` (the mark beside "nish",
-  for the header) and the favicons are renders of it, so a new mark
-  re-renders them all. The theme's violets and cyan are its colours.
+  for the header), the favicons and `icon-512.png` (the logo in the pages'
+  structured data) are renders of it, so a new mark re-renders them all.
+  Google shows a site's favicon in its results only at 48×48 or larger, so
+  `favicon.ico` carries a 48px image and `favicon-48.png` and
+  `favicon-192.png` are linked beside it. The theme's violets and cyan are
+  its colours.
 
 - [`theme.css`](site/theme.css) is the theme: the colours of both modes, the
   gradient behind every page, and every animation — a page's entrance, blocks
   that rise as they scroll into view, the cards' pointer highlight and the
   landing page's hero. All of it stops under `prefers-reduced-motion`, and a
   colour change re-measures the contrast figures in the file's head.
-- [`site.js`](site/site.js) builds the hero into the empty
-  `<div data-nish-hero></div>` at the top of [the landing
-  page](guide/index.md) and tracks the pointer for the cards. Until it
-  marks the hero's host `data-nish-ready`, `theme.css` holds the page under
-  the hero hidden, so the hero's late arrival pushes nothing a reader is
-  looking at; the hold ends by itself after 1.2s if `site.js` never runs.
+- The hero is static markup on one line at the top of [the landing
+  page](guide/index.md), so the server's HTML paints it with the page and
+  nothing under it moves when a script runs (no entrance animation fades
+  anything in from transparent either: each rises from 14px, already
+  visible). The line is `site.js`'s `hero()`, serialized: after a change to
+  the hero, rewrite it with `node tests/break-web/check.mjs --write-hero`;
+  the break-web check fails while the two differ. GitHub renders the same
+  Markdown, so it shows the hero's text there, unstyled.
+- [`site.js`](site/site.js) gives the hero its behaviour (the copy button,
+  the terminal), builds it into a host left empty (as the `og.png` script's
+  is), marks the host `data-nish-ready` once wired, and tracks the pointer
+  for the cards.
 - [`page.js`](site/page.js) writes each page's structured data and its
   `theme-color` (below), and lets a path in a table break after its
-  slashes, where `theme.css` keeps a table's names whole. It draws nothing, and stays out of `site.js` so the
+  slashes, where `theme.css` keeps a table's names whole. It draws nothing,
+  so it starts on `requestIdleCallback`, when the main thread is idle, and
+  stays out of `site.js` so the
   hero's script keeps its size budget (`tests/break-web/check.mjs`).
 - The landing page is the site's home, not a page of the guide: its route,
   first under `/` in `scalar.config.json` and out of the sidebar, sets a
@@ -221,8 +233,7 @@ The site's logo, styling and motion all live in [`docs/site/`](site/)
   centred column, a lead paragraph and centred section headings, with the
   hero and the card grids wider. The sidebar stays on in the route, because
   on a phone it is the menu, and `theme.css` hides it on a wider screen. Keep it a home page:
-  what it says in detail belongs on a guide page it links. The host stays
-  empty in the Markdown so that GitHub shows nothing in its place; nothing a
+  what it says in detail belongs on a guide page it links. Nothing a
   reader needs may live only in the hero.
 - [`og.png`](site/og.png) is the 1200×630 card a link to the site unfurls
   into: the hero itself, at rest, without its buttons, rendered by

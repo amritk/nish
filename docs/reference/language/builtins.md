@@ -1443,10 +1443,21 @@ class Cell implements Compact {
 - **A generic field instantiated as exactly a compact class is narrowed.**
   `Box<Cell>.inner`, with `Cell` compact, holds a compact link, so an
   interface view of the field and its implementer agree on the layout.
-- **A compact class is refused where C, Node or the runtime would read its
-  layout as full pointers**, each with its own code: in a build with `--emit-header`, `--emit-napi` or
-  `--emit-napi-async`, at the class (NL4021, `compact_reject_header`), or at an
-  export whose signature holds one (NL4020, `compact_reject_export`); as a
+- **A C host reaches a compact class only through a handle.** A
+  `--emit-header` build keeps every class that holds a link opaque
+  (`typedef struct Cell Cell;`): the compact class, a class with a field of
+  it, and an instantiation such as `Box<Cell>`. An export takes and returns
+  one as a full `struct Cell *`. The C host links the range runtime
+  (`-DNISH_ARENA_RANGE=1`, `scripts/build.sh --arena-range`); against the
+  default runtime a program fails to link as soon as one of its modules
+  allocates, an 8-aligned compact class's included ("compact header" in `tests/run.js`). A header build linked into a
+  shared library another process loads is not supported.
+- **A compact class is refused where Node or the runtime would read its
+  layout as full pointers**, each with its own code: in a build with `--emit-napi` or
+  `--emit-napi-async`, also beside `--emit-header`, at the class (NL4021,
+  `compact_reject_napi`, `compact_reject_header_napi`), or at an
+  export whose signature holds one (NL4020, `compact_reject_export`), because
+  the addon runs in Node's process, which Nish does not own; as a
   `declare class` (NL2795, `compact_reject_declare`), or held by one (NL2796,
   `compact_reject_declare_field`); and holding a `Secret`, whose wipe reads it
   through a full pointer (NL2797, `compact_reject_secret`); and as a generic
@@ -4543,7 +4554,8 @@ export const main = (): i32 => {
     one whose left operand is neither is refused in the words Phase 0 always
     used,
     `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-    (`reject_nullish`, `reject_nullish_nullable`).
+    (`reject_nullish`, `reject_nullish_nullable`), which the `nullish`
+    feature of [the compatibility dialect](semantics-decisions.md#the-compatibility-dialect) admits.
   - **Everywhere else a maybe is refused**, and the message names the place,
     because the rewrite differs by place. Some fail under `tsc` too (an
     operand, a `const` annotated `V`); the rest are legal TypeScript that this
@@ -5243,7 +5255,7 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   escape is honoured (`caps_policy_manifest_escaped_policy`,
   `caps_policy_manifest_escaped_entry`), and anything the reader could
   otherwise not vouch for — a second `"nish"` or `capabilities`, a key other
-  than `noPanic`, `capabilities`, `host`, `compat` and `netRings` — is NL3036
+  than `noPanic`, `capabilities`, `host`, `compat`, `netRings` and `link` — is NL3036
   (`caps_policy_manifest_repeated_nish`, `caps_policy_manifest_repeated_policy`,
   `caps_policy_manifest_nish_unknown_key`).
 - A policy changes no byte of the IR: a program inside it compiles and runs as

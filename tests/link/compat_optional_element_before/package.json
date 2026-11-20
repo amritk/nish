@@ -1,0 +1,7 @@
+{
+  "name": "compat-optional-element-before",
+  "private": true,
+  "nish": {
+    "compat": ["optional-chaining", "nullish"]
+  }
+}

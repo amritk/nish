@@ -248,6 +248,9 @@ export const main = (): i32 => {
 - A package can ship agent skills in `skills/<name>/SKILL.md`, and
   `npx nish-skills` links them into the project's `.claude/skills/`
   ([Agent skills](../using-nish/agent-skills.md)).
+- A package that wraps a C library names it, and its own C sources, in
+  `nish.link`. Your root `package.json` grants each one before it is linked
+  ([Calling C from Nish](../using-nish/interop.md#calling-c-from-nish-declare-function)).
 - The [`package.json` reference](../../reference/config/package-json.md)
   lists every field Nish reads in a package's manifest, and the error each
   mistake in one gets.

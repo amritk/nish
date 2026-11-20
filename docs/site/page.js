@@ -12,11 +12,19 @@
 
   const SITE = "https://nishlang.com"
   const DESCRIPTION =
-    "Nish compiles a strict, static subset of TypeScript ahead of time to native executables for x86_64, ARM64 and WebAssembly through LLVM, with no interpreter and no garbage collector."
+    "Nish compiles TypeScript ahead of time to fast native binaries for x86_64, ARM64 and WebAssembly. No interpreter, no JIT, no garbage collector: just one small executable."
 
   /** What Nish is, the same on every page. Nothing here names a person. */
   const PROJECT = [
     { "@type": "WebSite", "@id": `${SITE}/#website`, url: `${SITE}/`, name: "Nish", inLanguage: "en" },
+    {
+      "@type": "Organization",
+      "@id": `${SITE}/#organization`,
+      name: "Nish",
+      url: `${SITE}/`,
+      logo: `${SITE}/icon-512.png`,
+      sameAs: ["https://github.com/amritk/nish"],
+    },
     {
       "@type": "SoftwareApplication",
       "@id": `${SITE}/#software`,
@@ -24,6 +32,7 @@
       alternateName: "Native Instruction Static Host",
       description: DESCRIPTION,
       url: `${SITE}/`,
+      image: `${SITE}/icon-512.png`,
       applicationCategory: "DeveloperApplication",
       applicationSubCategory: "Compiler",
       operatingSystem: "Linux, macOS",
@@ -159,9 +168,16 @@
     // With no mode class the system's scheme decides, and it can change too.
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeColor)
   }
+  // The browser's chrome takes its colour at once; nothing else here is on
+  // screen, so the rest waits for an idle main thread rather than add to the
+  // page's blocking time. Safari has no requestIdleCallback; a timeout stands in.
+  const idle = () => {
+    themeColor()
+    window.requestIdleCallback ? requestIdleCallback(start, { timeout: 2000 }) : setTimeout(start, 0)
+  }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start)
+    document.addEventListener("DOMContentLoaded", idle)
   } else {
-    start()
+    idle()
   }
 })()

@@ -924,20 +924,47 @@ const RUNTIME_REGION_THREADS_TEXT_BUDGET = 1792
 const RUNTIME_ASYNC_TEXT_BUDGET = 4096
 
 /**
- * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
- * -- the adapter `nish/sqlite` calls: the thread-local connection and statement tables
- * that turn SQLite's pointers into `i32` handles, and the `nishsqlite_*` entry points
- * over them (open, close, exec, prepare, step, reset, bind, column reads and the copy of
- * a column into a caller's buffer). SQLite itself, `sqlite3.c`, is not counted: it is
- * vendored, linked only into a program that imports `nish/sqlite`, and its size is
- * upstream's.
- *
- * Measured **1,831 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
- * `.text`. Its own translation unit, linked only with SQLite, so a program that does not
- * import the module carries none of it. The budget is the next 256-byte boundary above
- * the measurement, as every ceiling here was set.
+ * The SQLite compile-time options `scripts/build.sh` compiles `runtime/sqlite/` with
+ * (its `SQLITE_THREADSAFE=0` build; `--threads` gives 2). `nish-sqlite.c` includes the
+ * amalgamation and refuses to compile without the options its cursors rely on, so the
+ * budget row below compiles with these, and they must stay the ones build.sh passes.
  */
-const RUNTIME_SQLITE_TEXT_BUDGET = 2048
+export const SQLITE_BUILD_DEFINES = [
+  "-DSQLITE_DQS=0",
+  "-DSQLITE_DEFAULT_MEMSTATUS=0",
+  "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
+  "-DSQLITE_LIKE_DOESNT_MATCH_BLOBS",
+  "-DSQLITE_MAX_EXPR_DEPTH=0",
+  "-DSQLITE_OMIT_DEPRECATED",
+  "-DSQLITE_OMIT_PROGRESS_CALLBACK",
+  "-DSQLITE_OMIT_SHARED_CACHE",
+  "-DSQLITE_USE_ALLOCA",
+  "-DSQLITE_OMIT_LOAD_EXTENSION",
+  "-DSQLITE_THREADSAFE=0",
+]
+
+/**
+ * Ceiling on the `.text*` bytes the adapter `nish/sqlite` calls adds over SQLite itself:
+ * the sum of the `.text*` sections of `clang -Oz <SQLITE_BUILD_DEFINES> -c
+ * runtime/sqlite/nish-sqlite.c`, less the same sum for `runtime/sqlite/sqlite3.c` alone
+ * with the same options. The adapter is the thread-local connection, statement and cursor
+ * tables that turn SQLite's pointers into `i32` handles, and the `nishsqlite_*` entry
+ * points over them (open, close, exec, prepare, step, reset, bind, column reads, the copy
+ * of a column into a caller's buffer, and the B-tree cursors). SQLite itself is not
+ * counted: it is vendored, linked only into a program that imports `nish/sqlite`, and its
+ * size is upstream's.
+ *
+ * Measured 1,831 bytes on 2026-10-24, when the adapter was its own translation unit and
+ * compiled alone. The cursors read SQLite's B-tree layer, which only the amalgamation's
+ * own translation unit can call, so `nish-sqlite.c` now includes `sqlite3.c` and the
+ * measurement subtracts it. Measured **7,564 bytes** on 2026-11-18 with clang 18.1.3 on
+ * linux-x64 (561,803 for the unit, 554,239 for `sqlite3.c` alone). Measured **8,213
+ * bytes** on 2026-11-19 (562,452 for the unit), with the cursor shape cache and the read
+ * transaction's kept statements (docs/wp7-runtime.md, "How the ceilings moved"). The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here was
+ * set.
+ */
+const RUNTIME_SQLITE_TEXT_BUDGET = 8448
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -1182,8 +1209,14 @@ export const RUNTIME_BUDGETS = [
     ["-DNISH_ARENA_RANGE=1", "-DNISH_THREADS=1"],
   ],
   ["runtime/runtime-async.c", RUNTIME_ASYNC_TEXT_BUDGET, "RUNTIME_ASYNC_TEXT_BUDGET", []],
-  ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
-].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
+  [
+    "runtime/sqlite/nish-sqlite.c",
+    RUNTIME_SQLITE_TEXT_BUDGET,
+    "RUNTIME_SQLITE_TEXT_BUDGET",
+    SQLITE_BUILD_DEFINES,
+    "runtime/sqlite/sqlite3.c",
+  ],
+].map(([src, budget, constant, flags, baseline = null]) => ({ src, budget, constant, flags, baseline }))
 
 /**
  * The page's bytes under `--profile wasm-host` (WP50 stage 1, docs/wp50-wasm-host.md):
@@ -1325,14 +1358,18 @@ export const WASM_PLAIN_DIGESTS = [
 /**
  * A row's name in a check and in the report: the file, and its flags when it has any,
  * so the two rows for `runtime.c` read as the two configurations they are rather than
- * as a repeat.
+ * as a repeat. A row measured over a baseline is named for what it subtracts instead of
+ * for its flags, which are build.sh's and the same for both compiles.
  */
-export const budgetLabel = ({ src, flags }) => [src.replace(/^runtime\//, ""), ...flags].join(" ")
+export const budgetLabel = ({ src, flags, baseline }) =>
+  baseline === null
+    ? [src.replace(/^runtime\//, ""), ...flags].join(" ")
+    : `${src.replace(/^runtime\//, "")} less ${baseline.replace(/^.*\//, "")}`
 
 if (process.argv[1] === import.meta.filename) {
   for (const row of RUNTIME_BUDGETS) {
     process.stdout.write(
-      `${[budgetLabel(row), row.src, row.budget, row.constant, row.flags.join(" ")].join("\t")}\n`
+      `${[budgetLabel(row), row.src, row.budget, row.constant, row.flags.join(" "), row.baseline ?? ""].join("\t")}\n`
     )
   }
 }

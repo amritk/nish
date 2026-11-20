@@ -759,6 +759,11 @@ export const emitCoalesce = (emitter: Emitter, expr: Node): string => {
     return emitChainCoalesce(emitter, expr)
   }
   if (!coalescesMaybe(emitter.program, emitter.table, expr)) {
+    // WP28 C1, `nullish`: a left operand that is never missing is the whole
+    // value, and the default never runs, as in JavaScript; the checker warned.
+    if (!emitter.table.isNullable(emitter.typeOf(expr.children[0]))) {
+      return emitter.emitExpression(expr.children[0])
+    }
     return emitNullableCoalesce(emitter, expr)
   }
   const fn = emitter.fn
@@ -865,12 +870,37 @@ const emitChainCoalesce = (emitter: Emitter, expr: Node): string => {
   return fn.emitValue(`phi ${ty} [ ${value}, %${valueEdge} ], [ ${fallback}, %${missingEdge} ]`)
 }
 
+/**
+ * WP28 C1, `optional-chaining`: a statement that is a `?.` chain, `a?.b.c()`.
+ * Each `?.` link's receiver is tested the moment it is evaluated, as in a
+ * `??` chain, and a `null` one branches to `chain.end`, past the rest of the
+ * statement, which is what JavaScript skips. The value is discarded, so the
+ * last link needs no test of its own, and the same count of tests guards the
+ * lowering.
+ */
+export const emitChainStatement = (emitter: Emitter, chain: Node): void => {
+  const fn = emitter.fn
+  const end = fn.newBlock("chain.end")
+  emitter.chainDefaults.push(end.label)
+  emitter.chainTests.push(0)
+  emitter.emitExpression(chain)
+  const tested = emitter.chainTests.pop()
+  emitter.chainDefaults.pop()
+  if (tested !== optionalLinks(chain)) {
+    process.exit(
+      internalErrorFor("emitter: a `?.` link whose receiver was not tested for null", emitter.opts.json)
+    )
+  }
+  fn.emit(`br label %${end.label}`)
+  fn.placeBlock(end)
+}
+
 /** How many `?.` links `chain` has, each of which tests its receiver once. */
 const optionalLinks = (chain: Node): i32 => {
   let count = 0
   let node = chain
   while (node.kind === NodeKind.Member || node.kind === NodeKind.Call || node.kind === NodeKind.Index) {
-    if (node.kind === NodeKind.Member && (node.flags & FLAG_OPTIONAL) !== 0) {
+    if (node.kind !== NodeKind.Call && (node.flags & FLAG_OPTIONAL) !== 0) {
       count = count + 1
     }
     node = node.children[0]
