@@ -67,6 +67,13 @@ produced it and claims only the fields that version prints. A per-second
 maximum is quoted as a maximum, never as a typical cost. Each "up to",
 "every" or "lower than" is checked against the table it summarises.
 
+**A bench side is the code it names.** A side called an existing copy calls
+the shipped function itself, with its callers' argument types and input
+shapes, and the native kernel where one replaces it; a loop the bench wrote
+says so. A claimed gain names its callers, found with `git grep` through
+every wrapper, and a stage's gate names a bench that reaches the changed
+function.
+
 A public declaration of `std/` or `runtime/nish.d.ts` lands with a doc
 comment, a `@param` per parameter and a `@returns` for a non-`void` return:
 `node scripts/gen-reference.mjs --check` fails on any gap
