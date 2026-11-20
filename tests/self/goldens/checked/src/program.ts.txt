@@ -267,6 +267,7 @@ struct StructInfo (class) size=176 align=8 exported
   field layout: boolean index=29 offset=169
   field laying: boolean index=30 offset=170
   field compact: boolean index=31 offset=171
+  field wide: boolean index=32 offset=172
   constructor -> @StructInfo.constructor
   method field -> @StructInfo.field
   method method -> @StructInfo.method

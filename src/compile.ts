@@ -1049,6 +1049,14 @@ const commandMain = (): number => {
       opts.explainMemory = true
     } else if (value === "--explain-layout") {
       opts.explainLayout = true
+    } else if (value === "--compact") {
+      arg = arg + 1
+      const mode = arg < process.argv.length ? process.argv[arg] : ""
+      if (mode !== "on" && mode !== "off") {
+        console.error("compile: --compact needs on or off")
+        return 2
+      }
+      opts.compact = mode === "on"
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
