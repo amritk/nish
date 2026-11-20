@@ -1414,9 +1414,10 @@ function splitLines(text: string): string[] -> @nish.splitLines [exported]
   local +12:9 end: i32 (let)
   local +18:9 i: i32 (let)
   local +25:11 bits: i32 (let)
-  local +30:15 lane: i32 (const)
-  local +31:15 at: i32 (const)
-  local +47:15 at: i32 (const)
+  local +30:15 zeros: i32 (const)
+  local +31:15 lane: i32 (const)
+  local +32:15 at: i32 (const)
+  local +48:15 at: i32 (const)
 function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.isTextBlankByte nish_array_grow nish_str_new

@@ -113,7 +113,8 @@ export const splitLines = (text: string): string[] => {
         bits = bitmask(eq(loadU8x16(flags, i), one)) & 0xffff
       }
       while (bits !== 0) {
-        const lane: i32 = (31 - (toI32(Math.clz32(bits & (0 - bits))) & 31)) & 15
+        const zeros: i32 = toI32(Math.clz32(bits & (0 - bits))) & 31
+        const lane: i32 = (31 - zeros) & 15
         const at: i32 = base + i + lane
         // `start` is never negative and never passes `at`, which is below
         // `length`, so this always holds: it is what proves both bounds
