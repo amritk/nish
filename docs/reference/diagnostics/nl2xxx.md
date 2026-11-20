@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 804 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 810 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15583,4 +15583,52 @@ The message of an error contains:
 
 ```text
 ` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one
+```
+
+## NL2813
+
+The message of an error contains:
+
+```text
+… is a fixed-length array, `Record<integer<0, Hi>, T>` for C's `T name[Hi + 1]`: its key must be `integer<0, Hi>`, a range from 0 with Hi below …
+```
+
+## NL2814
+
+The message of an error contains:
+
+```text
+…, which has no C element layout: an element of a fixed-length array is i32, i64, u8, u16, u32, u64, f32 or f64
+```
+
+## NL2815
+
+The message of an error contains:
+
+```text
+… is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index
+```
+
+## NL2816
+
+The message of an error contains:
+
+```text
+`: a fixed-length array inside a `declare class` is written element by element (`
+```
+
+## NL2817
+
+The message of an error contains:
+
+```text
+… elements inside a `declare class`: read and write it by index (`
+```
+
+## NL2818
+
+The message of an error contains:
+
+```text
+… elements: its indices are 0 to …
 ```

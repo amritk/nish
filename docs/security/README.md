@@ -78,7 +78,8 @@ the record that found it. The notes below the table name each such finding.
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 5 ²⁸ | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
-| **Total** ⁸ | | | **3 / 18 / 101 / 218** | **0 / 0 / 3 / 41** |
+| Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
+| **Total** ⁸ | | | **3 / 18 / 104 / 223** | **0 / 0 / 3 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -462,6 +463,9 @@ the record that found it. The notes below the table name each such finding.
 30. PL-F1 and PL-F2 (Low) were fixed in review and are counted as fixed Lows.
     PL-7, PL-8, PL-9 and PL-10 are accepted limits, with the reason in their record,
     and are not counted. The Total moves by this row: fixed +2 Low.
+31. CI-A1 to CI-A4 (Low), the limits of running clang on a header the
+    attacker wrote and of trusting the overrides file beside it, are
+    accepted, with the reason in their record, and are not counted.
 
 ## Fuzzed
 
@@ -541,6 +545,7 @@ only.
 | PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 | SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A same-user peer that shrinks a region with `ftruncate` makes a later access past the new end a `SIGBUS`, not a checked panic | — |
 | SERVE-14 | Low | `std/net/serve.ts` (`serveOn`, `serveFreeSlot`) | No per-peer share of `inFlight`: one client with `inFlight` connections, each holding a slow request, has every other request answered 503 | #1278 |
+| CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, escape bytes and lines of any file it includes among them, as running clang on the header by hand prints them; the module is not written | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in
