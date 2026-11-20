@@ -2,10 +2,11 @@
 // other constants, read by index, by `for...of`, through a `readonly`
 // parameter and by `.length`, with the width's maximum at both ends.
 const BASE: i32 = 1000
-const TOP: i64 = 4000000000
 
 const WIDE: readonly u16[] = [0, 1, 255, 256, BASE, BASE * 2 + 1, 32768, 65535]
-const MASKS: readonly u32[] = [0, 1, 65535, 65536, TOP, TOP + 294967295, 2147483648, 4294967295]
+// The u32 values above 2^31 are literals, not folded from an i64 constant:
+// --emit-ts lowers i64 arithmetic to bigint and mixes it with numbers (#1827).
+const MASKS: readonly u32[] = [0, 1, 65535, 65536, 4000000000, 4294967295, 2147483648, 4294967295]
 
 const wideSum = (xs: readonly u16[]): u32 => {
   let s: u32 = 0
