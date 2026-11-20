@@ -22161,6 +22161,50 @@ if (dealtHere("cliChecks")) {
     const nodeInclude =
       process.env.NODE_INCLUDE || path.join(path.dirname(process.execPath), "..", "include", "node")
     const hasNodeHeaders = fs.existsSync(path.join(nodeInclude, "node_api.h"))
+
+    // The N-API shim hands a returned constant table to JavaScript as a Uint8Array
+    // over a fresh ArrayBuffer it copies the elements into, so a store into the
+    // result never reaches the table's read-only data (#1640).
+    const tableNapi = emit(path.join(interopDir, "const_table_return.ts"), ["--emit-napi", sidecar("const_table_return", "napi.c")])
+    const tableShim = tableNapi.status === 0 ? fs.readFileSync(sidecar("const_table_return", "napi.c"), "utf8") : ""
+    check(
+      "napi: a function returning a constant table copies it into a new Uint8Array",
+      tableShim.includes("const nish_array *result = table();") &&
+        tableShim.includes("nish_napi_array_result(env, result, napi_uint8_array, 1, &out)") &&
+        tableShim.includes("napi_create_arraybuffer(env, a->len * elem_size, &data, &buffer);") &&
+        tableShim.includes("memcpy(data, a->data, a->len * elem_size);"),
+      tableShim || tableNapi.stderr
+    )
+    if (tableNapi.status === 0 && !hasNodeHeaders) {
+      skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the constant-table addon is not built`)
+    } else if (tableNapi.status === 0) {
+      const tableAddon = path.join(interopDir, "const_table_return.node")
+      const b = spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          sidecar("const_table_return", "ll"),
+          "runtime/runtime.c",
+          sidecar("const_table_return", "napi.c"),
+          "-o",
+          tableAddon,
+          "--profile",
+          "napi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const script = [
+        `const api = require(${JSON.stringify(tableAddon)});`,
+        "const t = api.table(); t[0] = 9;",
+        "console.log(t.constructor.name, Array.from(api.table()).join(','), api.at(4));",
+      ].join("\n")
+      const r = b.status === 0 ? spawnSync("node", ["-e", script], { cwd: root, encoding: "utf8" }) : null
+      check(
+        "napi: a returned constant table is a copy, so a store into it leaves the table as it was",
+        r !== null && r.stdout.trim() === "Uint8Array 1,2,3 2",
+        b.stderr + (r ? r.stdout + r.stderr : "")
+      )
+    }
     const shim = fs.existsSync(sidecar("add", "napi.c"))
       ? fs.readFileSync(sidecar("add", "napi.c"), "utf8")
       : ""
@@ -35776,6 +35820,44 @@ if (!only || "wasm-host".includes(only)) {
         fixedReading = `buffer ${memory.buffer.byteLength} bytes, grow ${grew ? "succeeded" : "refused"}`
       }
       check("wasm-host: --memory 16 fixes the memory at 16 MiB, initial and maximum", fixedOk, fixedReading)
+
+      // A function returning a constant table, linked for a page: the module exports
+      // the function, and the loader's `loadSync` hands back a copy of the table, so
+      // a page's store into it never reaches the read-only data (#1640).
+      const tableTs = at("const_table_return.ts")
+      fs.writeFileSync(
+        tableTs,
+        "const TAB: readonly u8[] = [1, 2, 3];\nexport const table = (): readonly u8[] => TAB;\nexport const at = (i: u8): u8 => TAB[i % 3];\n"
+      )
+      const tableCompiled = spawnSync(
+        NISH,
+        [tableTs, "--target", "wasm32", "--emit-dts", at("const_table_return.d.ts"), "-o", at("const_table_return.ll")],
+        { cwd: root, encoding: "utf8" }
+      )
+      const tableLink =
+        tableCompiled.status === 0
+          ? wasmHostLink([at("const_table_return.ll"), runtimeWasm], ["-o", at("const_table_return.wasm"), "--profile", "wasm-host"])
+          : null
+      let tableReading = tableLink === null ? shown(tableCompiled) : shown(tableLink)
+      let tableOk = false
+      if (tableLink?.status === 0) {
+        const tableExports = WebAssembly.Module.exports(new WebAssembly.Module(fs.readFileSync(at("const_table_return.wasm")))).map(
+          (e) => e.name
+        )
+        const tableLoader = await import(pathToFileURL(at("const_table_return.mjs")).href)
+        const api = tableLoader.loadSync(fs.readFileSync(at("const_table_return.wasm")))
+        const t = api.table()
+        t[0] = 9
+        tableReading = `exports ${tableExports.sort().join(", ")}; ${t.constructor.name} ${[...api.table()].join(",")} ${api.at(4)}`
+        tableOk =
+          tableExports.includes("table") &&
+          tableExports.includes("at") &&
+          tableExports.includes("memory") &&
+          t instanceof Uint8Array &&
+          [...api.table()].join(",") === "1,2,3" &&
+          api.at(4) === 2
+      }
+      check("wasm-host: a returned constant table is exported, and loadSync hands back a copy", tableOk, tableReading)
 
       // The refusals: both flags take wasm-host alone, and the size is checked.
       for (const [flags, what] of [
