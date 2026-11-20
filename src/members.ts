@@ -1420,6 +1420,12 @@ const checkStringArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: s
   }
 }
 
+/** The largest answer of `s.charCodeAt(i)`: a byte. */
+export const CHAR_CODE_TOP: i32 = 255
+
+/** The largest answer of `Math.clz32(x)`, which src/builtins.ts types as `integer<0, CLZ32_TOP>`. */
+export const CLZ32_TOP: i32 = 32
+
 /**
  * The top of the range `[0, top]` a builtin call's answer is documented to
  * land in, or -1 for any other call. `s.charCodeAt(i)` answers the byte at `i`
@@ -1443,10 +1449,10 @@ export const builtinAnswerTop = (program: CheckedProgram, table: TypeTable, call
   const receiver = callee.children[0]
   const type = program.nodeTypes[receiver.id]
   if (callee.text === "charCodeAt" && type >= 0 && table.baseOf(type) === T_STRING) {
-    return 255
+    return CHAR_CODE_TOP
   }
   const isMath = receiver.kind === NodeKind.Ident && receiver.text === "Math" && type < 0
-  return callee.text === "clz32" && isMath ? 32 : -1
+  return callee.text === "clz32" && isMath ? CLZ32_TOP : -1
 }
 
 const checkStringMethod = (ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 => {
