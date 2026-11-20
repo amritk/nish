@@ -1,0 +1,1 @@
+main.ts:5:1: error: `area` has overload signatures and cannot be described to C or Node (`--emit-header`, `--emit-napi` or `--emit-dts`): a header or declaration file would spell only the implementation's signature, which a caller may not call; export a function per signature

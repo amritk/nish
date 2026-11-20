@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 790 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 810 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -8767,7 +8767,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` is never `null` here, so `?.` has nothing to skip: write `.`
+…` is never `null` here, so `?.` has nothing to skip: write `…
 ```
 
 [`nl2490_chain_never_null.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2490_chain_never_null.ts):
@@ -15471,4 +15471,164 @@ export const main = (): i32 => {
 
 ```text
 `Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+## NL2799
+
+The message of an error contains:
+
+```text
+A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)
+```
+
+## NL2800
+
+The message of an error contains:
+
+```text
+` is not compatible with its implementation: …
+```
+
+## NL2801
+
+The message of an error contains:
+
+```text
+…): a call is held to the signatures written before the implementation, not to the implementation's own
+```
+
+## NL2802
+
+The message of an error contains:
+
+```text
+` has overload signatures and cannot be described to C or Node
+```
+
+## NL2803
+
+The message of an error contains:
+
+```text
+…can only be read as the left operand of `??`
+```
+
+## NL2804
+
+The message of an error contains:
+
+```text
+…which has no `null` to stand for an omitted argument
+```
+
+## NL2805
+
+The message of an error contains:
+
+```text
+…: an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one
+```
+
+## NL2806
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` has no layout to build, so only a `declare function` that returns one can make it
+```
+
+## NL2807
+
+The message of an error contains:
+
+```text
+`: C keeps its fields, and only a `declare function` can read or change them
+```
+
+## NL2808
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` has no fields, so the `CPtr` is the value; declare the C function to return the class itself
+```
+
+## NL2809
+
+The message of an error contains:
+
+```text
+`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`
+```
+
+## NL2810
+
+The message of an error contains:
+
+```text
+`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`
+```
+
+## NL2811
+
+The message of an error contains:
+
+```text
+`, which is not one of its parameters
+```
+
+## NL2812
+
+The message of an error contains:
+
+```text
+` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one
+```
+
+## NL2813
+
+The message of an error contains:
+
+```text
+… is a fixed-length array, `Record<integer<0, Hi>, T>` for C's `T name[Hi + 1]`: its key must be `integer<0, Hi>`, a range from 0 with Hi below …
+```
+
+## NL2814
+
+The message of an error contains:
+
+```text
+…, which has no C element layout: an element of a fixed-length array is i32, i64, u8, u16, u32, u64, f32 or f64
+```
+
+## NL2815
+
+The message of an error contains:
+
+```text
+… is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index
+```
+
+## NL2816
+
+The message of an error contains:
+
+```text
+`: a fixed-length array inside a `declare class` is written element by element (`
+```
+
+## NL2817
+
+The message of an error contains:
+
+```text
+… elements inside a `declare class`: read and write it by index (`
+```
+
+## NL2818
+
+The message of an error contains:
+
+```text
+… elements: its indices are 0 to …
 ```

@@ -1,0 +1,7 @@
+{
+  "name": "compat-overloads-method-no-match",
+  "private": true,
+  "nish": {
+    "compat": ["overloads"]
+  }
+}

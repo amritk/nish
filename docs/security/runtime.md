@@ -409,8 +409,18 @@ only the suite makes.
 
 *Built: `scripts/build.sh --arena-range`, which the compiler passes when a
 program has a compact class (WP48, [`docs/wp48-ref32-classes.md`](https://github.com/amritk/nish/blob/main/docs/wp48-ref32-classes.md)
-§3.3). No program has one until WP48 stage 2, so no build selects it today. The
-code is runtime.c's "The compact-class range" block, with the realigns in
+§3.3). Since WP48 stage 2c an `--emit-header` build's C host selects it by
+hand: the host compiles the runtime with `-DNISH_ARENA_RANGE=1` or runs
+`scripts/build.sh --arena-range`, as the header's banner and the guide's
+"A compact class in a C host" say. A host that links the default runtime
+instead fails to link: a module whose links are offsets and that allocates
+names `nish_arena_range_abi`, which only the range runtime defines, from both
+inline bumps (`nish_alloc_struct` and `nish_alloc_ref`). A module that
+allocates nothing names nothing, so the program fails to link as soon as one
+of its modules allocates, and an 8-aligned compact
+class that never calls `nish_alloc_ref` fails too (`tests/run.js`, "compact
+header:"). A C library another process loads is out of scope: the range would
+be reserved inside a process Nish does not own. The code is runtime.c's "The compact-class range" block, with the realigns in
 `nish_alloc_struct`, `runtime-text.c`'s `nish_text_alloc` and
 `runtime-cross.c`'s `nish_cross_in`, runtime.c's `nish_arena_keep` and the
 carve in `runtime-region.c`'s `nish_region_adopt` (RT-55), the drop in
@@ -526,6 +536,16 @@ signals and stdout, never a panic's words.
 - "debug arena with the compact-class range: a pointer kept across a release
   dies of SIGSEGV at the read", and the same with `, -DNISH_THREADS` after
   `range`.
+- In the `compact header` section (`node tests/run.js compact`), a C host
+  built from `--emit-header` output: "compact header: a C host holds a
+  compact instance as a handle and passes it back through the exports" and
+  "compact header: a C host round-trips an 8-aligned compact instance as a
+  handle", each linked with `-DNISH_ARENA_RANGE=1` and printing its total;
+  and "compact header: the same host linked against the default runtime
+  fails to link, on the range ABI symbol alone" and "compact header: the
+  8-aligned module linked against the default runtime fails to link, on the
+  range ABI symbol alone", where the default link exits non-zero and the same
+  link plus a stub defining only `nish_arena_range_abi` exits 0.
 
 | ID | Severity | Location | Finding | Status |
 | --- | --- | --- | --- | --- |

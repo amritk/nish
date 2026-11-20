@@ -48,6 +48,18 @@ allow AVX2; such a binary needs it to start
 
 </scalar-field>
 
+<scalar-field name="--pgo-generate">
+
+link a binary that writes a .profraw per run
+
+</scalar-field>
+
+<scalar-field name="--pgo-use" type="&lt;file.profdata&gt;">
+
+optimise the link with a merged profile
+
+</scalar-field>
+
 <scalar-field name="--target" type="&lt;triple&gt;|host">
 
 stamp the IR with a target's data layout

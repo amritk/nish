@@ -15,6 +15,8 @@
 // is being checked *into*, or -1 for none. It is a hint and never a coercion:
 // the result is still checked against what the sink expects.
 
+import { defaultTarget } from "./defaults"
+import { checkOverloadCall } from "./overloads"
 import {
   conditionMessage as secretConditionMessage,
   equalityMessage as secretEqualityMessage,
@@ -23,7 +25,7 @@ import {
 } from "./secret"
 import { LANGUAGE } from "./branding"
 import { Edit } from "./diagnostics"
-import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
+import { caseValue, isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import {
   captureOuter,
@@ -97,7 +99,7 @@ import {
   refuseValueArrow,
 } from "./fnrefs"
 import { ParentTable } from "./parents"
-import { isOptionalChain, unwrapParens } from "./emit-util"
+import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { CheckedProgram, FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
@@ -914,7 +916,7 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case NodeKind.Member:
       return checkMember(ctx, expr, scope)
     case NodeKind.Index:
-      return checkIndex(ctx, expr, scope)
+      return checkElement(ctx, expr, scope)
     case NodeKind.Array:
       // `[]` and `{ ... }` are typed by their context alone, so a context that
       // was refused (`y = []` after `let y = <refused>`) repeats the refusal.
@@ -1123,10 +1125,34 @@ const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
  */
 export const unproven = (ctx: CheckContext, type: i32): i32 => ctx.table.withState(type, R_UNKNOWN)
 
+/**
+ * NL2803: a name of an `x?: T` parameter (WP28 C1, `optional-params`) read
+ * anywhere but as the left operand of `??`. A call that leaves the argument
+ * out passes `null` here and `undefined` in TypeScript, and `x ?? d` is the
+ * one read that gives both the same value; `true` when it reported.
+ */
+const refuseOptionalRead = (ctx: CheckContext, expr: Node, local: Local | null): boolean => {
+  if (local === null || ctx.optionalLocals.indexOf(local) < 0) {
+    return false
+  }
+  const read = ctx.optionalRead
+  if (read !== null && read === expr) {
+    return false
+  }
+  ctx.error(
+    expr,
+    `Optional parameter \`${expr.text}\` can only be read as the left operand of \`??\`: a call that leaves it out passes \`undefined\` in TypeScript and \`null\` here, and \`${expr.text} ?? <default>\` is the one read that gives both the same value`
+  )
+  return true
+}
+
 const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text)
   if (local !== null) {
     ctx.program.nodeLocals[expr.id] = local
+    if (refuseOptionalRead(ctx, expr, sourceLocal(local))) {
+      return T_ERROR
+    }
     if (scope.exhausted(local)) {
       return ctx.errorType(expr, exhaustedMessage(expr.text))
     }
@@ -1144,6 +1170,9 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return T_ERROR
     }
     ctx.program.nodeLocals[expr.id] = captured
+    if (refuseOptionalRead(ctx, expr, sourceLocal(captured))) {
+      return T_ERROR
+    }
     // A `const` holds at the call what it held when it was declared.
     const outer = captured.captureOf
     const held = outer === null ? -1 : ctx.arrowOuterScopes[0].heldBy(outer)
@@ -3462,7 +3491,11 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (isOptionalChain(unwrapParens(expr.children[0]))) {
     return checkChainCoalesce(ctx, expr, scope)
   }
+  const bare = unwrapParens(expr.children[0])
+  const outerRead = ctx.optionalRead
+  ctx.optionalRead = bare.kind === NodeKind.Ident ? bare : null
   const left = maybeOperand(ctx, expr.children[0], scope)
+  ctx.optionalRead = outerRead
   if (left === T_ERROR) {
     return T_ERROR
   }
@@ -3470,10 +3503,7 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     return checkNullableCoalesce(ctx, expr, scope, left)
   }
   if (!ctx.table.isMaybe(left)) {
-    return ctx.errorType(
-      expr,
-      "Nullish coalescing `??` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
-    )
+    return checkNeverMissingCoalesce(ctx, expr, scope, left)
   }
   const value = ctx.table.refOf(left)
   const fallback = checkExpression(ctx, expr.children[1], scope, value)
@@ -3487,6 +3517,73 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     )
   }
   return value
+}
+
+/**
+ * `a ?? d`, where `a` is neither a maybe nor a `T | null`: the default never
+ * runs. Strict refuses it, in the words Phase 0 always used. The `nullish`
+ * feature of the compatibility dialect (WP28 C1) accepts it with Node's
+ * meaning, the left operand alone, and warns that the default is dead; only
+ * a left operand whose every part is listed in `neverMissing` qualifies. An
+ * element read, which JavaScript answers `undefined` past the end, is not
+ * one: it keeps strict's refusal, word for word and with no feature named,
+ * in both dialects.
+ */
+const checkNeverMissingCoalesce = (ctx: CheckContext, expr: Node, scope: Scope, left: i32): i32 => {
+  const operand = unwrapParens(expr.children[0])
+  const refusal = "Nullish coalescing `??` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
+  if (!neverMissing(operand)) {
+    return ctx.errorType(expr, refusal)
+  }
+  if (!ctx.compatAllows("nullish")) {
+    ctx.errorFeature(expr, refusal, "nullish")
+    return T_ERROR
+  }
+  const fallback = checkExpression(ctx, expr.children[1], scope, left)
+  if (fallback === T_ERROR) {
+    return T_ERROR
+  }
+  if (!ctx.table.assignable(fallback, left)) {
+    return ctx.errorType(
+      expr.children[1],
+      `The right operand of \`??\` stands in for a missing value, so it must be \`${ctx.table.typeName(left)}\`, the type of the value on its left; got \`${ctx.table.typeName(fallback)}\``
+    )
+  }
+  ctx.performance(
+    expr,
+    `\`${ctx.textOf(expr.children[0])}\` is never \`null\` or \`undefined\`, so \`??\` never runs its default: the build keeps the left operand alone (drop \`?? ${ctx.textOf(expr.children[1])}\`)`
+  )
+  return left
+}
+
+/**
+ * Whether JavaScript can never answer `undefined` for `node`, a left operand
+ * of `??` whose type is neither nullable nor a maybe. An allowlist, so a kind
+ * not named here keeps the strict refusal: an element read can run past the
+ * end, and a call or a ternary is left to a later stage.
+ */
+const neverMissing = (node: Node): boolean => {
+  const kind = node.kind
+  if (kind === NodeKind.Paren) {
+    return neverMissing(node.children[0])
+  }
+  if (kind === NodeKind.Member) {
+    return (node.flags & FLAG_OPTIONAL) === 0 && neverMissing(node.children[0])
+  }
+  return (
+    kind === NodeKind.Number ||
+    kind === NodeKind.String ||
+    kind === NodeKind.True ||
+    kind === NodeKind.False ||
+    kind === NodeKind.Template ||
+    kind === NodeKind.Ident ||
+    kind === NodeKind.This ||
+    kind === NodeKind.New ||
+    kind === NodeKind.Array ||
+    kind === NodeKind.Object ||
+    kind === NodeKind.Binary ||
+    kind === NodeKind.Unary
+  )
 }
 
 /**
@@ -3766,6 +3863,57 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
   return present === T_ERROR ? T_ERROR : ctx.table.maybeOf(present)
 }
 
+// ---- Fixed-length array fields (WP66 S4) ----------------------------------------------
+
+/**
+ * Tell `checkMember` that `index`'s receiver is read by index, so a
+ * fixed-length array field of a `declare class` (`FieldInfo.cLength`) types
+ * as `T[]` there and nowhere else.
+ */
+const markIndexReceiver = (ctx: CheckContext, index: Node): void => {
+  const receiver = unwrapParens(index.children[0])
+  ctx.program.indexReceiver = receiver.kind === NodeKind.Member ? receiver.id : -1
+}
+
+/** `a[i]` read: `checkIndex`, with a C array field's receiver marked and its constant index range-checked. */
+const checkElement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  markIndexReceiver(ctx, expr)
+  const type = checkIndex(ctx, expr, scope)
+  ctx.program.indexReceiver = -1
+  return type === T_ERROR || refuseCArrayConstant(ctx, expr) ? T_ERROR : type
+}
+
+/** `a[i] = v` and `a[i] op= v`: `checkIndexAssignment`, marked and range-checked as `checkElement` is. */
+const checkElementAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  const target = expr.children[0]
+  markIndexReceiver(ctx, target)
+  const type = checkIndexAssignment(ctx, expr, scope)
+  ctx.program.indexReceiver = -1
+  return type === T_ERROR || refuseCArrayConstant(ctx, target) ? T_ERROR : type
+}
+
+/**
+ * A constant index outside a fixed-length array field: C's `h[5]` past
+ * `unsigned h[5]`, which no run could take, refused where it is written. A
+ * constant inside is proved by `src/bounds.ts`, and any other index is
+ * checked when it runs.
+ */
+const refuseCArrayConstant = (ctx: CheckContext, index: Node): boolean => {
+  const field = cArrayField(ctx.program, ctx.table, index.children[0])
+  if (field === null) {
+    return false
+  }
+  const at = caseValue(ctx, index.children[1])
+  if (!at.known || (at.value >= toI64(0) && at.value < toI64(field.cLength))) {
+    return false
+  }
+  ctx.error(
+    index.children[1],
+    `Index ${at.value} is outside \`${ctx.textOf(index.children[0])}\`, a fixed-length array of ${field.cLength} elements: its indices are 0 to ${field.cLength - 1}`
+  )
+  return true
+}
+
 // ---- Assignment ---------------------------------------------------------------------
 
 const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
@@ -3774,7 +3922,7 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     const stored =
       target.kind === NodeKind.Member
         ? checkMemberAssignment(ctx, expr, scope)
-        : checkIndexAssignment(ctx, expr, scope)
+        : checkElementAssignment(ctx, expr, scope)
     clearPaths(ctx, target, scope)
     const path = pathVariable(ctx, target, scope, stored, expr.text === "=")
     if (path !== null && expr.text === "=") {
@@ -4020,12 +4168,25 @@ const checkImportedBuiltin = (
     return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`)
   }
   ctx.program.nodeBuiltins[expr.id] = imported.canonical
+  // WP66 S3: an opaque class has no layout, so there is nothing to copy into.
+  if (imported.member === "readStruct" && want >= 0 && ctx.table.isOpaque(ctx.table.stripNull(want))) {
+    return ctx.errorType(
+      expr,
+      `\`readStruct(p)\` cannot copy into \`${ctx.table.typeName(ctx.table.stripNull(want))}\`: an opaque \`declare class\` has no fields, so the \`CPtr\` is the value; declare the C function to return the class itself`
+    )
+  }
   return imported.namespace.length > 0
     ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
     : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member, want)
 }
 
-const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
+const checkCall = (ctx: CheckContext, expr: Node, outer: Scope, want: i32): i32 => {
+  // WP28 C1: a call a `?.` may skip runs its arguments only when the chain
+  // reaches it, so what they hold is held in a child scope, as an arm of `?:`
+  // holds it; an assignment there still drops the outer narrowing. Only
+  // `optional-chaining` takes the child scope, so a strict build checks
+  // `a?.m(args) ?? d` exactly as it did before the dialect.
+  const scope = isOptionalChain(expr) && ctx.compatAllows("optional-chaining") ? outer.child() : outer
   const callee = expr.children[0]
   if (callee.kind === NodeKind.Super) {
     return checkExpression(ctx, callee, scope, -1) // WP25: reports on the `super` token
@@ -4162,10 +4323,14 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     return T_ERROR
   }
   const args = expr.children[1]
-  if (!fitArguments(ctx, expr, args, sig, 0, sig.name)) {
+  // WP28 `optional-params`: a call that leaves out a default evaluated per
+  // call goes to the wrapper that evaluates it (`src/defaults.ts`).
+  const fit = defaultTarget(ctx, sig, args.children.length)
+  if (!fitArguments(ctx, expr, args, fit, 0, sig.name)) {
     return T_ERROR
   }
-  const foreign = sig.foreign()
+  const foreign = fit.foreign()
+  const gotTypes: i32[] = []
   let i = 0
   while (i < args.children.length) {
     const arg = args.children[i]
@@ -4173,11 +4338,12 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       // WP27 S4.1: C borrows a nested layout field by its interior address.
       ctx.embeddedRead = unwrapParens(arg).id
     }
-    const got = checkExpression(ctx, arg, scope, sig.paramTypes[i])
+    const got = checkExpression(ctx, arg, scope, fit.paramTypes[i])
     ctx.embeddedRead = -1
-    const refused = refuseForeignNullable(ctx, sig, i, arg, got, sig.name)
-    if (!refused && got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
-      const wantName = ctx.table.typeName(sig.paramTypes[i])
+    gotTypes.push(got)
+    const refused = refuseForeignNullable(ctx, fit, i, arg, got, sig.name)
+    if (!refused && got !== T_ERROR && !ctx.table.assignable(got, fit.paramTypes[i])) {
+      const wantName = ctx.table.typeName(fit.paramTypes[i])
       ctx.error(
         arg,
         `Argument ${i + 1} of \`${sig.name}\`: expected ${wantName}, got ${ctx.table.typeName(got)}`
@@ -4185,8 +4351,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     }
     i = i + 1
   }
-  ctx.program.nodeCallees[expr.id] = sig
-  return sig.returnType
+  checkOverloadCall(ctx, expr, sig, gotTypes, 0, sig.name)
+  ctx.program.nodeCallees[expr.id] = fit
+  return fit.returnType
 }
 
 /**

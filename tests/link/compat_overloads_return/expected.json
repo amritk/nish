@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_overloads_return/main.ts","line":2,"column":31,"endLine":2,"endColumn":37,"severity":"error","code":"NL2800","message":"This overload signature of `half` is not compatible with its implementation: it returns string and the implementation f64, and a call has the implementation's type"}
