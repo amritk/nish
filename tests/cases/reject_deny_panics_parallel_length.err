@@ -1,2 +1,2 @@
 error: `parallel-length` may panic here
-`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: make the call from a module `noPanic` does not list, and build with `--allow-panics`
+`parallelMapInto` panics when `dst` is shorter than `src`: guard the call with `if (dst.length < src.length) return`, or map in place with `src` as `dst`, and the check is proven
