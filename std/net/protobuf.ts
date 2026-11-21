@@ -45,15 +45,15 @@
  * bytes already there and pushing past its length, so a buffer that has grown
  * to a message's size is reused without allocating once the writer is `reset`.
  * Misuse (a field number outside 1 to 2^29 - 1, nesting past
- * `PROTO_MAX_DEPTH`, an `endMessage` with no open message) sets the same
- * sticky `failed` code and writes nothing more; a window outside the source
- * array is a caller bug and panics.
+ * `PROTO_MAX_DEPTH`, an `endMessage` with no open message, a `bytes` window
+ * outside its source array, a message past `PROTO_MAX_SIZE` bytes) sets the
+ * same sticky `failed` code and writes nothing more. Neither side panics: a
+ * reader window outside its array is `PROTO_ERR_WINDOW` too, so a program
+ * held to no panic may call both.
  *
  * The record of what this module refuses and why is
  * `docs/security/protobuf.md`.
  */
-import { copyBytes } from "nish/bytes"
-
 /** The varint wire type: int32, int64, uint32, uint64, sint32, sint64, bool and enum. */
 export const PROTO_WIRE_VARINT: i32 = 0
 /** The 64-bit wire type: fixed64, sfixed64 and double. */
@@ -71,6 +71,8 @@ export const PROTO_WIRE_I32: i32 = 5
 export const PROTO_MAX_FIELD: i32 = 536870911
 /** How many spans `ProtoReader.enter` and `ProtoWriter.beginMessage` may nest, protobuf's own default recursion limit. */
 export const PROTO_MAX_DEPTH: i32 = 100
+/** The largest message the writer writes, 2^31 - 2 bytes, so that its `end` fits an `i32`. */
+export const PROTO_MAX_SIZE: i32 = 2147483646
 
 /** No fault. */
 export const PROTO_OK: i32 = 0
@@ -92,12 +94,14 @@ export const PROTO_ERR_DEPTH: i32 = -7
 export const PROTO_ERR_MISMATCH: i32 = -8
 /** A `leave` or `endMessage` with no span open. */
 export const PROTO_ERR_UNBALANCED: i32 = -9
+/** A reader window or a `bytes` source window outside its array, or a message that would grow past `PROTO_MAX_SIZE` bytes. */
+export const PROTO_ERR_WINDOW: i32 = -10
 
 /** The bytes a varint of `v` takes, 1 to 10. */
 const varintSize = (v: u64): i32 => {
   let n: i32 = 1
   let rest: u64 = v >> toU64(7)
-  while (rest !== toU64(0)) {
+  while (rest !== toU64(0) && n < 10) {
     n += 1
     rest = rest >> toU64(7)
   }
@@ -178,23 +182,22 @@ export class ProtoReader {
 
   /**
    * Starts over on `buf[from, to)`, clearing `failed`. A window outside
-   * `buf` is a caller bug and panics.
+   * `buf` is a caller bug: the reader holds an empty span and `failed` is
+   * `PROTO_ERR_WINDOW`.
    *
    * @param buf - The array the message is in.
    * @param from - The offset of the message's first byte.
    * @param to - The offset one past its last byte.
    */
   reset(buf: readonly u8[], from: i32, to: i32): void {
-    if (from < 0 || to < from || to > toI32(buf.length)) {
-      panic(`ProtoReader: the window [${from}, ${to}) is outside a buffer of ${toI32(buf.length)} bytes`)
-    }
+    const bad: boolean = from < 0 || to < from || to > toI32(buf.length)
     this.buf = buf
-    this.pos = from
-    this.end = to
-    this.failed = PROTO_OK
+    this.pos = bad ? 0 : from
+    this.end = bad ? 0 : to
+    this.failed = bad ? PROTO_ERR_WINDOW : PROTO_OK
     this.field = 0
     this.wireType = 0
-    this.spanStart = from
+    this.spanStart = this.pos
     this.depth = 0
     this.pending = false
     this.packedType = -1
@@ -209,27 +212,31 @@ export class ProtoReader {
 
   /** Reads a varint of at most ten bytes; 0 and a fault when it is malformed. @internal */
   varint(): u64 {
+    const buf: readonly u8[] = this.buf
+    const end: i32 = this.end
+    let p: i32 = this.pos
     let result: u64 = 0
     let shift: u64 = 0
     for (let i: i32 = 0; i < 9; i += 1) {
-      if (this.pos >= this.end) {
+      if (p < 0 || p >= end || p >= toI32(buf.length)) {
         this.fail(PROTO_ERR_TRUNCATED)
         return 0
       }
-      const b: u8 = this.buf[this.pos]
-      this.pos += 1
+      const b: u8 = buf[p]
+      p = p + 1
       result = result | (toU64(b & toU8(127)) << shift)
       if ((b & toU8(128)) === toU8(0)) {
+        this.pos = p
         return result
       }
       shift += toU64(7)
     }
-    if (this.pos >= this.end) {
+    if (p < 0 || p >= end || p >= toI32(buf.length)) {
       this.fail(PROTO_ERR_TRUNCATED)
       return 0
     }
-    const last: u8 = this.buf[this.pos]
-    this.pos += 1
+    const last: u8 = buf[p]
+    this.pos = p + 1
     if ((last & toU8(128)) !== toU8(0)) {
       this.fail(PROTO_ERR_VARINT)
       return 0
@@ -244,7 +251,8 @@ export class ProtoReader {
     if (this.failed !== PROTO_OK) {
       return 0
     }
-    if (n > toU64(this.end - this.pos)) {
+    const room: i64 = toI64(this.end) - toI64(this.pos)
+    if (room < toI64(0) || n > toU64(room)) {
       this.fail(PROTO_ERR_LENGTH)
       return 0
     }
@@ -253,16 +261,25 @@ export class ProtoReader {
 
   /** Reads `count` little-endian bytes as one value; 0 and a fault when they run off the span. @internal */
   fixed(count: i32): u64 {
-    if (this.end - this.pos < count) {
-      this.fail(PROTO_ERR_TRUNCATED)
-      return 0
-    }
+    const buf: readonly u8[] = this.buf
+    const end: i32 = this.end
+    let p: i32 = this.pos
     let v: u64 = 0
-    for (let i: i32 = count - 1; i >= 0; i -= 1) {
-      v = (v << toU64(8)) | toU64(this.buf[this.pos + i])
+    for (let i: i32 = 0; i < count && i < 8; i += 1) {
+      if (p < 0 || p >= end || p >= toI32(buf.length)) {
+        this.fail(PROTO_ERR_TRUNCATED)
+        return 0
+      }
+      v = v | (toU64(buf[p]) << toU64(8 * i))
+      p = p + 1
     }
-    this.pos += count
+    this.pos = p
     return v
+  }
+
+  /** Moves past `n` bytes that `length` checked against the span. @internal */
+  pass(n: i32): void {
+    this.pos = toI32(toI64(this.pos) + toI64(n))
   }
 
   /** Passes over the current field's value by its wire type. @internal */
@@ -275,8 +292,7 @@ export class ProtoReader {
     } else if (this.wireType === PROTO_WIRE_I32) {
       this.fixed(4)
     } else {
-      const n: i32 = this.length()
-      this.pos += n
+      this.pass(this.length())
     }
   }
 
@@ -399,7 +415,7 @@ export class ProtoReader {
    */
   sint64(): i64 {
     const v: u64 = this.uint64()
-    return toI64(v >> toU64(1)) ^ -toI64(v & toU64(1))
+    return toI64((v >> toU64(1)) ^ (toU64(0) - (v & toU64(1))))
   }
 
   /**
@@ -410,7 +426,7 @@ export class ProtoReader {
    */
   sint32(): i32 {
     const v: u32 = toU32(this.uint64())
-    return toI32(v >> toU32(1)) ^ -toI32(v & toU32(1))
+    return toI32((v >> toU32(1)) ^ (toU32(0) - (v & toU32(1))))
   }
 
   /**
@@ -481,7 +497,7 @@ export class ProtoReader {
     }
     const n: i32 = this.length()
     this.spanStart = this.pos
-    this.pos += n
+    this.pass(n)
     return n
   }
 
@@ -500,14 +516,18 @@ export class ProtoReader {
     if (this.failed !== PROTO_OK) {
       return false
     }
-    if (this.depth >= PROTO_MAX_DEPTH) {
+    const ends: i32[] = this.ends
+    const d: i32 = this.depth
+    if (d < 0 || d >= PROTO_MAX_DEPTH || d >= toI32(ends.length)) {
       this.fail(PROTO_ERR_DEPTH)
       return false
     }
-    this.ends[this.depth] = this.end
-    this.depth += 1
-    this.end = this.pos + n
+    ends[d] = this.end
+    this.depth = d + 1
     this.spanStart = this.pos
+    this.pass(n)
+    this.end = this.pos
+    this.pos = this.spanStart
     return true
   }
 
@@ -573,7 +593,9 @@ export class ProtoReader {
     if (this.failed !== PROTO_OK) {
       return false
     }
-    if (this.depth === 0) {
+    const ends: i32[] = this.ends
+    const d: i32 = this.depth
+    if (d <= 0 || d > toI32(ends.length)) {
       this.fail(PROTO_ERR_UNBALANCED)
       return false
     }
@@ -589,8 +611,11 @@ export class ProtoReader {
     if (this.failed !== PROTO_OK) {
       return false
     }
-    this.depth -= 1
-    this.end = this.ends[this.depth]
+    const top: i32 = d - 1
+    if (top >= 0 && top < toI32(ends.length)) {
+      this.end = ends[top]
+    }
+    this.depth = top
     this.packedType = -1
     this.pending = false
     return true
@@ -640,12 +665,26 @@ export class ProtoWriter {
 
   /** Stores one byte at `end`, growing the buffer when it is full. @internal */
   put(b: u8): void {
-    if (this.end < toI32(this.buf.length)) {
-      this.buf[this.end] = b
-    } else {
-      this.buf.push(b)
+    const buf: u8[] = this.buf
+    const e: i32 = this.end
+    if (e < 0 || e >= PROTO_MAX_SIZE) {
+      this.failed = PROTO_ERR_WINDOW
+      return
     }
-    this.end += 1
+    if (e < toI32(buf.length)) {
+      buf[e] = b
+    } else {
+      buf.push(b)
+    }
+    this.end = e + 1
+  }
+
+  /** Stores `b` at `at` of the bytes already written; an offset outside them stores nothing. @internal */
+  poke(at: i32, b: u8): void {
+    const buf: u8[] = this.buf
+    if (at >= 0 && at < this.end && at < toI32(buf.length)) {
+      buf[at] = b
+    }
   }
 
   /** Appends `v` as a varint. @internal */
@@ -660,7 +699,7 @@ export class ProtoWriter {
 
   /** Appends the low `count` bytes of `v`, little-endian. @internal */
   putFixed(v: u64, count: i32): void {
-    for (let i: i32 = 0; i < count; i += 1) {
+    for (let i: i32 = 0; i < count && i < 8; i += 1) {
       this.put(toU8((v >> toU64(8 * i)) & toU64(255)))
     }
   }
@@ -817,7 +856,8 @@ export class ProtoWriter {
 
   /**
    * Writes a bytes field from `src[from, from + count)`. A window outside
-   * `src` is a caller bug and panics.
+   * `src` is a caller bug: nothing is written and `failed` is
+   * `PROTO_ERR_WINDOW`.
    *
    * @param field - The field number, 1 to 2^29 - 1.
    * @param src - The array the bytes are in.
@@ -825,15 +865,14 @@ export class ProtoWriter {
    * @param count - How many bytes.
    */
   bytes(field: i32, src: readonly u8[], from: i32, count: i32): void {
-    if (from < 0 || count < 0 || count > toI32(src.length) - from) {
-      panic(
-        `ProtoWriter.bytes: the window [${from}, ${from} + ${count}) is outside a buffer of ${toI32(src.length)} bytes`
-      )
+    const bad: boolean = from < 0 || count < 0 || toI64(from) + toI64(count) > toI64(src.length)
+    if (bad && this.failed === PROTO_OK) {
+      this.failed = PROTO_ERR_WINDOW
     }
     if (this.tag(field, PROTO_WIRE_LEN)) {
       this.putVarint(toU64(count))
-      for (let i: i32 = 0; i < count; i += 1) {
-        this.put(src[from + i])
+      for (let q: i32 = from; q >= 0 && q < toI32(src.length) && q - from < count; q += 1) {
+        this.put(src[q])
       }
     }
   }
@@ -865,9 +904,13 @@ export class ProtoWriter {
     if (this.failed === PROTO_OK && this.depth >= PROTO_MAX_DEPTH) {
       this.failed = PROTO_ERR_DEPTH
     }
+    const starts: i32[] = this.starts
+    const d: i32 = this.depth
     if (this.tag(field, PROTO_WIRE_LEN)) {
-      this.starts[this.depth] = this.end
-      this.depth += 1
+      if (d >= 0 && d < toI32(starts.length)) {
+        starts[d] = this.end
+        this.depth = d + 1
+      }
       this.put(toU8(0))
     }
   }
@@ -880,26 +923,38 @@ export class ProtoWriter {
     if (this.failed !== PROTO_OK) {
       return
     }
-    if (this.depth === 0) {
+    const starts: i32[] = this.starts
+    const d: i32 = this.depth
+    if (d <= 0 || d > toI32(starts.length)) {
       this.failed = PROTO_ERR_UNBALANCED
       return
     }
-    this.depth -= 1
-    const at: i32 = this.starts[this.depth]
-    const n: i32 = this.end - at - 1
+    const top: i32 = d - 1
+    this.depth = top
+    const at: i32 = top >= 0 && top < toI32(starts.length) ? starts[top] : 0
+    // `at` is where beginMessage put the one length byte, so `n` is 0 or more.
+    const n: i32 = toI32(toI64(this.end) - toI64(at) - toI64(1))
     const size: i32 = varintSize(toU64(n))
     for (let i: i32 = 1; i < size; i += 1) {
       this.put(toU8(0))
     }
-    if (size > 1) {
-      copyBytes(this.buf, at + size, this.buf, at + 1, n)
+    if (this.failed !== PROTO_OK) {
+      return
     }
-    let rest: i32 = n
-    for (let i: i32 = 0; i < size - 1; i += 1) {
-      this.buf[at + i] = toU8(rest & 127) | toU8(128)
-      rest = rest >> 7
+    // Move the contents right by size - 1 from the top, so no byte is read after it is overwritten.
+    const buf: u8[] = this.buf
+    for (let k: i32 = n; k > 0 && size > 1; k -= 1) {
+      const from: i32 = toI32(toI64(at) + toI64(k))
+      if (from >= 0 && from < toI32(buf.length)) {
+        this.poke(toI32(toI64(from) + toI64(size) - toI64(1)), buf[from])
+      }
     }
-    this.buf[at + size - 1] = toU8(rest)
+    let rest: u64 = toU64(n)
+    for (let i: i32 = 0; i < size; i += 1) {
+      const more: u8 = i + 1 < size ? toU8(128) : toU8(0)
+      this.poke(toI32(toI64(at) + toI64(i)), toU8(rest & toU64(127)) | more)
+      rest = rest >> toU64(7)
+    }
   }
 
   /**

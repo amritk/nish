@@ -1,1 +1,7 @@
 a window of 2 bytes: 4 0
+a negative offset: 4 -10
+and the fault is sticky: 4 -10
+a negative count: 0 -10
+a count past the end: 0 -10
+an offset plus count past 2^31 - 1: 0 -10
+an empty window at the end: 2 0

@@ -1,1 +1,5 @@
 a window of 2 bytes: true 1
+a window past the end: false -10
+a window below 0: false -10
+a window that ends before it starts: false -10
+reset over a good window: true 1 0
