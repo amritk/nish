@@ -1,0 +1,161 @@
+PASS  empty: decodes to its fields
+PASS  empty: reads with no fault
+PASS  empty: writes with no fault
+PASS  empty: re-encodes byte for byte
+PASS  empty: skips every field
+PASS  one varint: decodes to its fields
+PASS  one varint: reads with no fault
+PASS  one varint: writes with no fault
+PASS  one varint: re-encodes byte for byte
+PASS  one varint: skips every field
+PASS  negative int32 takes ten bytes: decodes to its fields
+PASS  negative int32 takes ten bytes: reads with no fault
+PASS  negative int32 takes ten bytes: writes with no fault
+PASS  negative int32 takes ten bytes: re-encodes byte for byte
+PASS  negative int32 takes ten bytes: skips every field
+PASS  int32 minimum: decodes to its fields
+PASS  int32 minimum: reads with no fault
+PASS  int32 minimum: writes with no fault
+PASS  int32 minimum: re-encodes byte for byte
+PASS  int32 minimum: skips every field
+PASS  int64 extremes: decodes to its fields
+PASS  int64 extremes: reads with no fault
+PASS  int64 extremes: writes with no fault
+PASS  int64 extremes: re-encodes byte for byte
+PASS  int64 extremes: skips every field
+PASS  uint32 maximum: decodes to its fields
+PASS  uint32 maximum: reads with no fault
+PASS  uint32 maximum: writes with no fault
+PASS  uint32 maximum: re-encodes byte for byte
+PASS  uint32 maximum: skips every field
+PASS  zigzag: decodes to its fields
+PASS  zigzag: reads with no fault
+PASS  zigzag: writes with no fault
+PASS  zigzag: re-encodes byte for byte
+PASS  zigzag: skips every field
+PASS  zigzag maxima: decodes to its fields
+PASS  zigzag maxima: reads with no fault
+PASS  zigzag maxima: writes with no fault
+PASS  zigzag maxima: re-encodes byte for byte
+PASS  zigzag maxima: skips every field
+PASS  bool: decodes to its fields
+PASS  bool: reads with no fault
+PASS  bool: writes with no fault
+PASS  bool: re-encodes byte for byte
+PASS  bool: skips every field
+PASS  fixed widths: decodes to its fields
+PASS  fixed widths: reads with no fault
+PASS  fixed widths: writes with no fault
+PASS  fixed widths: re-encodes byte for byte
+PASS  fixed widths: skips every field
+PASS  float and double: decodes to its fields
+PASS  float and double: reads with no fault
+PASS  float and double: writes with no fault
+PASS  float and double: re-encodes byte for byte
+PASS  float and double: skips every field
+PASS  float subnormal and infinity: decodes to its fields
+PASS  float subnormal and infinity: reads with no fault
+PASS  float subnormal and infinity: writes with no fault
+PASS  float subnormal and infinity: re-encodes byte for byte
+PASS  float subnormal and infinity: skips every field
+PASS  string: decodes to its fields
+PASS  string: reads with no fault
+PASS  string: writes with no fault
+PASS  string: re-encodes byte for byte
+PASS  string: skips every field
+PASS  bytes: decodes to its fields
+PASS  bytes: reads with no fault
+PASS  bytes: writes with no fault
+PASS  bytes: re-encodes byte for byte
+PASS  bytes: skips every field
+PASS  long string, a two-byte length: decodes to its fields
+PASS  long string, a two-byte length: reads with no fault
+PASS  long string, a two-byte length: writes with no fault
+PASS  long string, a two-byte length: re-encodes byte for byte
+PASS  long string, a two-byte length: skips every field
+PASS  embedded message: decodes to its fields
+PASS  embedded message: reads with no fault
+PASS  embedded message: writes with no fault
+PASS  embedded message: re-encodes byte for byte
+PASS  embedded message: skips every field
+PASS  packed: decodes to its fields
+PASS  packed: reads with no fault
+PASS  packed: writes with no fault
+PASS  packed: re-encodes byte for byte
+PASS  packed: skips every field
+PASS  largest field number: decodes to its fields
+PASS  largest field number: reads with no fault
+PASS  largest field number: writes with no fault
+PASS  largest field number: re-encodes byte for byte
+PASS  largest field number: skips every field
+PASS  every field: decodes to its fields
+PASS  every field: reads with no fault
+PASS  every field: writes with no fault
+PASS  every field: re-encodes byte for byte
+PASS  every field: skips every field
+PASS  a field of each wire type is skipped by it
+PASS  the field after them reads
+PASS  and nothing faults
+PASS  len answers the span
+PASS  whose start is spanStart
+PASS  depth counts the span entered
+PASS  leave passes over the unread rest
+PASS  and next goes on after it
+PASS  a varint of eleven bytes
+PASS  a varint cut short
+PASS  a tag cut short
+PASS  a tag that never ends in ten bytes
+PASS  a fixed64 cut short
+PASS  a fixed32 cut short
+PASS  a length past the span
+PASS  a length of 2^64 - 1 bytes
+PASS  a length cut short
+PASS  field number 0
+PASS  a field number past 2^29 - 1
+PASS  a start group
+PASS  an end group
+PASS  wire type 6
+PASS  wire type 7
+PASS  the good field reads
+PASS  the bad one after it is refused when passed over
+PASS  and the fault is sticky
+PASS  an inner length past the outer span
+PASS  an inner length past the outer span, entered
+PASS  a malformed rest is refused by leave
+PASS  an over-long varint for 0 reads as 0
+PASS  a tenth byte of 0x7e reads as 0
+PASS  a tenth byte of 0x7f reads as 2^63
+PASS  a tag of 2^32 + 8
+PASS  field 0 with wire type 3 is refused as a group
+PASS  a varint read as fixed32
+PASS  a value read twice
+PASS  a value read before next
+PASS  a varint entered
+PASS  leave with no span entered
+PASS  a packed field of length-delimited elements
+PASS  next inside a packed field
+PASS  more outside a packed field
+PASS  a ragged packed fixed32
+PASS  leave skips the packed rest
+PASS  reset clears the fault
+PASS  a window reads only its bytes
+PASS  the writer nests to the cap
+PASS  the reader enters to the cap
+PASS  the writer refuses one more
+PASS  the reader refuses one more
+PASS  field number 0 is refused
+PASS  a field number past 2^29 - 1 is refused
+PASS  2^29 - 1 is written
+PASS  endMessage with none open
+PASS  a packed element with none open
+PASS  a packed fixed32 with none open
+PASS  a packed fixed64 with none open
+PASS  a nested message of 2 bytes
+PASS  a nested message of 200 bytes
+PASS  a nested message of 20000 bytes
+PASS  a nested message of 303 bytes keeps its contents
+PASS  bytes writes its window
+PASS  an empty string
+PASS  int32 and int64 negatives take ten bytes
+PASS  a warm writer allocates nothing per field
+protobuf: 160 passed, 0 failed, 0 skipped

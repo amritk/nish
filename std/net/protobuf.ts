@@ -175,7 +175,7 @@ export class ProtoReader {
     this.packedType = -1
     this.ends = []
     for (let i: i32 = 0; i < PROTO_MAX_DEPTH; i += 1) {
-      this.ends.push(0)
+      this.ends.push(toI32(0))
     }
     this.reset(buf, from, to)
   }
@@ -288,9 +288,9 @@ export class ProtoReader {
     if (this.wireType === PROTO_WIRE_VARINT) {
       this.varint()
     } else if (this.wireType === PROTO_WIRE_I64) {
-      this.fixed(8)
+      this.fixed(toI32(8))
     } else if (this.wireType === PROTO_WIRE_I32) {
-      this.fixed(4)
+      this.fixed(toI32(4))
     } else {
       this.pass(this.length())
     }
@@ -435,7 +435,7 @@ export class ProtoReader {
    * @returns The value, or 0 on a fault.
    */
   fixed32(): u32 {
-    return this.take(PROTO_WIRE_I32) ? toU32(this.fixed(4)) : toU32(0)
+    return this.take(PROTO_WIRE_I32) ? toU32(this.fixed(toI32(4))) : toU32(0)
   }
 
   /**
@@ -463,7 +463,7 @@ export class ProtoReader {
    * @returns The value, or 0 on a fault.
    */
   fixed64(): u64 {
-    return this.take(PROTO_WIRE_I64) ? this.fixed(8) : toU64(0)
+    return this.take(PROTO_WIRE_I64) ? this.fixed(toI32(8)) : toU64(0)
   }
 
   /**
@@ -653,7 +653,7 @@ export class ProtoWriter {
     this.depth = 0
     this.starts = []
     for (let i: i32 = 0; i < PROTO_MAX_DEPTH; i += 1) {
-      this.starts.push(0)
+      this.starts.push(toI32(0))
     }
   }
 
@@ -801,7 +801,7 @@ export class ProtoWriter {
    */
   fixed32(field: i32, v: u32): void {
     if (this.tag(field, PROTO_WIRE_I32)) {
-      this.putFixed(toU64(v), 4)
+      this.putFixed(toU64(v), toI32(4))
     }
   }
 
@@ -833,7 +833,7 @@ export class ProtoWriter {
    */
   fixed64(field: i32, v: u64): void {
     if (this.tag(field, PROTO_WIRE_I64)) {
-      this.putFixed(v, 8)
+      this.putFixed(v, toI32(8))
     }
   }
 
@@ -998,7 +998,7 @@ export class ProtoWriter {
    */
   packedFixed32(v: u32): void {
     if (this.packed()) {
-      this.putFixed(toU64(v), 4)
+      this.putFixed(toU64(v), toI32(4))
     }
   }
 
@@ -1011,7 +1011,7 @@ export class ProtoWriter {
    */
   packedFixed64(v: u64): void {
     if (this.packed()) {
-      this.putFixed(v, 8)
+      this.putFixed(v, toI32(8))
     }
   }
 }

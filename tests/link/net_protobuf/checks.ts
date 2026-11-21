@@ -228,14 +228,14 @@ const vectorChecks = (s: Suite): void => {
 const skipChecks = (s: Suite): void => {
   // One field of each wire type, then a field read after them.
   const w = new ProtoWriter([])
-  w.uint64(1, toU64(300))
-  w.fixed64(2, toU64(7))
-  w.string(3, "abc")
-  w.fixed32(4, toU32(9))
-  w.beginMessage(5)
-  w.uint64(1, toU64(1))
+  w.uint64(toI32(1), toU64(300))
+  w.fixed64(toI32(2), toU64(7))
+  w.string(toI32(3), "abc")
+  w.fixed32(toI32(4), toU32(9))
+  w.beginMessage(toI32(5))
+  w.uint64(toI32(1), toU64(1))
   w.endMessage()
-  w.sint32(6, -3)
+  w.sint32(toI32(6), toI32(-3))
   const r = new ProtoReader(w.buf, 0, w.end)
   let types = ""
   let last: i32 = 0
@@ -246,19 +246,19 @@ const skipChecks = (s: Suite): void => {
     }
   }
   s.eqStr("a field of each wire type is skipped by it", types, "0 1 2 5 2 0")
-  s.eqI32("the field after them reads", last, -3)
+  s.eqI32("the field after them reads", last, toI32(-3))
   s.eqI32("and nothing faults", r.failed, PROTO_OK)
   // A span read whole, and a nested message left half read.
   const m = new ProtoReader(w.buf, 0, w.end)
   m.next()
   m.next()
   m.next()
-  s.eqI32("len answers the span", m.len(), 3)
-  s.eqI32("whose start is spanStart", toI32(w.buf[m.spanStart]), 97)
+  s.eqI32("len answers the span", m.len(), toI32(3))
+  s.eqI32("whose start is spanStart", toI32(w.buf[m.spanStart]), toI32(97))
   m.next()
   m.next()
   m.enter()
-  s.eqI32("depth counts the span entered", m.depth, 1)
+  s.eqI32("depth counts the span entered", m.depth, toI32(1))
   s.ok("leave passes over the unread rest", m.leave())
   s.ok("and next goes on after it", m.next() && m.field === 6)
 }
@@ -348,7 +348,7 @@ const misuseChecks = (s: Suite): void => {
   const again = over([0])
   again.next()
   const two: u8[] = [8, 2]
-  again.reset(two, 0, 2)
+  again.reset(two, toI32(0), toI32(2))
   s.ok("reset clears the fault", again.failed === PROTO_OK && again.next() && again.uint64() === toU64(2))
   // A window inside a larger array.
   const window = new ProtoReader([99, 8, 5, 99], 1, 3)
@@ -359,9 +359,9 @@ const depthChecks = (s: Suite): void => {
   // PROTO_MAX_DEPTH messages nested in each other, then one more.
   const w = new ProtoWriter([])
   for (let i: i32 = 0; i < PROTO_MAX_DEPTH; i += 1) {
-    w.beginMessage(1)
+    w.beginMessage(toI32(1))
   }
-  w.uint64(2, toU64(42))
+  w.uint64(toI32(2), toU64(42))
   for (let i: i32 = 0; i < PROTO_MAX_DEPTH; i += 1) {
     w.endMessage()
   }
@@ -374,14 +374,14 @@ const depthChecks = (s: Suite): void => {
   s.ok("the reader enters to the cap", entered === PROTO_MAX_DEPTH && r.field === 2 && r.uint64() === toU64(42))
   const over1 = new ProtoWriter([])
   for (let i: i32 = 0; i <= PROTO_MAX_DEPTH; i += 1) {
-    over1.beginMessage(1)
+    over1.beginMessage(toI32(1))
   }
   s.eqI32("the writer refuses one more", over1.failed, PROTO_ERR_DEPTH)
   // Each level a length-delimited field 1 holding the level inside it.
   let deep: u8[] = []
   for (let i: i32 = 0; i <= PROTO_MAX_DEPTH; i += 1) {
     const level = new ProtoWriter([])
-    level.bytes(1, deep, 0, toI32(deep.length))
+    level.bytes(toI32(1), deep, toI32(0), toI32(deep.length))
     deep = level.buf
   }
   const d = over(deep)
@@ -392,13 +392,13 @@ const depthChecks = (s: Suite): void => {
 /** A message of every kind of field, written into `warm` from its start. */
 const writeSample = (warm: ProtoWriter): void => {
   warm.reset()
-  warm.uint64(1, toU64(150))
-  warm.string(2, "a string of some length")
-  warm.beginMessage(3)
-  warm.double(1, toF64(5) / toF64(2))
-  warm.sint64(2, toI64(-9))
+  warm.uint64(toI32(1), toU64(150))
+  warm.string(toI32(2), "a string of some length")
+  warm.beginMessage(toI32(3))
+  warm.double(toI32(1), toF64(5) / toF64(2))
+  warm.sint64(toI32(2), toI64(-9))
   warm.endMessage()
-  warm.beginMessage(4)
+  warm.beginMessage(toI32(4))
   warm.packedFixed32(toU32(1))
   warm.packedFixed64(toU64(2))
   warm.packedVarint(toU64(3))
@@ -407,7 +407,7 @@ const writeSample = (warm: ProtoWriter): void => {
 
 const writerChecks = (s: Suite): void => {
   const w = new ProtoWriter([])
-  w.uint64(0, toU64(1))
+  w.uint64(toI32(0), toU64(1))
   s.ok("field number 0 is refused", w.failed === PROTO_ERR_FIELD && w.end === 0)
   w.reset()
   w.uint64(PROTO_MAX_FIELD + 1, toU64(1))
@@ -430,12 +430,12 @@ const writerChecks = (s: Suite): void => {
   // A nested message of 200 bytes takes a two-byte length, and of 20000 three.
   for (let size: i32 = 1; size <= 20000; size *= 100) {
     w.reset()
-    w.beginMessage(1)
+    w.beginMessage(toI32(1))
     for (let i: i32 = 0; i < size; i += 1) {
-      w.bool(2, true)
+      w.bool(toI32(2), true)
     }
     w.endMessage()
-    w.bool(3, true)
+    w.bool(toI32(3), true)
     const r = new ProtoReader(w.buf, 0, w.end)
     let count: i32 = 0
     r.next()
@@ -452,8 +452,8 @@ const writerChecks = (s: Suite): void => {
     ramp.push(toU8(i % 251))
   }
   w.reset()
-  w.beginMessage(1)
-  w.bytes(2, ramp, 0, 300)
+  w.beginMessage(toI32(1))
+  w.bytes(toI32(2), ramp, toI32(0), toI32(300))
   w.endMessage()
   const rr = new ProtoReader(w.buf, 0, w.end)
   rr.next()
@@ -464,15 +464,15 @@ const writerChecks = (s: Suite): void => {
   // A window of bytes, and a writer that reuses its buffer.
   const src: u8[] = [1, 2, 3, 4]
   w.reset()
-  w.bytes(1, src, 1, 2)
+  w.bytes(toI32(1), src, toI32(1), toI32(2))
   s.ok("bytes writes its window", sameBytes(w.buf, w.end, [10, 2, 2, 3]))
   w.reset()
-  w.string(1, "")
+  w.string(toI32(1), "")
   s.ok("an empty string", sameBytes(w.buf, w.end, [10, 0]))
   w.reset()
-  w.int64(1, toI64(-1))
-  w.int32(2, -1)
-  s.eqI32("int32 and int64 negatives take ten bytes", w.end, 22)
+  w.int64(toI32(1), toI64(-1))
+  w.int32(toI32(2), toI32(-1))
+  s.eqI32("int32 and int64 negatives take ten bytes", w.end, toI32(22))
   // Once the buffer has grown, writing the same message again allocates nothing.
   const warm = new ProtoWriter([])
   writeSample(warm)
