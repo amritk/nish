@@ -10044,8 +10044,20 @@ const proverReadsDeclared = () => [
   },
 ]
 
+/** The changelog words of WP72 S2, which ends an HTTP/2 answer of nish/net/http-server with trailers. */
+const SERVER_TRAILERS = "trailers on the nish/net/http-server façade's HTTP/2 answers"
+/** WP72 S2's negatives call `HttpServer.trailers`, which the seed's std/net does not have. */
+const serverTrailersDeclared = () =>
+  ["ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
+    program: `tests/link/net_http_server_trailers_${name}/main.ts`,
+    file: "exit",
+    changelog: SERVER_TRAILERS,
+    why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
+  }))
+
 const DECLARED = [
   ...proverReadsDeclared(),
+  ...serverTrailersDeclared(),
   ...scramModule(),
   {
     program: "tests/cases/cls_field_init.ts",
