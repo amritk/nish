@@ -389,9 +389,10 @@ the record that found it. The notes below the table name each such finding.
 19. COMP-11, COMP-12 and COMP-13 (Medium), stale bytes queued by
     `respondEncoded` after `H1_AGAIN`, a `GzipWriter` panic inside its own
     bound, and the AArch64 CRC-32 kernel reading four bytes past its window,
-    were found by a review of the first version and fixed. COMP-8 (Low) and COMP-9
-    (Medium), a stream of small dynamic blocks rebuilding the decoder's
-    tables and the BREACH class of length leaks, are accepted, with the reason
+    were found by a review of the first version and fixed. COMP-8 (Low), COMP-9
+    (Medium) and COMP-17 (Low), a stream of small dynamic blocks rebuilding the decoder's
+    tables, the BREACH class of length leaks and deflate with `identity;q=0`
+    answered as identity, are accepted, with the reason
     in their record, and are not counted. COMP-1 to COMP-7, COMP-10 and
     COMP-16 (the Adler-32 kernels' window and sums) are properties checked
     and found to hold.

@@ -177,10 +177,11 @@ again from then on.
 
 ## Compressing HTTP responses
 
-`nish/net/http-compress` reads a request's `Accept-Encoding` and gzips a
-response body. It is opt-in: nothing is compressed unless your program asks,
-and an `HttpCompressor` declines a body shorter than its `minLength`, longer
-than its `maxLength`, or that gzip would not make smaller. On HTTP/1.1 one call
+`nish/net/http-compress` reads a request's `Accept-Encoding` and compresses a
+response body with gzip or deflate. It is opt-in: nothing is compressed unless
+your program asks, and an `HttpCompressor` declines a body shorter than its
+`minLength`, longer than its `maxLength`, or that compressing would not make
+smaller. On HTTP/1.1 one call
 does all of it — `Content-Encoding: gzip`, the compressed `Content-Length`,
 and `Vary: Accept-Encoding` on every response whose form depended on the
 request, so that caches keep the two forms apart:
@@ -232,6 +233,39 @@ export const main = (): number => {
   return 0;
 };
 ```
+
+### Deflate as well as gzip
+
+`HTTP_CODING_DEFLATE` is the `deflate` coding, which HTTP means as the zlib
+format (RFC 1950): the same compressed data as gzip in a 2-byte header and an
+Adler-32 trailer, 12 bytes shorter than the gzip member. Offer it beside gzip
+and pass whichever coding the request picks; `compress`, `compressAnyway` and
+`respondEncoded` send either, and `addFields` names the one sent:
+
+```ts
+const coding: i32 = httpAcceptEncoding(value, 0, toI32(value.length), HTTP_OFFER_GZIP | HTTP_OFFER_DEFLATE);
+const m: i32 = enc.compress(coding, body, 0, n); // gzip or deflate, or -1
+```
+
+A tie goes to gzip, so `gzip, deflate` gets gzip; deflate goes to a client
+that gives it a higher q-value or does not take gzip. On HTTP/1.1,
+`conn.acceptEncoding()` offers gzip alone. To offer deflate, pass
+`httpAcceptEncoding` the field's value where it lies in the request head:
+`parser.headerIndex` finds the field, and `parser.spans` holds each field's
+name and value offsets into `parser.head`, four per field:
+
+```ts
+const parser: Http1Parser = conn.parser;
+const i: i32 = parser.headerIndex("accept-encoding");
+const coding: i32 = i < 0
+  ? HTTP_CODING_IDENTITY
+  : httpAcceptEncoding(parser.head, parser.spans[4 * i + 2], parser.spans[4 * i + 3], HTTP_OFFER_GZIP | HTTP_OFFER_DEFLATE);
+```
+
+`respondEncoded` sends a request that refuses identity a compressed body
+below every threshold only when the coding is gzip; with deflate it holds the
+request to the policy, so call `compressAnyway` yourself to compress
+regardless.
 
 ### Compressing only when it pays
 
@@ -309,10 +343,10 @@ export const main = (): number => {
 ```
 
 `Vary: Accept-Encoding` goes on a response that was compressed, and on one
-sent as it is because the request did not accept gzip. A body that is too
-small, too large or did not pay is sent the same to every client, so it
-carries no `Vary`. A request that refuses identity (`identity;q=0`) but
-accepts gzip is sent gzip whatever the policy says.
+sent as it is because the request did not accept the coding offered. A body
+that is too small, too large or did not pay is sent the same to every client,
+so it carries no `Vary`. A request that refuses identity (`identity;q=0`) and
+is answered gzip is sent gzip whatever the policy says, up to `maxLength`.
 
 The negotiation follows RFC 9110: q-values (`gzip;q=0` refuses gzip), `*`,
 `x-gzip`, and `identity`, which is acceptable unless the field gives it q=0. A
