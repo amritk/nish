@@ -287,7 +287,7 @@ struct ArgEdge (class) size=72 align=8 exported
   field via: string index=8 offset=64
   constructor -> @ArgEdge.constructor
   method isPrivate -> @ArgEdge.isPrivate
-struct FunctionFacts (class) size=456 align=8 exported
+struct FunctionFacts (class) size=448 align=8 exported
   field hasLoops: boolean index=0 offset=0
   field readsMemory: boolean index=1 offset=1
   field loopsBounded: boolean index=2 offset=2
@@ -361,17 +361,17 @@ struct FunctionFacts (class) size=456 align=8 exported
   field hoistedHeaders: HoistedHeader[] index=70 offset=360
   field hoistedScopeStarts: i32[] index=71 offset=368
   field panicSites: PanicSite[] index=72 offset=376
-  field callerProven: boolean index=73 offset=384
-  field cycleOrder: i32 index=74 offset=388
-  field cycleLow: i32 index=75 offset=392
-  field onCycleStack: boolean index=76 offset=396
-  field caps: i32 index=77 offset=400
-  field capVia: string[] index=78 offset=408
-  field capSite: Node | null[] index=79 offset=416
-  field capDist: i32[] index=80 offset=424
-  field capCallees: string[] index=81 offset=432
-  field capSites: Node[] index=82 offset=440
-  field ringListen: boolean index=83 offset=448
+  field cycleOrder: i32 index=73 offset=384
+  field cycleLow: i32 index=74 offset=388
+  field onCycleStack: boolean index=75 offset=392
+  field callerProven: boolean index=76 offset=393
+  field caps: i32 index=77 offset=396
+  field capVia: string[] index=78 offset=400
+  field capSite: Node | null[] index=79 offset=408
+  field capDist: i32[] index=80 offset=416
+  field capCallees: string[] index=81 offset=424
+  field capSites: Node[] index=82 offset=432
+  field ringListen: boolean index=83 offset=440
   constructor -> @FunctionFacts.constructor
   method offerCapability -> @FunctionFacts.offerCapability
   method pointerParam -> @FunctionFacts.pointerParam
@@ -606,7 +606,7 @@ function FunctionFacts.constructor(this: FunctionFacts, paramNames: string[], no
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: nodeCount paramNames
   calls: StringSet.constructor nish_alloc_struct nish_panic
-  pointer this: size=456 writesThrough=true captured=false
+  pointer this: size=448 writesThrough=true captured=false
   pointer paramNames: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:25 new StringSet -> @StringSet.constructor
@@ -619,7 +619,7 @@ function FunctionFacts.offerCapability(this: FunctionFacts, index: i32, via: str
   sharedWrite: +0:9
   escaping: dist index site via
   calls: compareStrings nish_array_grow nish_panic_index
-  pointer this: size=456 writesThrough=true captured=false
+  pointer this: size=448 writesThrough=true captured=false
   pointer site: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -3:13 none: Node | null (const)
@@ -631,43 +631,43 @@ function FunctionFacts.offerCapability(this: FunctionFacts, index: i32, via: str
 function FunctionFacts.pointerParam(this: FunctionFacts, name: string): PointerParamFacts | null -> @FunctionFacts.pointerParam [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer this: size=456 writesThrough=false captured=false
+  pointer this: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 pp: PointerParamFacts (const)
 function FunctionFacts.pointerParamAt(this: FunctionFacts, index: i32): PointerParamFacts | null -> @FunctionFacts.pointerParamAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: FunctionFacts.pointerParam
-  pointer this: size=456 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer this: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   callee +0:12 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
 function FunctionFacts.isStackSite(this: FunctionFacts, node: Node): boolean -> @FunctionFacts.isStackSite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer this: size=456 writesThrough=false captured=false
+  pointer this: size=448 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function FunctionFacts.scopesPass(this: FunctionFacts, body: Node): boolean -> @FunctionFacts.scopesPass [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=456 writesThrough=false captured=false
+  pointer this: size=448 writesThrough=false captured=false
   pointer body: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 scope: LoopScope (const)
 function FunctionFacts.scopesAnyPass(this: FunctionFacts): boolean -> @FunctionFacts.scopesAnyPass [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=456 writesThrough=false captured=false
+  pointer this: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 scope: LoopScope (const)
 function FunctionFacts.isStackParam(this: FunctionFacts, name: string): boolean -> @FunctionFacts.isStackParam [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringSet.has
-  pointer this: size=456 writesThrough=false captured=false
+  pointer this: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 StringSet.has -> @StringSet.has
 function FunctionFacts.holdsStackObject(this: FunctionFacts, local: Local): boolean -> @FunctionFacts.holdsStackObject [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=456 writesThrough=false captured=false
+  pointer this: size=448 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 candidate: Local (const)
@@ -683,7 +683,7 @@ function FactsTable.set(this: FactsTable, name: string, facts: FunctionFacts): v
   escaping: facts name
   calls: StringMap.get StringMap.set nish_array_grow nish_panic_index
   pointer this: size=24 writesThrough=false captured=false
-  pointer facts: size=456 writesThrough=true captured=true
+  pointer facts: size=448 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -7:11 at: i32 (const)
   callee -7:16 StringMap.get -> @StringMap.get
@@ -1230,7 +1230,7 @@ function FactCollector.constructor(this: FactCollector, unit: AnalysisUnit, tabl
   pointer table: size=168 writesThrough=true captured=true
   pointer opts: size=256 writesThrough=true captured=true
   pointer sig: size=224 writesThrough=true captured=true
-  pointer facts: size=456 writesThrough=true captured=true
+  pointer facts: size=448 writesThrough=true captured=true
   pointer known: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:22 new StringMap -> @StringMap.constructor
@@ -2689,7 +2689,7 @@ function initialisesFields(sig: FunctionSig): boolean -> @initialisesFields
   local +0:9 owner: StructInfo | null (const)
   local +4:14 field: FieldInfo (const)
 function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, memory: EscapeResult | null, nodeCount: i32, known: FactsTable | null): FunctionFacts -> @collectFacts
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=456
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=448
   sharedWrite: via collectStatedFacts
   escaping: nodeCount
   calls: assumeUnknownStance collectStatedFacts needsStance nish_str_eq
@@ -2706,7 +2706,7 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   callee +5:45 needsStance -> @needsStance
   callee +6:5 assumeUnknownStance -> @assumeUnknownStance
 function collectStatedFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, memory: EscapeResult | null, nodeCount: i32, known: FactsTable | null): FunctionFacts -> @collectStatedFacts
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=456
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=448
   sharedWrite: +0:7
   escaping: nodeCount
   calls: FactCollector.addCallees FactCollector.addUserCallee FactCollector.constructor FactCollector.findPrivateArrays FactCollector.noteInitializers FactCollector.noteSite FactCollector.visit FunctionFacts.constructor FunctionFacts.pointerParam FunctionSig.body FunctionSig.foreign FunctionSig.suspends Options.recordsPanics PanicSite.constructor PointerParamFacts.constructor StringSet.add StringSet.has StructInfo.allocatingInitializer TypeTable.isRanged TypeTable.stripNull applyStance checksRangesInPrologue filledByC initialisesFields isAtomicArrayMethod isAtomicMethod isChannelSend isLockMethod isMapRoute isPointerParam isRegionEntry isRegionIntrinsic isScalarArgument isShmSource isShmWindowIntrinsic isSpawnEntry isThreadsModule jsonRouteOf markAtomic markChannelSend markJsonRoute markLock markMapRoute markParallelEntry markRegionIntrinsic markShmWindow markWipe maxEffect nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq panicTailCallees pointerAlign rootsHoldNoPointer routeCalleesOf secretRoleOf structSize
@@ -2846,7 +2846,7 @@ function applyStance(facts: FunctionFacts, stance: BodilessStance): void -> @app
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: applyParamStance
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   pointer stance: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +1:7 i: i32 (let)
@@ -2872,7 +2872,7 @@ function assumeUnknownStance(facts: FunctionFacts): void -> @assumeUnknownStance
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: BodilessStance.constructor ParamStance.constructor applyStance nish_alloc_struct nish_str_concat
-  pointer facts: size=456 writesThrough=true captured=false passedTo=applyStance#0
+  pointer facts: size=448 writesThrough=true captured=false passedTo=applyStance#0
   stackSites=1 stackLocals=0
   local -2:9 unknown: ParamStance (const)
   callee -2:19 new ParamStance -> @ParamStance.constructor
@@ -2883,7 +2883,7 @@ function markParallelEntry(facts: FunctionFacts, runtime: string, joined: boolea
   sharedWrite: via handsParamsTo
   escaping: runtime
   calls: BodilessStance.constructor ParamStance.constructor handsParamsTo nish_alloc_struct
-  pointer facts: size=456 writesThrough=false captured=false passedTo=handsParamsTo#0
+  pointer facts: size=448 writesThrough=false captured=false passedTo=handsParamsTo#0
   stackSites=0 stackLocals=0
   callee +0:3 handsParamsTo -> @handsParamsTo
   local +1:9 each: ParamStance (const)
@@ -2894,7 +2894,7 @@ function handsParamsTo(facts: FunctionFacts, runtime: string): void -> @handsPar
   sharedWrite: via StringSet.add
   escaping: runtime
   calls: StringSet.add
-  pointer facts: size=456 writesThrough=false captured=false
+  pointer facts: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 StringSet.add -> @StringSet.add
   local +1:14 name: string (const)
@@ -2906,7 +2906,7 @@ function markMapRoute(table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
   calls: BodilessStance.constructor FunctionFacts.pointerParam StringSet.add nish_alloc_struct nish_array_grow routeCalleesOf statesNothing
   pointer table: size=168 writesThrough=false captured=false passedTo=routeCalleesOf#0
   pointer sig: size=224 writesThrough=false captured=false passedTo=routeCalleesOf#1
-  pointer facts: size=456 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer facts: size=448 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local -1:9 routed: FunctionSig[] (const)
   callee -1:18 routeCalleesOf -> @routeCalleesOf
@@ -2922,7 +2922,7 @@ function markWipe(facts: FunctionFacts): BodilessStance -> @markWipe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor ParamStance.constructor StringSet.add nish_alloc_struct statesNothing
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +3:3 StringSet.add -> @StringSet.add
   callee +5:10 new BodilessStance -> @BodilessStance.constructor
@@ -2932,7 +2932,7 @@ function markLock(facts: FunctionFacts): BodilessStance -> @markLock
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor StringSet.add nish_alloc_struct statesNothing
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +2:3 StringSet.add -> @StringSet.add
   callee +3:10 new BodilessStance -> @BodilessStance.constructor
@@ -2942,7 +2942,7 @@ function markChannelSend(facts: FunctionFacts): BodilessStance -> @markChannelSe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor ParamStance.constructor StringSet.add nish_alloc_struct statesNothing
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +5:3 StringSet.add -> @StringSet.add
   callee +6:10 new BodilessStance -> @BodilessStance.constructor
@@ -2952,7 +2952,7 @@ function markAtomic(facts: FunctionFacts): BodilessStance -> @markAtomic
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor ParamStance.constructor nish_alloc_struct statesNothing
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +5:10 new BodilessStance -> @BodilessStance.constructor
   callee +6:5 new ParamStance -> @ParamStance.constructor
@@ -2961,7 +2961,7 @@ function markRegionIntrinsic(facts: FunctionFacts): BodilessStance -> @markRegio
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor ParamStance.constructor nish_alloc_struct
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +7:9 each: ParamStance (const)
   callee +7:16 new ParamStance -> @ParamStance.constructor
@@ -2970,7 +2970,7 @@ function markShmWindow(facts: FunctionFacts): BodilessStance -> @markShmWindow
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:3
   calls: BodilessStance.constructor ParamStance.constructor nish_alloc_struct
-  pointer facts: size=456 writesThrough=true captured=false
+  pointer facts: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +6:9 each: ParamStance (const)
   callee +6:16 new ParamStance -> @ParamStance.constructor
@@ -2982,7 +2982,7 @@ function markJsonRoute(program: CheckedProgram, table: TypeTable, sig: FunctionS
   pointer program: size=928 writesThrough=false captured=false passedTo=jsonRouteCallees#0
   pointer table: size=168 writesThrough=false captured=false passedTo=jsonRouteCallees#1
   pointer sig: size=224 writesThrough=false captured=false passedTo=jsonRouteCallees#2 jsonRouteOf#0
-  pointer facts: size=456 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 handsParamsTo#0
+  pointer facts: size=448 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0 handsParamsTo#0
   stackSites=0 stackLocals=0
   local +4:9 receiver: PointerParamFacts | null (const)
   callee +5:33 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
@@ -3038,7 +3038,7 @@ function markFreshElements(escapes: EscapeSet, sigs: FunctionSig[], known: Facts
 function callsAnyCallee(f: FunctionFacts | null, names: StringSet): boolean -> @callsAnyCallee
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.at StringSet.has StringSet.size
-  pointer f: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=0 stackLocals=0
   local +0:7 c: i32 (let)
@@ -3148,7 +3148,7 @@ function someCalleeNetAllocates(facts: FactsTable, f: FunctionFacts): boolean ->
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get StringSet.at StringSet.size
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
-  pointer f: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 c: i32 (let)
   callee +1:14 StringSet.size -> @StringSet.size
@@ -3237,7 +3237,7 @@ function visitCycles(walk: CycleWalk, facts: FactsTable, v: FunctionFacts): void
   calls: FactsTable.get StringSet.at StringSet.size nish_array_grow nish_panic_index nish_panic_overflow visitCycles
   pointer walk: size=16 writesThrough=true captured=false passedTo=visitCycles#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 visitCycles#1
-  pointer v: size=456 writesThrough=true captured=true
+  pointer v: size=448 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +5:7 c: i32 (let)
   callee +6:14 StringSet.size -> @StringSet.size
@@ -3390,8 +3390,8 @@ function sameSite(a: Node | null, b: Node | null): boolean -> @sameSite
 function sameParams(f: FunctionFacts, g: FunctionFacts): boolean -> @sameParams
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer f: size=456 writesThrough=false captured=false
-  pointer g: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
+  pointer g: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 a: PointerParamFacts (const)
@@ -3420,8 +3420,8 @@ function checkPropagate(facts: FactsTable, fresh: FactsTable, runtime: RuntimeTa
 function differsFrom(f: FunctionFacts, g: FunctionFacts): string -> @differsFrom
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: functionAttributes nish_alloc_struct nish_str_eq sameParams sameSite
-  pointer f: size=456 writesThrough=false captured=false passedTo=functionAttributes#0 sameParams#0
-  pointer g: size=456 writesThrough=false captured=false passedTo=functionAttributes#0 sameParams#1
+  pointer f: size=448 writesThrough=false captured=false passedTo=functionAttributes#0 sameParams#0
+  pointer g: size=448 writesThrough=false captured=false passedTo=functionAttributes#0 sameParams#1
   stackSites=0 stackLocals=0
   callee +0:8 sameSite -> @sameSite
   callee +13:7 functionAttributes -> @functionAttributes
@@ -3433,7 +3433,7 @@ function visitFacts(graph: FactGraph, fi: i32, f: FunctionFacts): boolean -> @vi
   escaping: fi
   calls: FunctionFacts.pointerParamAt composeArguments nish_panic_overflow propagateCallee settleKeeps
   pointer graph: size=56 writesThrough=false captured=false
-  pointer f: size=456 writesThrough=true captured=false passedTo=propagateCallee#0 composeArguments#0 settleKeeps#0
+  pointer f: size=448 writesThrough=true captured=false passedTo=propagateCallee#0 composeArguments#0 settleKeeps#0
   stackSites=0 stackLocals=0
   local -28:7 changed: boolean (let)
   local -27:7 c: i32 (let)
@@ -3461,8 +3461,8 @@ function propagateCallee(f: FunctionFacts, calleeFacts: FunctionFacts | null, rt
   sharedWrite: +0:5
   escaping: callee whole
   calls: hasAttr inlineAllocatorAttrs markPastWrite maxEffect nish_arena_mark nish_arena_release nish_str_eq writesShared
-  pointer f: size=456 writesThrough=true captured=false passedTo=writesShared#0 markPastWrite#0
-  pointer calleeFacts: size=456 writesThrough=false captured=false passedTo=writesShared#1
+  pointer f: size=448 writesThrough=true captured=false passedTo=writesShared#0 markPastWrite#0
+  pointer calleeFacts: size=448 writesThrough=false captured=false passedTo=writesShared#1
   pointer rt: size=40 writesThrough=false captured=false passedTo=writesShared#2
   stackSites=0 stackLocals=0
   local -25:7 changed: boolean (let)
@@ -3528,8 +3528,8 @@ function relaxEdge(f: FunctionFacts, e: i32, g: FunctionFacts): boolean -> @rela
   sharedWrite: +0:5
   escaping: e
   calls: FunctionFacts.offerCapability nish_panic_index nish_panic_overflow
-  pointer f: size=456 writesThrough=true captured=false passedTo=FunctionFacts.offerCapability#0
-  pointer g: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=true captured=false passedTo=FunctionFacts.offerCapability#0
+  pointer g: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:7 moved: boolean (let)
   local +3:7 c: i32 (let)
@@ -3537,8 +3537,8 @@ function relaxEdge(f: FunctionFacts, e: i32, g: FunctionFacts): boolean -> @rela
 function writesShared(f: FunctionFacts, calleeFacts: FunctionFacts | null, rt: RuntimeFunction | null, callee: string, whole: boolean): boolean -> @writesShared
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: RuntimeFunction.sharedWrite nish_str_eq
-  pointer f: size=456 writesThrough=false captured=false
-  pointer calleeFacts: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
+  pointer calleeFacts: size=448 writesThrough=false captured=false
   pointer rt: size=40 writesThrough=false captured=false passedTo=RuntimeFunction.sharedWrite#0
   stackSites=0 stackLocals=0
   callee +0:25 RuntimeFunction.sharedWrite -> @RuntimeFunction.sharedWrite
@@ -3546,7 +3546,7 @@ function writesArgument(g: FunctionFacts | null, index: i32): boolean -> @writes
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: FunctionFacts.pointerParamAt
-  pointer g: size=456 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
+  pointer g: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
   stackSites=0 stackLocals=0
   local +0:9 target: PointerParamFacts | null (const)
   callee +0:18 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
@@ -3554,7 +3554,7 @@ function keepsArgument(g: FunctionFacts | null, index: i32): boolean -> @keepsAr
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: FunctionFacts.pointerParamAt
-  pointer g: size=456 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
+  pointer g: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParamAt#0
   stackSites=0 stackLocals=0
   local +0:9 target: PointerParamFacts | null (const)
   callee +0:18 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
@@ -3563,7 +3563,7 @@ function markParam(f: FunctionFacts, name: string, deep: boolean): boolean -> @m
   sharedWrite: +0:5
   escaping: name
   calls: FunctionFacts.pointerParam
-  pointer f: size=456 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local -6:9 pp: PointerParamFacts | null (const)
   callee -6:14 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
@@ -3572,7 +3572,7 @@ function markAll(f: FunctionFacts): boolean -> @markAll
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via markParam
   calls: markParam
-  pointer f: size=456 writesThrough=false captured=false passedTo=markParam#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=markParam#0
   stackSites=0 stackLocals=0
   local +0:7 changed: boolean (let)
   local +1:14 pp: PointerParamFacts (const)
@@ -3588,7 +3588,7 @@ function markForeign(f: FunctionFacts, root: string, steps: string, below: boole
   sharedWrite: via markAll
   escaping: steps
   calls: markAll markParam nish_str_eq stepsUnder
-  pointer f: size=456 writesThrough=false captured=false passedTo=markAll#0 markParam#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=markAll#0 markParam#0
   stackSites=0 stackLocals=0
   local +0:7 changed: boolean (let)
   local +1:14 d: DirtMark (const)
@@ -3603,7 +3603,7 @@ function reachesForeign(f: FunctionFacts, root: string, steps: string, below: bo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: steps
   calls: nish_str_eq stepsUnder
-  pointer f: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 d: DirtMark (const)
   local +4:11 over: boolean (const)
@@ -3624,7 +3624,7 @@ function storeName(f: FunctionFacts, name: string): boolean -> @storeName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: leaksNow nish_str_eq
-  pointer f: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -3:7 changed: boolean (let)
   local -2:14 pp: PointerParamFacts (const)
@@ -3633,7 +3633,7 @@ function markStores(f: FunctionFacts, path: MemPath): boolean -> @markStores
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storeName
   calls: FunctionFacts.pointerParam nish_str_eq stepsUnder storeName
-  pointer f: size=456 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0 storeName#0 storeName#0 storeName#0 storeName#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0 storeName#0 storeName#0 storeName#0 storeName#0
   pointer path: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
@@ -3651,7 +3651,7 @@ function markPath(f: FunctionFacts, path: MemPath, deep: boolean): boolean -> @m
   sharedWrite: via markParam
   escaping: deep
   calls: markAll markForeign markParam
-  pointer f: size=456 writesThrough=false captured=false passedTo=markParam#0 markAll#0 markForeign#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=markParam#0 markAll#0 markForeign#0
   pointer path: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 markParam -> @markParam
@@ -3660,7 +3660,7 @@ function markPath(f: FunctionFacts, path: MemPath, deep: boolean): boolean -> @m
 function valueClean(f: FunctionFacts, value: ValueDesc): boolean -> @valueClean
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: valueUnknown
-  pointer f: size=456 writesThrough=false captured=false passedTo=valueUnknown#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=valueUnknown#0
   pointer value: size=40 writesThrough=false captured=false passedTo=valueUnknown#1
   stackSites=0 stackLocals=0
   callee +0:33 valueUnknown -> @valueUnknown
@@ -3669,7 +3669,7 @@ function polluteName(f: FunctionFacts, name: string): boolean -> @polluteName
   sharedWrite: +0:7
   escaping: name
   calls: nish_str_eq storeName
-  pointer f: size=456 writesThrough=false captured=false passedTo=storeName#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=storeName#0
   stackSites=0 stackLocals=0
   local -3:7 changed: boolean (let)
   local -2:14 pp: PointerParamFacts (const)
@@ -3678,7 +3678,7 @@ function pollutePath(f: FunctionFacts, path: MemPath): boolean -> @pollutePath
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via polluteName
   calls: polluteName
-  pointer f: size=456 writesThrough=false captured=false passedTo=polluteName#0 polluteName#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=polluteName#0 polluteName#0
   pointer path: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 polluteName -> @polluteName
@@ -3721,7 +3721,7 @@ function walkTable(iterable: Node): Node -> @walkTable
 function isDirty(f: FunctionFacts, key: string): boolean -> @isDirty
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
-  pointer f: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 d: DirtMark (const)
 function keepsAnything(ctors: FunctionFacts | null[]): boolean -> @keepsAnything
@@ -3732,7 +3732,7 @@ function keepsAnything(ctors: FunctionFacts | null[]): boolean -> @keepsAnything
 function valueUnknown(f: FunctionFacts, value: ValueDesc): boolean -> @valueUnknown
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isDirty keepsAnything
-  pointer f: size=456 writesThrough=false captured=false passedTo=isDirty#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=isDirty#0
   pointer value: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:24 keepsAnything -> @keepsAnything
@@ -3742,7 +3742,7 @@ function settleDirt(f: FunctionFacts, d: DirtMark): boolean -> @settleDirt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: FunctionFacts.pointerParamAt nish_panic_overflow valueUnknown
-  pointer f: size=456 writesThrough=false captured=false passedTo=valueUnknown#0 valueUnknown#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=valueUnknown#0 valueUnknown#0
   pointer d: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -29:7 active: boolean (let)
@@ -3759,12 +3759,12 @@ function settleDirt(f: FunctionFacts, d: DirtMark): boolean -> @settleDirt
 function markPastWrite(f: FunctionFacts, elsewhere: boolean): boolean -> @markPastWrite
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  pointer f: size=456 writesThrough=true captured=false
+  pointer f: size=448 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function pastBelow(f: FunctionFacts, edge: ArgEdge): i32 -> @pastBelow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionFacts.pointerParamAt reachesForeign
-  pointer f: size=456 writesThrough=false captured=false passedTo=reachesForeign#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=reachesForeign#0
   pointer edge: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 g: FunctionFacts | null (const)
@@ -3784,7 +3784,7 @@ function callWrites(f: FunctionFacts, edge: ArgEdge, deep: boolean): boolean -> 
   sharedWrite: via markPath
   escaping: deep
   calls: markPath
-  pointer f: size=456 writesThrough=false captured=false passedTo=markPath#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=markPath#0
   pointer edge: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:81 markPath -> @markPath
@@ -3792,7 +3792,7 @@ function keepsOwn(f: FunctionFacts, edge: ArgEdge): boolean -> @keepsOwn
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: FunctionFacts.pointerParamAt isDirty
-  pointer f: size=456 writesThrough=false captured=false passedTo=isDirty#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=isDirty#0
   pointer edge: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -16:9 mark: DirtMark | null (const)
@@ -3807,7 +3807,7 @@ function settleKeeps(f: FunctionFacts): boolean -> @settleKeeps
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: FunctionFacts.pointerParam nish_str_eq
-  pointer f: size=456 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer f: size=448 writesThrough=true captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local -6:7 changed: boolean (let)
   local -5:14 d: DirtMark (const)
@@ -3818,7 +3818,7 @@ function composeArguments(f: FunctionFacts): boolean -> @composeArguments
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: FunctionFacts.pointerParam FunctionFacts.pointerParamAt callWrites edgeWrites keepsArgument keepsOwn markPastWrite markPath markStores nish_panic_index pastBelow polluteName pollutePath reachesForeign settleDirt valueClean
-  pointer f: size=456 writesThrough=true captured=false passedTo=settleDirt#0 markPath#0 markStores#0 reachesForeign#0 markPastWrite#0 callWrites#0 markStores#0 pastBelow#0 markPastWrite#0 valueClean#0 polluteName#0 keepsOwn#0 pastBelow#0 markPastWrite#0 callWrites#0 markStores#0 pollutePath#0 markPastWrite#0 reachesForeign#0 markPastWrite#0 FunctionFacts.pointerParam#0 markPastWrite#0
+  pointer f: size=448 writesThrough=true captured=false passedTo=settleDirt#0 markPath#0 markStores#0 reachesForeign#0 markPastWrite#0 callWrites#0 markStores#0 pastBelow#0 markPastWrite#0 valueClean#0 polluteName#0 keepsOwn#0 pastBelow#0 markPastWrite#0 callWrites#0 markStores#0 pollutePath#0 markPastWrite#0 reachesForeign#0 markPastWrite#0 FunctionFacts.pointerParam#0 markPastWrite#0
   stackSites=0 stackLocals=0
   local -21:7 changed: boolean (let)
   local -20:14 d: DirtMark (const)
@@ -3871,7 +3871,7 @@ function composeArguments(f: FunctionFacts): boolean -> @composeArguments
 function writesAnArgument(f: FunctionFacts, callee: string): boolean -> @writesAnArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionFacts.pointerParamAt edgeWrites nish_str_eq pastBelow reachesForeign
-  pointer f: size=456 writesThrough=false captured=false passedTo=pastBelow#0 pastBelow#0 reachesForeign#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=pastBelow#0 pastBelow#0 reachesForeign#0
   stackSites=0 stackLocals=0
   local +0:14 edge: ArgEdge (const)
   callee +1:35 pastBelow -> @pastBelow
@@ -4065,7 +4065,7 @@ function bodyDisturbs(body: Node, names: string[]): boolean -> @bodyDisturbs
 function functionAttributes(f: FunctionFacts): string[] -> @functionAttributes [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
-  pointer f: size=456 writesThrough=false captured=false
+  pointer f: size=448 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 attrs: string[] (const)
 function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts, privateAbi: boolean): string[] -> @paramAttributes [exported]
@@ -4073,7 +4073,7 @@ function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionF
   escaping: name type
   calls: FunctionFacts.pointerParam StringSet.has TypeTable.isFnRef TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer table: size=168 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.isFnRef#0 TypeTable.refOf#0 TypeTable.refOf#0
-  pointer f: size=456 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
+  pointer f: size=448 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
   local +0:9 attrs: string[] (const)
   callee +4:23 TypeTable.resultByValue -> @TypeTable.resultByValue

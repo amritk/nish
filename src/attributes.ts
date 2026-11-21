@@ -939,21 +939,21 @@ export class FunctionFacts {
    * the build asks for them (`Options.recordsPanics`).
    */
   panicSites: PanicSite[]
-  /**
-   * #2126: this function is `std/threads.ts`'s `slotOutOfRange`, the slot check
-   * of a four-argument `spawn`, whose callers' proof is made at the spawn
-   * (`PANIC_SPAWN_SLOT`), or its `dstTooShort`, the length check of
-   * `parallelMapInto`, proven at the map's call (`PANIC_PARALLEL_LENGTH`):
-   * `src/panics.ts` follows no call into it. Its own `panic` is still listed,
-   * at its own line.
-   */
-  callerProven: boolean
   /** `clearRecursiveWillReturn`'s visit number, from 1; 0 until the walk reaches this function. */
   cycleOrder: i32
   /** The lowest visit number this function reaches back to, in the same walk. */
   cycleLow: i32
   /** On the walk's stack: in the component still being collected. */
   onCycleStack: boolean
+  /**
+   * #2126: this function is `std/threads.ts`'s `slotOutOfRange`, the slot
+   * check of a four-argument `spawn`, whose callers' proof is made at the spawn
+   * (`PANIC_SPAWN_SLOT`), or its `dstTooShort`, the length check of
+   * `parallelMapInto`, proven at the map's call (`PANIC_PARALLEL_LENGTH`):
+   * `src/panics.ts` follows no call into it. Its own `panic` is still listed,
+   * at its own line. Beside `onCycleStack`, so the two share a word.
+   */
+  callerProven: boolean
   // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
   /**
    * The capabilities this function can reach, one bit each (`src/capabilities.ts`),
