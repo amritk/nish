@@ -7244,11 +7244,11 @@ if (dealtHere("emitTs")) {
           env: { ...process.env, NISH_ENCODES_TO: countFile },
         })
       : yamlTs
-  const yamlBytes = yamlRun.status === 0 ? Number(yamlRun.stdout.split(" ")[0]) : 0
+  const yamlUnits = yamlRun.status === 0 ? Number(yamlRun.stdout.split(" ")[0]) : 0
   const yamlEncodes = yamlRun.status === 0 && fs.existsSync(countFile) ? Number(fs.readFileSync(countFile, "utf8")) : Infinity
   check(
-    `emit-ts: a YAML load of ${yamlBytes} bytes under --emit-ts encodes under one string per thousand bytes (${yamlEncodes} encodes)`,
-    yamlBytes >= 100_000 && yamlEncodes * 1000 < yamlBytes,
+    `emit-ts: a YAML load of ${yamlUnits} UTF-16 units under --emit-ts encodes under one string per thousand units (${yamlEncodes} encodes)`,
+    yamlUnits >= 100_000 && yamlEncodes * 1000 < yamlUnits,
     `exit ${yamlRun.status}\n${yamlRun.stdout}${yamlRun.stderr}`
   )
 }
