@@ -6703,7 +6703,7 @@ if (dealtHere("stdPanics")) {
     const out = path.join(sweepDir, String(at))
     fs.mkdirSync(out, { recursive: true })
     // --allow-panics: the sweep counts sites, so it must build the module that has them
-    return spawnAsync(NISH, [module, ALLOW_PANICS, "--emit-panics", path.join(out, "panics.json"), "-o", `${out}/`], {
+    return spawnAsync(NISH, withAllowPanics(NISH, [module, "--emit-panics", path.join(out, "panics.json"), "-o", `${out}/`]), {
       cwd: root,
       encoding: "utf8",
     })
