@@ -1,16 +1,10 @@
-// Opt-out (`--allow-panics`): `ThreadScope.spawn` reaches the `panic` in
-// `slotOutOfRange` (std/threads.ts), which fires when a task's destination slot is
-// not in its array. Follow-up: make `spawn`'s slot store in `std/threads.ts`
-// panic-free, then build this file without `--allow-panics`.
-// smoke: args --allow-panics
-//
 // Four different questions about one series, asked at once (docs/wp29-thread-surface.md
 // §4.2): a scope from `nish/threads` runs each `spawn` on a thread of its own when
 // the block that declares it ends, and stores each answer in its slot of `answers`
 // once all four have finished. The tasks are heterogeneous — a prime count, a
 // Collatz search, a digit sum and a checksum — which is the shape `parallelMapInto`
 // cannot take.
-//   nish --allow-panics examples/tasks.ts --link build/tasks && ./build/tasks
+//   nish examples/tasks.ts --link build/tasks && ./build/tasks
 //   ./build/tasks --sequential     the same four calls, one after another
 // Under Node the same file runs each task at its `spawn`, one at a time, and prints
 // the same lines (`using` needs `--js-explicit-resource-management` before Node 24):
@@ -45,7 +39,9 @@ const primesBelow = (n: i32): u32 => {
 /**
  * The longest Collatz trajectory that starts below `n`, in steps. The walk is
  * in `f64`, which holds every value it reaches exactly, so it means the same
- * in either number mode and under Node.
+ * in either number mode and under Node. Evenness is `Math.floor(x / 2) * 2 === x`
+ * rather than `x % 2`, whose `fmodF64` (std/math.ts) keeps an overflow site
+ * a `--deny-panics` build refuses.
  */
 const longestCollatz = (n: i32): u32 => {
   let best: u32 = 0
@@ -53,7 +49,7 @@ const longestCollatz = (n: i32): u32 => {
     let x: f64 = toF64(start)
     let steps: u32 = 0
     while (x !== 1.0) {
-      x = x % 2.0 === 0.0 ? x / 2.0 : x * 3.0 + 1.0
+      x = Math.floor(x / 2.0) * 2.0 === x ? x / 2.0 : x * 3.0 + 1.0
       steps = steps + 1
     }
     if (steps > best) {
@@ -86,6 +82,24 @@ const checksum = (n: i32): u32 => {
   return acc
 }
 
+/**
+ * The task of slot `question`: one entry that every `spawn` names, so the four
+ * spawns are one loop whose slot is its counter, proven inside `answers` by the
+ * loop's own test (docs/LANGUAGE.md, "Panic sites").
+ */
+const ask = (question: i32): u32 => {
+  if (question === 0) {
+    return primesBelow(PRIMES)
+  }
+  if (question === 1) {
+    return longestCollatz(COLLATZ)
+  }
+  if (question === 2) {
+    return digitSum(DIGITS)
+  }
+  return checksum(CHECKSUM)
+}
+
 // Sized so each task takes about the same time on one core, which is what lets
 // four of them divide by four.
 const PRIMES: i32 = 3000000
@@ -97,16 +111,14 @@ export const main = (): i32 => {
   const answers: u32[] = [0, 0, 0, 0]
   const args = process.argv
   if (args.length > 1 && args[1] === "--sequential") {
-    answers[0] = primesBelow(PRIMES)
-    answers[1] = longestCollatz(COLLATZ)
-    answers[2] = digitSum(DIGITS)
-    answers[3] = checksum(CHECKSUM)
+    for (let q: i32 = 0; q < toI32(answers.length); q++) {
+      answers[q] = ask(q)
+    }
   } else {
     using s = scope()
-    s.spawn(primesBelow, PRIMES, answers, 0)
-    s.spawn(longestCollatz, COLLATZ, answers, 1)
-    s.spawn(digitSum, DIGITS, answers, 2)
-    s.spawn(checksum, CHECKSUM, answers, 3)
+    for (let q: i32 = 0; q < toI32(answers.length); q++) {
+      s.spawn(ask, q, answers, q)
+    }
   }
   // The tasks store into `answers` without changing its length, which a guard
   // states where the compiler can read it: the four reads below keep no check.

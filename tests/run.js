@@ -1757,6 +1757,7 @@ const DEALT_SECTIONS = {
   diagnostics: { name: "the diagnostics section", selected: selects("diagnostics") },
   performance: { name: "the performance section", selected: selects("performance") },
   memAwfy: { name: "the mem_awfy section", selected: selects("mem_awfy") },
+  stdPanics: { name: "the std-panics section", selected: selects("std-panics") },
   fix: {
     name: "the tests/fix section",
     // Every run takes it, whatever its filter, as it did before it was dealt.
@@ -6670,6 +6671,164 @@ if (dealtHere("performance")) {
   )
 }
 
+// ---- std-panics: the ratchet on std/'s panic sites --------------------------------
+//
+// Every git-tracked `std/` module is compiled as a root with `--allow-panics
+// --emit-panics`, and the sites the report does not discharge are counted: not
+// `proven` (the prover removed the check), not `allowed` (a `noPanic` site the
+// caller's flag lets through), and not of kind `call` (the callee's own sites,
+// counted where they are), `oom` (allocation failure, which every program
+// shares) or `unchecked` (the `nish:unsafe` opt-in, counted by its own rule).
+// A site reached from more than one root is one site: they are keyed by
+// `module:line:col:kind`. `tests/std-panics.json` holds the count per module
+// and per kind, and the count may only fall: a rise fails and names the sites
+// of that module and kind, a module that gains its first site fails, and a
+// fall fails until the baseline is rewritten to it
+// (`node tests/run.js std-panics --update-std-panics`), so a fixed site cannot
+// be traded for a new one. Its `kept` list names the explicit `panic(...)`
+// sites that stay, by function, with the reason (`docs/LANGUAGE.md`, "Panics
+// the standard library keeps"); the explicit sites of every other function
+// are the ones still to fix, and both counts are pinned.
+const UPDATE_STD_PANICS = process.argv.includes("--update-std-panics")
+if (dealtHere("stdPanics")) {
+  const baselineName = "tests/std-panics.json"
+  const baselineFile = path.join(root, baselineName)
+  const rewrite = `node tests/run.js std-panics --update-std-panics`
+  const modules = execFileSync("git", ["ls-files", "--", "std/*.ts", "std/**/*.ts"], { cwd: root, encoding: "utf8" })
+    .split("\n")
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts") && fs.existsSync(path.join(root, f)))
+  const sweepDir = path.join(buildDir, "std_panics")
+  fs.rmSync(sweepDir, { recursive: true, force: true })
+  const runs = await pool(modules, defaultJobs(), (module, at) => {
+    const out = path.join(sweepDir, String(at))
+    fs.mkdirSync(out, { recursive: true })
+    // --allow-panics: the sweep counts sites, so it must build the module that has them
+    return spawnAsync(NISH, withAllowPanics(NISH, [module, "--emit-panics", path.join(out, "panics.json"), "-o", `${out}/`]), {
+      cwd: root,
+      encoding: "utf8",
+    })
+  })
+  const unreported = []
+  const sites = new Map()
+  for (const [at, module] of modules.entries()) {
+    const report = path.join(sweepDir, String(at), "panics.json")
+    if (runs[at].status !== 0 || !fs.existsSync(report)) {
+      unreported.push(`${module}: exit ${runs[at].status}\n${runs[at].stderr}${runs[at].stdout}`)
+      continue
+    }
+    for (const fn of JSON.parse(fs.readFileSync(report, "utf8")).functions) {
+      for (const site of fn.panics) {
+        if (site.proven || site.allowed || ["call", "oom", "unchecked"].includes(site.kind)) {
+          continue
+        }
+        const key = `${fn.module}:${site.line}:${site.column}:${site.kind}`
+        if (!sites.has(key)) {
+          sites.set(key, { key, module: fn.module, function: fn.name, kind: site.kind })
+        }
+      }
+    }
+  }
+  check(
+    `std-panics: each of the ${modules.length} git-tracked std/ modules compiles as a root and reports its panic sites`,
+    modules.length > 0 && unreported.length === 0,
+    unreported.join("\n")
+  )
+  const counts = {}
+  for (const site of sites.values()) {
+    counts[site.module] ??= {}
+    counts[site.module][site.kind] = (counts[site.module][site.kind] ?? 0) + 1
+  }
+  const baseline = fs.existsSync(baselineFile)
+    ? JSON.parse(fs.readFileSync(baselineFile, "utf8"))
+    : { about: "", total: 0, explicit: { kept: 0, toFix: 0 }, modules: {}, kept: [] }
+  const keptOf = (site) =>
+    site.kind === "panic" && baseline.kept.some((k) => k.module === site.module && k.function === site.function)
+  const explicitSites = [...sites.values()].filter((site) => site.kind === "panic")
+  const explicit = {
+    kept: explicitSites.filter(keptOf).length,
+    toFix: explicitSites.filter((site) => !keptOf(site)).length,
+  }
+  const sorted = (object) => Object.fromEntries(Object.entries(object).sort(([a], [b]) => a.localeCompare(b)))
+  if (UPDATE_STD_PANICS && unreported.length === 0) {
+    const modulesOut = {}
+    for (const module of Object.keys(counts).sort()) {
+      modulesOut[module] = sorted(counts[module])
+    }
+    const next = { ...baseline, total: sites.size, explicit, modules: modulesOut, kept: baseline.kept }
+    fs.writeFileSync(baselineFile, `${JSON.stringify(next, null, 2)}\n`)
+    console.log(`std-panics: rewrote ${baselineName} (${sites.size} sites)`)
+    Object.assign(baseline, next)
+  }
+  const kinds = {}
+  for (const site of sites.values()) {
+    kinds[site.kind] = (kinds[site.kind] ?? 0) + 1
+  }
+  const perKind = Object.entries(kinds)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([kind, n]) => `${kind} ${n}`)
+    .join(", ")
+  const rises = []
+  const fresh = []
+  const falls = []
+  for (const module of [...new Set([...Object.keys(baseline.modules), ...Object.keys(counts)])].sort()) {
+    const want = baseline.modules[module]
+    const got = counts[module] ?? {}
+    if (want === undefined) {
+      const named = [...sites.values()].filter((site) => site.module === module).map((site) => `        ${site.key}`)
+      fresh.push(`${module}: ${named.length} site(s), and std/ admits no new module with one:\n${named.join("\n")}`)
+      continue
+    }
+    for (const kind of [...new Set([...Object.keys(want), ...Object.keys(got)])].sort()) {
+      const allowed = want[kind] ?? 0
+      const count = got[kind] ?? 0
+      if (count > allowed) {
+        const named = [...sites.values()]
+          .filter((site) => site.module === module && site.kind === kind)
+          .map((site) => `        ${site.key} (${site.function})`)
+        rises.push(`${module} ${kind}: ${count}, the baseline allows ${allowed}; one of these is new:\n${named.join("\n")}`)
+      } else if (count < allowed) {
+        falls.push(`${module} ${kind}: ${count}, the baseline says ${allowed}`)
+      }
+    }
+  }
+  check(
+    `std-panics: no std/ module has more panic sites of a kind than ${baselineName} allows (${sites.size} today: ${perKind})`,
+    unreported.length === 0 && rises.length === 0,
+    `${rises.join("\n")}\nProve the new site away, or return a Result where the failure is real (docs/LANGUAGE.md, "Panics the standard library keeps").`
+  )
+  check(
+    `std-panics: no std/ module gains its first panic site`,
+    unreported.length === 0 && fresh.length === 0,
+    fresh.join("\n")
+  )
+  check(
+    `std-panics: ${baselineName} is lowered wherever a count fell`,
+    unreported.length === 0 && falls.length === 0,
+    `${falls.join("\n")}\nA site removed is progress; write the baseline down to it with: ${rewrite}`
+  )
+  const keptGone = baseline.kept.filter(
+    (k) => !explicitSites.some((site) => site.module === k.module && site.function === k.function)
+  )
+  check(
+    `std-panics: every kept panic in ${baselineName} (${baseline.kept.length} functions) still has its site, and says why`,
+    unreported.length === 0 &&
+      keptGone.length === 0 &&
+      baseline.kept.every((k) => typeof k.reason === "string" && k.reason.length > 0),
+    [
+      ...keptGone.map((k) => `${k.module} ${k.function}: no explicit panic left; take it off the kept list`),
+      ...baseline.kept.filter((k) => !k.reason).map((k) => `${k.module} ${k.function}: no reason`),
+    ].join("\n")
+  )
+  check(
+    `std-panics: ${baselineName} counts ${explicit.kept} kept explicit panics and ${explicit.toFix} still to fix`,
+    unreported.length === 0 &&
+      baseline.explicit.kept === explicit.kept &&
+      baseline.explicit.toFix === explicit.toFix &&
+      baseline.total === sites.size,
+    `the baseline says ${baseline.explicit.kept} kept, ${baseline.explicit.toFix} to fix and ${baseline.total} in all; rewrite it with: ${rewrite}`
+  )
+}
+
 // #207's criteria 1 and 2, measured by hand there and pinned here (#325). The
 // AWFY harness is built as bench/run.mjs builds it, and no port calls `Arena`:
 // what each inner iteration allocates is handed back by the automatic arena
@@ -11148,8 +11307,8 @@ if (dealtHere("bench") && (!only || "yaml-compare".includes(only) || "bench".inc
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so every program
 // bench/instructions.json lists (bench/*.ts, the four WP32 map layout prototypes,
-// the three `Map` measurements, the seven AWFY ports and the crypto kernels of
-// bench/crypto/) is built as the timing mode builds it and run once under cachegrind, and a count above
+// the three `Map` measurements, the seven AWFY ports, the crypto kernels of
+// bench/crypto/ and the three std/ module programs) is built as the timing mode builds it and run once under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
 // bench/README.md ("Instruction counts") has the determinism measurements and

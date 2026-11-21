@@ -25,7 +25,7 @@
 //                       rewrites only their two tables and keeps the rest
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 31 programs executes
+//     --instructions    count the instructions each of the 34 programs executes
 //                       (the crypto kernels among them) under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
@@ -644,6 +644,30 @@ const CRYPTO_COUNTED = [
  */
 const FIXED_KEY = "fixed-key.so"
 
+/**
+ * The pool's size, pinned the same way. A parallel region divides its work
+ * among as many threads as the host has CPUs, and each thread is instructions
+ * of its own, so `std-threads` would count differently on a runner of four
+ * cores and a laptop of sixteen. `NISH_NUM_THREADS` (runtime/runtime-os.c)
+ * lowers the count to one on every host; no other counted program starts a
+ * thread.
+ */
+const PINNED_THREADS = "1"
+
+/**
+ * The std/ modules whose panic sites the std-panics ratchet counts and a fix
+ * would touch, each under a program of its own: `bench/<name>.ts`, built from
+ * its `.args` and run at the `n` bench/instructions.json names, like the
+ * counted bench/ programs. They have no twin and are not timed; the count
+ * only says whether a fix to a site moves the cost of the code around it.
+ * `--only std` names them all.
+ */
+const STD_COUNTED = [
+  { name: "std-threads", what: "scope spawns into proven slots, and parallelMapInto" },
+  { name: "std-json-typed", what: "jsonDecode of a nested document into fresh objects" },
+  { name: "std-cli-args", what: "Cli.parse of three command lines over one tree" },
+]
+
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
 const change = (count, base) => (count - base) / base
 
@@ -654,7 +678,7 @@ const change = (count, base) => (count - base) / base
  * binary on a host without libc's debug symbols. They are about 120 thousand
  * of a count in the hundreds of millions. What varies with the host is pinned
  * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD`,
- * `PINNED_CRYPTO`, `FIXED_KEY` and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
+ * `PINNED_CRYPTO`, `PINNED_THREADS`, `FIXED_KEY` and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
  * caller's variables nor the checkout's path reach the loader. bench/README.md
  * has the measurements that show what is left.
  */
@@ -676,6 +700,7 @@ const countInstructions = (valgrind, exe, args, name) => {
         GLIBC_TUNABLES: PINNED_LIBC,
         NISH_SIMD: PINNED_SIMD,
         ...PINNED_CRYPTO,
+        NISH_NUM_THREADS: PINNED_THREADS,
         LD_PRELOAD: `./${FIXED_KEY}`,
       },
       encoding: "utf8",
@@ -698,7 +723,7 @@ const countInstructions = (valgrind, exe, args, name) => {
 /**
  * `--instructions`: build the eight counted bench/ programs, the four map layout
  * prototypes, the three `Map` measurements, the seven AWFY ports and the
- * crypto families' programs, and run them at the sizes bench/instructions.json
+ * crypto families' programs and the three std/ module programs, and run them at the sizes bench/instructions.json
  * names (each crypto kernel once, at its own size and iterations); count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */
@@ -721,15 +746,17 @@ const runInstructions = () => {
     ...MAP_MEASURES.map((b) => b.name),
     ...AWFY.map((b) => b.name),
     ...CRYPTO_COUNTED.map((b) => b.name),
+    ...STD_COUNTED.map((b) => b.name),
   ]
   const listed = Object.keys(baseline.programs)
   if (listed.join(",") !== names.join(",")) {
     fail(`bench/instructions.json must list ${names.join(", ")} in that order; it lists ${listed.join(", ")}`)
   }
-  // `awfy`, `maps` and `crypto` name their whole group, as they do outside --instructions.
+  // `awfy`, `maps` and `crypto` name their whole group, as they do outside
+  // --instructions; `std` names the std/ programs, which only this mode runs.
   const wanted = (name, group) => !opts.only || opts.only.has(name) || (group !== "" && opts.only.has(group))
   for (const name of opts.only ?? []) {
-    if (name !== "awfy" && name !== "maps" && name !== "crypto" && !names.includes(name)) {
+    if (name !== "awfy" && name !== "maps" && name !== "crypto" && name !== "std" && !names.includes(name)) {
       fail(`unknown benchmark \`${name}\``)
     }
   }
@@ -748,6 +775,7 @@ const runInstructions = () => {
   const programs = [
     ...counted.filter((x) => wanted(x.name, "")),
     ...[...MAPS, ...MAP_MEASURES].filter((x) => wanted(x.name, "maps")),
+    ...STD_COUNTED.filter((x) => wanted(x.name, "std")),
   ]
   for (const b of programs) {
     const n = baseline.programs[b.name].n

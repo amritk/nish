@@ -18408,6 +18408,45 @@ const DECLARED = [
     changelog: "short Postgres int columns without the overflow test",
     why: "`PgConnection.reserve` keeps only its length test and calls the new `PgConnection.grow` when the buffer is short, so the program's own module, which declares the connection's put methods, gains that declaration and renumbers the ones after it",
   })),
+  // The std/ instruction benches compile against this tree's std/, which the
+  // seed's own std/ differs from or refuses.
+  {
+    program: "bench/std-cli-args.ts",
+    file: "cli-args.ll",
+    changelog: "std/ panic ratchet",
+    why: "a new instruction bench driving std/cli-args.ts: the reference compiles it against the seed's std/cli-args.ts, whose functions, hash key and `Cli` constructor differ from this tree's",
+  },
+  ...[
+    "bytes.ll",
+    "json-tokenizer.ll",
+    "json-typed.ll",
+    "json.ll",
+    "std-json-typed.h",
+    "std-json-typed.ll",
+  ].map((file) => ({
+    program: "bench/std-json-typed.ts",
+    file,
+    changelog: "std/ panic ratchet",
+    why: "a new instruction bench driving std/json-typed.ts: the reference compiles it against the seed's std/bytes.ts, std/json*.ts and std/json-typed.ts, which differ from this tree's, so every module it reaches and its own header and IR differ",
+  })),
+  {
+    program: "tests/link/spawn_slot_proven/main.ts",
+    file: "exit",
+    changelog: "caller-proven spawn slots",
+    why: "the candidate proves a `spawn` slot the caller's loop keeps in range and compiles the program under `--deny-panics`; the reference still counts std/threads.ts's slot check as a panic site and refuses it",
+  },
+  ...["examples/histogram.ts", "examples/tasks.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "caller-proven spawn slots",
+    why: "the example now builds without `--allow-panics`: the candidate proves each `spawn` slot its loop keeps in range, where the reference still counts std/threads.ts's slot check as a panic site and refuses the call",
+  })),
+  {
+    program: "tests/link/parallel_length_proven/main.ts",
+    file: "exit",
+    changelog: "caller-proven spawn slots",
+    why: "the candidate proves the `parallelMapInto` call's `src.length <= dst.length` from the caller's guard and compiles the program under the default no-panic scope; the reference has no such proof and refuses it",
+  },
   // WP72 S6a: a route marked `streamBody` takes its HTTP/2 body in pieces.
   // `Http2Stream` gains `held` and `owed`, so its struct moves in the header
   // of a program that links nish/net/http2 itself; the new probe calls

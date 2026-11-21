@@ -1,9 +1,10 @@
-// --deny-panics refuses `parallelMapInto`, whose length check no proof
-// removes yet.
+// --deny-panics refuses `parallelMapInto` when no test proves `dst` at least
+// as long as `src`. The callback cannot panic, so the length check is the
+// only site the case pins.
 import { parallelMapInto } from "nish/threads";
 
-const double = (x: i32): i32 => x * 2;
+const flip = (x: i32): i32 => x ^ 1;
 
-export const doubleAll = (src: i32[], dst: i32[]): void => {
-  parallelMapInto(src, dst, double);
+export const flipAll = (src: i32[], dst: i32[]): void => {
+  parallelMapInto(src, dst, flip);
 };

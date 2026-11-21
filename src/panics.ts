@@ -98,6 +98,17 @@ export const PANIC_FFI_LENGTH: i32 = 16
  * reach it as a `call`.
  */
 export const PANIC_REGION: i32 = 17
+/**
+ * #2126: a four-argument `s.spawn(entry, arg, dst, at)`, whose task stores
+ * into `dst[at]` when its scope joins. `std/threads.ts` checks the slot in
+ * `spawn` and again in `storeResult`, by a call to `slotOutOfRange`, and a
+ * call into that function is not followed (`FunctionFacts.callerProven`):
+ * the check is this site's, at the spawn, proven as `dst[at]` would be there.
+ * The destination rules (docs/LANGUAGE.md, "Scoped tasks") keep the array's
+ * length from moving before the join, so a slot proven at the spawn holds at
+ * the store.
+ */
+export const PANIC_SPAWN_SLOT: i32 = 18
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -136,6 +147,8 @@ const panicKindName = (kind: i32): string => {
       return "ffi-length"
     case PANIC_REGION:
       return "region"
+    case PANIC_SPAWN_SLOT:
+      return "spawn-slot"
     default:
       return "oom"
   }
@@ -144,21 +157,19 @@ const panicKindName = (kind: i32): string => {
 /**
  * One place a function can panic.
  *
- * A `call` (and a `parallel-length`, which is a call into `parallelMapInto`
- * whose panic is the length check in `std/threads.ts`) is recorded at every
- * call as a candidate and kept only when the callee turns out to be able to
- * panic; `reaches` is then the first site the callee can panic at, followed
+ * A `call` is recorded at every call as a candidate and kept only when the
+ * callee turns out to be able to panic; `reaches` is then the first site the callee can panic at, followed
  * through as many calls as it takes, which is what a reader needs to find it.
  */
 export class PanicSite {
   node: Node
   /** The module the site is written in, for a diagnostic that points at it from another. */
   source: SourceFile
-  /** The LLVM symbol of the function the site is in. */
+  /** The `FunctionSig.name` of the function the site is in: its package-prefixed name, `Owner.method` for a member. */
   fn: string
-  /** The callee's symbol, for a `call` or a `parallel-length`; `""` otherwise. */
+  /** The callee's symbol, for a `call`; `""` otherwise. */
   callee: string
-  /** For a kept `call` or `parallel-length`: the first site its callee reaches. */
+  /** For a kept `call`: the first site its callee reaches. */
   reaches: PanicSite | null
   kind: i32
   /** The checker proved the check cannot fail, and the emitter left it out. */
@@ -185,8 +196,7 @@ export class PanicSite {
 }
 
 /** Whether `site` is a call whose site-ness is the callee's to decide. */
-const isCallSite = (site: PanicSite): boolean =>
-  site.kind === PANIC_CALL || site.kind === PANIC_PARALLEL_LENGTH
+const isCallSite = (site: PanicSite): boolean => site.kind === PANIC_CALL
 
 /**
  * Whether `site` is listed but never counts: out of memory, which no guard
@@ -420,10 +430,13 @@ const callsMayPanic = (facts: FactsTable, may: boolean[], sites: PanicSite[], f:
   return false
 }
 
-/** Whether the function called `name` may panic; false for a runtime symbol. */
+/**
+ * Whether the function called `name` may panic; false for a runtime symbol,
+ * and for a check its callers prove (`FunctionFacts.callerProven`).
+ */
 const mayPanicAt = (facts: FactsTable, may: boolean[], name: string): boolean => {
   const at = facts.indexOf(name)
-  return at >= 0 && at < may.length && may[at]
+  return at >= 0 && at < may.length && may[at] && !facts.list[at].callerProven
 }
 
 /**
@@ -473,10 +486,13 @@ const firstPanic = (
   return null
 }
 
-/** What the function called `name` can panic at first, or null: none, or a runtime symbol. */
+/**
+ * What the function called `name` can panic at first, or null: none, a
+ * runtime symbol, or a check its callers prove (`FunctionFacts.callerProven`).
+ */
 const reachOf = (facts: FactsTable, reach: (PanicSite | null)[], name: string): PanicSite | null => {
   const at = facts.indexOf(name)
-  return at >= 0 && at < reach.length ? reach[at] : null
+  return at >= 0 && at < reach.length && !facts.list[at].callerProven ? reach[at] : null
 }
 
 /** The facts of a function `--emit-panics` lists: one with a body, defined in `program`. */
@@ -538,8 +554,8 @@ const keepSites = (
  *
  *   {"name","symbol","module","line","panics":[...]}
  *
- * and per site `{"kind","line","column"}` followed by `"proven"` for a check,
- * `"proven","callee"` for a `parallel-length`, `"callee","via"` for a `call`
+ * and per site `{"kind","line","column"}` followed by `"proven"` for a check
+ * (a `parallel-length` included), `"callee","via"` for a `call`
  * (`via` is the kind of the site the callee reaches) and `"allowed":true` for
  * an `oom` and an `unchecked`. `symbol` is the function's LLVM name, which is how a reader finds
  * it in the IR (`<name>.resume` for an `async` function that awaits); `callee` is the callee's name as a diagnostic spells it.
@@ -720,7 +736,9 @@ const refuseSite = (
   const node = site.node
   const reaches = site.reaches
   if (site.kind === PANIC_CALL) {
-    if (reaches === null || scoped.has(site.callee)) {
+    // A callee in the scope, or one whose first site is in a function of the
+    // scope (a callback the call instantiates), is refused at that site.
+    if (reaches === null || scoped.has(site.callee) || scoped.has(reaches.fn)) {
       return false
     }
     const callee = facts.get(site.callee)
@@ -738,10 +756,6 @@ const refuseSite = (
           : `: every module of this package is in it by default, and \`${ALLOW_PANICS_FLAG}\` takes out the ones \`noPanic\` does not list`)
     )
     return true
-  }
-  // A `parallelMapInto` is kept only when its body can panic, which is the length check.
-  if (site.kind === PANIC_PARALLEL_LENGTH && reaches === null) {
-    return false
   }
   sink.report(
     program.source,
@@ -832,8 +846,9 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return ioExitAdvice(program, node)
     case PANIC_PARALLEL_LENGTH:
       return (
-        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: " +
-        OUT_OF_SCOPE
+        "`parallelMapInto` panics when `dst` is shorter than `src`: guard the call with " +
+        "`if (dst.length < src.length) return`, or map in place with `src` as `dst`, " +
+        "and the check is proven"
       )
     case PANIC_OVERFLOW:
       return overflowAdvice(program, table, node)
@@ -858,6 +873,8 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
         "the array's length panics before the call: pass `toU64(buf.length)` of the buffer itself, which " +
         "needs no check"
       )
+    case PANIC_SPAWN_SLOT:
+      return spawnSlotAdvice(program, table, node)
     case PANIC_REGION:
       return (
         "`nish:region` checks the handle at every call, and stops the program on one that is freed, entered " +
@@ -901,6 +918,23 @@ const indexAdvice = (program: CheckedProgram, table: TypeTable, node: Node): str
       : "this index is not proven to be in range here"
   // The guard NL9007 offers, or none where no spelling is credited.
   return `${what}: ${indexGuardAdvice(program, table, index, i, xs)}`
+}
+
+/**
+ * A four-argument `spawn` stores its task's answer into `dst[at]`, so its
+ * slot is proven as that index would be at the call (`PANIC_SPAWN_SLOT`).
+ */
+const spawnSlotAdvice = (program: CheckedProgram, table: TypeTable, call: Node): string => {
+  const args = call.children[1].children
+  const holder = siteLocalName(program, args[2])
+  const name = siteLocalName(program, args[3])
+  const xs = holder.length > 0 ? holder : "dst"
+  const i = name.length > 0 ? name : "at"
+  const what =
+    name.length > 0 && holder.length > 0
+      ? `\`${i}\` is not proven to be a slot of \`${xs}\` here`
+      : "this slot is not proven to be in its array here"
+  return `${what}, and \`spawn\` panics on one that is not: ${indexGuardAdvice(program, table, args[3], i, xs)}`
 }
 
 /**

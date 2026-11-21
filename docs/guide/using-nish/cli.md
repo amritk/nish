@@ -837,6 +837,10 @@ leaves the IR unchanged.
   removes. The standard library is not yet panic-free, so a call to `Map`,
   `Set`, `split` or a `JSON` read is refused too, for now
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
+  Its count of panic sites only falls, and a `panic` it keeps on purpose
+  means the call broke a contract the function's doc states, such as an
+  index outside an array the caller sized
+  ([Panics the standard library keeps](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#panics-the-standard-library-keeps)).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
   list in your `package.json`'s `"nish"` field names are still held to no
   panic, and with no list, none is. **`--deny-panics`** spells the default

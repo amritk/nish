@@ -16,6 +16,7 @@ import Node from "./nodes" -> struct Node
 import StringMap from "./map" -> struct StringMap
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
+import PAR_MAP from "./program" -> const PAR_MAP
 import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
 import ROLE_METHOD from "./program" -> const ROLE_METHOD
 import inlineElementStruct from "./program" -> function @inlineElementStruct
@@ -24,6 +25,9 @@ import isAsciiText from "./strings" -> function @isAsciiText
 import isSimdExport from "./nish-modules" -> function @isSimdExport
 import simdSuffix from "./nish-modules" -> function @simdSuffix
 import simdTypeLane from "./nish-modules" -> function @simdTypeLane
+import isSpawnEntry from "./parallel" -> function @isSpawnEntry
+import isVoidSpawn from "./parallel" -> function @isVoidSpawn
+import parallelRoleOf from "./parallel" -> function @parallelRoleOf
 import Local from "./symbols" -> struct Local
 import STORAGE_LOCAL from "./symbols" -> const STORAGE_LOCAL
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
@@ -281,6 +285,14 @@ function knownAtMost(state: State, i: Local, w: Local): boolean -> @knownAtMost
   stackSites=0 stackLocals=0
   local +0:7 k: i32 (let)
   callee +7:10 knownBelow -> @knownBelow
+function knownLengthAtMost(state: State, src: Local, dst: Local): boolean -> @knownLengthAtMost
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: knownAtMost
+  pointer state: size=120 writesThrough=false captured=false passedTo=knownAtMost#0
+  pointer src: size=64 writesThrough=false captured=false passedTo=knownAtMost#1
+  pointer dst: size=64 writesThrough=false captured=false passedTo=knownAtMost#2
+  stackSites=0 stackLocals=0
+  callee +0:18 knownAtMost -> @knownAtMost
 function holdersAbove(state: State, i: Local): Local[] -> @holdersAbove
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: contains nish_array_grow nish_panic_index
@@ -812,6 +824,20 @@ function lengthOf(walk: BoundsWalk, expr: Node): Local | null -> @lengthOf
   callee +1:35 isBuiltinToI32 -> @isBuiltinToI32
   callee +2:9 unwrapBoundsParens -> @unwrapBoundsParens
   callee +7:10 holderOf -> @holderOf
+function exactArrayLengthOf(walk: BoundsWalk, expr: Node): Local | null -> @exactArrayLengthOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via holderOf
+  calls: TypeTable.isArray holderOf isBuiltinToI32 nish_panic_index nish_str_eq unwrapBoundsParens
+  pointer walk: size=200 writesThrough=false captured=false passedTo=holderOf#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
+  stackSites=0 stackLocals=0
+  local +0:7 e: Node (let)
+  callee +0:11 unwrapBoundsParens -> @unwrapBoundsParens
+  callee +1:35 isBuiltinToI32 -> @isBuiltinToI32
+  callee +2:9 unwrapBoundsParens -> @unwrapBoundsParens
+  local +10:9 holder: Local | null (const)
+  callee +10:18 holderOf -> @holderOf
+  callee +11:29 TypeTable.isArray -> @TypeTable.isArray
 function unsignedIndexOf(ctx: CheckContext, expr: Node): Local | null -> @unsignedIndexOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBuiltinConversion localOf nish_panic_index unwrapBoundsParens
@@ -1017,10 +1043,10 @@ function squareRootFloor(n: i32): i32 -> @squareRootFloor
 function orderFacts(walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: boolean): Fact[] -> @orderFacts
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via lengthOf
-  calls: Fact.constructor TypeTable.baseOf holdersAbove indexLocal knownBelow lengthOf literalValue maxIndexOf minusLiteral nish_alloc_struct nish_array_grow nish_panic_overflow offsetIndex squareRootFloor squaredLocal unsignedIndexOf unsignedLengthOf
-  pointer walk: size=200 writesThrough=false captured=false passedTo=lengthOf#0 lengthOf#0 unsignedLengthOf#0
+  calls: Fact.constructor TypeTable.baseOf TypeTable.isArray exactArrayLengthOf holdersAbove indexLocal knownBelow lengthOf literalValue maxIndexOf minusLiteral nish_alloc_struct nish_array_grow nish_panic_overflow offsetIndex squareRootFloor squaredLocal unsignedIndexOf unsignedLengthOf
+  pointer walk: size=200 writesThrough=false captured=false passedTo=lengthOf#0 lengthOf#0 unsignedLengthOf#0 exactArrayLengthOf#0
   pointer state: size=120 writesThrough=false captured=false passedTo=holdersAbove#0 knownBelow#0 holdersAbove#0 knownBelow#0 maxIndexOf#0 maxIndexOf#0 holdersAbove#0
-  pointer lo: size=40 writesThrough=true captured=true passedTo=indexLocal#1 literalValue#0 offsetIndex#1 unsignedIndexOf#1 squaredLocal#1
+  pointer lo: size=40 writesThrough=true captured=true passedTo=indexLocal#1 literalValue#0 offsetIndex#1 unsignedIndexOf#1 exactArrayLengthOf#1 squaredLocal#1
   pointer hi: size=40 writesThrough=true captured=true passedTo=indexLocal#1 literalValue#0 lengthOf#1 minusLiteral#1 unsignedLengthOf#1
   stackSites=0 stackLocals=0
   local +0:9 ctx: CheckContext (const)
@@ -1070,19 +1096,23 @@ function orderFacts(walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   callee +78:14 new Fact -> @Fact.constructor
   callee +82:14 new Fact -> @Fact.constructor
   callee +87:14 new Fact -> @Fact.constructor
-  local +93:9 root: Local | null (const)
-  callee +93:16 squaredLocal -> @squaredLocal
-  local +95:9 ceiling: i32 (let)
-  callee +97:17 maxIndexOf -> @maxIndexOf
-  callee +101:16 new Fact -> @Fact.constructor
-  callee +101:53 squareRootFloor -> @squareRootFloor
-  local +108:11 bound: i32 (const)
-  callee +108:19 maxIndexOf -> @maxIndexOf
-  local +109:11 below: i32 (const)
-  callee +111:16 new Fact -> @Fact.constructor
-  local +119:16 above: Local (const)
-  callee +119:25 holdersAbove -> @holdersAbove
-  callee +120:16 new Fact -> @Fact.constructor
+  local +92:9 loArray: Local | null (const)
+  callee +92:19 exactArrayLengthOf -> @exactArrayLengthOf
+  callee +93:48 TypeTable.isArray -> @TypeTable.isArray
+  callee +94:14 new Fact -> @Fact.constructor
+  local +100:9 root: Local | null (const)
+  callee +100:16 squaredLocal -> @squaredLocal
+  local +102:9 ceiling: i32 (let)
+  callee +104:17 maxIndexOf -> @maxIndexOf
+  callee +108:16 new Fact -> @Fact.constructor
+  callee +108:53 squareRootFloor -> @squareRootFloor
+  local +115:11 bound: i32 (const)
+  callee +115:19 maxIndexOf -> @maxIndexOf
+  local +116:11 below: i32 (const)
+  callee +118:16 new Fact -> @Fact.constructor
+  local +126:16 above: Local (const)
+  callee +126:25 holdersAbove -> @holdersAbove
+  callee +127:16 new Fact -> @Fact.constructor
 function equalityFacts(walk: BoundsWalk, left: Node, right: Node): Fact[] -> @equalityFacts
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via addEqualityFacts
@@ -1322,10 +1352,10 @@ function impliesNonNegative(walk: BoundsWalk, state: State, expr: Node): boolean
 function initialiserFacts(walk: BoundsWalk, state: State, v: Local, init: Node): Fact[] -> @initialiserFacts
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: Fact.constructor TypeTable.baseOf convertedRange differenceFacts impliesNonNegative indexLocal initialiserArrayFacts isIndexType lengthOf literalValue nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq rangeFacts unwrapBoundsParens
-  pointer walk: size=200 writesThrough=false captured=false passedTo=impliesNonNegative#0 lengthOf#0 convertedRange#0 differenceFacts#0 rangeFacts#0 differenceFacts#0 lengthOf#0
+  calls: Fact.constructor TypeTable.baseOf TypeTable.isArray convertedRange differenceFacts exactArrayLengthOf impliesNonNegative indexLocal initialiserArrayFacts isIndexType lengthOf literalValue nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq rangeFacts unwrapBoundsParens
+  pointer walk: size=200 writesThrough=false captured=false passedTo=impliesNonNegative#0 lengthOf#0 convertedRange#0 exactArrayLengthOf#0 differenceFacts#0 rangeFacts#0 differenceFacts#0 lengthOf#0
   pointer state: size=120 writesThrough=false captured=false passedTo=impliesNonNegative#1 differenceFacts#1 rangeFacts#1 differenceFacts#1
-  pointer v: size=64 writesThrough=true captured=true passedTo=Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 initialiserArrayFacts#1 differenceFacts#2 rangeFacts#2 differenceFacts#2 Fact.constructor#2
+  pointer v: size=64 writesThrough=true captured=true passedTo=Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#2 Fact.constructor#3 initialiserArrayFacts#1 differenceFacts#2 rangeFacts#2 differenceFacts#2 Fact.constructor#2
   pointer init: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=0 stackLocals=0
   local -4:9 ctx: CheckContext (const)
@@ -1349,23 +1379,27 @@ function initialiserFacts(walk: BoundsWalk, state: State, v: Local, init: Node):
   callee +18:29 isIndexType -> @isIndexType
   callee +20:16 new Fact -> @Fact.constructor
   callee +24:8 isIndexType -> @isIndexType
-  callee +25:12 initialiserArrayFacts -> @initialiserArrayFacts
-  local +30:9 copied: Local | null (const)
-  callee +30:18 indexLocal -> @indexLocal
-  callee +31:26 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +31:60 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +32:5 differenceFacts -> @differenceFacts
-  callee +35:3 rangeFacts -> @rangeFacts
-  local +37:11 c: i32 (const)
-  callee +37:15 literalValue -> @literalValue
-  local +38:11 w: Local | null (const)
-  callee +38:15 indexLocal -> @indexLocal
-  callee +39:33 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +39:62 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +40:7 differenceFacts -> @differenceFacts
-  local +45:11 above: Local | null (const)
-  callee +45:19 lengthOf -> @lengthOf
-  callee +47:16 new Fact -> @Fact.constructor
+  callee +26:9 TypeTable.isArray -> @TypeTable.isArray
+  local +27:13 sized: Local | null (const)
+  callee +27:21 exactArrayLengthOf -> @exactArrayLengthOf
+  callee +29:18 new Fact -> @Fact.constructor
+  callee +32:12 initialiserArrayFacts -> @initialiserArrayFacts
+  local +37:9 copied: Local | null (const)
+  callee +37:18 indexLocal -> @indexLocal
+  callee +38:26 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +38:60 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +39:5 differenceFacts -> @differenceFacts
+  callee +42:3 rangeFacts -> @rangeFacts
+  local +44:11 c: i32 (const)
+  callee +44:15 literalValue -> @literalValue
+  local +45:11 w: Local | null (const)
+  callee +45:15 indexLocal -> @indexLocal
+  callee +46:33 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +46:62 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +47:7 differenceFacts -> @differenceFacts
+  local +52:11 above: Local | null (const)
+  callee +52:19 lengthOf -> @lengthOf
+  callee +54:16 new Fact -> @Fact.constructor
 function rangeFacts(walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact[]): void -> @rangeFacts
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1642,6 +1676,40 @@ function isCharCodeAt(ctx: CheckContext, call: Node): boolean -> @isCharCodeAt
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
   callee +0:18 unwrapBoundsParens -> @unwrapBoundsParens
+function isSlotSpawn(ctx: CheckContext, call: Node): boolean -> @isSlotSpawn
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isSpawnEntry isVoidSpawn nish_panic_index
+  pointer ctx: size=448 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 target: FunctionSig | null (const)
+  callee +2:24 isSpawnEntry -> @isSpawnEntry
+  callee +2:49 isVoidSpawn -> @isVoidSpawn
+function isParallelMapInto(ctx: CheckContext, call: Node): boolean -> @isParallelMapInto
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index parallelRoleOf
+  pointer ctx: size=448 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 target: FunctionSig | null (const)
+  callee +1:29 parallelRoleOf -> @parallelRoleOf
+function judgeParallelLength(walk: BoundsWalk, state: State, call: Node): void -> @judgeParallelLength
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via holderOf
+  calls: TypeTable.isArray holderOf knownLengthAtMost nish_panic_index noteProof
+  pointer walk: size=200 writesThrough=false captured=false passedTo=holderOf#0 holderOf#0 noteProof#0
+  pointer state: size=120 writesThrough=false captured=false passedTo=knownLengthAtMost#0
+  pointer call: size=40 writesThrough=true captured=true passedTo=noteProof#1
+  stackSites=0 stackLocals=0
+  local +0:9 args: Node[] (const)
+  local +1:9 src: Local | null (const)
+  callee +1:15 holderOf -> @holderOf
+  local +2:9 dst: Local | null (const)
+  callee +2:15 holderOf -> @holderOf
+  callee +6:6 TypeTable.isArray -> @TypeTable.isArray
+  callee +7:6 TypeTable.isArray -> @TypeTable.isArray
+  callee +11:7 knownLengthAtMost -> @knownLengthAtMost
+  callee +12:5 noteProof -> @noteProof
 function lazyResultMethod(ctx: CheckContext, call: Node): string -> @lazyResultMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq unwrapBoundsParens
@@ -2048,9 +2116,9 @@ function walkArgument(walk: BoundsWalk, state: State, arg: Node, callee: Functio
 function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walkOperands
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkExpression
-  calls: SliceStart.constructor addFacts applyAssignment applyCallEffects applyDecrement callsNothing cloneState conditionFacts copyInto forgetCallEffects forgetPathsThrough intersect isArrayPop isCharCodeAt isSliceCall isSubstringCall judge judgeClampBound judgeOverflow judgePop judgeSliceBound judgeVectorAccess lazyResultMethod lengthHolder localOf nish_panic_index nish_panic_overflow nish_str_eq noteCallSite unwrapBoundsParens vectorAccessLanes walkArgument walkBinary walkExpression writesLocal
-  pointer walk: size=200 writesThrough=true captured=false passedTo=walkExpression#0 walkExpression#0 judge#0 walkExpression#0 walkExpression#0 walkExpression#0 forgetCallEffects#0 walkArgument#0 judgeSliceBound#0 judgeClampBound#0 judge#0 judgeVectorAccess#0 judgePop#0 noteCallSite#0 applyCallEffects#0 walkArgument#0 applyCallEffects#0 walkBinary#0 walkExpression#0 conditionFacts#0 walkExpression#0 walkExpression#0 walkExpression#0 judgeOverflow#0 forgetPathsThrough#0 applyAssignment#0 applyDecrement#0 walkExpression#0
-  pointer state: size=120 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 cloneState#0 copyInto#0 intersect#0 forgetCallEffects#1 walkArgument#1 judgeSliceBound#1 judgeClampBound#1 judge#1 judgeVectorAccess#1 judgePop#1 noteCallSite#1 applyCallEffects#1 walkArgument#1 applyCallEffects#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 judgeOverflow#1 forgetPathsThrough#1 applyAssignment#1 applyDecrement#1 walkExpression#1
+  calls: SliceStart.constructor addFacts applyAssignment applyCallEffects applyDecrement callsNothing cloneState conditionFacts copyInto forgetCallEffects forgetPathsThrough intersect isArrayPop isCharCodeAt isParallelMapInto isSliceCall isSlotSpawn isSubstringCall judge judgeClampBound judgeOverflow judgeParallelLength judgePop judgeSliceBound judgeVectorAccess lazyResultMethod lengthHolder localOf nish_panic_index nish_panic_overflow nish_str_eq noteCallSite unwrapBoundsParens vectorAccessLanes walkArgument walkBinary walkExpression writesLocal
+  pointer walk: size=200 writesThrough=true captured=false passedTo=walkExpression#0 walkExpression#0 judge#0 walkExpression#0 walkExpression#0 walkExpression#0 forgetCallEffects#0 walkArgument#0 judgeSliceBound#0 judgeClampBound#0 judge#0 judge#0 judgeParallelLength#0 judgeVectorAccess#0 judgePop#0 noteCallSite#0 applyCallEffects#0 walkArgument#0 applyCallEffects#0 walkBinary#0 walkExpression#0 conditionFacts#0 walkExpression#0 walkExpression#0 walkExpression#0 judgeOverflow#0 forgetPathsThrough#0 applyAssignment#0 applyDecrement#0 walkExpression#0
+  pointer state: size=120 writesThrough=true captured=false passedTo=walkExpression#1 walkExpression#1 judge#1 walkExpression#1 walkExpression#1 cloneState#0 copyInto#0 intersect#0 forgetCallEffects#1 walkArgument#1 judgeSliceBound#1 judgeClampBound#1 judge#1 judge#1 judgeParallelLength#1 judgeVectorAccess#1 judgePop#1 noteCallSite#1 applyCallEffects#1 walkArgument#1 applyCallEffects#1 walkBinary#1 walkExpression#1 conditionFacts#1 cloneState#0 cloneState#0 copyInto#0 walkExpression#1 judgeOverflow#1 forgetPathsThrough#1 applyAssignment#1 applyDecrement#1 walkExpression#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   stackSites=1 stackLocals=0
   local +0:9 ctx: CheckContext (const)
@@ -2088,45 +2156,49 @@ function walkOperands(walk: BoundsWalk, state: State, expr: Node): void -> @walk
   callee +62:11 judgeClampBound -> @judgeClampBound
   callee +66:9 isCharCodeAt -> @isCharCodeAt
   callee +67:7 judge -> @judge
-  local +69:11 lanes: i32 (const)
-  callee +69:19 vectorAccessLanes -> @vectorAccessLanes
-  callee +71:7 judgeVectorAccess -> @judgeVectorAccess
-  callee +73:9 isArrayPop -> @isArrayPop
-  callee +74:7 judgePop -> @judgePop
-  callee +76:9 callsNothing -> @callsNothing
-  callee +82:7 noteCallSite -> @noteCallSite
-  callee +87:5 applyCallEffects -> @applyCallEffects
-  local +92:11 target: FunctionSig | null (const)
-  local +93:9 at: i32 (let)
-  local +94:16 arg: Node (const)
-  callee +95:7 walkArgument -> @walkArgument
-  callee +98:5 applyCallEffects -> @applyCallEffects
-  callee +103:5 walkBinary -> @walkBinary
-  callee +108:5 walkExpression -> @walkExpression
-  local +109:11 facts: ConditionFacts (const)
-  callee +109:19 conditionFacts -> @conditionFacts
-  local +110:11 whenTrue: State (const)
-  callee +110:22 cloneState -> @cloneState
-  callee +111:5 addFacts -> @addFacts
-  callee +112:5 walkExpression -> @walkExpression
-  local +113:11 whenFalse: State (const)
-  callee +113:23 cloneState -> @cloneState
-  callee +114:5 addFacts -> @addFacts
-  callee +115:5 walkExpression -> @walkExpression
-  callee +116:5 copyInto -> @copyInto
-  callee +116:21 intersect -> @intersect
-  local +121:11 operand: Node (const)
-  callee +122:5 walkExpression -> @walkExpression
-  callee +124:5 judgeOverflow -> @judgeOverflow
-  local +128:11 field: Node (const)
-  callee +128:19 unwrapBoundsParens -> @unwrapBoundsParens
-  callee +130:7 forgetPathsThrough -> @forgetPathsThrough
-  local +133:11 v: Local | null (const)
-  callee +133:15 localOf -> @localOf
-  callee +138:7 applyAssignment -> @applyAssignment
-  callee +140:7 applyDecrement -> @applyDecrement
-  local +149:14 child: Node (const)
-  callee +150:5 walkExpression -> @walkExpression
+  callee +69:9 isSlotSpawn -> @isSlotSpawn
+  callee +70:7 judge -> @judge
+  callee +72:9 isParallelMapInto -> @isParallelMapInto
+  callee +73:7 judgeParallelLength -> @judgeParallelLength
+  local +75:11 lanes: i32 (const)
+  callee +75:19 vectorAccessLanes -> @vectorAccessLanes
+  callee +77:7 judgeVectorAccess -> @judgeVectorAccess
+  callee +79:9 isArrayPop -> @isArrayPop
+  callee +80:7 judgePop -> @judgePop
+  callee +82:9 callsNothing -> @callsNothing
+  callee +88:7 noteCallSite -> @noteCallSite
+  callee +93:5 applyCallEffects -> @applyCallEffects
+  local +98:11 target: FunctionSig | null (const)
+  local +99:9 at: i32 (let)
+  local +100:16 arg: Node (const)
+  callee +101:7 walkArgument -> @walkArgument
+  callee +104:5 applyCallEffects -> @applyCallEffects
+  callee +109:5 walkBinary -> @walkBinary
+  callee +114:5 walkExpression -> @walkExpression
+  local +115:11 facts: ConditionFacts (const)
+  callee +115:19 conditionFacts -> @conditionFacts
+  local +116:11 whenTrue: State (const)
+  callee +116:22 cloneState -> @cloneState
+  callee +117:5 addFacts -> @addFacts
+  callee +118:5 walkExpression -> @walkExpression
+  local +119:11 whenFalse: State (const)
+  callee +119:23 cloneState -> @cloneState
+  callee +120:5 addFacts -> @addFacts
+  callee +121:5 walkExpression -> @walkExpression
+  callee +122:5 copyInto -> @copyInto
+  callee +122:21 intersect -> @intersect
+  local +127:11 operand: Node (const)
+  callee +128:5 walkExpression -> @walkExpression
+  callee +130:5 judgeOverflow -> @judgeOverflow
+  local +134:11 field: Node (const)
+  callee +134:19 unwrapBoundsParens -> @unwrapBoundsParens
+  callee +136:7 forgetPathsThrough -> @forgetPathsThrough
+  local +139:11 v: Local | null (const)
+  callee +139:15 localOf -> @localOf
+  callee +144:7 applyAssignment -> @applyAssignment
+  callee +146:7 applyDecrement -> @applyDecrement
+  local +155:14 child: Node (const)
+  callee +156:5 walkExpression -> @walkExpression
 function storesBackRange(ctx: CheckContext, node: Node): boolean -> @storesBackRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isRanged isBoundsAssignment nish_panic_index nish_str_eq
@@ -2737,18 +2809,19 @@ function analyzeBounds(ctx: CheckContext, body: Node): BoundsWalk -> @analyzeBou
   callee +10:5 walkExpression -> @walkExpression
 function judgesAnything(ctx: CheckContext, node: Node): boolean -> @judgesAnything
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: checksOverflow judgesAnything nish_panic_index nish_str_eq rangeEntryOf unwrapBoundsParens
-  pointer ctx: size=448 writesThrough=false captured=false passedTo=rangeEntryOf#0 judgesAnything#0 rangeEntryOf#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=rangeEntryOf#1 checksOverflow#2
+  calls: checksOverflow isParallelMapInto judgesAnything nish_panic_index nish_str_eq rangeEntryOf unwrapBoundsParens
+  pointer ctx: size=448 writesThrough=false captured=false passedTo=rangeEntryOf#0 isParallelMapInto#0 judgesAnything#0 rangeEntryOf#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=rangeEntryOf#1 checksOverflow#2 isParallelMapInto#1
   stackSites=0 stackLocals=0
   callee +0:39 rangeEntryOf -> @rangeEntryOf
   callee +3:7 checksOverflow -> @checksOverflow
   local +7:11 callee: Node (const)
   callee +7:20 unwrapBoundsParens -> @unwrapBoundsParens
   local +8:11 name: string (const)
-  local +20:14 child: Node (const)
-  callee +22:37 judgesAnything -> @judgesAnything
-  callee +22:66 rangeEntryOf -> @rangeEntryOf
+  callee +12:9 isParallelMapInto -> @isParallelMapInto
+  local +23:14 child: Node (const)
+  callee +25:37 judgesAnything -> @judgesAnything
+  callee +25:66 rangeEntryOf -> @rangeEntryOf
 function i64Max(): i64 -> @i64Max
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow

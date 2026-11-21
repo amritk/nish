@@ -22,7 +22,8 @@
                 ]
               },
               "panics": [
-                { "kind": "parallel-length", "at": "main.ts:15:3", "proven": false, "callee": "parallelMapInto<i32, i32, square>" },
+                { "kind": "parallel-length", "at": "main.ts:15:3", "proven": false },
+                { "kind": "call", "at": "main.ts:15:3", "callee": "parallelMapInto<i32, i32, square>", "via": "overflow" },
                 { "kind": "oom", "at": "main.ts:17:3", "allowed": true },
                 { "kind": "index", "at": "main.ts:17:15", "proven": false }
               ]
@@ -335,7 +336,6 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/threads.ts:194:5", "callee": "dstTooShort", "via": "panic" },
                 { "kind": "call", "at": "std/threads.ts:196:3", "callee": "mapRange<i32, i32, square>", "via": "overflow" }
               ]
             },

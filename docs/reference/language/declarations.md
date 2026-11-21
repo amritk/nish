@@ -3023,7 +3023,10 @@ export const main = (): i32 => {
   any element is written or any thread started: a shorter one panics with
   `parallelMapInto: dst has 2 elements and src has 3` and exits 1
   (`tests/link/par_dst_short`). `src` and `dst` may be the same array
-  (`tests/link/par_map`).
+  (`tests/link/par_map`). The call is a [`parallel-length` panic
+  site](semantics-decisions.md#panic-sites) of its caller, proven where `src.length <= dst.length`
+  holds, so a guard `if (dst.length < src.length) return` lets a
+  [no-panic](semantics-decisions.md#the-no-panic-scope) module call it.
 - **`parallelMap(src, f)`** answers a new array of `f(src[i])` for every
   index of `src`, and **`parallelFrom(n, f)`** a new array of `n` elements,
   `f(i)` at index `i` — `Array.from({ length: n }, (_, i) => f(i))`. Each
@@ -3467,6 +3470,9 @@ export const main = (): i32 => {
   `const` locals (below). `at` is checked at the spawn and
   again when the answer is stored; out of range is
   `spawn: destination index 3 is out of range for an array of 1 elements` and exit 1.
+  The call is a [`spawn-slot` panic site](semantics-decisions.md#panic-sites) of its caller, proven
+  as `dst[at]` would be, so a loop below `dst.length` lets a
+  [no-panic](semantics-decisions.md#the-no-panic-scope) module spawn into each slot.
 - **`s.spawn(entry, arg)` and `s.spawn(() => ...)` have no destination.** The
   task runs as any other does and its scope stores nothing when it joins, so
   `entry` answers `void`: it is seen through the guard of a
