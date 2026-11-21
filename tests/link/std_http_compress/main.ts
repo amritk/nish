@@ -11,9 +11,14 @@
 // request decided, and `identity;q=0` sent gzip below every threshold. Last,
 // segment mode's skip: a response that fits one segment as it is goes out
 // with no encoder run (`encoderRuns`), at the segment's edge and one byte past,
-// and `encoderRuns` wrapping past 2^31 - 1 rather than panicking.
+// and `encoderRuns` wrapping past 2^31 - 1 rather than panicking. Then
+// deflate: the zlib body from each encoder round tripping through
+// `ZlibDecompressor`, the level encoder's byte for byte `ZlibCompressor`'s,
+// the 12 bytes it saves over gzip at the saving threshold, its fields and its
+// HTTP/1.1 response, head arithmetic included, and more q-value negotiation.
 import { DEFLATE_FAST, DEFLATE_NO_ROOM } from "nish/compress/deflate"
 import { GzipDecompressor, GzipFixedCompressor } from "nish/compress/gzip"
+import { ZlibCompressor, ZlibDecompressor } from "nish/compress/zlib"
 import {
   HTTP_CODING_DEFLATE,
   HTTP_CODING_GZIP,
@@ -207,7 +212,6 @@ export const main = (): number => {
     t.ok(`compressor: 5221 bytes of JSON become ${n}`, n > 0 && n < 2000)
     t.eqI32("compressor: and gunzip back", gunzip.decompress(enc.output, 0, n, back, 0, 70000), 5221)
     t.eqI32("compressor: identity is not compressed", enc.compress(HTTP_CODING_IDENTITY, body, 0, 5221), -1)
-    t.eqI32("compressor: deflate is not produced", enc.compress(HTTP_CODING_DEFLATE, body, 0, 5221), -1)
     t.eqI32("compressor: under minLength is not compressed", enc.compress(HTTP_CODING_GZIP, body, 0, 255), -1)
     t.eqI32("compressor: over maxLength is not compressed", enc.compress(HTTP_CODING_GZIP, new Array<u8>(65537), 0, 65537), -1)
     const rng = new Rng(7)
@@ -604,6 +608,117 @@ export const main = (): number => {
     t.eqI32("runs: wraps to -2^31", p.encoderRuns, -2147483648)
     p.encoderRuns = 2147483647
     t.ok("runs: so does compressAnyway", p.compressAnyway(HTTP_CODING_GZIP, body, 0, 40) > 0 && p.encoderRuns === -2147483648)
+  }
+
+  // --- deflate -------------------------------------------------------------------
+  {
+    const inflate = new ZlibDecompressor()
+    const d = new HttpCompressor(DEFLATE_FAST, 256, 65536)
+    // The fixed-Huffman encoder, under fixedLimit.
+    const small: i32 = d.compress(HTTP_CODING_DEFLATE, body, 0, 5221)
+    t.ok(`deflate fixed: 5221 bytes of JSON become ${small}`, small > 0 && small < 2000 && d.decision === HTTP_COMPRESS_SENT)
+    t.ok("deflate fixed: a zlib header, FLEVEL 0", d.output[0] === 0x78 && d.output[1] === 0x01)
+    t.eqI32("deflate fixed: and inflate back", inflate.decompress(d.output, 0, small, back, 0, 70000), 5221)
+    t.ok("deflate fixed: byte for byte", same(body, back, 0, 5221))
+    t.eqI32("deflate fixed: 12 bytes under gzip", d.compress(HTTP_CODING_GZIP, body, 0, 5221), small + 12)
+    // The level encoder, past fixedLimit: the zlib stream ZlibCompressor writes.
+    const large: u8[] = json(40000)
+    const n: i32 = d.compress(HTTP_CODING_DEFLATE, large, 0, 40000)
+    t.ok(`deflate level: 40000 bytes of JSON become ${n}`, n > 0 && n < 10000)
+    t.eqI32("deflate level: and inflate back", inflate.decompress(d.output, 0, n, back, 0, 70000), 40000)
+    t.ok("deflate level: byte for byte", same(large, back, 0, 40000))
+    const z: u8[] = new Array<u8>(50000)
+    t.eqI32("deflate level: ZlibCompressor's length", new ZlibCompressor(DEFLATE_FAST).compress(large, 0, 40000, z, 0), n)
+    t.ok("deflate level: and its bytes, header and Adler-32 alike", same(z, d.output, 0, n))
+    for (let level: i32 = 0; level <= 9; level += 1) {
+      const e = new HttpCompressor(level, 0, 65536)
+      e.encoder = HTTP_ENCODER_LEVEL
+      const m: i32 = e.compressAnyway(HTTP_CODING_DEFLATE, body, 0, 5221)
+      const want: i32 = new ZlibCompressor(level).compress(body, 0, 5221, z, 0)
+      t.ok(`deflate level ${level}: ZlibCompressor's stream, FLEVEL and all`, m === want && same(z, e.output, 0, m))
+    }
+    // A random-JSON window inside a larger buffer, every size class, both encoders.
+    const rng = new Rng(43)
+    const sizes: i32[] = [300, 1000, 4000, 16384, 16385, 30000]
+    for (let i: i32 = 0; i < toI32(sizes.length); i += 1) {
+      const size: i32 = sizes[i]
+      const src: u8[] = randomJson(rng, size + 9)
+      const k: i32 = d.compress(HTTP_CODING_DEFLATE, src, 7, size)
+      t.ok(`deflate window: ${size} bytes inflate back`, k > 0 && inflate.decompress(d.output, 0, k, back, 0, 70000) === size && same(back, src, 7, size))
+    }
+    // The saving threshold: a body gzip misses by 6 bytes goes as deflate.
+    const g: i32 = d.compress(HTTP_CODING_GZIP, body, 0, 5221)
+    d.minSaving = 5221 - g + 6
+    t.eqI32("deflate threshold: gzip is 6 bytes over", d.compress(HTTP_CODING_GZIP, body, 0, 5221), -1)
+    t.eqI32("deflate threshold: TOO_LITTLE_SAVED", d.decision, HTTP_COMPRESS_TOO_LITTLE_SAVED)
+    t.eqI32("deflate threshold: deflate is 6 under", d.compress(HTTP_CODING_DEFLATE, body, 0, 5221), g - 12)
+    t.eqI32("deflate threshold: SENT", d.decision, HTTP_COMPRESS_SENT)
+    d.minSaving = 5221 - g + 13
+    t.eqI32("deflate threshold: one byte more is too little", d.compress(HTTP_CODING_DEFLATE, body, 0, 5221), -1)
+    t.eqI32("deflate threshold: TOO_LITTLE_SAVED again", d.decision, HTTP_COMPRESS_TOO_LITTLE_SAVED)
+    d.encoder = HTTP_ENCODER_LEVEL
+    const lg: i32 = d.compress(HTTP_CODING_GZIP, large, 0, 40000)
+    d.minSaving = 40000 - lg + 6
+    t.eqI32("deflate threshold: the level encoder too", d.compress(HTTP_CODING_DEFLATE, large, 0, 40000), lg - 12)
+    d.encoder = HTTP_ENCODER_FIXED
+    d.minSaving = 0
+    // compressAnyway: deflate below every threshold, through either encoder.
+    const tiny: i32 = d.compressAnyway(HTTP_CODING_DEFLATE, body, 0, 40)
+    t.ok(`deflate anyway: 40 bytes into ${tiny}`, tiny > 0 && inflate.decompress(d.output, 0, tiny, back, 0, 70000) === 40 && d.decision === HTTP_COMPRESS_SENT)
+    t.ok("deflate anyway: FLEVEL 0 from the fixed encoder", d.output[0] === 0x78 && d.output[1] === 0x01)
+    d.encoder = HTTP_ENCODER_LEVEL
+    const none: i32 = d.compressAnyway(HTTP_CODING_DEFLATE, body, 0, 0)
+    t.ok("deflate anyway: an empty body", none === 8 && inflate.decompress(d.output, 0, none, back, 0, 70000) === 0)
+    t.ok("deflate anyway: FLEVEL 0 from DEFLATE_FAST", d.output[0] === 0x78 && d.output[1] === 0x01)
+    d.encoder = HTTP_ENCODER_FIXED
+    // The fields name the coding of the last body sent.
+    d.compress(HTTP_CODING_DEFLATE, body, 0, 5221)
+    d.addFields(names, values)
+    t.eqStr("deflate fields: content-encoding: deflate", `${textOf(d.names[1], 0, 16)}: ${textOf(d.values[1], 0, 7)}`, "content-encoding: deflate")
+    d.compress(HTTP_CODING_GZIP, body, 0, 5221)
+    d.addFields(names, values)
+    t.eqStr("deflate fields: then gzip again", `${textOf(d.values[1], 0, 4)}`, "gzip")
+    t.eqI32("deflate fields: four bytes, not seven", toI32(d.values[1].length), 4)
+    t.ok("deflate segments: a one-segment body is skipped", d.oneSegment(HTTP_CODING_DEFLATE, 1000, 0) && d.decision === HTTP_COMPRESS_NO_FEWER_SEGMENTS)
+    t.ok("deflate segments: identity is not", !d.oneSegment(HTTP_CODING_IDENTITY, 1000, 0))
+  }
+  {
+    // A deflate response on HTTP/1.1, negotiated off the request's field.
+    const inflate = new ZlibDecompressor()
+    const p = new HttpCompressor(DEFLATE_FAST, 256, 65536)
+    p.segmentMode = true
+    const conn = request(t, "h1 deflate", config, "GET", "accept-encoding: deflate, gzip;q=0.5\r\n")
+    const field: string | null = conn.parser.header("accept-encoding")
+    const coding: i32 = field === null ? HTTP_CODING_NONE : pick(field)
+    t.eqI32("h1 deflate: the request takes deflate", coding, HTTP_CODING_DEFLATE)
+    t.eqI32("h1 deflate: respondEncoded", conn.respondEncoded(200, names, values, body, 0, 5221, p, coding), 0)
+    const r: Response = queued(conn)
+    const n: i32 = r.bodyEnd - r.bodyStart
+    t.ok("h1 deflate: content-encoding: deflate", r.has("content-encoding: deflate") && p.decision === HTTP_COMPRESS_SENT)
+    t.ok("h1 deflate: vary: accept-encoding", r.has("vary: accept-encoding"))
+    t.ok(`h1 deflate: content-length ${n}`, r.has(`content-length: ${n}`))
+    t.eqI32("h1 deflate: the body inflates to the JSON", inflate.decompress(r.bytes, r.bodyStart, n, back, 0, 70000), 5221)
+    t.ok("h1 deflate: byte for byte", same(body, back, 0, 5221))
+    // The identity head worked out from the deflate head is the one written.
+    const wide = request(t, "h1 deflate wide", config, "GET", "accept-encoding: deflate\r\n")
+    wide.mss = 100000
+    t.eqI32("h1 deflate wide: respondEncoded", wide.respondEncoded(200, names, values, body, 0, 5221, p, HTTP_CODING_DEFLATE), 0)
+    const w: Response = queued(wide)
+    t.ok("h1 deflate wide: sent as it is", w.head.indexOf("content-encoding") < 0 && p.decision === HTTP_COMPRESS_NO_FEWER_SEGMENTS)
+    p.compress(HTTP_CODING_DEFLATE, body, 0, 5221)
+    t.eqI32("h1 deflate wide: http1IdentityHead is the head written", p.http1IdentityHead(r.bodyStart - conn.outputStart, n, 5221), w.bodyStart - wide.outputStart)
+  }
+  {
+    // More negotiation: deflate's q against gzip's, aliases and `*`.
+    t.eqI32("accept: deflate;q=1 over gzip;q=0.9", pick("deflate;q=1, gzip;q=0.9"), HTTP_CODING_DEFLATE)
+    t.eqI32("accept: deflate;q=0.001 over gzip;q=0", pick("gzip;q=0, deflate;q=0.001"), HTTP_CODING_DEFLATE)
+    t.eqI32("accept: x-gzip;q=0 leaves deflate", pick("x-gzip;q=0, deflate"), HTTP_CODING_DEFLATE)
+    t.eqI32("accept: *;q=0.5 and deflate;q=0 give gzip", pick("*;q=0.5, deflate;q=0"), HTTP_CODING_GZIP)
+    t.eqI32("accept: * alone is a tie, so gzip", pick("*"), HTTP_CODING_GZIP)
+    t.eqI32("accept: DEFLATE in capitals", pick("DEFLATE"), HTTP_CODING_DEFLATE)
+    t.eqI32("accept: deflate offered alone takes *", httpAcceptEncoding(ascii("*"), 0, 1, HTTP_OFFER_DEFLATE), HTTP_CODING_DEFLATE)
+    t.eqI32("accept: deflate offered alone, gzip asked, is identity", httpAcceptEncoding(ascii("gzip"), 0, 4, HTTP_OFFER_DEFLATE), HTTP_CODING_IDENTITY)
+    t.eqI32("accept: deflate;q=0 and identity;q=0 is none", pick("deflate;q=0, gzip;q=0, identity;q=0"), HTTP_CODING_NONE)
   }
   return t.done()
 }

@@ -29,7 +29,6 @@ PASS  accept: a window inside a buffer
 PASS  compressor: 5221 bytes of JSON become 1326
 PASS  compressor: and gunzip back
 PASS  compressor: identity is not compressed
-PASS  compressor: deflate is not produced
 PASS  compressor: under minLength is not compressed
 PASS  compressor: over maxLength is not compressed
 PASS  compressor: a body gzip would not shrink is sent as it is
@@ -222,4 +221,67 @@ PASS  skip refused: one encoder run more
 PASS  runs: compress at 2^31 - 1 runs
 PASS  runs: wraps to -2^31
 PASS  runs: so does compressAnyway
-http-compress: 224 passed, 0 failed, 0 skipped
+PASS  deflate fixed: 5221 bytes of JSON become 1314
+PASS  deflate fixed: a zlib header, FLEVEL 0
+PASS  deflate fixed: and inflate back
+PASS  deflate fixed: byte for byte
+PASS  deflate fixed: 12 bytes under gzip
+PASS  deflate level: 40000 bytes of JSON become 5699
+PASS  deflate level: and inflate back
+PASS  deflate level: byte for byte
+PASS  deflate level: ZlibCompressor's length
+PASS  deflate level: and its bytes, header and Adler-32 alike
+PASS  deflate level 0: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 1: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 2: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 3: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 4: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 5: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 6: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 7: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 8: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate level 9: ZlibCompressor's stream, FLEVEL and all
+PASS  deflate window: 300 bytes inflate back
+PASS  deflate window: 1000 bytes inflate back
+PASS  deflate window: 4000 bytes inflate back
+PASS  deflate window: 16384 bytes inflate back
+PASS  deflate window: 16385 bytes inflate back
+PASS  deflate window: 30000 bytes inflate back
+PASS  deflate threshold: gzip is 6 bytes over
+PASS  deflate threshold: TOO_LITTLE_SAVED
+PASS  deflate threshold: deflate is 6 under
+PASS  deflate threshold: SENT
+PASS  deflate threshold: one byte more is too little
+PASS  deflate threshold: TOO_LITTLE_SAVED again
+PASS  deflate threshold: the level encoder too
+PASS  deflate anyway: 40 bytes into 48
+PASS  deflate anyway: FLEVEL 0 from the fixed encoder
+PASS  deflate anyway: an empty body
+PASS  deflate anyway: FLEVEL 0 from DEFLATE_FAST
+PASS  deflate fields: content-encoding: deflate
+PASS  deflate fields: then gzip again
+PASS  deflate fields: four bytes, not seven
+PASS  deflate segments: a one-segment body is skipped
+PASS  deflate segments: identity is not
+PASS  h1 deflate: the request is read
+PASS  h1 deflate: the request takes deflate
+PASS  h1 deflate: respondEncoded
+PASS  h1 deflate: content-encoding: deflate
+PASS  h1 deflate: vary: accept-encoding
+PASS  h1 deflate: content-length 1314
+PASS  h1 deflate: the body inflates to the JSON
+PASS  h1 deflate: byte for byte
+PASS  h1 deflate wide: the request is read
+PASS  h1 deflate wide: respondEncoded
+PASS  h1 deflate wide: sent as it is
+PASS  h1 deflate wide: http1IdentityHead is the head written
+PASS  accept: deflate;q=1 over gzip;q=0.9
+PASS  accept: deflate;q=0.001 over gzip;q=0
+PASS  accept: x-gzip;q=0 leaves deflate
+PASS  accept: *;q=0.5 and deflate;q=0 give gzip
+PASS  accept: * alone is a tie, so gzip
+PASS  accept: DEFLATE in capitals
+PASS  accept: deflate offered alone takes *
+PASS  accept: deflate offered alone, gzip asked, is identity
+PASS  accept: deflate;q=0 and identity;q=0 is none
+http-compress: 286 passed, 0 failed, 0 skipped
