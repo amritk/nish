@@ -522,7 +522,9 @@
                 "head": {
                   "title": "Message classes from a .proto file · Nish",
                   "meta": [{ "property": "og:title", "content": "Message classes from a .proto file" }],
-                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/protobuf-classes" }]
+                  "links": [
+                    { "rel": "canonical", "href": "https://nishlang.com/using-nish/protobuf-classes" }
+                  ]
                 }
               },
               "/websocket": {
