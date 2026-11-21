@@ -12484,6 +12484,18 @@ const DECLARED = [
     why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
   },
   {
+    program: "tests/cases/async_lend.ts",
+    file: "exit",
+    changelog: "reads a spawner's object in place",
+    why: "the case imports lend from nish:async, which the 0.42.0 seed does not have, so only the candidate compiles it (WP49 stage 6, design B)",
+  },
+  {
+    program: "docs/cookbook/async-lend.ts",
+    file: "exit",
+    changelog: "reads a spawner's object in place",
+    why: "the cookbook entry imports lend from nish:async, which the 0.42.0 seed does not have, so only the candidate compiles it (WP49 stage 6, design B)",
+  },
+  {
     program: "tests/cases/async_spawn_handler_reach.ts",
     file: "exit",
     changelog: "reaches its spawner's state and awaits the async Postgres pool",
