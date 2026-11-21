@@ -442,9 +442,6 @@ class ProtoEmitter {
       this.line(5, "return false")
       this.line(4, "}")
       this.line(4, `${x}.set(k, v)`)
-      if (first) {
-        // Every later branch opens with `} else if`; the last one closes in emitMessage's caller.
-      }
       this.closeIf(msg, f)
       return
     }

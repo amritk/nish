@@ -121,7 +121,7 @@ function ProtoFile.constructor(this: ProtoFile): void -> @ProtoFile.constructor 
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=64 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function scalarOf(word: string): ProtoScalar -> @scalarOf [exported]
+function scalarOf(word: string): ProtoScalar -> @scalarOf
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
@@ -129,17 +129,17 @@ function isIgnoredOption(name: string): boolean -> @isIgnoredOption
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at nish_str_eq
   stackSites=0 stackLocals=0
-function isProtoKeyword(name: string): boolean -> @isProtoKeyword [exported]
+function isProtoKeyword(name: string): boolean -> @isProtoKeyword
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
-function isProtoReserved(name: string): boolean -> @isProtoReserved [exported]
+function isProtoReserved(name: string): boolean -> @isProtoReserved
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: name
   calls: isProtoKeyword nish_arena_mark nish_arena_release nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
   callee +0:3 isProtoKeyword -> @isProtoKeyword
-function upperSnake(name: string): string -> @upperSnake [exported]
+function upperSnake(name: string): string -> @upperSnake
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText
   stackSites=1 stackLocals=1
@@ -702,7 +702,7 @@ function ProtoParser.methodType(this: ProtoParser, method: string): string -> @P
   callee +3:9 ProtoParser.isWord -> @ProtoParser.isWord
   callee +3:34 ProtoParser.peek2 -> @ProtoParser.peek2
   callee +4:7 ProtoParser.refuse -> @ProtoParser.refuse
-  callee +4:76 ProtoParser.peek -> @ProtoParser.peek
+  callee +4:84 ProtoParser.peek -> @ProtoParser.peek
   local +7:11 type: string (const)
   callee +7:18 ProtoParser.dotted -> @ProtoParser.dotted
   callee +8:9 ProtoParser.failed -> @ProtoParser.failed

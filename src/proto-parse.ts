@@ -158,7 +158,7 @@ export class ProtoFile {
 }
 
 /** The scalar a type word names, or `Named`. */
-export const scalarOf = (word: string): ProtoScalar => {
+const scalarOf = (word: string): ProtoScalar => {
   if (word === "double") {
     return ProtoScalar.Double
   }
@@ -235,10 +235,10 @@ const GLOBALS: string =
   " ProtoReader ProtoWriter protoString protoBytes "
 
 /** Whether `name` is a word no generated name may be. */
-export const isProtoKeyword = (name: string): boolean => KEYWORDS.indexOf(` ${name} `) >= 0
+const isProtoKeyword = (name: string): boolean => KEYWORDS.indexOf(` ${name} `) >= 0
 
 /** Whether a top-level declaration may not be named `name`. */
-export const isProtoReserved = (name: string): boolean =>
+const isProtoReserved = (name: string): boolean =>
   isProtoKeyword(name) || GLOBALS.indexOf(` ${name} `) >= 0 || name.startsWith("PROTO_")
 
 /**
@@ -246,7 +246,7 @@ export const isProtoReserved = (name: string): boolean =>
  * upper-case letter that follows a lower-case letter or a digit, or that
  * starts a word after a run of capitals (`HTTPServer` is `HTTP_SERVER`).
  */
-export const upperSnake = (name: string): string => {
+const upperSnake = (name: string): string => {
   const out = new StringBuilder()
   for (let i = 0; i < name.length; i++) {
     const c = name.charCodeAt(i)
@@ -1033,7 +1033,7 @@ class ProtoParser {
       return ""
     }
     if (this.isWord("stream") && this.peek2().kind !== ProtoTok.Punct) {
-      this.refuse(`stream in method ${method} (streaming is not in WP72)`, this.peek().line)
+      this.refuse(`stream in method ${method} (only unary methods are supported)`, this.peek().line)
       return ""
     }
     const type = this.dotted("a message type")

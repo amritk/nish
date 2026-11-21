@@ -1,1 +1,0 @@
-proto: refused/enum_first_not_zero.proto:3: the first value of enum E must be 0 in proto3

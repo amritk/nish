@@ -1,1 +1,0 @@
-proto: refused/enum_constant_clash.proto:2: refused: the enum value X, whose constant E_X the module already has

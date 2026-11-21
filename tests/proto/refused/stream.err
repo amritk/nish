@@ -1,1 +1,1 @@
-proto: refused/stream.proto:4: refused: stream in method Get (streaming is not in WP72)
+proto: refused/stream.proto:4: refused: stream in method Get (only unary methods are supported)

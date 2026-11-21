@@ -1,1 +1,0 @@
-proto: refused/oneof_twice.proto:2: refused: a second oneof named c in message A
