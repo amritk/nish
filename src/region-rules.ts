@@ -1153,7 +1153,10 @@ class RegionWalk {
     const holder = this.origin(receiver)
     if (method === "push" || method === "unshift" || method === "splice") {
       if (holder === ORIGIN_LENT) {
-        this.report(node, lentMessage(this.who, `grows \`${textOf(this.program, receiver)}\` with \`${method}\``))
+        this.report(
+          node,
+          lentMessage(this.who, `grows \`${textOf(this.program, receiver)}\` with \`${method}\``)
+        )
         return
       }
       if (mayBeOuter(holder)) {

@@ -8,6 +8,7 @@ class Note {
 const tally = (n: Note): i32 => n.counts.length
 
 const read = async (note: Note): Promise<void> => {
+  await sleep(0)
   note.seen = tally(lend(note))
 }
 

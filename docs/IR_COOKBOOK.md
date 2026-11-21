@@ -12561,6 +12561,7 @@ class Note {
 const tally = (n: Note): i32 => n.counts.length
 
 const read = async (note: Note): Promise<void> => {
+  await sleep(0)
   note.seen = tally(lend(note))
 }
 
@@ -12576,6 +12577,8 @@ export const main = async (): Promise<i32> => {
 ```llvm
 %struct.Note = type { %struct.nish_array*, i32 }
 %struct.nish_array = type { i64, i64, i8* }
+%frame.read$ = type { i32, %struct.Note*, %frame.read$.rest }
+%frame.read$.rest = type { [0 x <2 x i64>], i64 }
 %frame.nish_main = type { i32, i32, %frame.nish_main.rest }
 %frame.nish_main.rest = type { [0 x <2 x i64>], %struct.Note*, i64 }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
@@ -12583,11 +12586,21 @@ export const main = async (): Promise<i32> => {
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.trap()
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
-declare void @nish_free_arena() #1
-declare noundef i64 @nish_async_sleep(i32 noundef) #2
-declare noundef i32 @nish_async_poll(i64 noundef) #2
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_free_arena() #3
+declare nonnull i8* @nish_async_spawn(i32 noundef, i64 noundef) #1
+declare i8* @nish_async_enter(i8* nonnull) #1
+declare void @nish_async_leave(i8* nonnull, i8*) #1
+declare void @nish_async_done(i8* nonnull) #1
+declare noundef i64 @nish_async_sleep(i32 noundef) #1
+declare noundef i32 @nish_async_poll(i64 noundef) #1
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #3
+
+define weak_odr hidden i1 @nish.async.task.0(i8* %frame) nounwind "probe-stack"="inline-asm" {
+entry:
+  %done = call i1 @read$.resume(i8* %frame)
+  ret i1 %done
+}
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
@@ -12623,15 +12636,52 @@ entry:
   ret i32 %4
 }
 
-define internal void @read$(%struct.Note* noundef nonnull align 8 dereferenceable(16) nocapture %note) #1 {
+define internal i1 @read$.resume(i8* %async.raw) #1 {
+async.entry:
+  %async.frame = bitcast i8* %async.raw to %frame.read$*
+  %async.state = getelementptr inbounds %frame.read$, %frame.read$* %async.frame, i32 0, i32 0
+  %note.at = getelementptr inbounds %frame.read$, %frame.read$* %async.frame, i32 0, i32 1
+  %note = load %struct.Note*, %struct.Note** %note.at
+  %async.rest = getelementptr inbounds %frame.read$, %frame.read$* %async.frame, i32 0, i32 2
+  %async.kids = bitcast %frame.read$.rest* %async.rest to i8*
+  %async.wait = getelementptr inbounds %frame.read$.rest, %frame.read$.rest* %async.rest, i32 0, i32 1
+  %async.at = load i32, i32* %async.state
+  switch i32 %async.at, label %async.bad [ i32 0, label %entry i32 -1, label %async.finished i32 1, label %wait.poll ]
+
 entry:
-  %0 = call i32 @tally(%struct.Note* %note)
-  %1 = getelementptr inbounds %struct.Note, %struct.Note* %note, i32 0, i32 1
-  store i32 %0, i32* %1, align 4, !tbaa !15
-  ret void
+  %0 = call i64 @nish_async_sleep(i32 0)
+  store i64 %0, i64* %async.wait
+  br label %wait.poll
+
+wait.poll:
+  %1 = load i64, i64* %async.wait
+  %2 = call i32 @nish_async_poll(i64 %1)
+  %3 = icmp slt i32 %2, 0
+  br i1 %3, label %wait.pending, label %wait.ready
+
+wait.pending:
+  store i32 1, i32* %async.state
+  br label %async.suspend
+
+wait.ready:
+  %4 = icmp ne i32 %2, 0
+  %5 = call i32 @tally(%struct.Note* %note)
+  %6 = getelementptr inbounds %struct.Note, %struct.Note* %note, i32 0, i32 1
+  store i32 %5, i32* %6, align 4, !tbaa !15
+  store i32 -1, i32* %async.state
+  ret i1 true
+
+async.bad:
+  unreachable
+
+async.finished:
+  ret i1 true
+
+async.suspend:
+  ret i1 false
 }
 
-define i1 @nish_main.resume(i8* %async.raw) #2 {
+define i1 @nish_main.resume(i8* %async.raw) #1 {
 async.entry:
   %async.frame = bitcast i8* %async.raw to %frame.nish_main*
   %async.state = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.frame, i32 0, i32 0
@@ -12683,27 +12733,43 @@ push.store:
   store i64 %21, i64* %12, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %22 = trunc i64 %21 to i32
   %23 = load %struct.Note*, %struct.Note** %note.addr, align 8
-  call void @read$(%struct.Note* %23)
-  %24 = call i64 @nish_async_sleep(i32 1)
-  store i64 %24, i64* %async.wait
+  %24 = call i8* @nish_async_spawn(i32 0, i64 32)
+  %25 = call i8* @nish_async_enter(i8* %24)
+  %26 = getelementptr inbounds i8, i8* %24, i64 32
+  %27 = bitcast i8* %26 to { i32, %struct.Note* }*
+  %28 = getelementptr inbounds { i32, %struct.Note* }, { i32, %struct.Note* }* %27, i32 0, i32 0
+  store i32 0, i32* %28
+  %29 = getelementptr inbounds { i32, %struct.Note* }, { i32, %struct.Note* }* %27, i32 0, i32 1
+  store %struct.Note* %23, %struct.Note** %29
+  %30 = call i1 @read$.resume(i8* %26)
+  call void @nish_async_leave(i8* %24, i8* %25)
+  br i1 %30, label %spawn.done, label %spawn.join
+
+spawn.done:
+  call void @nish_async_done(i8* %24)
+  br label %spawn.join
+
+spawn.join:
+  %31 = call i64 @nish_async_sleep(i32 1)
+  store i64 %31, i64* %async.wait
   br label %wait.poll
 
 wait.poll:
-  %25 = load i64, i64* %async.wait
-  %26 = call i32 @nish_async_poll(i64 %25)
-  %27 = icmp slt i32 %26, 0
-  br i1 %27, label %wait.pending, label %wait.ready
+  %32 = load i64, i64* %async.wait
+  %33 = call i32 @nish_async_poll(i64 %32)
+  %34 = icmp slt i32 %33, 0
+  br i1 %34, label %wait.pending, label %wait.ready
 
 wait.pending:
   store i32 1, i32* %async.state
   br label %async.suspend
 
 wait.ready:
-  %28 = icmp ne i32 %26, 0
-  %29 = load %struct.Note*, %struct.Note** %note.addr, align 8
-  %30 = getelementptr inbounds %struct.Note, %struct.Note* %29, i32 0, i32 1
-  %31 = load i32, i32* %30, align 4, !tbaa !15
-  store i32 %31, i32* %async.answer
+  %35 = icmp ne i32 %33, 0
+  %36 = load %struct.Note*, %struct.Note** %note.addr, align 8
+  %37 = getelementptr inbounds %struct.Note, %struct.Note* %36, i32 0, i32 1
+  %38 = load i32, i32* %37, align 4, !tbaa !15
+  store i32 %38, i32* %async.answer
   store i32 -1, i32* %async.state
   ret i1 true
 
@@ -12717,7 +12783,7 @@ async.suspend:
   ret i1 false
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %async.main = alloca %frame.nish_main, align 16
   %0 = getelementptr inbounds %frame.nish_main, %frame.nish_main* %async.main, i32 0, i32 0
@@ -12746,9 +12812,9 @@ async.done:
 }
 
 attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #2 = { nounwind "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!20, !21, !22, !23, !24}
@@ -12779,9 +12845,6 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 !24 = !{i32 4, !"probe-stack", !"inline-asm"}
 
 declare i8* @nish_async_next()
-declare i8* @nish_async_enter(i8* nonnull)
-declare void @nish_async_leave(i8* nonnull, i8*)
-declare void @nish_async_done(i8* nonnull)
 
 define hidden i1 @nish.async.run() nounwind "probe-stack"="inline-asm" {
 entry:
@@ -12831,7 +12894,11 @@ done:
 
 define internal i1 @nish.async.resume(i32 %kind, i8* %frame) nounwind "probe-stack"="inline-asm" {
 entry:
-  switch i32 %kind, label %bad [  ]
+  switch i32 %kind, label %bad [ i32 0, label %kind.0 ]
+
+kind.0:
+  %done.0 = call i1 @nish.async.task.0(i8* %frame)
+  ret i1 %done.0
 
 bad:
   call void @llvm.trap()
