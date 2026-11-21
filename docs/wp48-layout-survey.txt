@@ -15986,9 +15986,9 @@ std/crypto/pki-roots.ts:56:14: layout: PkiRoots (std): 3 no saving, 24 → 24 by
 std/crypto/pki-roots.ts:94:7: layout: PkiRootsLoad (std): 2 no link, 24 → 24 bytes
 std/net/router.ts:112:14: layout: RouterLimits (std): 2 no link, 20 → 20 bytes
 std/net/router.ts:130:14: layout: Router (std): 3 no saving, 328 → 328 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/net/http2.ts:268:14: layout: Http2Config (std): 3 no saving, 48 → 48 bytes
 std/net/http2.ts:315:14: layout: Http2Pools (std): 3 no saving, 24 → 24 bytes
 std/net/http2.ts:357:14: layout: Http2Stream (std): 2 no link, 48 → 48 bytes
@@ -16043,9 +16043,9 @@ explain-layout: 2 of 149 classes compact
 
 == tests/link/net_http_server_bad_limit/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -16194,9 +16194,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_bad_param/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -16345,9 +16345,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_bad_watch/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -16665,9 +16665,9 @@ tests/link/net_tls_resume/client.ts:437:14: layout: Run: 2 no link, 80 → 80 by
 tests/link/net_tls_record_common/client.ts:79:14: layout: ClientKeys: 2 no link, 64 → 64 bytes
 tests/link/net_http_server_carriers/rig.ts:32:14: layout: RigH2: 4 not made in a loop or recursion, 12 → 12 bytes; Rig saves 136 → 128
 tests/link/net_http_server_carriers/rig.ts:52:14: layout: Rig: 3 no saving, 136 → 136 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 136 → 128
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 192 → 184
 std/net/http2-cleartext.ts:110:14: layout: Http2CleartextServer (std): 3 no saving, 112 → 112 bytes
 explain-layout: 2 of 174 classes compact
 
@@ -16835,9 +16835,9 @@ tests/link/net_tls_resume/client.ts:437:14: layout: Run: 2 no link, 80 → 80 by
 tests/link/net_tls_record_common/client.ts:79:14: layout: ClientKeys: 2 no link, 64 → 64 bytes
 tests/link/net_http_server_carriers/rig.ts:32:14: layout: RigH2: 4 not made in a loop or recursion, 12 → 12 bytes; Rig saves 136 → 128
 tests/link/net_http_server_carriers/rig.ts:52:14: layout: Rig: 3 no saving, 136 → 136 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 136 → 128
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 192 → 184
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -16850,9 +16850,9 @@ explain-layout: 2 of 174 classes compact
 
 == tests/link/net_http_server_end_short/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17001,9 +17001,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_end_unstarted/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17152,9 +17152,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_foreign/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17303,9 +17303,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h1_fields/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17454,9 +17454,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h1_head/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17605,9 +17605,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h1_slots/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17756,9 +17756,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h1_twice/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -17907,9 +17907,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h2_connect/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -18058,9 +18058,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h2_head/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -18254,9 +18254,9 @@ std/net/http2.ts:449:14: layout: Http2Connection (std): 3 no saving, 344 → 344
 std/net/buffer-pool.ts:45:14: layout: BufferPool (std): 4 not made in a loop or recursion, 32 → 32 bytes; Http2Pools saves 24 → 12
 tests/link/net_http_server_carriers/rig.ts:32:14: layout: RigH2: 4 not made in a loop or recursion, 12 → 12 bytes; Rig saves 136 → 128
 tests/link/net_http_server_carriers/rig.ts:52:14: layout: Rig: 3 no saving, 136 → 136 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 136 → 128
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 192 → 184
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -18386,9 +18386,9 @@ explain-layout: 2 of 174 classes compact
 
 == tests/link/net_http_server_h2_slots/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -18537,9 +18537,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h2_twice/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -18688,9 +18688,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h2c/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -18839,9 +18839,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_h3_head/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -19001,9 +19001,9 @@ explain-layout: 3 of 159 classes compact
 
 == tests/link/net_http_server_h3_slots/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -19163,9 +19163,9 @@ explain-layout: 3 of 159 classes compact
 
 == tests/link/net_http_server_h3_twice/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -19325,9 +19325,9 @@ explain-layout: 3 of 159 classes compact
 
 == tests/link/net_http_server_h3_webtransport/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -19599,9 +19599,9 @@ std/net/quic-packet.ts:287:14: layout: QuicKeys (std): 4 not made in a loop or r
 std/net/quic-packet.ts:321:14: layout: QuicInitialSecrets (std): 2 no link, 16 → 16 bytes
 std/net/quic-packet.ts:344:14: layout: QuicPacket (std): 3 no saving, 40 → 40 bytes
 std/net/quic-packet.ts:1359:14: layout: QuicKeysSlot (std): compact, 72 → 72 bytes; QuicListener saves 192 → 184
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 136 → 128
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 192 → 184
 std/net/http2.ts:268:14: layout: Http2Config (std): 3 no saving, 48 → 48 bytes
 std/net/http2.ts:315:14: layout: Http2Pools (std): 3 no saving, 24 → 24 bytes
 std/net/http2.ts:357:14: layout: Http2Stream (std): 2 no link, 48 → 48 bytes
@@ -19694,9 +19694,9 @@ std/net/tls/ticket.ts:183:14: layout: TlsTicketState (std): 4 not made in a loop
 std/net/tls/ticket.ts:555:14: layout: TlsTicketStrikes (std): 3 no saving, 64 → 64 bytes
 tests/link/net_http_server_carriers/rig.ts:32:14: layout: RigH2: 4 not made in a loop or recursion, 12 → 12 bytes; Rig saves 136 → 128
 tests/link/net_http_server_carriers/rig.ts:52:14: layout: Rig: 3 no saving, 136 → 136 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 136 → 128
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 192 → 184
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -19841,9 +19841,9 @@ explain-layout: 2 of 174 classes compact
 
 == tests/link/net_http_server_start_fields/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -19992,9 +19992,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_start_length/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -20143,9 +20143,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_start_refused/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -20294,9 +20294,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_start_status/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -20445,9 +20445,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_start_twice/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -20596,9 +20596,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_take_none/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -20916,17 +20916,17 @@ tests/link/net_tls_resume/client.ts:437:14: layout: Run: 2 no link, 80 → 80 by
 tests/link/net_tls_record_common/client.ts:79:14: layout: ClientKeys: 2 no link, 64 → 64 bytes
 tests/link/net_http_server_carriers/rig.ts:32:14: layout: RigH2: 4 not made in a loop or recursion, 12 → 12 bytes; Rig saves 136 → 128
 tests/link/net_http_server_carriers/rig.ts:52:14: layout: Rig: 3 no saving, 136 → 136 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): 2 no link, 152 → 152 bytes
-std/net/http-server.ts:648:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 136 → 128
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): 2 no link, 176 → 176 bytes
+std/net/http-server.ts:671:14: layout: HttpServer (std): 4 not made in a loop or recursion, 728 → 728 bytes; Rig saves 192 → 184
 std/net/http2-cleartext.ts:110:14: layout: Http2CleartextServer (std): 3 no saving, 112 → 112 bytes
 explain-layout: 2 of 174 classes compact
 
 == tests/link/net_http_server_unbegun/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -21075,9 +21075,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_wait_tls/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -21226,9 +21226,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_write_long/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -21377,9 +21377,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_write_unstarted/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
@@ -21528,9 +21528,9 @@ explain-layout: 3 of 148 classes compact
 
 == tests/link/net_http_server_write_window/main.ts
 tests/link/net_http_server/taken.ts:29:14: layout: Taken: 2 no link, 24 → 24 bytes
-std/net/http-server.ts:181:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
-std/net/http-server.ts:213:14: layout: HttpServerRequest (std): compact, 152 → 152 bytes; Taken saves 24 → 16
-std/net/http-server.ts:648:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
+std/net/http-server.ts:187:14: layout: HttpServerLimits (std): 2 no link, 48 → 48 bytes
+std/net/http-server.ts:219:14: layout: HttpServerRequest (std): compact, 176 → 176 bytes; Taken saves 24 → 16
+std/net/http-server.ts:671:14: layout: HttpServer (std): 3 no saving, 728 → 728 bytes
 std/json.ts:617:7: layout: JsonMember (std): 2 no link, 20 → 20 bytes
 std/json.ts:928:14: layout: JsonWriter (std): 3 no saving, 48 → 48 bytes
 std/net/handler.ts:171:14: layout: HandlerLimits (std): 2 no link, 32 → 32 bytes
