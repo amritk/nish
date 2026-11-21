@@ -12,6 +12,7 @@ import {
   ROUTER_BAD_PATTERN,
   ROUTER_DUPLICATE,
   ROUTER_FULL,
+  ROUTER_MAX_STEPS,
   ROUTER_METHOD_NOT_ALLOWED,
   ROUTER_NOT_FOUND,
   ROUTER_NO_ROOM,
@@ -130,6 +131,18 @@ Every other read is checked.
 
 </scalar-detail>
 
+<scalar-detail title="Steps run before and after route bodies">
+
+`step` names a step, 0 for the
+first, and `use` binds it to a route — or to the requests no route answers,
+`ROUTER_NOT_FOUND` and `ROUTER_METHOD_NOT_ALLOWED` — while the table is
+built; `steps` answers a route's set as one bit per step, which
+`nish/net/handler` and `nish/net/http-server` read to hand the program each
+step's id (`docs/wp43-http-app-layer.md` §4, stage 5). A route bound to no
+step answers 0, and nothing else is looked up for it.
+
+</scalar-detail>
+
 Private helpers share the importing program's flat symbol namespace
 (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
 
@@ -206,6 +219,9 @@ class Router
 | `nodeCount(): i32` | How many nodes the tree has, the root included: the most one `match` visits. |
 | `paramCount(route: i32): i32` | How many `[start, end)` pairs `route` answers: its parameters, and one more for a final `*`. |
 | `staticCount(): i32` | How many routes the exact-path table holds: the routes `match` answers without the tree. Every route with no parameter and no `*` is one, but for a route whose slots were all taken, which the tree answers instead. |
+| `step(): i32` | Names a new step and answers its id, counting from 0, or `ROUTER_FULL` once the table names `ROUTER_MAX_STEPS`. A step runs for the routes `use` binds it to, in the order of the ids. |
+| `steps(route: i32): i32` | The steps bound to what `match` answered: bit `s` is set for step `s`. |
+| `use(route: i32, step: i32): void` | Binds step `step` to `route`: every request `match` answers that route runs it. `ROUTER_NOT_FOUND` binds it to the requests no route matches, and `ROUTER_METHOD_NOT_ALLOWED` to those whose path only other methods' routes match. Binding a step twice binds it once. Panics on a route or a step the table does not hold. |
 
 ### RouterLimits
 
@@ -224,6 +240,16 @@ class RouterLimits
 | `maxPatternBytes: i32` | The longest pattern, in bytes (1 to 65536). |
 | `maxRoutes: i32` | The most routes in the table (1 to 1048576). |
 | `maxSegments: i32` | The most segments in one pattern (1 to 256): the deepest a route can be. |
+
+## Limits
+
+<scalar-card title="31" icon="phosphor/regular/hash">
+
+`ROUTER_MAX_STEPS: i32`
+
+The most steps one table names: one bit each of an `i32`, its sign bit aside.
+
+</scalar-card>
 
 ## Constants
 
