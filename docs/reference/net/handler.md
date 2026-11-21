@@ -7,8 +7,11 @@ Complete requests and their responses over the HTTP/1.1 carrier, so that a serve
 ```ts
 import {
   HANDLER_ABSENT,
+  HANDLER_ANSWERED,
   HANDLER_DROPPED,
+  HANDLER_MAX_ADDED,
   HANDLER_MAX_WATCHED,
+  HANDLER_NEXT,
   HANDLER_SENT,
   HandlerLimits,
   HttpHandler,
@@ -179,11 +182,14 @@ class HttpHandler
 | --- | --- |
 | `new HttpHandler(limits: HandlerLimits, listener: i32, router: Router)` | A handler over `listener`, a listening socket the program made (`tcpListen`, or `tcpListenFlags` with SO_REUSEPORT for a worker of `nish/net/prefork`), routing through `router`, whose routes are added before the first `wait`. `limits.ring` acts only through the listener: open it with `limits.listen`, since a listener from `tcpListen` stays on descriptors whatever `ring` says. |
 | `scratch: u8[]` | `json` and `problem` write here. |
+| `after(r: HttpRequest): i32` | The next step to run after `r`'s route body has chosen its answer and before it sends it: the steps `before` handed out, highest id first, then `HANDLER_NEXT`; or `HANDLER_ANSWERED` once a step has answered `r`. A step here may still `field` or answer in the body's place. A request `before` was never called for runs no step here. |
+| `before(r: HttpRequest): i32` | The next step to run before `r`'s route body, lowest id first, or `HANDLER_NEXT` once every step `Router.use` bound to `r.route` has run, or `HANDLER_ANSWERED` once a step has answered `r`. A step reads `r`, and may answer it — `refuse`, `problem`, `empty` or any other answer — or add answer fields with `field`; call `before` again straight after each step, before the next `take`, until it answers a negative code. Only a request `take` handed over runs steps: the answers the handler sends itself (400, 408, 413, 431, 503) run none.<br><br>`let s = handler.before(req)`<br>`while (s >= 0) { switch (s) { case AUTH: ... } s = handler.before(req) }`<br>`if (s === HANDLER_NEXT) { switch (req.route) { ... } }` |
 | `connections(): i32` | How many connections are open. |
 | `deferSends(): void` | Lets the handler put a connection's send off until `flush`, so the answers to a pipelined burst go out in one write. Off by default, so an answer is sent as it ends. A program that turns it on calls `flush` (or `wait`, which flushes) after each turn of answers, before it blocks; `nish/net/serve` does. |
 | `drain(): void` | Begins a graceful stop: the handler accepts no more connections, closes each idle one now, and closes each other one once the request on it is answered and sent, so `connections()` falls to 0 as the program answers what it holds. A request already read on a draining connection is still handed over and answered. The listener is the program's to close. |
 | `empty(r: HttpRequest, status: i32): i32` | Answers `r` with `status` and no body: a 204, or a status whose meaning is all there is to say. |
 | `end(r: HttpRequest): i32` | Ends `r`'s response. `r` is the handler's again: it goes back once the carrier has taken every byte, and the connection's next request is read. Answers `HANDLER_SENT` or `HANDLER_DROPPED`. After `deferSends` the send may be put off so a pipelined burst goes out in one write: call `wait` or `flush` after answering, or it waits for the next of them. |
+| `field(r: HttpRequest, name: u8[], value: u8[]): void` | Adds the field `name: value` to `r`'s answer, after the fields the answer names itself, whichever answer it is. Both are kept by reference, so they stay the caller's bytes, unchanged, until the answer starts. Panics past `HANDLER_MAX_ADDED` fields, or on a request not held; a name or value the carrier refuses panics as the answer's own would. |
 | `fired(id: i32): boolean` | Whether watched descriptor `id` was ready in the last `wait`. |
 | `flush(): void` | Sends every answer whose send was put off, so the connection's answers to a pipelined burst go out in one write. `wait` calls it before it blocks; a program that blocks elsewhere, as `nish/net/serve` does, calls it first. |
 | `hungUp(r: HttpRequest): boolean` | Whether the client of `r` has hung up: its connection is closed or reused, or the peer ended its stream while `r` is held. A half-close counts, as nginx counts it, so a hung task is cancelled rather than kept for a reader who may be gone. |
@@ -245,6 +251,16 @@ class HttpRequest
 
 ## Limits
 
+<scalar-grid cols="2">
+
+<scalar-card title="16" icon="phosphor/regular/hash">
+
+`HANDLER_MAX_ADDED: i32`
+
+The most fields `field` adds to one answer.
+
+</scalar-card>
+
 <scalar-card title="16" icon="phosphor/regular/hash">
 
 `HANDLER_MAX_WATCHED: i32`
@@ -252,6 +268,8 @@ class HttpRequest
 The most descriptors `watch` takes beside the handler's own.
 
 </scalar-card>
+
+</scalar-grid>
 
 ## Constants
 
@@ -265,11 +283,27 @@ The most descriptors `watch` takes beside the handler's own.
 
 </scalar-card>
 
+<scalar-card title="-23" icon="phosphor/regular/hash">
+
+`HANDLER_ANSWERED: i32`
+
+`before` and `after`: a step answered the request, so the route body must not.
+
+</scalar-card>
+
 <scalar-card title="-21" icon="phosphor/regular/hash">
 
 `HANDLER_DROPPED: i32`
 
 An answer for a request whose connection closed first: nothing was sent.
+
+</scalar-card>
+
+<scalar-card title="-22" icon="phosphor/regular/hash">
+
+`HANDLER_NEXT: i32`
+
+`before` and `after`: every step bound to the request's route has run, and the request is still the program's to answer.
 
 </scalar-card>
 

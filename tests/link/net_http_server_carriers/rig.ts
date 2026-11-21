@@ -5,6 +5,7 @@
 // `tests/link/net_interop_server/client` turn a server's loop with.
 import { Secret } from "nish:secret"
 import { netLocalPort, tcpListen, udpBind } from "nish:net"
+import { HANDLER_ABSENT, HANDLER_ANSWERED } from "nish/net/handler"
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
 import { HTTP1_CHUNKED } from "nish/net/http1-codec"
 import { Http1Config } from "nish/net/http1-server"
@@ -31,6 +32,8 @@ const TRAILERS_BIG: i32 = 10
 const TRAILERS_MANY: i32 = 11
 const TRAILERS_HUGE: i32 = 12
 const TRAILERS_HOLD: i32 = 13
+const STEPPED: i32 = 14
+const GUARDED: i32 = 15
 
 /** `/big`'s body: more than the 65535 bytes of an HTTP/2 stream's first window. */
 export const RIG_BIG: i32 = 100000
@@ -96,6 +99,21 @@ export class Rig {
   trailerResults: i32[]
   /** `/trailers-hold`'s requests, started and held for the program to end with `trailers`. */
   streaming: HttpServerRequest[]
+  /**
+   * The steps `Router.use` binds to `/stepped` and `/guarded` alone, so no
+   * other route runs one: `id` adds `x-request-id`, `auth` refuses a request
+   * with no `authorization` field with 401, and `tag` adds `x-tag` after the body.
+   */
+  id: i32 = 0
+  auth: i32 = 0
+  tag: i32 = 0
+  /** How many requests `id` has named, the number in its `x-request-id`. */
+  named: i32 = 0
+  /** What the steps of the last stepped request did, in order: `id`, `auth`, `body`, `tag`. */
+  ran: string = ""
+  idName: u8[]
+  tagName: u8[]
+  tagValue: u8[]
 
   /** A server under `limits` with `slots` connections per listener: HTTP/1.1 and h2c, and HTTP/2 over TLS and HTTP/3 when `signed`. */
   constructor(limits: HttpServerLimits, signed: boolean, slots: i32) {
@@ -114,6 +132,15 @@ export class Rig {
     router.add("GET", "/trailers-many")
     router.add("GET", "/trailers-huge")
     router.add("GET", "/trailers-hold")
+    router.add("GET", "/stepped")
+    router.add("GET", "/guarded")
+    this.id = router.step()
+    this.auth = router.step()
+    this.tag = router.step()
+    router.use(STEPPED, this.id)
+    router.use(STEPPED, this.tag)
+    router.use(GUARDED, this.id)
+    router.use(GUARDED, this.auth)
     this.h = new HttpServer(limits, router)
     this.signed = signed
     this.h2 = new RigH2()
@@ -161,6 +188,9 @@ export class Rig {
     this.octets = ascii("application/octet-stream")
     this.hello = ascii("hello\n")
     this.big = new Array<u8>(RIG_BIG)
+    this.idName = ascii("x-request-id")
+    this.tagName = ascii("x-tag")
+    this.tagValue = ascii("on")
   }
 
   /** One turn of the server's loop, at most `wait` ms, signing with `key` when `signed`, then an answer to every request it took. */
@@ -208,6 +238,37 @@ export class Rig {
   answer(r: HttpServerRequest): void {
     const h: HttpServer = this.h
     this.taken = this.taken + 1
+    if (r.route === STEPPED || r.route === GUARDED) {
+      this.ran = ""
+    }
+    let s: i32 = h.before(r)
+    while (s >= 0) {
+      if (s === this.id) {
+        this.ran = `${this.ran}id `
+        h.field(r, this.idName, ascii(`${this.named}`))
+        this.named = this.named + 1
+      } else if (s === this.auth) {
+        this.ran = `${this.ran}auth `
+        if (r.header("authorization") === HANDLER_ABSENT) {
+          h.problem(r, 401, "Unauthorized", "")
+        }
+      }
+      s = h.before(r)
+    }
+    if (s === HANDLER_ANSWERED) {
+      return
+    }
+    if (r.route === STEPPED || r.route === GUARDED) {
+      this.ran = `${this.ran}body`
+    }
+    let a: i32 = h.after(r)
+    while (a >= 0) {
+      if (a === this.tag) {
+        this.ran = `${this.ran} tag`
+        h.field(r, this.tagName, this.tagValue)
+      }
+      a = h.after(r)
+    }
     switch (r.route) {
       case HELLO:
         h.send(r, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
@@ -268,6 +329,10 @@ export class Rig {
       case TRAILERS_HOLD:
         h.start(r, 200, this.altNames, this.altValues, HTTP1_CHUNKED)
         this.streaming.push(r)
+        break
+      case STEPPED:
+      case GUARDED:
+        h.send(r, 200, this.text, this.hello, ZERO, toI32(this.hello.length))
         break
       default:
         h.refuse(r)

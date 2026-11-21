@@ -254,6 +254,26 @@ export class HttpServerRequest {
    * @internal Read by `HttpServer` in this module to answer on the stream.
    */
   stream: i64 = 0
+  /**
+   * The trailer field names `trailers` was given: the program's own array, held until the stream ends.
+   * @internal Read by `HttpServer` in this module once the body's last pending byte is with the carrier.
+   */
+  trailerNames: u8[][]
+  /**
+   * The trailer field values `trailers` was given, `trailerValues[k]` for `trailerNames[k]`.
+   * @internal Read by `HttpServer` in this module beside `trailerNames`.
+   */
+  trailerValues: u8[][]
+  /**
+   * The names `field` added, kept by reference until the answer starts.
+   * @internal Grown by `HttpServer.field` in this module, to at most `HANDLER_MAX_ADDED`, and kept for the requests after.
+   */
+  addedNames: u8[][]
+  /**
+   * The values `field` added, `addedValues[k]` for `addedNames[k]`.
+   * @internal Grown beside `addedNames` by `HttpServer.field` in this module.
+   */
+  addedValues: u8[][]
   /** The index `Router.add` answered for the route, or a negative `ROUTER_*` code. */
   route: i32 = 0
   /** The HTTP version it came in on: 1, 2 or 3. */
@@ -326,6 +346,21 @@ export class HttpServerRequest {
   queryValueStart: i32 = 0
   /** Where the raw value `queryIndex` found ends in `head`, one past its last byte; it starts at `queryValueStart`. */
   queryValueEnd: i32 = 0
+  /**
+   * The steps `before` has still to hand out, one bit each; loaded from the router by the first `before`.
+   * @internal Moved only by `HttpServer.before` in this module.
+   */
+  stepsLeft: i32 = 0
+  /**
+   * The steps `before` handed out that `after` has still to hand out again.
+   * @internal Moved by `HttpServer.before` and `after` in this module.
+   */
+  stepsRan: i32 = 0
+  /**
+   * How many fields `field` added: `addedNames[0 .. added)` beside `addedValues`.
+   * @internal Counted by `HttpServer.field` in this module, read by `start`, and cleared when a request is read into it.
+   */
+  added: i32 = 0
   /** Whether it came over TLS or QUIC: true on HTTP/2 over TLS and on HTTP/3. */
   secure: boolean = false
   /**
@@ -349,45 +384,10 @@ export class HttpServerRequest {
    */
   trailing: boolean = false
   /**
-   * The trailer field names `trailers` was given: the program's own array, held until the stream ends.
-   * @internal Read by `HttpServer` in this module once the body's last pending byte is with the carrier.
-   */
-  trailerNames: u8[][]
-  /**
-   * The trailer field values `trailers` was given, `trailerValues[k]` for `trailerNames[k]`.
-   * @internal Read by `HttpServer` in this module beside `trailerNames`.
-   */
-  trailerValues: u8[][]
-  /**
-   * The steps `before` has still to hand out, one bit each; loaded from the router by the first `before`.
-   * @internal Moved only by `HttpServer.before` in this module.
-   */
-  stepsLeft: i32 = 0
-  /**
-   * The steps `before` handed out that `after` has still to hand out again.
-   * @internal Moved by `HttpServer.before` and `after` in this module.
-   */
-  stepsRan: i32 = 0
-  /**
    * Whether `before` has loaded the route's steps into `stepsLeft`.
    * @internal Set by `HttpServer.before` and cleared when a request is read into it, in this module.
    */
   stepped: boolean = false
-  /**
-   * How many fields `field` added: `addedNames[0 .. added)` beside `addedValues`.
-   * @internal Counted by `HttpServer.field` in this module, read by `start`, and cleared when a request is read into it.
-   */
-  added: i32 = 0
-  /**
-   * The names `field` added, kept by reference until the answer starts.
-   * @internal Grown by `HttpServer.field` in this module, to at most `HANDLER_MAX_ADDED`, and kept for the requests after.
-   */
-  addedNames: u8[][]
-  /**
-   * The values `field` added, `addedValues[k]` for `addedNames[k]`.
-   * @internal Grown beside `addedNames` by `HttpServer.field` in this module.
-   */
-  addedValues: u8[][]
 
   /**
    * An empty request for the server's pool; its buffers are made on its first use.

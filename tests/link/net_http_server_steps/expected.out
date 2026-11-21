@@ -1,0 +1,27 @@
+PASS  HTTP/1.1 /stepped: 200 with x-request-id 0 and x-tag
+PASS  HTTP/1.1 /stepped: id, the body, then tag
+PASS  HTTP/1.1 /guarded with no authorization: 401 carrying x-request-id 1, no x-tag
+PASS  HTTP/1.1 /guarded refused: the body never ran
+PASS  HTTP/1.1 /guarded with authorization: 200 with x-request-id 2, no x-tag
+PASS  HTTP/1.1 /guarded allowed: id, auth, the body
+PASS  HTTP/1.1 /hello, bound to no step: 200 with neither field
+PASS  h2c /stepped: 200 with x-request-id 3 and x-tag
+PASS  h2c /stepped: id, the body, then tag
+PASS  h2c /guarded with no authorization: 401 carrying x-request-id 4, no x-tag
+PASS  h2c /guarded refused: the body never ran
+PASS  h2c /guarded with authorization: 200 with x-request-id 5
+PASS  h2c /guarded allowed: id, auth, the body
+PASS  HTTP/3: the handshake, ALPN h3
+PASS  HTTP/3 /stepped answered and ended
+PASS  HTTP/3 /stepped: 200 with x-request-id 6 and x-tag
+PASS  HTTP/3 /stepped: id, the body, then tag
+PASS  HTTP/3 /guarded with no authorization answered and ended
+PASS  HTTP/3 /guarded with no authorization: 401 carrying x-request-id 7, no x-tag
+PASS  HTTP/3 /guarded refused: the body never ran
+PASS  HTTP/3 /guarded with authorization answered and ended
+PASS  HTTP/3 /guarded with authorization: 200 with x-request-id 8
+PASS  HTTP/3 /guarded allowed: id, auth, the body
+PASS  HTTP/3 /hello answered and ended
+PASS  HTTP/3 /hello, bound to no step: 200 with neither field
+PASS  nine requests named, one per stepped request
+http server steps: 26 passed, 0 failed, 0 skipped

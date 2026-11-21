@@ -161,12 +161,6 @@ export class Router {
   private routeParams: i32[]
   /** Per route: the steps `use` bound to it, bit `s` for step `s`. */
   private routeSteps: i32[]
-  /** The steps bound to `ROUTER_NOT_FOUND`: what `match` answers with any negative code but `ROUTER_METHOD_NOT_ALLOWED` runs them. */
-  private missSteps: i32 = 0
-  /** The steps bound to the requests `match` answers `ROUTER_METHOD_NOT_ALLOWED`. */
-  private refusedSteps: i32 = 0
-  /** How many steps `step` has named; the next answers this id. */
-  private stepCount: i32 = 0
   /**
    * The exact-path table: per slot a static route, or -1. Its length is a
    * power of two, at least four slots for each static route, and a route sits
@@ -218,6 +212,12 @@ export class Router {
   maxParams: i32 = 0
   private maxRoutes: i32 = 0
   private maxMethods: i32 = 0
+  /** The steps bound to `ROUTER_NOT_FOUND`: what `match` answers with any negative code but `ROUTER_METHOD_NOT_ALLOWED` runs them. */
+  private missSteps: i32 = 0
+  /** The steps bound to the requests `match` answers `ROUTER_METHOD_NOT_ALLOWED`. */
+  private refusedSteps: i32 = 0
+  /** How many steps `step` has named; the next answers this id. */
+  private stepCount: i32 = 0
   /** How many routes have no parameter and no `*`, and how many of them `staticSlots` holds. */
   private statics: i32 = 0
   private staticHeld: i32 = 0
