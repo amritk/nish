@@ -21,12 +21,19 @@ the program fixes at start-up.
 
 The data path — DATA in, DATA out, WINDOW_UPDATE, PING, SETTINGS, RST_STREAM —
 allocates nothing, measured both by `Arena.used()` and by resident memory. One
-finding is open: H2-2 (Low), frames that cost only CPU. Four are fixed: H2-1
+finding is open: H2-2 (Low), frames that cost only CPU. Five are fixed: H2-1
 (Medium), the memory each request's header block left behind; H2-3 (Low), no
 clock in the connection or the carrier, now a SETTINGS timeout and an idle
 timeout; H2-4 (Medium), resets the server sent at the client's prompting,
-which the reset budget did not count (MadeYouReset); and H2-5 (Low), a SETTINGS
-frame that walked every stream once per INITIAL_WINDOW_SIZE entry.
+which the reset budget did not count (MadeYouReset); H2-5 (Low), a SETTINGS
+frame that walked every stream once per INITIAL_WINDOW_SIZE entry; and H2-6
+(Low), a held stream's body that never went back to the connection's window,
+found in review before it shipped.
+
+A stream the program holds (`hold`) has its receive window credited only as
+the program consumes its body (`consumeBody`), never past what the peer sent,
+so its unconsumed body stays within one stream window; a peer that sends past
+it gets RST_STREAM FLOW_CONTROL_ERROR ("A held stream's window", below).
 
 ## Scope
 
@@ -34,7 +41,7 @@ frame that walked every stream once per INITIAL_WINDOW_SIZE entry.
 | --- | --- |
 | `std/net/http-fields.ts` | `httpFieldNameValid`, `httpFieldValueValid`, `httpFieldConnectionSpecific`, `httpFieldSensitive`, `httpFieldsCheckOutgoing`, `HttpFields` (`readSection`, `takePseudo`, `readRequest`, `readResponse`, `readTrailers`) |
 | `std/net/http2-frame.ts` | `http2ReadHeader`, `http2ParseFrame` and its helpers (`http2FrameUnpad`, `http2FramePriority`), `http2SettingError`, the eleven writers |
-| `std/net/http2.ts` | `Http2Connection`: `feed`, `next`, `handleFrame` and the handler of each type, `gather`, `endBlock`, `trailers`, `tooLarge`, `credit`, `streamError`, `resetStream`, `fail`, `sendHead`, `respond`, `writeData`, `writeTrailers`, `reset`, `goaway`, `restart`, and the borrowed buffers: `lender`, `holdInput`, `holdOutput`, `holdBlock`, `giveInput`, `giveOutput`, `giveBlock`, `rest`, `drop`, `inputTail`, `received`, `consume`, `wantsWrite`; `Http2Pools` |
+| `std/net/http2.ts` | `Http2Connection`: `feed`, `next`, `handleFrame` and the handler of each type, `gather`, `endBlock`, `trailers`, `tooLarge`, `credit`, `creditStream`, `settleOwed`, `settleCredit`, `hold`, `consumeBody`, `streamWindow`, `streamError`, `resetStream`, `fail`, `sendHead`, `respond`, `writeData`, `writeTrailers`, `reset`, `goaway`, `restart`, and the borrowed buffers: `lender`, `holdInput`, `holdOutput`, `holdBlock`, `giveInput`, `giveOutput`, `giveBlock`, `rest`, `drop`, `inputTail`, `received`, `consume`, `wantsWrite`; `Http2Pools` |
 | `std/net/http2-tls.ts` | `Http2TlsServer`: `accept`, `readable`, `writable`, `signP256`, `next`, `flush`, `refused`, `close`, `rest` |
 
 Out of scope: HPACK's decoder and encoder (`nish/net/hpack`), TLS
@@ -65,6 +72,7 @@ fields or frames it did not mean.
 | H2-3 | Low | `std/net/http2.ts` (`Http2Connection.expired`, `expiresNoSooner`, `timeOut`), `std/net/http2-tls.ts` (`Http2TlsServer.expire`) | Neither had a clock. A client that never acknowledges the server's SETTINGS is never sent SETTINGS_TIMEOUT (§6.5.3), and one that holds a connection idle, or a stream half-open, keeps its slot; when every slot is held new connections are shed at once (TLS-4). Memory stays bounded, since nothing grows with time. | **Fixed.** `Http2Config.settingsTimeout` (10 s by default) and `idleTimeout` (60 s by default), both checked at start-up, give the connection two deadlines, read from the clock the program passes in, as H1-1's `expire`. A client that has not acknowledged the server's SETTINGS within `settingsTimeout` of its start is sent GOAWAY SETTINGS_TIMEOUT (RFC 9113 §6.5.3); one with nothing moved for `idleTimeout` is sent GOAWAY NO_ERROR. `Http2TlsServer.expire(now)` does both for every slot, its TLS handshake counting toward the SETTINGS deadline, and closes the slot once the GOAWAY is out. A stream half-open on a connection that still moves bytes is not timed: the program resets it. Idle means no byte moved either way, frames of any type included, so a client that sends a PING or WINDOW_UPDATE more often than `idleTimeout` holds its slot as long as it likes; that bounds a silent client, not a chatty one, and the pool's size bounds the rest (TLS-4). The other way, a quiet stream the program means to keep open — a long poll, a server-sent event stream with nothing to send — is cut after `idleTimeout`: sent GOAWAY NO_ERROR and closed at once, without waiting for the stream to end. A program that holds one sends on it (a comment line for SSE) more often than `idleTimeout`, or raises it. Tests: `a client that has not acknowledged the server's SETTINGS is not late at settingsTimeout`, `but is a nanosecond past it`, `timed out, it is sent GOAWAY SETTINGS_TIMEOUT`, `timed out idle, it is sent GOAWAY NO_ERROR` in `tests/link/net_http2` and `_f64`; `the first is sent GOAWAY SETTINGS_TIMEOUT`, `a minute on, it is`, `and is sent GOAWAY NO_ERROR, naming its stream` in `tests/link/net_http2_tls` and `_f64`; and `tests/link/net_http2_bad_timeout` and `net_http2_bad_idle`. With the timeouts never reached, seven of them fail. |
 | H2-4 | Medium | `std/net/http2.ts` (`streamError`, `endBlock`, `handleData`, `handlePriority`, `handleRstStream`) | The reset budget counted only the RST_STREAM frames the client sent (`handleRstStream`). A client that cannot send one itself gets the server to: on a stream it has just opened with a valid request, a WINDOW_UPDATE of zero, a PRIORITY that makes the stream depend on itself, a window past 2^31 − 1, DATA past the stream's window, trailers without END_STREAM, a header list past the cap (the 431), a malformed request, or simply one stream past `maxStreams` (REFUSED_STREAM). Each reset freed the slot at once, so the next stream could open straight away, without limit and without GOAWAY: the program had been handed H2_REQUEST and kept whatever work it started unless it watched for H2_RESET, and each stream left its decoded headers behind (H2-1). This is MadeYouReset (CVE-2025-8671), rapid reset's twin. | **Fixed** (#805). Every RST_STREAM the server sends for a stream error the peer caused, every refused stream and every 431 is charged to the same `resetCredit` as the client's own resets (`chargeReset`, through `refuseStream` and `streamError`), and the one past the budget is the connection error ENHANCE_YOUR_CALM; a stream the server finishes still earns one back. What the program resets itself (`reset`) is its own choice and is not charged. What it does not bound: since a stream the server ends (`localEnd`) earns a credit back, a client that alternates one answered request with one provoked reset keeps its credit indefinitely, at one full response of the server's work per reset; the budget counts resets net of finished streams, as it does for the client's own resets, so this bounds the rate to the server's answers rather than closing it. And the charge falls on conforming clients too: a 431's stream never opens, so it is never refunded, and a client that draws `resetBudget` + 1 431s on one connection (a proxy retrying with an oversized cookie) is cut off with ENHANCE_YOUR_CALM; a program that expects that raises `resetBudget`. Test: `link/net_http2_reset: exits with 0 and stdout matches expected.out` — each trigger once past a budget of two ends in GOAWAY ENHANCE_YOUR_CALM, and up to it leaves the connection answering; measured with the charge removed (`refuseStream` and the 431 not calling `chargeReset`), ten of its 21 checks fail: the nine "once more than resetBudget allows" and the mixed one; "earns the budget back" passes either way, since without the charge nothing is spent. |
 | H2-5 | Low | `std/net/http2.ts` (`handleSettings`, `windowPassesMax`) | `handleSettings` applied each SETTINGS_INITIAL_WINDOW_SIZE entry as it read it, walking every stream slot to move its send window. A SETTINGS frame may repeat a setting (RFC 9113 §6.5.3 takes the entries in order), so one frame of the default 16,384-octet maximum carries 2,730 such entries and cost 2,730 walks of the slots: at the default `maxStreams` of 100, about 273,000 slot visits for 16 KB, some sixteen a byte, against H2-2's few hundred comparisons a frame. Each SETTINGS also has to be acknowledged, but the acknowledgement is nine octets whatever the frame holds. CPU only, no memory, and bounded by the frame size: a flood of these runs at the rate the client sends bytes, multiplied. | **Fixed.** The entries are checked first; INITIAL_WINDOW_SIZE only records its last value and the largest. The slots are walked at most twice a frame: once, only when the largest value raises the window, to ask whether any stream's window would pass 2^31 − 1 (`windowPassesMax`), and once to move every window by the last value's difference. Every window moves by the same amount, so an entry taken in order passes 2^31 − 1 exactly when the frame's largest value does, and that FLOW_CONTROL_ERROR (§6.9.2) stays the error when it came before an invalid entry, as it did entry by entry. The count is by construction, not measured. Tests in `tests/link/net_http2_errors` and `_f64`: `an entry that overflows a stream's window is the error even when a later entry in the same frame would bring it back`, `several INITIAL_WINDOW_SIZE entries in one frame: the last one sets every open stream's window`, `an overflowing window before an invalid entry: FLOW_CONTROL_ERROR, the first error`, `an invalid entry before an overflowing window: PROTOCOL_ERROR, the first error`; applying only the last value, without the largest, fails the first. |
+| H2-6 | Low | `std/net/http2.ts` (`handleData`) | Found in review of the change that added `hold`, before it shipped. A held stream's DATA credited the connection's window only with its padding: the body went to `owed`, and `consumeBody` credits only the stream's window. Every byte of every streamed body was so lost to the connection's window for good, and once a connection had been sent `connectionWindowSize` (1,048,576 by default) of streamed bodies, the peer could send no more DATA on any stream of it. A conforming client uploading more than that on one connection stalls until `idleTimeout` cuts it; no other connection is touched, and a client can hold its own slot that long anyway (H2-3). | **Fixed** (WP72 S6a). A held stream's DATA credits the connection's window with the whole frame on arrival, as any stream's does, and only the stream's own window waits for `consumeBody`. Tests: `800000 more on the connection, past its window` and `the connection window credited as streamed bodies arrived`, for h2c and HTTP/2 over TLS, in `link/net_http_server_stream: exits with 0 and stdout matches expected.out`: 300,000 bytes on stream 1, then 800,000 on stream 3 of the same connection; with the connection credited only the padding, all four fail. |
 
 ## Fuzzing
 
@@ -256,6 +264,27 @@ Tests: `link/net_http2: exits with 0 and stdout matches expected.out`,
 `link/net_http2_f64: exits with 0 and stdout matches expected.out`,
 `link/net_http2_tls: exits with 0 and stdout matches expected.out`,
 `link/net_http2_tls_f64: exits with 0 and stdout matches expected.out`.
+
+**A held stream's window** (`tests/link/net_http_server_stream`, through
+`nish/net/http-server`'s `streamBody`, on HTTP/2 over TLS and on h2c). Once
+`hold` marks a stream, its DATA still credits the connection's window on
+arrival, the whole frame, padding included (H2-6), but credits the stream's own window only by what
+`consumeBody` is told the program read, cut to the bytes the stream was sent
+and not yet credited (`owed`), so the peer is never given window it did not
+use. Nothing credits a held stream otherwise, so its unconsumed body never
+passes `streamWindow()`, `max(initialWindowSize, 65535)` until the peer
+acknowledges the SETTINGS, exactly `initialWindowSize` after, and DATA past the
+window is the stream error FLOW_CONTROL_ERROR, as on any stream (§6.9.1). A
+WINDOW_UPDATE that `consumeBody` cannot fit in the output stays owed and is
+sent from a later `next` or `settleCredit` (`settleOwed`). Tests: "never more than one stream window held", "one byte
+past the window resets the stream FLOW_CONTROL_ERROR", "no WINDOW_UPDATE for
+a stream nothing consumed", "the stream window credited as the program
+consumed", "the connection window credited as streamed bodies arrived", each
+for both carriers, in `link/net_http_server_stream: exits
+with 0 and stdout matches expected.out`; the owed WINDOW_UPDATE in "a consume
+with no room for its WINDOW_UPDATE: H2_AGAIN", "nothing owed is settled before
+the output drains" and "once drained, settleCredit sends what was owed", in
+`link/net_http2_stream: exits with 0 and stdout matches expected.out`.
 
 ## What is and is not wiped
 

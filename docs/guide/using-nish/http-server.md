@@ -241,6 +241,59 @@ length and connection fields itself. A status outside 200 to 599, more or
 less body than the length said, a request answered twice, or one answered
 through another server, panics, as a bug in your program.
 
+### Reading a body in pieces on HTTP/2
+
+A body longer than `maxBody`, such as an upload or a gRPC client stream,
+can be read as it arrives on the HTTP/2 listeners. Mark its route once,
+before the first `wait`:
+
+```ts
+const upload: i32 = router.add("POST", "/upload")
+server.streamBody(upload)
+```
+
+An HTTP/2 request to that route comes out of `take` at its head, with
+`r.streaming` true, and comes out again each time more of its body, its
+end or a reset arrives. Its unread body is always `r.body[0 ..
+r.bodyLength)`. Call `server.consume(r, n)` when you are done with the
+first `n` bytes: the rest moves to the front, and the client is given room
+for them again, once half a stream window has been consumed and not yet
+credited. `r.bodyEnded` turns true once the body is complete. Keep the
+request between turns, and answer it once:
+
+```ts
+while (server.ready()) {
+  const r = server.take()
+  if (server.hungUp(r)) {
+    server.refuse(r)
+  } else if (r.route === upload) {
+    total = total + r.bodyLength
+    server.consume(r, r.bodyLength)
+    if (r.bodyEnded) {
+      const said: u8[] = ascii(`${total}`)
+      server.send(r, 200, text, said, 0, toI32(said.length))
+    }
+  }
+}
+```
+
+A streamed request holds at most one stream window of unread body, 64 KiB
+by default (`Http2Config.initialWindowSize`), however long the body; a
+client that sends past it has its stream reset. `maxBody` and
+`bodyTimeout` do not apply to it. If the client resets the stream or the
+connection is lost, the request comes back once more with
+`server.hungUp(r)` true. If you answer before the body ends, the server
+resets the stream with `NO_ERROR` after your answer, so the client stops
+sending. Since `bodyTimeout` does not apply, keep a deadline of your own
+for each streamed request: a client that sends its head and then nothing
+holds the request for as long as you wait, so answer one that misses its
+deadline (a 408, say) and the server resets the rest of its stream.
+
+`consume` works on every request, so one loop serves every version: on
+HTTP/1.1 and HTTP/3, and on routes you did not mark, the request comes out
+once with its whole body, `r.streaming` false and `r.bodyEnded` true, and a
+body past `maxBody` is still answered 413.
+
 ## Steps before and after a route
 
 A [`Router`](http-router.md#steps-before-and-after-a-route) can bind *steps*

@@ -127,11 +127,11 @@ for (;;) {
 ```ts
 export class HttpServerLimits {
   requests: i32 = 1024;          // request pool shared by all listeners
-  maxBody: i32 = 1048576;        // a request body is held whole; 413 above
+  maxBody: i32 = 1048576;        // a body held whole; 413 above, bar an h2 streamBody route
   maxHead: i32 = 32768;          // copied head (method, target, fields); 431 above
   maxFields: i32 = 100;          // fields in one request head; 431 above
   maxResponseFields: i32 = 32;   // program fields + content-length + alt-svc
-  bodyTimeout: i32 = 30000;      // ms from head to whole body
+  bodyTimeout: i32 = 30000;      // ms from head to whole body; not a streamed body
   idleTimeout: i32 = 60000;      // ms an h2/h2c connection may hold no stream
   prefaceTimeout: i32 = 10000;   // ms an h2c peer has to send its 24 bytes
   altSvcMaxAge: i32 = 86400;     // Alt-Svc ma, seconds
@@ -454,7 +454,10 @@ two deadlines of its own, using its own clock and each carrier's
 `close(slot)`:
 
 - **`bodyTimeout`:** the time from a request's head to its last body byte,
-  for every version, as `HttpHandler.expireBodies` does for HTTP/1.1. On
+  for every version, as `HttpHandler.expireBodies` does for HTTP/1.1,
+  but only while the server reads a body: a body streamed to the program
+  on an h2 `streamBody` route is the program's from its head, and the
+  program keeps its own deadline for it. On
   HTTP/1.1 it closes the slot; on h2 it resets the stream with CANCEL; on
   h3 it calls `discardRequest` and resets the stream.
 - **`idleTimeout`:** how long an h2 or h2c connection may be open with no
@@ -463,6 +466,83 @@ two deadlines of its own, using its own clock and each carrier's
 `Http3Server` keeps QUIC's own idle timeout. Doing the timing in the façade
 avoids a change to `http2.ts`. Neither deadline is enforced when a program
 drives `Http2TlsServer` directly, as it is not today.
+
+### 3.5 Streaming request bodies on HTTP/2 (WP72 S6a)
+
+By default the façade holds a request until its whole body has arrived, up
+to `maxBody`, and answers 413 above that. A gRPC client stream, or an upload
+of any length, needs the body in pieces instead. On the HTTP/2 listeners
+(h2c and HTTP/2 over TLS), a route the program marks as streaming works
+that way. The request is handed over at its HEADERS frame. The body then
+arrives as DATA in pieces that the program reads and consumes. The stream's
+receive window is credited only as the program consumes, so a body of any
+length runs in bounded memory.
+
+- **Opt-in, per route.** `HttpServer.streamBody(route)` marks one of the
+  router's routes, by the index `Router.add` gave it, before the first
+  `wait`. It panics on an index the router does not have. Every other
+  route keeps the whole-body behaviour, and so does every route on
+  HTTP/1.1 and HTTP/3.
+- **Handed over at HEADERS.** On a streaming route, an HTTP/2 request whose
+  HEADERS frame does not end the stream is queued at once with
+  `r.streaming` set to true. `r.bodyLength` is then 0, or it counts the
+  DATA bytes that came in the same read. The `maxBody` check and its 413
+  (on `content-length` or on bytes received) do not apply to that request.
+  A streaming request whose HEADERS frame ends the stream is an ordinary
+  request with an empty body and `r.streaming` set to false.
+- **Reading a piece.** The unread body is always `r.body[0 ..
+  r.bodyLength)`. When more DATA arrives, the façade appends it there and
+  puts the request back in the ready queue, so `ready()` is true and
+  `take()` yields the same request again. It is yielded at most once per
+  turn, however many frames came. The program may take it while the
+  response is not yet started, or while it is streaming (`start` called,
+  `end` not yet). Taking it again does not change its state.
+- **Saying it consumed.** `HttpServer.consume(r, n)` drops the first `n`
+  unread bytes. The rest move to the front of `r.body`, and `n` bytes of
+  window go back to the peer (one WINDOW_UPDATE per half window, as the
+  carrier does for every other stream). It panics on another server's
+  request, on a request the program does not hold, and on `n` outside
+  `[0, r.bodyLength]`. On HTTP/1.1, HTTP/3 and non-streaming routes it only
+  moves the bytes down, so one program loop serves every version.
+- **End of body.** `r.bodyEnded` is true once the peer has ended its side,
+  by END_STREAM on a DATA frame or by a trailer section. The request is
+  yielded once more when that happens, even with nothing new to read.
+  Request trailers are accepted and dropped, as on every other request.
+  On every non-streaming request, `r.bodyEnded` is true from the first
+  `take`.
+- **The per-stream buffer cap.** A streaming request can hold at most the
+  window it advertised: `max(Http2Config.initialWindowSize, 65535)` bytes
+  of unconsumed body until the peer acknowledges the server's SETTINGS,
+  and exactly `initialWindowSize` after. Its body array grows by doubling up to that cap, and
+  it never grows past it. A peer that sends more than the window allows is
+  answered with RST_STREAM FLOW_CONTROL_ERROR by the carrier (RFC 9113
+  §6.9.1), before any byte reaches the façade. The connection window is
+  still credited on arrival, so one held stream never stalls the others.
+- **RST_STREAM and connection loss while held.** When the peer resets the
+  stream, or the connection closes or times out, the request is yielded
+  once more with `hungUp(r)` true. The program answers it as it answers any
+  hung-up request (`send` and `end` answer `HANDLER_DROPPED`, `refuse`
+  releases it). The bytes it held are released with it. An h2c peer's end
+  of file counts as connection loss here, though the connection lingers
+  while its streams are open. A request reset before the program first
+  took it is released by `ready()` unseen, as a whole-body request is.
+- **Our side giving up.** When the program answers (`end`, `send`,
+  `refuse`) before the body has ended, the façade resets the stream with
+  NO_ERROR once the response is complete, as RFC 9113 §8.1 allows, so the
+  peer stops sending. The bytes still in flight are discarded and credited
+  to the connection.
+- **`bodyTimeout`** does not apply to a streaming request after it is
+  handed over: the program sets the pace. `idleTimeout` still closes a
+  connection with no open stream.
+- **The pending byte count.** `HttpServer.pending(r)` answers how many
+  response bytes the façade holds for `r` that the carrier has not taken
+  yet, so a program (and S6's `send` for gRPC) can stop producing while the
+  peer is slow.
+- **HTTP/1.1 and HTTP/3 ignore the flag.** A streaming route there is
+  served as today: the whole body up to `maxBody`, 413 above it,
+  `r.streaming` false, `r.bodyEnded` true. HTTP/1.1 has no per-request
+  window to hold back without stalling the connection, and HTTP/3 streaming
+  is left to a later stage.
 
 ## 4. h2c: prior knowledge only
 
@@ -686,7 +766,7 @@ a warmed run. For HTTP/3 that pin is new. Today `net_http3_server` pins only
 | HTTP/2 over TLS | HTTP/1.1 fallback on the port (F2); server push; extended CONNECT; the ALTSVC frame; RFC 9218 priorities |
 | h2c | `Upgrade: h2c` and 101; HTTP/1.1 or sniffing on the port; any response to a bad preface; confidentiality of any kind |
 | HTTP/3 | WebTransport, datagrams and extended CONNECT; any ALPN but `h3` |
-| all | response trailers on HTTP/1.1 and HTTP/3 (`trailers` panics there; HTTP/2 has them since WP72 S2); 1xx and 103 Early Hints; streaming request bodies (held whole up to `maxBody`, 413 above); async `serve` over the façade (follow-up, §2.5) |
+| all | response trailers on HTTP/1.1 and HTTP/3 (`trailers` panics there; HTTP/2 has them since WP72 S2); 1xx and 103 Early Hints; streaming request bodies on HTTP/1.1 and HTTP/3 (held whole up to `maxBody`, 413 above; HTTP/2 has them per route since WP72 S6a, §3.5); async `serve` over the façade (follow-up, §2.5) |
 
 ### 7.1 Cross-version equivalence
 
@@ -740,7 +820,7 @@ version.
 | with `requests` 8: four h2 connections, 2 streams each | all 8 served; a fifth connection's stream is refused (pool full): the cap bounds a connection, not a peer (§9.2) |
 | `requests` of 1, 2 and 3, one GET on each of h2 and h3 | served (the per-connection cap is 1, not 0) |
 | `requests` of 0 | the constructor panics, naming `requests` |
-| a body that stalls past `bodyTimeout` | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
+| a body that stalls past `bodyTimeout` (not one the program streams) | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
 | an h2 connection with no open stream past `idleTimeout` | closed; a connection with an open stream is not |
 | an h2c connection that sends the preface, then nothing | closed by `idleTimeout`, not `prefaceTimeout` |
 | `altSvcMaxAge = 0`, with and without an HTTP/3 listener | `alt-svc: clear` on HTTP/1.1 and h2 over TLS; absent on h2c and h3 |
