@@ -90,6 +90,8 @@ export class GrpcRig {
   closed: i32 = 0
   /** The most reply bytes `send` said were still queued, over every Count call. */
   maxPending: i32 = 0
+  /** Whether the message `sumIn` last read parsed. */
+  private parsed: boolean = true
   /** A server with `slots` connections per listener: h2c and HTTP/1.1, and HTTP/2 over TLS when `signed`; `maxTimeout` in ms caps each call's deadline. */
   constructor(signed: boolean, slots: i32, maxTimeout: i32) {
     const router = new Router(new RouterLimits())
@@ -186,7 +188,7 @@ export class GrpcRig {
     this.results.push(this.grpc.reply(r, this.out.buf, ZERO, this.out.end))
   }
 
-  /** SumRequest `a + b` from `buf[from .. to)`, or -1 when it does not parse. */
+  /** SumRequest `a + b` from `buf[from .. to)`; sets `parsed` to whether it parsed. */
   private sumIn(buf: u8[], from: i32, to: i32): i32 {
     const msg = new ProtoReader(buf, from, to)
     let sum: i32 = 0
@@ -195,7 +197,8 @@ export class GrpcRig {
         sum = sum + msg.int32()
       }
     }
-    return msg.failed === PROTO_OK ? sum : -1
+    this.parsed = msg.failed === PROTO_OK
+    return sum
   }
 
   /** The index of `r` in `streams`, or -1 before `open` read it. */
@@ -232,7 +235,7 @@ export class GrpcRig {
       }
       if (got === GRPC_MESSAGE) {
         const sum: i32 = this.sumIn(this.grpc.messageBytes(r), this.grpc.messageStart(r), this.grpc.messageEnd(r))
-        if (sum < 0) {
+        if (!this.parsed) {
           this.results.push(this.grpc.fail(r, GRPC_INVALID_ARGUMENT, ""))
           break
         }

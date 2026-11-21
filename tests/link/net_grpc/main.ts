@@ -511,6 +511,44 @@ const streamChecks = (t: Suite, rig: GrpcRig, tls: boolean, key: Secret<u8[]>): 
   t.ok(`streaming ${over}: the program saw all fourteen calls, the faulted ones too`, rig.calls - calls === 14)
 }
 
+/**
+ * The Trailers-Only answers: 150 on one connection, past its 100 stream
+ * slots, each giving its slot back; and a streamed call answered so before
+ * the client's stream ends, whose later DATA does not hand it back to the
+ * program.
+ */
+const onlyChecks = (t: Suite, rig: GrpcRig, tls: boolean, key: Secret<u8[]>): void => {
+  const over: string = tls ? "over TLS" : "over h2c"
+  const p = new Peer(rig, tls)
+  t.ok(`Trailers-Only ${over}: a connection`, p.connect(key))
+  let answered: boolean = true
+  for (let batch: i32 = 0; batch < 3; batch++) {
+    for (let k: i32 = 0; k < 50; k++) {
+      const stream: i32 = 1 + 2 * (50 * batch + k)
+      p.wire.headers(stream, callOf("Missing", "application/grpc", ""), 0)
+      body(p.wire, stream, sumOf(n32(0), n32(0)))
+    }
+    p.flush(key)
+    const frames: string = p.until(`HEADERS ${1 + 2 * (50 * batch + 49)} end`, key)
+    for (let k: i32 = 0; k < 50; k++) {
+      answered = answered && only(frames, 1 + 2 * (50 * batch + k), n32(5))
+    }
+  }
+  t.ok(`Trailers-Only ${over}: 150 calls on one connection, each NOT_FOUND, none refused`, answered && p.text.indexOf("RST_STREAM") < 0)
+  const calls: i32 = rig.calls
+  // SumAll: a message that does not parse, failed while the client's stream is open.
+  p.wire.headers(n32(301), callOf("SumAll", "application/grpc", ""), 0)
+  piece(p.wire, n32(301), [toU8(0), toU8(0), toU8(0), toU8(0), toU8(2), toU8(8), toU8(128)])
+  p.flush(key)
+  const failed: boolean = only(p.until("HEADERS 301 end", key), n32(301), n32(3))
+  piece(p.wire, n32(301), sumOf(n32(1), n32(1)))
+  body(p.wire, n32(301), sumOf(n32(1), n32(1)))
+  p.wire.headers(n32(303), callOf("GetSum", "application/grpc", ""), 0)
+  body(p.wire, n32(303), sumOf(n32(2), n32(3)))
+  p.flush(key)
+  t.ok(`SumAll ${over}: INVALID_ARGUMENT before the stream ends; the client's later DATA is not handed back, and the next call is answered`, failed && replied(p.until("HEADERS 303 end", key), n32(303), n32(5)) && rig.calls - calls === 2 && rig.streams.length === 0)
+}
+
 /** HTTP/1.1: gRPC needs HTTP/2. */
 const h1Checks = (t: Suite, rig: GrpcRig, key: Secret<u8[]>): void => {
   const c = new H1Client(rig)
@@ -529,6 +567,8 @@ export const main = (): i32 => {
   deadlineChecks(t, rig, key)
   streamChecks(t, rig, true, key)
   streamChecks(t, rig, false, key)
+  onlyChecks(t, rig, true, key)
+  onlyChecks(t, rig, false, key)
   capChecks(t, key)
   h1Checks(t, rig, key)
   wipe(key)

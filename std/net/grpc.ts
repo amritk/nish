@@ -710,14 +710,14 @@ export class GrpcServer {
 
   /**
    * Answers `r` with `status` in the Trailers-Only form: one HEADERS frame
-   * that ends the stream. A stream that closed first is handed back.
+   * that ends the stream, then `end`, which hands `r` back whether the head
+   * went or the stream closed first. A head declaring no body still leaves
+   * the request the program's until `end`.
    */
   private only(r: HttpServerRequest, status: i32): i32 {
     const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.onlyNames, this.onlyValues[status], toI32(0))
-    if (sent !== HANDLER_SENT) {
-      this.server.end(r)
-    }
-    return sent
+    const ended: i32 = this.server.end(r)
+    return sent === HANDLER_SENT ? ended : sent
   }
 
   /** The decimal bytes of `status`, from the Trailers-Only table. */
