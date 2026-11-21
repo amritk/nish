@@ -2,7 +2,7 @@
 
 # NL3xxx\: modules and the driver
 
-The 57 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 61 codes of band 3. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL3001
 
@@ -91,17 +91,20 @@ The message of an error contains:
 [`nl3010_generic_redeclared.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3010_generic_redeclared.ts):
 
 ```ts
-// NL3010: two modules declaring one generic name. An instantiation is named
+// NL3010: two modules exporting one generic name. An instantiation is named
 // after its template, so both would emit `@identity$i32` — the same collision
-// the plain-function rule refuses, one namespace up. Two *packages* may each
-// keep a private `identity<T>`, because an instantiation carries its package's
-// prefix (`tests/link/package_generic`); this is one package, so they clash.
+// the exported-function rule refuses, one namespace up. Two *packages* may
+// each keep a private `identity<T>`, because an instantiation carries its
+// package's prefix (`tests/link/package_generic`), and since WP57 S1 two
+// modules may too, because a private template that clashes is qualified by
+// its module's path (`tests/link/module_private_generic`). Both of these are
+// exported, so neither is qualified and they clash.
 //
 // `anchor` is imported only to load the other module; the clash is between the
 // two `identity` templates and not between anything this file names.
 import { anchor } from "./wordings_generic";
 
-const identity = <T>(x: T): T => x;
+export const identity = <T>(x: T): T => x;
 
 export const main = (): i32 => identity(1) + anchor();
 ```
@@ -271,15 +274,18 @@ Exported function `twice` is also defined in tests/wordings/nl3_clash/node_modul
 The message of an error contains:
 
 ```text
-…; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name
+…; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name
 ```
 
-[`nl3026_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3026_function_clash.ts):
+[`nl3026_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3026_function_clash.ts) (compiled with `--no-strict-exports`):
 
 ```ts
 // NL3026: `hidden` is exported by neither module, and still clashes with
-// `nl3_clash/lib.ts`'s, because the whole-program attribute analysis is keyed
-// by symbol name and a module-private function has no prefix of its own.
+// `nl3_clash/lib.ts`'s under `--no-strict-exports` (this case's `.args`):
+// there every function keeps its bare name as its symbol, and the
+// whole-program attribute analysis is keyed by symbol. Under the default
+// `--strict-exports` each module's `hidden` is qualified by its path (WP57 S1)
+// and the program builds.
 import { anchor } from "./nl3_clash/lib";
 
 const hidden = (): i32 => 4;
@@ -288,7 +294,7 @@ export const main = (): i32 => hidden() + anchor();
 ```
 
 ```text
-Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name
+Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts, and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique across the program whether or not it is exported; two functions may not share one symbol, because the whole-program attribute analysis is keyed by symbol name
 ```
 
 ## NL3027
@@ -296,21 +302,22 @@ Function `hidden` is also defined in tests/wordings/nl3026_function_clash.ts; a 
 The message of an error contains:
 
 ```text
-…; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol
+…; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol
 ```
 
-[`nl3027_package_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3027_package_function_clash.ts):
+[`nl3027_package_function_clash.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl3027_package_function_clash.ts) (compiled with `--no-strict-exports`):
 
 ```ts
 // NL3027: NL3026 inside a package. `clash_internal`'s two modules each keep a
-// private `hidden`, which is one package-scoped symbol.
+// private `hidden`, which under `--no-strict-exports` (this case's `.args`) is
+// one package-scoped symbol.
 import { run } from "./nl3_clash/node_modules/clash_internal/index";
 
 export const main = (): i32 => run();
 ```
 
 ```text
-Function `hidden` is also defined in tests/wordings/nl3_clash/node_modules/clash_internal/index.ts; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol
+Function `hidden` is also defined in tests/wordings/nl3_clash/node_modules/clash_internal/index.ts, and under `--no-strict-exports` every function keeps its bare name as its symbol, so a function name must be unique within its package whether or not it is exported; two functions of one package may not share one symbol, because the whole-program attribute analysis is keyed by the package-scoped symbol
 ```
 
 ## NL3028
@@ -579,9 +586,9 @@ The message of an error contains:
 
 ```ts
 import { digits } from "./host/regex"
-export function f(): i32 {
+export const f = (): i32 => {
   return digits()
-}
+};
 ```
 
 ```text
@@ -600,9 +607,9 @@ The message of an error contains:
 
 ```ts
 import { twice } from "./host/plain"
-export function main(): i32 {
+export const main = (): i32 => {
   return twice(2)
-}
+};
 ```
 
 ```text
@@ -614,9 +621,9 @@ export function main(): i32 {
 ```ts
 // NL3050 under WASI: a WASI program links C, so it imports no host module.
 import { twice } from "./host/plain"
-export function main(): i32 {
+export const main = (): i32 => {
   return twice(2)
-}
+};
 ```
 
 ```text
@@ -717,4 +724,36 @@ The message of an error contains:
 
 ```text
 `: it is how many restricted rings `--sandbox` makes for `NET_LISTEN_RING` before its filter loads, an integer from 1 to …
+```
+
+## NL3059
+
+The message of an error contains:
+
+```text
+…: `nish.link` is an object whose `libraries` and `sources` are arrays of strings, and only the root package's may grant a dependency's under `dependencies`
+```
+
+## NL3060
+
+The message of an error contains:
+
+```text
+…: a `nish.link` library is a name `-l` takes, of letters, digits, `_`, `.`, `+` and `-` and not starting with `-`, and a source is a `.c` file inside the package, by its path relative to `package.json`
+```
+
+## NL3061
+
+The message of an error contains:
+
+```text
+…, which the root package does not grant it: a dependency's `nish.link` takes effect only once the root's `nish.link.dependencies` names it
+```
+
+## NL3062
+
+The message of an error contains:
+
+```text
+…: a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build
 ```

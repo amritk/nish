@@ -22,7 +22,7 @@ import { ringShift, ringSize } from "nish/host/ring";
 
 const INPUT = new Int32Array(2 + 64); // head, tail, then 64 slots
 
-export function tick(): void {
+export const tick = (): void => {
   while (ringSize(INPUT) > 0) {
     steer(ringShift(INPUT));
   }
@@ -100,7 +100,7 @@ and a size past the capacity reads as full, so `ringPush` refuses and
 The number of slots, the ring's length less its header.
 
 ```ts
-function ringCapacity(ring: Int32Array): i32
+const ringCapacity: (ring: Int32Array) => i32
 ```
 
 <scalar-field name="ring" type="Int32Array" required>
@@ -120,7 +120,7 @@ the slot count, or 0 for a ring too short to have one
 Empties the ring: the head catches up with the tail, and the slots keep their stale words.
 
 ```ts
-function ringClear(ring: Int32Array): void
+const ringClear: (ring: Int32Array) => void
 ```
 
 <scalar-field name="ring" type="Int32Array" required>
@@ -134,7 +134,7 @@ the ring's storage: head, tail, then its slots
 The number of words `ringPush` would still take.
 
 ```ts
-function ringFree(ring: Int32Array): i32
+const ringFree: (ring: Int32Array) => i32
 ```
 
 <scalar-field name="ring" type="Int32Array" required>
@@ -154,10 +154,7 @@ the free slots
 Puts `word` at the tail, or changes nothing when the ring is full.
 
 ```ts
-function ringPush(
-  ring: Int32Array,
-  word: i32,
-): boolean
+const ringPush: (ring: Int32Array, word: i32) => boolean
 ```
 
 <scalar-field name="ring" type="Int32Array" required>
@@ -184,7 +181,7 @@ Takes the word at the head. On an empty ring it answers 0 and changes
 nothing, so a caller that cannot tell 0 from empty asks `ringSize` first.
 
 ```ts
-function ringShift(ring: Int32Array): i32
+const ringShift: (ring: Int32Array) => i32
 ```
 
 <scalar-field name="ring" type="Int32Array" required>
@@ -204,7 +201,7 @@ the word taken, or 0 on an empty ring
 The number of words put and not yet taken.
 
 ```ts
-function ringSize(ring: Int32Array): i32
+const ringSize: (ring: Int32Array) => i32
 ```
 
 <scalar-field name="ring" type="Int32Array" required>

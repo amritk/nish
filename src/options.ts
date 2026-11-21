@@ -12,6 +12,18 @@
 
 import { NUMBER_MODE_I32 } from "./context"
 
+/**
+ * The flag that relaxes the no-panic check, spelled once: the help row
+ * (`src/cli-style.ts`), the flag loop (`src/compile.ts`) and the scope's
+ * diagnostics (`src/panics.ts`) read it from here, and the repository's
+ * builds pass it through `scripts/nish-compiler.sh` and
+ * `tests/allow-panics.js`. Without it every module of the root package is in
+ * the no-panic scope; with it the scope is the root package's
+ * `"nish".noPanic` list, or nothing, so a listed module stays held. The name
+ * is provisional: a rename is this constant, those two helpers and the docs.
+ */
+export const ALLOW_PANICS_FLAG: string = "--allow-panics"
+
 export class Options {
   /** How the `number` keyword is lowered: `NUMBER_MODE_I32` or `NUMBER_MODE_F64`. */
   numberMode: i32
@@ -49,6 +61,15 @@ export class Options {
    * the IR byte for byte what it was.
    */
   threads: boolean
+  /**
+   * Whether this program stores its compact classes' links as 32-bit offsets
+   * into the arena's reserved range (WP48, docs/wp48-ref32-classes.md §4): a
+   * module declares one with `implements Compact` on a target that
+   * compresses. Set by `Compilation.emit` once every module is checked, since
+   * every module's inline bump then realigns to 8 and the binary links the
+   * range runtime. Off leaves the IR byte for byte what it was.
+   */
+  compactLinks: boolean
   /**
    * The WP8 interop sidecars, each the path `--emit-header` / `--emit-dts` /
    * `--emit-napi` was given, or the empty string when it was not passed.
@@ -187,12 +208,22 @@ export class Options {
    */
   emitPanics: string
   /**
-   * `--deny-panics`: every function in the program's own modules is held to no
-   * panic site but out of memory (`reportDeniedPanics` in `src/panics.ts`).
-   * It changes no byte of the IR: a program it refuses writes none, and one it
-   * accepts is the one the build would have compiled anyway.
+   * Whether every function in the program's own modules is held to no panic
+   * site but out of memory (`reportDeniedPanics` in `src/panics.ts`): the
+   * default, which `--deny-panics` spells out and `ALLOW_PANICS_FLAG` turns
+   * off, the last of the two on a line winning. It changes no byte of the IR:
+   * a program it refuses writes none, and one it accepts is the one the build
+   * would have compiled anyway. True from the constructor, so a path that
+   * builds a program without reading the command line is strict unless it
+   * says why not (`src/dump-checked.ts`, `cachedTool` in `src/compile.ts`).
    */
   denyPanics: boolean
+  /**
+   * `--deny-panics` was the last of it and `ALLOW_PANICS_FLAG` on the line:
+   * the scope was asked for rather than taken by default, which is what
+   * `--emit-ast`, a dump that stops before the check, refuses.
+   */
+  denyPanicsFlag: boolean
   /**
    * `--deny-retention`: every arena-retention warning in the program's own
    * modules (NL9002, NL9003, NL9011, NL9016, NL9018, NL9019) is an error instead
@@ -213,8 +244,22 @@ export class Options {
    */
   explainMemory: boolean
   /**
+   * `--explain-layout`: print, for every class, whether the compact-class rule
+   * of docs/wp48-ref32-classes.md §3.1 picks it, or the first of its tests that
+   * refuses it, with the size it has and would have
+   * (`Compilation.explainLayoutText`). It changes no byte of the IR.
+   */
+  explainLayout: boolean
+  /**
+   * `--compact on|off`, on by default: whether a native build narrows the
+   * classes the compact-class rule of docs/wp48-ref32-classes.md §3.1 picks.
+   * Off narrows no class, `implements Compact` ones included, so the IR is
+   * the IR of a build with no compact class.
+   */
+  compact: boolean
+  /**
    * The root package's `"nish".noPanic` named at least one module, which puts
-   * those modules in the scope `--deny-panics` puts all of them in. Set by
+   * those modules in the scope even under `ALLOW_PANICS_FLAG`. Set by
    * `Compilation` once it has read the manifest, before anything records.
    */
   noPanicListed: boolean
@@ -303,8 +348,10 @@ export class Options {
    * decides it before the first module loads: `--compat` (`compatFlag`), or
    * else `nish.compat` in the root `package.json`. It implies
    * `--number-mode f64` unless the command line names a mode
-   * (`numberModeFlag`), and no feature is built yet, so beyond that it
-   * changes no diagnostic and no instruction (`tests/compat-erasure.js`).
+   * (`numberModeFlag`). Beyond that it marks each module it writes and
+   * accepts what the features in `compatFeatures` admit (`src/compat.ts`); a
+   * program strict already answers gets the same answer
+   * (`tests/compat-erasure.js`).
    */
   compat: boolean
   /** The command line gave `--compat` or `--compat=<list>`, which the root manifest does not override. */
@@ -323,6 +370,7 @@ export class Options {
     this.target = ""
     this.debugInfo = false
     this.threads = false
+    this.compactLinks = false
     this.emitHeader = ""
     this.emitDts = ""
     this.hosts = []
@@ -339,10 +387,13 @@ export class Options {
     this.statelessInstance = ""
     this.warnPortability = false
     this.emitPanics = ""
-    this.denyPanics = false
+    this.denyPanics = true
+    this.denyPanicsFlag = false
     this.denyRetention = false
     this.emitArena = ""
     this.explainMemory = false
+    this.explainLayout = false
+    this.compact = true
     this.noPanicListed = false
     this.capabilityReport = false
     this.allowCapabilities = -1

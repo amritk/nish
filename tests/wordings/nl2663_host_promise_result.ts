@@ -1,4 +1,4 @@
 import { later } from "./host/promise"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};

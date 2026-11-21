@@ -263,10 +263,10 @@ up to `maxBodyBytes`, before the answer comes. Policy, proxy, redirect and
 error rules are `fetchSync`'s.
 
 ```ts
-function fetch(
+const fetch: (
   url: string,
   init: RequestInit | null = null,
-): Promise<Result<FetchResponse, FetchError>>
+) => Promise<Result<FetchResponse, FetchError>>
 ```
 
 <scalar-field name="url" type="string" required>
@@ -294,10 +294,10 @@ the fetch failed. Null on a failure, with no way to say why: a program
 that reports its errors fetches through a `FetchSyncClient`.
 
 ```ts
-function fetchSync(
+const fetchSync: (
   req: HttpRequest,
   options: HttpOptions,
-): HttpResponse | null
+) => HttpResponse | null
 ```
 
 <scalar-field name="req" type="HttpRequest" required>
@@ -324,11 +324,11 @@ A proxy variable's value: `lower` when it is set and not empty, else
 `upper` when `upperAllowed`, else "". `HTTP_PROXY` is not allowed under CGI.
 
 ```ts
-function httpChooseProxy(
+const httpChooseProxy: (
   lower: string | null,
   upper: string | null,
   upperAllowed: boolean,
-): string
+) => string
 ```
 
 <scalar-field name="lower" type="string | null" required>
@@ -361,7 +361,7 @@ A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout",
 ... A fetch's `errorText` starts with it.
 
 ```ts
-function httpErrorName(code: i32): string
+const httpErrorName: (code: i32) => string
 ```
 
 <scalar-field name="code" type="i32" required>
@@ -385,11 +385,11 @@ any of them may end in `:port`, and an IPv6 address with a port is written
 in brackets. Case does not matter. Address ranges are not understood.
 
 ```ts
-function httpNoProxyMatch(
+const httpNoProxyMatch: (
   noProxy: string,
   host: string,
   port: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="noProxy" type="string" required>
@@ -423,14 +423,14 @@ settings: `httpsProxy` for https, `httpProxy` for http, and "" for none or
 when `noProxy` names the host.
 
 ```ts
-function httpProxyFor(
+const httpProxyFor: (
   scheme: string,
   host: string,
   port: i32,
   httpProxy: string,
   httpsProxy: string,
   noProxy: string,
-): string
+) => string
 ```
 
 <scalar-field name="scheme" type="string" required>

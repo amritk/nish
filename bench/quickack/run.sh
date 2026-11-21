@@ -70,7 +70,10 @@ done
 
 out=build/bench/quickack
 mkdir -p "$out"
-build/nish bench/http1-server.ts --link build/bench/h1 --profile speed >/dev/null
+# A bench program, so its build takes `--allow-panics` from a compiler that lists it.
+. scripts/nish-compiler.sh
+nish_allow_panics build/nish
+build/nish ${allow_panics[@]+"${allow_panics[@]}"} bench/http1-server.ts --link build/bench/h1 --profile speed >/dev/null
 cp build/bench/h1 "$out/h1-copy"
 cmp build/bench/h1 "$out/h1-copy"
 here=$(pwd)

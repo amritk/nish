@@ -1,0 +1,7 @@
+{
+  "name": "compat-for-of-string-destructure",
+  "private": true,
+  "nish": {
+    "compat": ["for-of-string"]
+  }
+}

@@ -52,7 +52,7 @@ const show = (label: string, s: Sample): void => {
   console.log(`${label}: tag ${s.tag}, count ${s.count}, name ${readCString(s.name)}, ratio ${s.ratio}`)
 }
 
-export function run(): i32 {
+export const run = (): i32 => {
   const kept = copied()
   const alias: Copy = readStruct(samplePtr())
   let maybe: Sample | null = null
@@ -68,4 +68,4 @@ export function run(): i32 {
   const lc: Lconv = readStruct(localeconv())
   console.log(`decimal point ${readCString(lc.decimalPoint)}, thousands separator "${readCString(lc.thousandsSep)}"`)
   return 0
-}
+};

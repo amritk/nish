@@ -23,7 +23,10 @@ nish="${NISH:-$root/build/nish}"
 out="$root/build/quic-lifecycle-record"
 rm -rf "$out"
 mkdir -p "$out"
-"$nish" "$here/main.ts" -o "$out/" --link "$out/app" >/dev/null 2>&1
+# A test fixture, so its build takes `--allow-panics` from a compiler that lists it.
+. "$root/scripts/nish-compiler.sh"
+nish_allow_panics "$nish"
+"$nish" ${allow_panics[@]+"${allow_panics[@]}"} "$here/main.ts" -o "$out/" --link "$out/app" >/dev/null 2>&1
 version="$("$python" -c 'import aioquic; print(aioquic.__version__)')"
 for scenario in "${scenarios[@]}"; do
   "$out/app" serve "$port" "$scenario" >"$out/$scenario.txt" &

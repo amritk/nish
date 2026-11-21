@@ -2634,6 +2634,7 @@ const undeclaredMessage = (intrinsic: string): string =>
 export const isPureRuntime = (symbol: string): boolean =>
   symbol.startsWith("llvm.") ||
   symbol === "nish_alloc_struct" ||
+  symbol === "nish_alloc_ref" ||
   symbol === "nish_arena_grow" ||
   symbol === "nish_arena_keep" ||
   symbol === "nish_arena_mark" ||
@@ -2712,7 +2713,12 @@ const reachedEffect = (facts: FactsTable, runtime: RuntimeTable, start: Function
         queue.push(next)
         continue
       }
-      if (callee !== "nish_alloc_struct" && !callee.startsWith("llvm.") && runtime.lookup(callee) === null) {
+      if (
+        callee !== "nish_alloc_struct" &&
+        callee !== "nish_alloc_ref" &&
+        !callee.startsWith("llvm.") &&
+        runtime.lookup(callee) === null
+      ) {
         return `${C_FUNCTION}\`${callee}\`${through}`
       }
     }

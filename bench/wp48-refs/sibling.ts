@@ -1,7 +1,16 @@
 // WP48's lean pointer graph: the tree `class.ts` builds, in the same order,
 // with no array per node. A node links to its parent, its first child and its
-// next sibling, three 8-byte pointers beside two `i32`s: 32 bytes a node and
-// nothing else allocated. `columns.ts` holds the same links as `i32` indices.
+// next sibling beside two `i32`s, and nothing else is allocated.
+// `columns.ts` holds the same links as `i32` indices.
+//
+// The compact rule (docs/guide/language/compact-classes.md) picks `Node`: its
+// three links become 32-bit offsets, 32 bytes a node to 20, the size of
+// `columns.ts`'s five columns. `Builder` stays wide, since it holds no link.
+// `--compact off` builds the 8-byte-pointer layout. The decode costs on
+// `climb`, a parent-chasing loop: at 1M nodes the program as a whole is
+// level within its band, at 4M even (docs/wp48-ref32-classes.md, section 5.5).
+// A program whose graph fits in cache and is mostly such a loop can say
+// `implements Wide` on its node.
 //
 //   build/nish bench/wp48-refs/sibling.ts --link build/wp48/sibling
 //   build/wp48/sibling <count> <rounds>

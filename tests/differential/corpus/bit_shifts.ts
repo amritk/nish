@@ -1,13 +1,13 @@
 // `<< >> >>>` on i32: sign-filling versus zero-filling, and counts at, above
 // and below the 32-bit width. JavaScript masks the count to 5 bits and so do
 // we, which is what keeps this program comparable at all.
-function row(a: number, n: number): void {
+const row = (a: number, n: number): void => {
   console.log(`${a} << ${n} = ${a << n}`);
   console.log(`${a} >> ${n} = ${a >> n}`);
   console.log(`${a} >>> ${n} = ${a >>> n}`);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   for (let n = 0; n < 40; n++) {
     row(-16, n);
   }
@@ -33,4 +33,4 @@ export function main(): number {
   x >>>= 4;
   console.log(x);
   return 0;
-}
+};

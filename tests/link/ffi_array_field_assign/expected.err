@@ -1,0 +1,1 @@
+a fixed-length array inside a `declare class` is written element by element (`c.h[i] = ...`)

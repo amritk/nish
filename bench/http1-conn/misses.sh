@@ -23,6 +23,7 @@ dram_requests="${3:-20000}"
 evict="${4:-1024}"
 out="$root/build/bench/http1-conn/misses"
 old_nish="$root/build/bench/http1-conn/old-package/bin/nish"
+. "$root/scripts/nish-compiler.sh"
 new_nish="$root/build/nish"
 [ -x "$new_nish" ] || new_nish="$root/build/seed/bin/nish"
 base_file="$root/build/bench/http1-conn/old-package/BASE"
@@ -55,7 +56,9 @@ for build in old new; do
   mkdir -p "$dir"
   # run.mjs wrote each build's main.ts, rewritten for a base without sendBody.
   cp "$root/build/bench/http1-conn/$build/main.ts" "$dir/main.ts"
-  logged "$dir/compile.log" "$nish" "$dir/main.ts" -o "$dir/" --profile speed -g --link "$dir/conn"
+  # The old package may predate `--allow-panics`, so each compiler is asked.
+  nish_allow_panics "$nish"
+  logged "$dir/compile.log" "$nish" ${allow_panics[@]+"${allow_panics[@]}"} "$dir/main.ts" -o "$dir/" --profile speed -g --link "$dir/conn"
   for shape in idle direct idle-dram direct-dram; do
     mode="${shape%-dram}"
     n="$requests"

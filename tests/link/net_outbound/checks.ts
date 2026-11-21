@@ -553,7 +553,7 @@ const runClient = (port: i32): i32 => {
 };
 
 
-export function outboundChecks(): i32 {
+export const outboundChecks = (): i32 => {
   const argv: string[] = process.argv;
   if (toI32(argv.length) >= 3 && argv[1] === "client") {
     return runClient(decimalOf(argv[2]));
@@ -565,4 +565,4 @@ export function outboundChecks(): i32 {
     return 1;
   }
   return server.serve(pid);
-}
+};

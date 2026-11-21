@@ -16,6 +16,63 @@ file per release, and each release's notes and downloads are on the
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-18
+
+### Added
+
+- runtime: Echo ECN counts in the QUIC server's ACKs ([#1711](https://github.com/amritk/nish/pull/1711))
+- bench: Measure Nish's crypto against OpenSSL, Go, Rust and Node, portable and with assembly ([#1716](https://github.com/amritk/nish/pull/1716))
+- runtime: Give netShutdown and netMss a slot path ([#1715](https://github.com/amritk/nish/pull/1715))
+- runtime: Carve the arena from a reserved range when a program has a compact class ([#1707](https://github.com/amritk/nish/pull/1707))
+- cli: Report which classes the compact-class rule picks, with --explain-layout ([#1736](https://github.com/amritk/nish/pull/1736))
+- codegen: Lay out an implements Compact class's links as 32-bit offsets ([#1744](https://github.com/amritk/nish/pull/1744))
+- checker: Report generic class instantiations in --explain-layout ([#1756](https://github.com/amritk/nish/pull/1756))
+
+### Fixed
+
+- runtime: Free an idle ring slot's receive queue ([#1712](https://github.com/amritk/nish/pull/1712))
+- runtime: Accept a WebSocket without leaving bytes in the arena ([#1714](https://github.com/amritk/nish/pull/1714))
+- runtime: Raise strbuild and map-proto-ordered-fp32 instruction baselines ([#1738](https://github.com/amritk/nish/pull/1738))
+- codegen: Lay out a class pointer field in 4 bytes on wasm32 ([#1740](https://github.com/amritk/nish/pull/1740))
+- codegen: Widen narrow C arguments and results with zeroext ([#1758](https://github.com/amritk/nish/pull/1758))
+
+### Performance
+
+- runtime: Grow arrays in place; Copy a push loop over an array range in one memcpy ([`c391e09`](https://github.com/amritk/nish/commit/c391e09))
+- codegen: Test a counted loop's x + i for overflow once, before the loop ([#1710](https://github.com/amritk/nish/pull/1710))
+- ci: Link the compiler under test once per compiler input ([#1735](https://github.com/amritk/nish/pull/1735))
+- self: Split the test runner's lines sixteen positions at a time with nish:simd, and add simd variants checked against scalar ([#1713](https://github.com/amritk/nish/pull/1713))
+- ci: Deal the test shards by today's costs ([#1739](https://github.com/amritk/nish/pull/1739))
+- ci: Run the side jobs only when their inputs change, behind one gate ([#1746](https://github.com/amritk/nish/pull/1746))
+
+### Documentation
+
+- site: Give every page a canonical link, its own titles and a theme-color ([`1fe3ce5`](https://github.com/amritk/nish/commit/1fe3ce5))
+- runtime: Record the ring's p99 as a queue on one core, and measure 300,000 connections ([#1717](https://github.com/amritk/nish/pull/1717))
+- runtime: Correct the ring slot's netShutdown and netMss answers and the io_uring counts ([#1730](https://github.com/amritk/nish/pull/1730))
+- self: Pin benchmark-table provenance and stale-pointer greps in CLAUDE.md ([#1729](https://github.com/amritk/nish/pull/1729))
+- Hold a CI lane's read set to what its commands read ([#1751](https://github.com/amritk/nish/pull/1751))
+
+### Tests
+
+- self: Give net_relay_f64 its own scratch directory ([#1704](https://github.com/amritk/nish/pull/1704))
+- spec: Hold the crypto specs to vector 0.4.0's rows instead of transcribed properties ([#1702](https://github.com/amritk/nish/pull/1702))
+- spec: Move to vector 0.5.0 ([#1703](https://github.com/amritk/nish/pull/1703))
+- codegen: Fail the fnref peak checks only on growth ([#1709](https://github.com/amritk/nish/pull/1709))
+- Rewrite the reject_* golden cases to arrow declarations ([#1725](https://github.com/amritk/nish/pull/1725))
+- Rewrite the link programs and wording cases to arrow declarations ([#1726](https://github.com/amritk/nish/pull/1726))
+- Rewrite the differential corpus and the remaining fixtures to arrow declarations ([#1737](https://github.com/amritk/nish/pull/1737))
+- Rewrite the positive golden cases to arrow declarations ([#1723](https://github.com/amritk/nish/pull/1723))
+- Refuse a new function definition in the test corpus ([#1741](https://github.com/amritk/nish/pull/1741))
+- Spell #1736's inline Nish programs as arrows ([#1743](https://github.com/amritk/nish/pull/1743))
+- Spell the last host-importing inline programs as arrows ([#1748](https://github.com/amritk/nish/pull/1748))
+
+### CI
+
+- Run each duplicated check once per push ([#1721](https://github.com/amritk/nish/pull/1721))
+- Let knip know prlimit is a system tool ([#1742](https://github.com/amritk/nish/pull/1742))
+
+
 ## [0.42.0] - 2026-11-17
 
 ### Added
@@ -2033,3 +2090,4 @@ file per release, and each release's notes and downloads are on the
 [0.40.1]: https://github.com/amritk/nish/releases/tag/v0.40.1
 [0.41.0]: https://github.com/amritk/nish/releases/tag/v0.41.0
 [0.42.0]: https://github.com/amritk/nish/releases/tag/v0.42.0
+[0.43.0]: https://github.com/amritk/nish/releases/tag/v0.43.0

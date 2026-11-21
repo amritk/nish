@@ -230,6 +230,20 @@ const isAsyncExport = (name: string): boolean =>
 export const isExecutorCall = (canonical: string): boolean =>
   canonical.startsWith("async.") && canonical !== "async.spawn" && canonical !== "async.awaitAll"
 
+/**
+ * `nish:compact` (WP48): the marker interfaces a class names to pick its
+ * layout (docs/LANGUAGE.md, "Compact classes"). `class R implements Compact`
+ * stores every field typed exactly `R` or `R | null`, in any class, as a 32-bit
+ * offset into the reserved range (`computeLayout` in `src/structs.ts`). Both
+ * names are types with no fields, so an `implements` of one adds no prefix.
+ * `Compact` forces what the compact-class rule (`src/compact-rule.ts`) would
+ * otherwise decide, and `Wide` keeps the rule from picking the class.
+ */
+export const COMPACT_SPECIFIER: string = "nish:compact"
+
+/** Whether `name` is one of `nish:compact`'s two marker interfaces. */
+export const isCompactExport = (name: string): boolean => name === "Compact" || name === "Wide"
+
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
@@ -240,11 +254,12 @@ export const isNishModule = (specifier: string): boolean =>
   specifier === SIMD_SPECIFIER ||
   specifier === ASYNC_SPECIFIER ||
   specifier === unsafeModule() ||
+  specifier === COMPACT_SPECIFIER ||
   isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${BUILTIN_SCHEME}region, ${SIMD_SPECIFIER}, ${ASYNC_SPECIFIER}, ${unsafeModule()}`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${BUILTIN_SCHEME}region, ${SIMD_SPECIFIER}, ${ASYNC_SPECIFIER}, ${unsafeModule()}, ${COMPACT_SPECIFIER}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
@@ -299,6 +314,9 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString, readStruct, cErrno"
+  }
+  if (specifier === COMPACT_SPECIFIER) {
+    return "Compact, Wide"
   }
   return "write, writeError, writeBytes, panic"
 }
@@ -631,6 +649,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === unsafeModule()) {
     return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null
+  }
+  if (specifier === COMPACT_SPECIFIER) {
+    return isCompactExport(name) ? new BuiltinExport("", name, false) : null
   }
   return null
 }

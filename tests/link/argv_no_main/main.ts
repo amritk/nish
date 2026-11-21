@@ -2,6 +2,6 @@
 // imported module: nothing would ever build the array.
 import { argumentCount } from "./args";
 
-export function twice(): number {
+export const twice = (): number => {
   return argumentCount() * 2;
-}
+};

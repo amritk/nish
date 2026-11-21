@@ -1,0 +1,24 @@
+text 0: 0 lines, scalar 0
+text 1: 1 lines, scalar 1
+text 2: 1 lines, scalar 1
+text 3: 1 lines, scalar 1
+text 4: 1 lines, scalar 1
+text 5: 1 lines, scalar 1
+text 6: 1 lines, scalar 1
+text 7: 1 lines, scalar 1
+text 8: 4 lines, scalar 4
+text 9: 2 lines, scalar 2
+text 10: 17 lines, scalar 17
+text 11: 3 lines, scalar 3
+text 12: 4 lines, scalar 4
+text 13: 2 lines, scalar 2
+crlf keeps cr: true
+U+010A is not a newline: true
+patterned texts: 147
+one newline placed: 33
+4095 positions: 820 lines
+4096 positions: 820 lines
+4097 positions: 820 lines
+8193 positions: 1639 lines
+chunk-edge texts: 32
+mismatches: 0

@@ -12,15 +12,15 @@ class Tally {
   }
 }
 
-function same(s: string): string {
+const same = (s: string): string => {
   return s
-}
+};
 
-function each(xs: string[], f: (n: string) => void): void {
+const each = (xs: string[], f: (n: string) => void): void => {
   for (const x of xs) {
     f(x)
   }
-}
+};
 
 async function work(tally: Tally, ms: i32): Promise<void> {
   await sleep(ms)

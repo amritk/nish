@@ -22,8 +22,11 @@ class File {
   }
 }
 
-function count(f?: File): i32 {
+const count = (f?: File): i32 => {
+  return 0
+};
+
+export const main = (): i32 => {
+  console.log(`count: ${count()}`)
   return 0
 }
-
-export const main = (): i32 => 0

@@ -62,7 +62,14 @@ fi
   cd "$dir"
   bash scripts/fetch-z3.sh
   mkdir -p dist
-  .nish/bin/nish src/main.ts --link dist/vector
+  # A nish that holds the root package to no panic by default lists
+  # `--allow-panics`: vector keeps panic sites no proof removes yet, so it
+  # is built relaxed until it migrates. An older nish has no such flag. This is
+  # the POSIX twin of `nish_allow_panics` (scripts/nish-compiler.sh, bash only).
+  relax=""
+  help=$(NO_COLOR=1 .nish/bin/nish --help 2>/dev/null) || help=""
+  case "$help" in *--allow-panics*) relax=--allow-panics ;; esac
+  .nish/bin/nish src/main.ts $relax --link dist/vector
 )
 
 got=$("$bin" --version)

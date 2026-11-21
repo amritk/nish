@@ -2,6 +2,6 @@
 // `cErrno` is refused there (`--profile wasi` links wasi-libc and keeps it).
 import { cErrno } from "nish:unsafe";
 
-export function lastErrno(): i32 {
+export const lastErrno = (): i32 => {
   return cErrno();
-}
+};

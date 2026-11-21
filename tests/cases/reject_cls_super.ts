@@ -9,6 +9,6 @@ class Counter {
   }
 }
 
-export function test(): number {
+export const test = (): number => {
   return new Counter(1).n;
-}
+};

@@ -2,13 +2,13 @@
 interface Cell {
   v: number
 }
-function bumpAll(...cs: Cell[]): void {
+const bumpAll = (...cs: Cell[]): void => {
   for (const c of cs) {
     c.v = c.v + 100
   }
-}
-export function main(): void {
+};
+export const main = (): void => {
   const p: Cell = { v: 1 }
   bumpAll(p, { v: 2 })
   console.log(p.v)
-}
+};

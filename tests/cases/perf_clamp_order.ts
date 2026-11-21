@@ -5,9 +5,9 @@
 // whole argument list left behind folded the clamp on a negative bound, read
 // three bytes before the string body, and segfaulted once the offset was
 // large enough -- with both compilers agreeing, so no oracle could see it.
-function width(): number {
+const width = (): number => {
   return 6;
-}
+};
 
 export const main = (): number => {
   const s = "hello world";

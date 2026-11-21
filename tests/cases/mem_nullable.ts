@@ -9,7 +9,7 @@ class Node {
   }
 }
 
-function sum(head: Node | null): number {
+const sum = (head: Node | null): number => {
   let total = 0;
   let cur: Node | null = head;
   while (cur !== null) {
@@ -17,28 +17,28 @@ function sum(head: Node | null): number {
     cur = cur.next;
   }
   return total;
-}
+};
 
-function find(head: Node | null, want: number): Node | null {
+const find = (head: Node | null, want: number): Node | null => {
   let cur = head;
   while (cur !== null && cur.value !== want) {
     cur = cur.next;
   }
   return cur;
-}
+};
 
-function describe(n: Node | null): string {
+const describe = (n: Node | null): string => {
   if (n === null) {
     return "none";
   }
   return `node ${n.value}`;
-}
+};
 
-function valueOr(n: Node | null, fallback: number): number {
+const valueOr = (n: Node | null, fallback: number): number => {
   return n !== null ? n.value : fallback;
-}
+};
 
-function last(head: Node): Node {
+const last = (head: Node): Node => {
   let cur = head;
   let next = cur.next;
   while (next !== null) {
@@ -46,9 +46,9 @@ function last(head: Node): Node {
     next = cur.next;
   }
   return cur;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const a = new Node(1);
   const b = new Node(2);
   const c = new Node(3);
@@ -76,4 +76,4 @@ export function main(): number {
     console.log(x1.value);
   }
   return 0;
-}
+};

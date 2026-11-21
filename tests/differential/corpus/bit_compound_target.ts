@@ -20,7 +20,7 @@ class Flags {
   }
 }
 
-export function main(): number {
+export const main = (): number => {
   const f = new Flags();
   f.bits = -16;
   f.bits |= 3;
@@ -54,4 +54,4 @@ export function main(): number {
   console.log(a[2]);
   console.log(f.count);
   return 0;
-}
+};

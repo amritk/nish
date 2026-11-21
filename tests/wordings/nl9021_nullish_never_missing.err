@@ -1,0 +1,1 @@
+`a` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? 1`)

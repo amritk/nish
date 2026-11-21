@@ -4,6 +4,6 @@
 // `cErrno()` from `nish:unsafe` is how a program reads it.
 declare let errno: i32;
 
-export function main(): i32 {
+export const main = (): i32 => {
   return errno;
-}
+};

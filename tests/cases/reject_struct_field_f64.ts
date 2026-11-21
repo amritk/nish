@@ -10,7 +10,7 @@ interface IoError {
   path: string;
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const problem: IoError = { code: 2, path: "/tmp" };
   return problem.code;
-}
+};

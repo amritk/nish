@@ -65,11 +65,11 @@ setting `key` to it. One hash and one probe natively, whichever it was.
 `value` is evaluated either way, as every argument is.
 
 ```ts
-function getOrInsert<K, V>(
+const getOrInsert: <K, V>(
   m: Map<K, V>,
   key: K,
   value: V,
-): V
+) => V
 ```
 
 <scalar-field name="m" type="Map&lt;K, V&gt;" required>
@@ -104,19 +104,16 @@ presizes the bucket table, and under Node, which has no such call, it does
 nothing. A count that is not positive does nothing either way.
 
 ```ts
-function reserve<K, V>(
-  _m: Map<K, V>,
-  _n: number,
-): void
+const reserve: <K, V>(m: Map<K, V>, n: number) => void
 ```
 
-<scalar-field name="_m" type="Map&lt;K, V&gt;" required>
+<scalar-field name="m" type="Map&lt;K, V&gt;" required>
 
 the map to presize.
 
 </scalar-field>
 
-<scalar-field name="_n" type="number" required>
+<scalar-field name="n" type="number" required>
 
 how many entries it should hold, those already in it counted,
   without growing.

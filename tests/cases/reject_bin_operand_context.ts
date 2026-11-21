@@ -3,7 +3,7 @@
 // grants an annotated initializer its type, and `1 + 2` is not a literal, it is
 // a sum of two `i32` literals that neither annotation reaches. Write
 // `const b: u8 = toU8(3)`, or annotate the operands one at a time.
-export function main(): i32 {
+export const main = (): i32 => {
   const b: u8 = 1 + 2;
   return toI32(b);
-}
+};

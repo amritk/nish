@@ -1,6 +1,6 @@
 // toI32 / toI64 / toF64 between every numeric type (default i32 mode):
 // sext, trunc, sitofp, and the saturating llvm.fptosi.sat.* for f64 -> integer.
-export function test(): number {
+export const test = (): number => {
   const f: f64 = 2.75;
   const big: i64 = 5000000000;
   console.log(toI32(f));
@@ -14,4 +14,4 @@ export function test(): number {
   console.log(toF64(3) / 2);
   console.log(toF64(2.75) === f);
   return toI32(f * 4);
-}
+};

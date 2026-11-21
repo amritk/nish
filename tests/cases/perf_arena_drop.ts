@@ -10,7 +10,7 @@ class Point {
   }
 }
 
-export function test(): number {
+export const test = (): number => {
   let p = new Point(1);
   p = new Point(2);
   let xs = [1, 2];
@@ -20,4 +20,4 @@ export function test(): number {
   let s = "a" + "b";
   s = s + "c";
   return p.x + xs[0] + s.length;
-}
+};

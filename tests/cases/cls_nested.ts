@@ -24,11 +24,11 @@ class Segment {
   }
 }
 
-function endpoint(s: Segment): Point {
+const endpoint = (s: Segment): Point => {
   return s.to;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const s = new Segment(new Point(1, 2), new Point(11, 22), "diag");
   console.log(s.dx());
   console.log(endpoint(s).y);
@@ -36,4 +36,4 @@ export function main(): number {
   console.log(s.from.x);
   console.log(s.label);
   return 0;
-}
+};

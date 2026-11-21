@@ -1,5 +1,5 @@
 // for...of: break/continue, push during iteration, nested for-of, a `let` loop variable.
-export function main(): number {
+export const main = (): number => {
   const xs = [3, 1, 4, 1, 5, 9, 2, 6];
   let sum = 0;
   for (const x of xs) {
@@ -69,4 +69,4 @@ export function main(): number {
   }
   console.log(product);
   return 0;
-}
+};

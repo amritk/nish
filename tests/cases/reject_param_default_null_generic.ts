@@ -2,9 +2,9 @@
 class Point {
   x: i32 = 0
 }
-function f<T>(x: T, y: T | null = null): T {
+const f = <T>(x: T, y: T | null = null): T => {
   return y !== null ? y : x
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(new Point()).x)
-}
+};

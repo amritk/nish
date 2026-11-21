@@ -1,4 +1,4 @@
 // The bytes are a `u8[]`: a string goes through `write`.
-export function main(): number {
+export const main = (): number => {
   return writeBytes("ab", 0, 2);
-}
+};

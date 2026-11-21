@@ -261,10 +261,7 @@ Written from RFC 9112 and RFC 9110, not ported from another implementation.
 Whether the octets of `bytes` spell `word`, which is lowercase, in any ASCII case: a field name compared as RFC 9110 §5.1 says.
 
 ```ts
-function http1BytesAre(
-  bytes: u8[],
-  word: string,
-): boolean
+const http1BytesAre: (bytes: u8[], word: string) => boolean
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -294,11 +291,7 @@ end of the body and only `http1LastChunk` writes that. A window outside
 `data` panics.
 
 ```ts
-function http1Chunk(
-  data: u8[],
-  off: i32,
-  len: i32,
-): u8[]
+const http1Chunk: (data: u8[], off: i32, len: i32) => u8[]
 ```
 
 <scalar-field name="data" type="u8[]" required>
@@ -340,11 +333,11 @@ or `=`, and whitespace that leads nowhere are each refused. The server's
 parser and the client's both read their chunk-size lines through this.
 
 ```ts
-function http1ChunkExtValid(
+const http1ChunkExtValid: (
   bytes: u8[],
   from: i32,
   to: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="bytes" type="u8[]" required>
@@ -376,7 +369,7 @@ true when the window is zero or more well-formed chunk extensions
 The value of the hex digit `c`, or -1.
 
 ```ts
-function http1HexValue(c: i32): i32
+const http1HexValue: (c: i32) => i32
 ```
 
 <scalar-field name="c" type="i32" required>
@@ -396,7 +389,7 @@ the byte to read, as a number 0 to 255
 Whether every byte of `text` may stand in a field value or a reason phrase.
 
 ```ts
-function http1IsFieldText(text: string): boolean
+const http1IsFieldText: (text: string) => boolean
 ```
 
 <scalar-field name="text" type="string" required>
@@ -416,7 +409,7 @@ true when nothing in `text` could end the line early; an empty string passes
 Whether `c` is optional whitespace, a space or a tab (OWS, RFC 9110 §5.6.3).
 
 ```ts
-function http1IsOws(c: i32): boolean
+const http1IsOws: (c: i32) => boolean
 ```
 
 <scalar-field name="c" type="i32" required>
@@ -436,7 +429,7 @@ true when `c` is whitespace a field value is trimmed of
 Whether every byte of `text` is a tchar, and there is at least one.
 
 ```ts
-function http1IsToken(text: string): boolean
+const http1IsToken: (text: string) => boolean
 ```
 
 <scalar-field name="text" type="string" required>
@@ -456,7 +449,7 @@ true when `text` is a valid token, false for an empty string
 Whether `c` is a tchar of RFC 9110 §5.6.2, the bytes a token is made of.
 
 ```ts
-function http1IsTokenByte(c: i32): boolean
+const http1IsTokenByte: (c: i32) => boolean
 ```
 
 <scalar-field name="c" type="i32" required>
@@ -476,7 +469,7 @@ true when `c` may stand in a method, a field name or another token
 Whether `c` may appear in a field value (RFC 9110 §5.5): HTAB, SP, VCHAR or obs-text.
 
 ```ts
-function http1IsValueByte(c: i32): boolean
+const http1IsValueByte: (c: i32) => boolean
 ```
 
 <scalar-field name="c" type="i32" required>
@@ -496,7 +489,7 @@ true when `c` cannot end the line early or smuggle a control byte into the value
 The last chunk and the empty trailer section that end a chunked body: `0\r\n\r\n`.
 
 ```ts
-function http1LastChunk(): u8[]
+const http1LastChunk: () => u8[]
 ```
 
 <scalar-field name="returns" type="u8[]">
@@ -510,11 +503,11 @@ those five bytes in a fresh array the caller owns
 Writes `text` at `out[at ..)`, which the caller has made sure holds it, and answers where it ends.
 
 ```ts
-function http1PutText(
+const http1PutText: (
   out: u8[],
   at: i32,
   text: string,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -559,13 +552,13 @@ with a body length (RFC 9110 §15.2, §15.3.5); and any other `bodyLength`
 below zero.
 
 ```ts
-function http1ResponseHead(
+const http1ResponseHead: (
   status: i32,
   reason: string,
   names: string[],
   values: string[],
   bodyLength: i32,
-): u8[] | null
+) => u8[] | null
 ```
 
 <scalar-field name="status" type="i32" required>
@@ -609,12 +602,12 @@ the head's bytes in a fresh array the caller owns, or `null` when the head is re
 Whether `text[a .. b)` is `word`, which is lowercase, in any ASCII case.
 
 ```ts
-function http1SameWord(
+const http1SameWord: (
   text: string,
   a: i32,
   b: i32,
   word: string,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="text" type="string" required>
@@ -652,12 +645,12 @@ true when the slice is `word` with any letters in either case
 `buf[from .. to)` as a string, each upper-case ASCII letter lowered when `lower`.
 
 ```ts
-function http1Text(
+const http1Text: (
   buf: u8[],
   from: i32,
   to: i32,
   lower: boolean,
-): string
+) => string
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -699,13 +692,13 @@ with `out` untouched. An empty window writes nothing and answers `at`,
 because a chunk of size zero ends the body. A window outside `data` panics.
 
 ```ts
-function http1WriteChunk(
+const http1WriteChunk: (
   out: u8[],
   at: i32,
   data: readonly u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -750,10 +743,7 @@ Writes `http1LastChunk`'s five bytes into `out` at `at` and answers where
 they end, or `HTTP1_NO_ROOM` with `out` untouched.
 
 ```ts
-function http1WriteLastChunk(
-  out: u8[],
-  at: i32,
-): i32
+const http1WriteLastChunk: (out: u8[], at: i32) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -793,7 +783,7 @@ that is not field text on a final status, the only one it is sent on;
 counted when it is sent. Either way `out` is untouched.
 
 ```ts
-function http1WriteResponseHead(
+const http1WriteResponseHead: (
   out: u8[],
   at: i32,
   status: i32,
@@ -803,7 +793,7 @@ function http1WriteResponseHead(
   bodyLength: i32,
   connection: string,
   date: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>

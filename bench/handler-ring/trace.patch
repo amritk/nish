@@ -1,0 +1,217 @@
+The ring loop's trace (docs/BENCHMARKS.md, "The ring's tail latency, and
+300,000 connections"): counters on runtime/runtime-net.c's nr_pump, nr_collect
+and nr_poll_wait, printed to stderr once a second when NR_TRACE is set. It is
+not in the runtime: bench/handler-ring/trace.sh applies it for one build and
+reverts it. git apply skips this text.
+
+Both lines start with t, the CLOCK_MONOTONIC second the line was printed at,
+the clock loadgen's win_lo and win_hi are on: a line whose t lies in
+(win_lo + 1, win_hi] covers one second of the measured window.
+
+`trace` line, per second. Counts: cycles (returns of nr_poll_wait), pumps,
+ev (completions pumped), waits, sleeps, sleep_full. The longest pass, a pass
+running from one return of nr_poll_wait to the next, less its sleep in
+epoll_wait: max_cycle, its length, ms; max_out, its time outside
+nr_poll_wait, in the handler, ms; n_at_max, the ready slots the previous
+return handed the handler, the ones that time served; max_cycle_pumps and
+max_cycle_ev, its pumps and the completions they took. The longest pump:
+max_pump, ms, and max_pump_ev, its completions. Maxima over every pass of
+the second, not of the longest one: max_in (one call of nr_poll_wait), max_wait
+(one nish_uring_wait), max_sleep (one epoll_wait), ms; max_rounds (waits in one
+pump), max_npend (sends queued at a pump's end). h(>1,2,5,10,20,50,100):
+passes longer than each bound, ms.
+
+`tr2` line, per second: ages, the ready-list entries the handler took;
+max_age, the longest any waited from listing to collection, ms, an upper
+bound: nr_collect re-appends every entry it reports and stamps it then, so an
+entry's age can start before the event it is next collected for; ah(...),
+entries older than each bound, ms, with the same caveat; max_list, the longest the list was, read
+every 64th collection; and the ring set's taskrun, overflow, nobufs and
+requeues over the second and its live count (nish_uring_stats).
+
+diff --git a/runtime/runtime-net.c b/runtime/runtime-net.c
+index 4160af77..5d1e17e3 100644
+--- a/runtime/runtime-net.c
++++ b/runtime/runtime-net.c
+@@ -67,6 +67,7 @@ typedef int nish_net_unused;
+ #include <stddef.h>
+ #include <stdint.h>
+ #include <stdlib.h>
++#include <stdio.h>
+ #include <string.h>
+ #include <sys/resource.h>
+ #include <sys/socket.h>
+@@ -297,6 +298,8 @@ int32_t nish_uring_close(struct nish_uring_set *s, int32_t ring, int32_t slot);
+ int32_t nish_uring_shutdown(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t how);
+ int64_t nish_uring_queued(const struct nish_uring_set *s, int32_t ring, int32_t slot);
+ int32_t nish_uring_full(const struct nish_uring_set *s);
++/* TRACE */ struct tr_ust { int64_t rings, live, accepting, slots, taskrun, overflow, nobufs, requeues, aerr, apause, bv, mar; };
++void nish_uring_stats(const struct nish_uring_set *s, struct tr_ust *st);
+ int32_t nish_uring_hold(struct nish_uring_set *s, int32_t ring, int32_t slot, int32_t on);
+ void nish_uring_destroy(struct nish_uring_set *s);
+ 
+@@ -323,6 +326,7 @@ struct nr_vent {
+   int32_t loop, events, token;
+   uint8_t listed, is_listener;
+   struct nr_vent *prev, *next;
++  double tr_ready;
+ };
+ 
+ /* One slot's connection. `gen` counts the slot's closes; `lingering` is a
+@@ -364,7 +368,10 @@ static void nr_unlist(struct nr_vent *v) {
+   v->listed = 0;
+ }
+ 
++static double tr_now(void);
++static int tr_on;
+ static void nr_append(struct nr_vent *v) {
++  if (tr_on > 0) v->tr_ready = tr_now();
+   v->prev = nr_tail;
+   v->next = NULL;
+   if (nr_tail) nr_tail->next = v; else nr_head = v;
+@@ -558,13 +565,66 @@ static void nr_dispatch(struct nr_set *S, const struct nish_uring_event *e) {
+ /* Takes every event the set holds, and hands the set what it has queued.
+    Then the slots waiting on their send areas: a write-blocked one whose area
+    has room is ready again, and a lingering close whose bytes are gone ends. */
++/* TRACE */
++static double tr_now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
++static double tr_t0, tr_ret, tr_in0;
++static long tr_cycles, tr_pumps, tr_ev, tr_waits, tr_sleeps, tr_sleep_full, tr_h[8];
++static double tr_max_cycle, tr_max_out, tr_max_in, tr_max_pump, tr_max_sleep, tr_max_wait;
++static long tr_max_pump_ev, tr_max_rounds, tr_n_at_max, tr_max_npend, tr_max_cycle_pumps, tr_cycle_pumps, tr_max_cycle_ev, tr_cycle_ev, tr_prev_n;
++static double tr_cycle_sleep;
++static long tr_ah[8], tr_ages; static double tr_max_age; static long tr_max_list;
++static struct nish_uring_set *tr_u; static struct tr_ust tr_prev;
++static void tr_age(double r) {
++  double a = tr_now() - r; tr_ages++;
++  if (a > tr_max_age) tr_max_age = a;
++  static const double e[7] = {1, 2, 5, 10, 20, 50, 100};
++  for (int i = 0; i < 7; i++) if (a > e[i]) tr_ah[i]++;
++}
++static void tr_backlog(void) {
++  static unsigned tick; if (++tick & 63) return;
++  long k = 0;
++  for (struct nr_vent *v = nr_head; v; v = v->next) k++;
++  if (k > tr_max_list) tr_max_list = k;
++}
++static void tr_flush(double t) {
++  if (t - tr_t0 < 1000) return;
++  if (tr_u) {
++    struct tr_ust u; nish_uring_stats(tr_u, &u);
++    fprintf(stderr, "tr2 t=%.3f ages=%ld max_age=%.2f ah(>1,2,5,10,20,50,100)=%ld,%ld,%ld,%ld,%ld,%ld,%ld max_list=%ld taskrun=%ld overflow=%ld nobufs=%ld requeues=%ld live=%ld\n",
++      t / 1e3, tr_ages, tr_max_age, tr_ah[0], tr_ah[1], tr_ah[2], tr_ah[3], tr_ah[4], tr_ah[5], tr_ah[6], tr_max_list,
++      (long)(u.taskrun - tr_prev.taskrun), (long)(u.overflow - tr_prev.overflow), (long)(u.nobufs - tr_prev.nobufs), (long)(u.requeues - tr_prev.requeues), (long)u.live);
++    tr_prev = u;
++  }
++  tr_ages = 0; tr_max_age = 0; tr_max_list = 0; for (int i = 0; i < 8; i++) tr_ah[i] = 0;
++  fprintf(stderr, "trace t=%.3f cycles=%ld pumps=%ld ev=%ld waits=%ld sleeps=%ld sleep_full=%ld max_cycle=%.2f max_out=%.2f n_at_max=%ld max_in=%.2f max_pump=%.2f max_pump_ev=%ld max_rounds=%ld max_wait=%.3f max_sleep=%.2f max_npend=%ld max_cycle_pumps=%ld max_cycle_ev=%ld h(>1,2,5,10,20,50,100)=%ld,%ld,%ld,%ld,%ld,%ld,%ld\n",
++          t / 1e3, tr_cycles, tr_pumps, tr_ev, tr_waits, tr_sleeps, tr_sleep_full, tr_max_cycle, tr_max_out, tr_n_at_max, tr_max_in, tr_max_pump, tr_max_pump_ev, tr_max_rounds, tr_max_wait, tr_max_sleep, tr_max_npend, tr_max_cycle_pumps, tr_max_cycle_ev, tr_h[0], tr_h[1], tr_h[2], tr_h[3], tr_h[4], tr_h[5], tr_h[6]);
++  tr_t0 = t;
++  tr_cycles = tr_pumps = tr_ev = tr_waits = tr_sleeps = tr_sleep_full = 0;
++  tr_max_cycle = tr_max_out = tr_max_in = tr_max_pump = tr_max_sleep = tr_max_wait = 0;
++  tr_max_pump_ev = tr_max_rounds = tr_n_at_max = tr_max_npend = tr_max_cycle_pumps = tr_max_cycle_ev = 0;
++  for (int i = 0; i < 8; i++) tr_h[i] = 0;
++}
+ static void nr_pump(struct nr_set *S) {
+   struct nish_uring_event ev[NR_EVENTS];
++  if (!tr_on) tr_on = getenv("NR_TRACE") ? 1 : -1;
++  tr_u = S->u;
++  double p0 = tr_on > 0 ? tr_now() : 0;
++  long pev = 0; int rounds = 0;
+   for (int round = 0; round < 64; round++) {
++    double w0 = tr_on > 0 ? tr_now() : 0;
+     int n = nish_uring_wait(S->u, 0, ev, NR_EVENTS);
++    if (tr_on > 0) { double w = tr_now() - w0; tr_waits++; if (w > tr_max_wait) tr_max_wait = w; }
+     if (n <= 0) break;
++    rounds++; pev += n;
+     for (int i = 0; i < n; i++) nr_dispatch(S, &ev[i]);
+   }
++  if (tr_on > 0) {
++    double d = tr_now() - p0;
++    tr_pumps++; tr_ev += pev; tr_cycle_pumps++; tr_cycle_ev += pev;
++    if (d > tr_max_pump) { tr_max_pump = d; tr_max_pump_ev = pev; }
++    if (rounds > tr_max_rounds) tr_max_rounds = rounds;
++    if ((long)S->npend > tr_max_npend) tr_max_npend = S->npend;
++  }
+   int full = S->npend > 0 && nish_uring_full(S->u);
+   uint32_t keep = 0;
+   for (uint32_t i = 0; i < S->npend; i++) {
+@@ -878,8 +938,11 @@ static int32_t nr_ctl(int32_t loop, int op, struct nr_vent *v, struct nr_set *S,
+ /* Writes the loop's ready virtual sources into `out`, at most `max`, in the
+    order they became ready. One reported and still ready goes to the tail,
+    so a busy source does not starve the rest. */
++static void tr_age(double r);
++static void tr_backlog(void);
+ static int nr_collect(int32_t loop, int32_t *out, int max) {
+   int n = 0;
++  if (tr_on > 0) tr_backlog();
+   struct nr_vent *again = NULL, *again_tail = NULL;
+   for (struct nr_vent *v = nr_head, *next; v && n < max; v = next) {
+     next = v->next;
+@@ -890,6 +953,7 @@ static int nr_collect(int32_t loop, int32_t *out, int max) {
+     out[2 * n] = v->token;
+     out[2 * n + 1] = bits;
+     n++;
++    if (tr_on > 0) tr_age(v->tr_ready);
+     v->next = NULL;
+     if (again_tail) again_tail->next = v; else again = v;
+     again_tail = v;
+@@ -917,9 +981,12 @@ static int nr_turn;
+    is spent. */
+ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout_ms) {
+   int64_t deadline = timeout_ms > 0 ? nr_now_ms() + timeout_ms : 0;
++  if (!tr_on) tr_on = getenv("NR_TRACE") ? 1 : -1;
++  if (tr_on > 0) { tr_in0 = tr_now(); }
++  int n = 0;
+   for (;;) {
+     nr_pump_all();
+-    int n = nr_collect(loop, out, max);
++    n = nr_collect(loop, out, max);
+     int32_t t = 0;
+     if (n == 0) {
+       t = timeout_ms < 0 ? -1 : timeout_ms == 0 ? 0 : (int32_t)(deadline - nr_now_ms());
+@@ -933,7 +1000,9 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
+     int room = max - n;
+     if (room == 0) room = max > 1 ? max / 2 : (nr_turn ^= 1);
+     struct epoll_event e[NR_EVENTS];
++    double s0 = tr_on > 0 ? tr_now() : 0;
+     int k = room > 0 ? epoll_wait(loop, e, room, t) : 0;
++    if (tr_on > 0 && t != 0) { double sl = tr_now() - s0; tr_sleeps++; if (k == 0) tr_sleep_full++; if (sl > tr_max_sleep) tr_max_sleep = sl; tr_cycle_sleep += sl; }
+     int woke = 0;
+     /* io_uring's task work interrupts the wait with no signal behind it, so
+        EINTR is a wake to pump for, not an answer of 0 before the timeout. */
+@@ -956,14 +1025,31 @@ static int32_t nr_poll_wait(int32_t loop, int32_t *out, int max, int32_t timeout
+       out[2 * n + 1] = ((got & EPOLLIN) ? 1 : 0) | ((got & EPOLLOUT) ? 2 : 0) | ((got & (EPOLLHUP | EPOLLERR)) ? 4 : 0);
+       n++;
+     }
+-    if (n > 0) return n;
++    if (n > 0) goto ret;
+     if (woke) {
+       nr_pump_all();
+       n = nr_collect(loop, out, max);
+-      if (n > 0) return n;
++      if (n > 0) goto ret;
+     }
+-    if (timeout_ms == 0 || (timeout_ms > 0 && nr_now_ms() >= deadline)) return 0;
++    if (timeout_ms == 0 || (timeout_ms > 0 && nr_now_ms() >= deadline)) { n = 0; goto ret; }
++  }
++ret:
++  if (tr_on > 0) {
++    double t = tr_now();
++    double in = t - tr_in0, out_ = tr_ret ? tr_in0 - tr_ret : 0, cyc = tr_ret ? t - tr_ret : 0;
++    tr_cycles++;
++    if (in > tr_max_in) tr_max_in = in;
++    double busy = cyc - tr_cycle_sleep;
++    tr_cycle_sleep = 0;
++    if (busy > tr_max_cycle) { tr_max_cycle = busy; tr_max_out = out_; tr_max_cycle_pumps = tr_cycle_pumps; tr_max_cycle_ev = tr_cycle_ev; tr_n_at_max = tr_prev_n; }
++    static const double edges[7] = {1, 2, 5, 10, 20, 50, 100};
++    for (int i = 0; i < 7; i++) if (busy > edges[i]) tr_h[i]++;
++    tr_prev_n = n;
++    tr_cycle_pumps = 0; tr_cycle_ev = 0;
++    tr_ret = t;
++    tr_flush(t);
+   }
++  return n;
+ }
+ #endif
+ 

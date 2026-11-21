@@ -5,7 +5,7 @@
 // empty path or one holding a NUL -2, as the runtime refuses each before the
 // file system is asked (under WASI, "" would name the preopened directory).
 // `tests/run.js` makes the FIFO and the socket before the case runs.
-export function main(): number {
+export const main = (): number => {
   console.log(`missing: ${fileOpen("build/test/file_open_errors_absent")}`);
   console.log(`directory: ${fileOpen("build/test")}`);
   console.log(`fifo: ${fileOpen("build/test/file_open_errors.fifo")}`);
@@ -13,4 +13,4 @@ export function main(): number {
   console.log(`nul in path: ${fileOpen("build/test/a\0b")}`);
   console.log(`empty path: ${fileOpen("")}`);
   return 0;
-}
+};

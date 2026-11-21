@@ -32,7 +32,7 @@ const readAll = (fd: i32, buf: u8[]): boolean => {
   return got === buf.length;
 };
 
-export function main(): number {
+export const main = (): number => {
   const a = quickListener(0, 4);
   const port = netLocalPort(a);
   const b = quickListener(port, 4);
@@ -65,4 +65,4 @@ export function main(): number {
   netClose(b);
   netClose(a);
   return 0;
-}
+};

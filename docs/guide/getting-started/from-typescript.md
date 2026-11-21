@@ -9,9 +9,15 @@ write instead.
 
 ## What carries over
 
-Most everyday TypeScript compiles as it is:
+Most everyday TypeScript compiles as it is. Nothing bounds the counter and
+the sums below, so the compiler cannot prove they fit an `i32` and this example
+builds with [`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do);
+bounding the operands, as the compile error suggests, builds it under the
+default:
 
-```ts nish:ok
+<!-- allow-panics: its counter and sums are not bounded, which the text below explains -->
+<!-- nish:ok --allow-panics -->
+```ts
 interface Point {
   x: i32;
   y: i32;
@@ -104,11 +110,13 @@ In Nish, `number` means `i32`, a 32-bit integer, so `7 / 2` is `3`. A
 fractional value needs `f64`, the 64-bit floating-point type that a JavaScript
 `number` is:
 
-```ts nish:err NL2068
+<!-- nish:err NL2068 -->
+```ts
 const ratio: number = 0.5;
 ```
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const ratio: f64 = 0.5;
 ```
 
@@ -117,7 +125,8 @@ The widths are written in the type, and there is one for each machine type:
 ones, and `f32` and `f64` for floating point. Two different types never mix in
 arithmetic, and nothing converts on its own:
 
-```ts nish:err NL2102
+<!-- nish:err NL2102 -->
+```ts
 const area = (r: f64): f64 => 3.14159 * r * r;
 
 const total = (n: i32, r: f64): f64 => {
@@ -127,7 +136,8 @@ const total = (n: i32, r: f64): f64 => {
 
 Convert explicitly with `toF64`, `toI32`, `toI64`, `toU8` and the others:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const area = (r: f64): f64 => 3.14159 * r * r;
 
 const total = (n: i32, r: f64): f64 => {
@@ -135,9 +145,12 @@ const total = (n: i32, r: f64): f64 => {
 };
 ```
 
-Integer arithmetic is also checked: an `i32` or `i64` that overflows stops the
-program instead of wrapping round, as
-[Your first program](first-program.md#exit-codes) shows. `--number-mode f64`
+Integer arithmetic is also checked. By default the compiler must prove that
+an `i32` or `i64` result fits, and it refuses the program where it cannot;
+with `--allow-panics` it builds a check instead, and an overflow stops the
+program rather than wrap round, as
+[Your first program](first-program.md#exit-codes) shows. The first example on
+this page adds up a counter nothing bounds, so it builds with that flag. `--number-mode f64`
 makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 `i32` or `f64` means the same in either mode. See
 [Types](../language/types.md), and the reference's
@@ -148,7 +161,8 @@ makes `number` mean `f64` for a whole program, as in JavaScript; an explicit
 
 Every value has exactly one type, known when the program compiles.
 
-```ts nish:err NL1013
+<!-- nish:err NL1013 -->
+```ts
 const show = (x: any): void => {
   console.log(`${x}`);
 };
@@ -156,7 +170,8 @@ const show = (x: any): void => {
 
 The same goes for `unknown`, and for unions such as `i32 | string`:
 
-```ts nish:err NL1053
+<!-- nish:err NL1053 -->
+```ts
 const show = (x: i32 | string): void => {
   console.log(`${x}`);
 };
@@ -176,7 +191,8 @@ appears is in checking the result of `Map.get`, as in
 
 Optional chaining works as long as the chain ends in a default:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   value: i32 = 0;
   next: Node | null = null;
@@ -190,7 +206,8 @@ const nextValue = (n: Node): i32 => {
 On its own, `n.next?.value` answers `undefined` when `n.next` is `null`, and
 Nish has no `undefined` value, so a chain without `??` is refused:
 
-```ts nish:err NL1062
+<!-- nish:err NL1062 -->
+```ts
 class Node {
   value: i32 = 0;
   next: Node | null = null;
@@ -206,7 +223,8 @@ When you need more than a default, copy the nullable value into a local and
 compare it with `null`; the compiler narrows it to the non-null type inside
 the branch:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Node {
   value: i32 = 0;
   next: Node | null = null;
@@ -228,7 +246,8 @@ as `n.next`; hence the copy.
 as in `counts.get(key) ?? 0`. `n.next ?? fallback` is a `Node`, with no
 narrowing needed. Anywhere else, such as on a number, it is refused
 (`NL1048`), and so is a default for an array element, `xs[i] ?? d`
-(`NL2489`): past the end of the array, Node answers `d` where Nish stops the
+(`NL2489`): past the end of the array, Node answers `d` where Nish refuses
+an index it cannot prove in range, or, under `--allow-panics`, stops the
 program. `?.[i]` and `f?.()` are not supported. See the reference's
 [Nullable types](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#nullable-types).
 
@@ -236,7 +255,8 @@ program. `?.[i]` and `f?.()` are not supported. See the reference's
 
 There is no `throw`, no `try` and no `catch`:
 
-```ts nish:err NL1001
+<!-- nish:err NL1001 -->
+```ts
 const half = (n: i32): i32 => {
   if (n % 2 !== 0) {
     throw new Error("odd");
@@ -248,7 +268,8 @@ const half = (n: i32): i32 => {
 A function that can fail says so in its return type, with `Result<T, E>`, and
 returns `Ok(value)` or `Err(error)`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
@@ -272,7 +293,8 @@ Seven is odd, so this program prints `odd` on stderr and exits with 1.
 A `Result` cannot be ignored: a call that returns one cannot stand on its own
 as a statement, and reading `r.value` before checking `r.isErr()` or
 `r.isOk()` is an error. For a state the program cannot recover from, call
-`panic("message")`, which ends the program the way an overflow does. [Errors and `Result`](../language/errors.md) covers the rest,
+`panic("message")`, which ends the program the way a failed overflow check does;
+like any panic, the call is refused by default and builds under `--allow-panics`. [Errors and `Result`](../language/errors.md) covers the rest,
 including `orReturn()`, which passes an error up to the caller like Rust's
 `?`. The reference is
 [Result and error handling](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#result-and-error-handling).
@@ -281,7 +303,8 @@ including `orReturn()`, which passes an error up to the caller like Rust's
 
 Classes have fields, one constructor and methods, but no `extends`:
 
-```ts nish:err NL2278
+<!-- nish:err NL2278 -->
+```ts
 class Animal {
   name: string = "";
 }
@@ -295,7 +318,8 @@ To share a shape, declare it as an interface, and have each class
 `implements` it. The class lists the interface's fields first, in the same
 order. Then a function that takes the interface accepts any of those classes:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 interface Animal {
   name: string;
 }
@@ -353,7 +377,8 @@ for you, as
 [Your first program](first-program.md#fixes-the-compiler-can-make-for-you)
 shows.
 
-```ts nish:err-body NL2188
+<!-- nish:err-body NL2188 -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length) {
   console.log("non-empty");

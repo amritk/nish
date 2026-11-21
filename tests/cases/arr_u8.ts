@@ -10,21 +10,21 @@
 // `u8`: `u8` arithmetic wraps modulo 256, and 200 + 255 would be 199. That is
 // the language's rule and not a quirk of arrays, but it is the mistake this
 // case would otherwise invite, so it is spelled out.
-function fill(bytes: u8[], v: u8): void {
+const fill = (bytes: u8[], v: u8): void => {
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = v;
   }
-}
+};
 
-function sum(bytes: u8[]): i32 {
+const sum = (bytes: u8[]): i32 => {
   let total = 0;
   for (let i = 0; i < bytes.length; i++) {
     total = total + toI32(bytes[i]);
   }
   return total;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const bytes = new Array<u8>(4);
   fill(bytes, 200);
   console.log(`${sum(bytes)}`);
@@ -42,4 +42,4 @@ export function main(): i32 {
   bytes[3] = bytes[0] + one;
   console.log(`${toI32(bytes[3])}`);
   return 0;
-}
+};

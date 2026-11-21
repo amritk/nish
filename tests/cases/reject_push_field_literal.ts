@@ -10,8 +10,8 @@ class Bag {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const b = new Bag();
   b.xs.push(0);
   return toI32(b.xs.length);
-}
+};

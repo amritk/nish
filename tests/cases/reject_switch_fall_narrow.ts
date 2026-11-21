@@ -24,7 +24,7 @@ class Square {
 
 type Shape = Circle | Square;
 
-function size(s: Shape): i32 {
+const size = (s: Shape): i32 => {
   let n: i32 = 0;
   switch (s.kind) {
     case Kind.Circle:
@@ -34,8 +34,8 @@ function size(s: Shape): i32 {
       break;
   }
   return n;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return size(new Square(3));
-}
+};

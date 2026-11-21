@@ -61,6 +61,7 @@ import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import * as lib from "./lib.js"
 import { classify } from "./asan.js"
+import { seedArgs } from "../self/seed.js"
 
 /**
  * mulberry32, the generator `fuzz.js` uses. `fuzz.js` does not export its
@@ -589,7 +590,7 @@ const build = (compiler, dir, name, source, link) => {
   const out = path.join(dir, name)
   const flags = ["--no-warn-performance", ...(source.includes('from "nish/threads"') ? ["--threads"] : [])]
   const linking = link ? ["--link", `${out}.exe`] : []
-  const compile = spawnSync(compiler.cmd, [...compiler.prefix, file, ...flags, "-o", `${out}/`, ...linking], {
+  const compile = spawnSync(compiler.cmd, seedArgs(compiler, [file, ...flags, "-o", `${out}/`, ...linking]), {
     encoding: "utf8",
   })
   if (compile.status !== 0) {

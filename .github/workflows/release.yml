@@ -408,10 +408,13 @@ jobs:
           cd "$work"
           "$nish" hello.ts --link hello
           test "$(./hello)" = "hello from Nish"
-          "$nish" multi/main.ts --link multi-app
+          # --allow-panics: math.ts's `n * n` may overflow (its header says why).
+          "$nish" multi/main.ts --allow-panics --link multi-app
           set +e; ./multi-app; code=$?; set -e
           test "$code" = "49" || { echo "::error::the unpacked compiler linked examples/multi but it exited $code, not 49"; exit 1; }
-          "$nish" stdlib.ts --link stdlib || { echo "::error::the unpacked compiler cannot compile a program that imports nish/text. The tarball is missing std/: see the staging step above."; exit 1; }
+          # --allow-panics: trim reaches a std/ panic site, which the no-panic
+          # default refuses until std/ is proven.
+          "$nish" stdlib.ts --allow-panics --link stdlib || { echo "::error::the unpacked compiler cannot compile a program that imports nish/text. The tarball is missing std/: see the staging step above."; exit 1; }
           test "$(./stdlib)" = "[padded]" || { echo "::error::the unpacked compiler linked a nish/text program but it printed $(./stdlib), not [padded]"; exit 1; }
           echo "native compiler works from an unrelated directory, on one module, on two, and on the standard library"
 

@@ -1,5 +1,5 @@
 import { square } from "./nope";
 
-export function main(): number {
+export const main = (): number => {
   return square(7);
-}
+};

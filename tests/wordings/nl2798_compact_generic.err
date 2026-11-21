@@ -1,0 +1,1 @@
+`Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker

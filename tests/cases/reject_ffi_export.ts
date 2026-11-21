@@ -2,6 +2,6 @@
 // defines", and a foreign declaration defines nothing.
 export declare function g(): i32;
 
-export function main(): i32 {
+export const main = (): i32 => {
   return 0;
-}
+};

@@ -42,7 +42,7 @@ declare function read(fd: i32, buf: u8[], n: u64): i64
 declare function close(fd: i32): i32
 
 /** This process's peak resident set in KiB, the `VmHWM` line of /proc/self/status; 0 off Linux, -1 unread. */
-function peakKib(): i64 {
+const peakKib = (): i64 => {
   if (platform !== "linux") {
     return 0
   }
@@ -66,7 +66,7 @@ function peakKib(): i64 {
     from += 1
   }
   return toI64(parseInt(status.substring(from, status.indexOf(" kB", at))))
-}
+};
 
 async function client(port: i32, doneFd: i32): Promise<void> {
   const open: i32[] = new Array<i32>(WARM + IDLE)

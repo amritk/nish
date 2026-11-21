@@ -37,17 +37,23 @@ nish --help                       # every flag
 - Exit codes: `0` ok, `1` the program was rejected, `2` usage, `3` the C
   toolchain is unusable, `70` a bug in `nish` worth reporting.
 - `nish --fix` rewrites files with no backup: run it on a committed tree.
+- A build is refused (NL2457, NL2458) where your code could panic and the
+  compiler cannot prove it will not: an index, a sum, a division. Add the guard
+  the message names. Never reach for `--allow-panics`, a `nish:unsafe` import
+  or a guard that proves nothing (one whose `else` returns a made-up value the
+  caller cannot tell from a real one) to make the error go away.
 - When it compiles, check the native build against the TypeScript reading:
   `nish program.ts --emit-ts out/` then `node out/entry.ts`. Both must print
   the same and exit the same.
 
 ## The shape of a program
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const gcd = (a: i32, b: i32): i32 => {
   let x = a;
   let y = b;
-  while (y !== 0) {
+  while (y > 0) {
     const t = y;
     y = x % y;
     x = t;
@@ -71,7 +77,8 @@ declarations at the top level: functions, `class`, `interface`, module `const`s,
 There is no `throw`, no `try` and no unwinding. A function that can fail says
 so in its return type.
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
@@ -115,7 +122,8 @@ export const main = (): i32 => {
 
 The most common rejection, NL2188:
 
-```ts nish:err-body NL2188
+<!-- nish:err-body NL2188 -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length) {
   console.log("non-empty");

@@ -1,3 +1,9 @@
+// Opt-out (`--allow-panics`): calls into `std/math` reach its panic sites,
+// and sim.ts indexes the `BODIES` and `SHOTS` records in module storage, which
+// the checker cannot yet prove in range or lend to a helper. Follow-up: make
+// `std/math` panic-free and teach the prover module-storage bounds, then build
+// this file without `--allow-panics`.
+//
 // The native replay of examples/wasm-arena: the same sim.ts, compiled with
 // `--deterministic`, steps the input a page recorded and prints the state's
 // hash, which the page's own hash must equal bit for bit.
@@ -8,7 +14,7 @@
 // many ticks: `40x17` is the word 17 for 40 ticks. Ticks past the last run
 // step with the word 0. It prints `ticks <n> hash <16 hex digits>`.
 //
-// smoke: args --deterministic
+// smoke: args --deterministic --allow-panics
 // smoke: argv 1 120 44x1 36x5 39x1
 import { simHash, simReset, simStep, simTicks } from "./sim"
 
@@ -17,7 +23,10 @@ const hex = (h: u64): string => {
   const out: string[] = []
   for (let shift = 60; shift >= 0; shift = shift - 4) {
     const d: i32 = toI32(toU32((h >> toU64(shift)) & toU64(15)))
-    out.push(digits.slice(d, d + 1))
+    // `d` is four bits, so the test always holds; it proves `d + 1` fits.
+    if (d < 16) {
+      out.push(digits.substring(d, d + 1))
+    }
   }
   return out.join("")
 }
@@ -34,12 +43,13 @@ export const main = (): i32 => {
   for (let a = 3; a < args.length; a++) {
     const run = args[a]
     const x: i32 = toI32(run.indexOf("x"))
-    if (x <= 0) {
+    // `indexOf` answers below the length, so the second test only proves `x + 1` fits.
+    if (x <= 0 || x >= toI32(run.length)) {
       console.log(`replay: bad run ${run}`)
       return 2
     }
-    const count: i32 = parseInt(run.slice(0, x))
-    const word: i32 = parseInt(run.slice(x + 1))
+    const count: i32 = parseInt(run.substring(0, x))
+    const word: i32 = parseInt(run.substring(x + 1))
     for (let k = 0; k < count && stepped < ticks; k++) {
       simStep(word)
       stepped++

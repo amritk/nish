@@ -3,9 +3,9 @@
 // call passes the handle and the u8 as they stand.
 import { Canvas, shade, width } from "../host-import/golden"
 
-export function wider(c: Canvas): i32 {
+export const wider = (c: Canvas): i32 => {
   return width(c) + 1
-}
-export function darker(level: u8): u8 {
+};
+export const darker = (level: u8): u8 => {
   return shade(level) - 1
-}
+};

@@ -2,11 +2,11 @@
 // chain is consulted before the constant table.
 const N: i32 = 1;
 
-function inner(): number {
+const inner = (): number => {
   return N;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   const N: i32 = 2;
   return N * 10 + inner();
-}
+};

@@ -1,0 +1,1 @@
+add `for-of-string` to `nish.compat` in package.json to accept it

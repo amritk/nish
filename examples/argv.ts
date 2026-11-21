@@ -9,8 +9,13 @@
 // smoke: exit 3
 export const main = (): number => {
   const args = process.argv
-  console.log(`program: ${args[0].length > 0 ? "named" : "unnamed"}, ${args.length - 1} argument(s)`)
-  let sum = 0
+  // `args.length > 0` is a guard the compiler reads: the read of `args[0]`
+  // after it is proven in range and keeps no bounds check.
+  const named = args.length > 0 && args[0].length > 0
+  console.log(`program: ${named ? "named" : "unnamed"}, ${args.length - 1} argument(s)`)
+  // An f64 sum never overflows, and it is exact for any count of i32 values a
+  // command line can hold (well below 2^53 in total).
+  let sum: f64 = 0
   for (let i = 1; i < args.length; i++) {
     // Read once: a call may change an array's length, so after `Number(...)`
     // the loop condition no longer proves `args[i]` in range and a second read
@@ -20,7 +25,7 @@ export const main = (): number => {
     // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
     const parsed = n === n ? `${n}` : "not a number"
     console.log(`  ${i}: ${arg} -> ${parsed}`)
-    sum += parseInt(arg)
+    sum += toF64(parseInt(arg))
   }
   console.log(`sum of the integers: ${sum}`)
   return args.length - 1

@@ -6,9 +6,9 @@ type F = (x: i32) => i32
 const plus1 = (x: i32): i32 => x + 1
 const plus3 = (x: i32): i32 => x + 3
 
-function apply<T>(f: F, tag: T): i32 {
+const apply = <T>(f: F, tag: T): i32 => {
   return f(1)
-}
+};
 
 export const main = (): void => {
   console.log(`${apply(plus3, "a")} ${apply(plus1, 2)}`)

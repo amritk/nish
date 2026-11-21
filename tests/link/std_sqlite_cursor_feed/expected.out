@@ -1,0 +1,50 @@
+PASS  cursors: 20 rows
+PASS  cursors: the index's id column is the rowid
+SQL:
+300 | 2026-01-26T09:00:00.000Z | 名前_1 | 0 | post 300: a
+299 | 2026-01-25T09:00:00.000Z | 名前_19 | 6 | post 299: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab 
+298 | 2026-01-25T09:00:00.000Z | zoë_12 | 5 | post 298: ab ü ab ü ab ü ab ü ab ü ab ü ab ü 
+297 | 2026-01-25T09:00:00.000Z | user_5 | 0 | post 297: ab ü ab ü ab ü ab ü ab
+296 | 2026-01-25T09:00:00.000Z | user_23 | 3 | post 296: ab ü ab ü
+295 | 2026-01-25T09:00:00.000Z | 名前_16 | 2 | post 295: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü a
+294 | 2026-01-25T09:00:00.000Z | zoë_9 | 0 | post 294: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab 
+293 | 2026-01-25T09:00:00.000Z | user_2 | 7 | post 293: ab ü ab ü ab ü ab ü ab ü ab ü 
+292 | 2026-01-25T09:00:00.000Z | user_20 | 6 | post 292: ab ü ab ü ab ü ab
+291 | 2026-01-25T09:00:00.000Z | 名前_13 | 0 | post 291: ab ü
+290 | 2026-01-25T09:00:00.000Z | zoë_6 | 4 | post 290: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü a
+289 | 2026-01-25T09:00:00.000Z | zoë_24 | 3 | post 289: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab 
+288 | 2026-01-25T09:00:00.000Z | user_17 | 0 | post 288: ab ü ab ü ab ü ab ü ab ü 
+287 | 2026-01-24T09:00:00.000Z | 名前_10 | 1 | post 287: ab ü ab ü ab
+286 | 2026-01-24T09:00:00.000Z | zoë_3 | 7 | post 286: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü
+285 | 2026-01-24T09:00:00.000Z | zoë_21 | 0 | post 285: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü a
+284 | 2026-01-24T09:00:00.000Z | user_14 | 5 | post 284: ab ü ab ü ab ü ab ü ab ü ab ü ab 
+283 | 2026-01-24T09:00:00.000Z | 名前_7 | 4 | post 283: ab ü ab ü ab ü ab ü 
+282 | 2026-01-24T09:00:00.000Z | 名前_25 | 0 | post 282: ab ü ab
+281 | 2026-01-24T09:00:00.000Z | zoë_18 | 2 | post 281: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü
+
+cursors:
+300 | 2026-01-26T09:00:00.000Z | 名前_1 | 0 | post 300: a
+299 | 2026-01-25T09:00:00.000Z | 名前_19 | 6 | post 299: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab 
+298 | 2026-01-25T09:00:00.000Z | zoë_12 | 5 | post 298: ab ü ab ü ab ü ab ü ab ü ab ü ab ü 
+297 | 2026-01-25T09:00:00.000Z | user_5 | 0 | post 297: ab ü ab ü ab ü ab ü ab
+296 | 2026-01-25T09:00:00.000Z | user_23 | 3 | post 296: ab ü ab ü
+295 | 2026-01-25T09:00:00.000Z | 名前_16 | 2 | post 295: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü a
+294 | 2026-01-25T09:00:00.000Z | zoë_9 | 0 | post 294: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab 
+293 | 2026-01-25T09:00:00.000Z | user_2 | 7 | post 293: ab ü ab ü ab ü ab ü ab ü ab ü 
+292 | 2026-01-25T09:00:00.000Z | user_20 | 6 | post 292: ab ü ab ü ab ü ab
+291 | 2026-01-25T09:00:00.000Z | 名前_13 | 0 | post 291: ab ü
+290 | 2026-01-25T09:00:00.000Z | zoë_6 | 4 | post 290: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü a
+289 | 2026-01-25T09:00:00.000Z | zoë_24 | 3 | post 289: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab 
+288 | 2026-01-25T09:00:00.000Z | user_17 | 0 | post 288: ab ü ab ü ab ü ab ü ab ü 
+287 | 2026-01-24T09:00:00.000Z | 名前_10 | 1 | post 287: ab ü ab ü ab
+286 | 2026-01-24T09:00:00.000Z | zoë_3 | 7 | post 286: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü
+285 | 2026-01-24T09:00:00.000Z | zoë_21 | 0 | post 285: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü a
+284 | 2026-01-24T09:00:00.000Z | user_14 | 5 | post 284: ab ü ab ü ab ü ab ü ab ü ab ü ab 
+283 | 2026-01-24T09:00:00.000Z | 名前_7 | 4 | post 283: ab ü ab ü ab ü ab ü 
+282 | 2026-01-24T09:00:00.000Z | 名前_25 | 0 | post 282: ab ü ab
+281 | 2026-01-24T09:00:00.000Z | zoë_18 | 2 | post 281: ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü ab ü
+
+PASS  the cursors' feed is the query's, byte for byte
+PASS  some bodies needed the buffer grown
+PASS  close
+std_sqlite_cursor_feed: 5 passed, 0 failed, 0 skipped

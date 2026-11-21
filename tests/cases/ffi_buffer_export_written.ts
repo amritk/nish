@@ -7,15 +7,15 @@
 declare function getentropy(buf: u8[], n: u64): i32;
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
 
-export function fill(b: u8[]): i32 {
+export const fill = (b: u8[]): i32 => {
   return getentropy(b, toU64(b.length));
-}
+};
 
-export function peek(b: u8[]): i64 {
+export const peek = (b: u8[]): i64 => {
   return write(1, b, toU64(b.length));
-}
+};
 
-export function test(): i32 {
+export const test = (): i32 => {
   const b = new Array<u8>(16);
   return fill(b);
-}
+};

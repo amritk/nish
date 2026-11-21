@@ -1,5 +1,5 @@
 // Embedded NUL bytes and escape sequences: length counts them, equality must not stop at NUL.
-export function main(): number {
+export const main = (): number => {
   const withNul = "a\0b";
   console.log(withNul.length);
   console.log(withNul === "a\0c");
@@ -26,4 +26,4 @@ export function main(): number {
   console.log(s === "\0\0");
   console.log(("x" + s + "y").length);
   return 0;
-}
+};

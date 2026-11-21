@@ -152,7 +152,9 @@ The condition must be `boolean`: there is no truthiness
 ## `for (const x of a)`
 
 - `a` must be an array (`` `for...of` requires an array, got string ``,
-  `tests/cases/reject_arr_forof_non_array`), or a walk of the global `Map` or
+  `tests/cases/reject_arr_forof_non_array`;
+  [the compatibility dialect](semantics-decisions.md#the-compatibility-dialect) walks a string one
+  code point at a time under `for-of-string`), or a walk of the global `Map` or
   `Set`: `m.keys()`, `m.values()`, a `Set` itself, `s.keys()` or `s.values()`
   ([`Map` and `Set`](builtins.md#map-and-set)), or a `Channel` from `nish/threads`, which
   takes values off it ([Channels](declarations.md#channels-channelt)); `x` gets the element type and
@@ -198,7 +200,8 @@ switch (node.kind) {
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
   of `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
-  honestly.
+  honestly. [The compatibility dialect](semantics-decisions.md#the-compatibility-dialect) admits
+  that chain under `string-switch`.
 - Every `case` label is an **integer constant expression** of the
   discriminant's type: a literal, its negation, a module constant, or an enum
   member

@@ -1,0 +1,128 @@
+PASS  openCursor before beginRead is MISUSE
+PASS  beginRead
+PASS  a column list short of the table's is SCHEMA
+PASS    and says why
+PASS  a missing table is SCHEMA
+PASS  the list has no spaces
+PASS  an index list without its DESC is SCHEMA
+PASS  scan: ends with Ok(false)
+PASS  scan: 1000 rows
+PASS  scan: ids and scores sum as SQL's
+PASS  scan: rowid is the INTEGER PRIMARY KEY
+PASS  scan: 142 records spill to overflow pages
+PASS  scan: every blob's length
+PASS  next past the end is MISUSE
+PASS  a column with no row is MISUSE
+PASS  rowid with no row is 0
+PASS  seekRowid 20 finds it
+PASS    its score
+PASS    its name
+PASS    the alias column is INTEGER
+PASS    and columnInto refuses it
+PASS    an INTEGER column is MISMATCH
+PASS    name is TEXT
+PASS    pad is BLOB
+PASS    column 4 is RANGE
+PASS    column -1 is RANGE
+PASS    at past the buffer is MISUSE
+PASS    a buffer too small answers the length
+PASS    and writes nothing
+PASS  seekRowid 21 is not there
+PASS    and leaves no row
+PASS  seekRowid 14 (an overflow row)
+PASS    reads its 9000 bytes
+PASS    each one the row's letter, at the offset asked
+PASS    one byte short answers the length
+PASS    and writes nothing
+PASS  last
+PASS    is rowid 2000
+PASS  previous
+PASS    is rowid 1998
+PASS  a table cursor has no key
+PASS    nor keyReset
+PASS    nor seek
+PASS  close
+PASS  close again is MISUSE
+PASS  a closed cursor's first is MISUSE
+PASS  error() names the code
+PASS  index: seekRowid is MISUSE
+PASS  index: seek with no key is MISUSE
+PASS  key n3
+PASS    seek op 0 is MISUSE
+PASS    seek op 5 is MISUSE
+PASS    GE
+PASS    lands on n3
+PASS    with the highest score first
+PASS    and its rowid
+PASS    column 2 is the rowid too
+PASS    LE
+PASS    lands on n3's last entry
+PASS    GT
+PASS    lands on n4
+PASS    at its first entry
+PASS    LT
+PASS    lands on n2
+PASS    at its last entry
+PASS  key n3, 503
+PASS    GE
+PASS    counts the equal entry
+PASS    GT
+PASS    steps past it, down the DESC column
+PASS    LT
+PASS    steps before it
+PASS    LE
+PASS    counts the equal entry
+PASS    next
+PASS    is the next lower score
+PASS  a third key value is RANGE
+PASS  keyReset
+PASS  keyTextBytes outside the buffer is MISUSE
+PASS  keyTextBytes zz
+PASS    GE past the last is Ok(false)
+PASS    LT is the last entry
+PASS    n9
+PASS    its lowest score
+PASS    next is Ok(false)
+PASS  keyReset and key a
+PASS    LT before the first is Ok(false)
+PASS    GE is the first entry
+PASS    n0
+PASS    previous is Ok(false)
+PASS  first
+PASS    is n0's highest score
+PASS  an empty table's first is Ok(false)
+PASS    and last
+PASS    previous with no row is MISUSE
+PASS  close f
+PASS  first
+PASS  a SELECT
+PASS    leaves the cursor
+PASS  finalize
+PASS  an INSERT
+PASS    closes the table cursor
+PASS    and the index cursor
+PASS    whose close is MISUSE
+PASS  COMMIT
+PASS    closes the cursor
+PASS  endRead outside a transaction is MISUSE
+PASS  openCursor outside one is MISUSE
+PASS  beginRead
+PASS  beginRead again is MISUSE
+PASS    sees the committed row
+PASS    rowid 2001
+PASS    its NULL score
+PASS    reads as 0
+PASS    a NULL blob is 0 bytes
+PASS  endRead
+PASS    closes the cursor
+PASS  a REAL row
+PASS  beginRead
+PASS  first
+PASS    1.5 is FLOAT
+PASS    and columnInto is MISMATCH
+PASS    columnI64 truncates
+PASS  next
+PASS    2.0 is stored as an INTEGER
+PASS  close the connection
+PASS    closes its cursors
+std_sqlite_cursor: 127 passed, 0 failed, 0 skipped

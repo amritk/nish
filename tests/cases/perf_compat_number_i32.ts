@@ -5,6 +5,6 @@
 // costs a program written for the other one.
 const scale = (n: number): number => n * 3;
 
-export function test(): number {
+export const test = (): number => {
   return scale(14);
-}
+};

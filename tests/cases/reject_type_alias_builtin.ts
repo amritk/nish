@@ -3,6 +3,6 @@
 // refusing.
 type string = i32;
 
-export function test(): number {
+export const test = (): number => {
   return 0;
-}
+};

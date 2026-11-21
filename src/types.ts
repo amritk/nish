@@ -323,7 +323,9 @@ export const accessAlign = (align: i32): i32 => (align > 8 ? 8 : align)
  *
  * The parallel arrays are indexed by type id: `kinds[t]` is the kind, `refs`
  * is the element type of an array and the inner type of a nullable, and
- * `names` is the name of a struct. The scalars occupy 0..11 and are filled in
+ * `names` is a struct's symbol, its identity and its spelling in the IR
+ * (WP57 S3a; equal to its source name until S3d qualifies a clashing private
+ * one). The scalars occupy 0..11 and are filled in
  * by the constructor so that `T_I32` and friends are usable before anything
  * has been interned.
  */
@@ -344,11 +346,21 @@ export class TypeTable {
    */
   readonlys: boolean[]
   /**
-   * The source spelling of an instantiated struct (`Box<i32>` for `Box$i32`,
-   * WP18 §6.7) or of a second enum of one name (`Kind` for `Kind.2`), or
-   * empty. Read only by `typeName`; symbols keep the name.
+   * The source spelling of a struct (its source name, or `Box<i32>` for the
+   * instantiation `Box$i32`, WP18 §6.7) or of a second enum of one name
+   * (`Kind` for `Kind.2`), or empty. Read only by `typeName`; symbols keep the
+   * name. Every declared struct has one (WP57 S3a), so `typeName` prints what
+   * the user wrote once a struct's symbol differs from it.
    */
   displays: string[]
+  /**
+   * WP66 S3: whether a struct id names an opaque `declare class`, one with no
+   * members, which C hands out and takes back. It is a flag beside the kind,
+   * as `readonlys` is, so the checker keeps every struct rule it already has
+   * for a layout class, and only `llvmType` asks: the value is a C pointer, so
+   * it lowers as `CPtr` does, to `i8*`.
+   */
+  opaques: boolean[]
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap
   /**
@@ -409,6 +421,7 @@ export class TypeTable {
     this.states = []
     this.readonlys = []
     this.displays = []
+    this.opaques = []
     this.index = new StringMap()
     this.memberEnums = []
     this.stringEnums = []
@@ -427,6 +440,7 @@ export class TypeTable {
       this.states.push(R_UNKNOWN)
       this.readonlys.push(false)
       this.displays.push("")
+      this.opaques.push(false)
       scalar = scalar + 1
     }
   }
@@ -445,8 +459,16 @@ export class TypeTable {
     return this.refs[type]
   }
 
-  /** The name of a struct type; the empty string otherwise. */
+  /** The name of a struct type, its symbol (WP57 S3a); the empty string otherwise. */
   nameOf(type: i32): string {
+    return this.names[type]
+  }
+
+  /**
+   * The symbol of a struct type (WP57 S3a): what the IR spells it and what
+   * interns it. Today it is the source name; `typeName` gives the display.
+   */
+  symbolOf(type: i32): string {
     return this.names[type]
   }
 
@@ -488,6 +510,7 @@ export class TypeTable {
     this.states.push(state)
     this.readonlys.push(ro)
     this.displays.push("")
+    this.opaques.push(false)
     this.index.set(key, id)
     return id
   }
@@ -506,8 +529,29 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_ARRAY && this.readonlys[type]
   }
 
-  structOf(name: string): i32 {
-    return this.intern(K_STRUCT, -1, name)
+  /** The struct type interned under the symbol `symbol`. */
+  structOf(symbol: string): i32 {
+    return this.intern(K_STRUCT, -1, symbol)
+  }
+
+  /**
+   * The struct type a declaration names (WP57 S3a): interned under `symbol`,
+   * with `display`, its source name, as the spelling `typeName` gives it.
+   */
+  declaredStructOf(symbol: string, display: string): i32 {
+    const type = this.structOf(symbol)
+    this.setDisplayName(type, display)
+    return type
+  }
+
+  /** Marks the struct id `type` as an opaque `declare class` (WP66 S3). */
+  markOpaque(type: i32): void {
+    this.opaques[type] = true
+  }
+
+  /** Whether `type` is an opaque `declare class` (WP66 S3); -1 is not. */
+  isOpaque(type: i32): boolean {
+    return type >= 0 && this.opaques[type]
   }
 
   /** Record `display` as the spelling `typeName` gives the struct id `type`. */
@@ -1175,6 +1219,29 @@ export class TypeTable {
     return kind === K_STRUCT || kind === K_ARRAY || kind === K_UNION || type === T_STRING || type === T_CPTR
   }
 
+  /**
+   * Whether the value's LLVM type is a pointer: a class, array, string,
+   * union, `Result` or `CPtr`, nullable or not. Its width is the target's,
+   * four bytes under wasm32's `p:32:32` and eight natively, where every other
+   * value's is `alignOf`'s, which no target moves.
+   */
+  isPointerValue(type: i32): boolean {
+    const kind = this.kinds[type]
+    if (kind === K_NULLABLE || kind === K_MAYBE) {
+      return this.isPointerValue(this.refs[type])
+    }
+    return kind === K_RESULT || this.isPointer(type)
+  }
+
+  /**
+   * `alignOf` on a target whose pointer is `pointer` bytes (`isPointerValue`).
+   * A pointer's size equals its alignment on every target, so this is also
+   * the bytes the value occupies in a struct field.
+   */
+  alignWithPointer(type: i32, pointer: i32): i32 {
+    return this.isPointerValue(type) ? pointer : this.alignOf(type)
+  }
+
   isNullable(type: i32): boolean {
     return this.kinds[type] === K_NULLABLE
   }
@@ -1351,7 +1418,7 @@ export class TypeTable {
       case K_ARRAY:
         return `${ARRAY_STRUCT}*`
       case K_STRUCT:
-        return `%struct.${this.names[type]}*`
+        return this.opaques[type] ? "i8*" : `%struct.${this.names[type]}*`
       case K_ENUM:
         return "i32"
       case K_ENUM_MEMBER:

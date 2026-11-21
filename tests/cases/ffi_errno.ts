@@ -15,11 +15,11 @@ declare function errno_says(e: i32): string;
 declare function quiet(): string;
 
 /** Reads the slot and nothing else. */
-function lastErrno(): i32 {
+const lastErrno = (): i32 => {
   return cErrno();
-}
+};
 
-export function run(): i32 {
+export const run = (): i32 => {
   console.log(`before any call: ${lastErrno()}`);
   const fd = open("/nonexistent/nish-errno", 0);
   console.log(`open: ${fd} errno ${lastErrno()}`);
@@ -32,4 +32,4 @@ export function run(): i32 {
   const said = errno_says(5);
   console.log(`errno_says: ${said} errno ${cErrno()}`);
   return cErrno();
-}
+};

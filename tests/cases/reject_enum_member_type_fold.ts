@@ -7,9 +7,9 @@ enum Kind {
 
 const array = (): Kind.Array => Kind.Array;
 const scalar = (): Kind.Scalar => Kind.Scalar;
-function fold<T>(xs: T[], init: T): T {
+const fold = <T>(xs: T[], init: T): T => {
   return xs.length > 0 ? xs[0] : init;
-}
+};
 
 export const test = (c: boolean, k: Kind): number => {
   const a: Kind.Array = array();

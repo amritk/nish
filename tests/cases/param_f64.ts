@@ -2,11 +2,11 @@
 // double: a fractional default, an earlier-parameter default, and a rest of
 // doubles, held to unmodified Node by tests/differential/unmodified.js.
 
-function mix(a: number, t: number = 0.25, b: number = a): number {
+const mix = (a: number, t: number = 0.25, b: number = a): number => {
   return a + (b - a) * t
-}
+};
 
-function mean(...xs: number[]): number {
+const mean = (...xs: number[]): number => {
   if (xs.length === 0) {
     return 0
   }
@@ -15,7 +15,7 @@ function mean(...xs: number[]): number {
     sum = sum + x
   }
   return sum / xs.length
-}
+};
 
 class Gauge {
   level: number
@@ -28,7 +28,7 @@ class Gauge {
   }
 }
 
-export function main(): void {
+export const main = (): void => {
   console.log(mix(2))
   console.log(mix(2, 0.5, 6))
   console.log(mix(2, 0.75))
@@ -38,4 +38,4 @@ export function main(): void {
   const g = new Gauge()
   console.log(g.raise())
   console.log(g.raise(2.25))
-}
+};

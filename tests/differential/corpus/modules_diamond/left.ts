@@ -1,5 +1,5 @@
 import { base, twice } from "./common";
 
-export function leftValue(): number {
+export const leftValue = (): number => {
   return twice(base()) + 1;
-}
+};

@@ -2,7 +2,7 @@ import { scope } from "nish/threads"
 
 const at = (n: i32): i32 => n
 
-export function main(): i32 {
+export const main = (): i32 => {
   let k = 3
   k = k + 1
   const out = new Array<i32>(2)

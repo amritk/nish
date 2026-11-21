@@ -1,5 +1,5 @@
 // 2D arrays: matrix multiplication, transpose, Pascal's triangle, jagged rows.
-function multiply(a: number[][], b: number[][]): number[][] {
+const multiply = (a: number[][], b: number[][]): number[][] => {
   const out: number[][] = [];
   for (let i = 0; i < a.length; i++) {
     const row = new Array<number>(b[0].length);
@@ -13,9 +13,9 @@ function multiply(a: number[][], b: number[][]): number[][] {
     out.push(row);
   }
   return out;
-}
+};
 
-function show(m: number[][]): void {
+const show = (m: number[][]): void => {
   for (const row of m) {
     let line = "";
     for (const v of row) {
@@ -23,9 +23,9 @@ function show(m: number[][]): void {
     }
     console.log(line);
   }
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const a = [
     [1, 2, 3],
     [4, 5, 6],
@@ -71,4 +71,4 @@ export function main(): number {
   console.log(grid[1][1]);
   console.log(grid[0][0]);
   return 0;
-}
+};

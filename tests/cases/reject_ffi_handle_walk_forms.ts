@@ -46,11 +46,11 @@ class File {
   }
 }
 
-function peek(f: File): i32 {
+const peek = (f: File): i32 => {
   return 0
-}
-function either(b: boolean, x: File, y: File): i32 {
+};
+const either = (b: boolean, x: File, y: File): i32 => {
   return peek(b ? x : y)
-}
+};
 
 export const main = (): i32 => 0

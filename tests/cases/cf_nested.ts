@@ -1,4 +1,4 @@
-function countPairs(n: number): number {
+const countPairs = (n: number): number => {
   let count = 0;
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
@@ -8,9 +8,9 @@ function countPairs(n: number): number {
     }
   }
   return count;
-}
+};
 
-function search(limit: number): number {
+const search = (limit: number): number => {
   let found = 0;
   let i = 0;
   while (i < limit) {
@@ -24,8 +24,8 @@ function search(limit: number): number {
     found += j;
   }
   return found;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return countPairs(6) * 100 + search(5);
-}
+};

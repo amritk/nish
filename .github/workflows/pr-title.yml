@@ -22,6 +22,12 @@ on:
   # merges was checked on the pull request itself, so the step is skipped and
   # the job reports success.
   merge_group:
+  # The Release PR's run. release-pr.yml pushes `release/next` with
+  # GITHUB_TOKEN, whose `pull_request` runs wait for a maintainer's approval,
+  # so it dispatches this workflow at the branch instead, and the check
+  # reports on the PR's head commit. The step below holds a dispatch to that
+  # one branch.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -49,3 +55,16 @@ jobs:
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: node scripts/changelog-gen.mjs --check-subject "$TITLE"
+
+      # A dispatch has no pull request to read a title from. release-pr.yml
+      # titles the Release PR with its commit's subject, so that subject is
+      # what is checked; any other branch fails, so a dispatch cannot stand in
+      # for another pull request's title check.
+      - name: Check the Release PR's subject
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/release/next" ]; then
+            echo "::error::a dispatched title check runs only at release/next, not $GITHUB_REF"
+            exit 1
+          fi
+          node scripts/changelog-gen.mjs --check-subject "$(git log -1 --format=%s)"

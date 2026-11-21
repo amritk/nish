@@ -4,9 +4,9 @@
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
-function peek(f: File): i32 {
+const peek = (f: File): i32 => {
   return f.read()
-}
+};
 class File {
   readonly file: CPtr | null
   constructor(path: string) {

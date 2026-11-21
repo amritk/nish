@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_optional_call/main.ts","line":5,"column":52,"endLine":5,"endColumn":59,"severity":"error","code":"NL1068","message":"An optional call `f?.()` is not supported, with or without `--compat`: call `f()` directly, or narrow `f` with `!== null` first"}

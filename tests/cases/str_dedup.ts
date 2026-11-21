@@ -1,14 +1,14 @@
-function first(): string {
+const first = (): string => {
   return "same";
-}
+};
 
-function second(): string {
+const second = (): string => {
   return "same";
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   console.log(first());
   console.log(second());
   console.log("same" === second());
   return 0;
-}
+};

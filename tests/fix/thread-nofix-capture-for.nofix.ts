@@ -1,6 +1,6 @@
 import { scope } from "nish/threads"
 
-export function main(): i32 {
+export const main = (): i32 => {
   const out = new Array<i32>(2)
   {
     using s = scope()

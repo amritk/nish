@@ -4,11 +4,11 @@ class Options {
   loud: boolean = true
 }
 
-function greet(name: string, opts: Options | null = null): string {
+const greet = (name: string, opts: Options | null = null): string => {
   return opts !== null && opts.loud ? `${name}!` : name
-}
+};
 
-function total(xs: i32[] | null = null): i32 {
+const total = (xs: i32[] | null = null): i32 => {
   let sum = 0
   if (xs !== null) {
     for (const x of xs) {
@@ -16,19 +16,19 @@ function total(xs: i32[] | null = null): i32 {
     }
   }
   return sum
-}
+};
 
-function suffix(base: string, end: string | null = null): string {
+const suffix = (base: string, end: string | null = null): string => {
   return end !== null ? `${base}${end}` : base
-}
+};
 
-function repeat(word: string, n: i32 = 2, opts: Options | null = null): string {
+const repeat = (word: string, n: i32 = 2, opts: Options | null = null): string => {
   let out = ""
   for (let i = 0; i < n; i++) {
     out = `${out}${word}`
   }
   return opts !== null && opts.loud ? `${out}!` : out
-}
+};
 
 class Box {
   label: string
@@ -40,7 +40,7 @@ class Box {
   }
 }
 
-export function main(): void {
+export const main = (): void => {
   console.log(greet("a"))
   console.log(greet("b", new Options()))
   console.log(greet("c", null))
@@ -56,4 +56,4 @@ export function main(): void {
   const b = new Box("top")
   console.log(b.tag())
   console.log(b.tag(new Options()))
-}
+};

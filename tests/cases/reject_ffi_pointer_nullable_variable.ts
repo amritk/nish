@@ -9,25 +9,25 @@
 declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
 declare function free(p: CPtr | null): void;
 
-function local(): void {
+const local = (): void => {
   const p = realpath(".", null);
   free(p);
-}
+};
 
-function parens(): void {
+const parens = (): void => {
   const p = realpath(".", null);
   free((p));
-}
+};
 
-function ternary(b: boolean): void {
+const ternary = (b: boolean): void => {
   const p = realpath(".", null);
   free(b ? p : null);
-}
+};
 
-function nullish(): void {
+const nullish = (): void => {
   const p = realpath(".", null);
   free(p ?? null);
-}
+};
 
 class Owner {
   readonly n: i32;
@@ -42,7 +42,7 @@ class Owner {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   local();
   parens();
   ternary(true);
@@ -50,4 +50,4 @@ export function main(): i32 {
   const o = new Owner();
   o.release();
   return o.n;
-}
+};

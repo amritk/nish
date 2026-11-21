@@ -1,11 +1,17 @@
+// Opt-out (`--allow-panics`): calls into `std/cli-args`, `std/collections`
+// and `std/json` reach their index, slice and overflow panic sites; this file
+// keeps none of its own. Follow-up: make those modules panic-free, then build
+// this file without `--allow-panics`.
+//
 // A command tree for an HTTP API's command-line client, on `nish/cli-args`:
 // `users list|get|keys list|keys create` and `projects list`, with global
 // flags that may stand before, between or after the verbs. It sends no
 // requests: each command prints, as JSON, the call it would make, so the
 // parse is what it shows.
-//   nish examples/api-cli/main.ts --link build/api-cli
+//   nish --allow-panics examples/api-cli/main.ts --link build/api-cli
 //   ./build/api-cli users keys list 42 --limit 5 -t ci -t deploy
 //   ./build/api-cli --help; ./build/api-cli users kyes
+// smoke: args --allow-panics
 // smoke: argv users get 7 --raw-output
 import { Cli, ParseResult, ROOT, SOURCE_ARGV, finish } from "nish/cli-args"
 import { agentDriven, styleFor } from "nish/cli"
@@ -96,11 +102,18 @@ class Api {
  * its own keys and `send` closes and prints it.
  */
 const call = (api: Api, r: ParseResult, method: string, route: string): JsonWriter => {
-  let size = 512 + 6 * route.length
-  for (let i = 0; i < process.argv.length; i++) {
-    size += 6 * process.argv[i].length
+  // `u32`, which wraps rather than panics, and cannot wrap here: the kernel
+  // caps the whole argument list at a few MiB, so six times it is far below
+  // 2^32. The buffer is filled by `push` because a `u32` length is checked.
+  let size: u32 = toU32(512) + toU32(6) * toU32(route.length)
+  for (const arg of process.argv) {
+    size += toU32(6) * toU32(arg.length)
   }
-  const w = new JsonWriter(new Array<u8>(size), 0)
+  const buf: u8[] = []
+  for (let i: u32 = 0; i < size; i++) {
+    buf.push(0)
+  }
+  const w = new JsonWriter(buf, 0)
   let tokenFrom = "none"
   if (r.source(api.token) === SOURCE_ARGV) {
     tokenFrom = "flag"

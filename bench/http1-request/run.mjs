@@ -47,7 +47,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -62,6 +62,10 @@ const CASES = [
   { name: "browser", requests: 1, known: "a9dc71a8" },
   { name: "api", requests: 1, known: "6b37847a" },
   { name: "short", requests: 1, known: "f730d88a" },
+  { name: "get", requests: 1, known: "7714a212" },
+  { name: "fields0", requests: 1, known: "38a6e2b6" },
+  { name: "fields4", requests: 1, known: "624896b6" },
+  { name: "fields10", requests: 1, known: "20bb24b6" },
   { name: "pipelined", requests: 2, known: "2569067a" },
   { name: "split", requests: 1, known: "f0a2967d" },
   { name: "json1k", requests: 1, known: "ce28ee06" },
@@ -143,8 +147,7 @@ const buildIn = (cmd, prefix, cwd, dir) => {
   const rel = (p) => path.relative(cwd, p)
   run(
     cmd,
-    [
-      ...prefix,
+    compileArgv({ cmd, prefix }, [
       "bench/http1-request/main.ts",
       "-o",
       `${rel(dir)}/`,
@@ -153,7 +156,7 @@ const buildIn = (cmd, prefix, cwd, dir) => {
       "--profile",
       "speed",
       ...(cpu === "x86-64" ? [] : ["--cpu", cpu]),
-    ],
+    ]),
     cwd
   )
   // A copy rather than the same path twice, as bench/crypto/run.mjs makes one:

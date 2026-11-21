@@ -2,7 +2,7 @@
 // the same constant twice.
 const ONE: i32 = 1;
 
-function f(n: number): number {
+const f = (n: number): number => {
   switch (n) {
     case 1:
       return 1;
@@ -11,4 +11,4 @@ function f(n: number): number {
     default:
       return 0;
   }
-}
+};

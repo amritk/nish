@@ -24,13 +24,13 @@ class File {
   }
 }
 
-export function either(p: string, c: boolean): i32 {
+export const either = (p: string, c: boolean): i32 => {
   if (c) {
     using f = new File(p)
     return f.read()
   } else {
     return f.read()
   }
-}
+};
 
 export const main = (): i32 => 0

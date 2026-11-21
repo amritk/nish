@@ -1,3 +1,3 @@
-function f(c: boolean): number {
+const f = (c: boolean): number => {
   return c ? 1 : true;
-}
+};

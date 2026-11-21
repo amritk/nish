@@ -7,7 +7,7 @@ interface Pixel {
   b: u8;
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const p: Pixel = { b: 255 };
   return toI32(p.b);
-}
+};

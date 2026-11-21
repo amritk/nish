@@ -190,6 +190,12 @@ export class Walk {
    * same instructions as the native build, rather than as the platform's.
    */
   deterministic: boolean
+  /**
+   * The build's dialect admits `optional-chaining` (WP28 C1): an element read
+   * inside a `?.` chain is left to the chain, which skips it on a missing
+   * link. A strict build keeps its `idx(a?.b, i)`, byte for byte.
+   */
+  optionalChaining: boolean
   /** Every name the emitted module must import from `nish/math`, in first-use order. */
   mathNames: StringSet
   /** Every width type the module spells, in first-use order. */
@@ -282,9 +288,16 @@ export class Walk {
    * the list's own spliced text no longer separates.
    */
   lastOperands: Operands | null
+  /**
+   * WP28 C1: the wrappers `src/defaults.ts` built in front of a function with
+   * a default that is not a constant. They are not in the source, whose text
+   * still carries the defaults, so the walk writes nothing for them.
+   */
+  defaultWrappers: Node[]
 
   constructor(program: CheckedProgram, table: TypeTable, source: SourceFile, nodeCount: i32) {
     this.program = program
+    this.defaultWrappers = []
     this.table = table
     this.source = source
     this.instanceHead = []
@@ -309,6 +322,7 @@ export class Walk {
     this.choiceTexts = []
     this.helpers = new StringSet()
     this.deterministic = false
+    this.optionalChaining = false
     this.mathNames = new StringSet()
     this.widths = new StringSet()
     this.hostHandle = false
@@ -1366,6 +1380,9 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
   // An entry's top-level code is written back where it stands
   // (`src/script.ts`), so the `main` built around it is not written at all.
   for (const stmt of sourceOrder(file)) {
+    if (walk.defaultWrappers.indexOf(stmt) >= 0) {
+      continue
+    }
     if (stmt.kind === NodeKind.Import) {
       if (
         stmt.children.length > 0 &&

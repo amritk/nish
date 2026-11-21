@@ -3,7 +3,7 @@
 // `from` is gone afterwards. A failure is an answer, not an exit: a missing
 // source is -2 (`ENOENT`) and the program carries on. Across file systems the
 // answer would be -18 (`EXDEV`), which no fixture here can reach.
-export function main(): number {
+export const main = (): number => {
   const from = "build/test/io_rename_from.txt";
   const to = "build/test/io_rename_to.txt";
   writeFileSync(to, "old");
@@ -14,4 +14,4 @@ export function main(): number {
   console.log(`missing source: ${renameSync(from, to)}`);
   console.log(`target kept: ${readFileSync(to)}`);
   return 0;
-}
+};

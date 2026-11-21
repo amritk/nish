@@ -9,7 +9,7 @@ class Flags {
   signed: i32 = -16;
 }
 
-export function main(): number {
+export const main = (): number => {
   const f = new Flags();
   f.bits &= 60;
   f.bits |= 3;
@@ -21,4 +21,4 @@ export function main(): number {
   console.log(toI32(f.wide));
   console.log(f.signed);
   return 0;
-}
+};

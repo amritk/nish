@@ -3,7 +3,7 @@
 // `readFileSyncOrNull` makes, so a driver phrases its own diagnostic. The last
 // two cases are the failures: no parent to create it in, and a plain file
 // already sitting at the path.
-export function main(): number {
+export const main = (): number => {
   const dir = "build/test/io_mkdir_dir";
   console.log(`fresh: ${mkdirSync(dir)}`);
   console.log(`already there: ${mkdirSync(dir)}`);
@@ -12,4 +12,4 @@ export function main(): number {
   writeFileSync(file, "not a directory\n");
   console.log(`over a file: ${mkdirSync(file)}`);
   return 0;
-}
+};

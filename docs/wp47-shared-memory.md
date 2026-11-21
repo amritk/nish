@@ -440,8 +440,11 @@ takes its `content-length` worth of body, and folds those bodies into an
 FNV-1a sum, which must equal the sum the producer folds over every record
 it renders. A run that fails either check fails the whole run. Both sums
 are one byte at a time, on the producer's and the reader's cores, so they
-slow the producer and the reader, which pace the pipeline. The pipeline
-and p99 figures here are higher than those of a run without the check.
+add work to the producer and the reader. No run without the check was
+recorded, and these runs predate the consumer's waiting column that
+`run.mjs` now prints, so neither whether the producer and the reader pace
+the pipeline nor how much the sums raise the pipeline and p99 figures is
+measured here.
 Every wait inside the run has a ten-second deadline: the producer's
 attach, room in a full ring for each record, each request, each record,
 room for each response head, each short body write, each drain of the

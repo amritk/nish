@@ -52,26 +52,26 @@ class Trust implements Account {
   }
 }
 
-function total(accounts: Account[]): number {
+const total = (accounts: Account[]): number => {
   let sum = 0;
   for (const a of accounts) {
     sum += a.balance;
   }
   return sum;
-}
+};
 
-function richer(a: Account, b: Account): Account {
+const richer = (a: Account, b: Account): Account => {
   return a.balance >= b.balance ? a : b;
-}
+};
 
 // A write through the interface reaches the class's own bytes.
-function charge(a: Account, amount: number): number {
+const charge = (a: Account, amount: number): number => {
   a.balance -= amount;
   a.ops += 1;
   return a.balance;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const s = new Savings("ann", 200, 10);
   console.log(s.deposit(50));
   console.log(s.accrue());
@@ -90,4 +90,4 @@ export function main(): number {
   console.log(best.owner);
   console.log(s.summary());
   return 0;
-}
+};

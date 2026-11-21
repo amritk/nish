@@ -1,1 +1,3 @@
-function f(o: number): number { return o.prototype; }
+const f = (o: number): number => {
+  return o.prototype;
+};

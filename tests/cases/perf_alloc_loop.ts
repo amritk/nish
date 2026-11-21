@@ -2,7 +2,7 @@
 // entry-block alloca (docs/wp6-memory.md §1), so a loop bumps one out of the
 // arena every pass. Nothing here keeps it past the iteration, so the compiler
 // names the hoist.
-export function test(): number {
+export const test = (): number => {
   const width = 3;
   let total = 0;
   let i = 0;
@@ -14,4 +14,4 @@ export function test(): number {
     i = i + 1;
   }
   return total;
-}
+};

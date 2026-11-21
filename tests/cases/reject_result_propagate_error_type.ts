@@ -5,15 +5,15 @@ interface IoError {
   code: i32;
 }
 
-function open(path: string): Result<i32, IoError> {
+const open = (path: string): Result<i32, IoError> => {
   if (path === "") {
     const problem: IoError = { code: 2 };
     return Err(problem);
   }
   return Ok(3);
-}
+};
 
-export function readFile(path: string): Result<i32, string> {
+export const readFile = (path: string): Result<i32, string> => {
   const fd = open(path).orReturn();
   return Ok(fd);
-}
+};

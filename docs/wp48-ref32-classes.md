@@ -78,16 +78,51 @@ A class `R` is compact when all of these hold:
 
 1. **The output is a native executable** (`--link`, or `nish run`). A
    wasm32 build already has 4-byte pointers, so there is nothing to do. A
-   build whose classes C or Node can see (`--emit-header`, `--emit-napi`,
-   `--emit-napi-async`, a C library) is left alone, because a compact class
-   is opaque to C (§4) and the range would be reserved inside a host process
-   Nish does not own.
+   build whose classes Node can see (`--emit-napi`, `--emit-napi-async`, also
+   beside `--emit-header`) or a C library another process loads is left
+   alone, because the range would be reserved inside a host process Nish
+   does not own. An `implements Compact` class is refused there (NL4021, and
+   NL4020 at an export's signature). Since stage 2c a `--emit-header` build
+   whose C host is the process is not refused: the header keeps every class
+   holding a link opaque (§4), the host holds an instance as a `struct X *`
+   handle, the runtime is the range runtime (`-DNISH_ARENA_RANGE`), and a
+   runtime built without it lacks `nish_arena_range_abi`, so a program fails
+   to link as soon as a module whose links are offsets allocates: both
+   inline bumps name the symbol there, so an 8-aligned compact class does
+   too. A module that allocates nothing names nothing. A busy range address
+   is the start-up panic every range build has. The automatic rule
+   (`src/compact-rule.ts`, test 1) still leaves a header build alone.
 2. **Something links to `R`**: some class, `R` itself included, has a field
    typed exactly `R` or `R | null`.
-3. **Narrowing saves memory on every instance**: `computeLayout` run both
-   ways gives `R`, or the class holding the link, a smaller size after
-   rounding. A class with one link among wide fields that rounding gives back
-   is left alone, because it would pay the decode for nothing.
+3. **Narrowing saves memory on every instance**: `R` is at least 24 bytes,
+   and `computeLayout` run both ways takes at least a quarter off its own
+   size after rounding. A 16-byte cell already packs four to a cache line;
+   narrowed to 8 it measured slower in both programs that make one in
+   bulk (`bench/awfy` List, `bench/goose/bintrees`, §5.5), so it is left
+   alone. A class
+   with one link among wide fields that rounding gives back is left alone,
+   because it would pay the decode for nothing, and so is a smaller saving:
+   it pays the decode on every link read for a few percent of one class.
+   Three rules are named in this note. **#1736's rule** (the
+   `--explain-layout` report that prepared this stage) passed test 3 on
+   any saving after rounding, in `R` or in any class holding a link to it,
+   with no floor on `R`'s size. On the corpus it picked seven `std/`
+   classes only through a holder (`Deflater`, whose `ZlibCompressor` holder
+   goes 8 → 4 bytes; `JsonTokenizer`, `JsonDocument` 248 → 240;
+   `HttpServerRequest`, `P256ProjectivePoint`, `QuicKeysSlot`,
+   `FetchResponse`, `PgConnection`), 19 of the compiler's 307 classes on
+   this branch's merged tree (17 of them holder-only; #1736 counted 18 on
+   its own tree, and the 19th, `SourceFile`, joins because `CheckContext`
+   has since grown to 448 bytes and narrowing its `SourceFile` link now
+   saves 448 → 440 after rounding), and the 16-byte cells of `awfy` List and `bintrees`
+   (§5.5). Two drafts of this stage came between it and the final rule:
+   a quarter off `R` or off a holder made in a loop, then a quarter off
+   `R` alone. Neither was gated on a run of its own; §5.5 times #1736's
+   rule and **the final rule**, which is the test as written above. A
+   holder-only saving is 4 to 8 bytes in one holder per stream, document or
+   request, which measured as noise and cost memory where the narrowed
+   class stopped being a stack value (§5.5), so only `R`'s own size counts.
+   The refusal still names the holder that would have saved.
 4. **`R` is made in a loop or in a recursive function**: some `new R(...)`
    is lexically inside a loop, or inside a function that can reach itself in
    the call graph. A class made once or a few times per run is left alone.
@@ -98,32 +133,37 @@ A class `R` is compact when all of these hold:
    correctness.
 5. **Nothing forbids it**: `R` is not, and is not a field of, a `declare
    class`; `R` does not hold a `Secret`; `R` is not exported in a C or N-API
-   surface.
+   surface. This test is the automatic rule's: an `implements Compact` class
+   may cross `--emit-header` as an opaque handle (rule 1).
 
 Two controls override the rule, both erased under Node and `tsc`:
 
 ```ts
-import type { Compact, Wide } from "nish:compact"
+import { Compact, Wide } from "nish:compact"
 
 class TNode implements Compact { /* compact even if the rule says no */ }
 class Big implements Wide { /* never compact */ }
 ```
 
-and `--compact off` turns the whole mechanism off for one build, which is
-what to try first when a program hits the range's limit (§3.3) or runs
-slower. `implements Compact` on a class that rule 1 or 5 refuses is a
-compile error naming the reason. Each class the rule picks is listed by
-`nish --explain-layout`, so the decision can be seen and checked.
+and `--compact off` turns the whole mechanism off for one build, classes
+marked `implements Compact` included, which is what to try first when a
+program hits the range's limit (§3.3) or runs slower. `implements Compact` on
+a class that rule 1 or 5 refuses is a compile error naming the reason, and a
+class may not write both markers (NL2819). `nish --explain-layout` prints one
+line per class: `compact` with its size before and after, `off` under
+`--compact off`, or the first test that refused it, numbered as above
+(`5 forbidden: implements Wide` for the marker), so the decision can be seen
+and checked. Stage 3 ships both controls and the flag (§5.5).
 
-Against the measured programs: `tree.ts`'s and `bintrees.ts`'s `TNode` are
-made in a recursive build and shrink from 24 to 12 and 16 to 8 bytes, and
-`sibling.ts`'s node is made in the build loop and shrinks from 32 to 20. The
-rule picks all three with no source change.
+Against the measured programs: `tree.ts`'s `TNode` is made in a recursive
+build and shrinks from 24 to 12 bytes, and `sibling.ts`'s node is made in the
+build loop and shrinks from 32 to 20. The rule picks both with no source
+change. `bintrees.ts`'s 16-byte `TNode` would shrink to 8, but test 3 refuses
+it for being under 24 bytes (§5.5).
 
 The rule lands after the mechanism (§8): stage 2 builds compact classes with
-`implements Compact` as the only way in, and stage 3 turns the rule on once
-the corpus shows no program slower beyond its noise band. Until then a
-program that does not write the marker is unchanged.
+`implements Compact` as the only way in, and stage 3 turns the rule on, gated
+on the corpus showing no program slower beyond its noise band (§5.5).
 
 **Why not every class.** The compiler could narrow every class's links, and
 that is the first note's Design A, measured and declined. Three costs stay
@@ -276,10 +316,10 @@ does with each.
 | **Thread sharing** | threads share the range | the same. A worker carves its chunks from the shared range under the size-class lock (a chunk grab, not a bump, so the lock is cold). `nish_cross_adopt` links range chunks unchanged. A compact instance riding in a parallel task payload (`src/emit-parallel.ts:421-512`) stays a full pointer, because a payload slot is not a class field. |
 | **Escape analysis** | a stack instance has no offset | a compact class is never promoted to the stack. `holdsNoPointerSlot` (`src/escape.ts:1893`) and the promotion site (`src/emit-classes.ts:105`) refuse it. That costs the promotion for that one class, which for a linked node rarely applied anyway (a node is stored, so it escapes). A test pins it. |
 | **Alignment and attributes** | — | a compact instance is `align 4 dereferenceable(size)`, not `align 8`. `src/attributes.ts:1951` and `:7053-7073` read the class's alignment instead of assuming 8, and `src/attributes.ts:2465` and `src/emit.ts:~2334` stop assuming 8-byte rounding. A decoded link is `nonnull` only once it is tested. With the zero-based decode, `o != 0` and `p != null` are the same test, and LLVM folds it (§5's assembly). `nocapture` counts an encoding store as a capture, as it counts a pointer store today. |
-| **TBAA** | a compressed field may-aliases every `i32` | a compressed field gets a scalar node of its own, `ref32`, under the root, beside `i32`. A store of a link then does not alias a store of an `i32` field. The struct-path nodes carry the new offsets (`src/tbaa.ts:110-142`). Prototyped in §5's IR. |
-| **C ABI and headers** | every struct holding a reference changes for C | a class holding a compressed field is **opaque** in `--emit-header` output, the same way a `Map` or a `Secret` already is (`src/interop-header.ts:147-158`), and C holds it as a handle. A compact instance passed to or returned from C is a full pointer, so N-API and FFI signatures do not change. A `declare class` (a C layout) may not hold a compact field: that is a checker refusal. |
-| **wasm32** | no-op | no-op. A wasm32 pointer is already 4 bytes, so a compact class compiles to exactly today's IR there: no range, no decode. Found on the way: `computeLayout` (`src/structs.ts:171`) gives a class's pointer field 8 bytes on wasm32 where LLVM's `p:32:32` lays out 4 (only a `declare class` is special-cased), so `info.size` over-allocates on wasm32 today. Stage 4 fixes that separately. |
-| **Debug info** | a member gdb cannot follow | the same, but only for compact classes: the member is a `DW_TAG_base_type` `u32` named for what it is (`ref32 TNode`), and a debugger pretty-printer (gdb Python, an lldb formatter) in `tools/` decodes it. Decoded locals are ordinary pointers, so stepping through code that holds them shows them as today. `src/debug.ts:440-468`. |
+| **TBAA** | a compressed field may-aliases every `i32` | a compressed field gets a scalar node of its own, `ref32`, under the root, beside `i32`. A store of a link then does not alias a store of an `i32` field. The struct-path nodes carry the new offsets. Landed in stage 2b (`ref32Node` and `fieldScalar` in `src/tbaa.ts`); two tags that both name a class are told apart by the class path whatever their scalars, so the node decides only once LLVM merges link stores through two classes into one store tagged with the bare scalar. `tests/cases/compact_tbaa.ts` pins that case: after `simplifycfg` sinks the two stores, `gvn` forwards an `i32` field and a pointer field across the merged store, and renaming the node to `i32` or `ptr` keeps the matching reload (`tests/run.js`, "compact tbaa"). `--plain` reloads both. |
+| **C ABI and headers** | every struct holding a reference changes for C | a class holding a compressed field is **opaque** in `--emit-header` output, the same way a `Map` or a `Secret` already is (`holdsLink` in `src/interop-header.ts`): the compact class itself, any class with a field narrowed to `i32`, and an instantiation such as `Box<Cell>`. C holds it as a handle. A compact instance passed to or returned from C is a full `struct X *`, so FFI signatures do not change. Done in stage 2c, with a C host round trip in `tests/run.js` ("compact header"). N-API stays refused (NL4020, NL4021), also beside `--emit-header`: an addon runs in Node's process. Out of scope: a header build linked into a shared library another process loads. A `declare class` (a C layout) may not hold a compact field: that is a checker refusal. |
+| **wasm32** | no-op | no-op. A wasm32 pointer is already 4 bytes, so a compact class compiles to exactly today's IR there: no range, no decode. Found on the way: `computeLayout` gave a class's pointer field 8 bytes on wasm32 where LLVM's `p:32:32` lays out 4 (only a `declare class` was special-cased), so `info.size` over-allocated on wasm32. Stage 6 fixed that separately: `computeLayout` now takes a pointer field's width from `pointerBytes` in `src/structs.ts`, 4 bytes on wasm32, so a class's size, alignment and field offsets there are LLVM's own. `resultLayout` (`src/result.ts`) took the same width later (#1749), so a `Result`'s pointer payload sits at LLVM's offset on wasm32 too. |
+| **Debug info** | a member gdb cannot follow | the same, but only for compact classes: the member is a `DW_TAG_typedef` named for what it is (`ref32 TNode`) over `unsigned int` (a typedef, not a renamed base type, because lldb shows a base type by its encoding and drops the name), and a debugger pretty-printer in `tools/` decodes it: `tools/gdb/ref32.py` (a printer and `$ref32(link)`) and `tools/lldb/ref32.py` (a summary and a synthetic child provider). Each picks the zero-based or based decode from the inferior's OS ABI or triple, as `zeroBasedLinks` does, with an override. Decoded locals are ordinary pointers, so stepping through code that holds them shows them as today. Landed in stage 2b (`linkType` in `src/debug.ts`); `tests/run.js` walks a list to `null` in both debuggers on Linux. |
 | **Pointer hashing** | must hash the decoded pointer | a `Map` key or a `Set` element is never a compressed field (§3.2), so every `ptrtoint` in `src/emit-map.ts` and `src/emit-parallel.ts` already sees a full pointer. Nothing to change. A test pins a compact class as a `Map` key. |
 | **Size limit** | 32 GiB, whole program | 15 GiB of arena for chunks of 2 MiB or less, only in programs the compiler gives a compact class (§7, decision 2). |
 | **AddressSanitizer** | — | the ASAN runtime (`-DNISH_ASAN`) mallocs every block, which a range cannot hold. Compression is a layout change with the same behaviour, so the ASAN build compiles compact classes uncompressed. The differential ASAN run tests the program's behaviour, not its layout. |
@@ -379,6 +419,13 @@ from the same rounds.)
 
 Noise band: wall 5.3%. Its trees are small and short-lived, so the time is
 allocation and release, and the decode is lost in the band.
+
+Stage 2b's `ref32` TBAA node, measured on `tree.ts` (compact) at n = 24:
+the IR linked with the node and with it renamed to `i32` (so a link
+may-aliases an `i32` again) builds byte-identical binaries, peak RSS
+394652 KB each: the node changes nothing LLVM does to `tree.ts`, so its time
+and memory cannot move. `tests/cases/compact_tbaa.ts` is a case the node does
+fold.
 
 ### 5.3 What the numbers say
 
@@ -493,6 +540,143 @@ All three print 33554431 and 134079322148. Band: widest per-round gap 16.8%,
 median per-round gap 3.5%. Verdict: `ptr-range` wall +2.5% against `ptr`,
 within the widest band and within the median band. Peak RSS moves by 0.1 MB.
 
+### 5.5 Stage 3: the rule's picks and its gate
+
+The rule (§3.1) run with `--explain-layout` over the nish-cmp corpus, every
+`tests/link` program, `bench/goose` and `bench/wp48-refs`, as `--link`
+builds. Before stage 3 no class was compact without `implements Compact`.
+
+| program | class | #1736's rule (any saving, `R` or a holder) | final rule |
+| --- | --- | --- | --- |
+| `bench/goose/tree.ts` | `TNode` | 24 → 12 | 24 → 12 |
+| `bench/treesum.ts` | `TreeNode` | 24 → 12 | 24 → 12 |
+| `bench/wp48-refs/sibling.ts` | `Node` | 32 → 20 | 32 → 20 |
+| `bench/goose/bintrees.ts` | `TNode` | 16 → 8 | refused, under 24 bytes |
+| `bench/awfy` `list.ts` | `Element` | 16 → 8 | refused, under 24 bytes |
+| `bench/awfy` `towers.ts` | `TowersDisk` | 16 → 8 | refused, under 24 bytes |
+| `tests/link/alias_export_nullable` | `Node` | 16 → 8 | refused, under 24 bytes |
+| `tests/link/std_json_typed` `keys.ts` | `Link` | 8 → 4 | refused, under 24 bytes |
+| `tests/link/std_compress*` | `Deflater` (held by `ZlibCompressor`) | holder 8 → 4 | refused, not `R` itself |
+| `tests/link/std_json_value` | `JsonTokenizer` (held by `JsonDocument`) | holder 248 → 240 | refused, not `R` itself |
+| `tests/link/net_http_server*` | `HttpServerRequest` (held by `Taken`) | holder 24 → 16 | refused, not `R` itself |
+| `tests/link/net_http_server*` | `P256ProjectivePoint`, `QuicKeysSlot` (held by `P256PointScratch`, `QuicListener`) | holders only | refused, not `R` itself |
+| `tests/link/net_fetch_async_https` | `FetchResponse` (held by the test's `Outcome`) | holder 24 → 16 | refused, not `R` itself |
+| `tests/link/net_serve_pg` | `PgConnection` (held by `PgPoolSlot`) | holder 64 → 56 | refused, not `R` itself |
+| the compiler (`src/compile.ts`) | the 19 below | 19 of 307 (#1736 counted 18; `SourceFile`, via `CheckContext` 448 → 440, is the 19th), all holder-only but `FunctionSig` 224 → 216 and `PanicSite` 56 → 48 | 0 of 307 |
+
+The compiler's 19 under #1736's rule, from `--explain-layout` on
+`src/compile.ts` at 568e1ef5 with test 3 set back to #1736's (a scratch
+build, not committed). Each line sizes its holders as if that class alone
+were compact, so a holder's figure differs between lines (`CheckContext` 448 →
+432 for `Node`'s two links, 448 → 440 for one). The final rule refuses all 19
+at test 3: only `FunctionSig` and `PanicSite` save anything of their own, and
+neither saves a quarter.
+
+| class | own size | holders that shrink, before → after |
+| --- | --- | --- |
+| `Node` (`nodes.ts`) | 40 → 40 | `LoopScope` 40 → 32, `PrivateArray` 24 → 16, `FunctionFacts` 440 → 432, `FunctionSig` 224 → 216, `FieldInfo` 104 → 96, `StructInfo` 184 → 176, `ConstInfo` 112 → 104, `ImportBinding` 88 → 80, `CheckedProgram` 928 → 920, `CheckContext` 448 → 432, `MinusLiteral` 16 → 8, `ElementRef` 56 → 48, `CollectionNames` 16 → 8, `Site` 24 → 16, `FlowTarget` 24 → 16, `AppendRange` 56 → 40, `GuardedAdd` 16 → 8, `ScopeSite` 32 → 24, `StatementSite` 16 → 8, `LateUse` 16 → 8, `Trail` 80 → 72, `Around` 40 → 32 |
+| `StringBuilder` (`strings.ts`) | 8 → 8 | `Lexer` 72 → 64 |
+| `AnalysisUnit` (`attributes.ts`) | 16 → 16 | `DropOrigin` 48 → 40 |
+| `FunctionSig` (`program.ts`) | **224 → 216** | `ParamUse` 24 → 12, `RangeSite` 32 → 24, `CaptureSlot` 16 → 8, `CaptureTarget` 16 → 8, `HandleClose` 24 → 16, `StoreScan` 88 → 80 |
+| `FunctionBindings` (`program.ts`) | 16 → 16 | `Instantiation` 192 → 184 |
+| `StructInstantiation` (`program.ts`) | 40 → 40 | `CheckContext` 448 → 440, `StructExpansion` 16 → 8 |
+| `Instantiation` (`program.ts`) | 192 → 192 | `FunctionSig` 224 → 216, `Expansion` 16 → 8 |
+| `FieldInfo` (`program.ts`) | 104 → 104 | `ArrayBase` 48 → 40 |
+| `StructInfo` (`program.ts`) | 184 → 184 | `FunctionSig` 224 → 216, `FieldInfo` 104 → 96, `JsonField` 64 → 56, `JsonPart` 56 → 48 |
+| `SourceFile` (`diagnostics.ts`) | 48 → 48 | `CheckContext` 448 → 440 |
+| `StringMap` (`map.ts`) | 48 → 48 | `StructInfo` 184 → 176, `StructRegistry` 24 → 16, `CheckedProgram` 928 → 920, `CheckContext` 448 → 440, `DiagnosticSink` 48 → 40, `StringSet` 8 → 4, `TypeTable` 168 → 160, `IRFunction` 184 → 176, `Demoter` 136 → 120, `Compilation` 232 → 224, `CallNode` 64 → 56, `InlineWalk` 80 → 72, `CalleeDrops` 80 → 72, `Importer` 248 → 232 |
+| `StringSet` (`map.ts`) | 8 → 8 | `FunctionFacts` 440 → 424, `Emitter` 424 → 416, `CheckedProgram` 928 → 912, `CheckContext` 448 → 440, `Assigned` 16 → 8, `ExternalFunction` 32 → 24, `Walk` 264 → 248, `Importer` 248 → 240 |
+| `Local` (`symbols.ts`) | 64 → 64 | `CheckContext` 448 → 440, `Fact` 32 → 16, `Offset` 16 → 8, `FlowTarget` 24 → 16, `SiblingSpawn` 32 → 24, `Declared` 24 → 16 |
+| `PanicSite` (`panics.ts`) | **56 → 48** | none |
+| `EntryFacts` (`bounds.ts`) | 56 → 56 | `RangeSite` 32 → 24, `RangeBody` 120 → 112 |
+| `IRBlock` (`ir.ts`) | 16 → 16 | `LoopTarget` 48 → 40, `IRFunction` 184 → 176 |
+| `RefModule` (`fnref-places.ts`) | 40 → 40 | `Builder` 8 → 4 |
+| `DropOrigin` (`arena-report.ts`) | 48 → 48 | `ArenaSite` 64 → 56 |
+| `ManifestList` (`manifest.ts`) | 24 → 24 | `ManifestCompat` 16 → 8, `LinkRequest` 16 → 8, `CapabilityManifest` 72 → 64 |
+
+No `std/` class is picked, `std/crypto` included (ECC-9 in
+`docs/security/crypto-ecc.md`), so the compiler and every program that picks
+nothing build the same IR with `--compact on` and `--compact off`;
+`explain_layout` pins that byte for byte. Each program in the table prints
+the same stdout both ways.
+
+**The gate.** Each picked program built both ways by the same compiler,
+`--compact on` against `--compact off`, run interleaved off then on in each
+round, timed as process wall under one 4-core cloud container. "Gap" is the
+per-round on/off ratio; its median and range are the noise band.
+
+| program (args) | rounds | off s | on s | median gap | gap range | peak RSS off → on |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `goose/tree` (depth 20) | 11 | 0.1838 | 0.1017 | −43.2% | −56.2 .. −25.6% | 50.5 → 25.9 MB |
+| `treesum` | 11 | 0.5181 | 0.3974 | −23.8% | −31.4 .. −6.7% | 25.8 → 13.6 MB |
+| `wp48-refs/sibling` (1M, 4) | 11 | 0.0934 | 0.1003 | +5.6% | −18.0 .. +31.2% | 32.7 → 20.9 MB |
+| `wp48-refs/sibling` (4M, 4) | 9 | 0.4132 | 0.4132 | +0.4% | −10.4 .. +9.4% | 126.6 → 79.7 MB |
+| `awfy` List (20 × 1500), #1736's rule | 11 + 9 | 0.4447 | 0.5507 | +26.9% | +5.5 .. +48.8% | 1.5 → 1.5 MB |
+| `goose/bintrees` (depth 17), #1736's rule | 11 | 0.1175 | 0.1396 | +18.3% | −14.5 .. +64.1% | 9.4 → 5.4 MB |
+| `goose/bintrees` (depth 19), #1736's rule | 9 | 0.5727 | 0.6446 | +18.8% | +1.8 .. +25.5% | 34.0 → 17.7 MB |
+| `awfy` Towers (20 × 600), #1736's rule | 11 | 0.2912 | 0.2958 | +1.5% | −14.3 .. +56.5% | 1.6 → 1.5 MB |
+| self-build (`src/compile.ts -o dir/`), #1736's rule | 9 | 2.660 | 2.574 | −2.7% | −10.3 .. +4.5% | 2026.9 → 2025.5 MB |
+| `compact-bench/json-doc` (700000), #1736's rule | 9 | 0.977 | 0.987 | +0.4% | −8.2 .. +3.9% | 86.7 → 172.4 MB |
+| `compact-bench/zlib-each` (2500), #1736's rule | 9 | 0.571 | 0.576 | +1.0% | −13.8 .. +8.2% | 865.2 → 856.6 MB |
+| `compact-bench/request-slot` (80000000), #1736's rule | 9 | 0.938 | 0.950 | +1.3% | −7.8 .. +26.2% | 1222.6 → 1222.4 MB |
+
+#1736's rule failed the gate: the `awfy` List cells ran slower in every
+round, and `bintrees` at depth 19 in every round. Both are 16-byte cells,
+four to a cache line already: List's lists are short enough to stay in L1,
+so the widening on each hop is all cost, and `bintrees` frees each tree
+before the next, so halving its nodes saves little traffic. Every 24- and
+32-byte node held within its noise band or gained. Test 3 therefore asks that `R` be at least
+24 bytes; the programs it refuses now build the same IR as `--compact off`,
+and of the three it keeps, `sibling`'s 1M run sits inside its band (which
+crosses zero) and its 4M run is even, while `treesum` gains 24% and `tree`
+43%, and both halve their peak RSS. A holder-only saving is not counted
+(§3.1), and the self-build and `compact-bench` rows are why.
+They time #1736's rule (any saving, `R`'s own or a holder's) against
+`--compact off`, in nine rounds that alternate which side runs first, on the
+head compiler with test 3 set back to #1736's. No `bench/` program makes one of
+the seven `std/` classes that rule picks only through a holder, so the three
+`tests/layout/compact-bench/` programs are minimal benches written for this
+measurement, for three of the seven: `json-doc` makes a `JsonTokenizer` each round and parses into one
+reused `JsonDocument`, `zlib-each` makes a `Deflater` each round beside one
+reused `ZlibCompressor`, and `request-slot` keeps a ring of 64 slots of its own
+(`Taken`'s shape) over `HttpServerRequest`s. Each prints the same checksum both
+ways, and the self-build writes the same 141 modules byte for byte. The other
+four (`FetchResponse`, `PgConnection`, `P256ProjectivePoint`, `QuicKeysSlot`)
+were not benched here; the final rule refuses them at test 3 with the rest,
+and stage 5 measures `std/`'s own classes. Every gap's
+range crosses zero: the self-build's −2.7% (19 classes picked, two of them
+shrinking themselves by 4% and 14%) and the three benches' +0.4% to +1.3% are
+noise. The memory goes the wrong way: `JsonTokenizer` in the build under #1736's rule is
+heap-allocated (`nish_alloc_struct(i64 128)` in `json-doc`'s loop), where with
+`--compact off` the same `new` is an `alloca`, so `json-doc` keeps 128 more
+bytes a round and its peak RSS doubles. `ZlibCompressor`'s 4 bytes and
+`JsonDocument`'s 8 are one object each; the compiler's peak RSS moves by
+1.4 MB of 2 GB. The figures support the tightened test 3 (`R`'s own saving,
+at least 24 bytes, at least a quarter) as it stands.
+
+### 5.6 Stage 4: `tree.ts` at the README's size
+
+§5.5's gate ran `tree.ts` at its own depth, 20. Stage 4 restates the Goose
+README's loss at the README's size, depth 24 (33,554,431 nodes): `build/nish`
+at 568e1ef5, the program built at depth 24 from its `bench:n` line with
+`--link --profile speed`, once with `--compact on` (the default) and once with
+`--compact off`. 11 rounds, alternating which ran first, each run a fresh
+process under `bench/rss.c`, process wall, one 4-core cloud container. Both
+print 33554431 and 134079322148.
+
+| build | median wall ms | peak RSS | binary bytes |
+| --- | ---: | ---: | ---: |
+| `--compact off` | 2805.6 | 788,320 KB | 7,832 |
+| `--compact on` | 1888.2 | 394,720 KB | 9,360 |
+
+Median per-round gap −33.5%, range −37.6% to −30.0%: every round gained.
+The binary grows by the range allocator (1,528 bytes). §5.2's prototype gave
+0.61x at this size; this is 0.67x, in another session whose `--compact off`
+runs were 31% slower than §5.2's `ptr`, so the two ratios are not one
+measurement. Goose was not rebuilt; its README figure, 395,320 KB, is now
+level with Nish's peak RSS, and its time is from another session, so no
+time ratio against Goose is claimed.
+
 ## 6. Where the emitter changes
 
 From a survey of `src/` at `8036aff1`.
@@ -514,11 +698,14 @@ From a survey of `src/` at `8036aff1`.
   `emitStructCopy`, `emitNew` (they read `info.size` and `info.align`, which
   `computeLayout` sets)
 - `src/emit-root.ts:203-217`, `writeTrace` (wasm32 only, nothing compressed)
-- `src/tbaa.ts:110-142`, `src/debug.ts:440-468`
+- `src/tbaa.ts` and `src/debug.ts` (done in stage 2b: `fieldScalar` and `linkType`)
 - `src/attributes.ts:1951`, `:2465`, `:7053-7073`, and `src/emit.ts:~2334`
-- `src/interop-header.ts:200-216`, `src/interop-abi.ts:627`
+- `src/interop-header.ts:200-216`, `src/interop-abi.ts:627` at `8036aff1`;
+  since stage 2c the header's handling is `holdsLink` and the opaque branch
+  of `structDefinitions` (`src/interop-header.ts:199-245`), and the refusals
+  are `refuseCompactSidecars` (`src/interop-abi.ts:1340`)
 
-**Layout is computed in one place**: `computeLayout` (`src/structs.ts:167-189`),
+**Layout is computed in one place**: `computeLayout` (`src/structs.ts`),
 called from `src/structs.ts:1070`, `:1186` and `src/inline-arrays.ts:895`. A
 compressed field is 4 wide and 4 aligned there, and the struct body built in
 `structTypeDeclarations` (`src/emit-classes.ts:526`) spells it `i32`.

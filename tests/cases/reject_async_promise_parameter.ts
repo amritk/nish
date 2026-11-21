@@ -4,8 +4,8 @@ async function load(x: i32): Promise<i32> {
   return x
 }
 
-function keep(p: Promise<i32>): i32 {
+const keep = (p: Promise<i32>): i32 => {
   return 0
-}
+};
 
 export const main = (): i32 => 0

@@ -10,7 +10,7 @@ class Box {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const b = new Box();
   return b.get(-1);
-}
+};

@@ -23,8 +23,8 @@ class File {
   }
 }
 
-function show(f: File): void {
+const show = (f: File): void => {
   console.log(f)
-}
+};
 
 export const main = (): i32 => 0

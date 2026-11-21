@@ -1,7 +1,7 @@
 // `console.error`, the newline-free writes, and `readFileSyncOrNull` against
 // Node: the runner compares stdout and stderr separately, so the interleaving
 // of the two streams is what this pins.
-export function main(): number {
+export const main = (): number => {
   write("one");
   write(" two");
   write("\n");
@@ -18,4 +18,4 @@ export function main(): number {
     console.log(`self: ${here.startsWith("// `console.error`")}`);
   }
   return 0;
-}
+};

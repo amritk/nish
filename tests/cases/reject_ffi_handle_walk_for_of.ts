@@ -22,12 +22,12 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   let n = 0
   for (const g of [f]) {
     n = n + 1
   }
   return n
-}
+};
 
 export const main = (): i32 => 0

@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 786 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 813 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -997,7 +997,7 @@ class Shape {
   side: i32 = 0;
 }
 
-function Shape(): void {}
+const Shape = (): void => {};
 ```
 
 ```text
@@ -1394,9 +1394,9 @@ Operator `===` requires two operands of the same type, got string and i32
 // A handle of one kind does not compare with a handle of another.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(c: Canvas, s: Socket): boolean {
+export const f = (c: Canvas, s: Socket): boolean => {
   return c === s
-}
+};
 ```
 
 ```text
@@ -1592,12 +1592,12 @@ The message of an error contains:
 // A handle of one kind is not a handle of another, as an argument.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-function draw(c: Canvas): i32 {
+const draw = (c: Canvas): i32 => {
   return 1
-}
-export function f(s: Socket): i32 {
+};
+export const f = (s: Socket): i32 => {
   return draw(s)
-}
+};
 ```
 
 ```text
@@ -1973,9 +1973,9 @@ The message of an error contains:
 
 ```ts
 // NL2140: `main` returns the process exit code, so the message names what a return type may be.
-export function main(): string {
+export const main = (): string => {
   return "a";
-}
+};
 ```
 
 ```text
@@ -2511,11 +2511,11 @@ Cannot assign string to i32 field `x`
 // A handle variable holds a handle, and a number is not one.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(): Canvas {
+export const f = (): Canvas => {
   let c: Canvas = 0
   c = 3
   return c
-}
+};
 ```
 
 ```text
@@ -3336,9 +3336,9 @@ Operator `+` requires two operands of the same numeric type or two strings, got 
 // A handle names something on the page; it is not a number to count with.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(c: Canvas): Canvas {
+export const f = (c: Canvas): Canvas => {
   return c + 1
-}
+};
 ```
 
 ```text
@@ -3365,10 +3365,10 @@ Optional/default parameters are not supported…
 
 ```ts
 // NL2233: An arrow written as a value gives no parameter a default: only a declaration's own list does.
-export function main(): void {
+export const main = (): void => {
   const xs = [1, 2]
   console.log(xs.map((x: i32, i: i32 = 0): i32 => x + i).length)
-}
+};
 ```
 
 ```text
@@ -3408,10 +3408,10 @@ Rest parameters are not supported…
 
 ```ts
 // NL2235: An arrow written as a value ends in no rest: only a declaration's own list does.
-export function main(): void {
+export const main = (): void => {
   const xs = [1, 2]
   console.log(xs.map((x: i32, ...r: i32[]): i32 => x + r.length).length)
-}
+};
 ```
 
 ```text
@@ -3661,7 +3661,54 @@ Unknown identifier `
 The message of an error contains:
 
 ```text
-Unknown method `
+Unknown method `…
+```
+
+[`nl2249_num_tostring.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring.ts):
+
+```ts
+// NL2249: a `u8`'s `toString()` is refused, and the message names `${b}`.
+export const main = (): i32 => {
+  const b: u8 = 1;
+  console.log(b.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on u8; use a template literal: `${b}`
+```
+
+[`nl2249_num_tostring_i64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_i64.ts):
+
+```ts
+// NL2249: an `i64`'s `toString()` with no argument names `${n}`, as the other
+// numeric types do (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString());
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64; use a template literal: `${n}`
+```
+
+[`nl2249_num_tostring_radix.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2249_num_tostring_radix.ts):
+
+```ts
+// NL2249: with a radix a number's `toString` names no template literal, since
+// a template literal has no radix (#1632).
+export const main = (): i32 => {
+  const n: i64 = 255;
+  console.log(n.toString(16));
+  return 0;
+};
+```
+
+```text
+Unknown method `toString` on i64
 ```
 
 ## NL2250
@@ -3775,9 +3822,9 @@ Unsupported expression in Phase 1: …
 // No cast takes a handle out to a number.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(c: Canvas): number {
+export const f = (c: Canvas): number => {
   return c as number
-}
+};
 ```
 
 ```text
@@ -3790,9 +3837,9 @@ Unsupported expression in Phase 1: AsExpression
 // No cast makes a handle out of a number: the page gives handles out.
 type Canvas = HostHandle<"canvas">
 type Socket = HostHandle<"socket">
-export function f(): Canvas {
+export const f = (): Canvas => {
   return 0 as Canvas
-}
+};
 ```
 
 ```text
@@ -4027,10 +4074,10 @@ type Socket = HostHandle<"socket">
 interface Slot {
   c: Canvas
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   const s: Slot = { c: 7 }
   return s.c
-}
+};
 ```
 
 ```text
@@ -4345,9 +4392,9 @@ The message of an error contains:
 ```ts
 // NL2300: the entry point is called by the C runtime, which has no type
 // arguments to give it, so there is no tuple to monomorphise `main` at.
-export function main<T>(x: T): i32 {
+export const main = <T>(x: T): i32 => {
   return 0;
-}
+};
 ```
 
 ```text
@@ -7144,7 +7191,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: …
+… may keep no panic site but out of memory: …
 ```
 
 [`nl2457_deny_panics_index.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index.ts) (compiled with `--deny-panics`):
@@ -7156,7 +7203,7 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < xs.length)` proves both ends, and an unsigned index needs only the upper one
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < xs.length)` proves both ends, and an unsigned index needs only the upper one
 ```
 
 [`nl2457_deny_panics_index_f64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7168,7 +7215,7 @@ export const at = (xs: number[], i: number): number => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `f64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `f64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
 ```
 
 [`nl2457_deny_panics_index_f64_i32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64_i32.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7181,7 +7228,7 @@ export const at = (xs: number[], i: i32): number => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
 ```
 
 [`nl2457_deny_panics_index_f64_ranged.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64_ranged.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7199,7 +7246,7 @@ export const at = (xs: i32[], k: i32): i32 => {
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: guard it with a test that reaches the access — `if (i >= 0 && i < toI32(xs.length))` proves both ends, and an unsigned index needs only the upper one
 ```
 
 [`nl2457_deny_panics_index_f64_shadowed_to_i32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_f64_shadowed_to_i32.ts) (compiled with `--deny-panics --number-mode f64`):
@@ -7214,7 +7261,7 @@ export const at = (xs: number[], i: i32): number => xs[i] + toI32(0);
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toI32`, which this module's own `toI32` hides: rename it to guard the access
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toI32`, which this module's own `toI32` hides: rename it to guard the access
 ```
 
 [`nl2457_deny_panics_index_shadowed_to_u32.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_shadowed_to_u32.ts) (compiled with `--deny-panics`):
@@ -7229,7 +7276,7 @@ export const at = (xs: i32[], i: u32): i32 => xs[i] + toU32(0);
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toU32`, which this module's own `toU32` hides: rename it to guard the access
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check here, because the one the compiler credits for this index calls the builtin `toU32`, which this module's own `toU32` hides: rename it to guard the access
 ```
 
 [`nl2457_deny_panics_index_u64.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2457_deny_panics_index_u64.ts) (compiled with `--deny-panics`):
@@ -7241,7 +7288,7 @@ export const at = (xs: i32[], i: u64): i32 => xs[i];
 ```
 
 ```text
-`index` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `u64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
+`index` may panic here, and a module of this package, held to no panic by default (`--allow-panics` relaxes the modules `noPanic` does not list), may keep no panic site but out of memory: `i` is not proven to be in range for `xs` here: no guard removes the check on an index of type `u64`, because the compiler credits no compare of it with the length: an `i32` index, or a `u8`, `u16` or `u32` one, has a guard that does
 ```
 
 ## NL2458
@@ -7249,7 +7296,7 @@ export const at = (xs: i32[], i: u64): i32 => xs[i];
 The message of an error contains:
 
 ```text
-…, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+…, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope…
 ```
 
 [`nl2458_deny_panics_call.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2458_deny_panics_call.ts) (compiled with `--deny-panics`):
@@ -7257,13 +7304,13 @@ The message of an error contains:
 ```ts
 // --deny-panics refuses a call into the standard library that may panic
 // (NL2458): the callee is outside the scope, so the call is where it is refused.
-import { trim } from "nish/text";
+import { split } from "nish/text";
 
-export const tidy = (s: string): string => trim(s);
+export const fields = (s: string, sep: string): string[] => split(s, sep);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:163:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope
+This call to `split` may panic: it reaches the `panic` site at std/text.ts:289:5, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope: every module of this package is in it by default, and `--allow-panics` takes out the ones `noPanic` does not list
 ```
 
 ## NL2459
@@ -8767,7 +8814,7 @@ export const main = (): i32 => {
 The message of an error contains:
 
 ```text
-…` is never `null` here, so `?.` has nothing to skip: write `.`
+…` is never `null` here, so `?.` has nothing to skip: write `…
 ```
 
 [`nl2490_chain_never_null.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2490_chain_never_null.ts):
@@ -10470,14 +10517,14 @@ class Link {
   next: Link | null = null
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const m = new Mutex<Link>(new Link())
   {
     using g = m.lock()
     g.value.next = null
   }
   return 0
-}
+};
 ```
 
 ```text
@@ -10721,9 +10768,9 @@ class Holder {
     wipe(this.k);
   }
 }
-function id(s: Secret<u8[]>): Secret<u8[]> {
+const id = (s: Secret<u8[]>): Secret<u8[]> => {
   return s;
-}
+};
 export const main = (): i32 => {
   const h = new Holder();
   const a = id(h.k);
@@ -11524,12 +11571,12 @@ The message of an error contains:
 
 ```ts
 // NL2595: A default is a constant the call passes, not an expression the callee runs.
-function f(x: i32, y: i32 = x + 1): i32 {
+const f = (x: i32, y: i32 = x + 1): i32 => {
   return x + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11548,12 +11595,12 @@ The message of an error contains:
 
 ```ts
 // NL2596: A parameter of a type parameter's type has no one constant default.
-function f<T>(x: T, y: T = 0): T {
+const f = <T>(x: T, y: T = 0): T => {
   return x
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11572,12 +11619,12 @@ The message of an error contains:
 
 ```ts
 // NL2597: A parameter after one with a default has a default too.
-function f(x: i32 = 1, y: i32): i32 {
+const f = (x: i32 = 1, y: i32): i32 => {
   return x + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1, 2))
-}
+};
 ```
 
 ```text
@@ -11596,12 +11643,12 @@ The message of an error contains:
 
 ```ts
 // NL2598: A default's parameter is annotated: the type is not inferred from the default.
-function f(x: i32, y = 2): i32 {
+const f = (x: i32, y = 2): i32 => {
   return x + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11620,12 +11667,12 @@ The message of an error contains:
 
 ```ts
 // NL2599: A default and a rest in one signature are not combined in this version.
-function f(x: i32 = 1, ...xs: i32[]): i32 {
+const f = (x: i32 = 1, ...xs: i32[]): i32 => {
   return x + xs.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f())
-}
+};
 ```
 
 ```text
@@ -11644,12 +11691,12 @@ The message of an error contains:
 
 ```ts
 // NL2600: A rest parameter has no default: leaving it out passes `[]`.
-function f(...xs: i32[] = [1]): i32 {
+const f = (...xs: i32[] = [1]): i32 => {
   return xs.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f())
-}
+};
 ```
 
 ```text
@@ -11669,15 +11716,15 @@ The message of an error contains:
 ```ts
 // NL2601: A function with a rest is no value for a function parameter: a call through
 // `f` passes one array where Node would gather every argument into `xs`.
-function total(...xs: i32[]): i32 {
+const total = (...xs: i32[]): i32 => {
   return xs.length
-}
-function apply(f: (a: i32[]) => i32): i32 {
+};
+const apply = (f: (a: i32[]) => i32): i32 => {
   return f([1, 2, 3])
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(apply(total))
-}
+};
 ```
 
 ```text
@@ -11696,12 +11743,12 @@ The message of an error contains:
 
 ```ts
 // NL2602: A rest parameter has an array type.
-function f(...xs: i32): i32 {
+const f = (...xs: i32): i32 => {
   return xs
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11720,12 +11767,12 @@ The message of an error contains:
 
 ```ts
 // NL2603: A rest parameter is the last one.
-function f(...xs: i32[], y: i32): i32 {
+const f = (...xs: i32[], y: i32): i32 => {
   return xs.length + y
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1, 2))
-}
+};
 ```
 
 ```text
@@ -11744,15 +11791,15 @@ The message of an error contains:
 
 ```ts
 // NL2604: A function parameter names the function a call passes; it has no default.
-function twice(x: i32): i32 {
+const twice = (x: i32): i32 => {
   return x * 2
-}
-function apply(x: i32, g: (a: i32) => i32 = twice): i32 {
+};
+const apply = (x: i32, g: (a: i32) => i32 = twice): i32 => {
   return g(x)
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(apply(1, twice))
-}
+};
 ```
 
 ```text
@@ -11771,12 +11818,12 @@ Optional parameters are not supported: give `…
 
 ```ts
 // NL2605: `x?: T` stays refused: a parameter a call may leave out has a default.
-function f(x: i32, y?: i32): i32 {
+const f = (x: i32, y?: i32): i32 => {
   return x
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11795,13 +11842,13 @@ Spread arguments are not supported: pass the array itself to a parameter of arra
 
 ```ts
 // NL2606: `f(...xs)` is refused: pass the array to a parameter of array type.
-function total(...xs: i32[]): i32 {
+const total = (...xs: i32[]): i32 => {
   return xs.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   const a = [1, 2]
   console.log(total(...a))
-}
+};
 ```
 
 ```text
@@ -11820,12 +11867,12 @@ The message of an error contains:
 
 ```ts
 // NL2607: A default is a number, a boolean, a string or an enum member.
-function f(x: i32, ys: i32[] = []): i32 {
+const f = (x: i32, ys: i32[] = []): i32 => {
   return x + ys.length
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f(1))
-}
+};
 ```
 
 ```text
@@ -11847,16 +11894,16 @@ A rest parameter copies each `…
 interface Cell {
   v: number
 }
-function bumpAll(...cs: Cell[]): void {
+const bumpAll = (...cs: Cell[]): void => {
   for (const c of cs) {
     c.v = c.v + 100
   }
-}
-export function main(): void {
+};
+export const main = (): void => {
   const p: Cell = { v: 1 }
   bumpAll(p, { v: 2 })
   console.log(p.v)
-}
+};
 ```
 
 ```text
@@ -12295,9 +12342,9 @@ The message of an error contains:
 
 ```ts
 import { size } from "./host/any_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12308,9 +12355,9 @@ Parameter `v` of host function `size` is `any`, and only a scalar, an enum or a 
 
 ```ts
 import { norm } from "./host/class_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12321,9 +12368,9 @@ Parameter `p` of host function `norm` is `Point`, and only a scalar, an enum or 
 
 ```ts
 import { each } from "./host/function_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12334,9 +12381,9 @@ Parameter `f` of host function `each` is a function type, and only a scalar, an 
 
 ```ts
 import { count } from "./host/object_array_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12347,9 +12394,9 @@ A parameter of host function `count` is an object type, and only a scalar, an en
 
 ```ts
 import { area } from "./host/object"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12360,9 +12407,9 @@ A parameter of host function `area` is an object type, and only a scalar, an enu
 
 ```ts
 import { corner } from "./host/object_result"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12373,9 +12420,9 @@ The result of host function `corner` is an object type, and only a scalar, an en
 
 ```ts
 import { size } from "./host/unknown_parameter"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12394,9 +12441,9 @@ The message of an error contains:
 
 ```ts
 import { first } from "./host/generic"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12415,9 +12462,9 @@ The message of an error contains:
 
 ```ts
 import { later } from "./host/promise"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12456,9 +12503,9 @@ The message of an error contains:
 
 ```ts
 declare function c_abs(x: i32): i32
-export function f(): i32 {
+export const f = (): i32 => {
   return c_abs(-1)
-}
+};
 ```
 
 ```text
@@ -12469,9 +12516,9 @@ export function f(): i32 {
 
 ```ts
 declare function c_abs(x: i32): i32
-export function f(): i32 {
+export const f = (): i32 => {
   return c_abs(-1)
-}
+};
 ```
 
 ```text
@@ -12490,9 +12537,9 @@ The message of an error contains:
 
 ```ts
 import { title } from "./host/name"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12510,10 +12557,10 @@ The message of an error contains:
 [`nl2668_string_literal_type.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2668_string_literal_type.ts):
 
 ```ts
-export function f(): i32 {
+export const f = (): i32 => {
   const s: "x" = "x"
   return 0
-}
+};
 ```
 
 ```text
@@ -12533,9 +12580,9 @@ The message of an error contains:
 ```ts
 // A handle has a kind, and the bare name gives none.
 type Canvas = HostHandle
-export function f(c: Canvas): i32 {
+export const f = (c: Canvas): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12546,9 +12593,9 @@ export function f(c: Canvas): i32 {
 
 ```ts
 type Canvas = HostHandle<canvas>
-export function f(c: Canvas): i32 {
+export const f = (c: Canvas): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12572,9 +12619,9 @@ type Socket = HostHandle<"socket">
 class Slot {
   c: Canvas = 7
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   return new Slot().c
-}
+};
 ```
 
 ```text
@@ -12590,9 +12637,9 @@ type Socket = HostHandle<"socket">
 class Slot {
   c: Canvas = -5
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   return new Slot().c
-}
+};
 ```
 
 ```text
@@ -12604,9 +12651,9 @@ Field `c` of class `Slot` is HostHandle<"canvas">, and a handle starts as `0`, t
 ```ts
 // A parameter's default may not forge a handle either: only `0`, the one that names nothing.
 type Canvas = HostHandle<"canvas">
-export function f(c: Canvas = 7): Canvas {
+export const f = (c: Canvas = 7): Canvas => {
   return c
-}
+};
 ```
 
 ```text
@@ -12705,9 +12752,9 @@ The message of an error contains:
 
 ```ts
 import { fill } from "./host/window_element"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12726,9 +12773,9 @@ The message of an error contains:
 
 ```ts
 import { fill } from "./host/buffer"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -12747,9 +12794,9 @@ The message of an error contains:
 
 ```ts
 import { fill } from "./host/window_width"
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -13977,14 +14024,14 @@ class Box {
   }
 }
 
-function u0(p: Point, b: Box): i32 {
+const u0 = (p: Point, b: Box): i32 => {
   return p.x;
-}
+};
 
-function u3(p: Point, b: Box): i32 {
+const u3 = (p: Point, b: Box): i32 => {
   b.last = p;
   return p.x;
-}
+};
 
 export const main = (): i32 => {
   let h = u0;
@@ -14199,9 +14246,9 @@ The message of an error contains:
 declare class Point {
   x: i32
 }
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -14214,9 +14261,9 @@ export function f(): i32 {
 declare class Point {
   x: i32
 }
-export function f(): i32 {
+export const f = (): i32 => {
   return 0
-}
+};
 ```
 
 ```text
@@ -15340,4 +15387,319 @@ The message of an error contains:
 
 ```text
 … of constant table `
+```
+
+## NL2795
+
+The message of an error contains:
+
+```text
+…` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker
+```
+
+[`nl2795_compact_declare.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2795_compact_declare.ts):
+
+```ts
+// WP48 rule 2: a `declare class` is a C struct and cannot implement `Compact`.
+import { Compact } from "nish:compact"
+
+declare class Clock implements Compact {
+  t: i64
+}
+
+export const main = (): number => {
+  const c = new Clock()
+  return Number(c.t)
+}
+```
+
+```text
+`Clock` is a `declare class`, which C lays out with a pointer-wide slot per link, so it cannot implement `Compact`; drop the marker
+```
+
+## NL2796
+
+The message of an error contains:
+
+```text
+…`, whose links C would read as pointers; a `declare class` holds no object of a class that implements `Compact`
+```
+
+[`nl2796_compact_declare_field.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2796_compact_declare_field.ts):
+
+```ts
+// WP48 rule 2: a `declare class` holds no object of a compact class.
+import { Compact } from "nish:compact"
+
+class Cell implements Compact {
+  value: i32 = 0
+  next: Cell | null = null
+}
+
+declare class Holder {
+  cell: Cell | null
+}
+
+export const main = (): number => {
+  const h = new Holder()
+  return h.cell === null ? 0 : 1
+}
+```
+
+```text
+Field `cell` of `declare class` `Holder` holds the compact class `Cell`, whose links C would read as pointers; a `declare class` holds no object of a class that implements `Compact`
+```
+
+## NL2797
+
+The message of an error contains:
+
+```text
+…`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement `Compact`; keep the secret in a class of its own that does not
+```
+
+[`nl2797_compact_secret.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2797_compact_secret.ts):
+
+```ts
+// WP48 rule 3: a compact class holds no `Secret`.
+import { Compact } from "nish:compact"
+import { Secret, secret, wipe } from "nish:secret"
+
+class Holder implements Compact {
+  readonly k: Secret<u8[]>
+  next: Holder | null = null
+  constructor(seed: u8) {
+    this.k = secret([seed, toU8(2)])
+  }
+  wipe(): void {
+    wipe(this.k)
+  }
+}
+
+export const main = (): i32 => {
+  const h = new Holder(toU8(1))
+  h.wipe()
+  return 0
+}
+```
+
+```text
+`Holder` implements `Compact` and holds the `Secret` field `k`: the wipe reads a secret through a full pointer, so a class that holds one cannot implement `Compact`; keep the secret in a class of its own that does not
+```
+
+## NL2798
+
+The message of an error contains:
+
+```text
+…` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+[`nl2798_compact_generic.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2798_compact_generic.ts):
+
+```ts
+// WP48: a generic class cannot implement `Compact` yet (NL2798), since its
+// instantiations keep full-pointer links.
+import { Compact } from "nish:compact"
+
+class Gen<T> implements Compact {
+  val: T
+  next: Gen<T> | null = null
+  constructor(val: T) {
+    this.val = val
+  }
+}
+
+export const main = (): i32 => {
+  const g = new Gen<i32>(1)
+  return g.val - 1
+}
+```
+
+```text
+`Gen` is generic, and a generic class cannot implement `Compact` in this version: its links would stay full pointers; drop the type parameters or the marker
+```
+
+## NL2799
+
+The message of an error contains:
+
+```text
+A `case` label of a `string` switch must be a string literal or a module constant (a label is compared without being run)
+```
+
+## NL2800
+
+The message of an error contains:
+
+```text
+` is not compatible with its implementation: …
+```
+
+## NL2801
+
+The message of an error contains:
+
+```text
+…): a call is held to the signatures written before the implementation, not to the implementation's own
+```
+
+## NL2802
+
+The message of an error contains:
+
+```text
+` has overload signatures and cannot be described to C or Node
+```
+
+## NL2803
+
+The message of an error contains:
+
+```text
+…can only be read as the left operand of `??`
+```
+
+## NL2804
+
+The message of an error contains:
+
+```text
+…which has no `null` to stand for an omitted argument
+```
+
+## NL2805
+
+The message of an error contains:
+
+```text
+…: an opaque `declare class` is a C pointer, so like a `CPtr` it may only appear in a `declare function` signature or on a local bound to one
+```
+
+## NL2806
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` has no layout to build, so only a `declare function` that returns one can make it
+```
+
+## NL2807
+
+The message of an error contains:
+
+```text
+`: C keeps its fields, and only a `declare function` can read or change them
+```
+
+## NL2808
+
+The message of an error contains:
+
+```text
+`: an opaque `declare class` has no fields, so the `CPtr` is the value; declare the C function to return the class itself
+```
+
+## NL2809
+
+The message of an error contains:
+
+```text
+`CountedBy` names the count of a buffer lent to C, so it is written only on a parameter of a `declare function`
+```
+
+## NL2810
+
+The message of an error contains:
+
+```text
+`CountedBy` takes a `u8[]` or `readonly u8[]` buffer and the name of its count parameter as a string literal, e.g. `CountedBy<u8[], "len">`
+```
+
+## NL2811
+
+The message of an error contains:
+
+```text
+`, which is not one of its parameters
+```
+
+## NL2812
+
+The message of an error contains:
+
+```text
+` names is a `u8`, `u16`, `u32` or `u64`, or a `declare class` whose one field is one
+```
+
+## NL2813
+
+The message of an error contains:
+
+```text
+… is a fixed-length array, `Record<integer<0, Hi>, T>` for C's `T name[Hi + 1]`: its key must be `integer<0, Hi>`, a range from 0 with Hi below …
+```
+
+## NL2814
+
+The message of an error contains:
+
+```text
+…, which has no C element layout: an element of a fixed-length array is i32, i64, u8, u16, u32, u64, f32 or f64
+```
+
+## NL2815
+
+The message of an error contains:
+
+```text
+… is a fixed-length array embedded in its object, which a spread cannot copy, so set each element by index
+```
+
+## NL2816
+
+The message of an error contains:
+
+```text
+`: a fixed-length array inside a `declare class` is written element by element (`
+```
+
+## NL2817
+
+The message of an error contains:
+
+```text
+… elements inside a `declare class`: read and write it by index (`
+```
+
+## NL2818
+
+The message of an error contains:
+
+```text
+… elements: its indices are 0 to …
+```
+
+## NL2819
+
+The message of an error contains:
+
+```text
+` implements both `Compact` and `Wide`, which ask for its links to be 32-bit offsets and full pointers at once; keep one marker
+```
+
+## NL2820
+
+The message of an error contains:
+
+```text
+` is not exported, but this class's initializers run in the module that builds it (export `
+```
+
+## NL2821
+
+The message of an error contains:
+
+```text
+` again, which never ends (assign it in the constructor)
 ```

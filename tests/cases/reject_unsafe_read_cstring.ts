@@ -5,10 +5,10 @@ import { readCString } from "nish:unsafe";
 
 declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;
 
-export function main(): i32 {
+export const main = (): i32 => {
   const p = getcwd(null, 0);
   const unnarrowed = readCString(p);
   const text = readCString("x");
   const none = readCString();
   return unnarrowed.length + text.length + none.length;
-}
+};

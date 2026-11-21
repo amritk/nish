@@ -2,11 +2,11 @@
 // runtime (nish_parse_number) with JavaScript semantics for the decimal forms,
 // plus the documented deviations: parseInt has no NaN (0 without digits) and
 // saturates into i32; parseFloat reads a `0x` prefix as hex like strtod.
-function show(label: string, v: f64): void {
+const show = (label: string, v: f64): void => {
   console.log(`${label} = ${v}`);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(`parseInt("42") = ${parseInt("42")}`);
   console.log(`parseInt("  -17abc") = ${parseInt("  -17abc")}`);
   console.log(`parseInt("+3.99") = ${parseInt("+3.99")}`);
@@ -56,4 +56,4 @@ export function main(): number {
   const n: number = 12;
   show("Number(n) / 5", Number(n) / 5);
   return 0;
-}
+};

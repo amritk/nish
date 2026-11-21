@@ -1,1 +1,3 @@
-function f(): number { return eval("1"); }
+const f = (): number => {
+  return eval("1");
+};

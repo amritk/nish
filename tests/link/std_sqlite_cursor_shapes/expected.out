@@ -1,0 +1,33 @@
+PASS  setup
+PASS  first open: t row 2
+PASS  kept shape: t row 2
+PASS  first open: t_b finds 30
+PASS  kept shape: t_b finds 30
+PASS  kept shape: t_b finds 10
+PASS  add column: runs
+PASS  add column: the kept shape is refused
+PASS  add column: the new shape opens
+PASS  add column: the new shape reads row 3
+PASS  remake: runs
+PASS  remake: the kept shape is refused
+PASS  remake: and the dropped index
+PASS  remake: the new shape reads row 1
+PASS  rollback: BEGIN and two DDL statements
+PASS  rollback: the shape opens inside the write
+PASS  rollback: ROLLBACK
+PASS  rollback: the rolled-back shape is refused
+PASS  rollback: the committed shape still reads row 1
+PASS  rollback: two DDL statements committed
+PASS  rollback: the rolled-back shape is still refused
+PASS  rollback: and the one before
+PASS  rollback: the committed shape reads row 1
+PASS  other connection: the shape is kept
+PASS  other connection: remakes t
+PASS  other connection: the kept shape is refused
+PASS  other connection: the new shape reads row 1
+PASS  many shapes: twelve tables
+PASS  many shapes: each read right on both passes
+PASS  many shapes: a wrong shape for one is refused
+PASS  close: the connection with kept shapes
+PASS  close: the other
+std_sqlite_cursor_shapes: 32 passed, 0 failed, 0 skipped

@@ -278,12 +278,12 @@ stream error in `streamError`, or the connection error the module comment
 lists.
 
 ```ts
-function http2ParseFrame(
+const http2ParseFrame: (
   frame: Http2Frame,
   buf: u8[],
   off: i32,
   maxFrameSize: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="frame" type="Http2Frame" required>
@@ -328,12 +328,12 @@ yet: a reader checks `frame.length` against its limit before it waits for
 the rest, which is what keeps a peer from making it buffer more.
 
 ```ts
-function http2ReadHeader(
+const http2ReadHeader: (
   frame: Http2Frame,
   buf: u8[],
   off: i32,
   len: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="frame" type="Http2Frame" required>
@@ -373,7 +373,7 @@ True when nine bytes were there and the header was read; false when fewer were, 
 How many settings a SETTINGS frame `http2ParseFrame` accepted carries.
 
 ```ts
-function http2SettingCount(frame: Http2Frame): i32
+const http2SettingCount: (frame: Http2Frame) => i32
 ```
 
 <scalar-field name="frame" type="Http2Frame" required>
@@ -395,10 +395,7 @@ setting this module does not know is not an error: §6.5.2 says it is
 ignored.
 
 ```ts
-function http2SettingError(
-  id: i32,
-  value: i64,
-): i32
+const http2SettingError: (id: i32, value: i64) => i32
 ```
 
 <scalar-field name="id" type="i32" required>
@@ -426,11 +423,11 @@ The setting's value, as `http2SettingValue` reads it, 0 to 2^32 − 1.
 The identifier of setting `k` of the SETTINGS frame in `buf`.
 
 ```ts
-function http2SettingId(
+const http2SettingId: (
   frame: Http2Frame,
   buf: u8[],
   k: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="frame" type="Http2Frame" required>
@@ -462,11 +459,11 @@ The 16-bit identifier, 0 to 65,535: an `H2_SETTINGS_*`, or one this module does 
 The value of setting `k` of the SETTINGS frame in `buf`.
 
 ```ts
-function http2SettingValue(
+const http2SettingValue: (
   frame: Http2Frame,
   buf: u8[],
   k: i32,
-): i64
+) => i64
 ```
 
 <scalar-field name="frame" type="Http2Frame" required>
@@ -499,7 +496,7 @@ Writes a CONTINUATION frame of the header block fragment `src[off, off + len)`, 
 (END_HEADERS) (§6.10). It is never padded.
 
 ```ts
-function http2WriteContinuation(
+const http2WriteContinuation: (
   out: u8[],
   at: i32,
   streamId: i32,
@@ -507,7 +504,7 @@ function http2WriteContinuation(
   off: i32,
   len: i32,
   flags: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -566,7 +563,7 @@ Writes a DATA frame of `src[off, off + len)` on `streamId`, with `flags` (END_ST
 padding, -1 for none (§6.1).
 
 ```ts
-function http2WriteData(
+const http2WriteData: (
   out: u8[],
   at: i32,
   streamId: i32,
@@ -575,7 +572,7 @@ function http2WriteData(
   len: i32,
   flags: i32,
   pad: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -640,7 +637,7 @@ Writes a GOAWAY frame naming `lastStreamId` and `code`, with the debug data `deb
 (§6.8).
 
 ```ts
-function http2WriteGoaway(
+const http2WriteGoaway: (
   out: u8[],
   at: i32,
   lastStreamId: i32,
@@ -648,7 +645,7 @@ function http2WriteGoaway(
   debug: u8[],
   off: i32,
   len: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -708,14 +705,14 @@ answers where the payload goes, or -1 when the header and the payload would
 not both fit. It checks no type's rules: the payload is the caller's to write.
 
 ```ts
-function http2WriteHeader(
+const http2WriteHeader: (
   out: u8[],
   at: i32,
   length: i32,
   type: i32,
   flags: i32,
   streamId: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -769,7 +766,7 @@ bytes of padding, -1 for none (§6.2). It never sets PRIORITY, which RFC
 9113 deprecates.
 
 ```ts
-function http2WriteHeaders(
+const http2WriteHeaders: (
   out: u8[],
   at: i32,
   streamId: i32,
@@ -778,7 +775,7 @@ function http2WriteHeaders(
   len: i32,
   flags: i32,
   pad: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -844,13 +841,13 @@ The offset just past the frame in `out`, or -1 when it would not fit, `out` then
 Writes a PING frame of the eight bytes `opaque[off, off + 8)`, an ACK when `ack` (§6.7).
 
 ```ts
-function http2WritePing(
+const http2WritePing: (
   out: u8[],
   at: i32,
   opaque: u8[],
   off: i32,
   ack: boolean,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -895,14 +892,14 @@ Writes a PRIORITY frame: `streamId` depends on `dependency`, exclusively or not,
 (§6.3).
 
 ```ts
-function http2WritePriority(
+const http2WritePriority: (
   out: u8[],
   at: i32,
   streamId: i32,
   dependency: i32,
   exclusive: boolean,
   weight: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -954,7 +951,7 @@ the header block fragment `src[off, off + len)`, with `flags`
 (END_HEADERS) and `pad` bytes of padding, -1 for none (§6.6).
 
 ```ts
-function http2WritePushPromise(
+const http2WritePushPromise: (
   out: u8[],
   at: i32,
   streamId: i32,
@@ -964,7 +961,7 @@ function http2WritePushPromise(
   len: i32,
   flags: i32,
   pad: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1035,12 +1032,12 @@ The offset just past the frame in `out`, or -1 when it would not fit, `out` then
 Writes a RST_STREAM frame closing `streamId` with `code` (§6.4).
 
 ```ts
-function http2WriteRstStream(
+const http2WriteRstStream: (
   out: u8[],
   at: i32,
   streamId: i32,
   code: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1080,12 +1077,12 @@ A value `http2SettingError` refuses panics, as two lists of different
 lengths do.
 
 ```ts
-function http2WriteSettings(
+const http2WriteSettings: (
   out: u8[],
   at: i32,
   ids: i32[],
   values: i64[],
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1123,10 +1120,7 @@ The offset just past the frame in `out`, or -1 when it would not fit, `out` then
 Writes the empty SETTINGS frame with ACK that acknowledges the peer's (§6.5.3).
 
 ```ts
-function http2WriteSettingsAck(
-  out: u8[],
-  at: i32,
-): i32
+const http2WriteSettingsAck: (out: u8[], at: i32) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1153,12 +1147,12 @@ Writes a WINDOW_UPDATE frame adding `increment`, 1 to 2^31 − 1, to `streamId`'
 connection's for 0 (§6.9).
 
 ```ts
-function http2WriteWindowUpdate(
+const http2WriteWindowUpdate: (
   out: u8[],
   at: i32,
   streamId: i32,
   increment: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="out" type="u8[]" required>

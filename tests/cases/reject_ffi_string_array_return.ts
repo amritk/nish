@@ -3,6 +3,6 @@
 // the return position refuses it as the parameter position does.
 declare function m(): string[];
 
-export function main(): i32 {
+export const main = (): i32 => {
   return 0;
-}
+};

@@ -132,7 +132,7 @@ Private helpers share the importing program's flat symbol namespace
 The options a program starts from and changes what it needs in.
 
 ```ts
-function defaultTerminalOptions(): TerminalOptions
+const defaultTerminalOptions: () => TerminalOptions
 ```
 
 <scalar-field name="returns" type="TerminalOptions">
@@ -149,9 +149,9 @@ asks for and it has. The restore string undoes all of it should the program
 panic or be signalled before `close`.
 
 ```ts
-function openTerminal(
+const openTerminal: (
   options: TerminalOptions,
-): Result<Terminal, string>
+) => Result<Terminal, string>
 ```
 
 <scalar-field name="options" type="TerminalOptions" required>
@@ -175,12 +175,12 @@ columns, `y` the rows) with the `Screen` already resized. The terminal is
 closed however the loop ends.
 
 ```ts
-function runTerminal<G>(
+const runTerminal: <G>(
   options: TerminalOptions,
   state: G,
   update: (g: G, input: TermInput) => boolean,
   render: (g: G, frame: Frame) => void,
-): Result<i32, string>
+) => Result<i32, string>
 ```
 
 <scalar-field name="options" type="TerminalOptions" required>

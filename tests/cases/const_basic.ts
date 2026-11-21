@@ -4,8 +4,8 @@ const LIMIT: i32 = 10;
 const READY: boolean = true;
 const LABEL: string = "limit";
 
-export function test(): number {
+export const test = (): number => {
   console.log(LABEL);
   console.log(READY);
   return LIMIT;
-}
+};

@@ -12,17 +12,17 @@ enum Kind {
 
 const array = (): Kind.Array => Kind.Array;
 
-function id<T>(x: T): T {
+const id = <T>(x: T): T => {
   return x;
-}
+};
 
-function wrap<T>(xs: T[]): T[] {
+const wrap = <T>(xs: T[]): T[] => {
   return xs;
-}
+};
 
-function tag<T>(x: T, k: Kind.Array): Kind.Array {
+const tag = <T>(x: T, k: Kind.Array): Kind.Array => {
   return k;
-}
+};
 
 class Box<T> {
   v: T;

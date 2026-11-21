@@ -41,12 +41,18 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
+import {
+  cArrayField,
+  isAssignmentOperator,
+  isOptionalChain,
+  isUncheckedAccess,
+  unwrapParens,
+} from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { RootTraces, rootTable } from "./emit-root"
 import { emitChannelWalk } from "./emit-parallel"
 import { isAtomicArrayConstructor, isChannelReader, isGuardedAccess } from "./parallel"
-import { emitSliceCheck, guardKeep } from "./emit-strings"
+import { emitSliceCheck, emitStringWalk, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import { IRBlock } from "./ir"
@@ -70,6 +76,7 @@ import {
   ARRAY_STRUCT,
   intBits,
   isFloat,
+  isInteger,
   isUnsigned,
   T_BOOL,
   T_F64,
@@ -835,7 +842,13 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
   if (node.kind === NodeKind.Arrow) {
     return
   }
-  if (node.kind === NodeKind.Index) {
+  if (
+    node.kind === NodeKind.Index &&
+    cArrayField(emitter.program, emitter.table, node.children[0]) !== null
+  ) {
+    // A fixed-length array field has no header to hoist: its length is the
+    // constant `N` and its elements sit inside the object.
+  } else if (node.kind === NodeKind.Index) {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
@@ -1283,19 +1296,31 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
  *     The compare is the same unsigned one, so a negative `n` fails it.
  *
  * A narrower unsigned cannot reach any of those, and a literal is in range
- * when it is at most 2^31 - 1. A ranged local is read as an `i32` (WP31), so
- * it is checked as one whatever its range.
+ * when it is at most 2^31 - 1. So is a named integer constant, `constant` (the
+ * `nodeConstants` entry of `n`), whose folded value is in `[0, 2^31 - 1]`: it
+ * is one value for the whole program, as a literal is. A ranged local is read
+ * as an `i32` (WP31), so it is checked as one whatever its range.
  * `collectArrayFacts` in `src/attributes.ts` asks the same question, because
  * the check is a call to a `noreturn` panic.
  */
 export const newArrayLengthChecked = (
   length: Node,
   type: i32,
+  constant: ConstInfo | null,
   numberMode: i32,
   table: TypeTable
 ): boolean => {
   const literal = unwrapParens(length)
   if (literal.kind === NodeKind.Number && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
+    return false
+  }
+  if (
+    constant !== null &&
+    constant.folded &&
+    isInteger(constant.type) &&
+    constant.intValue >= toI64(0) &&
+    constant.intValue <= toI64(I32_MAX)
+  ) {
     return false
   }
   if (table.isRanged(type)) {
@@ -1336,7 +1361,8 @@ const emitLengthCheck = (emitter: Emitter, ok: string): void => {
 /** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
 const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
   const type = emitter.typeOf(length)
-  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode, emitter.table)) {
+  const constant = emitter.program.nodeConstants[unwrapParens(length).id]
+  if (!newArrayLengthChecked(length, type, constant, emitter.opts.numberMode, emitter.table)) {
     return emitIndex(emitter, length)
   }
   const fn = emitter.fn
@@ -1400,8 +1426,44 @@ export const emitNewArray = (emitter: Emitter, expr: Node): string => {
 
 // ---- Element access -------------------------------------------------------------------
 
+/**
+ * The address of `h[i]` when `h` is a fixed-length array field of a
+ * `declare class` (WP66 S4): the element sits inside the object, C's
+ * `T h[N]`, so it is one `getelementptr` from the object with no header.
+ * The index is checked against the constant `N` unless the bounds walk
+ * proved it (`provesCArrayIndex` in `src/bounds.ts`). `null` for any other
+ * receiver.
+ */
+const cArrayElementPointer = (emitter: Emitter, site: Node): string | null => {
+  const receiver = site.children[0]
+  const field = cArrayField(emitter.program, emitter.table, receiver)
+  if (field === null) {
+    return null
+  }
+  const member = unwrapParens(receiver)
+  const holder = emitter.table.stripNull(emitter.typeOf(member.children[0]))
+  const info = emitter.program.struct(emitter.table.nameOf(holder))
+  if (info === null) {
+    process.exit(internalErrorFor(`emitter: no struct behind \`${member.text}\``, emitter.opts.json))
+  }
+  const object = emitter.emitExpression(member.children[0])
+  const idx = emitIndex(emitter, site.children[1])
+  if (!emitter.program.nodeProvenIndex[site.id]) {
+    emitRangeCheck(emitter, idx, `${field.cLength}`)
+  }
+  const ty = `%struct.${info.name}`
+  return emitter.fn.emitValue(
+    `getelementptr inbounds ${ty}, ${ty}* ${object}, i32 0, i32 ${field.index}, i64 ${idx}`
+  )
+}
+
 export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.typeOf(expr)
+  const field = cArrayElementPointer(emitter, expr)
+  if (field !== null) {
+    const ty = emitter.llvm(elem)
+    return emitter.fn.emitValue(`load ${ty}, ${ty}* ${field}${emitter.alignSuffix(elem)}`)
+  }
   emitter.declareType(ARRAY_TYPE)
   const base = emitArrayBase(emitter, expr.children[0])
   const idx = emitIndex(emitter, expr.children[1])
@@ -1509,6 +1571,10 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0]
   const elem = emitter.typeOf(target)
   const ty = emitter.llvm(elem)
+  const field = cArrayElementPointer(emitter, target)
+  if (field !== null) {
+    return emitCArrayAssignment(emitter, expr, elem, field)
+  }
   emitter.declareType(ARRAY_TYPE)
   const base = emitArrayBase(emitter, target.children[0])
   const idx = emitIndex(emitter, target.children[1])
@@ -1555,6 +1621,36 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   emitter.fn.emit(
     `store ${ty} ${value}, ${ty}* ${store}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )
+  return value
+}
+
+/**
+ * `h[i] = v` and `h[i] op= v` on a fixed-length array field of a `declare
+ * class`, once `cArrayElementPointer` checked the index and took the slot.
+ * The slot is inside the object and never moves, so the right side cannot
+ * invalidate it. The access carries no `!tbaa`: C code reaches the same
+ * bytes through its own types.
+ */
+const emitCArrayAssignment = (emitter: Emitter, expr: Node, elem: i32, slot: string): string => {
+  const ty = emitter.llvm(elem)
+  const align = emitter.alignSuffix(elem)
+  if (expr.text === "=") {
+    const value = emitter.emitExpression(expr.children[1])
+    emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${align}`)
+    return value
+  }
+  const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${slot}${align}`)
+  let value = ""
+  if (isBitwiseAssignment(expr.text)) {
+    value = emitBitwiseCombine(emitter, expr.text, elem, old, expr.children[1])
+  } else {
+    const rhs = emitter.emitExpression(expr.children[1])
+    value = isFloat(elem)
+      ? emitFloatArithmetic(emitter, withoutEquals(expr.text), elem, old, rhs, expr)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs, expr)
+  }
+  emitRangedStore(emitter, expr, value)
+  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${align}`)
   return value
 }
 
@@ -1767,7 +1863,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   fn.placeBlock(sumBodyBlock)
   const partPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, sumAt)
   const part = fn.emitValue(
-    `load i8*, i8** ${partPtr}${emitter.align8()}${valueSlotAccess(emitter, T_STRING)}`
+    `load i8*, i8** ${partPtr}${emitter.alignSuffix(T_STRING)}${valueSlotAccess(emitter, T_STRING)}`
   )
   const total = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`)
   const grown = fn.emitValue(`add i64 ${total}, ${stringLength(emitter, part)}`)
@@ -1811,7 +1907,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`)
   const itemPtr = elementPointer(emitter, new ArrayBase(arr, null), T_STRING, copyAt)
   const item = fn.emitValue(
-    `load i8*, i8** ${itemPtr}${emitter.align8()}${valueSlotAccess(emitter, T_STRING)}`
+    `load i8*, i8** ${itemPtr}${emitter.alignSuffix(T_STRING)}${valueSlotAccess(emitter, T_STRING)}`
   )
   const itemLen = stringLength(emitter, item)
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`)
@@ -1927,12 +2023,16 @@ const isUnitStep = (node: Node, name: string): boolean => {
   )
 }
 
-/** The single expression statement a loop body is, or `null`. */
+/**
+ * The single expression statement a loop body is, or `null`. A `?.` chain
+ * (`dst?.push(x)`, WP28 C1) is `null` too: it skips its call when a link is
+ * missing, which no range written for the whole loop can.
+ */
 const soleExpression = (body: Node): Node | null => {
   if (body.kind === NodeKind.Block) {
     return body.children.length === 1 ? soleExpression(body.children[0]) : null
   }
-  return body.kind === NodeKind.ExprStmt ? body.children[0] : null
+  return body.kind === NodeKind.ExprStmt && !isOptionalChain(body.children[0]) ? body.children[0] : null
 }
 
 /**
@@ -2125,6 +2225,223 @@ export const emitAppendRange = (emitter: Emitter, stmt: Node, end: IRBlock): boo
   return true
 }
 
+// ---- The loop-guarded additions ----------------------------------------------------------
+
+/** Whether `node` is the identifier `name` or holds it. */
+const holdsName = (node: Node, name: string): boolean => {
+  if (isIdentNamed(node, name)) {
+    return true
+  }
+  for (const child of node.children) {
+    if (holdsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether anything in `node` declares `name`: a declarator or a parameter whose binding holds it. */
+const redeclaresName = (node: Node, name: string): boolean => {
+  if ((node.kind === NodeKind.VarDecl || node.kind === NodeKind.Param) && holdsName(node.children[0], name)) {
+    return true
+  }
+  for (const child of node.children) {
+    if (redeclaresName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether anything in `node` assigns or steps a variable named `name`, by
+ * name or through a destructuring target. A write to an element or a field
+ * writes no variable.
+ */
+const writesVariableNamed = (node: Node, name: string): boolean => {
+  let target: Node | null = null
+  if (node.kind === NodeKind.Binary && isAssignmentOperator(node.text)) {
+    target = unwrapParens(node.children[0])
+  } else if (node.kind === NodeKind.Unary && (node.text === "++" || node.text === "--")) {
+    target = unwrapParens(node.children[0])
+  }
+  if (
+    target !== null &&
+    target.kind !== NodeKind.Member &&
+    target.kind !== NodeKind.Index &&
+    holdsName(target, name)
+  ) {
+    return true
+  }
+  for (const child of node.children) {
+    if (writesVariableNamed(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * `node` has one value for the whole of the loop `stmt`: a literal, or a
+ * local, parameter or constant typed `type` that nothing in `stmt` writes or
+ * declares again. A closure cannot assign what it captures (NL2586), so a
+ * call in the loop cannot move it either.
+ */
+const holdsAcrossLoop = (emitter: Emitter, node: Node, stmt: Node, type: i32): boolean => {
+  if (emitter.typeOf(node) !== type) {
+    return false
+  }
+  if (node.kind === NodeKind.Number) {
+    return true
+  }
+  if (node.kind !== NodeKind.Ident) {
+    return false
+  }
+  const program = emitter.program
+  if (program.nodeLocals[node.id] === null && program.nodeConstants[node.id] === null) {
+    return false
+  }
+  return !writesVariableNamed(stmt, node.text) && !redeclaresName(stmt, node.text)
+}
+
+/** A checked `x + i` in a counted loop's body and its loop-invariant operand `x`. */
+class GuardedAdd {
+  node: Node
+  operand: Node
+
+  constructor(node: Node, operand: Node) {
+    this.node = node
+    this.operand = operand
+  }
+}
+
+/**
+ * Every signed `x + i` and `i + x` in `node`, typed `type`, that the bounds
+ * walk left checked and whose `x` holds across `stmt`. A function or class
+ * inside the loop is emitted as a function of its own, so it is passed over.
+ */
+const collectGuardedAdds = (
+  emitter: Emitter,
+  node: Node,
+  stmt: Node,
+  counter: string,
+  type: i32,
+  out: GuardedAdd[]
+): void => {
+  if (node.kind === NodeKind.Arrow || node.kind === NodeKind.FunctionDecl || node.kind === NodeKind.Class) {
+    return
+  }
+  if (
+    node.kind === NodeKind.Binary &&
+    node.text === "+" &&
+    emitter.typeOf(node) === type &&
+    !emitter.program.nodeProvenNoOverflow[node.id]
+  ) {
+    const left = unwrapParens(node.children[0])
+    const right = unwrapParens(node.children[1])
+    if (isIdentNamed(right, counter) && holdsAcrossLoop(emitter, left, stmt, type)) {
+      out.push(new GuardedAdd(node, left))
+    } else if (isIdentNamed(left, counter) && holdsAcrossLoop(emitter, right, stmt, type)) {
+      out.push(new GuardedAdd(node, right))
+    }
+  }
+  for (const child of node.children) {
+    collectGuardedAdds(emitter, child, stmt, counter, type, out)
+  }
+}
+
+/**
+ * The checked additions of `for (let i = J; i < B; i++) body` that one test
+ * before the loop can vouch for: each `x + i` in the body whose `x` and `B`
+ * hold across the loop, where `i` is the loop's own signed 32- or 64-bit
+ * `let`, stepped by one and written nowhere else. In the body `i` runs over
+ * `J ..= B - 1` and `x + i` is monotone in `i`, so `x + J` and `x + B - 1`
+ * fitting means every `x + i` the loop computes fits.
+ *
+ * The test is emitted here, after the initializer: an `i1` that is set when
+ * any `x + J` or `x + (B - 1)` overflows. Each addition then branches on it
+ * (`emitSignedArith`): clear, it is `add nsw`; set, it is the checked
+ * addition as before, which panics at the iteration and the operator where it
+ * always did — nothing is checked earlier (docs/LANGUAGE.md: an overflow
+ * panics where the operation runs). The test is the same on every iteration,
+ * so LLVM's loop unswitching splits the loop on it, and the copy that runs
+ * when it is clear has `nsw` additions, which the loop passes widen into the
+ * induction variable: a byte comparison `s[a + i] !== s[b + i]` loses two
+ * overflow branches and two sign extensions per byte.
+ *
+ * `B - 1` is a plain `sub`: when it wraps, `B` is the minimum, the loop never
+ * runs and nothing reads the test. Answers how many guards were registered
+ * before, for `releaseAddGuards` once the loop is emitted.
+ */
+export const emitAddGuards = (emitter: Emitter, stmt: Node): i32 => {
+  const mark = emitter.addGuardNodes.length
+  const init = stmt.children[0]
+  const cond = stmt.children[1]
+  if (init.kind !== NodeKind.Var || init.children[0].children.length !== 1 || cond.kind !== NodeKind.Binary) {
+    return mark
+  }
+  const declared = init.children[0].children[0].children[0]
+  if (
+    declared.kind !== NodeKind.Ident ||
+    cond.text !== "<" ||
+    !isIdentNamed(cond.children[0], declared.text)
+  ) {
+    return mark
+  }
+  const name = declared.text
+  const counter = cond.children[0]
+  const type = emitter.typeOf(counter)
+  const body = stmt.children[3]
+  if (
+    (type !== T_I32 && type !== T_I64) ||
+    !isUnitStep(stmt.children[2], name) ||
+    writesVariableNamed(cond, name) ||
+    writesVariableNamed(body, name) ||
+    redeclaresName(body, name) ||
+    !holdsAcrossLoop(emitter, cond.children[1], stmt, type)
+  ) {
+    return mark
+  }
+  const adds: GuardedAdd[] = []
+  collectGuardedAdds(emitter, body, stmt, name, type, adds)
+  if (adds.length === 0) {
+    return mark
+  }
+  const fn = emitter.fn
+  const ty = emitter.llvm(type)
+  const bound = emitter.emitExpression(cond.children[1])
+  const first = emitter.emitExpression(counter)
+  const last = fn.emitValue(`sub ${ty} ${bound}, 1`)
+  const seen: string[] = []
+  let may = ""
+  for (const add of adds) {
+    if (seen.indexOf(add.operand.text) >= 0) {
+      continue
+    }
+    seen.push(add.operand.text)
+    const x = emitter.emitExpression(add.operand)
+    const lo = addWithOverflow(emitter, ty, x, first)
+    const hi = addWithOverflow(emitter, ty, x, last)
+    const either = fn.emitValue(`or i1 ${lo[1]}, ${hi[1]}`)
+    may = may === "" ? either : fn.emitValue(`or i1 ${may}, ${either}`)
+  }
+  for (const add of adds) {
+    emitter.addGuardNodes.push(add.node.id)
+    emitter.addGuardFlags.push(may)
+    emitter.addGuardFns.push(fn)
+  }
+  return mark
+}
+
+/** Drop the guards `emitAddGuards` registered after `mark`, once their loop is emitted. */
+export const releaseAddGuards = (emitter: Emitter, mark: i32): void => {
+  while (emitter.addGuardNodes.length > mark) {
+    emitter.addGuardNodes.pop()
+    emitter.addGuardFlags.pop()
+    emitter.addGuardFns.pop()
+  }
+}
+
 // ---- WP34 N2: the bulk writes -------------------------------------------------------------
 
 /** The address of element `idx` of `arr` as the `i8*` a byte intrinsic takes. */
@@ -2311,6 +2628,10 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   const local = emitter.program.nodeLocals[decl.id]
   if (local === null) {
     process.exit(internalErrorFor("emitter: a `for...of` variable with no local recorded", emitter.opts.json))
+  }
+  if (emitter.typeOf(stmt.children[1]) === T_STRING) {
+    emitStringWalk(emitter, stmt, local) // WP28 C1: `for-of-string`, a code point per pass
+    return
   }
   const elem = local.type
   const ty = emitter.llvm(elem)

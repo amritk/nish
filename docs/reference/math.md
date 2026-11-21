@@ -172,7 +172,7 @@ on one 64-bit integer rather than two 32-bit words.
 double-double pi - atan.
 
 ```ts
-function atan2F64(y: f64, x: f64): f64
+const atan2F64: (y: f64, x: f64) => f64
 ```
 
 <scalar-field name="y" type="f64" required>
@@ -200,7 +200,7 @@ The angle from the positive x axis to the point `(x, y)`, in
 `Math.cos(x)`: fdlibm's `cos`, its reduction shared with `tan`.
 
 ```ts
-function cosF64(x: f64): f64
+const cosF64: (x: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -222,7 +222,7 @@ The cosine of `x`; NaN for a NaN or an infinite `x`, and 1
 rational approximation on [-ln2/2, ln2/2].
 
 ```ts
-function expF64(x: f64): f64
+const expF64: (x: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -245,7 +245,7 @@ e_fmod.c's shift-and-subtract, exact, over one 64-bit word rather than two
 32-bit ones.
 
 ```ts
-function fmodF64(x: f64, y: f64): f64
+const fmodF64: (x: f64, y: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -274,7 +274,7 @@ The divisor.
 [1e-150, 1e150].
 
 ```ts
-function hypotF64(x: f64, y: f64): f64
+const hypotF64: (x: f64, y: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -303,7 +303,7 @@ The square root of `x * x + y * y`, computed without the squares
 log(1 + f) taken from a polynomial in f / (2 + f).
 
 ```ts
-function logF64(x: f64): f64
+const logF64: (x: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -329,7 +329,7 @@ included, makes the string NaN. Every other spelling is the runtime's
 `Number`, which already agrees across targets.
 
 ```ts
-function numberExact(s: string): f64
+const numberExact: (s: string) => f64
 ```
 
 <scalar-field name="s" type="string" required>
@@ -354,7 +354,7 @@ the `0` before it. Every other spelling is the runtime's `parseFloat`, which
 already agrees across targets.
 
 ```ts
-function parseFloatExact(s: string): f64
+const parseFloatExact: (s: string) => f64
 ```
 
 <scalar-field name="s" type="string" required>
@@ -375,7 +375,7 @@ The number at the start of `s`, or NaN.
 `y`, then 2 raised to that, with JavaScript's answers where fdlibm's differ.
 
 ```ts
-function powF64(x: f64, y: f64): f64
+const powF64: (x: f64, y: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -404,7 +404,7 @@ The exponent.
 one quiet NaN, `0x7fc00000`, for the reason `quietBitsF64` gives.
 
 ```ts
-function quietBitsF32(x: f32): i32
+const quietBitsF32: (x: f32) => i32
 ```
 
 <scalar-field name="x" type="f32" required>
@@ -428,7 +428,7 @@ between x86-64, arm64, wasm and V8, so the flag makes them one value; a
 `bitsToF64` of any NaN pattern is left as it is.
 
 ```ts
-function quietBitsF64(x: f64): i64
+const quietBitsF64: (x: f64) => i64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -448,7 +448,7 @@ The IEEE 754 bits of `x`, with every NaN as `0x7ff8000000000000`.
 `Math.sin(x)`: fdlibm's `sin`, its reduction shared with `tan`.
 
 ```ts
-function sinF64(x: f64): f64
+const sinF64: (x: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>
@@ -470,7 +470,7 @@ The sine of `x`; NaN for a NaN or an infinite `x`, and `x`
 2^20 * pi/2.
 
 ```ts
-function tanF64(x: f64): f64
+const tanF64: (x: f64) => f64
 ```
 
 <scalar-field name="x" type="f64" required>

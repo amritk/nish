@@ -110,15 +110,17 @@ const SLOWEST: i32 = 5;
 class Tools {
   /** The argv prefix that runs the compiler under test: `["node", "<entry>.js"]`, or just a binary. */
   compiler: string[];
+  /** This process's scratch files for the golden cases. */
+  work: string;
+  /** This process's link work directory, one subdirectory per program. */
+  linkWork: string;
   clang: boolean;
   llvmAs: boolean;
   opt: boolean;
   /** `env(1)`, and specifically an `env` that honours `-u`. See `hasEnvTool`. */
   env: boolean;
-  /** This process's scratch files for the golden cases. */
-  work: string;
-  /** This process's link work directory, one subdirectory per program. */
-  linkWork: string;
+  /** Whether the compiler's `--help` lists `--allow-panics`. See `listsAllowPanics`. */
+  allowPanics: boolean;
 
   constructor(
     clang: boolean,
@@ -137,14 +139,43 @@ class Tools {
     this.env = env;
     const node = compiler.endsWith(".js") || compiler.endsWith(".mjs") || compiler.endsWith(".cjs");
     this.compiler = node ? ["node", compiler] : [compiler];
+    this.allowPanics = listsAllowPanics(this.compiler, work);
   }
 }
 
-/** The compiler's argv prefix followed by `args`: one compile's whole command line. */
-const compilerArgv = (tools: Tools, args: string[]): string[] => {
+/**
+ * Whether `compiler --help` lists `--allow-panics`, the question
+ * `tests/allow-panics.js` asks for the JS harnesses. Every case and link program
+ * here is a test that may panic on purpose, so its compile passes the flag; a
+ * released compiler older than the flag exits 2 on it, so it is asked first. A
+ * case whose `.args` say `--deny-panics` still builds strict: the flag goes
+ * first and the last of the two wins.
+ */
+const listsAllowPanics = (compiler: string[], work: string): boolean => {
+  const argv: string[] = [];
+  for (const part of compiler) {
+    argv.push(part);
+  }
+  argv.push("--help");
+  const out = `${work}/help.probe.out`;
+  if (spawnSyncTo(argv, out, `${work}/help.probe.err`) !== 0) {
+    return false;
+  }
+  const help = readFileSyncOrNull(out);
+  return help !== null && help.indexOf("--allow-panics") >= 0;
+};
+
+/**
+ * The compiler's argv prefix, `--allow-panics` when it lists the flag and the
+ * program is not `strict`, and then `args`: one compile's whole command line.
+ */
+const compilerArgv = (tools: Tools, args: string[], strict: boolean): string[] => {
   const argv: string[] = [];
   for (const part of tools.compiler) {
     argv.push(part);
+  }
+  if (tools.allowPanics && !strict) {
+    argv.push("--allow-panics");
   }
   for (const arg of args) {
     argv.push(arg);
@@ -516,7 +547,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   const irPath = `${tools.work}/${name}.ll`;
   const compileOut = `${tools.work}/${name}.compile.out`;
   const compileErr = `${tools.work}/${name}.compile.err`;
-  const argv = compilerArgv(tools, [`${CASES}/${name}.ts`, "-o", irPath]);
+  const argv = compilerArgv(tools, [`${CASES}/${name}.ts`, "-o", irPath], false);
   // `--threads` is the one compiler flag that also changes how the case is
   // *linked*: the IR then reaches for a `_Thread_local` arena, which only
   // `runtime.c` compiled with `-DNISH_THREADS=1` defines (WP20 T0). Reading it
@@ -604,6 +635,12 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   if (threaded) {
     link.push("-DNISH_THREADS=1");
     link.push("-pthread");
+  }
+  // WP48: a module with a compact class references `@nish_arena_range_abi`,
+  // which only the range runtime defines, as `tests/run.js` links it.
+  const ir = readFileSyncOrNull(irPath);
+  if (ir !== null && ir.indexOf("@nish_arena_range_abi") >= 0) {
+    link.push("-DNISH_ARENA_RANGE=1");
   }
   link.push(irPath);
   if (!hasEntry(name, source)) {
@@ -759,15 +796,34 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
     return;
   }
   const exe = `${outDir}/app`;
-  const argv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${outDir}/`]);
+  // `panicScope` in tests/run.js: a `strict` file beside `main.ts` builds the
+  // program as a user would, with no flag the harness adds, because the
+  // no-panic default itself is what it tests.
+  const strict = readFileSyncOrNull(`${dir}/strict`) !== null;
+  const argv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${outDir}/`], strict);
   if (tools.clang) {
     argv.push("--link");
     argv.push(exe);
   }
   const args = readFileSyncOrNull(`${dir}/args`);
   const flags: string[] = args === null ? [] : splitWhitespace(args);
-  for (const flag of flags) {
-    argv.push(flag);
+  // `wasmRun` in tests/run.js: a program that runs but whose `args` name a
+  // wasm32 target is linked and run as a native build of the same flags. A
+  // wasm32 module lays a class's pointer field out in 4 bytes, and clang swaps
+  // its datalayout for the host's, so a native link of wasm32 IR writes 8-byte
+  // pointers into 4-byte slots and dies. The wasm32 compile is still made,
+  // below, and its modules verified. Only the two-token `--target wasm32` is
+  // recognised, as there.
+  const targetAt = flags.indexOf("--target");
+  const wasmRun =
+    targetAt >= 0 &&
+    targetAt + 1 < flags.length &&
+    flags[targetAt + 1].startsWith("wasm32") &&
+    readFileSyncOrNull(`${dir}/expected.err`) === null;
+  for (let i = 0; i < flags.length; i++) {
+    if (!wasmRun || (i !== targetAt && i !== targetAt + 1)) {
+      argv.push(flags[i]);
+    }
   }
   // `linkProfile` in tests/run.js: an unoptimised link is about a third of
   // the speed one's time, and the profile never changes a byte of the IR.
@@ -791,6 +847,26 @@ const runLinkCase = (t: Suite, tools: Tools, speedLink: string[], name: string):
   if (status !== 0) {
     t.fail(label, `the compile failed with ${status}: ${trim(diagnostics)}`);
     return;
+  }
+  if (wasmRun) {
+    const wasmDir = `${outDir}.wasm32`;
+    const wasmArgv = compilerArgv(tools, [`${dir}/main.ts`, "-o", `${wasmDir}/`], strict);
+    for (const flag of flags) {
+      wasmArgv.push(flag);
+    }
+    const wasmStatus = spawnSyncTo(wasmArgv, `${work}.wasm32.out`, `${work}.wasm32.err`);
+    const none: string[] = [];
+    const wasmEntries: string[] = wasmStatus === 0 ? (readdirSync(wasmDir) ?? none) : none;
+    let modules = 0;
+    for (const file of wasmEntries) {
+      if (file.endsWith(".ll")) {
+        modules++;
+        verifyIR(t, tools, `${label}: wasm32 ${file}`, `${wasmDir}/${file}`, `${work}_wasm32_${file}`);
+      }
+    }
+    if (modules === 0) {
+      t.fail(`${label}: its wasm32 compile writes modules`, `exit ${wasmStatus}: ${trim(readOrEmpty(`${work}.wasm32.err`))}`);
+    }
   }
 
   const entries = readdirSync(outDir);

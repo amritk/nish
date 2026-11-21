@@ -12,12 +12,12 @@ declare class Pair {
 declare function pairPtr(): CPtr
 declare function nullPtr(): CPtr
 
-export function present(): i32 {
+export const present = (): i32 => {
   const p: Pair = readStruct(pairPtr());
   return p.first + p.second;
-}
+};
 
-export function absent(): i32 {
+export const absent = (): i32 => {
   const p: Pair = readStruct(nullPtr());
   return p.first;
-}
+};

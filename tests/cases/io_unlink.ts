@@ -2,7 +2,7 @@
 // missing path is -2 (`ENOENT`), and a directory is refused, -21 (`EISDIR`)
 // on Linux and -1 (`EPERM`) on the BSDs and macOS, with no fall back to
 // rmdir(2): removing a directory is a different request.
-export function main(): number {
+export const main = (): number => {
   const file = "build/test/io_unlink.txt";
   writeFileSync(file, "doomed\n");
   console.log(`unlink: ${unlinkSync(file)}`);
@@ -14,4 +14,4 @@ export function main(): number {
   console.log(`directory refused: ${refused === -21 || refused === -1}`);
   console.log(`directory kept: ${isDirectorySync(dir)}`);
   return 0;
-}
+};

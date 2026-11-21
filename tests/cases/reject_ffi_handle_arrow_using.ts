@@ -25,15 +25,15 @@ class File {
 }
 
 
-function apply(g: () => i32): i32 {
+const apply = (g: () => i32): i32 => {
   return g()
-}
+};
 
-function count(): i32 {
+const count = (): i32 => {
   return apply((): i32 => {
     using f = new File("data.txt")
     return f.read()
   })
-}
+};
 
 export const main = (): i32 => 0

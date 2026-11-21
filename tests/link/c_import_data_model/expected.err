@@ -1,0 +1,1 @@
+limits.ts:3:16: error: this module was written by nish c-import for ILP32, and this build is LP64: a C type's size differs between the two data models, so regenerate the module with `nish c-import --target` for this build

@@ -94,7 +94,7 @@ ovf.fail:
 
 define void @nish_main() #0 {
 entry:
-  %b.addr = alloca %struct.Box$un2.$Circle.$Square*, align 8
+  %b.addr = alloca %struct.Box$un2.$Circle.$Square*, align 4
   %Box$un2.$Circle.$Square.obj = alloca %struct.Box$un2.$Circle.$Square, align 8
   %0 = call i8* @nish_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Circle*
@@ -104,13 +104,13 @@ entry:
   store i32 2, i32* %3, align 4, !tbaa !4
   %4 = bitcast %struct.Circle* %1 to %union.tagged*
   call void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, %union.tagged* %4)
-  store %struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, %struct.Box$un2.$Circle.$Square** %b.addr, align 8
-  %5 = load %struct.Box$un2.$Circle.$Square*, %struct.Box$un2.$Circle.$Square** %b.addr, align 8
+  store %struct.Box$un2.$Circle.$Square* %Box$un2.$Circle.$Square.obj, %struct.Box$un2.$Circle.$Square** %b.addr, align 4
+  %5 = load %struct.Box$un2.$Circle.$Square*, %struct.Box$un2.$Circle.$Square** %b.addr, align 4
   %6 = call %union.tagged* @Box$un2.$Circle.$Square.get(%struct.Box$un2.$Circle.$Square* %5)
   %7 = call i32 @area(%union.tagged* %6)
   %8 = call i8* @nish_str_from_i32(i32 %7)
   call void @nish_print(i8* %8)
-  %9 = load %struct.Box$un2.$Circle.$Square*, %struct.Box$un2.$Circle.$Square** %b.addr, align 8
+  %9 = load %struct.Box$un2.$Circle.$Square*, %struct.Box$un2.$Circle.$Square** %b.addr, align 4
   %10 = call i8* @nish_alloc_struct(i64 8)
   %11 = bitcast i8* %10 to %struct.Square*
   %12 = getelementptr inbounds %struct.Square, %struct.Square* %11, i32 0, i32 0
@@ -119,7 +119,7 @@ entry:
   store i32 3, i32* %13, align 4, !tbaa !6
   %14 = bitcast %struct.Square* %11 to %union.tagged*
   call void @Box$un2.$Circle.$Square.put(%struct.Box$un2.$Circle.$Square* %9, %union.tagged* %14)
-  %15 = load %struct.Box$un2.$Circle.$Square*, %struct.Box$un2.$Circle.$Square** %b.addr, align 8
+  %15 = load %struct.Box$un2.$Circle.$Square*, %struct.Box$un2.$Circle.$Square** %b.addr, align 4
   %16 = call %union.tagged* @Box$un2.$Circle.$Square.get(%struct.Box$un2.$Circle.$Square* %15)
   %17 = call i32 @area(%union.tagged* %16)
   %18 = call i8* @nish_str_from_i32(i32 %17)
@@ -127,24 +127,24 @@ entry:
   ret void
 }
 
-define internal void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %union.tagged* noundef %value) #1 {
+define internal void @Box$un2.$Circle.$Square.constructor(%struct.Box$un2.$Circle.$Square* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, %union.tagged* noundef %value) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %this, i32 0, i32 0
-  store %union.tagged* %value, %union.tagged** %0, align 8, !tbaa !11
+  store %union.tagged* %value, %union.tagged** %0, align 4, !tbaa !11
   ret void
 }
 
-define internal noundef %union.tagged* @Box$un2.$Circle.$Square.get(%struct.Box$un2.$Circle.$Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+define internal noundef %union.tagged* @Box$un2.$Circle.$Square.get(%struct.Box$un2.$Circle.$Square* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %this, i32 0, i32 0
-  %1 = load %union.tagged*, %union.tagged** %0, align 8, !tbaa !11
+  %1 = load %union.tagged*, %union.tagged** %0, align 4, !tbaa !11
   ret %union.tagged* %1
 }
 
-define internal void @Box$un2.$Circle.$Square.put(%struct.Box$un2.$Circle.$Square* noundef nonnull align 8 dereferenceable(8) nocapture %this, %union.tagged* noundef %value) #1 {
+define internal void @Box$un2.$Circle.$Square.put(%struct.Box$un2.$Circle.$Square* noundef nonnull align 8 dereferenceable(4) nocapture %this, %union.tagged* noundef %value) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$un2.$Circle.$Square, %struct.Box$un2.$Circle.$Square* %this, i32 0, i32 0
-  store %union.tagged* %value, %union.tagged** %0, align 8, !tbaa !11
+  store %union.tagged* %value, %union.tagged** %0, align 4, !tbaa !11
   ret void
 }
 

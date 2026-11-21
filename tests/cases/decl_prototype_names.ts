@@ -10,19 +10,19 @@ class toString {
   }
 }
 
-function valueOf(x: i32): i32 {
+const valueOf = (x: i32): i32 => {
   return x * 2;
-}
+};
 
-function hasOwnProperty(x: i32): i32 {
+const hasOwnProperty = (x: i32): i32 => {
   return x + 1;
-}
+};
 
-function isPrototypeOf(x: i32): i32 {
+const isPrototypeOf = (x: i32): i32 => {
   return x - 1;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const constructor: i32 = 3;
   console.log(valueOf(21));
   console.log(hasOwnProperty(41));
@@ -30,4 +30,4 @@ export function main(): number {
   console.log(new toString(7).n);
   console.log(constructor);
   return 0;
-}
+};

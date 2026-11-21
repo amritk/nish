@@ -5,7 +5,7 @@ built. §10 records the decisions: the builder is `builder()` from
 `nish:string`, the other five questions take this note's
 recommendations, and Q7 adds S5, object graphs in an arena block. Its stages
 are in §9 and on
-[the roadmap page](roadmap/wp56-flat-memory-generators.md).
+[its open-work issue](https://github.com/amritk/nish/issues/1926).
 
 Every claim about today's compiler is anchored at commit `e0a1661e`, on
 `main`. Measurements quoted here come from the documents they cite. This note

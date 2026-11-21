@@ -1,0 +1,12 @@
+PASS  beginRead
+PASS  the table, first to last
+PASS  the table, last to first
+PASS  seekRowid finds a rowid where WHERE rowid = r does, and walks on as SQL does
+PASS  the index, first to last
+PASS  the index, last to first
+PASS  every seek lands on the row SQL's ORDER BY puts first
+PASS    seeks compared
+PASS  close
+PASS  endRead
+PASS  close the connection
+std_sqlite_cursor_sql: 11 passed, 0 failed, 0 skipped

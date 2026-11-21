@@ -1,7 +1,6 @@
 # WP22: Arrow functions as the declaration form
 
-**Status: A and B are built; C is done everywhere but the test corpus; D is an
-open question.** Stages A and B (both compilers accept
+**Status: A, B and C are built; D is an open question.** Stages A and B (both compilers accept
 `const f = (n: i32): i32 => n * 2`, and the two spellings emit byte-identical
 IR) landed before 0.1.0. `tests/cases/fn_arrow` carries the golden, the
 `llvm-as` pass and the native round trip. Stage C rewrote the docs, `examples/`
@@ -9,8 +8,10 @@ and the playground first, then `src/` (0.3.0), then every other Nish program and
 the JavaScript tooling (0.13.0, [#253](https://github.com/amritk/nish/pull/253)).
 The Biome plugin `biome-plugins/no-function-declaration.grit` now makes a
 `function` declaration an error in every file its override in `biome.json`
-lists. What C has left is
-the test corpus, which Biome does not read (§7). A `function` definition is
+lists. Biome does not read the test corpus, so C's last step rewrote it and
+the `arrow-corpus` check in `tests/run.js` keeps it arrows: a test file that
+holds a `function` definition fails unless
+`tests/function-spelling-allowlist.txt` lists it with a reason (§7). A `function` definition is
 still accepted. Whether stage D ever rejects one is §10's open question, and
 [MASTER_PLAN](MASTER_PLAN.md#what-remains) lists it as the one open language
 question. The full plan, including the codemod's design history, is this file
@@ -105,26 +106,41 @@ is the checker's business, and its message names the rewrite:
 ## 7. The surfaces, measured
 
 A *definition* is a top-level `function` with a body. `declare function` lines
-are not counted, and are not stage D's to take (§9). Counted on 2026-10-05 with
-`grep -rhE --include=*.ts '^(export )?(default )?(async )?function\b' <dir> | wc -l`:
+are not counted, and are not stage D's to take (§9). Counted on 2026-11-18 with
+`grep -rhE --include=*.ts '^(export )?(default )?(async )?function\b' <dir> | wc -l`.
+The pattern takes `async function` too, which has no arrow spelling yet and which
+the codemod refuses; the third column counts the definitions without it:
 
-| Surface | `function` definitions | Note |
-| --- | ---: | --- |
-| `src/`, `std/`, `examples/`, `bench/`, `tests/self/`, `tests/nish/`, the JavaScript tooling the plugin lists | **0** | done, and the Biome plugin keeps it that way |
-| `runtime/shim.mjs`, `bin/launcher.js` (JavaScript, outside the plugin's list) | 90, 1 | not Nish programs; counted with the same pattern over `.mjs` and `.js` and not in the total below |
-| `docs/cookbook/` | 1 | `fn-add-function.ts`, which exists *to be* the `function` spelling and is excluded from the plugin in `biome.json` (§9a) |
-| `tests/cases/` | 715 | the goldens gate the rewrite. The count grows as new cases are written in the old spelling, and the corpus is outside Biome |
-| `tests/differential/corpus/` | 153 | also rewritten to JavaScript, so the arrow-parity guard (§8b) covers it |
-| `tests/link/` | 51 | whole multi-module programs |
-| `tests/parser/` | 32 | parser fixtures no checker accepts |
-| `tests/layout/` | 71 | all in `structs.ts`, the C-layout twins |
-| `tests/wordings/` | 5 | |
-| `tests/fix/` | 3 | `nish --fix` fixtures |
-| `tests/differential/arrow-parity/` | 3 | `declared.ts` |
+| Surface | `function` definitions | not `async` | Note |
+| --- | ---: | ---: | --- |
+| `src/`, `std/`, `tests/self/`, `tests/nish/`, `tests/differential/corpus/`, `tests/layout/`, the JavaScript tooling the plugin lists | **0** | **0** | done, and the Biome plugin (or, for `tests/`, the `arrow-corpus` check) keeps it that way |
+| `runtime/**/*.mjs`, `bin/launcher.js` (JavaScript, outside the plugin's list) | 197, 1 | | not Nish programs; counted with the same pattern over `.mjs` and `.js` and not in the total below |
+| `bench/` | 39 | 0 | all `async` |
+| `examples/` | 2 | 2 | `wasm-arena/host.ts`, a host module: `src/host-module.ts` reads `export function` |
+| `docs/cookbook/` | 2 | 2 | `fn-add-function.ts`, which exists *to be* the `function` spelling and is excluded from the plugin in `biome.json` (§9a), and the host module `host/scale.ts` |
+| `tests/cases/` | 221 | 24 | 197 `async`; 18 on the allowlist, 6 refused forms (`export default`, `function*`, a bodiless signature) |
+| `tests/link/` | 154 | 0 | all `async` |
+| `tests/emit-ts/`, `tests/postgres/` | 40, 1 | 0 | all `async` |
+| `tests/parser/` | 21 | 21 | parser fixtures: `function` parsing and recovery, and `catch` names the codemod cannot parse |
+| `tests/wordings/` | 25 | 16 | 14 host-module wordings, 2 refused forms (NL2203, NL2204), and 9 `async` |
+| `tests/host-import/`, `tests/host-window/`, `tests/panic/` | 22, 6, 2 | 21, 6, 2 | host modules, and one `async` |
+| `tests/fix/` | 4 | 4 | `nish --fix` fixtures whose declaration kind is the subject |
+| `tests/differential/arrow-parity/` | 3 | 3 | `declared.ts` |
 
-That is **1,034** definitions in all, against 1,664 when stage C's docs half was
-finished and `src/` had not been converted. §10 argues stage D from this
-number.
+That is **542** definitions in all, against 1,034 when this table was first
+counted and 1,664 when stage C's docs half was finished. Only **101** are not
+`async`. Four are the `examples/` and `docs/cookbook/` rows above. Of the 97
+under `tests/`, 8 are forms the codemod refuses by design, each the subject of
+its rejection case or wording (4 `export default`, 2 `function*`, 2 bodiless
+signatures), and the other 89 are on `tests/function-spelling-allowlist.txt`
+with their reasons. Of those 89, **14** (in
+6 files: `dbg_enum`, `dbg_locals`, `dbg_result`, `opt_target_triple`,
+`dump_ast`, `reject_type_mismatch`) are plain programs whose spelling is not
+the subject but whose rewrite would move a position something else pins: a
+`-g` golden's DILocation columns, an AST-dump golden, or a line:col the docs
+quote. The allowlist groups them as pinned positions; one leaves it only
+together with the regenerated golden or the doc edit. §10 argues stage D from
+these numbers.
 
 ## 8. The order, and why it is forced
 
@@ -136,7 +152,7 @@ stages:
 | --- | --- | --- |
 | **A** | the first compiler accepts arrows: §5's rules, the concise body, negative tests | **done** |
 | **B** | the self-hosted compiler accepts arrows, and the parser oracle builds the same tree | **done**, with `tests/cases/fn_arrow` |
-| **C** | the migration: docs and `examples/`, then `src/`, then the corpus | **done but for the corpus** (§7) |
+| **C** | the migration: docs and `examples/`, then `src/`, then the corpus | **done** (§7): the corpus is arrows but for the reasoned allowlist the `arrow-corpus` check in `tests/run.js` holds it to |
 | **D** | a `function` *definition* is refused with §6's message and a `reject_function_declaration` case; `declare function` stays legal (§9) | **open** (§10) |
 
 The docs were converted first because they were the cheapest surface to verify.
@@ -283,7 +299,9 @@ refusal. It must not fire for a `declare function`. That ordering gives the
 first two rows above for free. `reject_fn_nested` is untouched, because a
 nested declaration is refused as a statement before it reaches either check.
 So stage D is one flag, one refusal, the `reject_function_declaration` case and
-its wording, and the corpus. The corpus is the work.
+its wording, and the 101 definitions §7 still counts: a subject, a host
+module, a fixture or a pinned position the allowlist names, or a refused form
+that is its rejection case's subject.
 
 **The two entry-point wordings §10 names are `NL2149` and `NL2229`**:
 `` `process.argv` requires a `main` entry point (this program has no `export
@@ -302,11 +320,13 @@ makes the spelling they name wrong.
   rewording them retires `NL2229` and `NL2149` for a spelling change. They are
   stage D's to change, alongside the rejection that makes the other spelling
   wrong.
-- **Whether stage D happens at all.** A, B and most of C are done, and new
-  code outside the test corpus cannot use `function` (the Biome plugin). What
-  is left is 1,034 rewrites of test programs, for zero expressiveness (§7).
-  The alternative is to leave D undone, convert a case when it is opened for
-  another reason, and take D when the count is small. D withdraws an accepted
+- **Whether stage D happens at all.** A, B and C are done. New code outside
+  the test corpus cannot use `function` (the Biome plugin), and a new test
+  cannot either (the `arrow-corpus` check). What is left is 101 non-`async`
+  definitions, each a refused form under test or kept for a reason the
+  allowlist records, and the `async` ones, which have no arrow spelling to
+  move to (§7).
+  The alternative is to leave D undone. D withdraws an accepted
   construct. On 0.x that is a breaking minor, and after 1.0 it would need a
   major ([LANGUAGE.md](LANGUAGE.md)'s head), so it is cheaper while the project
   is on 0.x.

@@ -14,21 +14,25 @@
 
 import {
   foreignBufferCount,
+  foreignCountConversion,
   foreignBufferCountProven,
   hostFunction,
   hostWindowProven,
   lentBuffer,
 } from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
-import { Emitter } from "./emit"
+import { Emitter, LoopTarget } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
 import { emitFfiNullTest, emitPanicTail, panicTailCallees } from "./emit-builtins"
+import { loadField, structInfoOf } from "./emit-classes"
 import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
 import { Node, NodeKind } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
+import { Local } from "./symbols"
 import { irEscape } from "./strings"
+import { foreignCountWidth } from "./structs"
 import {
   isFloat,
   isForeignBuffer,
@@ -39,6 +43,7 @@ import {
   T_I32,
   T_I64,
   T_STRING,
+  T_U64,
   TypeTable,
 } from "./types"
 
@@ -210,7 +215,7 @@ export const emitStringLength = (emitter: Emitter, expr: Node): string => {
 /** Byte length, from the header the string pointer points at. */
 const loadStringLength = (emitter: Emitter, str: string): string => {
   const header = emitter.fn.emitValue(`bitcast i8* ${str} to i64*`)
-  return emitter.fn.emitValue(`load i64, i64* ${header}${emitter.alignSuffix(T_STRING)}`)
+  return emitter.fn.emitValue(`load i64, i64* ${header}${emitter.align8()}`)
 }
 
 /** The bytes themselves: past the 8-byte length header. */
@@ -228,6 +233,98 @@ const clampToLength = (emitter: Emitter, value: string, len: string): string => 
 /** A fresh arena string holding `n` bytes copied from `bytes`. */
 const newString = (emitter: Emitter, bytes: string, n: string): string =>
   emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`)
+
+/**
+ * WP28 C1: `for (const c of s)` under the compatibility dialect's
+ * `for-of-string`, a pass per code point, as JavaScript's string iterator
+ * takes one. A UTF-8 lead byte says how many bytes its code point has — 1
+ * below `0xC0` (a stray continuation byte stands alone), 2 below `0xE0`, 3
+ * below `0xF0`, else 4 — clamped to the bytes left, so a truncated sequence
+ * never reads past the end. The pass then takes only the continuation bytes
+ * (`10xxxxxx`) that follow the lead, so a lead byte with none stands alone and
+ * the byte after it gets its own pass, as `String.fromCharCode(200) + "abc"`
+ * takes four in Node. `c` is a fresh string of those bytes. The next
+ * offset is kept in `%forof.next` before the body runs, so `continue` steps
+ * by the width as falling out of the body does.
+ */
+export const emitStringWalk = (emitter: Emitter, stmt: Node, local: Local): void => {
+  const fn = emitter.fn
+  const condBlock = fn.newBlock("forof.cond")
+  const bodyBlock = fn.newBlock("forof.body")
+  const incBlock = fn.newBlock("forof.inc")
+  const endBlock = fn.newBlock("forof.end")
+  const slot = fn.emitAlloca(`${local.name}.addr`, "i8*", emitter.align(T_STRING))
+  emitter.setSlot(local, slot)
+  const debug = emitter.debug
+  if (debug !== null) {
+    debug.declareLocal(fn, local, slot, stmt.children[0].children[0].children[0]) // `-g`
+  }
+  const align = emitter.opts.optimizeAttributes ? 8 : 0
+  const idxSlot = fn.emitAlloca("forof.idx", "i64", align)
+  const nextSlot = fn.emitAlloca("forof.next", "i64", align)
+
+  const str = emitter.emitExpression(stmt.children[1])
+  const len = loadStringLength(emitter, str)
+  const data = stringData(emitter, str)
+  fn.emit(`store i64 0, i64* ${idxSlot}${emitter.align8()}`)
+  fn.emit(`br label %${condBlock.label}`)
+
+  fn.placeBlock(condBlock)
+  const idx = fn.emitValue(`load i64, i64* ${idxSlot}${emitter.align8()}`)
+  const more = fn.emitValue(`icmp ult i64 ${idx}, ${len}`)
+  fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`)
+
+  fn.placeBlock(bodyBlock)
+  const at = fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${idx}`)
+  const lead = fn.emitValue(`load i8, i8* ${at}`)
+  let width = "1"
+  // 0xC0, 0xE0 and 0xF0, as an `i8` spells them.
+  for (const bound of ["-64", "-32", "-16"]) {
+    const over = fn.emitValue(`icmp uge i8 ${lead}, ${bound}`)
+    const step = fn.emitValue(`zext i1 ${over} to i64`)
+    width = fn.emitValue(`add i64 ${width}, ${step}`)
+  }
+  const left = fn.emitValue(`sub i64 ${len}, ${idx}`)
+  const most = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${width}, i64 ${left})`)
+  // Count the continuation bytes after the lead, at most `most - 1` of them.
+  const entry = fn.currentBlock()
+  const runBlock = fn.newBlock("forof.run")
+  const testBlock = fn.newBlock("forof.run.test")
+  const takeBlock = fn.newBlock("forof.take")
+  fn.emit(`br label %${runBlock.label}`)
+  fn.placeBlock(runBlock)
+  // Named, not numbered: `grown` is defined after temporaries numbered later.
+  const n = `%${runBlock.label}.n`
+  const grown = `%${runBlock.label}.grown`
+  fn.emit(`${n} = phi i64 [ 1, %${entry.label} ], [ ${grown}, %${testBlock.label} ]`)
+  const room = fn.emitValue(`icmp ult i64 ${n}, ${most}`)
+  fn.emit(`br i1 ${room}, label %${testBlock.label}, label %${takeBlock.label}`)
+  fn.placeBlock(testBlock)
+  const tail = fn.emitValue(`getelementptr inbounds i8, i8* ${at}, i64 ${n}`)
+  const byte = fn.emitValue(`load i8, i8* ${tail}`)
+  const top = fn.emitValue(`and i8 ${byte}, -64`)
+  const follows = fn.emitValue(`icmp eq i8 ${top}, -128`)
+  fn.emit(`${grown} = add i64 ${n}, 1`)
+  fn.emit(`br i1 ${follows}, label %${runBlock.label}, label %${takeBlock.label}`)
+  fn.placeBlock(takeBlock)
+  const next = fn.emitValue(`add i64 ${idx}, ${n}`)
+  fn.emit(`store i64 ${next}, i64* ${nextSlot}${emitter.align8()}`)
+  const code = newString(emitter, at, n)
+  fn.emit(`store i8* ${code}, i8** ${slot}${emitter.alignSuffix(T_STRING)}`)
+  emitter.loops.push(new LoopTarget(endBlock, incBlock))
+  emitter.emitStatement(stmt.children[2])
+  emitter.loops.pop()
+  if (!fn.currentBlock().terminated()) {
+    fn.emit(`br label %${incBlock.label}`)
+  }
+
+  fn.placeBlock(incBlock)
+  const stepped = fn.emitValue(`load i64, i64* ${nextSlot}${emitter.align8()}`)
+  fn.emit(`store i64 ${stepped}, i64* ${idxSlot}${emitter.align8()}`)
+  fn.emit(`br label %${condBlock.label}`)
+
+  fn.placeBlock(endBlock)
+}
 
 /**
  * A copy of `str` in the current arena: what a read of a string through a
@@ -668,13 +765,14 @@ export const emitForeignBuffers = (
     } else if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
       const buffer = values[i]
       const count = foreignBufferCount(emitter.table, callee, i)
-      // The checker gave every buffer a count parameter after it, so `count`
-      // always names an argument.
+      // The checker gave every buffer a count parameter, named or after it,
+      // so `count` always names an argument.
       if (count >= 0 && count < values.length) {
-        const counted = values[count]
+        const conversion = foreignCountConversion(callee, count)
         if (
-          !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, "toU64")
+          !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts, conversion)
         ) {
+          const counted = foreignCountValue(emitter, callee.paramTypes[count], values[count])
           const len = loadLength(emitter, buffer)
           const fits = fn.emitValue(`icmp ule i64 ${counted}, ${len}`)
           const okBlock = fn.newBlock("ffi.ok")
@@ -695,6 +793,22 @@ export const emitForeignBuffers = (
     }
     i = i + 1
   }
+}
+
+/**
+ * A buffer's count as the `i64` its `len` is compared with (WP66 S5): a `u64`
+ * as it is, a narrower count widened with `zext` (every count is unsigned),
+ * and an out class's one field loaded through the pointer C is lent, after
+ * every argument ran, so the value checked is the value C reads.
+ */
+const foreignCountValue = (emitter: Emitter, type: i32, value: string): string => {
+  const width = foreignCountWidth(emitter.program, emitter.table, type)
+  let counted = value
+  if (width !== type) {
+    const info = structInfoOf(emitter, type)
+    counted = loadField(emitter, info, value, info.fields[0])
+  }
+  return width === T_U64 ? counted : emitter.fn.emitValue(`zext ${emitter.llvm(width)} ${counted} to i64`)
 }
 
 /**

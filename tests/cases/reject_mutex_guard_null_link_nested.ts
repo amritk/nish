@@ -15,11 +15,11 @@ class Holder {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const m = new Mutex<Holder>(new Holder())
   {
     using g = m.lock()
     g.value.inner.next = null
   }
   return 0
-}
+};

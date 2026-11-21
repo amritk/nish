@@ -25,15 +25,15 @@ import {
 ```ts example.ts
 import { awaitAll, spawn } from "nish:async";
 
-async function double(x: i32): Promise<i32> {
+const double = async (x: i32): Promise<i32> => {
   return x * 2;
 }
 
-async function log(x: i32): Promise<void> {
+const log = async (x: i32): Promise<void> => {
   console.log(x);
 }
 
-async function run(): Promise<void> {
+const run = async (): Promise<void> => {
   const [c, d] = await awaitAll(double(1), double(2));
   spawn(log(c + d));
 }
@@ -130,7 +130,7 @@ in the kernel's order and then expired timers by deadline:
 ```ts example.ts
 import { readable, sleep } from "nish:async";
 
-async function tick(): Promise<void> {
+const tick = async (): Promise<void> => {
   await sleep(10);
   console.log("tick");
 }
@@ -161,10 +161,10 @@ Wait for two calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B>(
+const awaitAll: <A, B>(
   a: Promise<A>,
   b: Promise<B>,
-): Promise<[A, B]>
+) => Promise<[A, B]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -190,11 +190,11 @@ Wait for three calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B, C>(
+const awaitAll: <A, B, C>(
   a: Promise<A>,
   b: Promise<B>,
   c: Promise<C>,
-): Promise<[A, B, C]>
+) => Promise<[A, B, C]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -226,12 +226,12 @@ Wait for four calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B, C, D>(
+const awaitAll: <A, B, C, D>(
   a: Promise<A>,
   b: Promise<B>,
   c: Promise<C>,
   d: Promise<D>,
-): Promise<[A, B, C, D]>
+) => Promise<[A, B, C, D]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -269,13 +269,13 @@ Wait for five calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B, C, D, E>(
+const awaitAll: <A, B, C, D, E>(
   a: Promise<A>,
   b: Promise<B>,
   c: Promise<C>,
   d: Promise<D>,
   e: Promise<E>,
-): Promise<[A, B, C, D, E]>
+) => Promise<[A, B, C, D, E]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -319,14 +319,14 @@ Wait for six calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B, C, D, E, F>(
+const awaitAll: <A, B, C, D, E, F>(
   a: Promise<A>,
   b: Promise<B>,
   c: Promise<C>,
   d: Promise<D>,
   e: Promise<E>,
   f: Promise<F>,
-): Promise<[A, B, C, D, E, F]>
+) => Promise<[A, B, C, D, E, F]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -376,7 +376,7 @@ Wait for seven calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B, C, D, E, F, G>(
+const awaitAll: <A, B, C, D, E, F, G>(
   a: Promise<A>,
   b: Promise<B>,
   c: Promise<C>,
@@ -384,7 +384,7 @@ function awaitAll<A, B, C, D, E, F, G>(
   e: Promise<E>,
   f: Promise<F>,
   g: Promise<G>,
-): Promise<[A, B, C, D, E, F, G]>
+) => Promise<[A, B, C, D, E, F, G]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -440,7 +440,7 @@ Wait for eight calls at once. It is awaited into one name per call,
 destructured, is NL2647.
 
 ```ts
-function awaitAll<A, B, C, D, E, F, G, H>(
+const awaitAll: <A, B, C, D, E, F, G, H>(
   a: Promise<A>,
   b: Promise<B>,
   c: Promise<C>,
@@ -449,7 +449,7 @@ function awaitAll<A, B, C, D, E, F, G, H>(
   f: Promise<F>,
   g: Promise<G>,
   h: Promise<H>,
-): Promise<[A, B, C, D, E, F, G, H]>
+) => Promise<[A, B, C, D, E, F, G, H]>
 ```
 
 <scalar-field name="a" type="Promise&lt;A&gt;" required>
@@ -515,7 +515,7 @@ task is never stopped in the middle of its code. Refused under
 `--emit-ts` (NL4018).
 
 ```ts
-function cancel(task: i64): boolean
+const cancel: (task: i64) => boolean
 ```
 
 <scalar-field name="task" type="i64" required>
@@ -539,7 +539,7 @@ later call replaces the deadline; a negative `ms` removes it. Refused
 under `--emit-ts` (NL4018).
 
 ```ts
-function cancelAfter(task: i64, ms: i32): boolean
+const cancelAfter: (task: i64, ms: i32) => boolean
 ```
 
 <scalar-field name="task" type="i64" required>
@@ -567,7 +567,7 @@ Whether the running task has been cancelled. Refused under `--emit-ts`
 (NL4018).
 
 ```ts
-function cancelled(): boolean
+const cancelled: () => boolean
 ```
 
 <scalar-field name="returns" type="boolean">
@@ -585,7 +585,7 @@ while the executor runs the others. Written only as
 `--emit-ts` (NL4017).
 
 ```ts
-function readable(fd: i32): Promise<boolean>
+const readable: (fd: i32) => Promise<boolean>
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -609,10 +609,7 @@ or `ms` milliseconds pass, whichever comes first. Written only as
 Refused under `--emit-ts` (NL4018).
 
 ```ts
-function readableWithin(
-  fd: i32,
-  ms: i32,
-): Promise<boolean>
+const readableWithin: (fd: i32, ms: i32) => Promise<boolean>
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -642,7 +639,7 @@ others. Written only as `await sleep(ms)` inside an `async` function
 (NL2671).
 
 ```ts
-function sleep(ms: i32): Promise<boolean>
+const sleep: (ms: i32) => Promise<boolean>
 ```
 
 <scalar-field name="ms" type="i32" required>
@@ -665,7 +662,7 @@ runs at once until it first waits on the outside world, then `spawn`
 returns; a task that never waits has finished before `spawn` returns.
 
 ```ts
-function spawn(task: Promise<void>): void
+const spawn: (task: Promise<void>) => void
 ```
 
 <scalar-field name="task" type="Promise&lt;void&gt;" required>
@@ -682,7 +679,7 @@ The running task's handle, to hand to `cancel` or `cancelAfter`. `main`'s
 handle is 0, which no call cancels. Refused under `--emit-ts` (NL4018).
 
 ```ts
-function taskId(): i64
+const taskId: () => i64
 ```
 
 <scalar-field name="returns" type="i64">
@@ -698,7 +695,7 @@ executor runs the others. Written only as `await writable(fd)` inside an
 `async` function (NL2671). Refused under `--emit-ts` (NL4017).
 
 ```ts
-function writable(fd: i32): Promise<boolean>
+const writable: (fd: i32) => Promise<boolean>
 ```
 
 <scalar-field name="fd" type="i32" required>
@@ -722,10 +719,7 @@ milliseconds pass, whichever comes first. Written only as
 Refused under `--emit-ts` (NL4018).
 
 ```ts
-function writableWithin(
-  fd: i32,
-  ms: i32,
-): Promise<boolean>
+const writableWithin: (fd: i32, ms: i32) => Promise<boolean>
 ```
 
 <scalar-field name="fd" type="i32" required>

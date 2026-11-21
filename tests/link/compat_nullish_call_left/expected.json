@@ -1,0 +1,2 @@
+{"file":"tests/link/compat_nullish_call_left/main.ts","line":7,"column":41,"endLine":7,"endColumn":54,"severity":"error","code":"NL1048","message":"Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)"}
+{"file":"tests/link/compat_nullish_call_left/main.ts","line":9,"column":67,"endLine":9,"endColumn":83,"severity":"error","code":"NL1048","message":"Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)"}

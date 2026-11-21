@@ -22,11 +22,11 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   if (f) {
     return f.read()
   }
   return 0
-}
+};
 
 export const main = (): i32 => 0

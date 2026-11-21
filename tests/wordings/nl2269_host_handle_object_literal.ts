@@ -4,7 +4,7 @@ type Socket = HostHandle<"socket">
 interface Slot {
   c: Canvas
 }
-export function f(): Canvas {
+export const f = (): Canvas => {
   const s: Slot = { c: 7 }
   return s.c
-}
+};

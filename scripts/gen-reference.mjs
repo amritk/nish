@@ -648,8 +648,16 @@ const typeParams = (tps) =>
         .join(", ")}>`
     : ""
 
+/**
+ * A parameter's name as a caller reads it. A stub whose body the compiler
+ * writes (`jsonDecode`, `wipe`) never reads its parameters, so tsc's
+ * `noUnusedParameters` makes the source spell them `_d`; the page drops the
+ * `_`, which the doc comment's prose already does.
+ */
+const paramName = (p) => p.name.replace(/^_(?=[A-Za-z])/, "")
+
 const paramText = (p) =>
-  `${p.flags?.isRest ? "..." : ""}${p.name}${p.flags?.isOptional ? "?" : ""}: ${typeText(p.type)}${
+  `${p.flags?.isRest ? "..." : ""}${paramName(p)}${p.flags?.isOptional ? "?" : ""}: ${typeText(p.type)}${
     p.defaultValue !== undefined ? ` = ${p.defaultValue}` : ""
   }`
 
@@ -663,6 +671,21 @@ const signatureText = (head, sig, withReturn = true, wrap = true) => {
     return one
   }
   return `${head}${tps}(\n${params.map((p) => `  ${p},`).join("\n")}\n)${ret}`
+}
+
+/**
+ * A top-level function as the `const` arrow binding it is in source,
+ * `const f: <T>(x: T) => T`, one parameter per line when it runs long.
+ */
+const arrowText = (name, sig) => {
+  const params = (sig.parameters ?? []).map(paramText)
+  const head = `const ${name}: ${typeParams(sig.typeParameters)}(`
+  const tail = `) => ${typeText(sig.type)}`
+  const one = `${head}${params.join(", ")}${tail}`
+  if (one.length <= 60 || params.length === 0) {
+    return one
+  }
+  return `${head}\n${params.map((p) => `  ${p},`).join("\n")}\n${tail}`
 }
 
 // ---- Module comments --------------------------------------------------------
@@ -901,7 +924,7 @@ const renderFunction = (f, ctx, fallback) => {
     if (desc && (i === 0 || desc !== firstDesc)) {
       out.push(desc)
     }
-    out.push(`\`\`\`ts\n${signatureText(`function ${f.name}`, sig)}\n\`\`\``, ...signatureFields(sig, c, ctx))
+    out.push(`\`\`\`ts\n${arrowText(f.name, sig)}\n\`\`\``, ...signatureFields(sig, c, ctx))
   }
   return out.join("\n\n")
 }
@@ -918,7 +941,7 @@ const signatureFields = (sig, c, ctx) => {
     out.push(
       tag(
         "scalar-field",
-        `name="${attr(`${p.flags?.isRest ? "..." : ""}${p.name}`)}" type="${attr(typeText(p.type))}"${req}`,
+        `name="${attr(`${p.flags?.isRest ? "..." : ""}${paramName(p)}`)}" type="${attr(typeText(p.type))}"${req}`,
         summary(pc, ctx)
       )
     )
@@ -1486,7 +1509,14 @@ const configText = (text, pages) => {
   // The references first, then the hand-written pages: the overview of std/,
   // running under Node, then release material. A hand-written page this list
   // does not name keeps its place after them.
-  const after = ["/standard-library", "/run-under-node", "/install", "/benchmarks", "/changelog"]
+  const after = [
+    "/standard-library",
+    "/run-under-node",
+    "/install",
+    "/benchmarks",
+    "/leaderboards",
+    "/changelog",
+  ]
   const written = Object.keys(reference.children).filter((k) => !(k in made))
   if (!written.includes("/standard-library")) {
     throw new Error(

@@ -2,6 +2,6 @@
 // instantiation, which needs a body to stamp out. A C symbol is one function.
 declare function f<T>(x: T): i32;
 
-export function main(): i32 {
+export const main = (): i32 => {
   return 0;
-}
+};

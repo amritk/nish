@@ -4,6 +4,6 @@
 const MAX: i32 = 2147483647;
 const OVER: i32 = MAX + 1;
 
-export function test(): number {
+export const test = (): number => {
   return OVER;
-}
+};

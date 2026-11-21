@@ -13,7 +13,7 @@
 // that is empty when nothing resolves: "does not resolve" is an answer the
 // caller asked for, and every component but the last has to exist for POSIX
 // `realpath` to answer at all.
-export function main(): number {
+export const main = (): number => {
   const missing = realpathSync("no-such-path-9f3c1a");
   console.log(`missing: ${missing === null ? "<null>" : "<resolved>"}`);
   const here = realpathSync(".");
@@ -24,4 +24,4 @@ export function main(): number {
     console.log(`nonempty: ${here.length > 0}`);
   }
   return 0;
-}
+};

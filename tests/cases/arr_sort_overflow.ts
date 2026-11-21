@@ -18,10 +18,10 @@ const show = (xs: i32[]): string => {
   return line
 }
 
-export function main(): number {
+export const main = (): number => {
   const safe: i32[] = [2147483647, -1, 0, -2147483648]
   console.log(show(safe.sort(ordered)))
   const wide: i32[] = [2147483647, -2]
   console.log(show(wide.sort(difference)))
   return 0
-}
+};

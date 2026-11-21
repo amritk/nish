@@ -1,7 +1,12 @@
+// Opt-out (`--allow-panics`): calls into `std/json` and `std/json-tokenizer`
+// reach their panic sites; this file keeps none of its own. Follow-up: make
+// those modules panic-free, then build this file without `--allow-panics`.
+// smoke: args --allow-panics
+//
 // A JSON Merge Patch (RFC 7396) applied to a typed record, with typed JSON's
 // `presence` option telling a key that was left out from one that was given:
 //
-//     build/nish examples/merge-patch.ts --link build/merge-patch
+//     build/nish --allow-panics examples/merge-patch.ts --link build/merge-patch
 //     build/merge-patch
 //
 // The patch is its own class: every field optional, so a missing key is no
@@ -120,9 +125,9 @@ const applyProfile = (target: Profile, patch: ProfilePatch): void => {
 }
 
 const bytes = (s: string): u8[] => {
-  const out = new Array<u8>(toI32(s.length))
-  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(s.length); i += 1) {
-    out[i] = toU8(s.charCodeAt(i))
+  const out: u8[] = []
+  for (let i: i32 = 0; i < toI32(s.length); i += 1) {
+    out.push(toU8(s.charCodeAt(i)))
   }
   return out
 }
@@ -172,7 +177,8 @@ export const main = (): i32 => {
     new Step(`{"address":null}`, JSON_DECODE_OK),
     new Step(`{"name":null}`, JSON_DECODE_TYPE),
   ]
-  let wrong: i32 = 0
+  // A `u32` count cannot overflow-panic, and it stays below the seven checks.
+  let wrong: u32 = 0
   for (const step of steps) {
     const code = mergePatch(p, step.patch)
     if (code !== step.want) {
@@ -184,5 +190,5 @@ export const main = (): i32 => {
   if (show(p) !== end) {
     wrong += 1
   }
-  return wrong
+  return toI32(wrong)
 }

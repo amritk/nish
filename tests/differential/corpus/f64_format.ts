@@ -1,10 +1,10 @@
 // --number-mode f64: every value must print exactly as JavaScript's String(x).
-function nan(): number {
+const nan = (): number => {
   const z = 0;
   return z / z;
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   console.log(0.1 + 0.2);
   console.log(1e21);
   console.log(1e-7);
@@ -48,4 +48,4 @@ export function main(): void {
   console.log(1e15 + 0.3);
   console.log(1e16 + 1);
   console.log(`${1e21} ${1e-7} ${-0} ${nan()} ${1 / 3}`);
-}
+};

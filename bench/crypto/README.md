@@ -10,7 +10,8 @@ interleaved rounds. Nish's own binary and a byte-identical copy of it run in
 the same rounds, and the gap between those two is the noise band.
 
 ```bash
-node bench/crypto/run.mjs --validate                  # what CI runs: build, checksums, the portable proof; nothing timed
+node bench/crypto/run.mjs --validate                  # what CI runs on a push to main: build, checksums, the portable proof
+node bench/crypto/run.mjs --validate --no-proofs      # what CI runs on a pull request: the same, without the portable proof's timed part
 node bench/crypto/run.mjs --validate --write-expected # rewrite each expected.txt, once every twin agrees
 node bench/crypto/run.mjs --only hash --rounds 11     # time one family; the section goes to stdout
 node bench/crypto/run.mjs --out build/bench/crypto/section.md

@@ -226,10 +226,7 @@ the `quicStream` prefix (`docs/wp26-stdlib.md` §3e).
 Whether bit `k` of `bits` is set; false outside the array.
 
 ```ts
-function quicStreamBit(
-  bits: u8[],
-  k: i32,
-): boolean
+const quicStreamBit: (bits: u8[], k: i32) => boolean
 ```
 
 <scalar-field name="bits" type="u8[]" required>
@@ -257,11 +254,11 @@ again: the capacity stays, so giving back that many buffers to the pool the
 list belongs to never grows the arena.
 
 ```ts
-function quicStreamGrowFree(
+const quicStreamGrowFree: (
   free: u8[][],
   target: i32,
   none: u8[],
-): void
+) => void
 ```
 
 <scalar-field name="free" type="u8[][]" required>
@@ -287,7 +284,7 @@ The placeholder pushed and popped, the table's empty array.
 Whether `id` is a stream this side, the server, opens: its low bit is 1.
 
 ```ts
-function quicStreamIsLocal(id: i64): boolean
+const quicStreamIsLocal: (id: i64) => boolean
 ```
 
 <scalar-field name="id" type="i64" required>
@@ -307,7 +304,7 @@ True for a server-opened stream, false for a client-opened one.
 Whether `id` is a unidirectional stream: its second bit is 1.
 
 ```ts
-function quicStreamIsUni(id: i64): boolean
+const quicStreamIsUni: (id: i64) => boolean
 ```
 
 <scalar-field name="id" type="i64" required>
@@ -327,11 +324,11 @@ True when only the opener sends on it, false for a bidirectional stream.
 Sets or clears bit `k` of `bits`.
 
 ```ts
-function quicStreamSetBit(
+const quicStreamSetBit: (
   bits: u8[],
   k: i32,
   on: boolean,
-): void
+) => void
 ```
 
 <scalar-field name="bits" type="u8[]" required>

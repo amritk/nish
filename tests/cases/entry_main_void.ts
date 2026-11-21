@@ -1,7 +1,7 @@
-function side(): void {
+const side = (): void => {
   return;
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   side();
-}
+};

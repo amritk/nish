@@ -5,8 +5,8 @@ enum Kind {
   Array,
 }
 
-function tag<T>(x: T, k: Kind.Array): Kind.Array {
+const tag = <T>(x: T, k: Kind.Array): Kind.Array => {
   return k;
-}
+};
 
 export const test = (): number => (tag(3, Kind.Scalar) === Kind.Array ? 1 : 0);

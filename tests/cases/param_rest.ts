@@ -1,35 +1,35 @@
 // A rest parameter gathers the trailing arguments into one exact-size array,
 // on the caller's stack when the callee keeps no reference to it.
-function total(...xs: number[]): number {
+const total = (...xs: number[]): number => {
   let sum = 0
   for (const x of xs) {
     sum = sum + x
   }
   return sum
-}
+};
 
-function joinAll(sep: string, ...parts: string[]): string {
+const joinAll = (sep: string, ...parts: string[]): string => {
   return parts.join(sep)
-}
+};
 
-function count(first: boolean, ...rest: f64[]): number {
+const count = (first: boolean, ...rest: f64[]): number => {
   return first ? rest.length + 1 : rest.length
-}
+};
 
 interface Point {
   x: number
   y: number
 }
 
-function sumX(...ps: Point[]): number {
+const sumX = (...ps: Point[]): number => {
   let sum = 0
   for (const p of ps) {
     sum = sum + p.x
   }
   return sum
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   console.log(total())
   console.log(total(5))
   console.log(total(1, 2, 3, 4))
@@ -44,4 +44,4 @@ export function main(): void {
     acc = acc + total(i, i * 2)
   }
   console.log(acc)
-}
+};

@@ -13,11 +13,11 @@ declare function setenv(name: string, value: string, overwrite: i32): i32;
 declare function setlocale(category: i32, locale: string | null): string | null;
 declare function strchr(s: string, c: i32): string | null;
 
-function digits(n: i32): string {
+const digits = (n: i32): string => {
   return `${n * 7}`;
-}
+};
 
-function noise(n: i32): i32 {
+const noise = (n: i32): i32 => {
   let t = "";
   let i = 0;
   while (i < n) {
@@ -25,9 +25,9 @@ function noise(n: i32): i32 {
     i = i + 1;
   }
   return t.length;
-}
+};
 
-function churn(): i32 {
+const churn = (): i32 => {
   let t = 0;
   let i = 0;
   while (i < 64) {
@@ -35,20 +35,20 @@ function churn(): i32 {
     i = i + 1;
   }
   return t;
-}
+};
 
-function describe(e: i32): string {
+const describe = (e: i32): string => {
   const k = noise(e + 3);
   const s = strerror(e);
   return k < 0 ? "never" : s;
-}
+};
 
-function after(n: i32): string | null {
+const after = (n: i32): string | null => {
   const s = "xxab" + digits(n);
   return strchr(s, 98);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(strerror(2));
   const name: string = "NISH_FFI_STRING_RETURN";
   console.log(getenv(name) === null ? "unset" : "set");
@@ -70,4 +70,4 @@ export function main(): i32 {
   console.log(tail === null ? "none" : tail);
   console.log(strchr("abc", 122) === null ? "none" : "found");
   return 0;
-}
+};

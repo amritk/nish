@@ -4,9 +4,9 @@
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
-function each(f: File, g: (f: File) => i32): i32 {
+const each = (f: File, g: (f: File) => i32): i32 => {
   return 0
-}
+};
 
 class File {
   readonly file: CPtr | null
@@ -28,8 +28,8 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   return each(f, (g: File): i32 => g.read())
-}
+};
 
 export const main = (): i32 => 0

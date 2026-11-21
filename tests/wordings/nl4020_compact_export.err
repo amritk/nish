@@ -1,0 +1,1 @@
+`Cell.constructor` is exported to Node and its signature holds `Cell`, which implements `Compact`: an N-API addon runs in Node's process, which Nish does not own, so nothing keeps free the range its links count from; an export to Node takes and returns no compact object

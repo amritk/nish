@@ -34,12 +34,12 @@ class Circle implements Shape {
 }
 
 // Reads and writes through the interface reach the class's own bytes.
-function shift(s: Shape, dx: i32): i32 {
+const shift = (s: Shape, dx: i32): i32 => {
   s.x = s.x + dx;
   return s.x + s.y;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const sq = new Square(1, 2, 10);
   const c = new Circle(3, 4, 20);
   const shapes: Shape[] = [sq, c];
@@ -49,4 +49,4 @@ export function main(): number {
   console.log(sq.side);
   console.log(c.radius);
   return 0;
-}
+};

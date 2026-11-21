@@ -1,3 +1,3 @@
-export function main(argc: number): number {
+export const main = (argc: number): number => {
   return argc;
-}
+};

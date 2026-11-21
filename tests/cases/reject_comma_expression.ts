@@ -1,1 +1,3 @@
-function f(): number { return (1, 2); }
+const f = (): number => {
+  return (1, 2);
+};

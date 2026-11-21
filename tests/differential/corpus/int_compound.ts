@@ -2,7 +2,7 @@
 // are the `nish:unsafe` calls that ask for it.
 import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
-export function main(): number {
+export const main = (): number => {
   let x = 2147483000;
   x = wrappingAdd(x, 1000);
   console.log(x);
@@ -36,4 +36,4 @@ export function main(): number {
   k++;
   console.log(`${ys[0]} ${ys[1]} ${ys[2]} ${k}`);
   return 0;
-}
+};

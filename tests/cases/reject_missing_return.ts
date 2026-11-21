@@ -1,1 +1,3 @@
-function f(a: number): number { let x = a; }
+const f = (a: number): number => {
+  let x = a;
+};

@@ -382,14 +382,14 @@ The size of the ACK_ECN frame `quicPutAckEcn` writes: the ACK frame
 `quicAckSize` does, or when a count is negative or above 2^62-1.
 
 ```ts
-function quicAckEcnSize(
+const quicAckEcnSize: (
   ranges: i64[],
   rangeCount: i32,
   ackDelay: i64,
   ect0: i64,
   ect1: i64,
   ce: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="ranges" type="i64[]" required>
@@ -441,11 +441,11 @@ it would refuse them: no ranges, ranges out of order or touching, a pair
 the array does not hold, or a value no varint holds.
 
 ```ts
-function quicAckSize(
+const quicAckSize: (
   ranges: i64[],
   rangeCount: i32,
   ackDelay: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="ranges" type="i64[]" required>
@@ -478,10 +478,7 @@ The bytes a CRYPTO frame's header takes for `length` bytes of data at
 `offset`: the type, the offset and the length.
 
 ```ts
-function quicCryptoOverhead(
-  offset: i64,
-  length: i32,
-): i32
+const quicCryptoOverhead: (offset: i64, length: i32) => i32
 ```
 
 <scalar-field name="offset" type="i64" required>
@@ -510,7 +507,7 @@ The size of the DATAGRAM frame `quicPutDatagram` writes for a payload of
 9221 §3 holds to `max_datagram_frame_size`.
 
 ```ts
-function quicDatagramSize(length: i32): i32
+const quicDatagramSize: (length: i32) => i32
 ```
 
 <scalar-field name="length" type="i32" required>
@@ -531,7 +528,7 @@ Whether a frame of `type` asks for an acknowledgement (RFC 9000 §13.2):
 every frame but ACK, PADDING and CONNECTION_CLOSE.
 
 ```ts
-function quicFrameAckEliciting(type: i32): boolean
+const quicFrameAckEliciting: (type: i32) => boolean
 ```
 
 <scalar-field name="type" type="i32" required>
@@ -556,10 +553,10 @@ but ACK, CRYPTO, NEW_TOKEN, HANDSHAKE_DONE and the retire and response
 frames a client cannot have a reason to send yet; a 1-RTT packet anything.
 
 ```ts
-function quicFrameAllowed(
+const quicFrameAllowed: (
   type: i32,
   packetType: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="type" type="i32" required>
@@ -594,12 +591,12 @@ what CONNECTION_CLOSE reports. A window outside `payload` is
 `QUIC_ERROR_INTERNAL`, the caller's fault rather than the peer's.
 
 ```ts
-function quicParseFrame(
+const quicParseFrame: (
   frame: QuicFrame,
   payload: u8[],
   at: i32,
   end: i32,
-): i64
+) => i64
 ```
 
 <scalar-field name="frame" type="QuicFrame" required>
@@ -640,12 +637,12 @@ One past the last byte the frame may use, normally the payload's end; a frame re
 Appends the ACK frame `quicPutAck` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushAck(
+const quicPushAck: (
   out: u8[],
   ranges: i64[],
   rangeCount: i32,
   ackDelay: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -683,7 +680,7 @@ True when the frame was appended.
 Appends the ACK_ECN frame `quicPutAckEcn` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushAckEcn(
+const quicPushAckEcn: (
   out: u8[],
   ranges: i64[],
   rangeCount: i32,
@@ -691,7 +688,7 @@ function quicPushAckEcn(
   ect0: i64,
   ect1: i64,
   ce: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -748,13 +745,13 @@ Appends the frame `quicPutConnectionClose` writes. Answers `false`, appending no
 refuses.
 
 ```ts
-function quicPushConnectionClose(
+const quicPushConnectionClose: (
   out: u8[],
   application: boolean,
   errorCode: i64,
   frameType: i64,
   reason: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -798,13 +795,13 @@ True when the frame was appended.
 Appends the CRYPTO frame `quicPutCrypto` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushCrypto(
+const quicPushCrypto: (
   out: u8[],
   offset: i64,
   data: u8[],
   from: i32,
   length: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -850,13 +847,13 @@ connection ID outside 1 to 20 bytes, a reset token that is not 16 bytes, a
 Retire Prior To above the sequence number, or a value no varint holds.
 
 ```ts
-function quicPushNewConnectionId(
+const quicPushNewConnectionId: (
   out: u8[],
   sequence: i64,
   retirePriorTo: i64,
   connectionId: u8[],
   resetToken: u8[],
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -901,10 +898,7 @@ Appends a NEW_TOKEN frame (§19.7) carrying `token`. Answers `false` for an
 empty token, which §19.7 forbids.
 
 ```ts
-function quicPushNewToken(
-  out: u8[],
-  token: u8[],
-): boolean
+const quicPushNewToken: (out: u8[], token: u8[]) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -930,10 +924,7 @@ True when the frame was appended; false, appending nothing, for an empty token.
 Appends `count` PADDING frames, which are `count` zero bytes. A count below one appends nothing.
 
 ```ts
-function quicPushPadding(
-  out: u8[],
-  count: i32,
-): void
+const quicPushPadding: (out: u8[], count: i32) => void
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -953,12 +944,12 @@ How many bytes of padding to append.
 Appends the frame `quicPutPathData` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushPathData(
+const quicPushPathData: (
   out: u8[],
   type: i32,
   data: u8[],
   from: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -999,7 +990,7 @@ Answers `false`, appending nothing, for a window outside `data`, a stream
 ID that is not a varint or an end past 2^62 − 1.
 
 ```ts
-function quicPushStream(
+const quicPushStream: (
   out: u8[],
   streamId: i64,
   offset: i64,
@@ -1007,7 +998,7 @@ function quicPushStream(
   from: i32,
   length: i32,
   fin: boolean,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1063,12 +1054,12 @@ True when the frame was appended.
 Appends the frame `quicPutStreamError` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushStreamError(
+const quicPushStreamError: (
   out: u8[],
   streamId: i64,
   errorCode: i64,
   finalSize: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1106,12 +1097,12 @@ True when the frame was appended.
 Appends the frame `quicPutStreamValue` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushStreamValue(
+const quicPushStreamValue: (
   out: u8[],
   type: i32,
   streamId: i64,
   value: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1149,10 +1140,7 @@ True when the frame was appended.
 Appends a frame that is its type alone: PING or HANDSHAKE_DONE. Answers `false` for another type.
 
 ```ts
-function quicPushTypeOnly(
-  out: u8[],
-  type: i32,
-): boolean
+const quicPushTypeOnly: (out: u8[], type: i32) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1178,11 +1166,11 @@ True when the frame was appended; false, appending nothing, for any other type.
 Appends the frame `quicPutValue` writes. Answers `false`, appending nothing, where it refuses.
 
 ```ts
-function quicPushValue(
+const quicPushValue: (
   out: u8[],
   type: i32,
   value: i64,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="out" type="u8[]" required>
@@ -1218,14 +1206,14 @@ largest at least two below the smallest of the pair before it), with
 nothing, where `quicAckSize` answers 0 or the frame does not fit.
 
 ```ts
-function quicPutAck(
+const quicPutAck: (
   buf: u8[],
   at: i32,
   end: i32,
   ranges: i64[],
   rangeCount: i32,
   ackDelay: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1279,7 +1267,7 @@ receiver keeps for the space (§13.4.1). Answers -1, writing nothing, where
 `quicAckEcnSize` answers 0 or the frame does not fit.
 
 ```ts
-function quicPutAckEcn(
+const quicPutAckEcn: (
   buf: u8[],
   at: i32,
   end: i32,
@@ -1289,7 +1277,7 @@ function quicPutAckEcn(
   ect0: i64,
   ect1: i64,
   ce: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1361,7 +1349,7 @@ which has no frame type. `reason` is the phrase, UTF-8, possibly empty.
 Answers -1 for a value no varint holds, or no room.
 
 ```ts
-function quicPutConnectionClose(
+const quicPutConnectionClose: (
   buf: u8[],
   at: i32,
   end: i32,
@@ -1369,7 +1357,7 @@ function quicPutConnectionClose(
   errorCode: i64,
   frameType: i64,
   reason: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1427,7 +1415,7 @@ stream offset `offset`. Answers -1, writing nothing, for a window outside
 `data`, an offset whose end passes 2^62 − 1, or no room.
 
 ```ts
-function quicPutCrypto(
+const quicPutCrypto: (
   buf: u8[],
   at: i32,
   end: i32,
@@ -1435,7 +1423,7 @@ function quicPutCrypto(
   data: u8[],
   from: i32,
   length: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1492,14 +1480,14 @@ Writes a DATAGRAM frame with a Length (type 0x31, RFC 9221 §4) carrying
 `data[from .. from + length)`. Answers -1 for a window outside `data` or no room.
 
 ```ts
-function quicPutDatagram(
+const quicPutDatagram: (
   buf: u8[],
   at: i32,
   end: i32,
   data: u8[],
   from: i32,
   length: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1552,7 +1540,7 @@ past the array, a reset token that is not 16 bytes, a Retire Prior To
 above the sequence number, a value no varint holds, or no room.
 
 ```ts
-function quicPutNewConnectionId(
+const quicPutNewConnectionId: (
   buf: u8[],
   at: i32,
   end: i32,
@@ -1561,7 +1549,7 @@ function quicPutNewConnectionId(
   connectionId: u8[],
   cidLength: i32,
   resetToken: u8[],
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1624,11 +1612,11 @@ Writes `count` PADDING frames, zero bytes, into `buf[at .. at + count)`,
 clamped to `buf`, and answers the offset past them.
 
 ```ts
-function quicPutPadding(
+const quicPutPadding: (
   buf: u8[],
   at: i32,
   count: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1663,14 +1651,14 @@ Writes a PATH_CHALLENGE or PATH_RESPONSE frame carrying the eight bytes
 `data`, or no room.
 
 ```ts
-function quicPutPathData(
+const quicPutPathData: (
   buf: u8[],
   at: i32,
   end: i32,
   type: i32,
   data: u8[],
   from: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1727,7 +1715,7 @@ is not zero. Answers -1, writing nothing, for a `length` past the array, a
 stream ID that is not a varint, an end past 2^62 − 1, or no room.
 
 ```ts
-function quicPutStream(
+const quicPutStream: (
   buf: u8[],
   at: i32,
   end: i32,
@@ -1737,7 +1725,7 @@ function quicPutStream(
   from: i32,
   length: i32,
   fin: boolean,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1806,14 +1794,14 @@ Writes a RESET_STREAM frame (§19.4) or, with `finalSize` at -1, a
 STOP_SENDING frame (§19.5). Answers -1 for a value no varint holds, or no room.
 
 ```ts
-function quicPutStreamError(
+const quicPutStreamError: (
   buf: u8[],
   at: i32,
   end: i32,
   streamId: i64,
   errorCode: i64,
   finalSize: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1865,14 +1853,14 @@ Writes a MAX_STREAM_DATA or STREAM_DATA_BLOCKED frame: the stream ID and
 the limit. Answers -1 for another type, a value no varint holds, or no room.
 
 ```ts
-function quicPutStreamValue(
+const quicPutStreamValue: (
   buf: u8[],
   at: i32,
   end: i32,
   type: i32,
   streamId: i64,
   value: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1923,12 +1911,12 @@ The offset past the frame, or -1 with nothing written.
 Writes a frame that is its type alone, PING or HANDSHAKE_DONE; -1 for another type or no room.
 
 ```ts
-function quicPutTypeOnly(
+const quicPutTypeOnly: (
   buf: u8[],
   at: i32,
   end: i32,
   type: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -1969,13 +1957,13 @@ RETIRE_CONNECTION_ID. Answers -1 for another type, a value no varint holds,
 a stream count past 2^60, or no room.
 
 ```ts
-function quicPutValue(
+const quicPutValue: (
   buf: u8[],
   at: i32,
   end: i32,
   type: i32,
   value: i64,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -2022,11 +2010,11 @@ The bytes a STREAM frame's header takes for `length` bytes of data on
 zero, and the length, which `quicPutStream` always writes.
 
 ```ts
-function quicStreamOverhead(
+const quicStreamOverhead: (
   streamId: i64,
   offset: i64,
   length: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="streamId" type="i64" required>

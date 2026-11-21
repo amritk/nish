@@ -84,6 +84,11 @@ const simdLoad = (Lanes) => (xs, i) => {
   return out;
 };
 
+// `nish:compact`: the marker interfaces pick a native layout and mean nothing
+// under Node, where every reference is the engine's own.
+export const Compact = Object.freeze({});
+export const Wide = Object.freeze({});
+
 export const u8x16 = simdMake(Uint8Array);
 export const u16x8 = simdMake(Uint16Array);
 export const i32x4 = simdMake(Int32Array);

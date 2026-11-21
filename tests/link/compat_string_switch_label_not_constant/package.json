@@ -1,0 +1,7 @@
+{
+  "name": "compat-string-switch-label-not-constant",
+  "private": true,
+  "nish": {
+    "compat": ["string-switch"]
+  }
+}

@@ -3,12 +3,12 @@
 // share one address, so a side-effecting index runs exactly one time: `slot()`
 // prints once per statement, not twice, which is what the two lines of output
 // before the values prove.
-function slot(): i32 {
+const slot = (): i32 => {
   console.log("slot");
   return 1;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const a: i32[] = [1, 255, 4];
   a[slot()] &= 60;
   a[slot()] |= 3;
@@ -18,4 +18,4 @@ export function main(): number {
   console.log(a[1]);
   console.log(a[2]);
   return 0;
-}
+};

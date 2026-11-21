@@ -2,6 +2,6 @@
 // and not `setupCounter`, which the page calls itself.
 import { first } from "./counter"
 
-export function next(x: i32): i32 {
+export const next = (x: i32): i32 => {
   return first(x)
 }

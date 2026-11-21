@@ -1,0 +1,1 @@
+board.ts:13:14: error: Field `pin` of class `Board`: `Pin` is not exported, but this class's initializers run in the module that builds it (export `Pin`)

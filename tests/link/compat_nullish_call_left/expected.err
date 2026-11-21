@@ -1,0 +1,1 @@
+main.ts:7:41: error: Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)

@@ -15,12 +15,12 @@ class Stats {
   }
 }
 
-function halve(s: Stats): void {
+const halve = (s: Stats): void => {
   s.scale /= 2;
   s.total -= s.total % 2;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const s = new Stats();
   s.add(5);
   s.add(8);
@@ -30,4 +30,4 @@ export function main(): number {
   console.log(s.count);
   console.log(s.scale);
   return 0;
-}
+};

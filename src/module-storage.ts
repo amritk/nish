@@ -967,8 +967,10 @@ const lentOnStays = (
   // Resolved by name in `sig`'s module, whose body may not be checked yet; a
   // name `sig` binds itself (a parameter, a local, a function value) was
   // refused just above, so the name can only reach a declared function.
+  // A function the `optional-params` feature put wrappers in front of may be
+  // reached through one whose default reads the buffer (`src/defaults.ts`).
   const next = home.signature(callee.text)
-  if (next === null) {
+  if (next === null || home.defaultImpls.indexOf(next.decl) >= 0) {
     return false
   }
   const at = call.children[1].children.indexOf(use)

@@ -2,7 +2,7 @@
 // read where the whole-file builtins cannot reach. `tests/run.js` makes
 // `build/test/file_size_large.bin` sparse, 2^32 + 16 bytes of zeroes with
 // `fs.truncateSync`, before the case runs; the last window reads its end.
-export function main(): number {
+export const main = (): number => {
   const fd = fileOpen("build/test/file_size_large.bin");
   if (fd < 0) {
     console.log(`fileOpen ${fd}`);
@@ -16,4 +16,4 @@ export function main(): number {
   console.log(`at the end: ${fileReadAt(fd, buf, 0, 8, size)}`);
   console.log(`closed: ${fileClose(fd)}`);
   return 0;
-}
+};

@@ -11,9 +11,9 @@ class Holder {
     wipe(this.k);
   }
 }
-function id<T>(x: T): T {
+const id = <T>(x: T): T => {
   return x;
-}
+};
 export const main = (): i32 => {
   const h = new Holder();
   const a = id(h.k);

@@ -1,7 +1,7 @@
-export function helper(): number {
+export const helper = (): number => {
   return 1;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   return 2;
-}
+};

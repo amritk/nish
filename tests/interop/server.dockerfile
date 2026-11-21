@@ -48,9 +48,17 @@ RUN sh scripts/fetch-seed.sh ${SEED_VERSION}
 COPY src/ src/
 COPY std/ std/
 COPY runtime/ runtime/
-RUN build/seed/bin/nish src/compile.ts --link build/nish
+# The compiler and the server panic on purpose in places, so both builds pass
+# `--allow-panics` when the compiler lists it (scripts/nish-compiler.sh): the
+# seed may be a release older than the flag. Bash, for the array.
+SHELL ["/bin/bash", "-c"]
+RUN . scripts/nish-compiler.sh \
+ && nish_allow_panics build/seed/bin/nish \
+ && build/seed/bin/nish ${allow_panics[@]+"${allow_panics[@]}"} src/compile.ts --link build/nish
 COPY tests/link/ tests/link/
-RUN build/nish tests/link/net_interop_server/main.ts -o build/interop/ --link build/interop-server
+RUN . scripts/nish-compiler.sh \
+ && nish_allow_panics build/nish \
+ && build/nish ${allow_panics[@]+"${allow_panics[@]}"} tests/link/net_interop_server/main.ts -o build/interop/ --link build/interop-server
 
 FROM martenseemann/quic-network-simulator-endpoint@sha256:3b2b9e6fa317da238c8140a7b6d2bf8d4d45a8464b873eecac3ff2a32520b71a
 COPY --from=build /nish/build/interop-server /interop-server

@@ -78,28 +78,52 @@ no equivalent:
 
 ## Results
 
-Large size, on a 4-core cloud container, built by `build/nish` at this
-branch's head. All five checksums are identical.
+Large size, on a 4-core cloud container:
+`node bench/goose/run.mjs --compiler <nish> --runs 5`. "After" is `build/nish`
+at 883d233b, the last commit to `src/`, `std/` or `runtime/` on this branch,
+which added the loop guard below. "Before" is the same build at its parent,
+491984b1. The suite ran four times in one session, alternating before, after,
+before, after. The table is the first "after" run, with the "before" row for
+words from the run just ahead of it. All five checksums are identical in
+every run.
 
 | Program | n | Nish ms | Goose ms | Goose/Nish | Nish RSS KB | Goose RSS KB | Nish bytes | Goose bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| tree | 24 | 2632 | 1437 | 0.55 | 788,320 | 395,308 | 7,800 | 18,864 |
-| bintrees | 19 | 535 | 401 | 0.75 | 34,020 | 26,540 | 12,824 | 18,880 |
-| records | 16000000 | 725 | 748 | 1.03 | 179,424 | 146,604 | 9,928 | 18,888 |
-| strlist | 8000000 | 536 | 598 | 1.12 | 161,632 | 220,652 | 9,288 | 18,888 |
-| words | 16000000 | 2532 | 1628 | 0.64 | 410,852 | 542,348 | 11,752 | 18,904 |
+| tree | 24 | 2016 | 1371 | 0.68 | 788,256 | 395,320 | 7,832 | 18,864 |
+| bintrees | 19 | 511 | 440 | 0.86 | 33,956 | 26,552 | 12,856 | 18,880 |
+| records | 16000000 | 626 | 621 | 0.99 | 179,616 | 146,552 | 9,960 | 18,888 |
+| strlist | 8000000 | 455 | 703 | 1.55 | 161,696 | 220,668 | 9,320 | 18,888 |
+| words, before | 16000000 | 2950 | 1620 | 0.55 | 410,788 | 542,348 | 11,848 | 18,904 |
+| words | 16000000 | 2393 | 1736 | 0.73 | 410,788 | 542,332 | 11,960 | 18,904 |
 
-Geometric means, Goose over Nish (above 1 means Nish ahead). The "before"
-column is the 0.41.0 seed, run on the same machine in the same session. It
-has neither fix below.
+Geometric means, Goose over Nish (above 1 means Nish ahead), from both runs
+of each compiler:
 
 | Measure | Before | After | Who is ahead |
 | --- | ---: | ---: | --- |
-| Binary size | 1.90 | 1.86 | Nish, on every program |
-| Time | 0.72 | 0.79 | Goose. Nish now wins records and strlist |
-| Peak RSS | 0.57 | 0.90 | Goose on tree, bintrees and records; Nish on strlist and words |
+| Binary size | 1.85, 1.85 | 1.85, 1.85 | Nish, on every program |
+| Time | 0.84, 0.81 | 0.92, 0.86 | Goose. Nish wins strlist |
+| Peak RSS | 0.90, 0.90 | 0.90, 0.90 | Goose on tree, bintrees and records; Nish on strlist and words |
 
-The fixes moved these programs:
+The noise band is wide. Each figure is one best of 5 after two warm-ups.
+Across the four runs, the Goose binaries, which no Nish change touches,
+ranged by up to 24.6%: tree 1282 to 1371 ms (6.9%), bintrees 353 to 440 ms
+(24.6%), records 621 to 666 ms (7.2%), strlist 680 to 742 ms (9.1%) and
+words 1527 to 1736 ms (13.7%). The two compilers build tree, bintrees,
+records and strlist byte for byte the same (compared at the ports' own
+`bench:n` sizes), and those Nish rows ranged by up to 16.5%: tree 1960 to 2056 ms (4.9%), bintrees 472 to 532 ms (12.7%),
+records 605 to 699 ms (15.5%) and strlist 455 to 530 ms (16.5%). Every
+Goose/Nish ratio therefore moves by more than the guard changes any program
+but words, and the two time geomeans overlap within that noise: 0.81 and
+0.84 before, 0.86 and 0.92 after. Words alone moved by more than the band:
+2950 and 2798 ms before, 2393 and 2383 ms after, 14.8% apart on the best
+runs. Its instruction count, which does not depend on the machine's noise,
+fell 14.7% (below).
+
+The guard costs words 112 bytes of binary (11,848 before, 11,960 after).
+
+An earlier session moved these programs with the first two fixes below, from
+the 0.41.0 seed. Its times do not compare with the table above:
 
 | Program | Seed ms | Now ms | Seed RSS KB | Now RSS KB |
 | --- | ---: | ---: | ---: | ---: |
@@ -107,12 +131,9 @@ The fixes moved these programs:
 | strlist | 628 | 536 | 358,112 | 161,632 |
 | words | 3020 | 2532 | 803,936 | 410,852 |
 
-tree and bintrees build no arrays, so the fixes do not touch them. Their
-times are the same from either compiler. This machine runs tree slower
-against Goose (0.55) than the machine of the first run did (0.72), with the
-same 7,800-byte binary. Only ratios taken in one session compare. The binaries
-that grow arrays are 376 to 440 bytes larger, which is the in-place growth
-path in the runtime.
+tree and bintrees build no arrays, so those fixes do not touch them. Only
+ratios taken in one session compare. The binaries that grow arrays are 376 to
+440 bytes larger, which is the in-place growth path in the runtime.
 
 ## Where Nish loses
 
@@ -149,15 +170,59 @@ or runtime change.
   prover cannot discharge from `idx = h & mask`, measured as nothing when
   removed by hand (count phase best 1797 ms without it, 1745 ms with it), so no
   codegen change was made.
-  - **Next:** measure the hash and `same()`, which checks
-    `a + i` and `b + i` for overflow on every byte it compares.
-- **A tree node is twice the size.** A `tree.ts` node is 24 bytes: an `i32`,
-  four bytes of padding and two 64-bit pointers. A Goose pool node is 12
-  bytes, because its links are 32-bit indices into the pool. The tree at
-  n = 24 is 33.5M nodes, so the difference is both the RSS gap (788 MB
-  against 395 MB) and most of the time gap.
-  - **Fix:** 32-bit references for a class whose instances all live in one
-    arena.
-- **bintrees allocates many small trees.** Its RSS gap is small. The time gap
-  is most likely the same node size: 16 bytes in Nish against Goose's 8.
-  This one has not been measured separately.
+- **Fixed: `same()` checked `a + i` and `b + i` on every byte.** A profile
+  of words at 4M words (`build/nish words.ts --link words-g --profile speed
+  -g`, then `valgrind --tool=callgrind ./words-g` and `callgrind_annotate
+  --auto=yes`, with the `bench:n` line set to 4000000) put 512.0M of 1,603.5M
+  instructions (31.9%) on `same()` and 212.5M (13.25%) on `hash()`. In
+  `same()` each byte paid two `llvm.sadd.with.overflow` branches and two
+  sign extensions before its loads. A counted loop
+  `for (let i = J; i < B; i++)` now tests each `x + i` in its body, with `x`
+  and `B` loop-invariant, once before the loop: when `x + J` and
+  `x + (B - 1)` both fit, the additions are `add nsw`, and otherwise they are
+  checked as before and panic where they run (`emitAddGuards`,
+  `src/emit-arrays.ts`; `tests/cases/ovf_loop_guard`). LLVM unswitches the
+  loop on that test. The same profile after the fix: 1,368.3M instructions
+  (-14.7%), `same()` 239.4M (17.5%), `hash()` 216.5M (15.8%). The total
+  fell 235.2M while `same()` fell 272.6M and `hash()` rose 4.0M. Per line,
+  the 33M left over is +44.0M on instructions callgrind gives no source
+  line, +8.0M on the probe's `while (true)`, +4.0M on the two
+  `uncheckedSet(counts, ...)` lines, -18.7M on the probe's `same(...)` call
+  and -4.0M on `starts.push`. Why the unattributed instructions grew was not
+  measured. Words at 16M,
+  best of 10 wall-clock runs, the two `words-nish` binaries `run.mjs` built
+  alternating: 3548 ms (3548 to 4053) before against 3110 ms (3110 to
+  3423) after, so the ranges do not overlap: 12% faster on the best run.
+  At the large size itself (the `bench:n` line set to 16000000, built and
+  profiled the same way by 491984b1 and 883d233b), the total fell from
+  6,410.9M instructions to 5,469.8M (-14.7%). `same()` fell from 2,048.4M
+  (32.0%) to 958.0M (17.5%), and `hash()` went from 849.4M (13.2%) to
+  865.4M (15.8%). The count phase, the word loop's own lines plus both
+  functions, fell from 3,361.4M (52.4%) to 2,260.0M (41.3%). Instructions
+  in `main` with no source line rose from 427.0M to 603.2M, and libc's
+  `memcpy` and `memset` stayed at 364.9M.
+  - **Next:** `same()` and `hash()` are now within two points of each other
+    (17.5% and 15.8%), at 4M and at 16M words. `same()` still compares one byte per iteration where
+    a word-at-a-time compare (or `memcmp`) would do eight; `hash()` is a
+    serial FNV-1a multiply chain per byte.
+- **Fixed: a tree node was twice the size.** A `tree.ts` node was 24 bytes:
+  an `i32`, four bytes of padding and two 64-bit pointers. A Goose pool node
+  is 12 bytes, because its links are 32-bit indices into the pool. The
+  compiler now picks `TNode` as a compact class by itself (WP48,
+  [`docs/wp48-ref32-classes.md`](../../docs/wp48-ref32-classes.md) §5.6): its
+  links are 32-bit offsets into one reserved range and the node is 12 bytes.
+  At n = 24, `build/nish` at 568e1ef5 against the same build with
+  `--compact off`, 11 rounds alternating which ran first, process wall under
+  `bench/rss.c`: 1888 ms against 2806 ms (median gap −33.5%, range −37.6%
+  to −30.0%), peak RSS 394,720 KB against 788,320 KB. Goose was not rebuilt
+  in that session; the table above has it at 395,320 KB, so the RSS gap is
+  closed, and its 1371 ms is from another session, so the time ratio is not
+  restated here. The binary is 1,528 bytes larger (9,360 against 7,832): the
+  range allocator.
+- **bintrees allocates many small trees.** Its node is 16 bytes in Nish
+  against Goose's 8. The compiler leaves it wide, on measurement: narrowed
+  under an earlier version of the rule it took half the memory but ran 18.8% slower at depth 19 (median of 9
+  rounds, range +1.8% to +25.5%; §5.5 of the same note). Each tree is freed
+  before the next, so the smaller node saves little traffic, and four 16-byte
+  nodes already fit in a cache line. The rule therefore counts a saving only
+  on a class of at least 24 bytes. Where the time gap goes is not measured.

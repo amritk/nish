@@ -13,7 +13,7 @@ const mainTask = (c: Channel<i32>): void => {
   c.send(2)
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const out = new Array<i32>(1)
   const ch = new Channel<i32>()
   {

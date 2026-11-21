@@ -42,7 +42,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -117,8 +117,7 @@ for (const b of binaries) {
 const build = (cmd, prefix, dir, target, extra) => {
   const r = spawnSync(
     cmd,
-    [
-      ...prefix,
+    compileArgv({ cmd, prefix }, [
       "bench/jwt-verify/main.ts",
       "-o",
       `${path.relative(dir, target)}.d/`,
@@ -127,7 +126,7 @@ const build = (cmd, prefix, dir, target, extra) => {
       "--profile",
       "speed",
       ...extra,
-    ],
+    ]),
     { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   )
   if (r.status !== 0) {

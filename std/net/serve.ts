@@ -9,7 +9,7 @@
  *     const HOME: i32 = 0   // module constants, in the order the routes are added
  *     const USER: i32 = 1
  *
- *     async function handle(req: Request): Promise<Response> {
+ *     const handle = async (req: Request): Promise<Response> => {
  *       switch (req.route) {
  *         case HOME: return new Response(200).text("hello\n")
  *         case USER: {
@@ -20,7 +20,7 @@
  *       }
  *     }
  *
- *     export async function main(): Promise<i32> {
+ *     export const main = async (): Promise<i32> => {
  *       const router = new Router(new RouterLimits())
  *       router.add("GET", "/")
  *       router.add("GET", "/users/:id")
@@ -818,7 +818,7 @@ const serveGrown = (have: i32, need: i32): i32 => {
 
 /** One slot's exchange: what it needs after its task's copy, and its record until then. */
 class ServeExchange {
-  /** The slot's connection: the carrier keeps one object per slot, set again on each accept. */
+  /** The slot's connection as of its last drive: the carrier lends one to a busy slot, so `driveOn` sets it again. */
   conn: Http1Connection
   /** The record, from the head's parse to the task's copy; `ServeConns.none` otherwise. */
   rec: HttpRequest
@@ -1052,7 +1052,6 @@ class ServeConns {
         this.open[slot] = true
         const e: ServeExchange = this.ex[slot]
         e.state = SERVE_IDLE
-        e.conn = this.server.connection(slot)
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
       }
       slot = this.server.accept()
@@ -1083,7 +1082,10 @@ class ServeConns {
 
   /** `drive` for a caller that holds slot `s`'s exchange `e`. */
   driveOn(s: i32, e: ServeExchange): void {
-    const conn: Http1Connection = e.conn
+    // A slot's connection is lent to it while it is busy and given back when
+    // it rests, so the exchange takes the one it holds now.
+    const conn: Http1Connection = this.server.connection(s)
+    e.conn = conn
     let event: i32 = this.server.next(s)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
@@ -1169,9 +1171,9 @@ class ServeConns {
    * A server sized for many connections pays for the ones it has had.
    */
   growSlots(slot: i32): void {
-    // An exchange's connection is set on its slot's accept; until then it
-    // names the one just accepted, which exists.
-    const conn: Http1Connection = this.server.connection(slot)
+    // An exchange's connection is set each time its slot is driven; until
+    // then it names the pool's first, which this does not lend the slot.
+    const conn: Http1Connection = this.server.connection(toI32(-1))
     let n: i32 = toI32(this.ex.length) * 2
     if (n < 64) {
       n = 64

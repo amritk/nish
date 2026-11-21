@@ -17,20 +17,20 @@ class Rect implements Shape {
   }
 }
 
-function perimeter(s: Shape): number {
+const perimeter = (s: Shape): number => {
   return 2 * (s.width + s.height);
-}
+};
 
-function widest(a: Shape, b: Shape): Shape {
+const widest = (a: Shape, b: Shape): Shape => {
   return a.width >= b.width ? a : b;
-}
+};
 
-function grow(r: Rect, by: number): Shape {
+const grow = (r: Rect, by: number): Shape => {
   r.width += by;
   return r;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const r = new Rect(3, 4);
   console.log(perimeter(r));
   const s: Shape = r;
@@ -39,4 +39,4 @@ export function main(): number {
   console.log(grow(r, 2).width);
   console.log(r.area());
   return 0;
-}
+};

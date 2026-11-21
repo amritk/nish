@@ -1,10 +1,10 @@
 // Unsigned arithmetic at every width: wrapping `+ - *` at the top of each
 // range, and values above INT_MAX that a signed type could not hold.
-function mulU32(a: u32, b: u32): u32 {
+const mulU32 = (a: u32, b: u32): u32 => {
   return a * b;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const b0: u8 = 255;
   console.log(`${b0 + 1}`);
   console.log(`${b0 * 2}`);
@@ -48,4 +48,4 @@ export function main(): number {
   }
   console.log(`${byte}`);
   return 0;
-}
+};

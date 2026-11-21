@@ -11,9 +11,9 @@ class Holder {
     wipe(this.k);
   }
 }
-function id(s: Secret<u8[]>): Secret<u8[]> {
+const id = (s: Secret<u8[]>): Secret<u8[]> => {
   return s;
-}
+};
 export const main = (): i32 => {
   const h = new Holder();
   const a = id(h.k);

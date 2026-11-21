@@ -1,3 +1,3 @@
-function same(a: string | null, b: string | null): boolean {
+const same = (a: string | null, b: string | null): boolean => {
   return a === b;
-}
+};

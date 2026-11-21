@@ -1,1 +1,3 @@
-function f(a: Array<Array<any>>): number { return 1; }
+const f = (a: Array<Array<any>>): number => {
+  return 1;
+};

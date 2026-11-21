@@ -1,5 +1,5 @@
 import { secret } from "./math";
 
-export function main(): number {
+export const main = (): number => {
   return secret();
-}
+};

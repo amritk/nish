@@ -1,1 +1,4 @@
-function f(): number { const s = Symbol("x"); return 1; }
+const f = (): number => {
+  const s = Symbol("x");
+  return 1;
+};

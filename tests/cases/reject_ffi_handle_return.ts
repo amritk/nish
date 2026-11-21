@@ -23,8 +23,8 @@ class File {
   }
 }
 
-function pass(f: File): File {
+const pass = (f: File): File => {
   return f
-}
+};
 
 export const main = (): i32 => 0

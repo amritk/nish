@@ -326,8 +326,8 @@ its rows are binary too. `PgBinaryArray` walks a one-dimensional `int2[]`,
 
 <scalar-detail title="Authentication">
 
-SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`). The
-password arrives as a `Secret<u8[]>`; the connection keeps a copy in a holder
+SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`), the
+key derivation and proofs from `nish/crypto/scram`. The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a holder
 that is wiped as soon as the proof is computed, or when the connection fails
 or is disposed. The server's signature is checked in constant time before
 `AuthenticationOk` is believed, and an `AuthenticationOk` that skips the end
@@ -441,7 +441,7 @@ TLS: its length, 8, and `PG_SSL_REQUEST_CODE`, both big-endian. The server
 answers one byte, `S` to go on with a TLS handshake or `N` to refuse.
 
 ```ts
-function pgSslRequest(): u8[]
+const pgSslRequest: () => u8[]
 ```
 
 <scalar-field name="returns" type="u8[]">
@@ -460,10 +460,7 @@ a socket path over 107 bytes (an `@` name over 107 after its `@`), never
 cut short.
 
 ```ts
-function pgTarget(
-  host: string,
-  port: i32,
-): PgTarget
+const pgTarget: (host: string, port: i32) => PgTarget
 ```
 
 <scalar-field name="host" type="string" required>
@@ -504,7 +501,7 @@ where libpq would take it as unset. The decoded host is then resolved as
 `pgTarget` resolves one.
 
 ```ts
-function pgTargetUrl(url: string): PgTarget
+const pgTargetUrl: (url: string) => PgTarget
 ```
 
 <scalar-field name="url" type="string" required>

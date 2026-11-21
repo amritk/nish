@@ -9,8 +9,8 @@ class Holder {
   }
 }
 
-export function main(): number {
+export const main = (): number => {
   const h = new Holder([1]);
   h.items[0] = 5;
   return 0;
-}
+};

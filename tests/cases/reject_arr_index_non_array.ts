@@ -1,1 +1,3 @@
-function f(n: number): number { return n[0]; }
+const f = (n: number): number => {
+  return n[0];
+};

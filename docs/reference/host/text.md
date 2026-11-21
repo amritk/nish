@@ -22,7 +22,7 @@ export const INBOX = new Array<u8>(256);
 export const OUTBOX = new Array<u8>(256);
 
 // The page: n = new TextEncoder().encodeInto(text, views.INBOX).written
-export function echo(n: i32): i32 {
+export const echo = (n: i32): i32 => {
   const text = textRead(INBOX, n);
   if (text === null) return -1;
   return textWriteInt(OUTBOX, textWrite(OUTBOX, 0, text), toI64(n));
@@ -84,10 +84,10 @@ The bytes are not checked as UTF-8; a sequence that is not becomes U+FFFD
 when the string next crosses to the page.
 
 ```ts
-function textRead(
+const textRead: (
   buf: readonly u8[],
   n: i32,
-): string | null
+) => string | null
 ```
 
 <scalar-field name="buf" type="readonly u8[]" required>
@@ -113,11 +113,7 @@ the string, or null when `n` is negative or past the buffer
 Writes `s` as its UTF-8 bytes at offset `at`, or nothing when it does not fit.
 
 ```ts
-function textWrite(
-  buf: u8[],
-  at: i32,
-  s: string,
-): i32
+const textWrite: (buf: u8[], at: i32, s: string) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -151,11 +147,7 @@ Writes `x` in its shortest round-tripping form, as a template literal
 formats it: `0.30000000000000004`, `1e+21`, `NaN`, `-Infinity`.
 
 ```ts
-function textWriteF64(
-  buf: u8[],
-  at: i32,
-  x: f64,
-): i32
+const textWriteF64: (buf: u8[], at: i32, x: f64) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -187,11 +179,7 @@ the offset after the text, or -1 as `textWrite` answers it
 Writes `n` in decimal, as a template literal formats it.
 
 ```ts
-function textWriteInt(
-  buf: u8[],
-  at: i32,
-  n: i64,
-): i32
+const textWriteInt: (buf: u8[], at: i32, n: i64) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>

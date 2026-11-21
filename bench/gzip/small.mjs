@@ -16,6 +16,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import zlib from "node:zlib"
 import { feedJson } from "./feed.mjs"
+import { withAllowPanics } from "../../tests/allow-panics.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..", "..")
@@ -49,7 +50,16 @@ for (const kb of [1, 2, 4, 8, 16]) {
   fs.writeFileSync(file, feedJson(n))
   files.push(file)
 }
-run(compiler, [path.join(here, "small.ts"), "-o", `${out}/`, "--link", path.join(out, "gzip-small")])
+run(
+  compiler,
+  withAllowPanics(compiler, [
+    path.join(here, "small.ts"),
+    "-o",
+    `${out}/`,
+    "--link",
+    path.join(out, "gzip-small"),
+  ])
+)
 
 // "encoder input" -> { size, ns: [] }
 const rows = new Map()

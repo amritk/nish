@@ -36,24 +36,24 @@ const twice = (n: i32): i32 => n * 2
 
 const pathFor = (fail: i32): Result<string, i32> => (fail === 0 ? Ok("data") : Err(fail))
 
-export function fallThrough(): i32 {
+export const fallThrough = (): i32 => {
   let c = 0
   {
     using f = new File("data")
     c = f.read()
   }
   return c
-}
+};
 
-export function early(k: i32): i32 {
+export const early = (k: i32): i32 => {
   using f = new File("data")
   if (k > 0) {
     return k
   }
   return f.read()
-}
+};
 
-export function loop(n: i32): i32 {
+export const loop = (n: i32): i32 => {
   let total = 0
   for (let i = 0; i < n; i++) {
     using f = new File("data")
@@ -66,38 +66,38 @@ export function loop(n: i32): i32 {
     total = total + f.read()
   }
   return total
-}
+};
 
 const pair = (fail: i32): Result<i32, i32> => {
   using a = new File("data"), b = new File(pathFor(fail).orReturn())
   return Ok(a.read() + b.read())
 }
 
-export function pairOf(fail: i32): i32 {
+export const pairOf = (fail: i32): i32 => {
   return pair(fail).unwrapOr(-1)
-}
+};
 
-export function doubled(n: i32): i32 {
+export const doubled = (n: i32): i32 => {
   using f = new File("data")
   return twice(n)
-}
+};
 
-export function doubledBare(n: i32): i32 {
+export const doubledBare = (n: i32): i32 => {
   return twice(n)
-}
+};
 
 const first = (f: File): i32 => f.read()
 
 const relay = (f: File): i32 => first(f) + first(f)
 
-export function lent(): i32 {
+export const lent = (): i32 => {
   using f = new File("data")
   return relay(f)
-}
+};
 
-export function counted(): i32 {
+export const counted = (): i32 => {
   using f = new File("data")
   f.reads = f.reads + f.read()
   f.reads = f.reads + f.read()
   return f.reads
-}
+};

@@ -1,0 +1,1 @@
+Field `box` of class `Shelf`: initializers must be literals (assign other values in the constructor)

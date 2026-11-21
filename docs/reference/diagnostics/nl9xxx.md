@@ -2,7 +2,7 @@
 
 # NL9xxx\: performance warnings
 
-The 20 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 21 codes of band 9. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL9001
 
@@ -400,41 +400,41 @@ The message of a warning `--no-warn-performance` turns off contains:
 ```ts
 // NL9017: a call through a reference whose set holds more than eight
 // functions branches on a `switch` of them where a direct call would not.
-function f0(x: i32): i32 {
+const f0 = (x: i32): i32 => {
   return x + 0;
-}
+};
 
-function f1(x: i32): i32 {
+const f1 = (x: i32): i32 => {
   return x + 1;
-}
+};
 
-function f2(x: i32): i32 {
+const f2 = (x: i32): i32 => {
   return x + 2;
-}
+};
 
-function f3(x: i32): i32 {
+const f3 = (x: i32): i32 => {
   return x + 3;
-}
+};
 
-function f4(x: i32): i32 {
+const f4 = (x: i32): i32 => {
   return x + 4;
-}
+};
 
-function f5(x: i32): i32 {
+const f5 = (x: i32): i32 => {
   return x + 5;
-}
+};
 
-function f6(x: i32): i32 {
+const f6 = (x: i32): i32 => {
   return x + 6;
-}
+};
 
-function f7(x: i32): i32 {
+const f7 = (x: i32): i32 => {
   return x + 7;
-}
+};
 
-function f8(x: i32): i32 {
+const f8 = (x: i32): i32 => {
   return x + 8;
-}
+};
 
 export const main = (): i32 => {
   const ops: ((x: i32) => i32)[] = [f0, f1, f2, f3, f4, f5, f6, f7, f8];
@@ -525,6 +525,16 @@ export const labels = (rows: i32): i32 => {
   }
   return out.length;
 };
+
+// What NL9019 judges: only a function a loop pass that releases nothing calls
+// directly, each on what it allocates itself; a call inside an arrow function
+// in the loop is not the pass's own and is not judged. Memory kept deeper in the call
+// chain, behind a direct callee that returns memory, is not reported here:
+// `nish --explain-memory` names the loop that keeps it. A direct callee that
+// does its work only once, behind a guard, still warns when it keeps an array
+// of its own. A constructor reached by `new` is never reported, and a loop
+// inside a `using a = arena()` block, or inside an outer pass with a scope of
+// its own, counts as released.
 ```
 
 ```text
@@ -537,4 +547,29 @@ The message of a warning `--no-warn-performance` turns off contains:
 
 ```text
 …beside the compatibility dialect: a bare `number` is the 32-bit integer
+```
+
+## NL9021
+
+The message of a warning `--no-warn-performance` turns off contains:
+
+```text
+…` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? …
+```
+
+[`nl9021_nullish_never_missing.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl9021_nullish_never_missing.ts) (compiled with `--compat=nullish`):
+
+```ts
+// Under `--compat=nullish` a `??` whose left operand can never be missing
+// compiles to that operand, as Node computes it. NL9021 names the default the
+// build drops, so the program can say what it means.
+const f = (a: number): number => a ?? 1
+
+export const main = (): void => {
+  console.log(f(4))
+}
+```
+
+```text
+`a` is never `null` or `undefined`, so `??` never runs its default: the build keeps the left operand alone (drop `?? 1`)
 ```

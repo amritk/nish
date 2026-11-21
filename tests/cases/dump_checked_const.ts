@@ -4,7 +4,7 @@ const WIDTH: i32 = 8;
 const AREA: i32 = WIDTH * WIDTH;
 const NAME: string = "box";
 
-export function test(): number {
+export const test = (): number => {
   console.log(NAME);
   return AREA;
-}
+};

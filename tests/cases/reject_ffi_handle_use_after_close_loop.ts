@@ -25,7 +25,7 @@ class File {
   }
 }
 
-export function next(p: string): i32 {
+export const next = (p: string): i32 => {
   let x = 0
   for (let i = 0; i < 2; i++) {
     if (i > 0) {
@@ -35,8 +35,8 @@ export function next(p: string): i32 {
     x += f.read()
   }
   return x
-}
-export function nested(p: string): i32 {
+};
+export const nested = (p: string): i32 => {
   let x = 0
   for (let i = 0; i < 2; i++) {
     {
@@ -46,6 +46,6 @@ export function nested(p: string): i32 {
     x += f.read()
   }
   return x
-}
+};
 
 export const main = (): i32 => 0

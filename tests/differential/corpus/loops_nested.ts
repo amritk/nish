@@ -1,5 +1,5 @@
 // Nested loops with break/continue: a sieve, a multiplication table, and a search.
-export function main(): number {
+export const main = (): number => {
   const limit = 50;
   const composite = new Array<boolean>(limit + 1);
   for (let i = 2; i <= limit; i++) {
@@ -66,4 +66,4 @@ export function main(): number {
   }
   console.log(w);
   return 0;
-}
+};

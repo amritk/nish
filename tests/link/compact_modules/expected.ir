@@ -1,0 +1,1 @@
+%struct.Queue = type { i32, i32 }

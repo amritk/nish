@@ -19,51 +19,51 @@ class Box {
   }
 }
 
-function keep(p: Point): Point {
+const keep = (p: Point): Point => {
   return p;
-}
+};
 
-function make(): Point {
+const make = (): Point => {
   return new Point(1, 2); // returned
-}
+};
 
-function boxed(): Box {
+const boxed = (): Box => {
   return new Box(new Point(3, 4)); // the Point is stored by the constructor; the Box is returned
-}
+};
 
-function stash(xs: Point[]): void {
+const stash = (xs: Point[]): void => {
   xs.push(new Point(5, 6)); // pushed
-}
+};
 
-function field(b: Box): void {
+const field = (b: Box): void => {
   b.item = new Point(7, 8); // stored into a field
-}
+};
 
-function captured(): number {
+const captured = (): number => {
   const p = new Point(9, 10);
   const q = keep(p); // `keep` captures (returns) its parameter
   return q.x;
-}
+};
 
-function reassigned(flag: boolean): number {
+const reassigned = (flag: boolean): number => {
   let p = new Point(11, 12);
   if (flag) {
     p = new Point(13, 14); // both objects are held by a reassigned `let`
   }
   return p.x;
-}
+};
 
-function aliased(): number {
+const aliased = (): number => {
   const p = new Point(15, 16);
   let q = p; // `let q = p` is an assignment-style alias: conservative, arena
   return q.y;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const xs: Point[] = [];
   stash(xs);
   const b = boxed();
   field(b);
   console.log(make().x + xs[0].y + b.item.x + captured() + reassigned(true) + aliased());
   return 0;
-}
+};

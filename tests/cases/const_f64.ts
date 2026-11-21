@@ -3,7 +3,7 @@
 const HALF: f64 = 0.5;
 const QUARTER: f64 = HALF * HALF;
 
-export function main(): number {
+export const main = (): number => {
   console.log(QUARTER);
   return 0;
-}
+};

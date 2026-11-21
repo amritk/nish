@@ -25,7 +25,7 @@ class File {
   }
 }
 
-export function pick(p: string, k: i32): i32 {
+export const pick = (p: string, k: i32): i32 => {
   let x = 0
   switch (k) {
     case 0:
@@ -37,6 +37,6 @@ export function pick(p: string, k: i32): i32 {
       break
   }
   return x
-}
+};
 
 export const main = (): i32 => 0

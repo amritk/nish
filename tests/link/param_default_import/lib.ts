@@ -18,6 +18,6 @@ export class Greeter {
   }
 }
 
-export function scale(x: number, by: number = 3): number {
+export const scale = (x: number, by: number = 3): number => {
   return x * by
-}
+};

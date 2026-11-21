@@ -9,17 +9,17 @@ import { wrappingMul } from "nish:unsafe";
 // that costs the most — without the alias domains LLVM reloads both headers on
 // every iteration, which blocks LICM. `tests/run.js` pins the consequence: after
 // `opt -O2` no `%struct.nish_array` access is left inside the loop.
-export function scale(dst: i32[], src: i32[]): void {
+export const scale = (dst: i32[], src: i32[]): void => {
   let i = 0;
   while (i < src.length) {
     dst[i] = wrappingMul(src[i], 2);
     i = i + 1;
   }
-}
+};
 
-export function test(): i32 {
+export const test = (): i32 => {
   const src = [1, 2, 3, 4];
   const dst = new Array<i32>(4);
   scale(dst, src);
   return dst[0] + dst[1] + dst[2] + dst[3];
-}
+};

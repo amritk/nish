@@ -5,10 +5,10 @@
 // loader; the IR returns the header pointer as it does natively.
 import { measure, say } from "../host-import/text/host"
 
-export function greet(n: i32): i32 {
+export const greet = (n: i32): i32 => {
   say(`hello ${n}`)
   return measure("é", n)
-}
-export function label(n: i32): string {
+};
+export const label = (n: i32): string => {
   return `#${n}`
-}
+};

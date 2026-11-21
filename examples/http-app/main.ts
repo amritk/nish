@@ -1,8 +1,14 @@
+// Opt-out (`--allow-panics`): calls into `std/json`, `std/net/handler`,
+// `std/net/http1-server` and `std/net/router` reach their panic sites, and
+// app.ts's `String.fromBytes` slice keeps a range check the checker cannot yet
+// discharge. Follow-up: make those modules panic-free and teach the prover that
+// slice's bound, then build this program without `--allow-panics`.
+//
 // A small JSON API over `nish/net/handler`: notes kept in memory, routed
 // through `nish/net/router`, one log line a request, and a graceful stop on
 // SIGINT or SIGTERM.
 //
-//     build/nish examples/http-app/main.ts --link build/http-app
+//     build/nish --allow-panics examples/http-app/main.ts --link build/http-app
 //     build/http-app 8080 --max-notes 100 &
 //     curl -s localhost:8080/health                          # {"status":"ok","notes":0}
 //     curl -s -d '{"text":"milk"}' localhost:8080/notes      # {"id":1,"text":"milk"}
@@ -15,6 +21,7 @@
 // open connections to finish, for `--drain-ms` at most; a second signal stops
 // it at once. Unknown paths and methods are RFC 9457 problems (404, or 405
 // with its `Allow`). Without a port it prints how to run it and exits 2.
+// smoke: args --allow-panics
 // smoke: exit 2
 import { HttpHandler, HandlerLimits } from "nish/net/handler"
 import { Router } from "nish/net/router"
@@ -68,7 +75,10 @@ export const main = (): i32 => {
   }
   console.log(`http-app: stopping, draining ${h.connections()} connections`)
   h.drain()
-  const deadline: i64 = monotonicNanos() + toI64(config.drainMs) * NANOS_PER_MS
+  // `u64`, which wraps rather than panics, and cannot here: the clock counts
+  // from boot and `--drain-ms` has nine digits at most, so the sum stays
+  // under 2^60.
+  const deadline: i64 = toI64(toU64(monotonicNanos()) + toU64(config.drainMs) * toU64(NANOS_PER_MS))
   let forced = false
   while (h.connections() > 0 && monotonicNanos() < deadline && !forced) {
     serveTurn(app, DRAIN_TURN_MS)

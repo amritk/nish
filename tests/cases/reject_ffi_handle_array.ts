@@ -23,9 +23,9 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   const all = [f]
   return all.length
-}
+};
 
 export const main = (): i32 => 0

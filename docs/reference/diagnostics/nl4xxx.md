@@ -2,7 +2,7 @@
 
 # NL4xxx\: the interop sidecars
 
-The 19 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 21 codes of band 4. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL4001
 
@@ -294,4 +294,84 @@ export const fallback = (): Role => Role.Guest
 
 ```text
 `fallback` returns `Role`, which holds a string enum: a string enum has no C, N-API or wasm spelling in this version, so take or return a `string` and convert with `String(r)` and a `switch`
+```
+
+## NL4020
+
+The message of an error contains:
+
+```text
+…`, which implements `Compact`: an N-API addon runs in Node's process, which Nish does not own, so nothing keeps free the range its links count from; an export to Node takes and returns no compact object
+```
+
+[`nl4020_compact_export.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4020_compact_export.ts) (compiled with `--emit-napi build/test/wordings/nl4020_compact_export.c`):
+
+```ts
+// WP48 rule 4: an export whose signature holds a compact class is refused at the signature.
+import { Compact } from "nish:compact"
+
+export class Cell implements Compact {
+  value: i32
+  next: Cell | null
+  constructor(value: i32, next: Cell | null) {
+    this.value = value
+    this.next = next
+  }
+}
+
+export const push = (value: i32, head: Cell | null): Cell => new Cell(value, head)
+
+export const main = (): number => push(3, null).value
+```
+
+```text
+`Cell.constructor` is exported to Node and its signature holds `Cell`, which implements `Compact`: an N-API addon runs in Node's process, which Nish does not own, so nothing keeps free the range its links count from; an export to Node takes and returns no compact object
+```
+
+## NL4021
+
+The message of an error contains:
+
+```text
+…` builds an addon Node loads into its own process, which Nish does not own, so nothing keeps free the range its 32-bit links count from; build a C host with `--emit-header`, or drop the marker
+```
+
+[`nl4021_compact_napi.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl4021_compact_napi.ts) (compiled with `--emit-napi build/test/wordings/nl4021_compact_napi.c`):
+
+```ts
+// WP48 rule 1: an N-API build refuses a compact class no refused export names, at its class: the addon runs in Node's process.
+import { Compact } from "nish:compact"
+
+class Cell implements Compact {
+  value: i32
+  next: Cell | null
+  constructor(value: i32, next: Cell | null) {
+    this.value = value
+    this.next = next
+  }
+}
+
+const sum = (head: Cell | null): i32 => {
+  let total: i32 = 0
+  let at = head
+  while (at !== null) {
+    total = total + at.value
+    at = at.next
+  }
+  return total
+}
+
+export const total = (n: i32): i32 => {
+  let head: Cell | null = null
+  for (let i: i32 = 0; i < n; i++) {
+    head = new Cell(i, head)
+  }
+  return sum(head)
+}
+
+export const main = (): number => total(4)
+```
+
+```text
+`Cell` implements `Compact`, and `--emit-napi` builds an addon Node loads into its own process, which Nish does not own, so nothing keeps free the range its 32-bit links count from; build a C host with `--emit-header`, or drop the marker
 ```

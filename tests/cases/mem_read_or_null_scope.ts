@@ -4,8 +4,8 @@
 // bytes the caller is about to read. The template literal is here to give the
 // function an allocation that *does* flow locally, which is what made the
 // missing site visible.
-export function load(path: string): string | null {
+export const load = (path: string): string | null => {
   const label = `read ${path}`;
   console.log(label);
   return readFileSyncOrNull(path);
-}
+};

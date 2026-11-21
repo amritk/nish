@@ -4,7 +4,7 @@
 import { sleep } from "nish:async"
 
 /** `n` elements counting up from `seed`. */
-export function fill(n: i32, seed: i32): i32[] {
+export const fill = (n: i32, seed: i32): i32[] => {
   const xs = new Array<i32>(n)
   let i = 0
   while (i < xs.length) {
@@ -12,10 +12,10 @@ export function fill(n: i32, seed: i32): i32[] {
     i = i + 1
   }
   return xs
-}
+};
 
 /** How many elements of `xs` are not `seed + i`, plus 1 unless it holds 100. */
-export function wrong(xs: i32[], seed: i32): i32 {
+export const wrong = (xs: i32[], seed: i32): i32 => {
   let bad = xs.length === 100 ? 0 : 1
   let i = 0
   while (i < xs.length) {
@@ -25,7 +25,7 @@ export function wrong(xs: i32[], seed: i32): i32 {
     i = i + 1
   }
   return bad
-}
+};
 
 /**
  * A lane: its array made after the first wait, in the lane's own region, and

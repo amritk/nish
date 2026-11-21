@@ -30,16 +30,16 @@ class Box<T> {
     this.value = value
   }
 }
-function same<T>(value: T): T {
+const same = <T>(value: T): T => {
   return value
-}
-function count(f: File): i32 {
+};
+const count = (f: File): i32 => {
   const g = same(f)
   return 0
-}
-function boxed(f: File): i32 {
+};
+const boxed = (f: File): i32 => {
   const b = new Box<File>(f)
   return 0
-}
+};
 
 export const main = (): i32 => 0

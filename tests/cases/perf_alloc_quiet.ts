@@ -7,7 +7,7 @@ class Point {
   y: i32 = 0;
 }
 
-export function test(): number {
+export const test = (): number => {
   let total = 0;
 
   // Stackable: a literal length is an entry-block alloca whose slot WP6 reuses
@@ -40,4 +40,4 @@ export function test(): number {
   once[0] = 7;
 
   return total + kept.length + once[0];
-}
+};

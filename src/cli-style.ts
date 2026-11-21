@@ -53,6 +53,8 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--link", "<exe>", "link a native binary; the entry exports main")
   menu.row("--profile", "speed|size|debug|wasi", "the link recipe; speed is -O3 with LTO")
   menu.row("--cpu", "x86-64-v3", "allow AVX2; such a binary needs it to start")
+  menu.row("--pgo-generate", "", "link a binary that writes a .profraw per run")
+  menu.row("--pgo-use", "<file.profdata>", "optimise the link with a merged profile")
   menu.row("--target", "<triple>|host", "stamp the IR with a target's data layout")
   menu.row("--threads", "", "an arena per thread, for --emit-napi-async")
   menu.row("--debug-arena", "", "trap a stale arena reference; for tests, slow")
@@ -60,6 +62,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--plain", "", "the IR without LLVM's attributes")
   menu.row("--no-strict-exports", "", "keep every function externally visible")
   menu.row("--no-stack-alloc", "", "keep every value off the stack")
+  menu.row("--compact", "on|off", "off keeps every class's links full pointers")
 
   menu.section("Output")
   menu.row("-o, --output", "<file.ll>|<dir>/", "where the IR goes; a dir gets one per module")
@@ -82,12 +85,14 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--warn-portability", "", "warn where TypeScript would answer otherwise")
   menu.row("--no-warn-performance", "", "silence the performance warnings")
   menu.row("--explain-memory", "", "why loops and functions keep their memory")
+  menu.row("--explain-layout", "", "which classes the compact-class rule picks")
   menu.row("--capabilities", "", "print what the program can reach, on stderr")
 
   menu.section("Policy")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
-  menu.row("--deny-panics", "", "refuse an unproven panic in your package")
+  menu.row("--deny-panics", "", "refuse an unproven panic site (the default)")
+  menu.row("--allow-panics", "", "hold only the noPanic list to no panic")
   menu.row("--deny-retention", "", "refuse retained arena memory in your package")
   menu.row("--deterministic", "", "same float bits everywhere, no clock or I/O")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
@@ -100,6 +105,8 @@ export const helpText = (style: Style, guide: string): string => {
     menu.row("--json", "", "diagnostics as JSON lines, fixes included")
     menu.row("--fix", "", "apply those fixes; read only what is left")
     menu.row(`${CLI} run <file.ts>`, "", "what the program prints, once it compiles")
+    menu.note("a panic refused (NL2457, NL2458): add the guard it names; never")
+    menu.note("--allow-panics, nish:unsafe or a guard that proves nothing")
   }
 
   menu.section("Exit codes")

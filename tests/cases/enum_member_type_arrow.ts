@@ -10,17 +10,17 @@ enum Kind {
 
 const array = (): Kind.Array => Kind.Array;
 
-function map<T, U>(xs: T[], f: (x: T) => U): U[] {
+const map = <T, U>(xs: T[], f: (x: T) => U): U[] => {
   const out: U[] = [];
   for (const x of xs) {
     out.push(f(x));
   }
   return out;
-}
+};
 
-function apply<T, U>(x: T, f: (x: T) => U): U {
+const apply = <T, U>(x: T, f: (x: T) => U): U => {
   return f(x);
-}
+};
 
 export const test = (): number => {
   const a: Kind.Array = array();

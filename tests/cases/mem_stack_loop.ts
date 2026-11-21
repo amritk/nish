@@ -14,7 +14,7 @@ class Vec {
   }
 }
 
-function accumulate(n: number): number {
+const accumulate = (n: number): number => {
   let total = 0;
   for (let i = 0; i < n; i++) {
     const v = new Vec(i, 1);
@@ -22,13 +22,13 @@ function accumulate(n: number): number {
     total += v.dot(w) % 7;
   }
   return total;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const before = Arena.used();
   const total = accumulate(100000);
   const flat = Arena.used() === before;
   console.log(total);
   console.log(flat);
   return 0;
-}
+};

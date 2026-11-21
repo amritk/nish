@@ -2,9 +2,9 @@
 class Point {
   x: i32 = 0
 }
-function f(p: Point | null = new Point()): i32 {
+const f = (p: Point | null = new Point()): i32 => {
   return p !== null ? p.x : -1
-}
-export function main(): void {
+};
+export const main = (): void => {
   console.log(f())
-}
+};

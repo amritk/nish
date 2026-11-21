@@ -22,11 +22,11 @@ class File {
   }
 }
 
-function count(): i32 {
+const count = (): i32 => {
   function next(f: File): i32 {
     return f.read()
   }
   return 0
-}
+};
 
 export const main = (): i32 => 0

@@ -170,10 +170,10 @@ first that does not: what `xs.every(pred)` compiles to when `pred` takes one
 parameter. An empty array answers `true`.
 
 ```ts
-function every<T>(
+const every: <T>(
   xs: readonly T[],
   pred: (x: T) => boolean,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -201,10 +201,10 @@ and its index: what `xs.every(pred)` compiles to when `pred` takes two
 parameters.
 
 ```ts
-function everyIndexed<T>(
+const everyIndexed: <T>(
   xs: readonly T[],
   pred: (x: T, i: number) => boolean,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -231,10 +231,10 @@ The elements of `xs` for which `pred` answers `true`, in order, in a new
 array: what `xs.filter(pred)` compiles to when `pred` takes one parameter.
 
 ```ts
-function filter<T>(
+const filter: <T>(
   xs: readonly T[],
   pred: (x: T) => boolean,
-): T[]
+) => T[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -262,10 +262,10 @@ its index: what `xs.filter(pred)` compiles to when `pred` takes two
 parameters.
 
 ```ts
-function filterIndexed<T>(
+const filterIndexed: <T>(
   xs: readonly T[],
   pred: (x: T, i: number) => boolean,
-): T[]
+) => T[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -292,10 +292,10 @@ The index of the first element of `xs` for which `pred` answers `true`:
 what `xs.findIndex(pred)` compiles to when `pred` takes one parameter.
 
 ```ts
-function findIndex<T>(
+const findIndex: <T>(
   xs: readonly T[],
   pred: (x: T) => boolean,
-): number
+) => number
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -323,10 +323,10 @@ given each element and its index: what `xs.findIndex(pred)` compiles to when
 `pred` takes two parameters.
 
 ```ts
-function findIndexIndexed<T>(
+const findIndexIndexed: <T>(
   xs: readonly T[],
   pred: (x: T, i: number) => boolean,
-): number
+) => number
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -356,10 +356,10 @@ visited, and at the current length, so one it pops is not either, as
 `Array.prototype.forEach` does.
 
 ```ts
-function forEach<T>(
+const forEach: <T>(
   xs: readonly T[],
   f: (x: T) => void,
-): void
+) => void
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -381,10 +381,10 @@ Calls `f` with each element of `xs` and its index, in order: what
 where `forEach`'s does.
 
 ```ts
-function forEachIndexed<T>(
+const forEachIndexed: <T>(
   xs: readonly T[],
   f: (x: T, i: number) => void,
-): void
+) => void
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -405,10 +405,7 @@ The elements of `xs`, each passed through `f`, in a new array of the same
 length: what `xs.map(f)` compiles to when `f` takes one parameter.
 
 ```ts
-function map<T, U>(
-  xs: readonly T[],
-  f: (x: T) => U,
-): U[]
+const map: <T, U>(xs: readonly T[], f: (x: T) => U) => U[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -435,10 +432,10 @@ The elements of `xs`, each passed through `f` with its index: what
 `xs.map(f)` compiles to when `f` takes two parameters.
 
 ```ts
-function mapIndexed<T, U>(
+const mapIndexed: <T, U>(
   xs: readonly T[],
   f: (x: T, i: number) => U,
-): U[]
+) => U[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -470,11 +467,11 @@ A float bound is truncated toward zero and saturates (NaN to 0, an infinity
 to the `i64` limit), natively and under Node alike.
 
 ```ts
-function slice<T>(
+const slice: <T>(
   xs: readonly T[],
   start: number,
   end: number,
-): T[]
+) => T[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -506,7 +503,7 @@ a new array of `end - start` elements.
 A copy of the whole of `xs`: what `xs.slice()` compiles to.
 
 ```ts
-function sliceAll<T>(xs: readonly T[]): T[]
+const sliceAll: <T>(xs: readonly T[]) => T[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -527,10 +524,7 @@ A copy of `xs[start..)`: what `xs.slice(start)` compiles to. `start` must
 satisfy `0 <= start <= xs.length`, or the call panics as `slice` does.
 
 ```ts
-function sliceFrom<T>(
-  xs: readonly T[],
-  start: number,
-): T[]
+const sliceFrom: <T>(xs: readonly T[], start: number) => T[]
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -558,10 +552,10 @@ the first that does: what `xs.some(pred)` compiles to when `pred` takes one
 parameter. An empty array answers `false`.
 
 ```ts
-function some<T>(
+const some: <T>(
   xs: readonly T[],
   pred: (x: T) => boolean,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>
@@ -589,10 +583,10 @@ element and its index: what `xs.some(pred)` compiles to when `pred` takes
 two parameters.
 
 ```ts
-function someIndexed<T>(
+const someIndexed: <T>(
   xs: readonly T[],
   pred: (x: T, i: number) => boolean,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="xs" type="readonly T[]" required>

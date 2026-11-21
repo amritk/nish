@@ -7,7 +7,7 @@
 // pair maps to a triple this compiler supports — `hostTriple` below is the
 // mapping `src/codegen/target.ts` and `self/target.ts` both make, spelled once
 // more so the case proves the strings are the ones that mapping expects.
-function hostTriple(platform: string, arch: string): string {
+const hostTriple = (platform: string, arch: string): string => {
   let cpu = "";
   if (arch === "x64") {
     cpu = "x86_64";
@@ -24,13 +24,13 @@ function hostTriple(platform: string, arch: string): string {
     return `${cpu}-apple-darwin`;
   }
   return "";
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const platform = process.platform;
   const arch = process.arch;
   console.log(`platform: ${platform.length > 0 && platform === process.platform}`);
   console.log(`arch: ${arch.length > 0 && arch === process.arch}`);
   console.log(`triple: ${hostTriple(platform, arch).length > 0}`);
   return 0;
-}
+};

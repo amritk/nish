@@ -12,6 +12,11 @@
 //                       portableProof also proves its portable columns are
 //                       portable (README.md, "portableProof").
 //                       Exit 1 on any mismatch
+//     --no-proofs       with --validate: keep the exact part of each portable
+//                       proof (a portable column's own binary is other bytes)
+//                       and leave out the timed part, printing `not timed` for
+//                       each column. tests/run.js passes it on a pull request
+//                       (`--delegate-bench-timing`); a push to main times them
 //     --write-expected  with --validate: rewrite each family's expected.txt from
 //                       the checksums, once every variant agrees
 //     --only a,b        family names (hash) or kernel names (sha256) to run
@@ -48,7 +53,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { compilerFrom } from "../compiler.mjs"
+import { compileArgv, compilerFrom } from "../compiler.mjs"
 import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 import { sideOf, times3 } from "../par-reading.mjs"
 import { PAIRED_MIN_RATIO, PAIRED_ROUNDS, pairedProves, pairedWant } from "./paired.mjs"
@@ -163,6 +168,7 @@ const opts = {
   rounds: 11,
   out: null,
   record: false,
+  noProofs: false,
   skip: new Set(),
   families: here,
 }
@@ -177,6 +183,8 @@ for (let i = 2; i < nishc.rest.length; i++) {
   }
   if (a === "--validate") {
     opts.validate = true
+  } else if (a === "--no-proofs") {
+    opts.noProofs = true
   } else if (a === "--write-expected") {
     opts.writeExpected = true
   } else if (a === "--only") {
@@ -197,6 +205,9 @@ for (let i = 2; i < nishc.rest.length; i++) {
   } else {
     fail(`unknown option ${a}`)
   }
+}
+if (opts.noProofs && !opts.validate) {
+  fail("--no-proofs belongs to --validate")
 }
 if (opts.writeExpected && !opts.validate) {
   fail("--write-expected belongs to --validate")
@@ -769,16 +780,19 @@ const buildFamily = (family) => {
   if (family.kernels.some((k) => k.nish === true)) {
     const exe = path.join(dir, "nish", "main")
     fs.mkdirSync(path.dirname(exe), { recursive: true })
-    build(`${family.name} (Nish)`, nishc.cmd, [
-      ...nishc.prefix,
-      path.join(family.dir, "main.ts"),
-      "-o",
-      `${path.dirname(exe)}${path.sep}`,
-      "--link",
-      exe,
-      "--profile",
-      "speed",
-    ])
+    build(
+      `${family.name} (Nish)`,
+      nishc.cmd,
+      compileArgv(nishc, [
+        path.join(family.dir, "main.ts"),
+        "-o",
+        `${path.dirname(exe)}${path.sep}`,
+        "--link",
+        exe,
+        "--profile",
+        "speed",
+      ])
+    )
     // The noise band: the same bytes under another name, timed in the same rounds.
     fs.copyFileSync(exe, `${exe}-copy`)
     add("nish", null, false, exe, [])
@@ -1166,6 +1180,10 @@ if (opts.validate) {
           mismatches++
           continue
         }
+        if (opts.noProofs) {
+          console.log(`portable ${family.name} ${slow.id}: not timed (--no-proofs)`)
+          continue
+        }
         for (const [i, { kernel, size }] of cases.entries()) {
           // The fastest round of each: a shared machine's noise only ever adds time.
           // A short ratio is measured once more, longer, before it counts.
@@ -1265,6 +1283,10 @@ if (opts.validate) {
     }
     if (why !== null) {
       console.log(`portable ${family.name} nish-portable: unproved (${why})`)
+      continue
+    }
+    if (opts.noProofs) {
+      console.log(`portable ${family.name} nish-portable: not timed (--no-proofs)`)
       continue
     }
     const iterations = calibrate(fast, p.kernel, p.size, TARGET_NS / 2)

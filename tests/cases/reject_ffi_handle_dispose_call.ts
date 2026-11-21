@@ -23,8 +23,8 @@ class File {
   }
 }
 
-function shut(f: File): void {
+const shut = (f: File): void => {
   f[Symbol.dispose]()
-}
+};
 
 export const main = (): i32 => 0

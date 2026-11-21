@@ -273,7 +273,7 @@ async function handshake(fd: i32, w: Wire, o: Out): Promise<boolean> {
 }
 
 /** Writes an ErrorResponse of SQLSTATE `code` and `message` into `o`. */
-function refuse(o: Out, code: string, message: string): void {
+const refuse = (o: Out, code: string, message: string): void => {
   o.begin(69)
   o.byte(83)
   o.cstr("ERROR")
@@ -283,17 +283,17 @@ function refuse(o: Out, code: string, message: string): void {
   o.cstr(message)
   o.byte(0)
   o.finish()
-}
+};
 
 /** The index of `name` in `names`, or -1. */
-function find(names: string[], name: string): i32 {
+const find = (names: string[], name: string): i32 => {
   for (let i: i32 = 0; i < toI32(names.length); i++) {
     if (names[i] === name) {
       return i
     }
   }
   return -1
-}
+};
 
 /**
  * Reads one batch through its Sync and answers it. Answers 1 when the

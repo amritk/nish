@@ -1,7 +1,7 @@
-function f(): number {
+const f = (): number => {
   while (true) {
     break;
     return 1;
   }
   return 0;
-}
+};

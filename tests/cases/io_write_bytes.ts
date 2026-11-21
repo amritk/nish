@@ -8,7 +8,7 @@
 // is one UTF-16 unit and a byte above 127 leaves as two, which the same check
 // pins, and under `--emit-ts` the bytes decode as UTF-8, a byte that is not
 // UTF-8 to U+FFFD.
-export function main(): number {
+export const main = (): number => {
   const bytes: u8[] = [];
   for (let i = 0; i < 256; i++) {
     bytes.push(toU8(i));
@@ -19,4 +19,4 @@ export function main(): number {
   writeFileSync("build/test/io_write_bytes_string.bin", text);
   const filed = writeFileBytesSync("build/test/io_write_bytes_array.bin", bytes);
   return sent === 256 && filed === 256 ? 0 : 1;
-}
+};

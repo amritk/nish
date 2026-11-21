@@ -12,7 +12,7 @@ import { sharedListener } from "./listener";
 const CLIENTS: i32 = 64;
 const WOULD_BLOCK: i32 = -11;
 
-export function main(): number {
+export const main = (): number => {
   const a = sharedListener(0, CLIENTS);
   const port = netLocalPort(a);
   const b = sharedListener(port, CLIENTS);
@@ -62,4 +62,4 @@ export function main(): number {
   netClose(b);
   netClose(a);
   return 0;
-}
+};

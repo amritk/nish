@@ -11,4 +11,4 @@ async function run(x: number): Promise<void> {
   console.log(b)
 }
 
-function main(): void {}
+const main = (): void => {};

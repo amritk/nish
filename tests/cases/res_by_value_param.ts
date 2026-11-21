@@ -13,25 +13,25 @@ interface Box {
   r: Result<i32, i32>;
 }
 
-function describe(r: Result<i32, i32>): i32 {
+const describe = (r: Result<i32, i32>): i32 => {
   if (r.isErr()) {
     return -r.error;
   }
   return r.value;
-}
+};
 
-function boxed(r: Result<i32, i32>): Box {
+const boxed = (r: Result<i32, i32>): Box => {
   return { r: r };
-}
+};
 
-function half(n: i32): Result<i32, i32> {
+const half = (n: i32): Result<i32, i32> => {
   if (n % 2 !== 0) {
     return Err(n);
   }
   return Ok(n / 2);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   // A construction written out at the call site is packed without ever being
   // built, and a callee's word is unpacked and repacked (which the optimiser
   // folds away entirely).
@@ -45,4 +45,4 @@ export function main(): i32 {
     console.log(inner.value);
   }
   return 0;
-}
+};

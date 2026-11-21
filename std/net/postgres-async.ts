@@ -10,7 +10,7 @@
  *       PgAsyncParams, PgAsyncPool, pgAsyncClaim, pgAsyncConnect, pgAsyncQuery, pgAsyncRelease,
  *     } from "nish/net/postgres-async"
  *
- *     async function title(pool: PgAsyncPool, id: i32): Promise<void> {
+ *     const title = async (pool: PgAsyncPool, id: i32): Promise<void> => {
  *       const ticket: i32 = await pgAsyncClaim(pool)
  *       if (ticket < 0) {
  *         return  // no live connection, or none came free in time
@@ -24,7 +24,7 @@
  *       }
  *     }
  *
- *     export async function main(): Promise<i32> {
+ *     export const main = async (): Promise<i32> => {
  *       const config = new PgConfig()
  *       config.user = "app"
  *       const pool = new PgAsyncPool(4)
@@ -236,11 +236,16 @@ const PG_ASYNC_SEQ_WRAP: i32 = 16777216
 const PG_ASYNC_QUEUE: i32 = 16384
 const PG_ASYNC_QUEUE_WRAP: i32 = 1073741824
 // The wakes the queue's tasks wait on, a task on the one its number picks, so
-// the queue's head moving wakes it and few others.
+// the queue's head moving wakes it and few others. A seat waiting for its
+// turn waits the same way on a turn lane, the one its seat index picks.
 const PG_ASYNC_LANES: i32 = 128
+// The wake the tasks waiting for a slot, or for a seat outside the queue,
+// wait on: after the turn lanes and before the queue lanes.
+const PG_ASYNC_POOL_WAKE: i32 = PG_ASYNC_LANES
+const PG_ASYNC_WAKES: i32 = PG_ASYNC_LANES * 2 + 1
 // What a query reads first; it grows by doubling up to one `maxMessage`.
 const PG_ASYNC_INPUT_SIZE: i32 = 8192
-// Loop turns a seat yields for its turn before it parks on its slot's wake.
+// Loop turns a seat yields for its turn before it parks on its turn lane.
 const PG_ASYNC_TURN_YIELDS: i32 = 4
 // ReadyForQuery's transaction status for "idle", outside any transaction.
 const PG_ASYNC_IDLE: i32 = 73
@@ -380,7 +385,7 @@ export class PgAsyncPool {
   /** Per slot: 1 while a task reads past an abandoned seat's answer. */
   readonly skipping: u8[]
   /**
-   * Per slot, then one for the pool, then one per queue lane: a socket pair
+   * Per turn lane, then one for the pool, then one per queue lane: a socket pair
    * whose read end a waiting task waits on, or -1. A pair is opened the first
    * time a task waits on its wake, so a pool nobody waits on holds none.
    */
@@ -400,7 +405,7 @@ export class PgAsyncPool {
 
   /**
    * A pool of `size` slots, none connected yet. A waiting task waits on a
-   * wake: one per slot, one for the pool and one per queue lane. Each opens
+   * wake: one per turn lane, one for the pool and one per queue lane. Each opens
    * its socket pair the first time a task waits on it; `close()` closes the
    * pairs opened.
    * @param size The number of connections, 1 to `PG_ASYNC_MAX_SIZE`; any
@@ -434,7 +439,7 @@ export class PgAsyncPool {
     this.seatClaims = new Array<i32>(size * PG_ASYNC_MAX_DEPTH)
     this.seatAbandoned = new Array<u8>(size * PG_ASYNC_MAX_DEPTH)
     this.skipping = new Array<u8>(size)
-    const wakes: i32 = size + 1 + PG_ASYNC_LANES
+    const wakes: i32 = PG_ASYNC_WAKES
     this.wakes = new Array<i32>(wakes * 2)
     this.wakePending = new Array<u8>(wakes)
     this.wakeBytes = new Array<u8>(8)
@@ -852,7 +857,7 @@ const pgAsyncSince = (began: i64): i32 => {
 }
 
 /**
- * Wakes the tasks waiting on wake `w` (a slot, or `pool.size` for the pool):
+ * Wakes the tasks waiting on wake `w` (a turn lane, the pool's or a queue lane):
  * one byte on its socket pair, unless one is already there or none waits.
  * The byte stays until every task then waiting has woken: the runtime reports
  * at most 64 ready sockets a turn, and a byte read back by the first of
@@ -905,7 +910,7 @@ const pgAsyncFreeSeats = (pool: PgAsyncPool): i32 => {
  * seats freed together are taken in one loop turn and not one a turn.
  */
 const pgAsyncWakePool = (pool: PgAsyncPool): void => {
-  pgAsyncSignal(pool, pool.size)
+  pgAsyncSignal(pool, PG_ASYNC_POOL_WAKE)
   const queued: i32 = (pool.seatTail - pool.seatHead + PG_ASYNC_QUEUE_WRAP) % PG_ASYNC_QUEUE_WRAP
   if (queued === 0) {
     return
@@ -915,7 +920,7 @@ const pgAsyncWakePool = (pool: PgAsyncPool): void => {
   wake = wake > queued ? queued : wake
   wake = wake > PG_ASYNC_LANES ? PG_ASYNC_LANES : wake
   for (let k: i32 = 0; k < wake; k++) {
-    pgAsyncSignal(pool, pool.size + 1 + ((pool.seatHead + k) % PG_ASYNC_LANES))
+    pgAsyncSignal(pool, PG_ASYNC_POOL_WAKE + 1 + ((pool.seatHead + k) % PG_ASYNC_LANES))
   }
 }
 
@@ -1005,8 +1010,8 @@ export const pgAsyncClaim = async (pool: PgAsyncPool): Promise<i32> => {
     }
     pool.waits += 1
     waited = true
-    await pgAsyncPark(pool, pool.size, left)
-    pgAsyncDrain(pool, pool.size)
+    await pgAsyncPark(pool, PG_ASYNC_POOL_WAKE, left)
+    pgAsyncDrain(pool, PG_ASYNC_POOL_WAKE)
   }
 }
 
@@ -1182,7 +1187,7 @@ export const pgAsyncSeat = async (pool: PgAsyncPool, statement: i32): Promise<i3
     if (skipped) {
       continue
     }
-    const w: i32 = queued >= 0 ? pool.size + 1 + (queued % PG_ASYNC_LANES) : pool.size
+    const w: i32 = queued >= 0 ? PG_ASYNC_POOL_WAKE + 1 + (queued % PG_ASYNC_LANES) : PG_ASYNC_POOL_WAKE
     pool.waits += 1
     await pgAsyncPark(pool, w, left)
     pgAsyncDrain(pool, w)
@@ -1265,6 +1270,9 @@ const pgAsyncLostSeat = (pool: PgAsyncPool, seat: i32): boolean => {
   return at >= 0 && pgAsyncAhead(pool, s, pool.seatSeq[seat]) >= pgAsyncAhead(pool, s, at)
 }
 
+/** The turn lane seat `seat` waits on: distinct for the seats of any eight slots in a row. */
+const pgAsyncTurnLane = (seat: i32): i32 => seat % PG_ASYNC_LANES
+
 /**
  * Whether a task waiting on slot `s`, other than `except`'s, may go on: its
  * turn came, its answer is lost, or an abandoned answer ahead of it waits to
@@ -1283,6 +1291,41 @@ const pgAsyncReady = (pool: PgAsyncPool, s: i32, except: i32): boolean => {
     waiting = true
   }
   return waiting && pgAsyncSkippable(pool, s) >= 0
+}
+
+/**
+ * Wakes the seats waiting for their turn on slot `s`, other than `except`'s,
+ * when one of them may go on: each on its turn lane, in the order their
+ * answers come. A seat whose answer is read wakes the next within the same
+ * loop turn only when the loop runs them in that order. The runtime promises
+ * only the kernel's order: Linux epoll hands back distinct descriptors in the
+ * order they became ready, so lanes rung in order run in order there, while
+ * kqueue specifies no order and a seat run early re-parks and costs a turn.
+ * One wake shared by them all ran them in the order they last waited, often
+ * the reverse, so seats freed together were freed one a turn.
+ */
+const pgAsyncWakeTurns = (pool: PgAsyncPool, s: i32, except: i32): void => {
+  if (!pgAsyncReady(pool, s, except)) {
+    return
+  }
+  let after: i32 = -1
+  for (let n: i32 = 0; n < PG_ASYNC_MAX_DEPTH; n++) {
+    let next: i32 = -1
+    let nextAhead: i32 = PG_ASYNC_SEQ_WRAP
+    for (let k: i32 = 0; k < PG_ASYNC_MAX_DEPTH; k++) {
+      const seat: i32 = s * PG_ASYNC_MAX_DEPTH + k
+      const ahead: i32 = pgAsyncAhead(pool, s, pool.seatSeq[seat])
+      if (seat !== except && toI32(pool.seatWaiting[seat]) === 1 && ahead > after && ahead < nextAhead) {
+        next = seat
+        nextAhead = ahead
+      }
+    }
+    if (next < 0) {
+      return
+    }
+    pgAsyncSignal(pool, pgAsyncTurnLane(next))
+    after = nextAhead
+  }
 }
 
 /**
@@ -1308,9 +1351,7 @@ const pgAsyncDoom = (pool: PgAsyncPool, s: i32, seq: i32): void => {
       pgAsyncSettle(pool, seat)
     }
   }
-  if (pgAsyncReady(pool, s, -1)) {
-    pgAsyncSignal(pool, s)
-  }
+  pgAsyncWakeTurns(pool, s, -1)
 }
 
 /**
@@ -1321,9 +1362,7 @@ const pgAsyncDoom = (pool: PgAsyncPool, s: i32, seq: i32): void => {
 const pgAsyncAbandon = (pool: PgAsyncPool, seat: i32): void => {
   const s: i32 = toI32(seat / PG_ASYNC_MAX_DEPTH)
   pool.seatAbandoned[seat] = 1
-  if (pgAsyncReady(pool, s, seat)) {
-    pgAsyncSignal(pool, s)
-  }
+  pgAsyncWakeTurns(pool, s, seat)
   pgAsyncWakePool(pool)
 }
 
@@ -1394,9 +1433,7 @@ const pgAsyncSkip = async (pool: PgAsyncPool, s: i32, seat: i32): Promise<void> 
       if (!waited && cancelled()) {
         // Another task reads on from where this one stopped.
         pool.skipping[s] = 0
-        if (pgAsyncReady(pool, s, -1)) {
-          pgAsyncSignal(pool, s)
-        }
+        pgAsyncWakeTurns(pool, s, -1)
         pgAsyncWakePool(pool)
         return
       }
@@ -1426,9 +1463,7 @@ const pgAsyncSkip = async (pool: PgAsyncPool, s: i32, seat: i32): Promise<void> 
     pool.prepared[s * PG_ASYNC_MAX_STATEMENTS + pool.seatStatement[seat]] = 0
   }
   pgAsyncSettle(pool, seat)
-  if (pgAsyncReady(pool, s, -1)) {
-    pgAsyncSignal(pool, s)
-  }
+  pgAsyncWakeTurns(pool, s, -1)
   pgAsyncWakePool(pool)
 }
 
@@ -1593,16 +1628,14 @@ export const pgAsyncTurn = async (pool: PgAsyncPool, ticket: i32, sent: i32): Pr
       await sleep(0)
     } else {
       pool.turnWaits += 1
-      await pgAsyncPark(pool, s, -1)
+      await pgAsyncPark(pool, pgAsyncTurnLane(seat), -1)
       // The last of the waiters the byte woke reads it, as in the claim and
       // seat loops: a seat that waits again must not park on a byte nobody reads.
-      pgAsyncDrain(pool, s)
+      pgAsyncDrain(pool, pgAsyncTurnLane(seat))
     }
   }
   pool.seatWaiting[seat] = 0
-  if (!pgAsyncReady(pool, s, seat)) {
-    pgAsyncDrain(pool, s)
-  }
+  pgAsyncDrain(pool, pgAsyncTurnLane(seat))
   if (pgAsyncLostSeat(pool, seat)) {
     return PG_ASYNC_BROKEN + (cancelled() ? PG_ASYNC_CANCELLED : 0)
   }
@@ -1759,9 +1792,7 @@ export const pgAsyncDone = (pool: PgAsyncPool, ticket: i32, turn: i32, reusable:
       // session they did not ask for.
       pgAsyncDoom(pool, s, pool.served[s])
     }
-    if (pgAsyncReady(pool, s, seat)) {
-      pgAsyncSignal(pool, s)
-    }
+    pgAsyncWakeTurns(pool, s, seat)
   }
   pgAsyncFree(pool, seat)
 }

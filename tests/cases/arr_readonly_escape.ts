@@ -14,18 +14,18 @@ class Window {
   }
 }
 
-export function first(xs: readonly i32[]): readonly i32[] {
+export const first = (xs: readonly i32[]): readonly i32[] => {
   return xs;
-}
+};
 
-export function hold(xs: readonly i32[]): i32 {
+export const hold = (xs: readonly i32[]): i32 => {
   const w = new Window(xs);
   return w.rows.length;
-}
+};
 
 // Shallow, so the inner array is an ordinary mutable `i32[]` and storing into
 // it is legal; the outer header is still never written through.
-export function touch(rows: readonly i32[][], v: i32): i32 {
+export const touch = (rows: readonly i32[][], v: i32): i32 => {
   rows[0][0] = v;
   return rows.length;
-}
+};

@@ -5,21 +5,21 @@
 // differ. The two constructions are also the two slots of the private ABI
 // (WP15 §7b): the ok arm fills index 1 and the error arm index 2, each leaving
 // the other `undef`.
-function scale(x: f32): Result<f32, boolean> {
+const scale = (x: f32): Result<f32, boolean> => {
   if (x < 0) {
     return Err(true);
   }
   return Ok(x * toF32(2));
-}
+};
 
-function narrow(n: i32): Result<u8, u16> {
+const narrow = (n: i32): Result<u8, u16> => {
   if (n > 255) {
     return Err(toU16(1000));
   }
   return Ok(toU8(n));
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(scale(toF32(1.5)).unwrapOr(toF32(-1)));
   console.log(scale(toF32(-1)).unwrapOr(toF32(-1)));
 
@@ -32,4 +32,4 @@ export function main(): i32 {
     console.log(big.error);
   }
   return 0;
-}
+};

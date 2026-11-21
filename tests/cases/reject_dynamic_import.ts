@@ -1,1 +1,4 @@
-function f(): number { import("./x"); return 1; }
+const f = (): number => {
+  import("./x");
+  return 1;
+};

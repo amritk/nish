@@ -1,1 +1,3 @@
-function f(a: boolean, b: boolean): boolean { return a < b; }
+const f = (a: boolean, b: boolean): boolean => {
+  return a < b;
+};

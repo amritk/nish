@@ -23,8 +23,8 @@ class File {
   }
 }
 
-export function count(f: File): i32 {
+export const count = (f: File): i32 => {
   return f.read()
-}
+};
 
 export const main = (): i32 => 0

@@ -1,17 +1,17 @@
 // String concatenation, equality, length, and empty strings.
-function repeat(s: string, n: number): string {
+const repeat = (s: string, n: number): string => {
   let out = "";
   for (let i = 0; i < n; i++) {
     out = out + s;
   }
   return out;
-}
+};
 
-function same(a: string, b: string): boolean {
+const same = (a: string, b: string): boolean => {
   return a === b;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const hello = "hello";
   const world = "world";
   const hw = hello + ", " + world + "!";
@@ -44,4 +44,4 @@ export function main(): number {
   const picked = hw.length > 10 ? hello : world;
   console.log(picked);
   return 0;
-}
+};

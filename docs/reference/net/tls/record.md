@@ -157,10 +157,10 @@ The traffic secret a KeyUpdate moves one direction to (RFC 8446 §7.2):
 wipe.
 
 ```ts
-function tlsNextTrafficSecret(
+const tlsNextTrafficSecret: (
   hashLength: i32,
   trafficSecret: Secret<u8[]>,
-): Secret<u8[]>
+) => Secret<u8[]>
 ```
 
 <scalar-field name="hashLength" type="i32" required>
@@ -190,11 +190,11 @@ not know (`unexpected_message`) or a body past 2^14 + 256 bytes
 (`record_overflow`, §5.2). The legacy version is not read (§5.1).
 
 ```ts
-function tlsRecordLength(
+const tlsRecordLength: (
   buf: u8[],
   off: i32,
   avail: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -229,11 +229,11 @@ Whether `[off, off + len)` is a window inside an array of `length` elements: eve
 It is written as `off <= length - len`, not `off + len <= length`, so a large `off` cannot overflow.
 
 ```ts
-function tlsRecordWindowFits(
+const tlsRecordWindowFits: (
   length: i32,
   off: i32,
   len: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="length" type="i32" required>

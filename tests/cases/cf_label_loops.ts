@@ -1,7 +1,7 @@
 // A labelled `break` leaves the loop it names from inside an inner one, and a
 // labelled `continue` starts that loop's next turn: the exit and the step are
 // the branches a hand-kept `done` flag would take, with no flag.
-function firstPair(limit: number, target: number): number {
+const firstPair = (limit: number, target: number): number => {
   let found = -1;
   outer: for (let i = 0; i < limit; i++) {
     for (let j = 0; j < limit; j++) {
@@ -12,9 +12,9 @@ function firstPair(limit: number, target: number): number {
     }
   }
   return found;
-}
+};
 
-function skipRows(rows: number[][]): number {
+const skipRows = (rows: number[][]): number => {
   let total = 0;
   rows: for (const row of rows) {
     for (const cell of row) {
@@ -26,9 +26,9 @@ function skipRows(rows: number[][]): number {
     total += 1000;
   }
   return total;
-}
+};
 
-function countdown(start: number): number {
+const countdown = (start: number): number => {
   let steps = 0;
   let n = start;
   outer: while (n > 0) {
@@ -46,8 +46,8 @@ function countdown(start: number): number {
     } while (k < 3);
   }
   return steps;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return firstPair(10, 12) + skipRows([[1, 2], [3, -1, 5], [4]]) + countdown(6);
-}
+};

@@ -1,17 +1,17 @@
 // Ternary chains of every result type, nested ternaries, ternaries as call arguments.
-function sign(x: number): number {
+const sign = (x: number): number => {
   return x < 0 ? -1 : x > 0 ? 1 : 0;
-}
+};
 
-function grade(score: number): string {
+const grade = (score: number): string => {
   return score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F";
-}
+};
 
-function fizzbuzz(n: number): string {
+const fizzbuzz = (n: number): string => {
   return n % 15 === 0 ? "FizzBuzz" : n % 3 === 0 ? "Fizz" : n % 5 === 0 ? "Buzz" : `${n}`;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(sign(-2147483647 - 1));
   console.log(sign(0));
   console.log(sign(42));
@@ -46,4 +46,4 @@ export function main(): number {
   const t = true ? (false ? 1 : 2) : 3;
   console.log(t);
   return 0;
-}
+};

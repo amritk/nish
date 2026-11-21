@@ -15,7 +15,7 @@ class Request {
 }
 
 /** The value of `name:` in `head`, or "" without one. */
-function field(head: string, name: string): string {
+const field = (head: string, name: string): string => {
   const at: i32 = head.indexOf(`\r\n${name}: `)
   if (at < 0) {
     return ""
@@ -23,10 +23,10 @@ function field(head: string, name: string): string {
   const from: i32 = at + name.length + 4
   const rest: string = head.substring(from, head.length)
   return rest.substring(0, rest.indexOf("\r\n"))
-}
+};
 
 /** A non-negative decimal's value; -1 for anything else. */
-function decimal(s: string): i32 {
+const decimal = (s: string): i32 => {
   if (s.length === 0) {
     return -1
   }
@@ -39,7 +39,7 @@ function decimal(s: string): i32 {
     v = v * 10 + ch - 48
   }
   return v
-}
+};
 
 /** Reads one request from `fd`, its body by Content-Length. */
 async function readRequest(fd: i32): Promise<Request> {
@@ -87,10 +87,10 @@ async function readRequest(fd: i32): Promise<Request> {
 }
 
 /** The head of an answer with `status`, `extra` fields and a body of `length`. */
-function head(status: string, extra: string, length: i32, close: boolean): string {
+const head = (status: string, extra: string, length: i32, close: boolean): string => {
   const connection: string = close ? "Connection: close\r\n" : ""
   return `HTTP/1.1 ${status}\r\n${extra}Content-Length: ${length}\r\n${connection}\r\n`
-}
+};
 
 /** Answers the requests on one connection, the `id`th accepted. */
 export async function answerScripted(fd: i32, id: i32, port: i32): Promise<void> {

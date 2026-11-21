@@ -24,13 +24,13 @@ class File {
   }
 }
 
-export function walk(p: string): i32 {
+export const walk = (p: string): i32 => {
   let x = 0
   for (let i = 0; i < 2; i += f.read()) {
     using f = new File(p)
     x += f.read()
   }
   return x
-}
+};
 
 export const main = (): i32 => 0

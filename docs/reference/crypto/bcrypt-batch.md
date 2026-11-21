@@ -152,9 +152,9 @@ width outside 1 to 6, a negative hold, fewer than one core, or a cost
 outside 4 to 31.
 
 ```ts
-function bcryptBatcher(
+const bcryptBatcher: (
   config: BcryptBatchConfig,
-): Result<BcryptBatcher, string>
+) => Result<BcryptBatcher, string>
 ```
 
 <scalar-field name="config" type="BcryptBatchConfig" required>

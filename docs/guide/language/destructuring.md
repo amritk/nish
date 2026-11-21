@@ -10,9 +10,15 @@ section.
 ## Objects
 
 An object pattern reads fields of a class or interface value. Write a field's
-name to bind it under that name, or `field: name` to rename it:
+name to bind it under that name, or `field: name` to rename it. The examples
+on this page do `i32` arithmetic nothing bounds, so the compiler cannot prove
+it fits and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); bounding the operands,
+as the compile error suggests, builds them under the default:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 class Point {
   x: i32;
   y: i32;
@@ -45,7 +51,9 @@ side once.
 An array pattern reads elements by their position. Leave a position empty to
 skip it:
 
-```ts nish:ok-body
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok-body --allow-panics -->
+```ts
 const xs: i32[] = [10, 20, 30];
 let [a, , c] = xs;
 a = a + 1;
@@ -53,13 +61,16 @@ console.log(`${a} ${c}`);
 ```
 
 This prints `11 30`. Each element is checked against the array's length like
-`xs[i]` is: where TypeScript would bind `undefined` for an element past the
-end, Nish stops with `index out of range`, because a name always holds a value
-of its type.
+`xs[i]` is: the compiler refuses a position it cannot prove in range, and
+under `--allow-panics`, where TypeScript would bind `undefined` for an element
+past the end, Nish stops with `index out of range`, because a name always
+holds a value of its type.
 
 ## In a `for...of`
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 class Point {
   x: i32;
   y: i32;
@@ -108,7 +119,8 @@ to write it instead:
   A module constant is a compile-time value the compiler folds into each
   use, so there is no receiver at run time for a pattern to read.
 
-```ts nish:err-body NL2775
+<!-- nish:err-body NL2775 -->
+```ts
 const [first, ...rest] = [1, 2, 3];
 console.log(`${first}`);
 ```

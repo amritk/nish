@@ -61,7 +61,7 @@
 import { astText } from "./ast-text"
 import { playBreak } from "./break"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
-import { CLI, VERSION } from "./branding"
+import { CLI, PACKAGE_CONDITION, VERSION } from "./branding"
 import { agentDriven, Style, styleFor } from "../std/cli"
 import { helpHint, helpText } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
@@ -69,17 +69,28 @@ import { compatFeatureNames, compatHasFeature, compatKnownText } from "./compat"
 import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
-import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
+import { acceptsSidecars, ExternalFunction, externalFunctions, refuseCompactSidecars } from "./interop-abi"
 import { generateDts } from "./interop-dts"
 import { generateHeader } from "./interop-header"
 import { generateNapiShim, napiBridges } from "./interop-napi"
 import { generateWasmLoader, wasmLoaderPath } from "./interop-wasm"
 import { unsafeModule } from "./nish-modules"
-import { Options } from "./options"
+import {
+  LINK_ENTRY,
+  LINK_SHAPE,
+  LINK_UNGRANTED,
+  LinkManifest,
+  LinkRequest,
+  ManifestList,
+  manifestLink,
+  manifestNish,
+} from "./manifest"
+import { ALLOW_PANICS_FLAG, Options } from "./options"
+import { packageDirOf, packageNameOf } from "./packages"
 import { basenameWithout, dirname, joinPath } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
-import { Diagnostic, formatList } from "./diagnostics"
+import { Diagnostic, formatList, SourceFile } from "./diagnostics"
 import { EmittedProgram, emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
 import {
@@ -89,11 +100,15 @@ import {
   simulatedUnlabelledBuiltin,
 } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
+import { cImport } from "./c-import"
 import { RELEASE_HELPER_SOURCE, planUpgrade, runUpgrade, startNoticeCheck, updateNotice } from "./upgrade"
 import { WATCH_SUPERVISOR_SOURCE, watchState } from "./watch"
 import { moduleCacheKey, moduleCacheRoot } from "./build-cache"
 import {
   anyCallsSqlite,
+  LinkSet,
+  linkSetLines,
+  makeRulePaths,
   runBinaryName,
   runCacheKey,
   runCacheRoot,
@@ -143,10 +158,21 @@ const isProfile = (name: string): boolean =>
 /**
  * The one CPU level `--cpu` accepts (docs/LANGUAGE.md, "The CPU level"): the
  * link compiles the program and the runtime for it, and the constant-time
- * check reads its assembly (CT-16). Every other level, `native` included, is
- * refused rather than passed to clang unread.
+ * check reads its assembly (CT-16). Every other level is refused rather than
+ * passed to clang unread. `native` is refused for a measured reason, which
+ * `NATIVE_REFUSED` gives: the check does not pass at every CPU it names.
  */
 const CPU_LEVEL: string = "x86-64-v3"
+
+/**
+ * Why `--cpu native` is refused (docs/security/ct-verification.md, CT-16):
+ * read under clang 18 at `-march=znver2`, `znver3`, `znver4` and
+ * `sapphirerapids`, the `ct_asm_chacha20poly1305` fixture holds a branch the
+ * checker refuses, so a native build on those CPUs could ship assembly the
+ * check does not pass.
+ */
+const NATIVE_REFUSED: string =
+  "under clang 18 the constant-time check (CT-16) refuses the assembly made for some CPUs native names (znver2 to znver4, sapphirerapids)"
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one
@@ -493,6 +519,113 @@ const missingToolchain = (asker: string): string => {
   return lines.join("\n")
 }
 
+/**
+ * The first eight bytes of the indexed profile `llvm-profdata merge` writes,
+ * `\xfflprofi\x81`, and of the raw `.profraw` an instrumented binary writes,
+ * `\x81rforpl\xff`. `llvm-profdata show` reads either, so the raw one, which
+ * clang refuses as bad magic deep in the link, is told apart here.
+ */
+const INDEXED_PROFILE_MAGIC: readonly i32[] = [255, 108, 112, 114, 111, 102, 105, 129]
+const RAW_PROFILE_MAGIC: readonly i32[] = [129, 114, 102, 111, 114, 112, 108, 255]
+
+/** Whether `bytes` starts with the eight bytes of `magic`. */
+const startsWithMagic = (bytes: u8[], magic: readonly i32[]): boolean => {
+  if (bytes.length < magic.length) {
+    return false
+  }
+  // `i < bytes.length` repeats the test above where the prover sees it, so the
+  // read keeps no bounds check (NL9007).
+  let i = 0
+  while (i < magic.length && i < bytes.length) {
+    if (toI32(bytes[i]) !== magic[i]) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}
+
+/**
+ * The `/bin/sh` script `pgoProblem` asks a profile's type with: exit 0 for a
+ * regular file, `PROFILE_KIND_DIRECTORY` for a directory, and
+ * `PROFILE_KIND_OTHER` for anything else. `$1` is the profile's real path, an operand, never script text.
+ */
+const PROFILE_KIND_SCRIPT: string = 'if [ -d "$1" ]; then exit 4; fi; if [ -f "$1" ]; then exit 0; fi; exit 5'
+
+/** The status `PROFILE_KIND_SCRIPT` exits with for a directory. */
+const PROFILE_KIND_DIRECTORY: i32 = 4
+
+/** The status `PROFILE_KIND_SCRIPT` exits with for a FIFO, device or socket. */
+const PROFILE_KIND_OTHER: i32 = 5
+
+/**
+ * Why a `--pgo-generate` or `--pgo-use` line is refused, without the
+ * `compile: ` prefix, or `""`. The flags shape the link, so they need one;
+ * only the speed and size recipes optimise, so only they take a profile; and
+ * a profile is trained on this machine, so the target is the host. A
+ * `--pgo-use` file must be a regular file holding an indexed profile, not a
+ * raw `.profraw`. `real` is `use` resolved once by the caller, or null.
+ */
+const pgoProblem = (
+  flag: string,
+  generate: boolean,
+  use: string,
+  real: string | null,
+  link: string,
+  profile: string,
+  target: string
+): string => {
+  if (generate && use.length > 0) {
+    return "--pgo-generate and --pgo-use cannot be used together: link the training binary with one, then the optimised one with the other"
+  }
+  if (link.length === 0) {
+    return `${flag} needs --link: it shapes the binary the link builds, and the IR does not change`
+  }
+  if (profile !== "speed" && profile !== "size") {
+    return `${flag} cannot be used with --profile ${profile}: only speed and size optimise, so only they take a profile`
+  }
+  if (target.length > 0) {
+    const host = resolveTarget("host")
+    if (host === null || host.triple !== target) {
+      return `${flag} trains and builds for this machine, and the target is ${target}`
+    }
+  }
+  if (use.length === 0) {
+    return ""
+  }
+  const merge = "write one with `llvm-profdata merge -o <file>.profdata <runs>.profraw`"
+  if (real === null) {
+    return `--pgo-use: no profile at \`${use}\`; ${merge}`
+  }
+  // The resolved path's type, before anything opens it: a FIFO would block the
+  // read below with no writer, and a device never ends. The question goes to
+  // `/bin/sh`, as `distrustOf`'s does, because `lstatOwnerModeSync` is refused
+  // on a wasm32 build and `src/` is also the web compiler. It fails closed: a
+  // probe that cannot run, or answers with a status the script never exits
+  // with, refuses the profile as one whose type could not be checked.
+  const kind = spawnSyncTo(["/bin/sh", "-c", PROFILE_KIND_SCRIPT, "sh", real], "/dev/null", "/dev/null")
+  if (kind === PROFILE_KIND_DIRECTORY) {
+    return `--pgo-use: \`${use}\` is a directory, not a profile; ${merge}`
+  }
+  if (kind === PROFILE_KIND_OTHER) {
+    return `--pgo-use: \`${use}\` is not a regular file, so not a profile; ${merge}`
+  }
+  if (kind !== 0) {
+    return `--pgo-use: the type of \`${use}\` could not be checked, because \`/bin/sh\` did not answer; the profile is refused`
+  }
+  const bytes = readFileBytesSync(real)
+  if (bytes === null) {
+    return `--pgo-use: \`${use}\` cannot be read; check its permissions`
+  }
+  if (startsWithMagic(bytes, RAW_PROFILE_MAGIC)) {
+    return `--pgo-use: \`${use}\` is a raw profile a --pgo-generate binary wrote; merge it first: \`llvm-profdata merge -o <file>.profdata ${use}\``
+  }
+  if (!startsWithMagic(bytes, INDEXED_PROFILE_MAGIC)) {
+    return `--pgo-use: \`${use}\` is not a profile \`llvm-profdata merge\` writes; ${merge}`
+  }
+  return ""
+}
+
 /** The byte that separates the names of one `--allow` or `--deny` value. */
 const COMMA: i32 = 44
 
@@ -686,6 +819,10 @@ const commandMain = (): number => {
   if (process.argv[1] === "upgrade") {
     return upgrade()
   }
+  // `nish c-import` writes a module from a C header (src/c-import.ts).
+  if (process.argv[1] === "c-import") {
+    return cImport(process.argv)
+  }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
   opts.statelessInstance = simulatedStatelessInstance()
@@ -719,6 +856,13 @@ const commandMain = (): number => {
   // `--cpu`: empty for the baseline CPU, else CPU_LEVEL. Driver-level like
   // the profile: it changes the link, never a byte of the IR.
   let cpu = ""
+  // `--pgo-generate` and `--pgo-use <file>`: link an instrumented binary, or
+  // one optimised with a merged profile. Driver-level like `--cpu`: the IR
+  // does not move; build.sh puts the flag on every unit and the link.
+  // `pgoUse` is the profile's real path once the line is read, because
+  // build.sh compiles SQLite from inside its own directory.
+  let pgoGenerate = false
+  let pgoUse = ""
   // `--debug-arena`: link the runtime whose arena traps a stale reference.
   // Driver-level like `--cpu`: it changes the runtime, never the IR.
   let debugArena = false
@@ -797,10 +941,29 @@ const commandMain = (): number => {
         return 2
       }
       cpu = process.argv[arg]
+      if (cpu === "native") {
+        console.error(`compile: --cpu native is refused: ${NATIVE_REFUSED}; the one accepted is ${CPU_LEVEL}`)
+        return 2
+      }
       if (cpu !== CPU_LEVEL) {
         console.error(`compile: unknown cpu level \`${cpu}\`; the one accepted is ${CPU_LEVEL}`)
         return 2
       }
+    } else if (value === "--pgo-generate") {
+      notForRun = notForRun.length === 0 ? value : notForRun
+      pgoGenerate = true
+    } else if (value === "--pgo-use") {
+      notForRun = notForRun.length === 0 ? value : notForRun
+      arg = arg + 1
+      // An empty value, an unset `$VAR`, is refused here: every later check
+      // keys on a non-empty `pgoUse`, so it would be a plain link.
+      if (arg >= process.argv.length || process.argv[arg].length === 0) {
+        console.error(
+          "compile: --pgo-use needs a profile, the .profdata `llvm-profdata merge` writes from the runs of a --pgo-generate binary"
+        )
+        return 2
+      }
+      pgoUse = process.argv[arg]
     } else if (value === "--target") {
       notForRun = notForRun.length === 0 ? value : notForRun
       irFlag = irFlag.length === 0 ? value : irFlag
@@ -879,11 +1042,32 @@ const commandMain = (): number => {
       }
       opts.emitPanics = process.argv[arg]
     } else if (value === "--deny-panics") {
+      // The default spelled out, kept for the scripts that pass it.
       opts.denyPanics = true
+      opts.denyPanicsFlag = true
+    } else if (value === ALLOW_PANICS_FLAG) {
+      // The opposite of `--deny-panics`, and the last of the two wins: neither
+      // moves a byte of the IR, so either reading builds the same binary,
+      // unlike two `--sandbox` modes. A `noPanic` list still holds under it.
+      // Nothing else relaxes the default: `nish run`, `--emit-ts` and
+      // `--compat` refuse what a plain compile refuses, since each is a way
+      // to run the same program.
+      opts.denyPanics = false
+      opts.denyPanicsFlag = false
     } else if (value === "--deny-retention") {
       opts.denyRetention = true
     } else if (value === "--explain-memory") {
       opts.explainMemory = true
+    } else if (value === "--explain-layout") {
+      opts.explainLayout = true
+    } else if (value === "--compact") {
+      arg = arg + 1
+      const mode = arg < process.argv.length ? process.argv[arg] : ""
+      if (mode !== "on" && mode !== "off") {
+        console.error("compile: --compact needs on or off")
+        return 2
+      }
+      opts.compact = mode === "on"
     } else if (value === "--emit-arena") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -1163,12 +1347,33 @@ const commandMain = (): number => {
     // `--warn-portability` is left alone: it is off unless the line asks.
     warnPerformance = false
   }
+  // After the `run` refusals, which cover both flags under `run` through
+  // `notForRun`, and after the loop, so flag order does not matter. build.sh
+  // lets the last `--pgo-*` win and drops them under debug and wasi; a flag
+  // that does nothing is refused here instead.
+  const pgoFlag = pgoUse.length > 0 ? "--pgo-use" : "--pgo-generate"
+  const pgoReal: string | null = pgoUse.length > 0 ? realpathSync(pgoUse) : null
+  if (pgoGenerate || pgoUse.length > 0) {
+    const problem = pgoProblem(pgoFlag, pgoGenerate, pgoUse, pgoReal, link, profile, opts.target)
+    if (problem.length > 0) {
+      console.error(`compile: ${problem}`)
+      return 2
+    }
+  }
+  const pgoFlags: string[] = []
+  if (pgoGenerate) {
+    pgoFlags.push("--pgo-generate")
+  } else if (pgoReal !== null) {
+    pgoUse = pgoReal
+    pgoFlags.push("--pgo-use")
+    pgoFlags.push(pgoUse)
+  }
   // After the `run` refusals, which already cover `--fix` under `run`, so
   // that this one is only ever about a compile.
-  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory)) {
+  if (fix && (productFlag.length > 0 || irFlag.length > 0 || opts.explainMemory || opts.explainLayout)) {
     let refused = productFlag.length > 0 ? productFlag : irFlag
     if (refused.length === 0) {
-      refused = "--explain-memory"
+      refused = opts.explainMemory ? "--explain-memory" : "--explain-layout"
     }
     console.error(
       `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
@@ -1266,18 +1471,28 @@ const commandMain = (): number => {
   }
   // The panic sites are settled after the whole-program proofs, so they are a
   // fact about a checked program too, and the file would never be written,
-  // nor a site refused.
-  if (emitAst && (opts.emitPanics.length > 0 || opts.denyPanics)) {
+  // nor a site refused. Only a scope the line asked for is refused: the
+  // default one is skipped without a word, as every other check is.
+  if (emitAst && (opts.emitPanics.length > 0 || opts.denyPanicsFlag)) {
     console.error(
-      `compile: \`${opts.denyPanics ? "--deny-panics" : "--emit-panics"}\` reports on a checked program, and --emit-ast stops before the check`
+      `compile: \`${opts.denyPanicsFlag ? "--deny-panics" : "--emit-panics"}\` reports on a checked program, and --emit-ast stops before the check`
     )
     return 2
+  }
+  if (emitAst) {
+    opts.denyPanics = false
   }
   // The retention warnings and the arena placements come from the body checks
   // and the whole-program facts, which `--emit-ast` never reaches, so there
   // would be nothing to deny or to write.
-  if (emitAst && (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory)) {
+  if (
+    emitAst &&
+    (opts.denyRetention || opts.emitArena.length > 0 || opts.explainMemory || opts.explainLayout)
+  ) {
     let flag = opts.explainMemory ? "--explain-memory" : "--emit-arena"
+    if (opts.explainLayout && !opts.explainMemory) {
+      flag = "--explain-layout"
+    }
     if (opts.denyRetention) {
       flag = "--deny-retention"
     }
@@ -1285,11 +1500,10 @@ const commandMain = (): number => {
     return 2
   }
   // `--json` promises a stderr of diagnostic objects, one per line, and the
-  // memory report is prose.
-  if (json && opts.explainMemory) {
-    console.error(
-      "compile: `--explain-memory` prints a report for people, and --json keeps stderr to diagnostics"
-    )
+  // memory and layout reports are prose.
+  if (json && (opts.explainMemory || opts.explainLayout)) {
+    const flag = opts.explainMemory ? "--explain-memory" : "--explain-layout"
+    console.error(`compile: \`${flag}\` prints a report for people, and --json keeps stderr to diagnostics`)
     return 2
   }
   opts.capabilityReport = capabilitiesFile.length > 0
@@ -1327,6 +1541,26 @@ const commandMain = (): number => {
     if (problem.length > 0) {
       reportToolchainFailure(problem, json)
       return 3
+    }
+  }
+  // The `.profraw` files an instrumented binary writes are of no use without
+  // `llvm-profdata merge`, and a profile is read by the LLVM that wrote it, so
+  // the tool is asked for before anything compiles (docs/security/cli.md,
+  // CLI-13). `show` reads the whole profile and refuses one another LLVM
+  // wrote, with the tool's own reason on stderr.
+  if (pgoGenerate || pgoUse.length > 0) {
+    if (programOnPath("llvm-profdata").length === 0) {
+      reportToolchainFailure(
+        `${pgoFlag}: llvm-profdata is not on PATH; a profile-guided build needs it to merge and read profiles. Ubuntu's llvm-18 package installs it as llvm-profdata-18: link that onto PATH as llvm-profdata.`,
+        json
+      )
+      return 3
+    }
+    if (pgoUse.length > 0 && spawnSyncTo(["llvm-profdata", "show", pgoUse], "/dev/null", "") !== 0) {
+      console.error(
+        `compile: --pgo-use: llvm-profdata cannot read \`${pgoUse}\` (above); merge it again with this LLVM`
+      )
+      return 2
     }
   }
 
@@ -1475,6 +1709,9 @@ const commandMain = (): number => {
   if (opts.explainMemory) {
     console.error(compilation.explainMemoryText())
   }
+  if (opts.explainLayout) {
+    console.error(compilation.explainLayoutText())
+  }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last
   // thing on stderr before the program's own output.
@@ -1580,8 +1817,31 @@ const commandMain = (): number => {
     report(compilation, json)
     return 1
   }
+  // WP48: `--emit-dts` alone describes types to `tsc`, which never reads a link,
+  // and `--emit-header` hands a C host compact classes as opaque handles. Only
+  // an N-API addon is refused, also beside `--emit-header`: it runs in Node's
+  // process, which Nish does not own.
+  let hostFlag = ""
+  if (opts.emitNapi.length > 0) {
+    hostFlag = "--emit-napi"
+  } else if (opts.emitNapiAsync.length > 0) {
+    hostFlag = "--emit-napi-async"
+  }
+  if (hostFlag.length > 0 && !refuseCompactSidecars(compilation, fns, hostFlag)) {
+    report(compilation, json)
+    return 1
+  }
   const emitted = compilation.emit()
   const arenaRange = hasCompactClass(compilation)
+  const links = new LinkSet()
+  links.sqlite = anyCallsSqlite(emitted)
+  // Read on every compile, not only one that links: a link a package may not
+  // have is refused by a compile to IR and by `--json` too, so a check that
+  // never links still sees it.
+  if (!readLinkSet(compilation, links)) {
+    report(compilation, json)
+    return 1
+  }
   if (runMode && watchStateFile.length > 0) {
     const cached = cachedBinary(
       emitted,
@@ -1593,6 +1853,7 @@ const commandMain = (): number => {
       opts.threads,
       debugArena,
       arenaRange,
+      links,
       json
     )
     if (cached.status === 0) {
@@ -1611,6 +1872,7 @@ const commandMain = (): number => {
       opts.threads,
       debugArena,
       arenaRange,
+      links,
       json,
       runArgsFrom
     )
@@ -1657,8 +1919,9 @@ const commandMain = (): number => {
     opts.threads,
     debugArena,
     arenaRange,
-    anyCallsSqlite(emitted),
+    links,
     "",
+    pgoFlags,
     json,
     false
   )
@@ -1997,6 +2260,212 @@ const findPackage = (): PackageSearch => {
   return search
 }
 
+/** A package whose `nish.link` a program may carry: its name and directory. */
+class LinkPackage {
+  name: string
+  dir: string
+
+  constructor(name: string, dir: string) {
+    this.name = name
+    this.dir = dir
+  }
+}
+
+/**
+ * WP66 S7: every C library and source the program's packages link, read
+ * from each one's `nish.link` into `links`, or false with each refusal
+ * reported. `links.sqlite` is the standard library's own entry, set by the
+ * caller from the IR (`anyCallsSqlite`), so a program that calls
+ * `std/sqlite.ts` links SQLite exactly as before.
+ *
+ * The root package's link is its own to ask for. A dependency's takes effect
+ * only where the root's `nish.link.dependencies` grants that package that
+ * library or source (WP40's rule), and anything else it asks for is NL3061.
+ * A dependency is every package the program loaded a module of, by the
+ * resolver's record (`packageCopies`) and by path for one reached by a
+ * relative import, so none is missed by the way it was reached.
+ */
+const readLinkSet = (compilation: Compilation, links: LinkSet): boolean => {
+  const root = compilation.rootManifest()
+  let granted = new LinkManifest()
+  const skip: string[] = []
+  const library = realpathSync(compilation.libraryRoot())
+  if (library !== null) {
+    skip.push(library)
+  }
+  if (root !== null) {
+    const rootDir = dirname(root.path)
+    const realRoot = realpathSync(rootDir.length === 0 ? "." : rootDir)
+    if (realRoot !== null) {
+      skip.push(realRoot)
+    }
+    // A refused `nish` field was reported by `Compilation.check`, which
+    // stops the build before this runs.
+    const nish = manifestNish(root.text, PACKAGE_CONDITION)
+    if (nish.problem.length === 0) {
+      granted = manifestLink(root.text, nish.linkAt, nish.linkEnd, true)
+      reportLinkProblems(compilation, root, granted)
+      addLinkRequest(compilation, root, rootDir, realRoot, granted.own, granted.own, links)
+    }
+  }
+  readDependencyLinks(compilation, linkPackages(compilation), 0, granted, skip, links)
+  return !compilation.sink.hasErrors()
+}
+
+/**
+ * `readLinkSet`'s reading of each of `packages` from `at` on: its `nish.link`
+ * checked against `granted`, and what it may link added to `links`. `skip`
+ * holds the real directories already read. Recursive rather than a loop, so
+ * each package's manifest text is given back when its call returns (NL9011).
+ */
+const readDependencyLinks = (
+  compilation: Compilation,
+  packages: LinkPackage[],
+  at: i32,
+  granted: LinkManifest,
+  skip: string[],
+  links: LinkSet
+): void => {
+  if (at < 0 || at >= packages.length) {
+    return
+  }
+  const dependency = packages[at]
+  const real = realpathSync(dependency.dir)
+  const path = joinPath([dependency.dir, "package.json"])
+  const text = readFileSyncOrNull(path)
+  if (real !== null && skip.indexOf(real) < 0 && text !== null) {
+    skip.push(real)
+    const source = new SourceFile(path, text)
+    const nish = manifestNish(text, PACKAGE_CONDITION)
+    if (nish.problem.length > 0) {
+      // Fails closed: a field this reader cannot read may hold a link.
+      if (text.indexOf("link") >= 0) {
+        compilation.sink.report(source, nish.problemStart, nish.problemEnd, `${nish.problem}${LINK_SHAPE}`)
+      }
+    } else if (nish.linkAt >= 0) {
+      const asked = manifestLink(text, nish.linkAt, nish.linkEnd, false)
+      reportLinkProblems(compilation, source, asked)
+      const grant = granted.grantFor(dependency.name)
+      refuseUngranted(
+        compilation,
+        source,
+        dependency.name,
+        "links the C library",
+        asked.own.libraries,
+        grant.libraries
+      )
+      refuseUngranted(
+        compilation,
+        source,
+        dependency.name,
+        "compiles the C source",
+        asked.own.sources,
+        grant.sources
+      )
+      addLinkRequest(compilation, source, dependency.dir, real, asked.own, grant, links)
+    }
+  }
+  readDependencyLinks(compilation, packages, at + 1, granted, skip, links)
+}
+
+/** The packages other than the root that the program loaded a module of. */
+const linkPackages = (compilation: Compilation): LinkPackage[] => {
+  const out: LinkPackage[] = []
+  const names: string[] = []
+  for (const copy of compilation.packageCopies) {
+    if (names.indexOf(copy.name) < 0) {
+      names.push(copy.name)
+      out.push(new LinkPackage(copy.name, copy.dir))
+    }
+  }
+  for (const unit of compilation.modules) {
+    const dir = packageDirOf(unit.path)
+    const name = packageNameOf(unit.path)
+    if (dir.length > 0 && dir !== compilation.rootPackageDir && names.indexOf(name) < 0) {
+      names.push(name)
+      out.push(new LinkPackage(name, dir))
+    }
+  }
+  return out
+}
+
+/** Each refusal `manifestLink` made of `source`'s `nish.link`, reported where it is written. */
+const reportLinkProblems = (compilation: Compilation, source: SourceFile, link: LinkManifest): void => {
+  for (const problem of link.problems) {
+    compilation.sink.report(source, problem.start, problem.end, problem.message)
+  }
+}
+
+/** NL3061 for each of `asked` (a dependency's `nish.link` list) that `grant` does not name. */
+const refuseUngranted = (
+  compilation: Compilation,
+  source: SourceFile,
+  name: string,
+  verb: string,
+  asked: ManifestList,
+  grant: ManifestList
+): void => {
+  let i = 0
+  while (i < asked.entries.length && i < asked.offsets.length && i < asked.ends.length) {
+    const entry = asked.entries[i]
+    if (grant.entries.indexOf(entry) < 0) {
+      compilation.sink.report(
+        source,
+        asked.offsets[i],
+        asked.ends[i],
+        `the dependency \`${name}\` ${verb} \`${entry}\`${LINK_UNGRANTED}`
+      )
+    }
+    i = i + 1
+  }
+}
+
+/**
+ * Into `links`, what `asked` names that `grant` names too (for the root,
+ * `grant` is `asked`): each library as written, and each source as its real
+ * path, refused (NL3060) unless that path is a file inside `realDir`, the
+ * package's real directory (null when it has none), so a symbolic link cannot
+ * carry a source out of the package. What each source's compile reads then
+ * keys the run cache (`readLinkIncludes`).
+ */
+const addLinkRequest = (
+  compilation: Compilation,
+  source: SourceFile,
+  dir: string,
+  realDir: string | null,
+  asked: LinkRequest,
+  grant: LinkRequest,
+  links: LinkSet
+): void => {
+  for (const name of asked.libraries.entries) {
+    if (grant.libraries.entries.indexOf(name) >= 0) {
+      links.addLibrary(name)
+    }
+  }
+  let i = 0
+  while (
+    i < asked.sources.entries.length &&
+    i < asked.sources.offsets.length &&
+    i < asked.sources.ends.length
+  ) {
+    const entry = asked.sources.entries[i]
+    if (grant.sources.entries.indexOf(entry) >= 0) {
+      const real = realpathSync(joinPath([dir, entry]))
+      if (realDir === null || real === null || !real.startsWith(`${realDir}/`) || !real.endsWith(".c")) {
+        compilation.sink.report(
+          source,
+          asked.sources.offsets[i],
+          asked.sources.ends[i],
+          `\`${entry}\` is no file inside the package${LINK_ENTRY}`
+        )
+      } else {
+        links.addSource(real)
+      }
+    }
+    i = i + 1
+  }
+}
+
 /**
  * `nish run`: the program's binary out of the cache, built into it first when
  * this IR has not been linked with this recipe before, then started with the
@@ -2023,6 +2492,7 @@ const runProgram = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
+  links: LinkSet,
   json: boolean,
   argsFrom: i32
 ): number => {
@@ -2036,6 +2506,7 @@ const runProgram = (
     threads,
     debugArena,
     arenaRange,
+    links,
     json
   )
   if (cached.status !== 0) {
@@ -2059,6 +2530,56 @@ const runProgram = (
   return status
 }
 
+/**
+ * Into `links.includes`, every file `scripts/build.sh --link-depends` lists for
+ * the compile of each of its sources with this recipe's flags (clang -M:
+ * headers and included files of any name, the system's too), so an edit to
+ * any of them is another key (docs/security/package-link.md, PL-6). A source
+ * whose list cannot be had or read, or names a file that cannot be read, sets
+ * `includesUnlisted`, and the run links afresh rather than trust a key that
+ * may miss a read.
+ */
+const readLinkIncludes = (
+  links: LinkSet,
+  root: string,
+  cacheRoot: string,
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean,
+  debugArena: boolean,
+  arenaRange: boolean
+): void => {
+  for (const source of links.sources) {
+    const scratch = makeScratchFile(cacheRoot, ".d")
+    let paths: string[] | null = null
+    if (scratch.length > 0) {
+      const argv: string[] = ["bash", `${root}/scripts/build.sh`, "--link-depends", source]
+      pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
+      const status = spawnSyncTo(argv, scratch, "/dev/null")
+      const text = readFileSyncOrNull(scratch)
+      if (status === 0 && text !== null) {
+        paths = makeRulePaths(text)
+      }
+      const forget: string[] = ["rm", "-f", "--", scratch]
+      spawnSync(forget)
+    }
+    if (paths === null) {
+      links.includesUnlisted = true
+    } else {
+      for (const path of paths) {
+        links.addInclude(path)
+        // A listed path that cannot be read keys nothing: clang writes a
+        // backslash in a directory name as `/`, so the name it lists is not
+        // the file it read.
+        if (readFileSyncOrNull(path) === null) {
+          links.includesUnlisted = true
+        }
+      }
+    }
+  }
+}
+
 /** A program in the run cache: its binary and entry, or the status a miss failed with. */
 class CachedBinary {
   binary: string = ""
@@ -2077,6 +2598,7 @@ const cachedBinary = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
+  links: LinkSet,
   json: boolean
 ): CachedBinary => {
   const cached = new CachedBinary()
@@ -2089,14 +2611,16 @@ const cachedBinary = (
     cached.status = 3
     return cached
   }
-  if (refuseCacheRoot(cacheRoot, json)) {
+  // A linked source's include list is written to a scratch file in the root,
+  // so a first run makes the root, private, before that file.
+  if (refuseCacheRoot(cacheRoot, json) || (links.sources.length > 0 && !makePrivateRoot(cacheRoot, json))) {
     cached.status = 3
     return cached
   }
   const file = runBinaryName(name)
-  const sqlite = anyCallsSqlite(emitted)
+  readLinkIncludes(links, pkg.root, cacheRoot, profile, cpu, debugInfo, threads, debugArena, arenaRange)
   // Hashed once, for this key and for the SQLite entry's below it.
-  const sqliteLines = sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
+  const sqliteLines = links.sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
   const key = runCacheKey(
     emitted,
     file,
@@ -2108,13 +2632,14 @@ const cachedBinary = (
     debugArena,
     arenaRange,
     cCompiler(),
-    sqliteLines
+    sqliteLines,
+    linkSetLines(links)
   )
   cached.entry = `${cacheRoot}/${sha256Hex(key)}`
   cached.binary = `${cached.entry}/${file}`
   const keyFile = `${cached.entry}/key`
   const stored = readFileSyncOrNull(keyFile)
-  if (stored === null || stored !== key) {
+  if (stored === null || stored !== key || links.includesUnlisted) {
     cached.status = buildIntoCache(
       emitted,
       pkg,
@@ -2128,7 +2653,7 @@ const cachedBinary = (
       threads,
       debugArena,
       arenaRange,
-      sqlite,
+      links,
       sqliteLines,
       json
     )
@@ -2212,14 +2737,23 @@ const cachedTool = (
   opts.packageRoot = pkg.library
   opts.link = `${CLI} run`
   opts.profile = "debug"
+  // The compiler's own program, not the user's: like `src/`, which the
+  // repository builds with the flag that relaxes the scope, it is not held to
+  // no panic, and a user could not change it if it were refused.
+  opts.denyPanics = false
   const compilation = new Compilation(opts)
   if (!loadRoots(compilation, [file], false) || !compilation.check()) {
     report(compilation, json)
     tool.status = internalErrorFor(`${what} did not compile`, json)
     return tool
   }
+  const emitted = compilation.emit()
+  // The compiler's own tools are std code, so the only link they can carry
+  // is std/sqlite.ts's.
+  const links = new LinkSet()
+  links.sqlite = anyCallsSqlite(emitted)
   const built = cachedBinary(
-    compilation.emit(),
+    emitted,
     pkg,
     `${CLI}-${name}`,
     "debug",
@@ -2228,6 +2762,7 @@ const cachedTool = (
     false,
     false,
     false,
+    links,
     json
   )
   tool.binary = built.binary
@@ -2382,7 +2917,7 @@ const buildIntoCache = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
-  sqlite: boolean,
+  links: LinkSet,
   sqliteLines: string,
   json: boolean
 ): number => {
@@ -2419,8 +2954,9 @@ const buildIntoCache = (
     threads,
     debugArena,
     arenaRange,
-    sqlite,
+    links,
     sqliteLines,
+    [],
     json,
     true
   )
@@ -2453,6 +2989,8 @@ const buildIntoCache = (
  *
  * `irs` is the IR of each of `outputs`, in their order, when the caller wants
  * the module cache (`nish run`), and empty otherwise; see `stageModules`.
+ * `pgo` is `--pgo-generate`, or `--pgo-use` and the profile's real path, for
+ * build.sh, or empty; `nish run` refuses both flags, so it passes none.
  */
 const linkProgram = (
   outputs: string[],
@@ -2465,8 +3003,9 @@ const linkProgram = (
   threads: boolean,
   debugArena: boolean,
   arenaRange: boolean,
-  sqlite: boolean,
+  links: LinkSet,
   sqliteLines: string,
+  pgo: string[],
   json: boolean,
   quiet: boolean
 ): number => {
@@ -2482,19 +3021,28 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const cached = cachedRuntime(
-    root,
-    quiet ? [] : outputs,
-    profile,
-    cpu,
-    debugInfo,
-    threads,
-    debugArena,
-    arenaRange,
-    sqlite,
-    sqliteLines,
-    json
-  )
+  // A profile-guided link takes nothing from the cache and adds nothing to
+  // it (docs/security/cli.md, CLI-13): the runtime and SQLite entries are
+  // keyed without the profile, so an instrumented object would be handed to
+  // a plain link, and build.sh refuses `--pgo-*` beside cached objects. Every
+  // unit is compiled for this link alone, profile and all. The module cache
+  // is the debug recipe's, which takes no profile.
+  const cached =
+    pgo.length > 0
+      ? new CachedObjects("", "", "")
+      : cachedRuntime(
+          root,
+          quiet ? [] : outputs,
+          profile,
+          cpu,
+          debugInfo,
+          threads,
+          debugArena,
+          arenaRange,
+          links.sqlite,
+          sqliteLines,
+          json
+        )
   if (cached === null) {
     return 3
   }
@@ -2532,13 +3080,37 @@ const linkProgram = (
     argv.push("--sqlite-from")
     argv.push(cached.sqlite)
   }
+  // WP66 S7: what the packages' `nish.link` asked for and the root granted,
+  // each name and path already checked by `readLinkSet`; build.sh checks the
+  // names again, since it is a script anyone may call.
+  for (const name of links.libraries) {
+    argv.push("--link-lib")
+    argv.push(name)
+  }
+  for (const path of links.sources) {
+    argv.push("--link-source")
+    argv.push(path)
+  }
   argv.push("-o")
   argv.push(link)
   pushRecipeFlags(argv, profile, cpu, debugInfo, threads, debugArena, arenaRange)
+  for (const flag of pgo) {
+    argv.push(flag)
+  }
   const status = spawnSync(argv)
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
-    reportToolchainFailure(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`, json)
+    // An instrumented link needs compiler-rt's profile runtime, which
+    // Ubuntu packages apart from clang; the failure may be another one, so
+    // the hint is conditional.
+    const hint =
+      pgo.length > 0 && pgo[0] === "--pgo-generate"
+        ? "; if the error names libclang_rt.profile, the instrumented link needs compiler-rt's profile runtime, which Ubuntu installs with libclang-rt-18-dev"
+        : ""
+    reportToolchainFailure(
+      `--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}${hint}`,
+      json
+    )
     return 3
   }
   if (staged !== null) {
@@ -2558,10 +3130,10 @@ const linkProgram = (
  * Whether a program has a compact class, a class whose references are 32-bit
  * offsets into the arena's reserved range (WP48, docs/wp48-ref32-classes.md
  * §3.1), so its binary must link the range runtime (`--arena-range`). Stage 1
- * ships that runtime and no compact class, so no program has one yet; stage 2
- * reads the rule here.
+ * ships that runtime; stage 2's `Compilation.emit` sets `compactLinks` when a module
+ * declares one on a target that compresses (not wasm32, not an ASAN build).
  */
-const hasCompactClass = (_compilation: Compilation): boolean => false
+const hasCompactClass = (compilation: Compilation): boolean => compilation.opts.compactLinks
 
 /**
  * The flags that pick `scripts/build.sh`'s recipe, the same for the link and

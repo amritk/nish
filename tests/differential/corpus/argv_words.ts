@@ -2,7 +2,7 @@
 // the script under Node) and differs in text, so only its presence is checked;
 // the rest comes from argv_words.argv. Every array operation applies to the
 // read-only array (here: passing it on, `.length`, indexing, `for...of`).
-function longest(words: string[]): string {
+const longest = (words: string[]): string => {
   let best = "";
   let first = true;
   for (const w of words) {
@@ -10,9 +10,9 @@ function longest(words: string[]): string {
     first = false;
   }
   return best;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const args = process.argv;
   console.log(`${args.length - 1} words after the program name`);
   console.log(args.length > 0 && args[0].length > 0 ? "argv[0] is set" : "argv[0] is empty");
@@ -24,4 +24,4 @@ export function main(): number {
   console.log(`longest: ${longest(args)}`);
   console.log(`total bytes: ${total}`);
   return total % 256;
-}
+};

@@ -1,4 +1,4 @@
-export function main(): number {
+export const main = (): number => {
   const xs: number[] = [];
   for (let i = 0; i < 10; i++) {
     xs.push(i * i);
@@ -10,4 +10,4 @@ export function main(): number {
     console.log(xs[i]);
   }
   return 0;
-}
+};

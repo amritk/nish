@@ -80,6 +80,7 @@ import {
 import {
   checksArgumentRange,
   emitBuiltinCall,
+  emitFfiNullTest,
   emitIdentifierBuiltinCall,
   emitNamespaceProperty,
   emitParamRangeChecks,
@@ -124,6 +125,7 @@ import {
 } from "./emit-result"
 import {
   emitFusedCall,
+  emitChainStatement,
   emitChainTest,
   emitLibraryCopies,
   emitMapIntrinsic,
@@ -173,7 +175,13 @@ import {
   emitTemplate,
   isEnumStringCall,
 } from "./emit-strings"
-import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
+import {
+  dottedName,
+  intrinsicType,
+  isAssignmentOperator,
+  isOptionalChain,
+  receiverIsValue,
+} from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, PanicSiteTable, paramValue } from "./ir"
 import {
@@ -234,10 +242,11 @@ import {
   ARRAY_TYPE,
   inlineAllocator,
   inlineAllocatorAttrs,
+  inlineRefAllocator,
   RuntimeTable,
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
-import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
+import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader, zeroBasedLinks } from "./target"
 import { accessAlign, isForeignBuffer, isHostWindow, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
@@ -313,8 +322,20 @@ export class Emitter {
   constructorsGlobal: i32
   /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
   readsArenaGlobal: boolean
+  /** Whether a link decode or encode read `@nish_ref_base` (WP48, the based decode). */
+  readsRefBase: boolean
+  /** Whether a compact class's links decode zero-based on this target (`zeroBasedLinks`). */
+  zeroBasedLinks: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
+  /**
+   * The checked `x + i` additions of the counted loops being emitted
+   * (`emitAddGuards`), innermost last: each node's id, the `i1` that is set
+   * when one of its values may overflow, and the function that value is in.
+   */
+  addGuardNodes: i32[]
+  addGuardFlags: string[]
+  addGuardFns: IRFunction[]
   /** The labels around the statement being emitted, innermost last, each with the index in `loops` of what it names. */
   labelNames: string[]
   labelDepths: i32[]
@@ -435,6 +456,9 @@ export class Emitter {
     this.accumulator = null
     this.uncopied = -1
     this.loops = []
+    this.addGuardNodes = []
+    this.addGuardFlags = []
+    this.addGuardFns = []
     this.labelNames = []
     this.labelDepths = []
     this.openScopes = []
@@ -455,6 +479,8 @@ export class Emitter {
     this.usedRuntime = new StringSet()
     this.definesRuntime = new StringSet()
     this.readsArenaGlobal = false
+    this.readsRefBase = false
+    this.zeroBasedLinks = zeroBasedLinks(opts.target)
     this.strings = new StringMap()
     this.enumTables = new StringSet()
     this.stringRefs = []
@@ -469,7 +495,7 @@ export class Emitter {
       this.libraries.push(library.program)
     }
     if (opts.debugInfo) {
-      this.debug = new DebugInfo(this.module, this.program, table)
+      this.debug = new DebugInfo(this.module, this.program, table, isWasmBuild(opts) ? 32 : 64)
     }
     if (!isWasmBuild(opts)) {
       this.module.definitionAttrs = HARDENING_ATTRS
@@ -656,6 +682,9 @@ export class Emitter {
     this.chainTests = []
     this.fusedProbes = []
     this.loops = []
+    this.addGuardNodes = []
+    this.addGuardFlags = []
+    this.addGuardFns = []
     this.labelNames = []
     this.labelDepths = []
     this.openScopes = []
@@ -1112,7 +1141,9 @@ export class Emitter {
    */
   /**
    * `declare <ret> @name(<params>)` for a `declare function` (WP27 S1), with no
-   * parameter attributes, no return attributes and no attribute group.
+   * attribute group and no parameter or return attribute but the ABI's own:
+   * `zeroext` on a narrow parameter or result (`foreignExtended`), which says
+   * how the value is passed rather than anything about the body.
    *
    * The emptiness is "no attribute without a proof" applied to a body this
    * compiler cannot see: not `nounwind` (a C++ callee may unwind — undefined
@@ -1127,11 +1158,14 @@ export class Emitter {
     while (i < sig.paramNames.length) {
       // WP53 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
       params.push(
-        isForeignBuffer(this.table, sig.paramTypes[i]) ? "i8*" : this.llvmAbi(sig.paramTypes[i], false)
+        isForeignBuffer(this.table, sig.paramTypes[i])
+          ? "i8*"
+          : foreignExtended(this.llvmAbi(sig.paramTypes[i], false), false)
       )
       i = i + 1
     }
-    const declared = `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
+    const result = foreignExtended(this.llvmAbi(sig.returnType, false), true)
+    const declared = `declare ${result} @${sig.name}(${params.join(", ")})`
     const origin = sig.origin
     return origin !== null && origin.host ? this.hostDeclarationFor(sig) : declared
   }
@@ -1311,9 +1345,13 @@ export class Emitter {
 
   emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls
-    const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct")
+    const wantsRef = this.usedRuntime.has("nish_alloc_ref")
+    const wantsAlloc = all || wantsRef || this.usedRuntime.has("nish_alloc_struct")
     if (wantsAlloc) {
       this.usedRuntime.add("nish_arena_grow")
+    }
+    if (this.readsRefBase) {
+      this.module.addGlobal("@nish_ref_base = external global i8*, align 8")
     }
     if (wantsAlloc || this.readsArenaGlobal) {
       this.module.addTypeDecl(ARENA_TYPE)
@@ -1342,7 +1380,20 @@ export class Emitter {
       this.module.addDeclaration(`${rt.signature}${group}`)
     }
     if (wantsAlloc) {
-      this.module.addRawDefinition(inlineAllocator(this.module.attrGroupFor(inlineAllocatorAttrs())))
+      const group = this.module.attrGroupFor(inlineAllocatorAttrs())
+      // WP48: either bump names the range runtime's ABI symbol in a module
+      // whose links are offsets and that allocates, whichever one its compact
+      // classes use. A module that allocates nothing names nothing.
+      if (wantsRef || this.opts.compactLinks) {
+        this.module.addGlobal("@nish_arena_range_abi = external constant i32, align 4")
+      }
+      if (all || this.usedRuntime.has("nish_alloc_struct")) {
+        this.module.addRawDefinition(inlineAllocator(group, this.opts.compactLinks))
+      }
+      // WP48: a compact class's own 4-rounding bump.
+      if (wantsRef) {
+        this.module.addRawDefinition(inlineRefAllocator(group))
+      }
     }
   }
 
@@ -1459,7 +1510,11 @@ export class Emitter {
         }
         return
       case NodeKind.ExprStmt:
-        this.emitExpression(stmt.children[0])
+        if (isOptionalChain(stmt.children[0])) {
+          emitChainStatement(this, stmt.children[0]) // WP28 C1
+        } else {
+          this.emitExpression(stmt.children[0])
+        }
         return
       case NodeKind.Block:
         this.emitBlock(stmt)
@@ -1943,7 +1998,12 @@ export class Emitter {
       if (sig.foreign() && !hostFunction(sig) && this.table.stripNull(want) === T_STRING) {
         value = emitForeignString(this, args.children[i], value, sig, i)
       }
-      operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
+      // #1755: a narrow C argument is widened here, at the call, as at the
+      // `declare` (`foreignExtended`).
+      // The attribute is a literal, so the pass allocates only the operand.
+      const operandAbi = this.llvmAbi(want, calleePrivate)
+      const widened = sig.foreign() && isNarrowAbi(operandAbi) ? " zeroext" : ""
+      operands.push(`${operandAbi}${widened} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
       passed.push(value)
@@ -2084,7 +2144,9 @@ export class Emitter {
     // WP27 S5: in a program naming `cErrno`, errno is 0 going into C and
     // saved coming out, before the result is marshalled.
     const errno = sig.foreign() && !hostFunction(sig) && this.program.capturesErrno ? this.zeroErrno() : ""
-    const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
+    const returnAbi = this.llvmAbi(sig.returnType, calleePrivate)
+    const callResult = sig.foreign() ? foreignExtended(returnAbi, true) : returnAbi
+    const call = `${marker}call ${callResult} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)
       this.saveErrno(errno)
@@ -2108,6 +2170,16 @@ export class Emitter {
     // (`emitForeignStringResult`).
     if (sig.foreign() && this.table.stripNull(sig.returnType) === T_STRING) {
       answer = emitForeignStringResult(this, sig, answer)
+    } else if (sig.foreign() && this.table.isOpaque(sig.returnType)) {
+      // WP66 S3: a non-null opaque class is C's promise of a pointer, and a
+      // `NULL` that broke it would pass every `!== null` test unseen, so it
+      // panics here as a `string` result does; `Name | null` takes it as null.
+      const name = this.table.typeName(sig.returnType)
+      emitFfiNullTest(
+        this,
+        answer,
+        `\`${sig.sourceName}\` returned NULL for a \`${name}\` result; declare it \`${name} | null\``
+      )
     }
     if (keepSize >= 0) {
       return keepElement(this, this.llvmAbi(sig.returnType, calleePrivate), answer, keepSize, mark)
@@ -2332,15 +2404,22 @@ export class Emitter {
    * Alignment an access to a type claims, or 0 when attributes are disabled.
    * A `nish:simd` vector lays out at 16 (`TypeTable.alignOf`), as clang's
    * `vector_size(16)` does, but the arena's blocks are 8-byte aligned
-   * (`nish_alloc_struct`), so no access claims more than 8.
+   * (`nish_alloc_struct`), so no access claims more than 8. A pointer
+   * claims the target's width, four on wasm32, which is where a class lays
+   * a pointer field out there (`computeLayout`, WP48 stage 6).
    */
   align(type: i32): i32 {
     // A vector's ABI alignment is sixteen, more than an arena block promises,
     // so its accesses state their alignment even with the attributes off.
     if (this.opts.optimizeAttributes || this.table.isVector(type)) {
-      return accessAlign(this.table.alignOf(type))
+      return accessAlign(this.table.alignWithPointer(type, this.pointerBytes()))
     }
     return 0
+  }
+
+  /** Bytes in one pointer on the target: four under wasm32's `p:32:32`, eight natively. */
+  pointerBytes(): i32 {
+    return isWasmBuild(this.opts) ? 4 : 8
   }
 
   alignSuffix(type: i32): string {
@@ -2369,5 +2448,26 @@ export const emitProgram = (
   return emitter.emitModule()
 }
 
-/** An integer narrower than wasm's i32, which crosses to the page zero-extended. */
+/**
+ * An integer narrower than i32: a wasm host value, which crosses to the page
+ * zero-extended, and a C argument or result, which the caller widens.
+ */
 const isNarrowAbi = (abi: string): boolean => abi === "i1" || abi === "i8" || abi === "i16"
+
+/**
+ * A C parameter's or result's ABI type with the extension clang gives the same
+ * C type (#1755): `u8`, `u16` and `boolean` are `unsigned char`,
+ * `unsigned short` and `_Bool`, so `zeroext`. x86-64 SysV, Apple arm64 and
+ * wasm32 leave the widening of a narrow argument to the caller, and a
+ * clang-built callee reads the whole register, so without it C sees whatever
+ * high bits produced the value. The same holds for a result coming back.
+ * `prefix` places the attribute before the type, as a result takes it. Nish
+ * has no signed narrow integer, so `signext` does not arise; an `i8` or `i16`
+ * would take `signext` under the same rule.
+ */
+const foreignExtended = (abi: string, prefix: boolean): string => {
+  if (!isNarrowAbi(abi)) {
+    return abi
+  }
+  return prefix ? `zeroext ${abi}` : `${abi} zeroext`
+}

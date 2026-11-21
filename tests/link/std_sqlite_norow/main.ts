@@ -32,7 +32,7 @@ const noRow = (t: Suite, when: string, db: Database, q: Statement, buf: u8[]): v
   t.eqStr(`${when}: the connection's message is unchanged`, db.error(SQLITE_ERROR).message, before);
 };
 
-export function main(): i32 {
+export const main = (): i32 => {
   const t = new Suite("std_sqlite_norow");
   const opened = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE);
   if (opened.isErr()) {
@@ -59,4 +59,4 @@ export function main(): i32 {
   t.ok("finalize", q.finalize().isOk());
   t.ok("close", db.close().isOk());
   return t.done();
-}
+};

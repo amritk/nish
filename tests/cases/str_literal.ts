@@ -1,8 +1,8 @@
-function greeting(): string {
+const greeting = (): string => {
   return "hello, world";
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   console.log(greeting());
   return 0;
-}
+};

@@ -30,6 +30,12 @@
 // replaces. Nothing writes the database, so neither cache goes stale. With
 // either, each worker prints `cache <worker> <hits> <misses>` every 4,096
 // requests.
+//
+// BENCH_NODB=1 is the no-database route (bench/http1-request's breakdown in
+// docs/BENCHMARKS.md, "A minimal GET on Http1Server"): /plaintext answers the
+// same 129 bytes with the random id and a like count of 0 and makes no query
+// (the database is still opened and the lookup prepared, and never stepped),
+// so a request costs the handler and the codec alone.
 import { HandlerLimits, HttpHandler, HttpRequest } from "nish/net/handler"
 import { PREFORK_STOPPED, PreforkConfig, preforkArgs, preforkIndex, preforkWith } from "nish/net/prefork"
 import { Router, RouterLimits } from "nish/net/router"
@@ -53,6 +59,8 @@ const MMAP_SQL: string = "PRAGMA mmap_size=268435456"
 const CACHE_NONE: i32 = 0
 const CACHE_SHM: i32 = 1
 const CACHE_PRIVATE: i32 = 2
+/** BENCH_NODB=1: no query, the lookup's statement never stepped. */
+const CACHE_NODB: i32 = 3
 /** The shared cache's region: one i32 a post, its like count plus 1, 0 when not yet looked up. */
 const CACHE_REGION: string = "nish-bench-cache"
 const CACHE_BYTES: i32 = (POSTS + 1) * 4
@@ -120,6 +128,11 @@ class Entry {
     x = x ^ (x << 5)
     this.x = x
     const id: i32 = toI32(x % toU32(POSTS)) + 1
+    if (this.mode === CACHE_NODB) {
+      digitsInto(this.body, 0, 7, toI64(id))
+      digitsInto(this.body, 8, 5, 0)
+      return true
+    }
     const cached: i32 = this.cached(id)
     if (cached > 0) {
       this.hits = this.hits + 1
@@ -200,8 +213,12 @@ const benchCores = (): i32 => {
   return n > 1 ? n : 1
 }
 
-/** The cache `BENCH_CACHE` asks for: `shm`, `private`, or none. */
+/** The cache `BENCH_CACHE` asks for: `shm`, `private`, or none; CACHE_NODB under BENCH_NODB=1. */
 const benchCache = (): i32 => {
+  const nodb: string | null = getenv("BENCH_NODB")
+  if (nodb !== null && nodb === "1") {
+    return CACHE_NODB
+  }
   const env: string | null = getenv("BENCH_CACHE")
   if (env !== null && env === "shm") {
     return CACHE_SHM
@@ -291,6 +308,10 @@ export const main = (): i32 => {
   const limits: HandlerLimits = new HandlerLimits()
   limits.slots = parseInt(args[2])
   limits.maxEvents = 128
+  // The loadgen opens every connection before its first request, and 300,000
+  // take about 95 s to open: past the carrier's 60 s default the first ones
+  // would be closed as idle before the window starts. Ten minutes covers it.
+  limits.http.idleTimeout = 600000
   const ring: string | null = getenv("BENCH_RING")
   limits.ring = ring !== null && ring === "1"
   const listener: i32 = limits.listen("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)

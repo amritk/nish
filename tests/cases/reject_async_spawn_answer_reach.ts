@@ -39,9 +39,9 @@ async function first(b: Board): Promise<Holder> {
   return new Holder(b.tallies[0])
 }
 
-function badge(t: Tally): Badge {
+const badge = (t: Tally): Badge => {
   return new Badge(t)
-}
+};
 
 async function work(board: Board, ms: i32): Promise<void> {
   const h = await first(board)

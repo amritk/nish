@@ -1,0 +1,13 @@
+length 0: scalar 00000001, lanes 00000001
+length 1: scalar 00e100e1, lanes 00e100e1
+length 15: scalar 459e0880, lanes 459e0880
+length 16: scalar 38040673, lanes 38040673
+length 17: scalar 443c070d, lanes 443c070d
+length 31: scalar fc3010a9, lanes fc3010a9
+length 32: scalar ef1a0e51, lanes ef1a0e51
+length 33: scalar 1f0911e3, lanes 1f0911e3
+length 100: scalar 5f25312d, lanes 5f25312d
+4000 bytes of 0xff: scalar e68a9142, lanes e68a9142
+Wikipedia: scalar 11e60398, lanes 11e60398 (published 11e60398)
+Wikipedia x4: scalar 09810e5d, lanes 09810e5d
+mismatches: 0

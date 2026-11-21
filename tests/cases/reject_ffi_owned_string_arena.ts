@@ -7,7 +7,7 @@ import { readCString } from "nish:unsafe";
 declare function strdup(s: string): CPtr | null;
 declare function free(p: CPtr): void;
 
-function looped(n: i32): string {
+const looped = (n: i32): string => {
   const p = strdup("owned by C");
   if (p === null) {
     return "";
@@ -21,9 +21,9 @@ function looped(n: i32): string {
   }
   free(p);
   return s;
-}
+};
 
-function direct(): string {
+const direct = (): string => {
   const q = strdup("owned by C");
   if (q === null) {
     return "";
@@ -35,10 +35,10 @@ function direct(): string {
   }
   free(q);
   return s;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(looped(4));
   console.log(direct());
   return 0;
-}
+};

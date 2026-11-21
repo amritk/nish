@@ -1,9 +1,14 @@
+// Opt-out (`--allow-panics`): calls into `std/term-io` and `std/term-pixels`
+// reach their panic sites; this file keeps none of its own. Follow-up: make
+// those modules panic-free, then build this file without `--allow-panics`.
+//
 // What `nish/term-io` found out about this terminal, and how its frame loop
 // settled: attach the output to a bug report about a terminal that draws
 // wrong. It opens the terminal, presents a moving picture for five seconds,
 // closes it, and prints every `TermCaps` field and one stats line per second.
-//   nish run examples/term-probe.ts
+//   nish run --allow-panics examples/term-probe.ts
 // Off a terminal it refuses, as the smoke run's /dev/null stdin is:
+// smoke: args --allow-panics
 // smoke: exit 1
 import { monotonicNanos } from "nish:process"
 import { TermCaps } from "nish/term-probe"
@@ -13,8 +18,11 @@ import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term
 const BACKGROUND: i32 = 0x203040
 const BAND: i32 = 0xffcc00
 
-/** The name of a `GRAPHICS_*` backend. */
-const backendName = (backend: i32): string => ["ascii", "halfblock", "sixel", "kitty"][backend]
+/** The name of a `GRAPHICS_*` backend, or its number if this list lacks it. */
+const backendName = (backend: i32): string => {
+  const names = ["ascii", "halfblock", "sixel", "kitty"]
+  return backend >= 0 && backend < toI32(names.length) ? names[backend] : `${backend}`
+}
 
 /** `x` to two decimal places. */
 const round2 = (x: f64): f64 => Math.round(x * 100.0) / 100.0
@@ -22,8 +30,10 @@ const round2 = (x: f64): f64 => Math.round(x * 100.0) / 100.0
 /** What the run keeps: the terminal's capabilities and a stats line a second. */
 class Probe {
   start: i64 = 0
-  second: i32 = 1
-  frames: i32 = 0
+  // `u32`, which wraps rather than panics, and cannot here: the run stops
+  // after five seconds, a few thousand frames at most.
+  second: u32 = 1
+  frames: u32 = 0
   caps: TermCaps | null = null
   lines: string[]
 
@@ -33,27 +43,36 @@ class Probe {
 }
 
 /** Run until the fifth stats line is kept. */
-const update = (p: Probe, input: TermInput): boolean => p.second <= 5
+const update = (p: Probe, input: TermInput): boolean => p.second <= toU32(5)
 
 /** A band that moves, and a stats line once each second has passed. */
 const render = (p: Probe, frame: Frame): void => {
   p.caps = frame.caps
-  p.frames = p.frames + 1
+  p.frames = p.frames + toU32(1)
   const fb = frame.framebuffer
   fb.fill(BACKGROUND)
-  const x0: i32 = (p.frames * 3) % (fb.width - 20)
-  for (let y: i32 = fb.height / 3; y < (fb.height * 2) / 3; y++) {
-    for (let x: i32 = x0; x < x0 + 20; x++) {
-      fb.set(x, y, BAND)
+  const width: i32 = fb.width
+  const height: i32 = fb.height
+  // The options ask for 320 by 180, so these tests always hold: they are the
+  // bounds that prove the band's arithmetic cannot overflow or divide by 0.
+  if (width > 20 && height >= 0 && height <= 180) {
+    const span: i32 = width - 20
+    const x0: i32 = toI32(p.frames * toU32(3)) % span
+    if (x0 >= 0 && x0 < 300) {
+      for (let y: i32 = height / 3; y < (height * 2) / 3; y++) {
+        for (let x: i32 = x0; x < x0 + 20; x++) {
+          fb.set(x, y, BAND)
+        }
+      }
     }
   }
-  if (monotonicNanos() - p.start >= toI64(p.second) * 1000000000) {
+  if (toU64(monotonicNanos()) - toU64(p.start) >= toU64(p.second) * toU64(1000000000)) {
     const s = frame.stats
     p.lines.push(
       `${p.second}s frames ${p.frames} tier ${s.tier} backend ${backendName(s.backend)} rtt ${round2(s.rttMs)}ms ` +
         `${Math.round(s.bytesPerSec)}B/s cost ${round2(s.frameCostMs)}ms dropped ${s.dropped} unacked ${s.unacked} lost ${s.lost}`
     )
-    p.second = p.second + 1
+    p.second = p.second + toU32(1)
   }
 }
 

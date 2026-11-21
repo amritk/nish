@@ -1,0 +1,9 @@
+a: letter
+b: letter
+hi: greeting
+héllo: accented wide
+😀: wide
+: empty
+hello: other
+zz: other
+before the empty word: 5

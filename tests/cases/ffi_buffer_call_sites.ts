@@ -19,16 +19,16 @@ class Greeter {
   }
 }
 
-function via(f: (fd: i32, buf: readonly u8[], n: u64) => i64): i64 {
+const via = (f: (fd: i32, buf: readonly u8[], n: u64) => i64): i64 => {
   const b: u8[] = [112, 10];
   return f(1, b, 2);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const b: u8[] = [102, 10];
   write(1, b, 2);
   const g = new Greeter();
   g.greet();
   via(write);
   return 0;
-}
+};

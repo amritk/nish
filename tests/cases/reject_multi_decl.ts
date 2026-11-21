@@ -13,6 +13,6 @@ abstract class Circle {
   r: number = 1;
 }
 
-function f(): number {
+const f = (): number => {
   return 1;
-}
+};

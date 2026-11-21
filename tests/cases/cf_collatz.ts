@@ -1,4 +1,4 @@
-function collatzSteps(n: number): number {
+const collatzSteps = (n: number): number => {
   let steps = 0;
   let x = n;
   while (x !== 1) {
@@ -10,8 +10,8 @@ function collatzSteps(n: number): number {
     steps++;
   }
   return steps;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   return collatzSteps(27);
-}
+};

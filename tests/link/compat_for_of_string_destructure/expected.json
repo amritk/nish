@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_for_of_string_destructure/main.ts","line":5,"column":14,"endLine":5,"endColumn":17,"severity":"error","code":"NL2785","message":"A destructuring `for...of` head walks an array only; bind the element to a name and destructure it in the body"}

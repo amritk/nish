@@ -47,6 +47,7 @@ import { createServer } from "node:net";
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { withAllowPanics } from "../../allow-panics.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..", "..");
@@ -224,7 +225,7 @@ const statements = (file) => {
 };
 
 const compile = (source, out) => {
-  const r = spawnSync(NISH, [source, "--link", out], { encoding: "utf8" });
+  const r = spawnSync(NISH, withAllowPanics(NISH, [source, "--link", out]), { encoding: "utf8" });
   if (r.status !== 0)
     throw new Error(`nish ${source} failed:\n${r.stdout}${r.stderr}`);
 };

@@ -7,9 +7,9 @@ enum Kind {
 
 const array = (): Kind.Array => Kind.Array;
 const scalar = (): Kind.Scalar => Kind.Scalar;
-function apply<T, U>(x: T, f: (x: T) => U): U {
+const apply = <T, U>(x: T, f: (x: T) => U): U => {
   return f(x);
-}
+};
 
 export const test = (c: boolean, k: Kind): number => {
   const a: Kind.Array = array();

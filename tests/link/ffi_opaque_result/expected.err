@@ -1,0 +1,1 @@
+`Db` cannot be a `Result` arm: an opaque `declare class` is a C pointer

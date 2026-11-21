@@ -19,10 +19,10 @@ import { Request, Response, ServeLimits, ServeStats, serveOn } from "nish/net/se
 import { Conn, dial, hangUp, readResponse, sendText } from "../net_serve/client"
 
 /** Tells the client one more step happened, on the descriptor its request names in `x-signal`. */
-function step(req: Request): void {
+const step = (req: Request): void => {
   const one: u8[] = [1]
   netWrite(toI32(parseInt(req.header("x-signal"))), one, 0, 1)
-}
+};
 
 /** Waits until the handler signals one more step on `fd`. */
 async function stepped(fd: i32): Promise<void> {
@@ -31,9 +31,9 @@ async function stepped(fd: i32): Promise<void> {
   netRead(fd, got, 0, 1)
 }
 
-function describe(req: Request): string {
+const describe = (req: Request): string => {
   return `${req.method()} ${req.path()} tag=${req.header("x-tag")} body=${req.text()}`
-}
+};
 
 async function handle(req: Request): Promise<Response> {
   if (req.route === 0) {

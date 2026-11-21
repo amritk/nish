@@ -1,1 +1,4 @@
-function f(): number { const xs = []; return xs.length; }
+const f = (): number => {
+  const xs = [];
+  return xs.length;
+};

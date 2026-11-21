@@ -23,9 +23,9 @@ class File {
   }
 }
 
-function count(path: string, first: boolean): i32 {
+const count = (path: string, first: boolean): i32 => {
   using f = first ? new File(path) : new File("other")
   return f.read()
-}
+};
 
 export const main = (): i32 => 0

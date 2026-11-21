@@ -33,8 +33,8 @@ class Keeper {
 class Lender {
   l: File | null = null
 }
-function lend(h: Lender, f: File): void {
+const lend = (h: Lender, f: File): void => {
   h.l = f
-}
+};
 
 export const main = (): i32 => 0

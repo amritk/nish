@@ -3,7 +3,7 @@ export const TOKEN_NAME: i32 = TOKEN_NUMBER + 1;
 export const TOKEN_END: i32 = TOKEN_NAME + 1;
 export const PROMPT: string = "> ";
 
-export function describe(token: i32): string {
+export const describe = (token: i32): string => {
   if (token === TOKEN_NUMBER) {
     return "number";
   }
@@ -11,4 +11,4 @@ export function describe(token: i32): string {
     return "name";
   }
   return "end";
-}
+};

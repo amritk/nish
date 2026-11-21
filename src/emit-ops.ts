@@ -111,7 +111,41 @@ const emitSignedArith = (
   if (emitter.program.nodeProvenNoOverflow[node.id]) {
     return fn.emitValue(`${opcode} nsw ${ty} ${lhs}, ${rhs}`)
   }
-  return emitCheckedArith(emitter, opcode, ty, lhs, rhs, panicCode)
+  const guard = addGuardOf(emitter, node)
+  if (guard === "") {
+    return emitCheckedArith(emitter, opcode, ty, lhs, rhs, panicCode)
+  }
+  // The loop's test said whether any of its `x + i` may overflow: when none
+  // can, the addition is `nsw`; when one may, it is checked as before.
+  const fast = fn.newBlock("add.nsw")
+  const checked = fn.newBlock("add.checked")
+  const join = fn.newBlock("add.join")
+  fn.emit(`br i1 ${guard}, label %${checked.label}, label %${fast.label}`)
+  fn.placeBlock(fast)
+  const sum = fn.emitValue(`${opcode} nsw ${ty} ${lhs}, ${rhs}`)
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(checked)
+  const value = emitCheckedArith(emitter, opcode, ty, lhs, rhs, panicCode)
+  const from = fn.currentBlock().label
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(join)
+  return fn.emitValue(`phi ${ty} [ ${sum}, %${fast.label} ], [ ${value}, %${from} ]`)
+}
+
+/**
+ * The `i1` a counted loop set when its additions may overflow
+ * (`emitAddGuards` in `src/emit-arrays.ts`), when `node` is one of them and
+ * the loop is in the function being emitted; otherwise the empty string.
+ */
+const addGuardOf = (emitter: Emitter, node: Node): string => {
+  let k = emitter.addGuardNodes.length - 1
+  while (k >= 0) {
+    if (emitter.addGuardNodes[k] === node.id && emitter.addGuardFns[k] === emitter.fn) {
+      return emitter.addGuardFlags[k]
+    }
+    k = k - 1
+  }
+  return ""
 }
 
 /**

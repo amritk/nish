@@ -2,7 +2,7 @@
 import { square, cube as pow3, wrapMul } from "./math";
 import { shout, join } from "./text";
 
-export function main(): number {
+export const main = (): number => {
   console.log(square(12));
   console.log(pow3(-3));
   console.log(wrapMul(65536, 65536));
@@ -16,4 +16,4 @@ export function main(): number {
   console.log(total);
   console.log(join(`${square(3)}`, `${pow3(3)}`));
   return square(2) + 1;
-}
+};

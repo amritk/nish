@@ -6,7 +6,7 @@ export interface ParseError {
 // The importer never writes `ParseError`, and still reads one out of the
 // `Result` this hands back: a `Result` drags both payload layouts across the
 // module boundary the way a class's method signature does (WP16).
-export function parseDigit(text: string, at: i32): Result<i32, ParseError> {
+export const parseDigit = (text: string, at: i32): Result<i32, ParseError> => {
   if (at >= text.length) {
     const problem: ParseError = { offset: at, reason: "end of input" };
     return Err(problem);
@@ -17,4 +17,4 @@ export function parseDigit(text: string, at: i32): Result<i32, ParseError> {
     return Err(problem);
   }
   return Ok(code - 48);
-}
+};

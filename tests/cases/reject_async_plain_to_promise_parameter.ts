@@ -4,9 +4,9 @@ async function run(g: (x: i32) => Promise<i32>, v: i32): Promise<i32> {
   return await g(v)
 }
 
-function twice(x: i32): i32 {
+const twice = (x: i32): i32 => {
   return x * 2
-}
+};
 
 async function start(): Promise<void> {
   const a = await run(twice, 1)

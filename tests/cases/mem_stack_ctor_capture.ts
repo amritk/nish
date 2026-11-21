@@ -13,12 +13,12 @@ class Item {
   }
 }
 
-function register(reg: Registry, value: number): number {
+const register = (reg: Registry, value: number): number => {
   const item = new Item(reg, value);
   return item.value;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const reg = new Registry();
   console.log(register(reg, 7));
   console.log(register(reg, 8));
@@ -27,4 +27,4 @@ export function main(): number {
     console.log(last.value);
   }
   return 0;
-}
+};

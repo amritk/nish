@@ -10,6 +10,6 @@ class C {
   }
 }
 
-export function h1(m: Result<C, string>): i32 {
+export const h1 = (m: Result<C, string>): i32 => {
   return m.ok ? 1 : 0
-}
+};

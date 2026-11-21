@@ -1,9 +1,9 @@
 // Template literals with every hole type: string, i32, f64, boolean, i64, expressions, nesting.
-function describe(name: string, n: number, ok: boolean): string {
+const describe = (name: string, n: number, ok: boolean): string => {
   return `${name}: n=${n}, ok=${ok}!`;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(describe("answer", 42, true));
   console.log(describe("", -1, false));
   const tenth: f64 = 0.1;
@@ -38,4 +38,4 @@ export function main(): number {
   const z: f64 = 0;
   console.log(`${z / z} ${1 / z} ${-1 / z}`);
   return 0;
-}
+};

@@ -12,11 +12,11 @@
 // constructor, which is a call: `sumRefilled` is counted like `sumCounted`.
 declare function read(fd: i32, buf: u8[], n: u64): i64;
 
-function drain(fd: i32, buf: u8[]): i64 {
+const drain = (fd: i32, buf: u8[]): i64 => {
   const n = read(fd, buf, 1);
   buf.pop();
   return n;
-}
+};
 
 class Refill {
   n: i64;
@@ -25,16 +25,16 @@ class Refill {
   }
 }
 
-export function addCount(fd: i32, i: i32): i32 {
+export const addCount = (fd: i32, i: i32): i32 => {
   const buf = new Array<u8>(4);
   if (i < 0 || i >= buf.length) {
     return -1;
   }
   buf[i] += toU8(read(fd, buf, toU64(buf.length)));
   return toI32(buf[i]);
-}
+};
 
-export function sumCounted(fd: i32): i32 {
+export const sumCounted = (fd: i32): i32 => {
   const buf = new Array<u8>(4);
   let s = 0;
   for (let i = 0; i < buf.length; i++) {
@@ -42,9 +42,9 @@ export function sumCounted(fd: i32): i32 {
     s += toI32(buf[i]);
   }
   return s;
-}
+};
 
-export function sumEach(fd: i32): i32 {
+export const sumEach = (fd: i32): i32 => {
   const buf = new Array<u8>(4);
   let s = 0;
   for (const b of buf) {
@@ -52,9 +52,9 @@ export function sumEach(fd: i32): i32 {
     s += toI32(b);
   }
   return s;
-}
+};
 
-export function sumRefilled(fd: i32): i32 {
+export const sumRefilled = (fd: i32): i32 => {
   const buf = new Array<u8>(4);
   let s = 0;
   for (let i = 0; i < buf.length; i++) {
@@ -62,15 +62,15 @@ export function sumRefilled(fd: i32): i32 {
     s += toI32(buf[i]) + toI32(r.n);
   }
   return s;
-}
+};
 
-export function addDrained(fd: i32): i32 {
+export const addDrained = (fd: i32): i32 => {
   const buf = new Array<u8>(4);
   buf[0] += toU8(drain(fd, buf));
   return toI32(buf[0]) + buf.length;
-}
+};
 
-export function sumDrained(fd: i32): i32 {
+export const sumDrained = (fd: i32): i32 => {
   const buf = new Array<u8>(4);
   let s = 0;
   for (let i = 0; i < buf.length; i++) {
@@ -78,9 +78,9 @@ export function sumDrained(fd: i32): i32 {
     s += toI32(buf[i]);
   }
   return s;
-}
+};
 
-export function sumEachDrained(fd: i32): i32 {
+export const sumEachDrained = (fd: i32): i32 => {
   const buf = new Array<u8>(4);
   let s = 0;
   for (const b of buf) {
@@ -88,4 +88,4 @@ export function sumEachDrained(fd: i32): i32 {
     s += toI32(b);
   }
   return s;
-}
+};

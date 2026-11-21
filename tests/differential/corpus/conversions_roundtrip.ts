@@ -1,15 +1,15 @@
 // toI32 / toI64 / toF64 in every direction: round trips, saturation, wrapping, rounding.
 import { wrappingAdd, wrappingMul } from "nish:unsafe";
 
-function roundTrip32(x: number): boolean {
+const roundTrip32 = (x: number): boolean => {
   return toI32(toF64(x)) === x;
-}
+};
 
-function roundTrip64(x: i64): boolean {
+const roundTrip64 = (x: i64): boolean => {
   return toI64(toF64(x)) === x;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const max = 2147483647;
   const min = -2147483647 - 1;
   console.log(roundTrip32(max));
@@ -63,4 +63,4 @@ export function main(): number {
   console.log(acc);
   console.log(toI32(acc) === 328350);
   return 0;
-}
+};

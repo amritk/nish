@@ -229,7 +229,7 @@ running, and it keeps nothing between calls, so call it once, at startup,
 and keep the answer. A few tens of milliseconds of one core.
 
 ```ts
-function bcryptCalibrate(): i32
+const bcryptCalibrate: () => i32
 ```
 
 <scalar-field name="returns" type="i32">
@@ -246,11 +246,11 @@ bcrypt's base64. The salt must come from a CSPRNG and be fresh for each
 hash. An `Err` for a salt of another length or a cost outside 4–31.
 
 ```ts
-function bcryptHash(
+const bcryptHash: (
   password: Secret<u8[]>,
   salt: u8[],
   cost: i32,
-): Result<string, string>
+) => Result<string, string>
 ```
 
 <scalar-field name="password" type="Secret&lt;u8[]&gt;" required>
@@ -286,14 +286,14 @@ four strings. An `Err` for `salts` of another length than 64 or a cost
 outside 4–31.
 
 ```ts
-function bcryptHash4(
+const bcryptHash4: (
   p0: Secret<u8[]>,
   p1: Secret<u8[]> | null,
   p2: Secret<u8[]> | null,
   p3: Secret<u8[]> | null,
   salts: u8[],
   cost: i32,
-): Result<string[], string>
+) => Result<string[], string>
 ```
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
@@ -352,7 +352,7 @@ cost rounds interleaved, whatever positions they are in; one lane runs as
 than 96 or a cost outside 4–31.
 
 ```ts
-function bcryptHashN(
+const bcryptHashN: (
   p0: Secret<u8[]>,
   p1: Secret<u8[]> | null,
   p2: Secret<u8[]> | null,
@@ -361,7 +361,7 @@ function bcryptHashN(
   p5: Secret<u8[]> | null,
   salts: u8[],
   cost: i32,
-): Result<string[], string>
+) => Result<string[], string>
 ```
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
@@ -428,10 +428,10 @@ password and `hash`'s own prefix, salt and cost. `$2a$`, `$2b$` and `$2y$`
 are read; an `Err` names what makes `hash` not a bcrypt hash.
 
 ```ts
-function bcryptVerify(
+const bcryptVerify: (
   password: Secret<u8[]>,
   hash: string,
-): Result<boolean, string>
+) => Result<boolean, string>
 ```
 
 <scalar-field name="password" type="Secret&lt;u8[]&gt;" required>
@@ -461,13 +461,13 @@ A stored hash; its cost sets the work, so it must be one you
 answers, four of them, and the same lane errors.
 
 ```ts
-function bcryptVerify4(
+const bcryptVerify4: (
   p0: Secret<u8[]>,
   p1: Secret<u8[]> | null,
   p2: Secret<u8[]> | null,
   p3: Secret<u8[]> | null,
   hashes: string[],
-): Result<boolean[], string>
+) => Result<boolean[], string>
 ```
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>
@@ -520,7 +520,7 @@ call an `Err` naming the lane ("bcrypt: lane 2: …") before any hashing, so
 one bad row in a batch cannot be read as a wrong password.
 
 ```ts
-function bcryptVerifyN(
+const bcryptVerifyN: (
   p0: Secret<u8[]>,
   p1: Secret<u8[]> | null,
   p2: Secret<u8[]> | null,
@@ -528,7 +528,7 @@ function bcryptVerifyN(
   p4: Secret<u8[]> | null,
   p5: Secret<u8[]> | null,
   hashes: string[],
-): Result<boolean[], string>
+) => Result<boolean[], string>
 ```
 
 <scalar-field name="p0" type="Secret&lt;u8[]&gt;" required>

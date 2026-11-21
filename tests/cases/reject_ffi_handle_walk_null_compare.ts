@@ -23,11 +23,11 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   if (f === null) {
     return 0
   }
   return f.read()
-}
+};
 
 export const main = (): i32 => 0

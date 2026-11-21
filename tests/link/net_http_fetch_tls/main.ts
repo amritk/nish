@@ -229,7 +229,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   return t.failed;
 };
 
-export function main(): i32 {
+export const main = (): i32 => {
   const argv: string[] = process.argv;
   if (toI32(argv.length) >= 10 && argv[1] === "client") {
     const ports: i32[] = [parsePort(argv[2]), parsePort(argv[3]), parsePort(argv[4]), parsePort(argv[5])];
@@ -248,4 +248,4 @@ export function main(): i32 {
     return 1;
   }
   return servers.serve(pid);
-}
+};

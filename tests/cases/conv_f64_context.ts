@@ -22,11 +22,11 @@ class Point {
   }
 }
 
-export function main(): number {
+export const main = (): number => {
   const xs: f64[] = [0.5, 1.5];
   const c = new Config();
   console.log(xs[0] + c.ratio + c.weights[2]);
   // A constructor parameter is an annotation like any other.
   console.log(new Point(1.5, 2.25).x);
   return 0;
-}
+};

@@ -1,0 +1,76 @@
+# Test files that may still hold a top-level `function` definition.
+#
+# WP22 spells every function in the test corpus as a const arrow. The
+# `arrow-corpus` check in tests/run.js fails on a tests/**/*.ts file that holds
+# a definition `node scripts/arrowify.mjs` would rewrite (or cannot parse) and
+# is not listed here, and on a listed file that no longer holds one. Each line
+# is a path, then `#` and the reason the file keeps its `function` spelling.
+# Forms the codemod refuses by design (`declare function`, `async`,
+# `function*`, `export default`, a bodiless signature ending in `;`) are not
+# definitions here.
+
+# Pinned positions: plain programs whose spelling is not the subject, but whose
+# rewrite would move a position something else pins: a `-g` golden's
+# DILocation columns, an AST-dump golden, or a line:col the docs quote. One
+# leaves this list only together with the regenerated golden or the doc edit
+# (#1723).
+tests/cases/dbg_enum.ts  # -g golden; arrows move DILocation columns (#1723)
+tests/cases/dbg_locals.ts  # -g golden; arrows move DILocation columns (#1723)
+tests/cases/dbg_result.ts  # -g golden; arrows move DILocation columns (#1723)
+tests/cases/opt_target_triple.ts  # -g in its .args; arrows move DILocation columns (#1723)
+tests/cases/dump_ast.ts  # its expected AST dump is the function-declaration tree (#1723)
+tests/cases/reject_type_mismatch.ts  # docs/FAQ.md and docs/wp10-ci.md quote its line and its 1:40 diagnostic; tests/run.js pins it
+
+# The `function` spelling is the subject of the test.
+tests/cases/compat_optional_params.ts  # pins that a default that is not a constant lifts from a function declaration as from an arrow (WP28 C1)
+tests/cases/compat_overloads.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/cases/reject_export_c_symbol_function.ts  # the function spelling of #618; reject_export_c_symbol_const is the arrow sibling
+tests/cases/reject_ffi_body.ts  # an extern function with a body is the rejection (WP22 §8c, §9a)
+tests/differential/arrow-parity/declared.ts  # the declaration half of the stage-B arrow-parity pair
+tests/fix/decl-export-list.ts  # the fixer's declaration-kind handling is the subject
+tests/fix/decl-export-list.fixed.ts  # the fixer's expected output for decl-export-list.ts
+tests/fix/decl-nofix-export-default-twice.nofix.ts  # the fixer's declaration-kind handling is the subject
+tests/fix/port-nofix-div-shadow-function.nofix.ts  # a shadowing function declaration is the subject
+tests/parser/names-bindings.ts  # exercises the parser's function-declaration bindings
+tests/parser/recovery.ts  # syntax-recovery fixture; its declarations are what recovers
+
+# The codemod cannot parse these (each names a function after a keyword:
+# `catch`, or a word TypeScript reads as an operator), or misreads them.
+tests/cases/reject_try_catch_call_newline.ts  # `function catch(...)`; arrowify cannot parse it
+tests/cases/reject_try_catch_pattern_call_newline.ts  # `function catch(...)`; arrowify cannot parse it
+tests/parser/names.ts  # a `catch` name; arrowify cannot parse it
+tests/parser/names-catch-array.ts  # a `catch` name; arrowify cannot parse it
+tests/parser/names-catch-object.ts  # a `catch` name; arrowify cannot parse it
+tests/parser/names-operator-calls.ts  # functions named `typeof`, `delete`, `void`, `instanceof`, `in`, `yield`, `await`, `satisfies`, `as` and `of`; arrowify cannot parse it
+tests/parser/names-declarations.ts  # `function made(): keyof {`: arrowify reads `keyof {` as a type literal and skips the body
+
+# Host modules: src/host-module.ts reads `export function` declarations.
+tests/host-import/bodies/host.ts  # host module; src/host-module.ts reads export function
+tests/host-import/golden.ts  # host module golden; src/host-module.ts reads export function
+tests/host-import/host.ts  # host module; src/host-module.ts reads export function
+tests/host-import/route/src/host.ts  # host module; src/host-module.ts reads export function
+tests/host-import/text/host.ts  # host module; src/host-module.ts reads export function
+tests/host-import/unimported/counter.ts  # host module; src/host-module.ts reads export function
+tests/host-window/host.ts  # host module; src/host-module.ts reads export function
+tests/panic/host.ts  # host module; src/host-module.ts reads export function
+tests/wordings/host/any_parameter.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/buffer.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/class_parameter.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/function_parameter.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/generic.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/name.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/object.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/object_array_parameter.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/object_result.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/plain.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/regex.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/unknown_parameter.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/window_element.ts  # host-module wording; src/host-module.ts reads export function
+tests/wordings/host/window_width.ts  # host-module wording; src/host-module.ts reads export function
+tests/link/compat_optional_params_overloaded/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_emit_dts/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_emit_header/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_feature/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_incompatible/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_no_match/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)
+tests/link/compat_overloads_return/main.ts  # overload signatures are written on a function declaration, which an arrow cannot carry (WP28 C1)

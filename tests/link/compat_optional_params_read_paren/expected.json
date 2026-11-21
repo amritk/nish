@@ -1,0 +1,1 @@
+{"file":"tests/link/compat_optional_params_read_paren/main.ts","line":4,"column":11,"endLine":4,"endColumn":17,"severity":"error","code":"NL2803","message":"Optional parameter `suffix` can only be read as the left operand of `??`: a call that leaves it out passes `undefined` in TypeScript and `null` here, and `suffix ?? <default>` is the one read that gives both the same value"}

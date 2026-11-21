@@ -34,9 +34,9 @@ class Reader {
     this.n = this.n + f.read()
   }
 }
-export function first(p: string): i32 {
+export const first = (p: string): i32 => {
   const r = new Reader(p)
   return r.n
-}
+};
 
 export const main = (): i32 => 0

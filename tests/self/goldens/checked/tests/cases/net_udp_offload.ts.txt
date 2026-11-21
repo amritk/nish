@@ -27,7 +27,7 @@ function intact(buf: u8[], n: i32): boolean -> @intact
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_bind
-  calls: intact llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to receive
+  calls: intact llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic_index nish_panic_overflow nish_panic_slice nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to receive
   stackSites=6 stackLocals=3
   local +0:9 node: i32 (const)
   local +1:9 data: u8[] (const)

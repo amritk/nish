@@ -47,29 +47,29 @@ async function get(url: string, init: RequestInit): Promise<Outcome> {
   return out
 }
 
-function status(o: Outcome): i32 {
+const status = (o: Outcome): i32 => {
   const res: FetchResponse | null = o.res
   return res !== null ? res.status : 0
-}
+};
 
-function body(o: Outcome): string {
+const body = (o: Outcome): string => {
   const res: FetchResponse | null = o.res
   return res !== null ? res.text() : ""
-}
+};
 
-function bytes(s: string): u8[] {
+const bytes = (s: string): u8[] => {
   const out: u8[] = []
   for (let i: i32 = 0; i < s.length; i += 1) {
     out.push(toU8(s.charCodeAt(i)))
   }
   return out
-}
+};
 
-function following(): RequestInit {
+const following = (): RequestInit => {
   const init: RequestInit = new RequestInit()
   init.options.followRedirects = true
   return init
-}
+};
 
 async function checks(port: i32, control: Control): Promise<i32> {
   const t: Tally = new Tally()
@@ -159,18 +159,18 @@ async function child(port: i32): Promise<i32> {
   return accepted > 0 ? failed : 1
 }
 
-function selfPath(): string {
+const selfPath = (): string => {
   const exe: string | null = platform === "linux" ? realpathSync("/proc/self/exe") : null
   return exe !== null ? exe : process.argv[0]
-}
+};
 
-function argDecimal(s: string): i32 {
+const argDecimal = (s: string): i32 => {
   let v: i32 = 0
   for (let i: i32 = 0; i < s.length; i += 1) {
     v = v * 10 + toI32(s.charCodeAt(i)) - 48
   }
   return v
-}
+};
 
 export async function main(): Promise<i32> {
   const argv: string[] = process.argv

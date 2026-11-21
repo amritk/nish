@@ -2,11 +2,11 @@
 // written as the `nish:unsafe` call that asks for the wrap.
 import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
-function times(a: number, b: number): number {
+const times = (a: number, b: number): number => {
   return wrappingMul(a, b);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const max = 2147483647;
   const min = -2147483647 - 1;
   console.log(wrappingAdd(max, 1));
@@ -37,4 +37,4 @@ export function main(): number {
   }
   console.log(s);
   return 0;
-}
+};

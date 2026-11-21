@@ -12,7 +12,8 @@ section.
 
 Give the function type a name with `type`, and use it like any other type:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 type Op = (x: i32) => i32;
 
 const double = (x: i32): i32 => x * 2;
@@ -42,6 +43,13 @@ whichever function the field holds at that moment.
 
 ## Arrays, returns and comparison
 
+The examples from here on build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do): some add and index with
+nothing bounding them, and bounding the operands and testing `i < xs.length`
+before an index builds those under the default; the `Map` one calls
+standard-library code that keeps panic sites no proof removes yet, and will
+build under the default once that code is made panic-free.
+
 A reference goes anywhere a value of its type can: a local, a field of a
 class or an interface, an array element, a return value, and a parameter
 whose type is the alias, of a function, a method or a constructor. You call
@@ -49,7 +57,9 @@ it with the usual syntax, `h(3)` or `this.op(4)`, or call an element in place
 as below, and `===` and `!==` tell you whether two references name the same
 function:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 type Step = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -85,7 +95,8 @@ initialised where it is declared, and an array of them is built from `[]` or
 a literal and `push` (`fill`, `unshift` and `splice` are not available on
 it). `new Array<Op>(n)`, which would fill the array with zeros, is refused:
 
-```ts nish:err NL2730
+<!-- nish:err NL2730 -->
+```ts
 type Op = (x: i32) => i32;
 
 export const main = (): i32 => {
@@ -114,7 +125,8 @@ and naming one where a value is expected is an error:
   reference cannot (`NL2731`); one that reads nothing is refused too
   (`NL2336`): declare it at the top level and name it.
 
-```ts nish:err NL2731
+<!-- nish:err NL2731 -->
+```ts
 export const main = (): i32 => {
   const k = 3;
   const addK = (x: i32): i32 => x + k;
@@ -132,7 +144,8 @@ A reference is called, compared, stored and passed, and nothing else. In
 particular it cannot be printed or put in a template string, because a
 native program has no source text to show for it:
 
-```ts nish:err NL2737
+<!-- nish:err NL2737 -->
+```ts
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -154,7 +167,8 @@ an enum beside it when you need one of those.
 test proves it holds a function; a nullable field is read into a `const`
 first, and the test is on the `const`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -178,7 +192,8 @@ export const main = (): i32 => {
 
 A call with no test before it is refused (`NL2758`):
 
-```ts nish:err NL2758
+<!-- nish:err NL2758 -->
+```ts
 type Op = (x: i32) => i32;
 
 export const run = (h: Op | null): i32 => h(1);
@@ -192,7 +207,9 @@ A `Map` value can be a reference, an array of them, or a nullable of either.
 A call through what `get` returns can reach every function of that type that
 any `Map` or array in the program holds, so it is a choice among all of them:
 
-```ts nish:ok
+<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 type Op = (x: i32) => i32;
 
 const inc = (x: i32): i32 => x + 1;
@@ -223,7 +240,9 @@ A reference cannot sit directly in a `Result`, in either arm, nullable or not:
 `Result<Op, string>` is refused (`NL2762`). Return an array of references
 (`Result<Op[], string>`), or a class with a reference field, instead:
 
-```ts nish:ok
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 type Op = (x: i32) => i32;
 
 const plus1 = (x: i32): i32 => x + 1;
@@ -245,7 +264,9 @@ A parameter whose function type is written out in the parameter list, as in
 `apply` below, takes a function's name, an arrow, or a variable holding a
 reference. The call passes an arrow that calls the reference:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 type F = (x: i32) => i32;
 
 const apply = (f: (x: i32) => i32, x: i32): i32 => f(x);

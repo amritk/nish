@@ -11,7 +11,8 @@ reference's [Statements](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.
 Every condition — in `if`, `while`, `for`, the conditional operator, `&&`,
 `||` and `!` — must be a `boolean`. There is no truthiness:
 
-```ts nish:err-body NL2188
+<!-- nish:err-body NL2188 -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length) {
   console.log("non-empty");
@@ -20,7 +21,8 @@ if (xs.length) {
 
 Say what you are testing:
 
-```ts nish:ok-body
+<!-- nish:ok-body -->
+```ts
 const xs = [1, 2, 3];
 if (xs.length !== 0) {
   console.log("non-empty");
@@ -34,7 +36,8 @@ nothing else.
 
 ## `if` and the conditional operator
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const sign = (n: i32): string => {
   if (n > 0) {
     return "positive";
@@ -57,9 +60,15 @@ Both arms of `c ? a : b` must have the same type.
 ## Loops
 
 `while`, `do … while`, `for (init; cond; update)` and `for (const x of xs)`
-are all there, with `break` and `continue`:
+are all there, with `break` and `continue`. Several examples on this page do
+`i32` arithmetic nothing bounds, so they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); why, and the guard that
+builds them under the default, are in [Checked arithmetic](#checked-arithmetic)
+below:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const main = (): i32 => {
   let steps = 0;
   let n = 27;
@@ -97,7 +106,8 @@ A label on a loop lets `break` and `continue` reach past an inner loop:
 next turn. A label can also name a block, which `break` leaves early, or a
 `switch`. Each jump compiles to a plain branch, with no flag:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const firstPair = (limit: i32, target: i32): i32 => {
   let found: i32 = -1;
   outer: for (let i: i32 = 0; i < limit; i++) {
@@ -142,7 +152,8 @@ A clause falls through into the next one, as in TypeScript, unless it ends in
 `break`, `return`, `continue` or `process.exit`. An empty clause falls through
 too, which is how several labels share one body:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 const kind = (day: i32): string => {
   switch (day) {
     case 0:
@@ -162,7 +173,9 @@ export const main = (): i32 => {
 A clause with statements falls through the same way, so leaving out a
 `break` runs the next clause as well:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 const points = (stars: i32): i32 => {
   let total = 0;
   switch (stars) {
@@ -205,7 +218,8 @@ through — is refused rather than
 warned about. The same analysis is what checks that a non-`void` function
 returns on every path.
 
-```ts nish:err NL2251
+<!-- nish:err NL2251 -->
+```ts
 const f = (): i32 => {
   return 1;
   console.log("never");
@@ -228,7 +242,8 @@ meant. Nish refuses them, where other compilers warn or say nothing:
   branch can never run;
 - an unsigned value tested for its sign, `u < 0`, which is always false.
 
-```ts nish:err NL2716
+<!-- nish:err NL2716 -->
+```ts
 const size = (n: i32): string => {
   if (n > 10) {
     return "big";
@@ -248,7 +263,9 @@ never reported unread, which is how a loop that only counts its turns is
 written. Copy a value to a second `const` to compare it with itself. On
 `f32` and `f64`, `x !== x` stays the test for NaN:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const main = (): i32 => {
   let turns = 0;
   for (const _item of [1, 2, 3]) {
@@ -269,11 +286,15 @@ has the exact rules.
 ## Checked arithmetic
 
 On `i32` and `i64`, `+`, `-`, `*`, unary `-`, `++`, `--` and the compound
-assignments are **checked**: a result that does not fit stops the program
-with a message on stderr and exit status 1. It never wraps silently, and it
-is never undefined behaviour:
+assignments are **checked**: the compiler must prove a result fits, and by
+default it refuses the program where it cannot, naming the guard that would
+prove it. Under `--allow-panics` the check is built in instead, and a result
+that does not fit stops the program with a message on stderr and exit
+status 1. It never wraps silently, and it is never undefined behaviour:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 const square = (n: i32): i32 => n * n;
 
 export const main = (): i32 => {
@@ -283,9 +304,11 @@ export const main = (): i32 => {
 };
 ```
 
-Run it and the second line never prints: the program writes
+Nothing bounds `n`, so by default this is a compile error. Run it with
+`--allow-panics` and the second line never prints: the program writes
 `attempt to multiply with overflow` to stderr and exits with status 1.
-Integer `/` and `%` are checked the same way — a zero divisor prints
+Integer `/` and `%` are checked the same way: refused by default unless the
+divisor is proved safe, and under `--allow-panics` a zero divisor prints
 `attempt to divide by zero`. The check costs a compare and a branch, and the
 compiler removes it wherever it can prove the result fits, such as a loop
 counter under `i < n`.
@@ -294,7 +317,8 @@ When wrapping is what you want — a hash, a checksum, a random-number
 generator — use an unsigned type, whose arithmetic always wraps, or the
 `wrappingAdd`, `wrappingSub` and `wrappingMul` functions from `nish:unsafe`:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { wrappingMul } from "nish:unsafe";
 
 export const main = (): i32 => {

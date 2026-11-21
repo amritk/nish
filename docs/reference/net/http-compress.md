@@ -176,12 +176,12 @@ HTTP_OFFER_DEFLATE`): `HTTP_CODING_GZIP`, `HTTP_CODING_DEFLATE`,
 comment. A window outside `buf` panics.
 
 ```ts
-function httpAcceptEncoding(
+const httpAcceptEncoding: (
   buf: u8[],
   start: i32,
   end: i32,
   offered: i32,
-): i32
+) => i32
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -221,7 +221,7 @@ the `HTTP_CODING_*` to send the body in, or `HTTP_CODING_NONE`
 A compressor for the usual server: `DEFLATE_FAST`, bodies of 1 KB to 1 MB.
 
 ```ts
-function httpCompressorDefault(): HttpCompressor
+const httpCompressorDefault: () => HttpCompressor
 ```
 
 <scalar-field name="returns" type="HttpCompressor">
@@ -239,11 +239,11 @@ server should then send a coding the client takes even where it would not
 bother (`HttpCompressor.compressAnyway`).
 
 ```ts
-function httpIdentityRefused(
+const httpIdentityRefused: (
   buf: u8[],
   start: i32,
   end: i32,
-): boolean
+) => boolean
 ```
 
 <scalar-field name="buf" type="u8[]" required>
@@ -276,7 +276,7 @@ The number of TCP segments `bytes` bytes take at `mss` bytes a segment.
 A segment size of zero or less panics, since no count would mean anything.
 
 ```ts
-function httpSegments(bytes: i32, mss: i32): i32
+const httpSegments: (bytes: i32, mss: i32) => i32
 ```
 
 <scalar-field name="bytes" type="i32" required>

@@ -9,19 +9,19 @@
 // `x` is a parameter, so no call folds to a constant. A result is printed
 // beside its reciprocal, which is how a -0 shows: `${-0}` is "0", and
 // `1 / -0` is -Infinity.
-function shown(r: number): string {
+const shown = (r: number): string => {
   return `${r} ${1 / r}`;
-}
+};
 
-function round(x: number): void {
+const round = (x: number): void => {
   console.log(shown(Math.round(x)));
-}
+};
 
-function others(x: number): void {
+const others = (x: number): void => {
   console.log(`${shown(Math.floor(x))} | ${shown(Math.ceil(x))} | ${shown(Math.trunc(x))}`);
-}
+};
 
-export function test(): i32 {
+export const test = (): i32 => {
   const inf = 1 / 0;
   round(0);
   round(-0);
@@ -70,4 +70,4 @@ export function test(): i32 {
   others(-inf);
   others(0 / 0);
   return 0;
-}
+};

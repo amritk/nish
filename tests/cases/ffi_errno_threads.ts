@@ -7,10 +7,10 @@ import { cErrno } from "nish:unsafe";
 
 declare function set_errno_to(e: i32): i32;
 
-export function stage(e: i32): i32 {
+export const stage = (e: i32): i32 => {
   return set_errno_to(e);
-}
+};
 
-export function readErrno(): i32 {
+export const readErrno = (): i32 => {
   return cErrno();
-}
+};

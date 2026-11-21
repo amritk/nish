@@ -10,7 +10,7 @@ class Pixel {
   code: u32 = 0;
 }
 
-export function test(): number {
+export const test = (): number => {
   const p = new Pixel();
   p.r = 250;
   p.r += 10; // wraps at 8 bits
@@ -20,4 +20,4 @@ export function test(): number {
   bytes[0] += 1;
   console.log(`${p.r} ${p.a} ${p.code} ${bytes[0]} ${bytes[2]}`);
   return 0;
-}
+};

@@ -14,17 +14,17 @@ class Clock {
   }
 }
 
-function area(w: number, h: number = 2): number {
+const area = (w: number, h: number = 2): number => {
   return w * h
-}
+};
 
-function total(...xs: number[]): number {
+const total = (...xs: number[]): number => {
   let sum = 0
   for (const x of xs) {
     sum = sum * 10 + x
   }
   return sum
-}
+};
 
 class Cell {
   v: number
@@ -34,13 +34,13 @@ class Cell {
   }
 }
 
-function bumpAll(...cs: Cell[]): void {
+const bumpAll = (...cs: Cell[]): void => {
   for (const c of cs) {
     c.v = c.v + 100
   }
-}
+};
 
-export function main(): void {
+export const main = (): void => {
   const c = new Clock()
   console.log(area(c.next()))
   console.log(c.n)
@@ -51,4 +51,4 @@ export function main(): void {
   bumpAll(p, q)
   console.log(p.v)
   console.log(q.v)
-}
+};

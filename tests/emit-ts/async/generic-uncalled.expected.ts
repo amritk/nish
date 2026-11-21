@@ -6,7 +6,7 @@ async function echo<T>(x: T): Promise<T> {
   return x
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log("plain")
   return 0
 }

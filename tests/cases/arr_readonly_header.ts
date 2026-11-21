@@ -6,18 +6,18 @@
 //
 // No `main`: with an entry point every other function is internal and the
 // header has nothing to declare.
-export function sum(xs: readonly i32[]): i32 {
+export const sum = (xs: readonly i32[]): i32 => {
   let total = 0;
   for (const x of xs) {
     total = total + x;
   }
   return total;
-}
+};
 
-export function fill(xs: i32[], v: i32): void {
+export const fill = (xs: i32[], v: i32): void => {
   let i = 0;
   while (i < xs.length) {
     xs[i] = v;
     i = i + 1;
   }
-}
+};

@@ -6,10 +6,21 @@ the parsing, the maths, the data transforms — with Nish, and call it from
 Node, from a WebAssembly host or from C. In the opposite direction, a Nish
 program can call a C function you declare.
 
+The examples on this page that keep a check build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do), which tests it as the
+program runs and stops the program if it fails. Under the default each is a
+compile error: an `i32` sum that may overflow, an index the compiler cannot
+prove in range, a string passed to C that may hold a NUL, a C pointer that may
+be `NULL`. A guard removes most of them: a bound on the sum's inputs, a test of
+the index against `length`, a string literal, a C result declared `| null` and
+narrowed.
+
 Each direction starts from an ordinary module that `export`s the functions to
 call. This one is used throughout the page:
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 export const add = (a: i32, b: i32): i32 => a + b;
 
 export const mean = (xs: Float64Array): f64 => {
@@ -305,10 +316,10 @@ export function fill(c: Canvas, rgb: u32): void { canvases[c].fill(rgb); }
 // draw.ts: the Nish module
 import { Canvas, fill, nowMs } from "./web/host.ts";
 
-export function frame(c: Canvas): f64 {
+export const frame = (c: Canvas): f64 => {
   fill(c, 0x336699);
   return nowMs();
-}
+};
 ```
 
 ```console
@@ -470,7 +481,9 @@ world, a document, a list — declare module storage whose element is a class
 or `null`. Each slot is a *root*: the object in it, and everything that
 object reaches, outlives the call that built it.
 
-```ts nish:ok --target wasm32
+<!-- allow-panics: indexes an array without a guard the checker reads; does integer arithmetic nothing bounds -->
+<!-- nish:ok --target wasm32 --allow-panics -->
+```ts
 class Node {
   value: i32
   next: Node | null = null
@@ -577,14 +590,16 @@ export const tick = (): void => {
   without `at: u32, n: u32` after it (NL2682), or with them of another type
   (NL2683). Module storage and a local array both lend; a storage of records
   does not.
-- **The module checks the window before the page runs.** A window that
-  reaches past the end of the array panics, naming your parameters:
+- **The module checks the window before the page runs.** A window the
+  compiler cannot prove in bounds is a compile error under the default; under
+  `--allow-panics`, one that reaches past the end of the array panics, naming
+  your parameters:
   `` `scale`: argument 2 (at) plus argument 3 (n) reaches past the end of argument 1 (xs) ``.
   `at + n` is added in 64 bits, so huge values cannot wrap around the check.
   Lending `0, toU32(xs.length)` of a local array `xs` is proven in bounds
   and costs no check. A window of module storage, such as `DATA` here,
-  always keeps the check, even `0, toU32(DATA.length)`: the compiler proves
-  facts about locals, not about storage.
+  always keeps the check, even `0, toU32(DATA.length)`, so lending one needs
+  `--allow-panics`: the compiler proves facts about locals, not about storage.
 - **The page is handed a view of all of memory and an index**, so its
   `xs[at]` is the program's `DATA[at]`. Read and write only `[at, at + n)`:
   past it is the rest of the module's memory
@@ -603,12 +618,12 @@ A template formats a number the way JavaScript does: `${0.1 + 0.2}` is
 // app.ts
 import { say } from "./web/host.ts";
 
-export function label(n: i32): string {
+export const label = (n: i32): string => {
   return `item ${n}`;
-}
-export function greet(n: i32): void {
+};
+export const greet = (n: i32): void => {
   say(`hello ${n}`);
-}
+};
 ```
 
 ```js
@@ -632,11 +647,11 @@ import { textRead, textWrite, textWriteInt } from "nish/host/text";
 export const INBOX = new Array<u8>(256);
 export const OUTBOX = new Array<u8>(256);
 
-export function echo(n: i32): i32 {
+export const echo = (n: i32): i32 => {
   const text = textRead(INBOX, n);
   if (text === null) return -1;
   return textWriteInt(OUTBOX, textWrite(OUTBOX, 0, text), toI64(n));
-}
+};
 ```
 
 ```js
@@ -661,8 +676,9 @@ A native program that panics prints a message and stops. A module in a page
 cannot stop the page, so under `--profile wasm-host` a program that keeps
 [module storage](#sharing-memory-with-the-page) or imports a
 [host module](#functions-the-page-supplies-host-modules) reports every panic
-(an index out of range, an overflow, a `panic(...)`, an allocation
-`--memory` cannot hold, a `process.exit`): it unwinds out of the module and
+(a check `--allow-panics` left to run time, such as an index out of range, an
+overflow or a `panic(...)`; an allocation `--memory` cannot hold; a
+`process.exit`): it unwinds out of the module and
 the call that started it throws `NishPanic`, exported by the generated
 loader. A program with neither gets a plainer loader: a panic is the bare
 `RuntimeError` a trap is, what the call allocated is released, and the next
@@ -868,11 +884,14 @@ A `Result` crosses too: the header gives it a C struct, and the addon and the
 wasm loader turn it into `{ ok: true, value }` or `{ ok: false, error }`. See
 [Interop](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#interop) for which `Result`s each host takes.
 
-A numeric enum crosses as its number. A string enum has no spelling in C or
-in the typings yet, so a function that takes or returns one is refused under
-`--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async`:
+An enum does not cross. A function that takes or returns a numeric enum is
+left out of the header and the typings, and each writes a comment naming
+the signature where the declaration would be. A string enum has no spelling in C or in the typings yet either,
+and a function that takes or returns one is refused under `--emit-header`,
+`--emit-dts`, `--emit-napi` and `--emit-napi-async`:
 
-```ts nish:err NL4019 --emit-header build/docs-ai/nl4019.h
+<!-- nish:err NL4019 --emit-header build/docs-ai/nl4019.h -->
+```ts
 enum Role {
   Admin = "admin",
   Guest = "guest",
@@ -884,12 +903,16 @@ export const roleOf = (admin: boolean): Role => (admin ? Role.Admin : Role.Guest
 Give the host the member's text instead, a `string` from `String(r)`, or an
 `i32` of your own choosing.
 
+A compact class crosses as an opaque handle, and its host links the range
+runtime: see [A compact class in a C host](../language/compact-classes.md#a-compact-class-in-a-c-host).
+
 ## Calling C from Nish: `declare function`
 
 `declare function` names a C function the program calls but does not define.
 The symbol is the name as written, and the call is an ordinary call:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function abs(n: i32): i32;
 
 export const main = (): i32 => {
@@ -911,8 +934,74 @@ through a [host module](#functions-the-page-supplies-host-modules) instead. A
 `--target wasm32-wasi` build links C, so it keeps `declare function` even with
 `--emit-dts`.
 
-A function from the C library links with `nish run` or `--link` as it is. One
-of your own goes on the build line beside the runtime:
+For a whole library, `nish c-import` writes these declarations from its
+header: see [Binding a C library](c-import.md).
+
+A function from the C library links with `nish run` or `--link` as it is.
+Your own C, and any other library, is named in the `nish.link` field of the
+nearest `package.json` above the entry file. Every compile that emits IR
+reads it, and `nish run` and `--link` link what it names:
+
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "link": { "libraries": ["z"], "sources": ["c/mylib.c"] }
+  }
+}
+```
+
+- `libraries` are passed to the linker as `-l<name>`, so `"z"` links
+  `libz`. A name is printable ASCII letters, digits, `_`, `.`, `+` and `-`,
+  and starts with a letter, digit or `_` (so not with `-`, `.` or `+`).
+  Nothing in it can become a flag. There is no pkg-config, so
+  a library outside the linker's default search path is not found unless
+  `LIBRARY_PATH` names its directory. The run cache keys the name, not the
+  file it finds: after rebuilding the library or changing `LIBRARY_PATH`,
+  clear the cache.
+- `sources` are `.c` files inside the package, by their path relative to
+  `package.json`. Each is compiled with clang beside the runtime. A path that
+  is absolute, holds a backslash or a character outside printable ASCII,
+  climbs out with `..`, or resolves outside the package through a symbolic
+  link is refused (NL3060).
+- Any other key in `link` is refused (NL3059), not skipped.
+- The run cache key holds the link set, each source's bytes and the files
+  `clang -M` lists for its compile, so editing `c/mylib.c`, a header, or any
+  other file it `#include`s makes the next `nish run` link again. A file
+  clang does not list is not in the key: one an assembler `.incbin` pulls
+  in, or a header you add later that would be found ahead of one already
+  included. After such a change, edit the source too, or clear the cache.
+- These refusals (NL3059, NL3060, NL3061) come from every compile that
+  emits IR, a compile to IR or `--json` too, not only from `nish run` and
+  `--link`.
+- Only the native profiles (`speed`, `size`, `debug`) link it. `--link
+  --profile wasi` with a `nish.link` fails the link (exit 3).
+
+A dependency's `nish.link` takes effect only when your root `package.json`
+grants it, entry by entry, under `nish.link.dependencies`. Each library or
+source a dependency names that you have not granted is refused (NL3061). The
+dependency still needs the `ffi` capability to call its C:
+
+```json package.json
+{
+  "name": "app",
+  "nish": {
+    "capabilities": { "dependencies": { "zstd-bind": ["ffi"] } },
+    "link": {
+      "dependencies": {
+        "zstd-bind": { "libraries": ["zstd"], "sources": ["c/shim.c"] }
+      }
+    }
+  }
+}
+```
+
+`nish/sqlite` needs none of this: the standard library links SQLite itself
+when a program calls it. What a link can and cannot confine is recorded in
+[`docs/security/package-link.md`](https://github.com/amritk/nish/blob/main/docs/security/package-link.md).
+
+Without a `package.json`, your own C still goes on the build line beside the
+runtime:
 
 ```console
 $ nish app.ts -o app.ll
@@ -920,10 +1009,14 @@ $ $NISH/scripts/build.sh app.ll $NISH/runtime/runtime.c mylib.c -o app
 ```
 
 Scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64` and
-the rest), `boolean` and `void`. So does a `string` *parameter*, which C reads
+the rest), `boolean` and `void`. A `u8`, `u16` and `boolean` are C's
+`unsigned char`, `unsigned short` and `_Bool`, and Nish widens them at the call
+as the C ABI expects, so `toU8(511)` reaches C as 255. So does a `string` *parameter*, which C reads
 as a NUL-terminated `const char *`:
 
-```ts nish:ok
+<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- nish:ok --allow-panics -->
+```ts
 declare function puts(s: string): i32;
 declare function strlen(s: string): u64;
 
@@ -942,7 +1035,9 @@ take a `CPtr` instead, and handed memory C allocated. A `string | null`
 parameter passes `NULL` for `null`.
 
 A Nish string can hold a NUL byte, and C would stop reading at it, so a string
-that holds one stops the program before the call instead:
+that is not a literal is a compile error under the default, and under
+`--allow-panics` one that holds a NUL stops the program before the call
+instead:
 
 ```console
 `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
@@ -960,7 +1055,9 @@ like any other string the function makes, in a loop as anywhere else. A C
 function that may answer `NULL` is declared `string | null`, and `NULL` arrives
 as `null`:
 
-```ts nish:ok
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
+```ts
 declare function strerror(errnum: i32): string;
 declare function getenv(name: string): string | null;
 
@@ -972,8 +1069,10 @@ export const main = (): i32 => {
 };
 ```
 
-A result declared `string` that is `NULL` after all stops the program, because
-a `string` cannot hold it, and `--emit-panics` lists the call as an `ffi-null`
+Under `--allow-panics`, a result declared `string` that is `NULL` after all
+stops the program, because a `string` cannot hold it (the default refuses the
+call, since no proof removes the test), and `--emit-panics` lists the call as
+an `ffi-null`
 site:
 
 ```console
@@ -987,7 +1086,8 @@ A class other than a `declare class` (below), an interface or an array other
 than the byte buffer below is refused, in either direction, because nothing else the Nish compiler allocated
 may reach code it cannot see:
 
-```ts nish:err NL2551
+<!-- nish:err NL2551 -->
+```ts
 declare function execvp(file: string, argv: string[]): i32;
 
 export const main = (): i32 => {
@@ -999,7 +1099,8 @@ A `u8[]` parameter is a byte buffer C writes into, and a `readonly u8[]` one
 C only reads, as C's `const`. A run of one or more buffers is followed by one
 `u64`, the number of bytes C may touch in each of them:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
 declare function getentropy(buf: u8[], n: u64): i32;
 
@@ -1013,16 +1114,19 @@ The count is paired by position, so it is your word, not the compiler's proof.
 `fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
 as the third argument, so the one count is the whole size. A buffer with no
 `u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
-`u8[]` result are each refused.
+`u8[]` result are each refused; a count of another width, or one elsewhere in
+the declaration, is named with `CountedBy` (below).
 
 A call passes the array's bytes, and checks the count against each buffer
-first: a count larger than the array stops the program before C runs, with
+first: under `--allow-panics`, a count larger than the array stops the
+program before C runs, with
 `` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
 and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
-proves the count, so the call carries no check and compiles under
-`--deny-panics`:
+proves the count, so the call carries no check and compiles in a module
+held to no panic, as every module of your package is by default:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
 
 export const main = (): i32 => {
@@ -1037,11 +1141,57 @@ C borrows the bytes for the length of the call, and may write a `u8[]` (not a
 A task a scope spawns may not call such a function: C's body is unseen, so the
 call could write memory the parent is reading.
 
+When a library's count is not a `u64` straight after the buffer, name it.
+`CountedBy<u8[], "n">` on the buffer says which parameter is its count, and
+that count can be a `u8`, `u16`, `u32` or `u64`, sit anywhere in the
+declaration, or be an out class with one unsigned field, as zlib's `uInt`
+counts and `compress`'s `uLongf *destLen` are:
+
+<!-- nish:ok -->
+```ts
+declare class OutLen {
+  value: u64;
+}
+
+declare function crc32(crc: u32, buf: CountedBy<readonly u8[], "len">, len: u32): u32;
+declare function compress(
+  dest: CountedBy<u8[], "destLen">,
+  destLen: OutLen,
+  source: CountedBy<readonly u8[], "sourceLen">,
+  sourceLen: u64
+): i32;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
+The call checks a named count the same way, widening a narrow one or reading
+the out class's field first, and `toU32(buf.length)` of the buffer itself, at
+whatever width the count is declared, is proved and carries no check. A name
+that is not one of the declaration's parameters is refused:
+
+<!-- nish:err NL2811 -->
+```ts
+declare function fill(dst: CountedBy<u8[], "len">, n: u32): i32;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
+`CountedBy` is only for a `declare function`. `nish c-import` writes it for
+a buffer the overrides file pairs with a count
+([Binding a C library](c-import.md)). To check such a file with `tsc`,
+declare the alias in a `.d.ts` file that only `tsc` reads, since Nish refuses a generic type alias:
+`type CountedBy<T, N extends string> = T`.
+
 The one exception is `CPtr`, an address that C owns. A declared function can
 take or return one, a local can hold one, and nothing else can: no field, no
 array, no arithmetic. A `CPtr | null` from C is narrowed before it goes back:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare function calloc(count: u64, size: u64): CPtr | null;
 declare function free(block: CPtr): void;
 
@@ -1060,7 +1210,9 @@ it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
 yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
 how `realpath` is asked to allocate:
 
-```ts nish:ok
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { readCString } from "nish:unsafe";
 
 declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
@@ -1086,14 +1238,15 @@ behaviour, and the import is where a module says it takes that on. It takes a
 declared to answer `CPtr` may still answer `NULL`, so `readCString` tests its
 pointer first: `NULL` stops the program with
 `` `readCString` read a NULL pointer `` on stderr and exit status 1, and
-`--deny-panics` refuses the call for that reason. Declare a result that may be
+the no-panic default refuses the call for that reason. Declare a result that may be
 `NULL` as `CPtr | null` and narrow it instead.
 
 A `NULL` reaches C only where the source spells it. A nullable pointer held in
 a variable is refused, because the path that passes it `NULL` is one nobody
 wrote on purpose:
 
-```ts nish:err NL2539
+<!-- nish:err NL2539 -->
+```ts
 declare function free(p: CPtr | null): void;
 declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;
 
@@ -1114,7 +1267,9 @@ its `[Symbol.dispose]` is exactly the call that closes it. Open one with
 block — falling off its end, an early `return`, `break`, `continue`, or an
 `orReturn()` that propagates:
 
-```ts nish:ok
+<!-- allow-panics: passes C a string that may hold a NUL -->
+<!-- nish:ok --allow-panics -->
+```ts
 declare function fopen(path: string, mode: string): CPtr | null;
 declare function fclose(p: CPtr): i32;
 declare function fgetc(p: CPtr): i32;
@@ -1175,7 +1330,8 @@ them, each at its natural alignment, as a C compiler lays out the same fields.
 `new` takes no arguments and zero-fills it, and a parameter typed with it
 passes C its address:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 declare class Rlimit {
   cur: u64;
   max: u64;
@@ -1207,7 +1363,8 @@ target's pointer, four bytes under `--profile wasi`. A build a web page loads
 to and refuses a `declare class`. Any other field type is refused, since it has no C
 spelling; that includes `number`, whose width `--number-mode` picks:
 
-```ts nish:err NL2752
+<!-- nish:err NL2752 -->
+```ts
 declare class Flags {
   ok: boolean;
 }
@@ -1217,11 +1374,58 @@ export const main = (): i32 => {
 };
 ```
 
+A C struct that holds an array, such as OpenSSL's `SHA_CTX` with its
+`unsigned int h[5]`, or Linux's `struct utsname` with its `char` arrays, spells
+that field `Record<integer<0, Hi>, T>`: `T name[Hi + 1]`, laid out inside the
+struct as C lays it out. `T` is `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`
+or `f64`. Read and write it by index:
+
+<!-- nish:ok -->
+```ts
+// glibc's `struct utsname`: six `char` arrays of 65 bytes.
+declare class Utsname {
+  sysname: Record<integer<0, 64>, u8>;
+  nodename: Record<integer<0, 64>, u8>;
+  release: Record<integer<0, 64>, u8>;
+  version: Record<integer<0, 64>, u8>;
+  machine: Record<integer<0, 64>, u8>;
+  domainname: Record<integer<0, 64>, u8>;
+}
+declare function uname(buf: Utsname): i32;
+
+export const main = (): i32 => {
+  const name = new Utsname();
+  if (uname(name) !== 0) {
+    return 1;
+  }
+  let length = 0;
+  while (length < 65 && name.sysname[length] !== 0) {
+    length++;
+  }
+  console.log(length); // 5, for "Linux"
+  return 0;
+};
+```
+
+Every index is checked against the length. A constant outside it, such as
+`name.sysname[65]`, does not compile; any other index the compiler cannot
+prove inside it is a compile error under the default and, under
+`--allow-panics`, panics before it reads or writes outside it; and an index
+the compiler can prove is inside it,
+like a constant or a counter the loop keeps below 65, costs no check:
+`--emit-panics` lists the `name.sysname[length]` read above as `proven`. The
+field is part of the struct, not a Nish array: you cannot hold it in a
+variable, pass it to a function, read its `.length` or walk it with
+`for...of`, and you write it one element at a time. Unions and bitfields
+still have no spelling, so a struct with one stays out of reach. The rules
+are in [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
+
 C borrows the struct for the call, as it borrows a string: it reads and
 writes the fields until it returns, and may not keep the address. A
-`declare function` cannot return one, and it cannot be an array element or
-built from an object literal. A parameter typed `Rlimit | null` passes `NULL`
-for `null`, under the same rule as a `CPtr | null`. The rules are in
+`declare function` cannot return one (unless it has no fields, below), and
+it cannot be an array element or built from an object literal. A parameter
+typed `Rlimit | null` passes `NULL` for `null`, under the same rule as a
+`CPtr | null`. The rules are in
 [A `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#a-declare-class-a-c-struct-lent-by-pointer).
 
 A C function that answers a pointer to a struct it owns, such as `localeconv`
@@ -1231,7 +1435,9 @@ program owns, so a later call that overwrites C's buffer leaves the copy
 alone. The type to copy into comes from the context, an annotation or a
 return type, and the copy is the class's size in bytes:
 
-```ts nish:ok
+<!-- allow-panics: reads a C pointer that may be `NULL` -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { readCString, readStruct } from "nish:unsafe";
 
 declare class Lconv {
@@ -1249,7 +1455,7 @@ export const main = (): i32 => {
 
 A `NULL` pointer stops the program before the copy, with
 `` `readStruct` read a NULL pointer into a `Lconv` `` on stderr and exit
-status 1, and `--deny-panics` refuses the call for that reason. Nothing else
+status 1, and the no-panic default refuses the call for that reason. Nothing else
 is checked: the pointer must be live, and the class must declare C's fields
 in C's order, or the copy reads the wrong bytes. That is why `readStruct`
 comes from `nish:unsafe`: a call to it gives the function the `unsafe`
@@ -1259,13 +1465,65 @@ at, with `readCString` here, while C still holds it. A `CPtr | null` result
 is narrowed with `!== null` before the call. The rules are in
 [`readStruct`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#readstruct-a-struct-out-of-memory-c-owns).
 
+Many C libraries hand out a pointer to a struct they never show you:
+`sqlite3 *`, `FILE *`, `DIR *`. A `declare class` with no fields is that
+pointer's type. A `declare function` can take it and return it, as `FILE` or
+as `FILE | null`, and it is passed to C as a plain pointer. What it adds over
+`CPtr` is its name: a `FILE` cannot be passed where a `DIR` is wanted, though
+both are pointers.
+
+<!-- nish:ok -->
+```ts
+declare class FILE {}
+declare function fopen(path: string, mode: string): FILE | null;
+declare function fputs(text: string, stream: FILE): i32;
+declare function fclose(stream: FILE): i32;
+
+export const main = (): i32 => {
+  const out = fopen("/dev/null", "w");
+  if (out === null) {
+    return 1;
+  }
+  fputs("hello\n", out);
+  return fclose(out);
+};
+```
+
+It holds no fields, so it has no members and no `new`: only C makes one and
+only C reads it. Like a `CPtr`, it lives in a local and goes to and from C,
+and is refused as a field, an array element, a `Result` arm, a type argument
+of a generic, a capture of an arrow you pass to a call, or a parameter or
+return type of a function your program defines. A `declare function` that returns `FILE`
+rather than `FILE | null` promises C never answers `NULL`, and a `NULL`
+stops the program with `` `fopen` returned NULL for a `FILE` result; declare
+it `FILE | null` `` on stderr and exit status 1:
+
+<!-- nish:err NL2806 -->
+```ts
+declare class FILE {}
+declare function fclose(stream: FILE): i32;
+
+export const main = (): i32 => {
+  return fclose(new FILE());
+};
+```
+
+This is new in WP66 S3. Before it, `declare class FILE {}` was an empty
+struct your program built with `new FILE()` and lent to C. A program that
+did that now gets the error above: declare the C function that makes the
+value, or give the class the fields C lays out.
+
+The rules are in
+[An opaque `declare class`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#an-opaque-declare-class-a-c-pointer-type).
+
 A C function that fails through `errno` is checked with `cErrno` from
 `nish:unsafe`. It answers the errno the most recent `declare function` call on
 this thread left, and naming it makes the compiler set errno to 0 just before
 every C call, so a function like `strtol`, which reports an out-of-range number
 only through errno, can be told apart from a success:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 import { cErrno } from "nish:unsafe";
 
 declare function strtol(s: string, end: CPtr | null, base: i32): i64;

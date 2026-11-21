@@ -8,7 +8,9 @@
 # Every snippet `docs/cookbook/<name>.ts` is compiled with
 # `build/nish <name>.ts -o build/cookbook/<name>/ [flags]`, where the flags
 # come from `docs/cookbook/<name>.args` when that file exists. `build/nish` is
-# what `npm run build` leaves, and it is built here when it is missing.
+# what `npm run build` leaves, and it is built here when it is missing. The
+# snippets show checks' IR, a panic's among them, so each is compiled with
+# `--allow-panics` when the compiler lists it (`nish_allow_panics`).
 # `NISH=<compiler>` compiles them with another compiler instead, run as
 # scripts/nish-compiler.sh says (a native `nish` directly, a .js under node):
 #
@@ -38,6 +40,7 @@ mkdir -p "$out"
 nish_compiler "${NISH:-build/nish}"
 # Only the default is built here: a compiler named in NISH is the caller's to provide.
 [ -n "${NISH:-}" ] || [ -x build/nish ] || npm run build >/dev/null
+nish_allow_panics "${compiler[@]}"
 
 tmp="$out/IR_COOKBOOK.md.new"
 cp "$doc" "$tmp"
@@ -50,7 +53,7 @@ for src in docs/cookbook/*.ts; do
     read -ra args < "docs/cookbook/$name.args"
   fi
   mkdir -p "$out/$name"
-  if ! "${compiler[@]}" "$src" -o "$out/$name/" "${args[@]}" >"$out/$name.log" 2>&1; then
+  if ! "${compiler[@]}" ${allow_panics[@]+"${allow_panics[@]}"} "$src" -o "$out/$name/" "${args[@]}" >"$out/$name.log" 2>&1; then
     echo "error: $src does not compile:" >&2
     sed 's/^/  /' "$out/$name.log" >&2
     exit 1

@@ -1,12 +1,12 @@
-function join(words: string[]): string {
+const join = (words: string[]): string => {
   let out = "";
   for (const w of words) {
     out = out + w;
   }
   return out;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const words = ["hello", ", ", "world"];
   words.push("!");
   console.log(join(words));
@@ -14,4 +14,4 @@ export function main(): number {
   words[0] = "goodbye";
   console.log(words[0]);
   return 0;
-}
+};

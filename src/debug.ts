@@ -210,11 +210,14 @@ export class DebugInfo {
   typeRefs: string[]
   /** The `DISubprogram` of the function being emitted: the scope of every location and variable. */
   subprogram: string
+  /** A pointer's width in bits: 32 under wasm32's `p:32:32`, 64 natively, as `computeLayout` lays it out. */
+  pointerBits: i32
   /** Whether that function is a reference's dispatcher, whose every location is line 0 (WP51 §5.3). */
   synthetic: boolean
 
-  constructor(module: IRModule, program: CheckedProgram, table: TypeTable) {
+  constructor(module: IRModule, program: CheckedProgram, table: TypeTable, pointerBits: i32) {
     this.module = module
+    this.pointerBits = pointerBits
     this.program = program
     this.table = table
     this.source = program.source
@@ -339,7 +342,7 @@ export class DebugInfo {
       // `p *r` shows `ok`, `value` and `error` rather than an opaque pointer.
       // Only the arm the discriminant selects is meaningful; the other is
       // whatever the construction left there (WP16 does not zero it).
-      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
+      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type, this.pointerBits / 8)))
     } else if (this.table.isUnion(type)) {
       ref = this.pointerTo(this.unionComposite(type))
     } else if (this.table.isNullable(type)) {
@@ -405,7 +408,9 @@ export class DebugInfo {
   }
 
   pointerTo(base: string): string {
-    return this.module.addMetadata(`!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: 64)`)
+    return this.module.addMetadata(
+      `!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: ${this.pointerBits})`
+    )
   }
 
   /** One `DW_TAG_member`; an empty `file` is a member with no declaration to point at. */
@@ -459,14 +464,55 @@ export class DebugInfo {
         )
         continue
       }
+      if (f.cLength >= 0) {
+        // WP66 S4: C's `T name[N]` inline, where `f.type` is the element `T`.
+        const bits = bitsOfIn(this.table, f.type) * f.cLength
+        const range = this.module.addMetadata(
+          `!{${this.module.addMetadata(`!DISubrange(count: ${f.cLength})`)}}`
+        )
+        const array = this.module.addMetadata(
+          `!DICompositeType(tag: DW_TAG_array_type, baseType: ${this.typeRef(f.type)}, size: ${bits}, elements: ${range})`
+        )
+        members.push(this.member(f.name, ref, array, bits, f.offset * 8, file, line))
+        continue
+      }
+      if (f.link) {
+        members.push(this.member(f.name, ref, this.linkType(f.type), 32, f.offset * 8, file, line))
+        continue
+      }
       const base = this.typeRef(f.type)
-      members.push(this.member(f.name, ref, base, bitsOfIn(this.table, f.type), f.offset * 8, file, line))
+      members.push(this.member(f.name, ref, base, this.memberBits(f.type), f.offset * 8, file, line))
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(this.table.typeName(info.type))}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     )
+    return ref
+  }
+
+  /**
+   * A compact class's link (WP48) as DWARF sees it: the 32-bit offset it is,
+   * a typedef of `unsigned int` named `ref32 <Class>`, one per class the link
+   * names, so a debugger without the printers shows the raw offset and
+   * `tools/gdb/ref32.py` and `tools/lldb/ref32.py` find the class to decode it
+   * to by name. A typedef rather than a base type of that name, because lldb
+   * answers a base type with the builtin its encoding and size match and
+   * drops the name. Keyed under a prefix no mangled type has.
+   */
+  linkType(type: i32): string {
+    const target = this.table.stripNull(type)
+    const key = `^${this.table.mangle(target)}`
+    const known = this.typeKeys.get(key, -1)
+    if (known >= 0) {
+      return this.typeRefs[known]
+    }
+    const base = this.typeRef(T_U32)
+    const name = quote(`ref32 ${this.table.typeName(target)}`)
+    const ref = this.module.addMetadata(
+      `!DIDerivedType(tag: DW_TAG_typedef, name: ${name}, file: ${this.file}, baseType: ${base})`
+    )
+    this.setTypeRef(key, ref)
     return ref
   }
 
@@ -522,7 +568,7 @@ export class DebugInfo {
     const ref = this.module.reserveMetadata()
     const members: string[] = []
     members.push(this.member("len", ref, this.typeRef(T_I64), 64, 0, "", 0))
-    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 64, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), this.pointerBits, 64, "", 0))
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
@@ -538,13 +584,18 @@ export class DebugInfo {
     const members: string[] = []
     members.push(this.member("len", ref, long, 64, 0, "", 0))
     members.push(this.member("cap", ref, long, 64, 64, "", 0))
-    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 128, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), this.pointerBits, 128, "", 0))
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(name)}, file: ${this.file}, size: 192, align: 64, elements: ${elements})`
     )
     return ref
+  }
+
+  /** A member's width: a pointer is the target's, anything else its own. */
+  memberBits(type: i32): i32 {
+    return this.table.isPointerValue(type) ? this.pointerBits : bitsOfIn(this.table, type)
   }
 
   /**
@@ -573,7 +624,7 @@ export class DebugInfo {
     let i = 0
     while (i < names.length) {
       const base = this.typeRef(types[i])
-      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0))
+      members.push(this.member(names[i], ref, base, this.memberBits(types[i]), offsets[i] * 8, "", 0))
       i = i + 1
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
@@ -616,7 +667,7 @@ export class DebugInfo {
     if (known >= 0) {
       return this.typeRefs[known]
     }
-    const layout = resultLayout(this.table, type)
+    const layout = resultLayout(this.table, type, this.pointerBits / 8)
     const ref = this.module.reserveMetadata()
     const union = this.module.reserveMetadata()
     const armNames: string[] = []

@@ -57,11 +57,12 @@ the record that found it. The notes below the table name each such finding.
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
 | `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper and the scope constants in `src/emit.ts`; the flag, its refusals and the directory scopes in `src/compile.ts`, `src/options.ts`; the `ffi` widening in `src/compilation.ts`; the spawn handed to the sandbox in `runtime/runtime-os.c` | 0 / 1 / 0 / 0 | 0 / 0 / 0 / 0 |
-| io_uring ring layer | [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md) | `runtime/runtime-uring.c`; the ring slot layer in `runtime/runtime-net.c` | 0 / 2 / 8 / 9 | 0 / 0 / 0 / 2 |
+| io_uring ring layer | [net-uring.md](https://github.com/amritk/nish/blob/main/docs/security/net-uring.md) | `runtime/runtime-uring.c`; the ring slot layer in `runtime/runtime-net.c` | 0 / 2 / 8 / 10 | 0 / 0 / 0 / 2 |
 | Shared memory between processes | [shm.md](shm.md) | `runtime/runtime-shm.c`, `std/sync/shm.ts`, `std/sync/ring.ts`, `src/shm-window.ts`, `src/emit-shm-window.ts` | 0 / 0 / 1 / 3 | 0 / 0 / 0 / 1 |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`); the grant arguments (`grantArgument`, `refuseNarrowGrants`, `narrowSandbox` in `src/compilation.ts`, `literalReaches` in `src/capability-report.ts`) | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 0 ¹⁶ |
-| PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
+| A package's C link | [package-link.md](package-link.md) | `src/manifest.ts` (`manifestNish`'s `link` key, `manifestLink`, `manifestReadLinkObject`, `manifestReadLinkList`, `manifestReadLinkGrants`, `manifestLinkLibrary`, `manifestPrintableAscii`, `manifestLinkSourceProblem`), `src/compile.ts` (`readLinkSet`, `linkPackages`, `refuseUngranted`, `addLinkRequest`, `readLinkIncludes`, `linkProgram`), `src/run-cache.ts` (`LinkSet`, `makeRulePaths`, `linkSetLines`, `runCacheKey`), `scripts/build.sh` (`--link-lib`, `--link-source`, `--link-depends`) | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ³⁰ |
+| PostgreSQL client, its handler carrier and async pool | [postgres.md](postgres.md) | `std/net/postgres.ts`, `std/net/postgres-carrier.ts`, `std/net/postgres-async.ts`, `std/crypto/scram.ts` | 0 / 0 / 10 / 7 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts`, `std/crypto/bcrypt-batch.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `runtime/runtime-checksum.c`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding`, `acceptEncodingOf`, `identityRefused`, `respondEncoded` and `unrespond` in `std/net/http1-server.ts` | 0 / 0 / 3 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
@@ -77,7 +78,8 @@ the record that found it. The notes below the table name each such finding.
 | The wasm-host boundary: module storage, windows, panics and `nish/page` | [wasm-host.md](wasm-host.md) | `runtime/page.mjs`, `runtime/page.d.ts`, `std/host/ring.ts`; the `nish.panic` import in `runtime/runtime-wasm.c`; the generated loader's `panicText`, `panicOf`, `guardLoader` (`refuse`, `typedIn`, `stringOut`), `payloadIn`, `resultIn`, `arrayIn`, `hostImportsOf` (`text`), `pushHostEntry` and `layoutLoader`, and the wrapper's `wasmTypedIn`, `wasmPayloadWriter` and `refused`, in `src/interop-wasm.ts`; `emitHostWindow` and `emitHostString` in `src/emit-strings.ts`, `hostWindowProven` in `src/attributes.ts`, `src/module-storage.ts`, and `std/host/text.ts`; root storage's keep (`nish_runtime_root_keep` and its trace) in `runtime/runtime-wasm.c` and its descriptors in `src/emit-root.ts` | 0 / 1 / 3 / 5 ²⁸ | 0 / 0 / 0 / 1 |
 | Async executor | [async.md](async.md) | `runtime/runtime-async.c`; the emitted driver and `awaitAll`'s lanes (`src/emit-async.ts`); what a spawned task may share (`src/async-check.ts`, `src/region-rules.ts`); `nish_region_adopt` in `runtime/runtime-region.c` and the carved chunk it leaves in `runtime/runtime.c` | 0 / 1 / 9 / 1 | 0 / 0 / 0 / 4 |
 | Update notice, `nish upgrade` and `nish/release` | [release.md](release.md) | `std/release.ts`, `src/upgrade.ts`; `noticeSuppressed`, `selfPath`, `upgrade` and `cachedTool` in `src/compile.ts` | 0 / 0 / 0 / 4 | 0 / 0 / 0 / 2 |
-| **Total** ⁸ | | | **3 / 18 / 101 / 216** | **0 / 0 / 3 / 41** |
+| Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
+| **Total** ⁸ | | | **3 / 18 / 104 / 223** | **0 / 0 / 3 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -458,16 +460,22 @@ the record that found it. The notes below the table name each such finding.
     by column: fixed `3 / 18 / 98 / 211` and open `0 / 0 / 3 / 42`. The
     Total `main` carried before this row (fixed `3 / 17 / 96 / 207`, open
     `0 / 0 / 2 / 42`) did not sum its rows; it is recomputed here.
+30. PL-F1 and PL-F2 (Low) were fixed in review and are counted as fixed Lows.
+    PL-7, PL-8, PL-9 and PL-10 are accepted limits, with the reason in their record,
+    and are not counted. The Total moves by this row: fixed +2 Low.
+31. CI-A1 to CI-A4 (Low), the limits of running clang on a header the
+    attacker wrote and of trusting the overrides file beside it, are
+    accepted, with the reason in their record, and are not counted.
 
 ## Fuzzed
 
 Each parser below is a libFuzzer target in `tests/fuzz/targets/` (how to
 build, run and replay one: [`tests/fuzz/README.md`](https://github.com/amritk/nish/blob/main/tests/fuzz/README.md)),
-and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
-HPACK and X.509 targets each ran for at least 30 minutes from their seed
-corpora and found no crash, sanitizer report, timeout or OOM, except
-`tls-server-flight` and `websocket-client`, which have not yet had their
-run; CI replays every
+and its record says what fuzzing found. Each TLS, QUIC, HTTP/1, WebSocket,
+HPACK, X.509, JSON and URL target has run for 30 minutes from its seed corpus
+in every `fuzz.yml` run since 2026-10-30, and the JWT target in every run
+since 2026-11-07, and none found a crash, sanitizer report, timeout or OOM;
+CI replays every
 corpus on each PR and runs each target for 30 minutes weekly. RT-21 was found
 building the runtime for the harness, not by a target.
 
@@ -537,6 +545,7 @@ only.
 | PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 | SHM-3 | Low | `runtime/runtime-shm.c` (`adopt`) | A same-user peer that shrinks a region with `ftruncate` makes a later access past the new end a `SIGBUS`, not a checked panic | — |
 | SERVE-14 | Low | `std/net/serve.ts` (`serveOn`, `serveFreeSlot`) | No per-peer share of `inFlight`: one client with `inFlight` connections, each holding a slow request, has every other request answered 503 | #1278 |
+| CI-4 | Low | `src/c-import.ts` (`readHeader`, `readMacros`) | A header clang refuses has clang's errors printed to stderr as clang wrote them, escape bytes and lines of any file it includes among them, as running clang on the header by hand prints them; the module is not written | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

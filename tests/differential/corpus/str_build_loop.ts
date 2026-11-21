@@ -1,21 +1,21 @@
 // Strings built up in loops: a number table, a bar chart, and a run-length pattern.
-function bar(n: number): string {
+const bar = (n: number): string => {
   let s = "";
   for (let i = 0; i < n; i++) {
     s = s + "#";
   }
   return s;
-}
+};
 
-function pad(s: string, width: number): string {
+const pad = (s: string, width: number): string => {
   let out = s;
   while (out.length < width) {
     out = " " + out;
   }
   return out;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   for (let i = 1; i <= 10; i++) {
     console.log(`${pad(`${i}`, 3)} | ${bar(i)} ${i * i}`);
   }
@@ -37,4 +37,4 @@ export function main(): number {
   console.log(pad("x", 1));
   console.log(pad("", 0).length);
   return 0;
-}
+};

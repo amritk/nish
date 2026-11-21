@@ -1,6 +1,6 @@
 // A label is seen only by the function it is written in: the arrow's
 // `break` cannot leave the loop around the arrow.
-export function test(): number {
+export const test = (): number => {
   let n = 0;
   outer: for (let i = 0; i < 3; i++) {
     const stop = (): void => {
@@ -10,4 +10,4 @@ export function test(): number {
     n += i;
   }
   return n;
-}
+};

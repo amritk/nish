@@ -1,7 +1,7 @@
 // Digit sums, reversal, and palindromes with while loops, / and %.
 import { wrappingAdd, wrappingMul } from "nish:unsafe";
 
-function digitSum(n: number): number {
+const digitSum = (n: number): number => {
   let s = 0;
   let r = n;
   while (r !== 0) {
@@ -9,9 +9,9 @@ function digitSum(n: number): number {
     r /= 10;
   }
   return s;
-}
+};
 
-function reverse(n: number): number {
+const reverse = (n: number): number => {
   let r = 0;
   let x = n;
   while (x !== 0) {
@@ -19,13 +19,13 @@ function reverse(n: number): number {
     x /= 10;
   }
   return r;
-}
+};
 
-function isPalindrome(n: number): boolean {
+const isPalindrome = (n: number): boolean => {
   return n === reverse(n);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(digitSum(12345));
   console.log(digitSum(-987));
   console.log(digitSum(2147483647));
@@ -43,4 +43,4 @@ export function main(): number {
   console.log(isPalindrome(12321));
   console.log(isPalindrome(12322));
   return 0;
-}
+};

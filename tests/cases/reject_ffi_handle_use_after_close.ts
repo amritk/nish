@@ -24,22 +24,22 @@ class File {
   }
 }
 
-export function after(p: string): i32 {
+export const after = (p: string): i32 => {
   let x = 0
   {
     using f = new File(p)
     x = f.read()
   }
   return x + f.read()
-}
-function count(f: File): i32 {
+};
+const count = (f: File): i32 => {
   return f.read()
-}
-export function lent(p: string): i32 {
+};
+export const lent = (p: string): i32 => {
   {
     using f = new File(p)
   }
   return count(f)
-}
+};
 
 export const main = (): i32 => 0

@@ -16,7 +16,15 @@ of its own, in a task that may await, uses [an async server](async-server.md).
 
 ## A first server
 
-```ts nish:ok
+The examples on this page build with
+[`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/net/handler`,
+`nish/net/router` and the JSON reads keep panic sites no proof removes yet, so
+a call to them is refused by default until the standard library is made
+panic-free.
+
+<!-- allow-panics: calls `std/json.ts`, `std/net/handler.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- nish:ok --allow-panics -->
+```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";
 import { Router, RouterLimits } from "nish/net/router";
 import { tcpListen } from "nish:net";
@@ -181,8 +189,8 @@ answer.
 
 `examples/http-app` is a JSON notes API on this page's pieces: command-line
 flags, a log line a request, problems for bad input, and the graceful stop
-above with a deadline. Build it with `nish examples/http-app/main.ts --link
-http-app` and run `./http-app 8080`. Copy it and change it: logging and
+above with a deadline. Build it with `nish examples/http-app/main.ts --allow-panics
+--link http-app` (its header says which panic sites it keeps) and run `./http-app 8080`. Copy it and change it: logging and
 configuration are left to the example because every server wants them a
 little differently.
 

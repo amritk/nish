@@ -9,10 +9,10 @@ const firstL = (s: string): i32 => s.indexOf("l");
 
 const same = (n: i32): i32 => n;
 
-function kept(n: i32): i32 {
+const kept = (n: i32): i32 => {
   const m = n;
   return m;
-}
+};
 
 const width = (s: string): i32 => firstL(s) + 1;
 

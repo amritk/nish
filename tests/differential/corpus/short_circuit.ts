@@ -1,9 +1,9 @@
 // && and || evaluate the right operand only when needed; ++ inside them proves it.
-function positive(x: number): boolean {
+const positive = (x: number): boolean => {
   return x > 0;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   let calls = 0;
   const a = false && calls++ > -1;
   console.log(`${a} ${calls}`);
@@ -38,4 +38,4 @@ export function main(): number {
   const notFirst = !(k > 0) && !(steps > 100);
   console.log(notFirst);
   return 0;
-}
+};

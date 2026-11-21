@@ -1,0 +1,7 @@
+{
+  "name": "compat-for-of-string-feature",
+  "private": true,
+  "nish": {
+    "compat": ["string-switch"]
+  }
+}

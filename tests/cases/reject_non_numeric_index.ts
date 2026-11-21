@@ -1,1 +1,3 @@
-function f(o: number): number { return o[true]; }
+const f = (o: number): number => {
+  return o[true];
+};

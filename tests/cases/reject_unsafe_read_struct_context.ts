@@ -14,10 +14,10 @@ class Plain {
 
 declare function localeconv(): CPtr;
 
-export function main(): i32 {
+export const main = (): i32 => {
   const bare = readStruct(localeconv());
   const plain: Plain = readStruct(localeconv());
   const scalar: i32 = readStruct(localeconv());
   const ok: Lconv = readStruct(localeconv());
   return plain.x + scalar + (ok.decimalPoint === ok.decimalPoint ? 0 : 1);
-}
+};

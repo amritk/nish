@@ -9,14 +9,14 @@
 // The caller unpacks into its own entry-block object, which is what every WP16
 // construct — `isErr()`, `.value`, `.error` — reads, so nothing below the ABI
 // boundary changed. There is no `nish_alloc_struct` in this golden at all.
-function half(n: i32): Result<i32, i32> {
+const half = (n: i32): Result<i32, i32> => {
   if (n % 2 !== 0) {
     return Err(n);
   }
   return Ok(n / 2);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const good = half(8);
   if (good.isErr()) {
     console.log(good.error);
@@ -31,4 +31,4 @@ export function main(): i32 {
   }
   console.log(bad.error);
   return 0;
-}
+};

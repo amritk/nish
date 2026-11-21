@@ -1,1 +1,3 @@
-function f(o: number): boolean { return "x" in o; }
+const f = (o: number): boolean => {
+  return "x" in o;
+};

@@ -1,14 +1,14 @@
 // `Result<T, E>` (WP16): the discriminant test is what unlocks the payload, so
 // the golden pins one `load i1` plus a branch, and the two payload loads in the
 // blocks the branch guards. Nothing reaches `value` without passing the test.
-function half(n: i32): Result<i32, string> {
+const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
   }
   return Ok(n / 2);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const good = half(8);
   if (good.isErr()) {
     console.log(good.error);
@@ -23,4 +23,4 @@ export function main(): i32 {
   }
   console.log(bad.error);
   return 0;
-}
+};

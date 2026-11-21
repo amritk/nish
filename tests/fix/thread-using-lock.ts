@@ -7,7 +7,7 @@ class Count {
   }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const m = new Mutex<Count>(new Count(1))
   {
     const g = m.lock()

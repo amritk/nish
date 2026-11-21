@@ -24,6 +24,6 @@ class Holder {
 
 const peek = (h: Holder): i32 => (h.held === null ? 0 : 1);
 
-export function run(): i32 {
+export const run = (): i32 => {
   return peek(new Holder());
-}
+};

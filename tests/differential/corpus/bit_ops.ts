@@ -1,12 +1,12 @@
 // `& | ^` and `~` on i32, with negative operands so the two's-complement
 // reading is exercised at both ends of the range, plus the compound forms.
-function show(a: number, b: number): void {
+const show = (a: number, b: number): void => {
   console.log(`${a} & ${b} = ${a & b}`);
   console.log(`${a} | ${b} = ${a | b}`);
   console.log(`${a} ^ ${b} = ${a ^ b}`);
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   show(12, 10);
   show(-1, 255);
   show(-16, -3);
@@ -31,4 +31,4 @@ export function main(): number {
     console.log(mask);
   }
   return 0;
-}
+};

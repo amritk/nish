@@ -12,11 +12,11 @@ class Packet {
   }
 }
 
-function fill(o: Packet): i64 {
+const fill = (o: Packet): i64 => {
   return read(0, o.bytes, toU64(o.bytes.length));
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const o = new Packet();
   let seen = 0;
   {
@@ -27,4 +27,4 @@ export function main(): i32 {
     seen = toI32(o.bytes[0]);
   }
   return seen;
-}
+};

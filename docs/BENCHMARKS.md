@@ -2956,6 +2956,64 @@ Run 1 put everything together 1.48 µs under main on `list`, outside that run's 
 `readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
 <!-- postgres-profile:end -->
 
+<!-- db-clients:begin -->
+## Database clients against C and Rust
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `nish/sqlite` and `nish/net/postgres` are timed against the C library each wraps or replaces and against the Rust crate most programs reach it through, on the multicore server challenge's schema. The workloads, the builds and the rules are in [bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite) ([PostgreSQL](https://github.com/amritk/nish/blob/main/bench/README.md#postgresql)). A difference is claimed only when the median difference is larger than the noise band, the build against its byte-identical copy, and than the IQR of both sides; "seen" below means it is.
+
+### SQLite: nish/sqlite, SQLite's C API and rusqlite
+
+`node bench/sqlite/run.mjs --rounds 12`, the bench code at commit `f08a1674` (no later commit changes `std/sqlite.ts`, `runtime/sqlite/` or the bench's programs), on a four-core Intel Xeon virtual machine that reports 2.10 GHz, with Ubuntu clang 18.1.3, rustc 1.97.0, rusqlite 0.43.0 (libsqlite3-sys 0.40.0) and SQLite 3.54.1. rusqlite refuses a SQLite built `THREADSAFE=0`, so the "mt" columns are a second group on `THREADSAFE=2`, which a `--threads` build gets, with Rust linked to the same SQLite object as C mt. Median ns per call (IQR):
+
+| Workload | Nish | C | Nish mt | C mt | Rust mt (rusqlite) | Noise band |
+| --- | --- | --- | --- | --- | --- | --- |
+| `lookup` | 6,005 (195) | 5,987 (294) | 6,335 (370) | 6,098 (253) | 6,193 (180) | 32 |
+| `feed` | 20,894 (2,090) | 21,353 (1,616) | 22,222 (5,219) | 20,706 (702) | 22,449 (2,743) | 1,136 |
+| `insert` | 20,254 (1,203) | 20,221 (1,534) | 21,272 (2,417) | 20,764 (912) | 20,744 (2,833) | 431 |
+| `insert-txn` | 5,983 (885) | 5,981 (456) | 6,233 (1,317) | 6,084 (169) | 6,412 (689) | 88 |
+
+No difference in this table is seen: each is inside the IQR of at least one of the two sides it compares. SQLite's own work dominates every call. The one cost a finer instrument has found is on `feed`, 20 rows of five columns a call: under callgrind the build runs 4.2 % more instructions a call than C, about 7,800 of 186,300, with the adapter fix of commit `0e40dff2` in (bench/README.md has the command).
+
+### PostgreSQL: nish/net/postgres, libpq and tokio-postgres
+
+`node bench/postgres/run.mjs --rounds 12`, the bench code and `std/` at commit `df3f1023`, on a four-core Intel Xeon virtual machine that reports 2.10 GHz, with Ubuntu clang 18.1.3, rustc 1.97.0, tokio-postgres 0.7.18 on tokio 1.54.1's current-thread runtime, and PostgreSQL and libpq 18.7, the server on the same machine. `pk` is 50,000 primary-key reads at 16 in flight, `list` 3,000 reads of 20 rows at 16 in flight, `insert` 5,000 inserts one at a time. Client CPU in µs per query, min / median (IQR); system time and qps are medians:
+
+| Workload | Nish | C (libpq) | Rust (tokio-postgres) | Noise band | System, Nish / C / Rust | qps, Nish / C / Rust |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 6.50 / 7.06 (0.42) | 8.00 / 8.26 (0.32) | 9.11 / 9.32 (0.47) | 0.41 | 5.76 / 5.38 / 5.06 | 40,175 / 40,266 / 41,131 |
+| `list` | 45.84 / 49.90 (1.68) | 61.11 / 63.64 (2.74) | 59.58 / 63.39 (4.54) | 0.05 | 26.86 / 25.81 / 22.47 | 409 / 403 / 409 |
+| `insert` | 14.64 / 18.21 (2.14) | 15.95 / 19.13 (2.37) | 18.68 / 21.37 (1.88) | 1.58 | 16.53 / 17.08 / 16.59 | 4,687 / 4,603 / 4,585 |
+
+| Workload | Nish − C | Rust − C | Nish − Rust |
+| --- | --- | --- | --- |
+| `pk` | −1.20 (−14.6 %), seen | +1.06 (+12.9 %), seen | −2.26 (−24.3 %), seen |
+| `list` | −13.75 (−21.6 %), seen | −0.25 (−0.4 %), inside the noise | −13.49 (−21.3 %), seen |
+| `insert` | −0.92 (−4.8 %), inside the noise | +2.24 (+11.7 %), inside the noise | −3.16 (−14.8 %), seen |
+
+On this run the module costs the client less CPU than tokio-postgres on all three workloads, and less than libpq on `pk` and `list`; on `insert` its difference from libpq is inside the noise. tokio-postgres costs more than libpq on `pk`; on `list` and `insert` the difference is inside the noise. qps is within 2.4 % across the three sides on every row, so client CPU is not what limits throughput at these depths. On `pk` and `insert` most of each side's CPU is system time, which no client's library code spends; on `list`, where 20 rows are decoded a query, it is about half of the module's CPU and less than half of libpq's and tokio-postgres's.
+
+### The optimisation pass behind the PostgreSQL figures
+
+Commit `df3f1023` changed two things in `std/net/postgres.ts`. `PgText.int` reads a column of at most 18 bytes as two runs of digits, each below 10^9, so the bounds prover sees that nothing there can wrap and the digit loop has no overflow test. `PgConnection.reserve` keeps only its length test and calls out to grow, so the test every put makes inlines. The module's unproven panic sites under `--emit-panics` stayed at 591. Instructions per operation under callgrind, from `node bench/pg-decode/run.mjs --callgrind --base HEAD`, run with the change uncommitted on `d81c00c1`, so `base` is `std/` at `d81c00c1`. A byte-identical copy of the build agreed with it to 0.0 % on every case. The kernels are [bench/pg-decode/main.ts](https://github.com/amritk/nish/blob/main/bench/pg-decode/main.ts)'s: `rows` decodes a binary-format answer of n rows, `text` the same rows in the text format, `pool` the binary group through a one-slot `PgPool`, and `params` encodes a text-format Bind of n keys and n ids:
+
+| Case | `d81c00c1` | `df3f1023` | Change |
+| --- | ---: | ---: | ---: |
+| `rows 1` (214 B) | 3,662 | 3,350 | −8.5 % |
+| `rows 20` (2,892 B) | 26,911 | 26,599 | −1.2 % |
+| `rows 100` (14,019 B) | 123,159 | 122,847 | −0.3 % |
+| `text 1` (218 B) | 4,013 | 3,721 | −7.3 % |
+| `text 20` (2,464 B) | 40,694 | 39,909 | −1.9 % |
+| `text 100` (12,153 B) | 198,368 | 195,145 | −1.6 % |
+| `pool 1` (214 B) | 4,119 | 3,807 | −7.6 % |
+| `pool 20` (2,892 B) | 28,261 | 27,949 | −1.1 % |
+| `pool 100` (14,019 B) | 128,316 | 128,004 | −0.2 % |
+| `params 1` (104 B) | 3,923 | 3,447 | −12.1 % |
+| `params 20` (1,051 B) | 29,136 | 26,550 | −8.9 % |
+| `params 100` (5,179 B) | 138,200 | 126,734 | −8.3 % |
+
+The clock cannot resolve these changes in the end-to-end figures above, so callgrind is the evidence for them. The same bench at `5aee9afb`'s `std/`, on the same kind of machine in an earlier session, put C's own `pk` median at 7.80 µs against 8.26 µs here: an unchanged binary moved 5.9 % between runs. Tried and dropped in the same pass: rewrites of `PgText.timestamp`, which ran more instructions; a comma scan in `PgArrayWalker`, a digit count in `putDecimal` and an inlined `getI32BE`, none of which gave a measured win; and a digit loop that wraps instead of testing, which needs `nish:unsafe` and so would make every program that uses the module reach `unsafe`.
+<!-- db-clients:end -->
+
 <!-- unix-ipc:begin -->
 ## Unix sockets against loopback TCP
 
@@ -3081,6 +3139,208 @@ ns per request, median (min–max) and ratio of medians to `old`. `idle` shows n
 What the layout does measurably reduce is lines touched. Under cachegrind, an idle request misses D1 10.95 times on `main` and 9.01 on this layout, and LL 0 times on both, because the pool fits in LL. The count is the difference between 100,000 and 0 requests over 10,000 connections. In `idle-dram`, with the eviction sweep's own misses left out, it misses LL 10.94 times on `main` and 9.00 on this layout. The saving is in `Http1Connection.feed` (2.38 to 0.75 read misses) and in the write misses of `unpark`, `http1Next` and `Http1Connection.next`; `http1Next` and `inputRoom` take on 0.44 and 0.25 read misses. Reading straight into the lent `parser.buf` (`direct`) saves no misses.
 <!-- http-conn:end -->
 
+<!-- http-idle-bytes:begin -->
+## What an idle keep-alive connection costs Http1Server
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `bash bench/http1-conn/idle.sh` serves `bench/http1-server.ts` (bench/handler-ring's `h1` design) on descriptors (`epoll`) and with `BENCH_RING=1` on `NET_LISTEN_RING` slots (`ring`). `bench/fd-limit/loadgen.c` holds 18,000 keep-alive connections, sends `GET /plaintext` at 30,000 requests a second for 4 seconds, then sends nothing for 5 seconds with every connection open. Its `-i` reads the server's RSS and PSS, and the box's `Slab` and TCP pages, then and before the first connect. Each figure is that difference over 18,000.
+
+| | |
+| --- | --- |
+| Date | 2026-11-18 |
+| nish | an `Http1Server` that lends a connection only to a busy slot (`new`, commit 9c39ab8c, whose `bench/http1-conn/idle.sh` and `bench/fd-limit/loadgen.c` produced this table), against `main` at b18d1bf1 (`old`), `--profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, Linux 6.18 |
+| Runs | 5 interleaved rounds, the two builds' order turned each round |
+| Command | `bash bench/http1-conn/idle.sh --rounds 5 --binary before=<old build of bench/http1-server.ts>` |
+
+| mode | build | RSS B/conn | PSS B/conn | Slab B/conn | server µs/req under load |
+| --- | --- | ---: | ---: | ---: | ---: |
+| epoll | old | 1265 (1263–1267) | 1261 (1259–1264) | 9330 (9316–9356) | 13.83 (13.42–14.00) |
+| epoll | new | 99 (96–106) | 96 (93–102) | 9329 (9311–9344) | 13.41 (13.33–13.83) |
+| ring | old | 1610 (1609–1614) | 1609 (1608–1613) | 9049 (9034–9075) | 17.92 (17.75–18.33) |
+| ring | new | 459 (448–485) | 458 (448–485) | 9053 (9034–9061) | 17.25 (16.92–18.00) |
+
+Median (min–max) of 5 runs. Every run answered every request and closed none.
+
+- **The server's resident bytes for an idle connection fall by 1157 to 1171 on epoll and by 1124 to 1166 on the ring.** These are the band edges: old's minimum less new's maximum, and old's maximum less new's minimum. A resting slot no longer holds its `Http1Connection`, which was 904 arena bytes after four requests (`HTTP1_SERVER_IDLE_BYTES`), with its pages. It keeps 32 bytes of slot arrays (`fds`, `armed`, `at` and `restedMss` as i32, `rested` and `owner` as i64). Growth by doubling can leave up to twice that allocated. The rest of new's 99 bytes is not broken down here.
+- **The ring holds about 350 bytes a connection more than epoll in both builds** (345 old, 360 new, medians). This change does not move it. It is the runtime's io_uring set (`runtime/runtime-uring.c`), not `Http1Server`.
+- **The kernel holds about 9.3 KB a connection on epoll and 9.0 KB on the ring, unchanged.** `Slab` is the box's, so it counts the client's end of each loopback socket too. TCP pages read 0 at idle, within ±112 bytes a connection.
+- **Server CPU a request under load is inside noise in both modes.** The ranges overlap. On a lent connection, the kept response head (H1-7) is reused only for the peer whose responses wrote it. Here 18,000 peers share the busy connections, so it is seldom reused, and no cost shows outside the band. `node bench/http1-request/run.mjs --instructions --base b18d1bf1` counts the same instructions per request in every case, with no change beyond 0.1%. Its path feeds one `Http1Connection`, which is never lent.
+- **`node bench/http1-conn/run.mjs --shape rss --base b18d1bf1 --connections 10000`** builds its own pool of `Http1Connection`s, not an `Http1Server`. Each connection there costs 9 bytes more: 1059 (1057–1061) against 1050 (1049–1052) with `idleInput` and one request. That is the `keptFor` field `lendTo` keys the kept head on. `Http1Server` now pays it only for a connection lent to a busy slot.
+<!-- http-idle-bytes:end -->
+
+<!-- http-lean-get:begin -->
+## A minimal GET on Http1Server
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. This section breaks down one keep-alive `GET` answered with a 200 and a small JSON body: where its instructions go, its wall-clock time, the bytes a connection holds, and the server CPU and memory at 18,000 keep-alive connections. It then bounds what a lean request path could save (#1760). `std/`, `src/` and `runtime/` are `main` at 4d0faa4b throughout. Each table names the bench code that produced it: either `main` at 4d0faa4b with a path, or "this PR's bench code", the files this section's PR adds or changes under `bench/`.
+
+| | |
+| --- | --- |
+| Date | 2026-11-18 |
+| nish | `main` at 4d0faa4b, `--profile speed`, built `--cpu x86-64` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores (L1d 48 KiB and L2 2 MiB a core, L3 260 MiB), 15.7 GiB |
+| Runs | callgrind and cachegrind with `NISH_SIMD=base` and glibc's string functions pinned by `GLIBC_TUNABLES`, 1,000 iterations less 500, over 500; wall clock in 12 interleaved rounds against a byte-identical copy (`bench/http1-request`), and in 15 rounds (7 for the stages) against `old` and `old′` (`bench/http1-conn`); `bench/handler-ring` in 5 interleaved rounds |
+| Command | `node bench/http1-request/breakdown.mjs`; `node bench/http1-request/run.mjs --instructions`; `node bench/http1-request/run.mjs --case get --case short --case fields0 --case fields4 --case fields10`; `node bench/http1-conn/run.mjs --shape hot,cold,idle-dram,direct-dram --connections 18000 --rounds 15 --base origin/main`; `node bench/http1-conn/run.mjs --shape hot,idle --connections 1 --rounds 15 --rss 0 --base origin/main`; `node bench/http1-conn/run.mjs --shape cold,idle-dram,direct-dram,stages --connections 18000 --rounds 7 --base origin/main` (origin/main at 4d0faa4b in each); `build/nish bench/http1-conn/bytes.ts --link build/bench/http1-conn/bytes && build/bench/http1-conn/bytes`; `bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "ring epoll1 epoll epoll-copy" --server-cpus 0`; `bash bench/handler-ring/run.sh --nodb --conns 18000 --designs "h1 h1-copy epoll1" --rounds 5` |
+
+The request shapes are cases of `bench/http1-request` (this PR's bench code, `bench/http1-request/main.ts`):
+
+- `get` is 350 bytes: `GET /json` with `Host: api.example.com`, `User-Agent`, `Accept: application/json`, and a 221-byte HS256 Bearer `Authorization`. The program reads none of the last three.
+- `short` is 37 bytes: `GET / HTTP/1.1` and `Host: example.com`.
+- `fields0`, `fields4` and `fields10` are `GET /json` with `Host: example.com` and 0, 4 or 10 `X-Pad-k: value-k` fields. They are 41, 113 and 221 bytes, and give the cost of each unread field.
+
+Each case is answered `200` with `Content-Type: application/json` and a JSON body written by the handler. Every request has the same status and fields as the one before, so the response head takes the kept-head path.
+
+### Instructions a request, by component
+
+Every instruction is given to the source function its debug line sits in, not the function callgrind names, because the optimiser inlines most of `std/net` into its callers. `bench/http1-request/breakdown.mjs` does this over `bench/http1-request/main.ts`, both this PR's bench code. It prints a row per function at 1 Ir or more a request; the grouping into the components below is done by hand from those rows. The totals are of the `-g` build under callgrind. Under cachegrind, `run.mjs --instructions` counts a build without debug info at 6,116, 3,490, 3,512, 5,309 and 8,094, within 1.8% of the totals below.
+
+| component | `get` | `short` | `fields0` | `fields4` | `fields10` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| head parse: request line, `next`, end of head (the rest of `http1-codec`) | 1,303.5 | 842.6 | 864.7 | 1,065.9 | 1,389.3 |
+| head parse: line scan (`http1Section` less line 1880) | 952 | 260 | 260 | 692 | 1,363 |
+| header spans: field lines (`http1FieldLine`, `http1LowerName`, `http1NonTokenLanes`, `http1SpanSet`, `http1FramingField`, `http1HeadIs`, `http1HeadIsVector`, `headerIndex`) | 1,423 | 346 | 346 | 1,418 | 3,026 |
+| header spans: head copy (`http1Section` line 1880) | 252 | 24 | 24 | 72 | 156 |
+| `memcpy` | 136 | 57 | 57 | 65 | 112 |
+| Host check (`std/net/url.ts`) | 448 | 361 | 361 | 361 | 361 |
+| Date (`HttpDate.current` 14, `HttpDate.formats` 1) | 15 | 15 | 15 | 15 | 15 |
+| response head, kept path | 451 | 451 | 451 | 451 | 451 |
+| sendBody: `write` and `end` | 86 | 86 | 86 | 86 | 86 |
+| connection, the rest | 323 | 323 | 323 | 323 | 323 |
+| JSON writer (the handler) | 494 | 494 | 494 | 494 | 494 |
+| bench harness | 176 | 176 | 176 | 176 | 176 |
+| total | 6,059.6 | 3,435.6 | 3,457.8 | 5,219.0 | 7,952.3 |
+
+Instructions a request (Ir), callgrind; this PR's bench code (`bench/http1-request/main.ts`, `bench/http1-request/breakdown.mjs`).
+
+- **Header spans.** On `get`, the field lines are `http1FieldLine` 540, `http1HeadIs` 353, `http1NonTokenLanes` 194, `http1LowerName` (the lowercasing) 176, `headerIndex` 71, `http1SpanSet` (the span stores) 40, `http1FramingField` 29 and `http1HeadIsVector` 20.
+- **Unread fields.** From `fields0` to `fields10`, each unread field costs 449.5 Ir. That is 268 Ir of field lines (`http1FieldLine` 133, `http1LowerName` 44, `http1NonTokenLanes` 39, `headerIndex` 17, `http1SpanSet` 10, `http1HeadIsVector` 10, `http1FramingField` 8, `http1HeadIs` 7), 110 of line scan, 13 of head copy, 5.5 of `memcpy` and 52 in the rest of the codec. Cachegrind's slope is 458.2.
+- **Response head, kept path.** Its 451 Ir are `http1ServerKept` 99, `sameHead` 70, `http1ServerSame8` 64, `respond` 110, `copyBytes` 49, `bodyRoom` 28, `http1ServerCopy` 20 and `begin` 11. `sameHead` compares the kept head, its Date included, and on a match `copyBytes` copies the kept head whole. `http1WriteResponseHead` is not in the steady-state profile: it runs only when the status, the fields or the Date change.
+- **Connection, the rest.** This is `inputRoom` 64, `nextRequest` 53, `next` 27, `room` 26, `acquire` 28, `OutputPool.take` 27, `release` 16, and 82 Ir of smaller rows. The per-request state reset is `http1StartRequest` 22 plus `Http1Connection.nextRequest` 53, 75 Ir.
+- **Date.** A lean path keeps Date: RFC 9110 §6.6.1 says an origin server with a clock MUST send Date in its 2xx, 3xx and 4xx responses. It costs 15 Ir a request here. `HttpDate.current` returns the pinned time, or else the time held by `hold()`, or else reads the clock. `Http1Server` holds once per readable event (`std/net/http1-server.ts`, lines 2574 and 2621). `bench/http1-request` and `bench/http1-conn` both pin the date, so neither times a clock read inside `HttpDate`. At 30,000 requests a second over 18,000 connections a readable event mostly carries one request, so the read can be once a request: at the 28.2 ns of the `clock read` row below, which is the bench's own `monotonicNanos` read, that is up to about 28 ns a request, and a lean path pays it too. The 29-byte Date copy happens only in `http1WriteResponseHead`, so the kept-head path does not make it.
+
+### Wall clock
+
+`node bench/http1-request/run.mjs` (this PR's bench code, `bench/http1-request/`), 12 rounds of 2 columns a case. Each figure is ns a request, median (min–max). The band is the byte-identical copy's median against its build's.
+
+| case | ns | copy | band | ns per Ir | copy ns per Ir |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `short` | 302.2 (262.1–409.9) | 299.5 (273.0–390.5) | ±0.9% | 0.088 | 0.087 |
+| `get` | 466.9 (447.9–655.0) | 489.3 (449.9–602.9) | ±4.8% | 0.077 | 0.081 |
+| `fields0` | 286.6 (271.4–436.9) | 304.1 (264.9–364.6) | ±6.1% | 0.083 | 0.088 |
+| `fields4` | 501.2 (392.6–738.7) | 530.8 (389.5–629.9) | ±5.9% | 0.096 | 0.102 |
+| `fields10` | 628.6 (599.3–843.1) | 687.3 (601.6–840.8) | ±9.3% | 0.079 | 0.086 |
+
+The ns-per-Ir columns divide each median by the callgrind total above. The per-field slope by wall clock is noisy: 34.2 ns a field from `fields0` to `fields10`, and 53.7 from `fields0` to `fields4`. `get` less `fields0` is 180.3 ns at the medians.
+
+`node bench/http1-conn/run.mjs` (`main` at 4d0faa4b, `bench/http1-conn/main.ts` and `run.mjs`) times `Http1Connection` without a socket on the GET of about 350 bytes. Each round is the fastest of 5 batches of 200,000 requests, pinned to core 1. The shapes are:
+
+- `hot`: one connection, the GET alone, every line in cache.
+- `cold`: the GET over 18,000 connections visited round-robin. 18,000 connections hold about 21 MB by the byte counts below, which fits in this box's 260 MiB L3 but not its 2 MiB L2, so `cold` reaches L3 but not DRAM.
+- `idle`: an `Http1Server`-shaped pool with `idleInput` on: each request is read through the server's scratch buffer, the connection lends its input and head buffers back when it parks, and the requests alternate the GET with a POST of about 550 bytes.
+- `idle-dram` and `direct-dram`: `idle` over 18,000 connections, and its variant that reads into the lent input buffer with no scratch copy, run 20,000 a batch with a 1 GiB eviction ring swept between requests, so every request finds its connection in DRAM. Only the requests are timed, each between two clock reads.
+
+`old` is `main`'s `std/` and `old′` a byte-identical copy of its build. `new` is the working tree, whose `std/` is the same 4d0faa4b, so all three columns are one code and their spread is noise.
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot, 1 connection | 378.6 (374.1–395.0) | 377.2 (373.1–394.4) 0.996 | 375.8 (373.5–396.0) 0.993 |
+| cold, 18,000 connections | 448.5 (404.0–626.0) | 437.2 (401.1–626.5) 0.975 | 442.8 (404.5–659.9) 0.987 |
+| idle-dram, 18,000 connections | 732.6 (687.5–794.4) | 733.8 (688.0–859.3) 1.002 | 735.4 (697.3–801.7) 1.004 |
+| direct-dram, 18,000 connections | 703.0 (669.3–886.0) | 687.0 (655.1–756.6) 0.977 | 688.2 (661.4–786.6) 0.979 |
+
+15 rounds; ns per request, median (min–max) and ratio of medians to `old`.
+
+| shape | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| hot, 1 connection | 386.9 (376.8–475.0) | 388.2 (378.3–480.1) 1.003 | 386.5 (379.1–460.5) 0.999 |
+| idle, 1 connection | 540.1 (519.7–672.1) | 542.2 (524.6–654.2) 1.004 | 534.2 (517.5–692.7) 0.989 |
+
+A second run of 15 rounds at one connection: `idle` does the work of `idle-dram`, GET and POST through the scratch buffer and the pools, with no eviction ring and no miss. Its `hot` row is 2.8% slower than the run above, the drift between two runs on this box.
+
+| stage | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| recv | 57.8 (56.2–60.8) | 59.1 (54.3–68.3) | 59.0 (56.2–62.2) |
+| parse | 353.2 (345.8–370.6) | 364.8 (343.9–409.2) | 353.3 (345.0–366.3) |
+| dispatch | 33.5 (30.9–40.2) | 35.1 (29.9–40.4) | 33.2 (32.3–34.6) |
+| respond | 54.3 (50.7–89.0) | 58.7 (49.5–63.4) | 52.6 (50.2–56.2) |
+| sendBody | 62.4 (19.4–70.1) | 72.3 (39.7–149.7) | 50.2 (19.4–78.4) |
+| park | 15.7 (14.9–16.5) | 15.7 (14.6–22.6) | 15.6 (15.4–16.5) |
+| total | 567.0 (529.5–636.9) | 613.8 (535.8–751.7) | 551.4 (528.4–611.8) |
+| clock read | 28.3 (28.2–28.6) | 28.3 (28.2–28.5) | 28.2 (28.1–28.3) |
+| sendmsg | 543.6 (530.8–588.1) | 540.8 (523.8–556.9) | 547.1 (533.1–583.3) |
+
+Stages on 18,000 connections, 7 rounds, ns per request, with the clock read and `sendmsg` taken out of each stage. `respond` is the kept-head path; `sendBody` is the body write and `end`.
+
+### Bytes per connection
+
+`bench/http1-conn/bytes.ts` (this PR's bench code) reads `Arena.used()` around each allocation on the default `Http1Config`. The arena bump-allocates in 8-byte steps with no per-object header, so these counts include the rounding and there is no allocator header to add. An array is a 24-byte header plus its storage.
+
+| object | bytes | needed |
+| --- | ---: | --- |
+| an empty array | 24 | |
+| `HttpDate` | 112 | one a server, not a connection |
+| `Http1Parser` built alone | 368 | |
+| `Http1Connection` built: the connection 288, its parser 232, the parser's 5 array headers 120, its tally 16, the connection's 3 array headers 72 (`noOutput`, `noFields`, `headLengths`) | 728 | between requests |
+| after request 1: + the spans, `Array<i32>(64)`, 256 + 24 | 1,008 | per request only, but held |
+| after request 2: + the kept head, 128 + 24, and its field lengths, 8 + 24 (split inferred from the sizes) | 1,192 | between requests: the kept-head path compares against it |
+| after requests 3 and 4 | 1,192 | |
+| lent from the server's pools while a request is served: input 1,024, head 256, output 65,536 | 0 when idle | per request only |
+
+The peak RSS of an idle connection, from the 15-round `bench/http1-conn/run.mjs` run above (`main` at 4d0faa4b, `bench/http1-conn`) at 18,000 connections less 0, median (min–max) of 5 runs, in bytes:
+
+| | old | old′ | new |
+| --- | ---: | ---: | ---: |
+| `idleInput`, 1 request | 1049 (1048–1049) | 1048 (1048–1048) | 1049 (1048–1049) |
+| `idleInput`, 4 requests | 1233 (1232–1234) | 1232 (1232–1232) | 1232 (1232–1233) |
+| `idleInput` off, 1 request | 2918 (2917–2918) | 2917 (2917–2917) | 2918 (2917–2919) |
+| `idleInput` off, 4 requests | 3102 (3101–3103) | 3101 (3101–3101) | 3102 (3101–3103) |
+
+The object counts are 41 and 40 bytes under these RSS figures, 3–4%: 1,008 against 1,049 after one request (3.9%), and 1,192 against 1,232 after four (3.2%). Where those 40 bytes go is not explained by these runs: the pools' lent buffers, 66,816 bytes shared by the whole pool, come to under 4 bytes a connection, and the rest was not split further. `bytes.ts` serves a different GET from `run.mjs` (Host `bench.example.com:8080`, User-Agent, Accept and Accept-Encoding, a 66-byte body), which does not change what is held. With `idleInput` off, a parked connection keeps its input and head buffers instead of lending them back, which costs 1,869 bytes more after one request and 1,870 after four, the "about 1.9 KB" of `Http1Config.idleInput`'s doc comment. The lent sizes, 1,024 and 256 with their 24-byte headers, account for 1,328 of it; the other 541 bytes were not split. Of the 1,192 bytes an idle connection holds, the 280 of spans are needed only while a request is served.
+
+### Server CPU and idle memory at 18,000 connections
+
+`bench/http.mjs` drives `bench/http1-server.ts` with `wrk`, which is not installed on this box, so it was not used. Both runs below use `bench/handler-ring/run.sh --nodb` (this PR's bench code, `bench/handler-ring/`) and its load generator, which offers 30,000 requests a second over 18,000 keep-alive connections, with a 3 s warm-up and a 10 s window. The server runs on CPU 0 and the load generator on CPUs 1–3, under a hard `RLIMIT_NOFILE` of 20,000. All 18,000 connections were held in every round and none was lost. User and sys are the server's own CPU per request; box µs is the box's non-idle CPU per request from `/proc/stat`, the load generator's included. Each row is the median of 5 interleaved rounds (min–max), from the per-round `srv_us`, `srv_user_us`, `srv_sys_us`, `softirq_us`, `srv_rss_mb` and `srv_pss_mb` lines.
+
+The real server: the `h1` design builds `bench/http1-server.ts`, which serves through `nish/net/handler`'s `HttpHandler` and a `Router` table on top of `Http1Server`, so `h1`'s CPU includes those layers; the load generator asks it for `GET /plaintext`, a 129-byte response. `h1-copy` is a byte-identical copy of its build, which gives the noise band; `epoll1` is `bench/handler-ring/server.ts` on epoll in one process, serving the same route with no SQLite query.
+
+| design | server µs a request | user | sys | softirq µs | box µs | RSS MB | PSS MB | p50 ms | p99 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `h1` | 12.07 (11.73–13.23) | 1.83 (1.67–2.20) | 10.27 (9.97–11.03) | 13.30 (12.40–14.70) | 25.53 | 24.0 | 22.7 | 0.12 | 0.84 (0.62–1.42) |
+| `h1-copy` | 12.37 (11.46–13.37) | 1.93 (1.47–2.13) | 10.37 (9.80–11.23) | 13.26 | 25.56 | 24.0 | 22.7 | 0.12 | 0.74 (0.66–0.90) |
+| `epoll1` | 12.83 (12.17–12.97) | 2.07 (1.90–2.33) | 10.50 (10.13–10.87) | 13.50 | 26.17 | 25.1 | 23.8 | 0.09 | 1.10 (0.58–1.42) |
+
+The `h1` against `h1-copy` band is 2.5%. `h1` holds 18,005 descriptors and `epoll1` 18,008. `h1`'s median PSS was 22.7 MB: 22.7 MB over 18,000 connections is about 1.26 KB each, which includes the process's own base and its epoll tables, against the 1,192 bytes `bytes.ts` counts and the 1,232 of peak RSS above.
+
+An earlier run on the same box compared the handler-ring designs:
+
+- `ring`: one process on `NET_LISTEN_RING`.
+- `epoll1`: one process on epoll.
+- `epoll`: five `SO_REUSEPORT` processes on epoll.
+- `epoll-copy`: a byte-identical copy of `epoll`'s build, which gives the noise band.
+
+| design | server µs a request | user | sys | box µs | softirq µs | RSS MB | p50 ms | p99 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `epoll1` | 11.07 (10.60–11.80) | 1.80 (1.43–2.07) | 9.40 (9.17–9.87) | 24.40 | 12.10 | 25.1 | 0.14 | 0.82 |
+| `epoll` | 15.03 (14.23–15.37) | 2.77 (2.23–2.83) | 12.27 (11.60–12.53) | 29.80 | 14.70 | 39.7 | 0.07 | 0.89 |
+| `epoll-copy` | 14.77 (14.37–15.47) | 2.87 (2.57–3.07) | 12.03 (11.47–12.60) | 30.10 | 14.73 | 39.7 | 0.07 | 0.87 |
+| `ring` | 16.93 (16.57–17.20) | 2.83 (2.60–3.03) | 13.93 (13.53–14.50) | 30.24 | 15.60 | 31.7 | 0.04 | 0.60 |
+
+The `epoll` against `epoll-copy` band is 1.7%. Against `epoll`'s five processes, the ring costs 12.6% more server CPU; against `epoll1`, the one-process design it replaces, it costs about 53% more (16.93 against 11.07 µs). The script's advisory verdict is no-go. `epoll1` measured 11.07 µs in this run and 12.83 µs in the one above, so the box moves by more than either run's band between runs; compare rows within one table. `epoll1`'s median PSS was 23.8 MB in both runs: 23.8 MB over 18,000 connections is under 1.4 KB a connection, with the process base and epoll tables included. These connections were held while the server answered 30,000 requests a second, so they were not strictly idle.
+
+### What a lean path could save
+
+The bound adds three things a lean path might remove, each a median widened to the edge of its noise band. A band here is a median's gap to its byte-identical copy's; the min–max spreads in the same tables are 25–50%, so this is not a maximum:
+
+- **Spans of unread fields: 220.2 ns.** This is `get` less `fields0` by wall clock, with `get` 4.8% higher and `fields0` 6.1% lower, the edges of their bands: 466.9 × 1.048 − 286.6 × 0.939 = 489.3 − 269.1. At the medians it is 180.3 ns. It also includes the line scan of the three unread fields and `get`'s longer Host, which a lean path still pays, so it overstates. Taking only the span work by instructions (field lines, head copy and `memcpy`, `get` less `fields0`: 1,077 + 228 + 79 = 1,384 Ir) at the highest ns per Ir above, 0.102, gives about 141 ns.
+- **The per-request state reset: 7.6 ns.** That is 75 Ir at 0.1017 ns an Ir, the highest ns per Ir of either column (`fields4`'s copy, 530.8 ns over 5,219 Ir).
+- **Cache misses: 218.3 ns.** This is the highest `idle-dram` median of the three columns, 735.4, less the lowest `idle` median at one connection, 534.2, scaled down by 0.968 for the drift between the two runs (the lowest `hot` median of the first, 375.8, over the highest of the second, 388.2): 735.4 − 517.1. Within one column the difference is 192.5 in `old`, 191.6 in `old′` and 201.2 in `new`. It is measured from `idle` and not `hot` because `idle-dram` alternates the GET with a POST of about 550 bytes and reads through the scratch buffer: `idle` less `hot` at one connection is about 150 ns of that extra work and no miss, so `idle-dram` less `hot`, 735.4 − 375.8 = 359.6 ns, would count it as misses and give a sum of 587.5 ns. The term holds every miss of the request, those on state needed between requests included, and the clock reads around each timed request, so it bounds the misses of state a lean path could drop from above. `cold` less `hot`, 448.5 − 375.8 = 72.7 ns at the edges, is the GET's L3 cost on 18,000 connections; `idle-dram` evicts every line, so its misses are within this term and not added to it. `misses.sh` was not run, so the term is not split by object.
+
+Date is not counted: a lean path keeps it (RFC 9110 §6.6.1). It is 15 Ir a request, plus up to about 28 ns where a readable event carries one request, and its 29-byte copy happens only when the head is rewritten.
+
+The sum is 220.2 + 7.6 + 218.3 = 446.1 ns, under 0.5 µs by 53.9 ns. At the medians, unscaled (the miss term taken within `old`'s column, without the 0.968 drift factor), it is 180.3 + 7.5 + 192.5 = 380.3 ns. 446.1 ns is 8.7% of the 5.1 µs a no-database 404 costs in the nish-std-amritk challenge entry, about 3 µs of which is in the kernel; those two figures are the entry owner's measurement, not measured here. Against the real server above, it is 3.7% of `h1`'s 12.07 µs of server CPU a request and about 24% of its 1.83 µs of user time.
+
+Verdict: STOP — on medians widened to every term's band edge, a lean request path could save about 0.45 µs a request (446.1 ns), under the 0.5 µs bar and about 9% of the 5.1 µs no-database 404 (the entry owner's figure, not measured here).
+<!-- http-lean-get:end -->
+
 <!-- sha-block:begin -->
 ## SHA-256's block function
 
@@ -3184,6 +3444,93 @@ Most of the ring process's 518 MB was the slots' receive queues: each slot kept 
 | 96,000 | epoll copy | 5 | 96,000 | 96,040 | 29.03 (28.53–32.50) | 40.40 | 30,000 | 128.8 | 1,346 |
 
 The ring process's PSS fell from 517.8 MB to 141.4 MB, about 1.5 KB a connection against the five epoll processes' 1.3 KB (128.9 MB, unchanged from 128.8), and every round read between 141.4 and 141.7 MB. The box's used memory in the last round was 1,375 MB against 1,792 MB before. At the medians the ring process is 25.7% cheaper than the five against a 0.8% band (29.5% against 0.7% before), so the verdict above still holds; this run's single-round bands are wider than S4's, up to 11.0%, and its smallest saving in a round was 22.6%. Both sides read lower in absolute terms than S4's run (29.27 against 37.17 µs for the five), which is the box between runs, not the change: compare within a run, not across them. What the free costs, an allocation and a free per drained read, is not separable here from that drift.
+
+<a id="the-rings-tail-latency-and-300000-connections"></a>
+
+### The ring's tail latency, and 300,000 connections
+
+The owner's external entry read a p99 of 65 ms for one ring process against 20 ms for five epoll processes. The runs above measured CPU a request and no latency, so `bench/fd-limit/loadgen.c` now times every request sent inside the window, from its send to the last byte of its response, into a log-linear histogram (32 buckets an octave, so a percentile reads within about 3%), and `run.sh` reports p50, p99 and p99.9. With `--think S` the load is closed-loop: each connection sends its next request S seconds after its last answer, so the offered rate is about C / S and a slow server is offered less.
+
+What this bench shares with the entry: one SQLite lookup a request, and one ring process against five SO_REUSEPORT epoll processes. What it does not: the think time is this bench's choice (the 300,000 run below uses 10 seconds), as are the pinning and the 15-second windows, against the entry's 100-second windows as the owner reported them (not recorded in this tree). The server, all five epoll processes included, runs on CPU 0 (`--server-cpus`, default `0`) and the load on CPUs 1 to 3. The entry's load generator and rate are not known here, and its five epoll processes may have run on several cores while its ring process had one.
+
+**The tail does not reproduce at a matched load.** `bash bench/handler-ring/run.sh --conns 90000 --think T --rounds 2 --warmup 8 --seconds 15 --designs "ring epoll"` at commit `d603893d`, on an Intel Xeon @ 2.10GHz, 4 vCPUs, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000. The figures are per round (round 1 / round 2):
+
+| think | offered req/s | ring req/s | ring µs/req | ring p99 ms | ring lost | epoll req/s | epoll µs/req | epoll p99 ms | epoll lost |
+| ---: | ---: | ---: | --- | --- | --- | ---: | --- | --- | --- |
+| 3 s | 30,000 | 29,992 / 29,991 | 18.34 / 18.09 | 1.02 / 1.04 | 0 / 0 | 29,992 / 29,991 | 25.49 / 27.19 | 2.53 / 18.18 | 0 / 2 |
+| 2.5 s | 36,000 | 35,979 / 35,986 | 18.70 / 18.54 | 14.46 / 2.91 | 0 / 0 | 35,853 / 35,794 | 26.40 / 26.15 | 84.99 / 70.66 | 15 / 3 |
+| 2 s | 45,000 | 44,904 / 44,813 | 17.86 / 18.43 | 11.65 / 76.80 | 0 / 0 | 40,342 / 39,188 | 24.52 / 25.23 | 331.78 / 446.46 | 8 / 7 |
+| 1.6 s | 56,250 | 52,868 / 53,094 | 18.38 / 17.96 | 182.27 / 231.42 | 7 / 0 | 39,693 / 39,180 | 24.96 / 25.30 | 778.24 / 794.62 | 4 / 0 |
+
+**The p99 column is noisy, far more than the CPU columns.** The same design at the same load moved by as much as 7.2× between the two rounds of this table (epoll's 2.53 against 18.18 ms at 3 s; the ring's largest was 6.6×, 11.65 against 76.80 ms at 2 s), and by 11.8× across the three rounds at 96,000 connections below (epoll's 2.27 to 26.88 ms), where epoll and its byte-identical copy read median p99s of 8.83 and 3.87 ms against a CPU band of 0.8%. Read a p99 here by its order of magnitude and by which side is lower in each round, not by its digits. The p99 is also right-censored: a request still unanswered 2 s after the window closes is counted in `lat_lost`, not in the histogram, so it is missing from the percentiles. The `lost` columns are those counts: at most 15 of the about 450,000 to 800,000 requests timed in a round of this table, too few to move a p99. The loadgen of these runs closed its window only after `take()`'s sample reads at its end, not after its last `/proc` reads (the memory and descriptor counts that follow), so a request sent during the sample reads counted as timed but could not count as answered; these counts include any such request. loadgen now closes the window before those reads, `run.sh` warns on any `lat_lost` above 0, and it reports `lat_lost` in a `lost` column, which the runs below predate: their runs' counts were at most 8 a round at 18,000, 8 at 96,000 and 10 at 300,000.
+
+In every round at every load the ring process's p99 was below the five's on the same core. Both tails grow as the load nears what one core can serve: on this 2.10GHz box, about 53,000 requests a second for the ring process (about 18 µs a request) and about 40,000 for the five (about 25 µs). At the 2-second and 1.6-second thinks the five were saturated: they served about 40,000 of the 45,000 and 56,250 offered, so their p99 there is a backlog that grows for the whole window, not a tail at the same load as the ring's. At 2.5 seconds they were near saturation: they served 35,853 and 35,794 of 36,000, about 0.94 of the core at their 26 µs a request, with p99s of 85.0 and 70.7 ms. At 1.6 seconds the ring process was saturated too, at about 53,000 of 56,250. Two longer runs at a light load, 3 rounds each, read the same way:
+
+- `--conns 90000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"` at `d603893d`, at 22,500 req/s: the ring process read a p99 of 0.70 to 0.76 ms against 1.23 to 1.39 ms for the five.
+- `--conns 18000 --think 0.8 --rounds 3 --warmup 5 --seconds 15 --designs "ring epoll epoll-copy epoll1"` at `d603893d`, same rate: the ring process read 1.65 to 1.78 ms, the five 2.08 to 3.17 ms, and one epoll process 1.49 to 1.84 ms.
+
+**One epoll process at the same rate tails too.** The control for "one ring process" is one epoll process (`epoll1`) on the same core, but it cannot hold 90,000 connections here: it opens a descriptor a connection, the box's hard `RLIMIT_NOFILE` is 20,000, and `run.sh` gives it at most 20,000 - 64 = 19,936 slots and skips it above that. Raising the hard limit needs `CAP_SYS_RESOURCE`, which this container's root lacks (`prlimit --nofile=200000:200000` answers "Operation not permitted"). So the control runs at 18,000 connections and the rate of the 90,000 runs, with a think time five times shorter: `bash bench/handler-ring/run.sh --conns 18000 --think T --rounds 2 --warmup 8 --seconds 15 --designs "ring epoll1 epoll"`, the 0.4-second rows at commit `877c503e` and the 0.5-second rows at `c1b8967f`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000. Per round (round 1 / round 2):
+
+| think | offered req/s | ring µs/req | ring p99 ms | epoll1 µs/req | epoll1 p99 ms | epoll µs/req | epoll p99 ms |
+| ---: | ---: | --- | --- | --- | --- | --- | --- |
+| 0.5 s | 36,000 | 14.78 / 15.18 | 8.13 / 5.57 | 18.37 / 17.55 | 4.67 / 4.93 | 23.10 / 23.17 | 36.35 / 17.15 |
+| 0.4 s | 45,000 | 14.29 / 14.61 | 12.67 / 7.10 | 18.46 / 17.65 | 40.45 / 27.39 | 22.58 / 22.12 | 53.76 / 38.40 |
+
+Every round served within 1.2% of the offered rate but the five's first at 45,000, at 43,250. At 36,000 a second one epoll process's p99 was 4.7 to 4.9 ms, lower than the ring's 5.6 to 8.1; at 45,000 it was 27 to 40 ms, about three times the ring's 7.1 to 12.7, with the five at 38 to 54. A single process on one core tails at these rates whichever readiness API it uses; the ring's lower CPU a request keeps it further from the core's limit, which fits the order flipping at the higher rate. The 0.5-second rows' loadgen, at `c1b8967f`, prints `send_failed` and `closed`, and both read 0 in every one of their runs; the 0.4-second rows' loadgen, at `877c503e`, prints neither. The 0.8-second run above, at 22,500 a second, is the same control at a light load.
+
+**What the tail is: a queue on one core, not a stall.** The trace is in the tree: `bench/handler-ring/trace.patch` adds per-second counters to `runtime/runtime-net.c`'s `nr_pump`, `nr_collect` and `nr_poll_wait` (its header says how each field is computed), and `bash bench/handler-ring/trace.sh 90000 2` applies it for one build, runs the ring server on CPU 0 at 90,000 connections and a 2-second think, and reverts it. Every counter line starts with its `CLOCK_MONOTONIC` second, and loadgen's line ends with its window's bounds on the same clock, so `trace.sh` copies the seconds wholly inside the window to `build/bench/handler-ring/trace-window.err`; the full trace, connect phase and warm-up included, is `trace.err`. One run, with `runtime/` as at `0c6cdaa7` and `bench/` (`trace.patch`, `trace.sh`, loadgen) as at `1b3a92ee`, on the 2.30GHz box above, read the line below. That loadgen predates the window-close fix above; it prints every counter quoted here.
+
+```
+label=trace conns=90000 up=90000 failed=0 clients=5 connect_s=6.3 rps=44975 srv_us=16.76 srv_user_us=4.54 srv_sys_us=12.23 box_us=23.75 softirq_us=7.65 srv_rss_mb=136.8 srv_pss_mb=135.3 srv_fds=21 mem_used_mb=1356 tcp_mem_mb=0 starved=0 sent=1034304 think_s=2.00 p50_ms=0.552 p99_ms=15.744 p999_ms=25.344 max_ms=28.416 lat_n=674621 lat_lost=0 send_failed=0 closed=0 win_lo=188.861 win_hi=203.862
+```
+
+This run's p99, 15.7 ms, lies between the ring's two 2-second rows in the 90,000 table, 11.65 and 76.80 ms, but that is a cross-host comparison: those ran on the 2.10GHz box, this on a 2.30GHz one, and the p99 band is wide even on one box. The window held 14 whole seconds. The second with the longest pass and the oldest ready slot, and the second with the next longest pass, verbatim from `trace-window.err`:
+
+```
+tr2 t=191.556 ages=43247 max_age=19.37 ah(>1,2,5,10,20,50,100)=13506,11430,7272,4248,0,0,0 max_list=1456 taskrun=2956 overflow=0 nobufs=0 requeues=0 live=90000
+trace t=191.556 cycles=1826 pumps=2263 ev=43252 waits=4881 sleeps=435 sleep_full=0 max_cycle=4.63 max_out=2.34 n_at_max=43 max_in=5.08 max_pump=2.28 max_pump_ev=208 max_rounds=10 max_wait=2.201 max_sleep=4.97 max_npend=0 max_cycle_pumps=1 max_cycle_ev=208 h(>1,2,5,10,20,50,100)=302,2,0,0,0,0,0
+tr2 t=194.557 ages=46767 max_age=26.17 ah(>1,2,5,10,20,50,100)=9322,4798,4109,3478,1662,0,0 max_list=1910 taskrun=31745 overflow=0 nobufs=0 requeues=0 live=90000
+trace t=194.557 cycles=1978 pumps=2475 ev=46805 waits=5483 sleeps=496 sleep_full=0 max_cycle=8.60 max_out=0.56 n_at_max=64 max_in=8.05 max_pump=8.03 max_pump_ev=408 max_rounds=10 max_wait=7.711 max_sleep=2.83 max_npend=0 max_cycle_pumps=1 max_cycle_ev=408 h(>1,2,5,10,20,50,100)=232,11,1,0,0,0,0
+```
+
+In the window's 14 seconds (43,145 to 46,805 completions a second, `live=90000` throughout):
+
+- The longest pass of `nr_poll_wait` and the handler took 8.60 ms (`max_cycle`). The fields assigned with it say that pass spent 0.56 ms in the handler (`max_out`) on the 64 ready slots the previous return handed it (`n_at_max`, which the chunk of 64 caps), and pumped once, 408 completions (`max_cycle_pumps`, `max_cycle_ev`). That second's longest pump, 8.03 ms over 408 completions (`max_pump`, `max_pump_ev`), is the same count, and it fits in that pass: the pass's 8.60 ms less 0.56 ms in the handler leaves at most 8.04 ms, and only one pass that second took over 5 ms. So most of the pass was that one pump, about 20 µs a completion in that pump, a second's maximum and not the typical cost: over the whole run a request cost 16.76 µs of server CPU, 12.23 of it system time (`srv_us`, `srv_sys_us`). The next longest pass in the window, 4.63 ms, spent 2.34 ms in the handler on 43 slots and pumped 208. `max_in`, `max_wait` and `max_pump` are maxima over all of a second's passes, not fields of its longest. In no window second did more than 11 passes take over 2 ms, only one pass took over 5 ms, and none over 10 ms.
+- In every second of the trace no completion overflowed the ring (`overflow`), no send was requeued (`requeues`), and no receive on an unheld slot ended for want of a buffer (`nobufs`, the set's `nobufs_rearms`; a held slot's receive that ends so is not counted). `max_rounds`, the `nish_uring_wait` calls in one pump, peaked at 31 in the window (t=203.559), below `nr_pump`'s cap of 64, and was 10 in the second of the longest pass, so no pump in the window stopped at its cap.
+- The oldest ready slot in the window had waited up to 26.2 ms, in the second of the longest pass: `max_age` is an upper bound, since `nr_collect` re-appends every slot it reports and the re-append stamps the slot then, so a slot's age can start before the event it is next collected for arrived. 1,662 of the 46,767 slots taken that second read more than 20 ms old, by the same upper-bound age, and none more than 50 ms, and the list held at least 1,910 slots at once (`max_list` is read every 64th collection, so it is a lower bound). loadgen's own maximum over the window, 28.4 ms (the midpoint of its top histogram bucket, so within about 1.6%), is the same size. The handler takes the list in arrival order, at most 64 slots a wait, so the last slot in a burst waits for the whole burst.
+- The warm-up, outside the window, was worse: two seconds read 64.7 and 58.7 ms ages with lists of 4,800 and 5,033 slots, and one connect-phase second read a 339.5 ms pass while the connections were being opened. An earlier trace, with `bench/` as at `c1b8967f`, read a second of 5,163 slots and a 63.2 ms age; its lines carry no clock stamp, so that second cannot be placed against its loadgen window, whose maximum was 45.6 ms. As an upper bound, the 63.2 ms age does not contradict that maximum.
+
+That second also shows where the long pump's time went. Its longest single `nish_uring_wait`, with a timeout of 0, so one that never blocks, took 7.7 ms (`max_wait`). A pass holds its waits, and only one pass that second took over 5 ms, so that wait was in the longest pass, inside its one pump of 8.03 ms; and the ring set re-entered the kernel to run its deferred task work (`taskrun`, the set's `taskrun_reentries`, counted on the ring's `IORING_SQ_TASKRUN` flag in `runtime/runtime-uring.c`'s `ur_service`) 31,745 times that second, against 2,956 to 18,469 in the window's other seconds. The trace does not time the task work; that the long wait was the kernel completing the queued requests' work inside the call, the 408 completions of that pump, and not the process asleep or blocked, is an inference from the `taskrun` count and a timeout of 0: a queue, not a stall. Two other candidate causes are ruled out for the window and one is not: no connection opened or closed in it (`live=90000` in every second, and loadgen's `up=90000`, `closed=0`), so no accept completed and no accept re-arm or batching ran in it (the trace's struct carries the accept-error and accept-pause counts but does not print them); the re-arm of a receive whose multishot ended is not counted, so the trace cannot rule its cost in or out.
+
+The bursts come, by inference, from the load itself; the trace does not observe the load generator. A closed loop with one fixed think time sends a connection's next request at a fixed interval after its last answer, so the requests a slow moment delays arrive together again one think time later. A server on more cores drains the same burst sooner, which is consistent with the entry's five epoll processes on several cores against one ring process on one. That is an inference: the entry's cores were not measured here. The ring process's own CPU a request, 18 µs against the five's 25 µs on the 2.10GHz box (15 against 23 µs at 18,000 connections on the 2.30GHz one), is what decides how near its core it runs at a given rate.
+
+No fix is made in this stage. Pumping is not cheap overhead to bound: a pumped completion carries the kernel work of a request, and bounding the pump would move that work between passes, not remove it. That the work is most of the run's 16.76 µs a request is an inference, not a measurement: the trace counts completions, not the CPU each costs, and the inference rests on 12.23 µs of the 16.76 being system time. The batch of 64 is `NISH_POLL_CHUNK` in `runtime/runtime-net.c`, which caps a wait below the bench's `limits.maxEvents` of 128 (set in `bench/handler-ring/server.ts`; `std/net/handler.ts`'s default is 256); a smaller one would reorder the same queue. What should shorten the tail is a second core, with one ring process for each core, or smaller bursts from the load. Neither is measured here.
+
+**The final code at the box's C.** `bash bench/handler-ring/run.sh --conns 96000 --think 4 --rounds 3 --warmup 8 --seconds 15 --designs "ring epoll epoll-copy"` at commit `d603893d`, on an Intel Xeon @ 2.30GHz, 4 vCPUs, 15.7 GiB, kernel 6.18.44 under Docker, hard `RLIMIT_NOFILE` 20,000, at 24,000 req/s:
+
+| C | round | ring | epoll | epoll copy | saving | band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 96,000 | 1 | 21.62 | 31.45 | 31.78 | 31.3% | 1.0% |
+| 96,000 | 2 | 20.86 | 31.17 | 31.20 | 33.1% | 0.1% |
+| 96,000 | 3 | 20.62 | 30.37 | 31.42 | 32.1% | 3.5% |
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 96,000 | ring | 1 | 96,000 | 21 | 20.86 (20.62–21.62) | 30.53 | 23,994 | 141.8 | 1,400 | 0.17 | 1.74 (1.55–1.78) | 10.11 |
+| 96,000 | epoll | 5 | 96,000 | 96,040 | 31.17 (30.37–31.45) | 41.65 | 23,995 | 129.2 | 1,322 | 0.24 | 8.83 (2.27–26.88) | 29.44 |
+| 96,000 | epoll copy | 5 | 96,000 | 96,040 | 31.42 (31.20–31.78) | 41.53 | 23,996 | 129.2 | 1,327 | 0.24 | 3.87 (2.21–17.66) | 19.71 |
+
+Medians of 3 (min to max), and `box MB` from the last round of each design, as above. These rounds predate `02230cc8`'s ten-minute `idleTimeout` (below), which does not touch them: opening 96,000 connections took 4.7 to 6.1 s, far inside the 60-second default. They also predate loadgen's `send_failed` and `closed` counters, so they do not show that every connection kept sending; every round answered within 0.03% of the offered 24,000 a second. The ring process is 33.1% cheaper than the five at the medians, against a 0.8% band, and its p99 was lower than either epoll build's in every round. The p99 band is far wider than the CPU band: epoll and its byte-identical copy read 8.83 and 3.87 ms at the medians, 2.27 to 26.88 and 2.21 to 17.66 ms across rounds. Its PSS, 141.6 to 141.8 MB, has ends 0.2 and 0.1 MB above those of the 141.4 to 141.7 MB NURING-38 measured. The verdict still holds.
+
+**300,000 connections, one ring process.** `bash bench/handler-ring/run.sh --conns 300000 --think 10 --rounds 3 --warmup 15 --seconds 15 --designs ring` at commit `02230cc8`, on the same 2.30GHz box, at 30,000 req/s. There is no epoll row. Under this limit five epoll processes hold 96,000 connections between them, so 300,000 would need sixteen.
+
+| C | design | processes | held | fds | server µs/req | box µs/req | req/s | PSS MB | box MB | p50 ms | p99 ms | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 300,000 | ring | 1 | 300,000 | 47 | 23.73 (23.67–24.16) | 36.80 | 29,998 | 436.3 | 3,075 | 0.12 | 0.90 (0.87–2.59) | 8.83 |
+
+Medians of 3 (min to max). These rounds also predate the `send_failed` and `closed` counters; each answered 29,998 a second of the offered 30,000. One process held 300,000 connections in every round, under a limit of 20,000, with 47 descriptors. Its PSS was 435.9 to 436.3 MB, about 1.5 KB a connection, about the same as at 96,000. A request cost 23.73 µs against 20.86 at 96,000, though at a different rate, so the two are not a like-for-like comparison.
+
+Opening the connections took 90.6 to 123.7 s. The first run, at `d603893d`, answered no requests at all: past the handler's 60-second default `idleTimeout` the server closed the first connections before the window opened, and the load generator does not reopen a closed connection. `bench/handler-ring/server.ts` now sets `limits.http.idleTimeout` to ten minutes. That is a setting of the bench, not of the ring.
 <!-- handler-ring:end -->
 
 <!-- handler-wins:begin -->
@@ -3231,6 +3578,107 @@ The noise band is 0.6% at the medians (epoll against its copy) and at most 6.0% 
 
 What this does not say: the stand-in is not the entry, and its one route is a read; writes go through the WAL and an mmap gains them nothing (design §9). Only 18,000 connections were measured. Rerun `wins.sh` on the entry before it adopts either.
 <!-- handler-wins:end -->
+
+<!-- sqlite-cursor:begin -->
+## The feed through cursors against SQL
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/sqlite/run.mjs` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#sqlite)) times the challenge's feed three ways through `nish/sqlite`. All three read the 20 newest posts with each author's username and like count, and fold them the same way:
+
+- **`feed`** is SQL. One statement is prepared once; each call steps it 21 times, reads every column and resets. The statement has no parameters, so nothing is bound.
+- **`feed-cursor-walk`** reads through the [cursor API](https://github.com/amritk/nish/blob/main/docs/sqlite-cursor.md) and no SQL. One read transaction and four cursors are opened before the timed loop and closed after it, so a call is the walk alone: it walks `posts_created_at_id_idx` newest first, seeks each post and its author by rowid, and counts the post's entries in `likes_post_id_idx`.
+- **`feed-cursor`** is the same walk with what a request adds: each call runs `beginRead`, four `openCursor` calls, the walk, and `endRead`.
+
+Every run of all three printed `rows 200000 checksum 1510587328` (10,000 calls of 20 rows), and `--validate` refuses a cursor workload whose line differs from `feed`'s. The C and Rust twins have no cursor path, so the two cursor workloads run on the build and its byte-identical copy only. Each workload's noise band is the build against that copy.
+
+`node bench/sqlite/run.mjs` (12 rounds after a warm-up round) with the bench code of commit `c940ecb3`, which includes #1801 (`9996c9b1`): `openCursor` caches checked cursor shapes, and `beginRead`/`endRead` keep `BEGIN`, the schema read and `COMMIT` prepared. The machine is an Intel Xeon @ 2.10GHz with 4 logical cores, Linux 6.18.44, Ubuntu clang 18.1.3 and SQLite 3.54.1. ns per call:
+
+| Workload | Build min / median (IQR) | Copy min / median (IQR) | Noise band, min / median |
+| --- | --- | --- | --- |
+| `feed` (SQL) | 14,429 / 18,082 (1,208) | 15,598 / 17,517 (624) | 1,169 / 564 |
+| `feed-cursor-walk` | 10,000 / 12,531 (759) | 9,799 / 12,585 (2,809) | 201 / 54 |
+| `feed-cursor` | 11,676 / 14,647 (2,346) | 11,692 / 14,694 (1,370) | 16 / 46 |
+
+Against `feed`, both on the build in the same rounds:
+
+- `feed-cursor-walk` less `feed`: min −4,429 ns, median −5,550 ns (−30.7 % of `feed`'s median).
+- `feed-cursor` less `feed`: min −2,754 ns, median −3,434 ns (−19.0 % of `feed`'s median).
+
+The verdict statistic is the median.
+
+**The walk is faster than the SQL statement here: 5,550 ns less a call.** That is larger than both noise bands (564 and 54) and the four IQRs (1,208, 624, 759 and 2,809). The gap is not the VDBE alone: each `feed` call opens and closes its own read transaction, while the walk holds one across every call, and this run does not separate the two.
+
+**With a request's setup on every call, the cursors are still faster than the SQL: 3,434 ns less a call.** That is larger than both noise bands (564 and 46) and the four IQRs (1,208, 624, 2,346 and 1,370).
+
+**The setup a per-request open adds is derived, not measured: `feed-cursor` less `feed-cursor-walk` is 2,116 ns at the median (1,676 ns at the min).** It is the difference of two rows of the table, not a timed row of its own. It is larger than both of their noise bands (54 and 46) but smaller than the IQRs of `feed-cursor` (2,346) and of `feed-cursor-walk`'s copy (2,809), so this run does not resolve it beyond those spreads.
+<!-- sqlite-cursor:end -->
+
+<!-- sqlite-pgo:begin -->
+## PGO and the CPU level on the SQLite feed
+
+`bench/run.mjs` does not measure this section; it carries the section over unchanged. `node bench/sqlite/run.mjs --variant V` ([bench/README.md](https://github.com/amritk/nish/blob/main/bench/README.md#variants-pgo-and-the-cpu-level)) adds one binary to the rounds and times it against what it varies:
+
+- `pgo`: the build linked with `--pgo-use` on a profile trained on another database.
+- `x86-64-v3`: the build linked with `--cpu x86-64-v3`.
+- `pgo-x86-64-v3`: both.
+- `c-native`: the C twin with `-march=native`. It is C only, because `nish` refuses `--cpu native`.
+
+Each comparison's noise band is the binary it varies (the build, or for `c-native` the C twin) against that binary's byte-identical copy.
+
+**The run.**
+
+- **Bench code:** commit `b52f0131`. The commit that adds this section changes only documentation.
+- **CPU:** this container, `Intel(R) Xeon(R) Processor @ 2.10GHz`, 4 CPUs (one thread a core), Linux 6.18.44.
+  - `lscpu` lists `fma`, `movbe`, `avx2` and `bmi2`, which x86-64-v3 needs. It also lists `avx512f`, `avx512dq`, `avx512cd`, `avx512bw`, `avx512vl`, `avx512_vnni`, `avx512_bf16` and `avx512_fp16`.
+  - `clang -march=native` picks `sapphirerapids`.
+- **Toolchain:** Ubuntu clang 18.1.3. `LLVM_PROFDATA` was unset, so run.mjs found `llvm-profdata` on PATH: `/usr/bin/llvm-profdata`, a link to LLVM 18's `/usr/lib/llvm-18/bin/llvm-profdata`.
+- **SQLite:** 3.54.1.
+
+```bash
+npm run build
+node bench/sqlite/run.mjs --validate --variant pgo   # likewise for each V: rows and checksums agree
+node bench/sqlite/run.mjs --rounds 12 --variant pgo
+node bench/sqlite/run.mjs --rounds 12 --variant x86-64-v3
+node bench/sqlite/run.mjs --rounds 24 --variant x86-64-v3
+node bench/sqlite/run.mjs --rounds 12 --variant pgo-x86-64-v3
+node bench/sqlite/run.mjs --rounds 24 --variant pgo-x86-64-v3
+node bench/sqlite/run.mjs --rounds 12 --variant c-native   # five binaries, so run.mjs rounds 12 up to 20
+```
+
+**What the figures are.** Each figure is wall-clock ns per call of `feed`, which reads the 20 newest posts: 20 rows of five columns. One process runs the call in a single-threaded loop, and each run times its own loop. That makes the figures neither per-request CPU time nor throughput. They are min, median and IQR over the rounds, after one uncounted warm-up round. Every timed run printed `rows 200000 checksum 1510587328`.
+
+**The verdict rule.** The verdict statistic is the median difference. A difference is claimed only when it is larger than its noise band and than the IQR of both binaries it compares. The min is reported but not judged.
+
+**This session's machine was slower and noisier than the one behind bench/README.md's figures.** The plain build's `feed` median ran from 18,488 to 20,866 ns across these runs. That record, from another session, puts it at 15,391 ns.
+
+| Comparison | Rounds | Base min / median (IQR) | Copy min / median (IQR) | Variant min / median (IQR) | Noise band, min / median | Variant − base, min / median |
+| --- | --- | --- | --- | --- | --- | --- |
+| PGO, against the build | 12 | 17,854 / 19,937 (3,254) | 17,582 / 19,148 (833) | 14,819 / 15,795 (1,752) | 273 / 789 | −3,035 / −4,142 (−20.8 %) |
+| `--cpu x86-64-v3`, against the build | 12 | 17,666 / 18,488 (2,898) | 17,636 / 19,217 (2,676) | 17,620 / 19,377 (2,052) | 30 / 730 | −46 / +889 (+4.8 %) |
+| `--cpu x86-64-v3`, against the build | 24 | 17,878 / 20,827 (5,105) | 17,833 / 20,221 (6,814) | 17,899 / 20,464 (3,792) | 45 / 607 | +21 / −363 (−1.7 %) |
+| PGO and `--cpu x86-64-v3`, against the build | 12 | 17,827 / 18,868 (3,926) | 17,548 / 18,518 (722) | 14,769 / 16,631 (3,870) | 279 / 349 | −3,059 / −2,236 (−11.9 %) |
+| PGO and `--cpu x86-64-v3`, against the build | 24 | 18,069 / 20,866 (4,669) | 17,731 / 21,201 (4,487) | 14,910 / 16,716 (2,952) | 339 / 335 | −3,160 / −4,150 (−19.9 %) |
+| C twin `-march=native`, against the C twin | 20 | 17,400 / 18,905 (4,306) | 17,528 / 19,897 (3,391) | 17,499 / 19,226 (3,444) | 128 / 993 | +99 / +322 (+1.7 %) |
+
+In the C row, "base" is the C twin and "copy" is the twin's byte-identical copy. In every other row, "base" is the Nish build and "copy" is its copy.
+
+**PGO: the build is faster on `feed`, 4,142 ns a call at the median (−20.8 %).** That is larger than the band (789) and both IQRs (3,254 and 1,752). This verdict rests on a single 12-round run; the other two Nish comparisons each have a 12- and a 24-round run.
+
+**`--cpu x86-64-v3` alone: no measurable change.** At 12 rounds, +889 ns is outside the band (730) but inside both IQRs (2,898 and 2,052). At 24 rounds, −363 ns is inside the band (607). The two runs also disagree on the sign.
+
+**PGO with `--cpu x86-64-v3`: this run does not resolve it at the median, though both runs point the same way as PGO alone.**
+
+- At 24 rounds, −4,150 ns (−19.9 %) is larger than the band (335) and than the variant's IQR (2,952). It is smaller than the build's IQR (4,669).
+- At 12 rounds, −2,236 ns is larger than the band (349) but smaller than both IQRs (3,926 and 3,870).
+- With `x86-64-v3` alone showing nothing, nothing here separates this variant from PGO alone.
+
+**C twin with `-march=native`: no measurable change.** +322 ns is inside the twin's band (993) and both IQRs (4,306 and 3,444).
+
+**Not measured here:**
+
+- `lookup`, `insert`, `insert-txn` and the cursor workloads. The same runs printed them; this record does not judge them.
+- PGO's effect on a profile trained on the timed database itself.
+- PGO's effect on the multi-threaded rusqlite group, which `--variant` leaves out.
+<!-- sqlite-pgo:end -->
 
 <!-- crypto:begin -->
 ## Crypto against other languages

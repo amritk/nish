@@ -12,6 +12,6 @@ export class Token {
 
 // A free function that hands out `Token` values. An importer of `lex` alone
 // never writes `Token`, and still holds, calls and reads one.
-export function lex(kind: number): Token {
+export const lex = (kind: number): Token => {
   return new Token(kind);
-}
+};

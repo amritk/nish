@@ -3,11 +3,11 @@ import { leftValue } from "./left";
 import { rightValue } from "./right";
 import { base } from "./common";
 
-export function mainConstant(): number {
+export const mainConstant = (): number => {
   return 1000;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   console.log(base());
   console.log(leftValue());
   console.log(rightValue());
@@ -16,4 +16,4 @@ export function main(): number {
     console.log(`${i}: ${leftValue() * i}`);
   }
   return 0;
-}
+};

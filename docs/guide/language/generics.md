@@ -12,14 +12,22 @@ and [Generic methods](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#
 
 ## Generic functions
 
+Several examples on this page index and add with nothing bounding them, so the
+compiler cannot prove them safe and they build with
+[`--allow-panics`](../using-nish/cli.md#asking-what-a-program-can-do); testing `i < xs.length`
+before an index and bounding the operands, as the compile error suggests,
+builds them under the default.
+
 Both ways of writing a function take type parameters:
 
-```ts nish:ok
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 const identity = <T>(x: T): T => x;
 
-function lastOf<T>(items: T[], fallback: T): T {
+const lastOf = <T>(items: T[], fallback: T): T => {
   return items.length === 0 ? fallback : items[items.length - 1];
-}
+};
 
 export const main = (): i32 => {
   console.log(`${identity(7)} ${identity("seven")}`);
@@ -37,7 +45,8 @@ This prints `7 seven`, `c` and `false`. The generics become four functions:
 `T` out from the arguments, so `identity<i32>(7)` is refused and
 `identity(7)` is what you write:
 
-```ts nish:err NL2303
+<!-- nish:err NL2303 -->
+```ts
 const identity = <T>(x: T): T => x;
 
 export const main = (): i32 => {
@@ -55,7 +64,9 @@ A class or interface takes type parameters too. Here the type arguments are
 always written out, after `new` or in a type annotation, because there is
 nothing to infer them from:
 
-```ts nish:ok
+<!-- allow-panics: indexes an array without a guard the checker reads -->
+<!-- nish:ok --allow-panics -->
+```ts
 class Stack<T> {
   items: T[];
 
@@ -103,7 +114,8 @@ A method can have type parameters of its own, inferred at the call like a
 function's. On a generic class it can use the class's parameters as well, but
 it cannot reuse their names:
 
-```ts nish:ok
+<!-- nish:ok -->
+```ts
 class Chooser {
   flip: boolean = false;
 
@@ -128,7 +140,8 @@ Inside a generic body a `T` can be passed on, stored, returned and compared,
 but you cannot read a field or call a method on it, even if every type you
 use it with has one:
 
-```ts nish:err NL2329
+<!-- nish:err NL2329 -->
+```ts
 class Square {
   area: i32;
 
@@ -146,7 +159,9 @@ export const main = (): i32 => areaOf(new Square(4));
 type argument then has to *be* `Shape`, or a class that declares
 `implements Shape`; having fields with the same names is not enough.
 
-```ts nish:ok
+<!-- allow-panics: does integer arithmetic nothing bounds -->
+<!-- nish:ok --allow-panics -->
+```ts
 interface Shape {
   area: i32;
 }

@@ -8,21 +8,21 @@
 // Every call below is bracketed, and each one uses the *kept* pointer: passing
 // the temporary to `shout` (`stack` is an argument, not a concatenation),
 // handing it straight back out of `twice`, and storing it in a `const`.
-function tag(i: number): string {
+const tag = (i: number): string => {
   return `#${i}`;
-}
+};
 
-function shout(s: string): string {
+const shout = (s: string): string => {
   return s + "!";
-}
+};
 
-function twice(i: number): string {
+const twice = (i: number): string => {
   return shout(tag(i));
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const held = tag(7);
   console.log(twice(1));
   console.log(held);
   return 0;
-}
+};

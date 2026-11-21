@@ -1,5 +1,5 @@
 import math from "./locals";
 
-function f(): number {
+const f = (): number => {
   return 1;
-}
+};

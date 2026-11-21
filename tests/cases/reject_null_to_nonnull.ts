@@ -6,7 +6,7 @@ class Node {
   }
 }
 
-function make(): Node {
+const make = (): Node => {
   const n: Node = null;
   return n;
-}
+};

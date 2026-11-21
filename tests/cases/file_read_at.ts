@@ -3,7 +3,7 @@
 // time from a running offset until a read answers 0, each window's bytes
 // decoded and printed. `fileSize` agrees with what was written, and
 // `fileClose` answers 0.
-export function main(): number {
+export const main = (): number => {
   const path = "build/test/file_read_at.txt";
   const text = "streamed a window at a time\n";
   const bytes: u8[] = [];
@@ -31,4 +31,4 @@ export function main(): number {
   console.log(pieces.join(""));
   console.log(`closed: ${fileClose(fd)}`);
   return 0;
-}
+};

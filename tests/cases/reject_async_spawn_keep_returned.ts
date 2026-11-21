@@ -16,9 +16,9 @@ class Holder {
   }
 }
 
-function wrap(t: Tally): Holder {
+const wrap = (t: Tally): Holder => {
   return new Holder(t)
-}
+};
 
 async function wrapLater(t: Tally): Promise<Holder> {
   await sleep(1)

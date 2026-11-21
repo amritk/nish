@@ -7,7 +7,7 @@ class A {
 class B {
   y: i32 = 0;
 }
-export function test(): number {
+export const test = (): number => {
   const xs: (A | B)[] = [];
   return xs.length;
-}
+};

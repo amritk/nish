@@ -1,5 +1,5 @@
 // Collatz sequence lengths and peaks for 1..30 (do-while, while, nested loops).
-function steps(n: number): number {
+const steps = (n: number): number => {
   let x = n;
   let count = 0;
   while (x !== 1) {
@@ -11,9 +11,9 @@ function steps(n: number): number {
     count++;
   }
   return count;
-}
+};
 
-function peak(n: number): number {
+const peak = (n: number): number => {
   let x = n;
   let best = n;
   do {
@@ -23,9 +23,9 @@ function peak(n: number): number {
     x = x % 2 === 0 ? x / 2 : 3 * x + 1;
   } while (x !== 1);
   return best;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   let longest = 0;
   let arg = 0;
   for (let n = 1; n <= 30; n++) {
@@ -38,4 +38,4 @@ export function main(): number {
   }
   console.log(`longest: ${arg} (${longest})`);
   return 0;
-}
+};

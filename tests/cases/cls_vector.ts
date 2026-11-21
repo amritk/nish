@@ -24,19 +24,19 @@ class Vec3 {
   }
 }
 
-function centroid(count: number): Vec3 {
+const centroid = (count: number): Vec3 => {
   const acc = new Vec3(0, 0, 0);
   for (let i = 0; i < count; i++) {
     acc.addInPlace(new Vec3(1, 2, 3).scaled(0.5));
   }
   return acc;
-}
+};
 
 // `main(): void` because under --number-mode f64 the literal `0` is a double.
-export function main(): void {
+export const main = (): void => {
   const c = centroid(4);
   console.log(c.x);
   console.log(c.y);
   console.log(c.z);
   console.log(c.dot(new Vec3(1, 1, 1)));
-}
+};

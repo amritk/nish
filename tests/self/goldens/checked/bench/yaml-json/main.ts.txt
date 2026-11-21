@@ -352,7 +352,7 @@ function JsonTokenizer.close(this: JsonTokenizer, at: i32, inside: i32): i32 -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at
-  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_index nish_panic_overflow
+  calls: nish.JsonTokenizer.emit nish.JsonTokenizer.fail nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
   callee -5:14 JsonTokenizer.fail -> @nish.JsonTokenizer.fail
@@ -3210,7 +3210,7 @@ function JsonDocument.unsigned(this: JsonDocument, x: i32): u64 -> @nish.JsonDoc
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: x
-  calls: nish.JsonDocument.readNumber nish.jsonValueGet nish_panic_div nish_panic_overflow
+  calls: nish.JsonDocument.readNumber nish.jsonValueGet nish_panic_overflow
   pointer this: size=248 writesThrough=true captured=false passedTo=nish.JsonDocument.readNumber#0
   stackSites=0 stackLocals=0
   callee +1:10 JsonDocument.readNumber -> @nish.JsonDocument.readNumber
@@ -7949,6 +7949,10 @@ function parseYaml(text: string): YamlStream -> @nish.parseYaml [exported]
   stackSites=1 stackLocals=0
   callee +0:56 parseYamlWith -> @nish.parseYamlWith
 module std/text.ts [package nish]
+import bitmask from "nish:simd" -> builtin bitmask
+import eq from "nish:simd" -> builtin eq
+import loadU8x16 from "nish:simd" -> builtin loadU8x16
+import splatU8x16 from "nish:simd" -> builtin splatU8x16
 const NEWLINE: i32 = 10
 const CARRIAGE_RETURN: i32 = 13
 const SPACE: i32 = 32
@@ -7976,13 +7980,23 @@ function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function splitLines(text: string): string[] -> @nish.splitLines [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_str_new
-  stackSites=0 stackLocals=0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32 nish_array_grow nish_panic_index nish_str_new
+  stackSites=1 stackLocals=1
   local +0:9 length: i32 (const)
   local +1:9 lines: string[] (const)
   local +2:7 start: i32 (let)
-  local +3:7 i: i32 (let)
+  local +3:7 base: i32 (let)
+  local +9:11 flags: u8[] (const)
+  local +10:11 one: u8x16 (const)
+  local +14:11 n: i32 (let)
+  local +15:11 end: i32 (let)
+  local +21:11 i: i32 (let)
+  local +28:13 bits: i32 (let)
+  local +33:17 zeros: i32 (const)
+  local +34:17 lane: i32 (const)
+  local +35:17 at: i32 (const)
+  local +51:17 at: i32 (const)
 function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.isTextBlankByte nish_array_grow nish_str_new
@@ -8000,13 +8014,13 @@ function trimStart(text: string): string -> @nish.trimStart [exported]
   local +1:7 i: i32 (let)
   callee +2:24 isTextBlankByte -> @nish.isTextBlankByte
 function trimEnd(text: string): string -> @nish.trimEnd [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.isTextBlankByte nish_panic_index nish_str_new
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.isTextBlankByte nish_str_new
   stackSites=0 stackLocals=0
   local +0:7 end: i32 (let)
   callee +1:21 isTextBlankByte -> @nish.isTextBlankByte
 function trim(text: string): string -> @nish.trim [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
   calls: nish.trimEnd nish.trimStart
   stackSites=0 stackLocals=0
@@ -8057,7 +8071,7 @@ function fixedDigitsAdd(digits: i32[], doubling: boolean, amount: i32): void -> 
 function toFixed(x: f64, digits: i32): string -> @nish.toFixed [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: x
-  calls: llvm.fptosi.sat.i32.f64 nish.fixedDigitsAdd nish.fixedDigitsHalve nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_str_from_f64 nish_str_new
+  calls: llvm.fptosi.sat.i32.f64 nish.fixedDigitsAdd nish.fixedDigitsHalve nish_array_grow nish_panic nish_panic_overflow nish_panic_slice nish_str_from_f64 nish_str_new
   stackSites=2 stackLocals=2
   local +0:9 negative: boolean (const)
   local +3:7 m: f64 (let)
@@ -9122,8 +9136,7 @@ function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): 
   callee +0:21 slotWord -> @nish.slotWord
   callee +2:5 fileEntry -> @nish.fileEntry
 function Map<string, i32>.constructor(this: Map<string, i32>): void -> @nish.Map$str$i32.constructor [exported constructor instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Map<string, i32>.probe(this: Map<string, i32>, key: string): i64 -> @nish.Map$str$i32.probe [exported method instance]
@@ -9252,7 +9265,7 @@ function Map<string, i32>.reserveSlots(this: Map<string, i32>, n: i32): void -> 
 function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key mask
-  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic nish_panic_overflow
+  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic
   pointer slots: size=0 writesThrough=false captured=false
   pointer hashes: size=0 writesThrough=false captured=false
   pointer keys: size=0 writesThrough=true captured=false

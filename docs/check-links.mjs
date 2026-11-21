@@ -25,9 +25,8 @@
 //
 // It also reads scalar.config.json, the navigation of the user guide's site:
 // every route's `filepath` must be an existing .md file, and every page under
-// docs/guide/ or docs/roadmap/ must be reached by some route, so a page cannot
-// be written and then never published; and every docs/wp*.md note must have
-// its roadmap page, docs/roadmap/<the note's name>.
+// docs/guide/ must be reached by some route, so a page cannot be written and
+// then never published.
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -280,21 +279,6 @@ for (const page of files.filter((f) => f.startsWith(guideDir))) {
     problems.push(`${path.relative(root, page)}: no route in scalar.config.json reaches this guide page`)
   }
 }
-// The roadmap keeps every work package's state on a page of its own, named as
-// its note is, so a new note without a page, or a page left unrouted, would be
-// a package the published roadmap silently drops.
-const roadmapDir = path.join(root, "docs", "roadmap")
-for (const page of files.filter((f) => f.startsWith(roadmapDir + path.sep))) {
-  if (!routedPages.has(page)) {
-    problems.push(`${path.relative(root, page)}: no route in scalar.config.json reaches this roadmap page`)
-  }
-}
-for (const note of fs.readdirSync(path.join(root, "docs")).filter((f) => /^wp\d+-.*\.md$/.test(f))) {
-  if (!fs.existsSync(path.join(roadmapDir, note))) {
-    problems.push(`docs/${note}: no roadmap page; add docs/roadmap/${note} and its route`)
-  }
-}
-
 if (problems.length > 0) {
   console.error(problems.join("\n"))
   console.error(

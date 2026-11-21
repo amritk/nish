@@ -73,10 +73,7 @@ xorshift sequence, so the same call gives the same samples every time.
 The frequency `semitones` equal-tempered steps above `base`.
 
 ```ts
-function synthSemitone(
-  base: f64,
-  semitones: i32,
-): f64
+const synthSemitone: (base: f64, semitones: i32) => f64
 ```
 
 <scalar-field name="base" type="f64" required>
@@ -102,10 +99,7 @@ how many steps up; negative steps go down
 `seconds` of silence: an array of zero samples, one at least.
 
 ```ts
-function synthSilence(
-  seconds: f64,
-  sampleRate: i32,
-): f64[]
+const synthSilence: (seconds: f64, sampleRate: i32) => f64[]
 ```
 
 <scalar-field name="seconds" type="f64" required>
@@ -139,7 +133,7 @@ Nothing is added for a sample rate, start or length that is not positive
 start or length too long to count in samples.
 
 ```ts
-function synthTone(
+const synthTone: (
   out: f64[],
   sampleRate: i32,
   start: f64,
@@ -149,7 +143,7 @@ function synthTone(
   wave: i32,
   volume: f64,
   decay: f64,
-): void
+) => void
 ```
 
 <scalar-field name="out" type="f64[]" required>

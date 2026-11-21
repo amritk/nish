@@ -1,1 +1,3 @@
-function f(o: number): boolean { return o instanceof Object; }
+const f = (o: number): boolean => {
+  return o instanceof Object;
+};

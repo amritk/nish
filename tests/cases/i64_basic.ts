@@ -6,11 +6,11 @@
 // multiply is `wrappingMul` from `nish:unsafe`; a checked `*` would panic.
 import { wrappingMul } from "nish:unsafe";
 
-function square(x: i64): i64 {
+const square = (x: i64): i64 => {
   return x * x;
-}
+};
 
-export function test(): number {
+export const test = (): number => {
   const big: i64 = 3000000000;
   const sq = square(big);
   console.log(sq);
@@ -21,4 +21,4 @@ export function test(): number {
   const n: number = 7;
   console.log(toI64(n) + 1);
   return toI32(sq % 1000);
-}
+};

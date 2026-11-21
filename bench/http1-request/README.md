@@ -15,6 +15,7 @@ node bench/http1-request/run.mjs                                  # x86-64, 11 r
 node bench/http1-request/run.mjs --cpu x86-64-v3
 node bench/http1-request/run.mjs --base 4dc09dcc                  # adds a before column
 node bench/http1-request/run.mjs --instructions --base 4dc09dcc   # cachegrind counts
+node bench/http1-request/breakdown.mjs --case get   # callgrind, Ir a request by source function
 ```
 
 | Case | What is fed | Answer |
@@ -22,6 +23,8 @@ node bench/http1-request/run.mjs --instructions --base 4dc09dcc   # cachegrind c
 | `browser` | a 756-byte browser GET: Accept, Accept-Language, User-Agent, Cookie, and a 251-byte HS256 JWT as a Bearer token | 2 JSON fields |
 | `api` | a POST with a 338-byte head, a 148-byte HS256 JWT (`sub`, `iat`, `exp`) as a Bearer token, and a 61-byte JSON body | 2 JSON fields |
 | `short` | `GET / HTTP/1.1` and `Host`, 37 bytes | 2 JSON fields |
+| `get` | a 350-byte `GET /json`: Host, User-Agent, Accept and a 221-byte HS256 Bearer token, none but Host read | 2 JSON fields |
+| `fields0`, `fields4`, `fields10` | `GET /json` with Host and 0, 4 or 10 unread `X-Pad-k: value-k` fields, 41, 113 and 221 bytes | 2 JSON fields |
 | `pipelined` | the `api` POST and the `browser` GET in one read | both |
 | `split` | the `browser` GET in two reads, cut inside its Cookie line | 2 JSON fields |
 | `json1k` … `json40k` | the `short` GET | 1,008, 3,943, 16,193 and 40,760 bytes of JSON |

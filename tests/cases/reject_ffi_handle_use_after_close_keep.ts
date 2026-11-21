@@ -24,9 +24,9 @@ class File {
   }
 }
 
-function count(f: File): i32 {
+const count = (f: File): i32 => {
   let saved = f
   return saved.read()
-}
+};
 
 export const main = (): i32 => 0

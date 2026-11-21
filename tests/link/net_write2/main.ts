@@ -7,7 +7,7 @@
 import { NET_SO_SNDBUF, netAddress, netClose, netLocalPort, netSetOption, netWrite2, tcpAccept, tcpConnect, tcpListen } from "nish:net";
 import { readAll, ready } from "./wait";
 
-export function main(): number {
+export const main = (): number => {
   const listener = tcpListen("127.0.0.1", 0, 4);
   const addr: u8[] = new Array<u8>(18);
   netAddress(addr, "127.0.0.1", netLocalPort(listener));
@@ -51,4 +51,4 @@ export function main(): number {
   netClose(client);
   netClose(listener);
   return 0;
-}
+};

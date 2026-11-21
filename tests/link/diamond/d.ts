@@ -1,3 +1,3 @@
-export function base(): number {
+export const base = (): number => {
   return 5;
-}
+};

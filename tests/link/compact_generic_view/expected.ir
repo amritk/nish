@@ -1,0 +1,6 @@
+%struct.Box$$Cell = type { i32, i32 }
+%struct.Container$$Cell = type { i32, i32 }
+%struct.Holder$$Cell = type { i32 }
+%struct.H = type { i32 }
+%struct.Slot = type { i32, i32 }
+%struct.S = type { i32, i32 }

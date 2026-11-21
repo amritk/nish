@@ -677,20 +677,17 @@ and nothing but blanks may follow it. A call inside a `using a = arena()`
 block is refused (NL2424).
 
 ```ts
-function jsonDecode<T>(
-  _d: JsonDecoder,
-  _out: T,
-): i32
+const jsonDecode: <T>(d: JsonDecoder, out: T) => i32
 ```
 
-<scalar-field name="_d" type="JsonDecoder" required>
+<scalar-field name="d" type="JsonDecoder" required>
 
 The decoder over the input; its `failed` and `errorAt` say what
   went wrong, and `reset` starts it over.
 
 </scalar-field>
 
-<scalar-field name="_out" type="T" required>
+<scalar-field name="out" type="T" required>
 
 The object to decode into: a declared class, whose fields,
   nested objects and arrays are reused.
@@ -716,20 +713,17 @@ is never written at the call; under Node this body ends the program with a
 panic, because the types are erased.
 
 ```ts
-function jsonDecodeUnion<T>(
-  _d: JsonDecoder,
-  _prev: T,
-): T
+const jsonDecodeUnion: <T>(d: JsonDecoder, prev: T) => T
 ```
 
-<scalar-field name="_d" type="JsonDecoder" required>
+<scalar-field name="d" type="JsonDecoder" required>
 
 The decoder over the input; its `failed` and `errorAt` say what
   went wrong, and `reset` starts it over.
 
 </scalar-field>
 
-<scalar-field name="_prev" type="T" required>
+<scalar-field name="prev" type="T" required>
 
 The value the union holds now, reused when the tag names its variant.
 
@@ -753,19 +747,16 @@ the writer's `JSON_WRITE_FULL`, and a value deeper than 64 levels, or one
 that holds itself, its `JSON_WRITE_TOO_DEEP`.
 
 ```ts
-function jsonEncode<T>(
-  _w: JsonWriter,
-  _value: T,
-): void
+const jsonEncode: <T>(w: JsonWriter, value: T) => void
 ```
 
-<scalar-field name="_w" type="JsonWriter" required>
+<scalar-field name="w" type="JsonWriter" required>
 
 The writer, whose sticky code reports any failure.
 
 </scalar-field>
 
-<scalar-field name="_value" type="T" required>
+<scalar-field name="value" type="T" required>
 
 The object to write: a declared class.
 
@@ -776,10 +767,10 @@ The object to write: a declared class.
 Writes an array whose every element is a `boolean`.
 
 ```ts
-function jsonEncodeBooleanArray(
+const jsonEncodeBooleanArray: (
   w: JsonWriter,
   xs: boolean[],
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -799,10 +790,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeBooleanArray` writes it.
 
 ```ts
-function jsonEncodeBooleanArrayOrNull(
+const jsonEncodeBooleanArrayOrNull: (
   w: JsonWriter,
   xs: boolean[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -822,10 +813,7 @@ The elements, or `null`.
 Writes an array whose every element is an `f64`, a NaN or an infinity as the writer writes one.
 
 ```ts
-function jsonEncodeF64Array(
-  w: JsonWriter,
-  xs: f64[],
-): void
+const jsonEncodeF64Array: (w: JsonWriter, xs: f64[]) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -845,10 +833,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeF64Array` writes it.
 
 ```ts
-function jsonEncodeF64ArrayOrNull(
+const jsonEncodeF64ArrayOrNull: (
   w: JsonWriter,
   xs: f64[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -868,10 +856,7 @@ The elements, or `null`.
 Writes an array whose every element is an `i32`.
 
 ```ts
-function jsonEncodeI32Array(
-  w: JsonWriter,
-  xs: i32[],
-): void
+const jsonEncodeI32Array: (w: JsonWriter, xs: i32[]) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -891,10 +876,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeI32Array` writes it.
 
 ```ts
-function jsonEncodeI32ArrayOrNull(
+const jsonEncodeI32ArrayOrNull: (
   w: JsonWriter,
   xs: i32[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -914,10 +899,7 @@ The elements, or `null`.
 Writes an array whose every element is an `i64`.
 
 ```ts
-function jsonEncodeI64Array(
-  w: JsonWriter,
-  xs: i64[],
-): void
+const jsonEncodeI64Array: (w: JsonWriter, xs: i64[]) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -937,10 +919,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeI64Array` writes it.
 
 ```ts
-function jsonEncodeI64ArrayOrNull(
+const jsonEncodeI64ArrayOrNull: (
   w: JsonWriter,
   xs: i64[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -960,10 +942,10 @@ The elements, or `null`.
 Writes a `JsonNumber` as the text it holds, byte for byte.
 
 ```ts
-function jsonEncodeNumber(
+const jsonEncodeNumber: (
   w: JsonWriter,
   n: JsonNumber,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -983,10 +965,10 @@ The number.
 Writes an array whose every element is a string.
 
 ```ts
-function jsonEncodeStringArray(
+const jsonEncodeStringArray: (
   w: JsonWriter,
   xs: string[],
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -1006,10 +988,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeStringArray` writes it.
 
 ```ts
-function jsonEncodeStringArrayOrNull(
+const jsonEncodeStringArrayOrNull: (
   w: JsonWriter,
   xs: string[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -1029,10 +1011,7 @@ The elements, or `null`.
 Writes an array whose every element is a `u32`.
 
 ```ts
-function jsonEncodeU32Array(
-  w: JsonWriter,
-  xs: u32[],
-): void
+const jsonEncodeU32Array: (w: JsonWriter, xs: u32[]) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -1052,10 +1031,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeU32Array` writes it.
 
 ```ts
-function jsonEncodeU32ArrayOrNull(
+const jsonEncodeU32ArrayOrNull: (
   w: JsonWriter,
   xs: u32[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -1078,10 +1057,7 @@ array of this call's own that nothing keeps. A value past 2^63 has no
 loop. Every `u64` here is built with `toU64`, a BigInt under Node.
 
 ```ts
-function jsonEncodeU64(
-  w: JsonWriter,
-  v: u64,
-): void
+const jsonEncodeU64: (w: JsonWriter, v: u64) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -1101,10 +1077,7 @@ The value.
 Writes an array whose every element is a `u64`, each as `jsonEncodeU64` writes it.
 
 ```ts
-function jsonEncodeU64Array(
-  w: JsonWriter,
-  xs: u64[],
-): void
+const jsonEncodeU64Array: (w: JsonWriter, xs: u64[]) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>
@@ -1124,10 +1097,10 @@ The elements, in order.
 Writes `null`, or the array as `jsonEncodeU64Array` writes it.
 
 ```ts
-function jsonEncodeU64ArrayOrNull(
+const jsonEncodeU64ArrayOrNull: (
   w: JsonWriter,
   xs: u64[] | null,
-): void
+) => void
 ```
 
 <scalar-field name="w" type="JsonWriter" required>

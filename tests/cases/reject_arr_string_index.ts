@@ -1,1 +1,3 @@
-function f(xs: number[], key: string): number { return xs[key]; }
+const f = (xs: number[], key: string): number => {
+  return xs[key];
+};

@@ -1,7 +1,7 @@
-export function argumentCount(): number {
+export const argumentCount = (): number => {
   return process.argv.length - 1;
-}
+};
 
-export function firstArgumentIsSet(): boolean {
+export const firstArgumentIsSet = (): boolean => {
   return process.argv[0].length > 0;
-}
+};

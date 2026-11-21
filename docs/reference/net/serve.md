@@ -26,7 +26,7 @@ import { sleep } from "nish:async"
 const HOME: i32 = 0   // module constants, in the order the routes are added
 const USER: i32 = 1
 
-async function handle(req: Request): Promise<Response> {
+const handle = async (req: Request): Promise<Response> => {
   switch (req.route) {
     case HOME: return new Response(200).text("hello\n")
     case USER: {
@@ -37,7 +37,7 @@ async function handle(req: Request): Promise<Response> {
   }
 }
 
-export async function main(): Promise<i32> {
+export const main = async (): Promise<i32> => {
   const router = new Router(new RouterLimits())
   router.add("GET", "/")
   router.add("GET", "/users/:id")
@@ -167,10 +167,10 @@ The answer for a request the router refused: 405 with an `Allow` field
 naming the methods the path has, and 404 for anything else.
 
 ```ts
-function refuse(_req: Request): Response
+const refuse: (req: Request) => Response
 ```
 
-<scalar-field name="_req" type="Request" required>
+<scalar-field name="req" type="Request" required>
 
 the request to refuse; the loop answers it from the request it holds
 
@@ -189,12 +189,12 @@ Serves HTTP/1.1 on `port` on every address, handing each request to
 good when it is 0).
 
 ```ts
-function serve(
+const serve: (
   port: i32,
   router: Router,
   limits: ServeLimits,
   handle: (req: Request) => Promise<Response>,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="port" type="i32" required>
@@ -234,13 +234,13 @@ a test, or `tcpListenFlags` with SO_REUSEPORT for a worker — filling
 `stats` as it runs.
 
 ```ts
-function serveOn(
+const serveOn: (
   listener: i32,
   router: Router,
   limits: ServeLimits,
   handle: (req: Request) => Promise<Response>,
   stats: ServeStats,
-): Promise<i32>
+) => Promise<i32>
 ```
 
 <scalar-field name="listener" type="i32" required>

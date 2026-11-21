@@ -1,5 +1,5 @@
 // break/continue interplay with for updates, while counters, and do-while conditions.
-export function main(): number {
+export const main = (): number => {
   let log = "";
   for (let i = 0; i < 10; i++) {
     if (i % 2 === 0) {
@@ -65,4 +65,4 @@ export function main(): number {
   }
   console.log(k);
   return 0;
-}
+};

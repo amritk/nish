@@ -3,7 +3,7 @@
 // discriminant, whose labels are BigInt literals in JavaScript.
 const KIND_SKIP: i32 = 3;
 
-function classify(n: number): string {
+const classify = (n: number): string => {
   switch (n) {
     case 0:
       return "zero";
@@ -15,9 +15,9 @@ function classify(n: number): string {
     default:
       return "other";
   }
-}
+};
 
-function widen(w: i64): i64 {
+const widen = (w: i64): i64 => {
   let out: i64 = 0;
   switch (w) {
     case 1:
@@ -28,9 +28,9 @@ function widen(w: i64): i64 {
       break;
   }
   return out;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   for (let i = -2; i < 4; i++) {
     console.log(classify(i));
   }
@@ -50,4 +50,4 @@ export function main(): number {
   console.log(total);
   console.log(`${widen(1)} ${widen(2)} ${widen(9)}`);
   return 0;
-}
+};
