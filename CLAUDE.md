@@ -148,14 +148,16 @@ new positive `tests/cases/*` is registered with
 `docs/LANGUAGE.md`: rewrite it with `node scripts/gen-reference.mjs`; CI's
 `--check` fails on a stale, extra or hand-edited page
 ([`docs/README.md`](docs/README.md#the-library-reference)). A change to
-`nish --help` text regenerates `examples/break-web/help.ts` and
-`docs/site/break/` with `node examples/break-web/build.mjs` in the same PR:
-the break-web checks in the `test` shards pin both against the compiler's
-`--help`. `docs/IR_COOKBOOK.md` is generated too, by
-`docs/cookbook/regen.sh`, and moves with any codegen change its entries show:
-run `NISH=build/nish bash docs/cookbook/regen.sh --check` before pushing a
-`src/` change. CI's `examples` job runs it after the smoke build, so a red
-`examples` job with every example passing is usually this.
+`nish --help` text or `scripts/build.sh`, or a merge of `main` that touches
+either, regenerates `examples/break-web/help.ts` and `docs/site/break/` with
+`node examples/break-web/build.mjs` in the same PR (`--check` exits 0): the
+break-web checks in the `test` shards pin both against the compiler's
+`--help`. A conflict in those files is regenerated, never resolved by hand.
+`docs/IR_COOKBOOK.md` is generated too, by `docs/cookbook/regen.sh`, and
+moves with any codegen change its entries show: run
+`NISH=build/nish bash docs/cookbook/regen.sh --check` before pushing a `src/`
+change. CI's `examples` job runs it after the smoke build, so a red `examples`
+job with every example passing is usually this.
 
 **nish-cmp hides a wasm32 program behind its sidecars.** A default run reports
 a wasm32 program whose sidecar build both compilers refuse as "refused by
