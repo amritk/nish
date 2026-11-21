@@ -14395,7 +14395,7 @@ if (dealtHere("cryptoChecks")) {
       /** The IR `nish` writes for `name`'s case with `args`, or the failed spawn. */
       const ir = (name, args) => {
         const ll = path.join(workDir, `${name}.${args.length > 0 ? args[1] : "host"}.ll`)
-        const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", ll, ...args], { cwd: root, encoding: "utf8" })
+        const r = spawnNish([path.join(casesDir, `${name}.ts`), "-o", ll, ...args], { cwd: root, encoding: "utf8" })
         return r.status === 0 ? { ll, text: fs.readFileSync(ll, "utf8") } : { error: shown(r) }
       }
       /** `clang -O2 -S` of `ll` for `triple`: the assembly, or "" with the reason in `error`. */
@@ -14485,7 +14485,7 @@ if (dealtHere("cryptoChecks")) {
       ]) {
         const dir = path.join(workDir, `wasm32-${module}`)
         fs.rmSync(dir, { recursive: true, force: true })
-        const built = spawnSync(NISH, [path.join(root, program), "-o", `${dir}${path.sep}`, "--target", "wasm32"], {
+        const built = spawnNish([path.join(root, program), "-o", `${dir}${path.sep}`, "--target", "wasm32"], {
           cwd: root,
           encoding: "utf8",
         })
@@ -14511,8 +14511,7 @@ if (dealtHere("cryptoChecks")) {
         ["mul_high_wasm32", "18446744073709551614 false\n"],
       ]) {
         const module = path.join(workDir, `${name}.wasm`)
-        const built = spawnSync(
-          NISH,
+        const built = spawnNish(
           [path.join(casesDir, `${name}.ts`), "-o", workDir + path.sep, "--link", module, "--profile", "wasi"],
           { cwd: root, encoding: "utf8" }
         )
