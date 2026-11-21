@@ -398,8 +398,8 @@ stopped at its budget.
 
 A client that hangs up mid-call is answered for you: `next`, `send` and
 `finish` give `r` back to the server. Deadlines work as for a unary call,
-counted from `open` or `call`, and are checked each time you call one of
-them. A client-streaming call whose client sends nothing more is not timed
+counted from when the server read the request's head, and are checked each
+time you call one of them. A client-streaming call whose client sends nothing more is not timed
 out while it waits, so a program holding several asks `grpc.expired(r)` of
 each on every turn and answers the stale ones with
 `grpc.finish(r, GRPC_DEADLINE_EXCEEDED, "")`.

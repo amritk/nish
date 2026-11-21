@@ -439,22 +439,24 @@ const streamChecks = (t: Suite, rig: GrpcRig, tls: boolean, key: Secret<u8[]>): 
   p.flush(key)
   p.turns(n32(5), key)
   t.ok(`SumAll ${over}: RST_STREAM CANCEL ends the call, the program's read with it, and nothing is sent`, open && rig.streams.length === 0 && rig.closed - closed === 1 && p.until("HEADERS 7", key).indexOf("HEADERS 7") < 0)
-  // SumAll, its 40 ms deadline passing mid-stream.
-  p.wire.headers(n32(9), callOf("SumAll", "application/grpc", "40m"), 0)
+  // SumAll, its 300 ms deadline passing mid-stream, the call seen open first.
+  p.wire.headers(n32(9), callOf("SumAll", "application/grpc", "300m"), 0)
   piece(p.wire, n32(9), sumOf(n32(1), n32(1)))
   p.flush(key)
-  p.wait(toI64(60), key)
-  t.ok(`SumAll ${over}: a deadline passing mid-stream is DEADLINE_EXCEEDED`, only(p.until("HEADERS 9 end", key), n32(9), n32(4)) && rig.streams.length === 0)
+  p.turns(n32(3), key)
+  const open9: boolean = rig.streams.length === 1
+  p.wait(toI64(450), key)
+  t.ok(`SumAll ${over}: a deadline passing mid-stream is DEADLINE_EXCEEDED`, open9 && only(p.until("HEADERS 9 end", key), n32(9), n32(4)) && rig.streams.length === 0)
   // The framing faults, each in a streamed request.
   const faults: u8[][] = [
     [toU8(0), toU8(0), toU8(0), toU8(0), toU8(RIG_MAX_MESSAGE + 1)],
     [toU8(1), toU8(0), toU8(0), toU8(0), toU8(0)],
     [toU8(2), toU8(0), toU8(0), toU8(0), toU8(0)],
-    [toU8(0), toU8(0), toU8(0), toU8(0), toU8(4), toU8(8), toU8(1)],
+    [toU8(0), toU8(0), toU8(0), toU8(0), toU8(RIG_MAX_MESSAGE), toU8(8), toU8(1)],
     [toU8(0), toU8(0), toU8(0)],
   ]
   const statuses: i32[] = [8, 12, 13, 13, 13]
-  const names: string[] = ["a length past maxMessage", "a compressed message", "an unknown flag byte", "a message the stream ends inside", "a prefix the stream ends inside"]
+  const names: string[] = ["a length past maxMessage", "a compressed message", "an unknown flag byte", "a maxMessage-long message the stream ends inside after 2 bytes", "a prefix the stream ends inside"]
   for (let k: i32 = 0; k < toI32(faults.length); k++) {
     p.wire.headers(n32(11 + 2 * k), callOf("SumAll", "application/grpc", ""), 0)
     body(p.wire, n32(11 + 2 * k), faults[k])
@@ -485,25 +487,25 @@ const streamChecks = (t: Suite, rig: GrpcRig, tls: boolean, key: Secret<u8[]>): 
   p.flush(key)
   const hundred: string = p.until("HEADERS 23 end", key)
   t.ok(`Count ${over}: the window opened, all hundred replies, then grpc-status 0`, dataBytes(hundred, n32(23)) === 101000 && hundred.indexOf("HEADERS 23 end grpc-status=0") > 0 && rig.senders.length === 0)
-  // Count, stalled past its 40 ms deadline without the server's loop turning: send answers DEADLINE_EXCEEDED.
+  // Count, stalled past its 300 ms deadline without the server's loop turning: send answers DEADLINE_EXCEEDED.
   const sendClosed: i32 = rig.closed
-  p.wire.headers(n32(25), callOf("Count", "application/grpc", "40m"), 0)
+  p.wire.headers(n32(25), callOf("Count", "application/grpc", "300m"), 0)
   body(p.wire, n32(25), countOf(n32(100), n32(1), n32(1000)))
   p.flush(key)
   p.turns(n32(3), key)
   const since: i64 = monotonicNanos()
-  while (monotonicNanos() - since < toI64(60000000)) {}
+  while (monotonicNanos() - since < toI64(450000000)) {}
   p.wire.windowUpdate(n32(25), n32(1000000))
   p.flush(key)
   t.ok(`Count ${over}: send past the deadline ends the call DEADLINE_EXCEEDED`, p.until("HEADERS 25 end", key).indexOf("HEADERS 25 end grpc-status=4") > 0 && rig.closed - sendClosed === 1 && rig.senders.length === 0)
   // Count, every reply queued and the deadline passing while they wait: finish answers DEADLINE_EXCEEDED.
   const results: i32 = toI32(rig.results.length)
-  p.wire.headers(n32(27), callOf("Count", "application/grpc", "40m"), 0)
+  p.wire.headers(n32(27), callOf("Count", "application/grpc", "300m"), 0)
   body(p.wire, n32(27), countOf(n32(68), n32(1), n32(1000)))
   p.flush(key)
   p.turns(n32(3), key)
   const queued: boolean = rig.senders.length === 1 && rig.left[0] === 0
-  p.wait(toI64(60), key)
+  p.wait(toI64(450), key)
   p.wire.windowUpdate(n32(27), n32(1000000))
   p.flush(key)
   const late: string = p.until("HEADERS 27 end", key)

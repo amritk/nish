@@ -31,11 +31,9 @@ these is answered before the program sees the call. A program's
 `grpc-message` is percent-encoded, so no byte of it can end its field. On a
 streaming call `next` answers the same framing faults, a message the client's
 stream ends inside, a deadline passed mid-stream and a client that hung up,
-each without handing the program a message. Two Medium findings were fixed
-and are counted: GR-5, a slot every Trailers-Only answer kept until its
-connection closed (on `main` before this change), and GR-6, a panic in the
-program's `HttpServer.start` when a client sent DATA after its call was
-answered early (in a commit of this change only). Five properties are
+each without handing the program a message. One Medium finding was fixed
+and is counted: GR-5, a slot every Trailers-Only answer kept until its
+connection closed (on `main` before this change). Five properties are
 recorded as accepted (GR-1 to GR-4, GR-7).
 
 ## Scope
@@ -90,14 +88,12 @@ calls on one connection makes the module:
 | GR-2 | None (a property) | `GrpcServer.timeout` | A request with two `grpc-timeout` fields is read by its first. | **Accepted, not counted.** Either value is capped at `maxTimeout`, so the peer gains nothing by sending two. |
 | GR-3 | None (a property) | `GrpcServer.only` | The Trailers-Only HEADERS frame carries `content-length: 0` beside `content-type` and `grpc-status`, which the façade adds to every HTTP/2 head whose body length it knows. A server that advertises HTTP/3 also adds `alt-svc` to it over TLS, as it does to every head there. | **Accepted, not counted.** gRPC's Trailers-Only form names the fields it needs and does not forbid others. Pinned by each Trailers-Only check, which matches `content-type=application/grpc grpc-status=<s> content-length=0`. |
 | GR-4 | None (a property) | `GrpcServer.call` | A call without `te: trailers` is answered. The match on `content-type` is exact, so a value with parameters or in another case is answered 415. | **Accepted, not counted.** `te` tells proxies the client reads trailers; the server sends them either way. gRPC defines no `content-type` parameters. Pinned by "content-type text/plain: 415" and "content-type application/grpc+json: 415". |
+| GR-5 | Medium (denial of service) | `GrpcServer.only` | A Trailers-Only answer (every error without a message, from `call` and from the program's `fail`) was sent with `HttpServer.start` and never handed back with `end`. The head ends the stream, but the façade kept the request, and with it one of the connection's stream slots (at most 100, fewer for a small `requests`), until the connection closed. After that many such answers every later call on the connection was refused with `RST_STREAM REFUSED_STREAM`, so a peer sending malformed calls, or a client meeting ordinary `NOT_FOUND`s, wedged its own connection and held the server's request slots. | **Fixed** (c8321737): `only` calls `end` after `start`, whether the head went or the stream closed first. Pinned by "Trailers-Only over TLS: 150 calls on one connection, each NOT_FOUND, none refused" and its h2c twin, which failed before the fix, and by the interop job's 300 Missing calls on one ghz connection. The bug was on `main` (`2354c33`). |
+| GR-7 | None (a property) | `GrpcServer.next`, `grow`, `over` | A message that does not fit in the body piece at hand is copied into a buffer of the call's own. The buffer grows as the message's bytes arrive, from 1 KiB (`GRPC_GROW_FROM`), doubling and capped at the length the prefix declares, so a peer is held to about twice the bytes it has sent; a body that has already ended short of the declared length is answered `INTERNAL` before anything is allocated for the message. A peer that sends a message's bytes slowly can still make the server hold up to `maxMessage` bytes for as long as the call is open. The buffer is kept for the slot's next call when it is at most 64 KiB (`GRPC_KEEP`) and dropped when the call ends otherwise. | **Accepted, not counted.** The memory is bounded by `maxMessage` times the calls open at once, which the program sets (`maxMessage`, the server's `requests`). A program serving untrusted streaming clients sets `maxMessage` to the largest message its methods read. A call held this way still ends at its deadline when the program checks `expired`. |
 
-| GR-5 | Medium (denial of service) | `GrpcServer.only` | A Trailers-Only answer (every error without a message, from `call` and from the program's `fail`) was sent with `HttpServer.start` and never handed back with `end`. The head ends the stream, but the façade kept the request, and with it one of the connection's stream slots (at most 100, fewer for a small `requests`), until the connection closed. After that many such answers every later call on the connection was refused with `RST_STREAM REFUSED_STREAM`, so a peer sending malformed calls, or a client meeting ordinary `NOT_FOUND`s, wedged its own connection and held the server's request slots. | **Fixed** (c8321737): `only` calls `end` after `start`, whether the head went or the stream closed first. Pinned by "Trailers-Only over TLS: 150 calls on one connection, each NOT_FOUND, none refused" and its h2c twin, which failed before the fix (86 passed, 4 failed), and by the interop job's 300 Missing calls on one ghz connection. The bug was on `main` (`2354c33`). |
-| GR-6 | Medium (denial of service) | `GrpcServer.only`, `close` | A streaming call (`streamBody`) the module answered Trailers-Only before the client's stream ended was handed back by the façade's `take` on the client's next DATA frame, as a request whose answer had already been sent. A program answering it again, as the guide's loop does, panicked in `HttpServer.start`. | **Fixed** in the same commit as GR-5: `end` hands the request back, so the later DATA is discarded and `take` never hands it over again. Pinned by "SumAll over TLS: INVALID_ARGUMENT before the stream ends; the client's later DATA is not handed back, and the next call is answered" and its h2c twin. It was introduced by this change's streaming commit (ffb4731b) and never reached `main`. |
-| GR-7 | None (a property) | `GrpcServer.next`, `over` | A message that does not fit in the body piece at hand is copied into a buffer of the call's own, allocated at the length its prefix declares as soon as the prefix is whole, before the rest arrives. Five bytes can make the server hold `maxMessage` bytes for as long as the call is open. The buffer is kept for the slot's next call when it is at most 64 KiB (`GRPC_KEEP`) and dropped when the call ends otherwise. | **Accepted, not counted.** The memory is bounded by `maxMessage` times the calls open at once, which the program sets (`maxMessage`, the server's `requests`). A program serving untrusted streaming clients sets `maxMessage` to the largest message its methods read. A call held this way still ends at its deadline when the program checks `expired`. |
-
-GR-5 and GR-6 are counted, as Medium: each lets a peer deny service, GR-5 by
-exhausting a connection's stream slots and GR-6 by a panic in the program.
-GR-1 to GR-4 and GR-7 are properties and are not counted.
+GR-5 is counted, as Medium: it let a peer deny service by exhausting a
+connection's stream slots. GR-1 to GR-4 and GR-7 are properties and are not
+counted.
 
 ## Properties verified
 
@@ -207,7 +203,7 @@ it is `RESOURCE_EXHAUSTED` ("SumAll over TLS: a length past maxMessage:
 grpc-status 8"). A compressed message is `UNIMPLEMENTED` ("a compressed
 message: grpc-status 12") and another flag byte `INTERNAL` ("an unknown flag
 byte: grpc-status 13"). A stream that ends inside a message or inside a
-prefix is `INTERNAL` ("a message the stream ends inside: grpc-status 13", "a
+prefix is `INTERNAL` ("a maxMessage-long message the stream ends inside after 2 bytes: grpc-status 13", "a
 prefix the stream ends inside: grpc-status 13"). A deadline that passes
 between messages is `DEADLINE_EXCEEDED` ("a deadline passing mid-stream is
 DEADLINE_EXCEEDED"). A client's `RST_STREAM` ends the call as `CANCELLED`,
@@ -223,10 +219,11 @@ answer hands its request back with `end` (GR-5): 150 `NOT_FOUND`s on one
 connection, past its 100 stream slots, are each answered and none refused
 ("Trailers-Only over TLS: 150 calls on one connection, each NOT_FOUND, none
 refused"). A streaming call answered before its client's stream ended takes
-no later DATA back to the program, and the connection's next call is
-answered (GR-6, "SumAll over TLS: INVALID_ARGUMENT before the stream ends;
-the client's later DATA is not handed back, and the next call is answered").
-Once a call is over, `next`, `send`, `begin` and `finish` answer without
+no later DATA back to the program, since `end` hands its request back, and
+the connection's next call is answered ("SumAll over TLS: INVALID_ARGUMENT
+before the stream ends; the client's later DATA is not handed back, and the
+next call is answered").
+Once a call is over, `next`, `send`, `begin`, `finish` and `reply` answer without
 touching the request (`GRPC_ANSWERED`, `GRPC_ENDED`, `HANDLER_DROPPED`), so a
 program that keeps a stale handle cannot answer it twice until the façade
 reuses the request object for a later request. A call's state is kept with
@@ -296,7 +293,10 @@ pinned by `net_grpc` alone.
   message.
 - No check reuses a request index with a stale handle, so the turn and
   stream test in front of every call's state is read from the code.
-- GR-7's buffer kept or dropped at `GRPC_KEEP` is read from the code, not
-  tested.
+- GR-7's buffer kept or dropped at `GRPC_KEEP`, and its growth, are read
+  from the code, not tested. That a body already ended short of its declared
+  length allocates nothing is read from the code too; the wire answer is
+  pinned ("a maxMessage-long message the stream ends inside after 2 bytes:
+  grpc-status 13").
 - No check calls `reply` or `fail` twice on one call, or `fail` after
   `reply`.

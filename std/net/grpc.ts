@@ -135,6 +135,8 @@ const GRPC_BEGUN: i32 = 2
 const GRPC_OVER: i32 = 3
 /** The largest per-call message buffer kept once its call is over. */
 const GRPC_KEEP: i32 = 65536
+/** The size a call's message buffer first grows to, before it doubles. */
+const GRPC_GROW_FROM: i32 = 1024
 
 /** The length prefix: one compressed-flag byte and a four-byte big-endian length. */
 const GRPC_PREFIX: i32 = 5
@@ -304,7 +306,10 @@ export class GrpcServer {
    * ends inside a message (`INTERNAL`), a deadline past (`DEADLINE_EXCEEDED`)
    * and a client that hung up (`CANCELLED`, which the server drops). Never
    * panics on what the peer sent; panics on a request `open` or `call` did
-   * not answer `GRPC_CALL` for.
+   * not answer `GRPC_CALL` for. A message read in place is handed back to
+   * the client's window only by a later `next`, so a program calls `next`
+   * until it answers `GRPC_MORE`, `GRPC_END` or `GRPC_ANSWERED` before it
+   * waits for `take`.
    * @param r a call `open` read
    * @returns `GRPC_MESSAGE` for a message, valid until the next call of `next`; `GRPC_MORE` to wait until `take` hands `r` over again; `GRPC_END` when the client's stream ended; `GRPC_ANSWERED` when `r` is the server's again
    */
@@ -365,8 +370,10 @@ export class GrpcServer {
         this.ends[i] = at + n
         return GRPC_MESSAGE
       }
-      if (toI32(this.bufs[i].length) < n) {
-        this.bufs[i] = new Array<u8>(n)
+      if (r.bodyEnded) {
+        // The rest can never come: answered before anything is allocated for it.
+        this.close(r, GRPC_INTERNAL, "")
+        return GRPC_ANSWERED
       }
       this.want[i] = n
       this.have[i] = 0
@@ -374,6 +381,7 @@ export class GrpcServer {
     const need: i32 = this.want[i] - this.have[i]
     const avail: i32 = r.bodyLength - at
     const piece: i32 = avail < need ? avail : need
+    this.grow(i, this.have[i] + piece)
     copyBytes(this.bufs[i], this.have[i], body, at, piece)
     this.have[i] += piece
     at += piece
@@ -553,6 +561,9 @@ export class GrpcServer {
     if (i >= 0 && this.states[i] === GRPC_BEGUN) {
       panic("GrpcServer.reply: the call's answer has begun; end it with finish")
     }
+    if (i >= 0 && this.states[i] === GRPC_OVER) {
+      return HANDLER_DROPPED
+    }
     this.over(r)
     if (this.expired(r)) {
       return this.only(r, GRPC_DEADLINE_EXCEEDED)
@@ -597,6 +608,30 @@ export class GrpcServer {
       return this.close(r, GRPC_DEADLINE_EXCEEDED, "")
     }
     return this.close(r, status, message)
+  }
+
+  /**
+   * Grows index `i`'s message buffer to hold at least `size` bytes, keeping
+   * the `have[i]` already copied: doubled from 1 KiB, and never past the
+   * message's declared length, so what the call holds tracks what the client
+   * sent rather than what its prefix declared.
+   */
+  private grow(i: i32, size: i32): void {
+    const held: i32 = toI32(this.bufs[i].length)
+    if (held >= size) {
+      return
+    }
+    const want: i32 = this.want[i]
+    let grown: i32 = held < GRPC_GROW_FROM ? GRPC_GROW_FROM : held
+    while (grown < size) {
+      grown = grown >= want - grown ? want : grown * 2
+    }
+    if (grown > want) {
+      grown = want
+    }
+    const bigger: u8[] = new Array<u8>(grown)
+    copyBytes(bigger, 0, this.bufs[i], 0, this.have[i])
+    this.bufs[i] = bigger
   }
 
   /** The version, `content-type`, `grpc-timeout` and deadline checks `call` and `open` share; false once it answered `r` itself. */

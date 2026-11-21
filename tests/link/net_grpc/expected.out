@@ -47,7 +47,7 @@ PASS  SumAll over TLS: a deadline passing mid-stream is DEADLINE_EXCEEDED
 PASS  SumAll over TLS: a length past maxMessage: grpc-status 8
 PASS  SumAll over TLS: a compressed message: grpc-status 12
 PASS  SumAll over TLS: an unknown flag byte: grpc-status 13
-PASS  SumAll over TLS: a message the stream ends inside: grpc-status 13
+PASS  SumAll over TLS: a maxMessage-long message the stream ends inside after 2 bytes: grpc-status 13
 PASS  SumAll over TLS: a prefix the stream ends inside: grpc-status 13
 PASS  SumAll over TLS: each fault ended the call, none answered by the program
 PASS  Count over TLS: three replies in order, then grpc-status 0
@@ -67,7 +67,7 @@ PASS  SumAll over h2c: a deadline passing mid-stream is DEADLINE_EXCEEDED
 PASS  SumAll over h2c: a length past maxMessage: grpc-status 8
 PASS  SumAll over h2c: a compressed message: grpc-status 12
 PASS  SumAll over h2c: an unknown flag byte: grpc-status 13
-PASS  SumAll over h2c: a message the stream ends inside: grpc-status 13
+PASS  SumAll over h2c: a maxMessage-long message the stream ends inside after 2 bytes: grpc-status 13
 PASS  SumAll over h2c: a prefix the stream ends inside: grpc-status 13
 PASS  SumAll over h2c: each fault ended the call, none answered by the program
 PASS  Count over h2c: three replies in order, then grpc-status 0

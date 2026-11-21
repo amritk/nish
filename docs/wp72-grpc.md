@@ -1,7 +1,7 @@
 # WP72: gRPC over the HTTP/2 server
 
-**Status: S1 to S5 built; S6, streaming calls, is designed in §7 and built
-on the façade's streaming request bodies (S6a).** §1's table is the state
+**Status: S1 to S6 built; S6, streaming calls, is §7, on the façade's
+streaming request bodies (S6a).** §1's table is the state
 when the package was proposed, at `f2b8933f`; the stages in §5 say what each
 one added.
 
@@ -92,7 +92,8 @@ On the façade's two HTTP/2 listeners:
   (Superseded: the cap is `GrpcLimits.maxTimeout`, as the next paragraph
   says.)
 
-As built, `GrpcServer` sits on an `HttpServer` and keeps no state per call:
+As built in S1, `GrpcServer` sits on an `HttpServer` and keeps no state per
+unary call (S6's streaming calls keep theirs, §7):
 
 - `call(r)` answers every fault itself and returns `GRPC_CALL` only for a
   call the program should answer. A request off HTTP/2 is answered 505,
@@ -143,7 +144,7 @@ row, and with a guide page under `docs/guide/` and its route.
   on a TLS listener and an h2c one and caps every call's deadline at 1 s
   (`CAP_MS`). `tests/interop/grpc/check.sh` calls it from
   `tests/interop/grpc/benchmark.proto`, since the server offers no reflection.
-  It runs seven checks on each listener, and the job fails on any one:
+  It runs twelve checks on each listener, and the job fails on any one:
 
   - grpcurl's GetSum 2 + 3 answers `{"result": 5}`, and -5 + 3 answers `-2`;
   - Denied ends PERMISSION_DENIED with the message `no 100% é`, decoded from
@@ -151,9 +152,14 @@ row, and with a guide page under `docs/guide/` and its route.
   - Missing ends NOT_FOUND with no message;
   - Slow, called with a 10 s deadline (`-max-time 10`), ends DEADLINE_EXCEEDED with no message,
     in under 5 s, so it is the server's capped deadline that answered, not
-    grpc-go's own timeout;
+    grpc-go's own timeout (two checks: the status, then the time);
+  - SumAll sums three streamed requests to 5; Count answers 7 8 9 in order,
+    and 200 replies of 4 KiB padding, 0 to 199 in order, past one HTTP/2
+    window; Echo answers each request's sum, 3 then 11;
   - ghz makes 2000 GetSum calls, 10 at a time, and every one is OK. It is a
-    stability check: no throughput is recorded.
+    stability check: no throughput is recorded;
+  - ghz makes 300 Missing calls on its one connection, and every one is
+    NOT_FOUND, none refused.
 
   grpcurl 1.9.3 and ghz 0.120.0 are fetched by release and their SHA-256s
   checked before either runs, as h2spec is. The job runs on a pull request
@@ -174,7 +180,7 @@ row, and with a guide page under `docs/guide/` and its route.
 | | Question | Recommendation |
 | --- | --- | --- |
 | **D1** | Where the wire format lives | **`std/net/protobuf.ts`**, so the scope check holds its decoder to a record from the first commit |
-| **D2** | A generator first, or codecs by hand | **By hand first** (S1), the generator deferred (S5): HttpArena's messages are three `int32` fields, and the reader and writer are what a generator would emit calls to |
+| **D2** | A generator first, or codecs by hand | **By hand first** (S1), the generator after it (S5, built): HttpArena's messages are three `int32` fields, and the reader and writer are what a generator would emit calls to |
 | **D3** | A gRPC client | **Not in this package.** `nish/net/fetch` is HTTP/1.1; a client needs an HTTP/2 client first |
 | **D4** | gRPC on the port that serves HTTP/1.1 | **WP39's question, not this package's.** `unary-grpc-tls` needs no change to it; `unary-grpc` on 8080 waits on it |
 
@@ -261,7 +267,8 @@ sends the head then the trailers, as `fail` does for a unary call.
   `HANDLER_DROPPED`). A call answered before its body ended is reset with
   NO_ERROR by the façade, so the client may stop sending.
 - **The deadline** is the call's `grpc-timeout`, capped by `maxTimeout`,
-  counted from `open` or `call`. `next`, `send` and `finish` each check it,
+  counted from when the server read the request's head (`r.since`), as for a
+  unary call. `next`, `send` and `finish` each check it,
   and past it end the call DEADLINE_EXCEEDED. The façade's `bodyTimeout`
   does not cover a streamed body, so a client that sends nothing more is
   answered only when the program asks: a program holding streaming calls
