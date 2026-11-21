@@ -10097,8 +10097,35 @@ const DECLARED = [
         "net_http_server_foreign",
         "net_http_server_h1_fields",
         "net_http_server_h1_head",
+        "net_http_server_h1_slots",
+        "net_http_server_h1_twice",
+        "net_http_server_h2_connect",
+        "net_http_server_h2_head",
+        "net_http_server_h2_refused",
+        "net_http_server_h2_slots",
+        "net_http_server_h2_twice",
+        "net_http_server_h2c",
+        "net_http_server_h3_head",
+        "net_http_server_h3_slots",
+        "net_http_server_h3_twice",
+        "net_http_server_h3_webtransport",
+        "net_http_server_lifecycle",
+        "net_http_server_matrix",
       ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]])
     )
+  ),
+  ...stdPanicFree(
+    "the program decodes JSON into class fields, so it moves with std/json's guarded reader (json.ll, and the declarations and field ranges main.ll and main.h take from it) and with nish/bytes' guarded reads (bytes.ll)",
+    {
+      "tests/link/cls_field_init_json/main.ts": ["bytes.ll", "json.ll", "main.h", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "the example drops its --allow-panics opt-out now that the Map and Set calls it makes cannot panic, so the seed, whose collections still can, refuses it as a strict module",
+    {
+      "examples/sets.ts": ["exit"],
+      "examples/wordcount.ts": ["exit"],
+    }
   ),
   ...scramModule(),
   {
