@@ -261,6 +261,13 @@ where t.length % 4 !== 0
 ~~~
 
 ~~~ ts-property
+// P-STD-LENGTH-1-ZERO covers R-CASES — a standard text one character past a whole number of groups is refused even when that character is "A", whose six zero bits would pass the pad-bit test
+// samples: 64
+forall (t: string /* 0..32 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" */) => base64StdPadDecode(t + "A") === null && base64StdPadDecodedLength(utf8(t + "A")) === -1
+where t.length % 4 === 0
+~~~
+
+~~~ ts-property
 // P-STD-MISPLACED-PAD covers R-CASES, R-PAD-CHAR — a standard text with "=" anywhere but its last two characters, or "=" before a non-pad character, is refused
 // samples: 128
 forall (

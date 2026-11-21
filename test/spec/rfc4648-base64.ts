@@ -6,7 +6,7 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: 9b940c28cab7e017989382b8db3ebbd6092faf5f12db7c089a4b0c4cf4e815a8
+// vector-contract-sha256: a04bd7b3ed166a33c4647d5b81a49523e161f31d477b70576c559606a884b32a
 
 import { Suite } from "nish/testing";
 import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64";
@@ -3837,6 +3837,90 @@ const clause_P_STD_LENGTH_1 = (t: Suite): boolean => {
 };
 
 /**
+ * a standard text one character past a whole number of groups is refused even when that character is "A", whose six zero bits would pass the pad-bit test
+ *
+ * R-CASES — RFC 4648 §4, DEFINITION:
+ *   Since all base 64 input is an integral number of octets, only the
+ *   following cases can arise:
+ */
+const clause_P_STD_LENGTH_1_ZERO = (t: Suite): boolean => {
+  const table_t: string[] = [
+    "A4Gpfq9XlE+e81Vv",
+    "",
+    "elm4cbKy+QUl3k6uKVys0EwRuKAFk1GT",
+    "XENtAxjCkWF2",
+    "VMhA",
+    "mBPv6B0XPidY2bFeQhUGvy84",
+    "RVJTCyWS8f9d/QbdgL5Zbf8exMd/",
+    "fLS/Ra9yos4roJy/KsLU",
+    "fPCYsx9OJBSpFNaDbMjV0Uao",
+    "OhePv0v1VlOEZ2Jc",
+    "Fgyzq54lTXjxEa/VuV68KuWvFqaW",
+    "4OeKsi2taPywEpZW",
+    "/W75",
+    "NBKmSrAkXCHf",
+    "O1UMUZQw",
+    "uHIhLqSum/ZCek7LfnOr5zHBsn0QuFXO",
+    "zl13kGNza7t67UDPd6dX3L6W",
+    "/4YJ",
+    "g/R7WgK5X58jmMYHHpef",
+    "MVWZt+0DEWzi",
+    "Tdc3tCezMqlt6sdy56BgoTBejTdaarJr",
+    "vHFMEspHpZYSodWm",
+    "PefRnHUh4D8E",
+    "L8ScQ8fw",
+    "dNIxR3IGkgRz",
+    "3rDya9Si",
+    "IINpoS+d9piPwvK2nHEIY+FmWD/o",
+    "kqDm",
+    "/w+wVS6qNbVQVggH",
+    "IoE1PQAOZs0/VHT0",
+    "ysOIxQUZ0+uHY9eQ+cNviKNsXrRE",
+    "vNDefImDp5wFwUwmKnMFOgxNtpJhGkp6",
+    "3CTwb4cY",
+    "Be0k+3PNGubvrJXs7X2+5mps7B/d",
+    "ViWMRoD+snOz6YTk",
+    "nrr/va3qXrxOSG4YgAwF",
+    "m/oXib8dD/W8ZYWfhyrU",
+    "mhDItUOuJlFUdnse",
+    "Plwk",
+    "bhBRF5KyD/7E5gD5v//4JuAK",
+    "PNSd4o4pfgkyN9mkzKJ3p0v7",
+    "Qb4s",
+    "tnk1ff+3yMOd9phz",
+    "HZhqQGkRSlNJo5chEITkOI3YIGNI",
+    "ufAeJ4F2A20h3tSWySd+",
+    "ttnZdTiy2xSB4uUEqHm0qoHvd3Ecm/7I",
+    "D5rb+LDgmVnIVimz",
+    "sb3A",
+    "S3ru",
+    "oD60nbKFTWfRoPU/",
+    "bwl5xYQ9qbtS/gGfp1yG/BugaeFoFJIl",
+    "LS+yXOjGhddy",
+    "qhHUlT0sEt2v40+V",
+    "aSwErTLH",
+    "upVVWuoV420eHsGJ",
+    "Xr73d/UgOUF25dbm83ZzGDQZ",
+    "E886",
+    "flqdgXRKCCJA5+5U7gmo",
+    "WYVJxc6WCELPjFe9R7LEN6DItwTxom6H",
+    "ptQY",
+    "i5KiboO3bdgq",
+    "27BVqDjfcZuU",
+    "OvPN1NMFv+IawFyZ",
+    "nkyXEm3UF/Yxz5uF+m+BCSVeX0O5kWf8",
+  ];
+  for (let i: i32 = 0; i < 64; i += 1) {
+    const v_t: string = table_t[i];
+    const holds: boolean = (isNullBytes(base64StdPadDecode(`${v_t}${"A"}`)) && (plain_base64StdPadDecodedLength(utf8Bytes(`${v_t}${"A"}`)) === (-1)));
+    if (!holds) {
+      return t.fail("[P-STD-LENGTH-1-ZERO] a standard text one character past a whole number of groups is refused even when that character is \"A\", whose six zero bits would pass the pad-bit test (R-CASES)", `sample ${i + 1} of 64 (len(t) = ${toI32(v_t.length)}): the assertion is false`);
+    }
+  }
+  return t.pass("[P-STD-LENGTH-1-ZERO] a standard text one character past a whole number of groups is refused even when that character is \"A\", whose six zero bits would pass the pad-bit test (R-CASES) — 64 samples");
+};
+
+/**
  * a standard text with "=" anywhere but its last two characters, or "=" before a non-pad character, is refused
  *
  * R-CASES — RFC 4648 §4, DEFINITION:
@@ -4804,6 +4888,7 @@ export const main = (): i32 => {
   ran = `${ran}${clause_P_BASE64_ENCODE(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_BASE64_ENCODE_INTO(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_STD_LENGTH_1(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_STD_LENGTH_1_ZERO(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_STD_MISPLACED_PAD(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_STD_THREE_PADS(t) ? "1" : "0"}`;
   ran = `${ran}${clause_P_URL_FROM_STD(t) ? "1" : "0"}`;

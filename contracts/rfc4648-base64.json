@@ -2821,6 +2821,166 @@
     },
     {
       "kind": "property",
+      "id": "P-STD-LENGTH-1-ZERO",
+      "title": "a standard text one character past a whole number of groups is refused even when that character is \"A\", whose six zero bits would pass the pad-bit test",
+      "covers": ["R-CASES"],
+      "forall": [
+        {
+          "name": "t",
+          "type": "string",
+          "minLen": 0,
+          "maxLen": 32,
+          "alphabet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h",
+            "i",
+            "j",
+            "k",
+            "l",
+            "m",
+            "n",
+            "o",
+            "p",
+            "q",
+            "r",
+            "s",
+            "t",
+            "u",
+            "v",
+            "w",
+            "x",
+            "y",
+            "z",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "+",
+            "/"
+          ]
+        }
+      ],
+      "where": {
+        "op": "==",
+        "args": [
+          {
+            "op": "%",
+            "args": [
+              {
+                "op": "strLen",
+                "args": [
+                  {
+                    "var": "t"
+                  }
+                ]
+              },
+              {
+                "int": 4
+              }
+            ]
+          },
+          {
+            "int": 0
+          }
+        ]
+      },
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "base64StdPadDecode",
+                "args": [
+                  {
+                    "op": "strConcat",
+                    "args": [
+                      {
+                        "var": "t"
+                      },
+                      {
+                        "str": "A"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "==",
+            "args": [
+              {
+                "call": "base64StdPadDecodedLength",
+                "args": [
+                  {
+                    "op": "utf8",
+                    "args": [
+                      {
+                        "op": "strConcat",
+                        "args": [
+                          {
+                            "var": "t"
+                          },
+                          {
+                            "str": "A"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "int": -1
+              }
+            ]
+          }
+        ]
+      },
+      "samples": 64
+    },
+    {
+      "kind": "property",
       "id": "P-STD-MISPLACED-PAD",
       "title": "a standard text with \"=\" anywhere but its last two characters, or \"=\" before a non-pad character, is refused",
       "covers": ["R-CASES", "R-PAD-CHAR"],
