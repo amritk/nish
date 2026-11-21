@@ -942,8 +942,10 @@ export class FunctionFacts {
   /**
    * #2126: this function is `std/threads.ts`'s `slotOutOfRange`, the slot check
    * of a four-argument `spawn`, whose callers' proof is made at the spawn
-   * (`PANIC_SPAWN_SLOT`): `src/panics.ts` follows no call into it. Its own
-   * `panic` is still listed, at its own line.
+   * (`PANIC_SPAWN_SLOT`), or its `dstTooShort`, the length check of
+   * `parallelMapInto`, proven at the map's call (`PANIC_PARALLEL_LENGTH`):
+   * `src/panics.ts` follows no call into it. Its own `panic` is still listed,
+   * at its own line.
    */
   callerProven: boolean
   /** `clearRecursiveWillReturn`'s visit number, from 1; 0 until the walk reaches this function. */
@@ -2218,21 +2220,21 @@ class FactCollector {
 
   /**
    * A call into `callee`, a candidate `call` site the resolution keeps when
-   * the callee may panic; a `parallelMapInto` instance's is the length check
-   * its body makes before it divides the work. A four-argument `spawn` also
-   * holds its slot check, proven where `src/bounds.ts` proves `dst[at]`
-   * would be (`PANIC_SPAWN_SLOT`).
+   * the callee may panic. Two callees also hold a check their callers prove,
+   * at the call, as a site of its own: a four-argument `spawn`'s slot, proven
+   * where `src/bounds.ts` proves `dst[at]` would be (`PANIC_SPAWN_SLOT`), and
+   * a `parallelMapInto` instance's length check, proven by `src.length <=
+   * dst.length` (`PANIC_PARALLEL_LENGTH`).
    */
   noteCall(node: Node, callee: FunctionSig): void {
+    const proven = this.unit.program.nodeProvenIndex[node.id]
     if (isSpawnEntry(callee) && !isVoidSpawn(callee)) {
-      this.noteSite(node, PANIC_SPAWN_SLOT, this.unit.program.nodeProvenIndex[node.id], "")
+      this.noteSite(node, PANIC_SPAWN_SLOT, proven, "")
     }
-    this.noteSite(
-      node,
-      parallelRoleOf(callee) === PAR_MAP ? PANIC_PARALLEL_LENGTH : PANIC_CALL,
-      false,
-      callee.name
-    )
+    if (parallelRoleOf(callee) === PAR_MAP) {
+      this.noteSite(node, PANIC_PARALLEL_LENGTH, proven, "")
+    }
+    this.noteSite(node, PANIC_CALL, false, callee.name)
   }
 
   /**
@@ -4542,7 +4544,8 @@ const collectStatedFacts = (
   // and proves no site, and a function that takes the analysis's table needs
   // none of its own; `isStackSite` reads past the end as false.
   const facts = new FunctionFacts(sig.paramNames, known === null || ownMemory ? 0 : nodeCount)
-  facts.callerProven = sig.sourceName === "slotOutOfRange" && isThreadsModule(program)
+  facts.callerProven =
+    (sig.sourceName === "slotOutOfRange" || sig.sourceName === "dstTooShort") && isThreadsModule(program)
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR
   facts.returnDeref = structSize(program, table, opts, sig.returnType)
   facts.returnAlign = pointerAlign(program, table, sig.returnType)

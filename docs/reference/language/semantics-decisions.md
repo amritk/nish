@@ -1472,8 +1472,12 @@ integer, a `u32` under `--number-mode i32`)
 **`parallel-length`**: a `parallelMapInto` call whose `dst` is shorter than
 its `src`
 
-- *What proves it away:* nothing yet: the check is `std/threads.ts`'s own
-  (`tests/link/panics_parallel_length`)
+- *What proves it away:* `src.length <= dst.length` holding at the call: a
+  guard `if (dst.length < src.length) return` before it, or `src` and `dst`
+  the same array (`tests/link/parallel_length_proven`,
+  `tests/link/parallel_length_unproven`, `tests/link/panics_parallel_length`).
+  The check itself stays in `std/threads.ts`; a call no longer reaches it, so
+  the site at the call is the only one the caller answers for
 
 **`spawn-slot`**: a four-argument `s.spawn(entry, arg, dst, at)` whose `at` is
 not a slot of `dst`, which `spawn` checks before it takes the task
@@ -1577,8 +1581,7 @@ each is an `ffi-null` site above)
   one function per line in module and declaration order, each
   `{"name","symbol","module","line","panics"}`, where `symbol` is the
   function's LLVM name; per site `{"kind","line","column"}` and then
-  `"proven"` for a check, `"proven","callee"` for `parallel-length`,
-  `"callee","via"` for `call` and `"allowed": true` for `oom` and `unchecked`. Lines and
+  `"proven"` for a check, `"callee","via"` for `call` and `"allowed": true` for `oom` and `unchecked`. Lines and
   columns are 1-based, in the units a diagnostic uses. The `wrote <file>` line
   is on stderr, like the IR's. It is written once the program is checked: a
   program that does not compile writes none, and `--emit-checked` writes it
@@ -1715,7 +1718,7 @@ site: a call from the [no-panic scope](#the-no-panic-scope) that reaches it is
 refused (NL2458), and the same `panic` in a module of the scope is NL2457. A
 caller in the scope calls the checked twin where there is one, or proves the
 contract at the call where the site is the caller's own, as a
-[`spawn-slot`](#panic-sites) is.
+[`spawn-slot`](#panic-sites) or a [`parallel-length`](#panic-sites) is.
 
 ## The compatibility dialect
 

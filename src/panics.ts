@@ -157,10 +157,8 @@ const panicKindName = (kind: i32): string => {
 /**
  * One place a function can panic.
  *
- * A `call` (and a `parallel-length`, which is a call into `parallelMapInto`
- * whose panic is the length check in `std/threads.ts`) is recorded at every
- * call as a candidate and kept only when the callee turns out to be able to
- * panic; `reaches` is then the first site the callee can panic at, followed
+ * A `call` is recorded at every call as a candidate and kept only when the
+ * callee turns out to be able to panic; `reaches` is then the first site the callee can panic at, followed
  * through as many calls as it takes, which is what a reader needs to find it.
  */
 export class PanicSite {
@@ -169,9 +167,9 @@ export class PanicSite {
   source: SourceFile
   /** The LLVM symbol of the function the site is in. */
   fn: string
-  /** The callee's symbol, for a `call` or a `parallel-length`; `""` otherwise. */
+  /** The callee's symbol, for a `call`; `""` otherwise. */
   callee: string
-  /** For a kept `call` or `parallel-length`: the first site its callee reaches. */
+  /** For a kept `call`: the first site its callee reaches. */
   reaches: PanicSite | null
   kind: i32
   /** The checker proved the check cannot fail, and the emitter left it out. */
@@ -198,8 +196,7 @@ export class PanicSite {
 }
 
 /** Whether `site` is a call whose site-ness is the callee's to decide. */
-const isCallSite = (site: PanicSite): boolean =>
-  site.kind === PANIC_CALL || site.kind === PANIC_PARALLEL_LENGTH
+const isCallSite = (site: PanicSite): boolean => site.kind === PANIC_CALL
 
 /**
  * Whether `site` is listed but never counts: out of memory, which no guard
@@ -557,8 +554,8 @@ const keepSites = (
  *
  *   {"name","symbol","module","line","panics":[...]}
  *
- * and per site `{"kind","line","column"}` followed by `"proven"` for a check,
- * `"proven","callee"` for a `parallel-length`, `"callee","via"` for a `call`
+ * and per site `{"kind","line","column"}` followed by `"proven"` for a check
+ * (a `parallel-length` included), `"callee","via"` for a `call`
  * (`via` is the kind of the site the callee reaches) and `"allowed":true` for
  * an `oom` and an `unchecked`. `symbol` is the function's LLVM name, which is how a reader finds
  * it in the IR (`<name>.resume` for an `async` function that awaits); `callee` is the callee's name as a diagnostic spells it.
@@ -758,10 +755,6 @@ const refuseSite = (
     )
     return true
   }
-  // A `parallelMapInto` is kept only when its body can panic, which is the length check.
-  if (site.kind === PANIC_PARALLEL_LENGTH && reaches === null) {
-    return false
-  }
   sink.report(
     program.source,
     node.start,
@@ -851,8 +844,9 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return ioExitAdvice(program, node)
     case PANIC_PARALLEL_LENGTH:
       return (
-        "`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: " +
-        OUT_OF_SCOPE
+        "`parallelMapInto` panics when `dst` is shorter than `src`: guard the call with " +
+        "`if (dst.length < src.length) return`, or map in place with `src` as `dst`, " +
+        "and the check is proven"
       )
     case PANIC_OVERFLOW:
       return overflowAdvice(program, table, node)

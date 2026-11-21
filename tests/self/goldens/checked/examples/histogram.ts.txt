@@ -396,9 +396,10 @@ function main(): i32 -> @nish_main [exported entry]
   local +16:15 s: ThreadScope (const)
   callee +16:19 scope -> @nish.scope
   local +17:18 t: i32 (let)
-  callee +18:11 ThreadScope.spawn<Shard, u32, binShard> -> @nish.ThreadScope.spawn$$Shard$u32$fn.8.binShard
-  callee +20:13 new Shard -> @Shard.constructor
-  local +26:18 n: u32 (const)
-  local +30:11 g: MutexGuard<Hist> (const)
-  callee +30:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
-  local +31:14 b: i32 (let)
+  local +18:17 shard: Shard (const)
+  callee +18:25 new Shard -> @Shard.constructor
+  callee +23:13 ThreadScope.spawn<Shard, u32, binShard> -> @nish.ThreadScope.spawn$$Shard$u32$fn.8.binShard
+  local +27:18 n: u32 (const)
+  local +31:11 g: MutexGuard<Hist> (const)
+  callee +31:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
+  local +32:14 b: i32 (let)

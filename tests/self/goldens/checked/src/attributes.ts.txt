@@ -1277,15 +1277,17 @@ function FactCollector.noteCall(this: FactCollector, node: Node, callee: Functio
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.noteSite
   calls: FactCollector.noteSite isSpawnEntry isVoidSpawn nish_panic_index parallelRoleOf
-  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0 FactCollector.noteSite#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1 FactCollector.noteSite#1
+  pointer this: size=72 writesThrough=false captured=false passedTo=FactCollector.noteSite#0 FactCollector.noteSite#0 FactCollector.noteSite#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1 FactCollector.noteSite#1 FactCollector.noteSite#1
   pointer callee: size=224 writesThrough=false captured=false passedTo=isSpawnEntry#0 isVoidSpawn#0 parallelRoleOf#0
   stackSites=0 stackLocals=0
-  callee +0:9 isSpawnEntry -> @isSpawnEntry
-  callee +0:34 isVoidSpawn -> @isVoidSpawn
-  callee +1:7 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +3:5 FactCollector.noteSite -> @FactCollector.noteSite
-  callee +5:7 parallelRoleOf -> @parallelRoleOf
+  local +0:11 proven: boolean (const)
+  callee +1:9 isSpawnEntry -> @isSpawnEntry
+  callee +1:34 isVoidSpawn -> @isVoidSpawn
+  callee +2:7 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +4:9 parallelRoleOf -> @parallelRoleOf
+  callee +5:7 FactCollector.noteSite -> @FactCollector.noteSite
+  callee +7:5 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.noteCaptures(this: FactCollector, arrow: Node, lifted: FunctionSig): void -> @FactCollector.noteCaptures [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via captureTarget
@@ -2715,13 +2717,13 @@ function collectStatedFacts(unit: AnalysisUnit, table: TypeTable, opts: Options,
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=24 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=3 stackLocals=3
-  local -181:9 program: CheckedProgram (const)
-  local -178:9 ownMemory: boolean (const)
-  callee -178:41 isChannelSend -> @isChannelSend
-  callee -178:63 jsonRouteOf -> @jsonRouteOf
-  local -173:9 facts: FunctionFacts (const)
-  callee -173:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -172:63 isThreadsModule -> @isThreadsModule
+  local -182:9 program: CheckedProgram (const)
+  local -179:9 ownMemory: boolean (const)
+  callee -179:41 isChannelSend -> @isChannelSend
+  callee -179:63 jsonRouteOf -> @jsonRouteOf
+  local -174:9 facts: FunctionFacts (const)
+  callee -174:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -172:82 isThreadsModule -> @isThreadsModule
   callee -170:23 structSize -> @structSize
   callee -169:23 pointerAlign -> @pointerAlign
   callee -145:43 rootsHoldNoPointer -> @rootsHoldNoPointer

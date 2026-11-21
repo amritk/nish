@@ -144,11 +144,18 @@ import { cArrayField, isOptionalChain, unwrapParens } from "./emit-util"
 import { DiagnosticSink } from "./diagnostics"
 import { FLAG_CONST, FLAG_USING, Node, NodeKind } from "./nodes"
 import { StringMap } from "./map"
-import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
+import {
+  CheckedProgram,
+  FunctionSig,
+  PAR_MAP,
+  ROLE_FUNCTION,
+  ROLE_METHOD,
+  inlineElementStruct,
+} from "./program"
 import { Options } from "./options"
 import { isAsciiText } from "./strings"
 import { isSimdExport, simdSuffix, simdTypeLane } from "./nish-modules"
-import { isSpawnEntry, isVoidSpawn } from "./parallel"
+import { isSpawnEntry, isVoidSpawn, parallelRoleOf } from "./parallel"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import {
   DeclaredRange,
@@ -180,7 +187,11 @@ const FACT_EXCLUDES: i32 = 6
 
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
- * is the length holder; `w` is the length holder of `below` and `atMost`; `n`
+ * is the length holder; `w` is the length holder of `below` and `atMost`. An
+ * `atMost` whose `v` is an array stands for that array's length,
+ * `v.length <= w.length` with both arrays (`knownLengthAtMost`): no index is
+ * ever an array, so no reader of the family mistakes one for the other, and
+ * every rule that forgets an array's length facts forgets it too; `n`
  * is the literal of the three constant families, and the reach of a `below`:
  * `v + n < w.length`, 0 for the plain `v < w.length`.
  */
@@ -388,6 +399,13 @@ const knownAtMost = (state: State, i: Local, w: Local): boolean => {
   }
   return knownBelow(state, i, w)
 }
+
+/**
+ * `src.length <= dst.length`, both arrays, which is what proves the length
+ * check of a `parallelMapInto` call (`judgeParallelLength`).
+ */
+const knownLengthAtMost = (state: State, src: Local, dst: Local): boolean =>
+  src === dst || knownAtMost(state, src, dst)
 
 /** Every holder whose length bounds `i` from above, in the order they were recorded. */
 const holdersAbove = (state: State, i: Local): Local[] => {
@@ -1371,6 +1389,28 @@ const lengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
 }
 
 /**
+ * The array whose `.length` `expr` reads exactly: the bare member, or `toI32`
+ * of it where the length is already an `i32` and the conversion is the
+ * identity. Under `--number-mode f64` the saturating `toI32` may stop short of
+ * the length, which is all `lengthOf` asks and too little for the smaller side
+ * of a comparison between two lengths, or for the size an array is built with.
+ */
+const exactArrayLengthOf = (walk: BoundsWalk, expr: Node): Local | null => {
+  let e = unwrapBoundsParens(expr)
+  if (e.kind === NodeKind.Call && isBuiltinToI32(walk.ctx.program, e)) {
+    e = unwrapBoundsParens(e.children[1].children[0])
+    if (walk.ctx.program.nodeTypes[e.id] !== T_I32) {
+      return null
+    }
+  }
+  if (e.kind !== NodeKind.Member || e.text !== "length") {
+    return null
+  }
+  const holder = holderOf(walk, e.children[0])
+  return holder !== null && walk.ctx.table.isArray(holder.type) ? holder : null
+}
+
+/**
  * The `u8`, `u16` or `u32` local `expr` reads, alone or through `toU32`: the
  * index side of the unsigned guard `toU32(i) < toU32(w.length)`, whose
  * compare is a `u32` one. `toU32` widens a `u8` or `u16` with `zext` and is
@@ -1791,6 +1831,13 @@ const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: 
   if (loVar !== null && hiLength !== null && !strict) {
     out.push(new Fact(FACT_AT_MOST, loVar, hiLength, 0))
   }
+  // `src.length <= dst.length` (or `<`) between two arrays: what a
+  // `parallelMapInto(src, dst, f)` call needs (`judgeParallelLength`). Only
+  // arrays on both sides, because a string's length facts outlive a call.
+  const loArray = exactArrayLengthOf(walk, lo)
+  if (loArray !== null && hiLength !== null && ctx.table.isArray(hiLength.type) && loArray !== hiLength) {
+    out.push(new Fact(FACT_AT_MOST, loArray, hiLength, 0))
+  }
   // `i * i <= n` with `n` below a literal: `|i|` is at most the square root.
   // The product was checked or proven where the condition ran, so it is the
   // true square — which is what lets a sieve's `j += i` be proven under
@@ -2161,6 +2208,13 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
     return out
   }
   if (!isIndexType(ctx.table, v.type)) {
+    // `const dst = new Array<U>(src.length)` is as long as `src`.
+    if (ctx.table.isArray(v.type) && e.kind === NodeKind.New && e.children[2].children.length === 1) {
+      const sized = exactArrayLengthOf(walk, e.children[2].children[0])
+      if (sized !== null && sized !== v) {
+        out.push(new Fact(FACT_AT_MOST, sized, v, 0))
+      }
+    }
     return initialiserArrayFacts(ctx, v, e, out)
   }
   // `let j = i`: the copy has every bound the original has.
@@ -2873,6 +2927,41 @@ const isSlotSpawn = (ctx: CheckContext, call: Node): boolean => {
   return (
     target !== null && isSpawnEntry(target) && !isVoidSpawn(target) && call.children[1].children.length === 4
   )
+}
+
+/**
+ * `parallelMapInto(src, dst, f)`, whose body checks `dst.length >= src.length`
+ * before it divides the work (`PANIC_PARALLEL_LENGTH` in `src/panics.ts`).
+ */
+const isParallelMapInto = (ctx: CheckContext, call: Node): boolean => {
+  const target = ctx.program.nodeCallees[call.id]
+  return target !== null && parallelRoleOf(target) === PAR_MAP && call.children[1].children.length === 3
+}
+
+/**
+ * Record a `parallelMapInto` call whose length check the caller proves: `src`
+ * and `dst` are arrays the walk holds facts about, and `src.length <=
+ * dst.length` holds once the arguments have run: the callee compares the two
+ * lengths first thing, before `f` runs at all.
+ */
+const judgeParallelLength = (walk: BoundsWalk, state: State, call: Node): void => {
+  if (walk.tables !== null) {
+    return
+  }
+  const args = call.children[1].children
+  const src = holderOf(walk, args[0])
+  const dst = holderOf(walk, args[1])
+  if (
+    src === null ||
+    dst === null ||
+    !walk.ctx.table.isArray(src.type) ||
+    !walk.ctx.table.isArray(dst.type)
+  ) {
+    return
+  }
+  if (knownLengthAtMost(state, src, dst)) {
+    noteProof(walk, call)
+  }
 }
 
 /**
@@ -3689,6 +3778,9 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     }
     if (isSlotSpawn(ctx, e)) {
       judge(walk, state, e, e.children[1].children[2], e.children[1].children[3], true)
+    }
+    if (isParallelMapInto(ctx, e)) {
+      judgeParallelLength(walk, state, e)
     }
     const lanes = vectorAccessLanes(ctx.program, ctx.table, e)
     if (lanes > 0) {
@@ -4915,6 +5007,9 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
     const callee = unwrapBoundsParens(node.children[0])
     const name = callee.kind === NodeKind.Member ? callee.text : ""
     if (name === "charCodeAt" || name === "substring" || name === "pop" || name === "spawn") {
+      return true
+    }
+    if (isParallelMapInto(ctx, node)) {
       return true
     }
   }

@@ -39,7 +39,9 @@ const primesBelow = (n: i32): u32 => {
 /**
  * The longest Collatz trajectory that starts below `n`, in steps. The walk is
  * in `f64`, which holds every value it reaches exactly, so it means the same
- * in either number mode and under Node.
+ * in either number mode and under Node. Evenness is `Math.floor(x / 2) * 2 === x`
+ * rather than `x % 2`, whose `fmodF64` (std/math.ts) keeps an overflow site
+ * a `--deny-panics` build refuses.
  */
 const longestCollatz = (n: i32): u32 => {
   let best: u32 = 0
@@ -47,7 +49,7 @@ const longestCollatz = (n: i32): u32 => {
     let x: f64 = toF64(start)
     let steps: u32 = 0
     while (x !== 1.0) {
-      x = x % 2.0 === 0.0 ? x / 2.0 : x * 3.0 + 1.0
+      x = Math.floor(x / 2.0) * 2.0 === x ? x / 2.0 : x * 3.0 + 1.0
       steps = steps + 1
     }
     if (steps > best) {

@@ -37,13 +37,14 @@ there.
 
 The examples on this page build with
 [`--allow-panics`](cli.md#asking-what-a-program-can-do): `nish/threads` keeps
-panic sites no proof removes yet, among them `parallelMapInto`'s check that
-`dst` is long enough, and the examples index arrays and add numbers without a
-guard the compiler reads. A test such as `i < xs.length` before an index, or
-a bound on a sum, proves those in your own code; the library calls will build
-under the default once the standard library is made panic-free.
+panic sites no proof removes yet, and the examples index arrays and add
+numbers without a guard the compiler reads. A test such as `i < xs.length`
+before an index, or a bound on a sum, proves those in your own code; so does
+`if (dst.length < src.length) return` before a `parallelMapInto` call. The
+other library calls will build under the default once the standard library is
+made panic-free.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto`, whose length check no proof removes yet; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto` with no guard that proves `dst` is long enough; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
@@ -128,7 +129,7 @@ not reach an array `dst` could be, but a table's own arrays are private to it:
 a `Map<string, i32>` beside an `i32[]` `dst` is fine, and a
 `Map<string, i32[]>` is refused, because one of its values could be `dst`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `parallelMapInto`, whose length check no proof removes yet; indexes an array without a guard the checker reads -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `parallelMapInto` with no guard that proves `dst` is long enough; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto } from "nish/threads";
@@ -329,7 +330,7 @@ export const main = (): i32 => {
   next pass's call comes after it; a loop that declares its own `dst` each pass
   is fine.
 
-<!-- allow-panics: builds an array whose length it does not bound; calls `parallelMapInto`, whose length check no proof removes yet; does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `std/threads.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMap, parallelMapInto } from "nish/threads";
@@ -816,7 +817,7 @@ lost when two threads make one at the same moment. The fast pattern is the one
 below: each task counts into its own local array, then adds each count to the
 shared atomic once, at its end:
 
-<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `parallelMapInto`, whose length check no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; indexes an array without a guard the checker reads; calls `parallelMapInto` with no guard that proves `dst` is long enough -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { AtomicI32, parallelMapInto, scope } from "nish/threads";

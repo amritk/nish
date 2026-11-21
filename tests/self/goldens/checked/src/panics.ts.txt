@@ -390,10 +390,10 @@ function refuseSite(program: CheckedProgram, listed: boolean, facts: FactsTable,
   callee +11:87 SourceFile.columnOf -> @SourceFile.columnOf
   callee +12:5 DiagnosticSink.report -> @DiagnosticSink.report
   callee +16:63 panicKindName -> @panicKindName
-  callee +29:3 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +33:10 panicKindName -> @panicKindName
-  callee +33:60 scopeReason -> @scopeReason
-  callee +34:25 siteAdvice -> @siteAdvice
+  callee +25:3 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +29:10 panicKindName -> @panicKindName
+  callee +29:60 scopeReason -> @scopeReason
+  callee +30:25 siteAdvice -> @siteAdvice
 function scopeReason(listed: boolean): string -> @scopeReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -435,10 +435,10 @@ function siteAdvice(program: CheckedProgram, table: TypeTable, site: PanicSite):
   callee +16:14 divideAdvice -> @divideAdvice
   callee +18:14 rangeAdvice -> @rangeAdvice
   callee +29:14 ioExitAdvice -> @ioExitAdvice
-  callee +36:14 overflowAdvice -> @overflowAdvice
-  local +43:13 reader: string (const)
-  callee +43:22 calledName -> @calledName
-  callee +59:14 spawnSlotAdvice -> @spawnSlotAdvice
+  callee +37:14 overflowAdvice -> @overflowAdvice
+  local +44:13 reader: string (const)
+  callee +44:22 calledName -> @calledName
+  callee +60:14 spawnSlotAdvice -> @spawnSlotAdvice
 function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): string -> @indexAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via indexGuardAdvice

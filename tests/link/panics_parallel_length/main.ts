@@ -1,8 +1,8 @@
 // Panic sites (docs/LANGUAGE.md): `parallelMapInto` checks that `dst` is at
 // least as long as `src` before it divides the work, and panics with
 // `std/threads.ts`'s message when it is not, so every call is a
-// `parallel-length` site of its caller. `std/threads.ts`'s own functions are
-// listed too, the check among them as the `panic` the call reaches.
+// `parallel-length` site of its caller, unproven here as nothing orders the
+// two lengths. `std/threads.ts`'s own functions are listed too.
 import { parallelMapInto } from "nish/threads"
 
 const double = (x: i32): i32 => x * 2

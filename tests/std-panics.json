@@ -2144,7 +2144,7 @@
     {
       "module": "std/threads.ts",
       "function": "dstTooShort",
-      "reason": "parallelMapInto dst must be at least as long as src; array lengths are the caller's"
+      "reason": "parallelMapInto dst must be at least as long as src; each call is a parallel-length site its caller proves with src.length <= dst.length"
     },
     {
       "module": "std/threads.ts",

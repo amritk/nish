@@ -3023,7 +3023,10 @@ export const main = (): i32 => {
   any element is written or any thread started: a shorter one panics with
   `parallelMapInto: dst has 2 elements and src has 3` and exits 1
   (`tests/link/par_dst_short`). `src` and `dst` may be the same array
-  (`tests/link/par_map`).
+  (`tests/link/par_map`). The call is a [`parallel-length` panic
+  site](semantics-decisions.md#panic-sites) of its caller, proven where `src.length <= dst.length`
+  holds, so a guard `if (dst.length < src.length) return` lets a
+  [no-panic](semantics-decisions.md#the-no-panic-scope) module call it.
 - **`parallelMap(src, f)`** answers a new array of `f(src[i])` for every
   index of `src`, and **`parallelFrom(n, f)`** a new array of `n` elements,
   `f(i)` at index `i` — `Array.from({ length: n }, (_, i) => f(i))`. Each
