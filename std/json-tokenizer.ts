@@ -103,7 +103,7 @@
  * `jsonTokW64`.
  */
 
-import { copyBytes, skipBlank, skipJsonText } from "nish/bytes"
+import { skipBlank, skipJsonText, tryCopyBytes } from "nish/bytes"
 
 /** The top-level value is complete and only blanks follow it. Answered again on every later call. */
 export const JSON_TOK_END: i32 = 0
@@ -1313,14 +1313,14 @@ export class JsonTokenizer {
     let i: i32 = quote + 1
     if (n === end - i) {
       // No escape (see `keyEquals`): the bytes are copied as they are, as one
-      // `copyBytes` of as many as both arrays hold, which the caller's test
+      // `tryCopyBytes` of as many as both arrays hold, which the caller's test
       // above has made all of them.
       // The source window still in `src` is the case met; the clamps below
       // are for one shrunk since it was scanned.
       const srcLength: i32 = toI32(src.length)
       if (end <= srcLength) {
-        copyBytes(out, at, src, i, n)
-        return n
+        // A range that does not fit copies nothing, and says so.
+        return tryCopyBytes(out, at, src, i, n) ? n : 0
       }
       let count: i32 = end - i
       if (srcLength - i < count) {
@@ -1330,8 +1330,7 @@ export class JsonTokenizer {
         count = room
       }
       if (count > 0) {
-        copyBytes(out, at, src, i, count)
-        return count
+        return tryCopyBytes(out, at, src, i, count) ? count : 0
       }
       return 0
     }
@@ -1356,8 +1355,9 @@ export class JsonTokenizer {
           // turned plain lets a run outgrow that length, so the copy is cut
           // to the room left.
           const left: i32 = outLength - o
-          const c: i32 = left < count ? left : count
-          copyBytes(out, o, src, i, c)
+          const fits: i32 = left < count ? left : count
+          // What did not fit was not written, so it does not move `o`.
+          const c: i32 = tryCopyBytes(out, o, src, i, fits) ? fits : 0
           // No more than the room left, so at most `outLength`.
           o = toI32(toI64(o) + toI64(c))
         }

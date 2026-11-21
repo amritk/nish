@@ -6547,6 +6547,11 @@ export const main = (): i32 => {
   `copyBytes: the range lies outside an array` before any byte is written
   (`tests/link/std_bytes_copy_outside`). Overlapping ranges of one array copy
   as if every byte were read before any was written, as `copyWithin` does.
+- **`tryCopyBytes` answers `false` where `copyBytes` panics.** It takes the
+  same arguments and checks the same ranges; a range `copyBytes` would panic
+  on writes nothing and answers `false`, and every other copies and answers
+  `true`. It has no panic site, so a strict module calls it
+  (`tests/link/std_bytes_runs`).
 - **The walkers are the meaning.** Each public function clamps or checks its
   range, then makes one call to a private walker, a plain loop over the bytes,
   which is what runs under Node. Natively the compiler recognises that call by

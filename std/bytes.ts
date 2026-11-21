@@ -522,10 +522,31 @@ export const skipJsonPlain = (b: u8[], from: i32, to: i32): i32 => {
  * @param count How many bytes to copy; zero copies nothing.
  */
 export const copyBytes = (dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void => {
-  if (count < 0 || at < 0 || from < 0 || at > toI32(dst.length) - count || from > toI32(src.length) - count) {
+  if (!tryCopyBytes(dst, at, src, from, count)) {
     panic("copyBytes: the range lies outside an array")
   }
+}
+
+/**
+ * `copyBytes` that answers `false`, and writes nothing, where `copyBytes`
+ * panics: for a negative `count` or a range that does not lie inside its
+ * array. A caller a strict module reaches uses this one, so the out-of-range
+ * case is a value it handles rather than a panic site.
+ *
+ * @param dst The array written into; only `dst[at..at+count)` changes.
+ * @param at Where in `dst` the first copied byte goes.
+ * @param src The array copied from, which may be `dst` itself.
+ * @param from Where in `src` the copied bytes start.
+ * @param count How many bytes to copy; zero copies nothing.
+ * @returns `true` once the bytes are copied, or `false` when either range
+ *   lies outside its array and nothing was written.
+ */
+export const tryCopyBytes = (dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): boolean => {
+  if (count < 0 || at < 0 || from < 0 || at > toI32(dst.length) - count || from > toI32(src.length) - count) {
+    return false
+  }
   copyBytesWalk(dst, at, src, from, count)
+  return true
 }
 
 /**
@@ -562,11 +583,12 @@ const skipDigitsWalk = (b: u8[], from: i32, to: i32): i32 => {
 }
 
 /**
- * The length of the well-formed UTF-8 sequence whose lead byte is `b[i]` and
- * that ends at or before `to`, or 0: RFC 3629's table, with the narrowed
- * second byte after `E0`, `ED`, `F0` and `F4`.
+ * Where the well-formed UTF-8 sequence whose lead byte is `b[i]` ends, when it
+ * ends at or before `to`, or `i` when there is none: RFC 3629's table, with the
+ * narrowed second byte after `E0`, `ED`, `F0` and `F4`. The end, not the
+ * length, so the caller steps to it without a sum.
  */
-const bytesUtf8Length = (b: u8[], i: i32, to: i32): i32 => {
+const bytesUtf8End = (b: u8[], i: i32, to: i32): i32 => {
   const lead: i32 = toI32(b[i])
   let low: i32 = BYTES_NON_ASCII
   let high: i32 = BYTES_CONTINUATION_TOP
@@ -590,24 +612,29 @@ const bytesUtf8Length = (b: u8[], i: i32, to: i32): i32 => {
       high = 0x8f
     }
   } else {
-    return 0
+    return i
   }
-  if (to - i < n) {
-    return 0
+  // Each continuation byte is read only once it is known to lie before both
+  // `to` and the array's end; a sequence cut short by either is not one.
+  if (i < 0 || i >= toI32(b.length)) {
+    return i
   }
-  const second: i32 = toI32(b[i + 1])
-  if (second < low || second > high) {
-    return 0
-  }
-  let k: i32 = 2
+  let j: i32 = i + 1
+  let k: i32 = 1
   while (k < n) {
-    const c: i32 = toI32(b[i + k])
-    if (c < BYTES_NON_ASCII || c > BYTES_CONTINUATION_TOP) {
-      return 0
+    if (j >= to || j >= toI32(b.length)) {
+      return i
     }
+    const c: i32 = toI32(b[j])
+    const lowest: i32 = k === 1 ? low : BYTES_NON_ASCII
+    const highest: i32 = k === 1 ? high : BYTES_CONTINUATION_TOP
+    if (c < lowest || c > highest) {
+      return i
+    }
+    j += 1
     k += 1
   }
-  return n
+  return j
 }
 
 /** `skipJsonText`'s walk, once its range is clamped. */
@@ -616,11 +643,11 @@ const skipJsonTextWalk = (b: u8[], from: i32, to: i32): i32 => {
   while (i >= 0 && i < to && i < toI32(b.length)) {
     const c: i32 = toI32(b[i])
     if (c >= BYTES_NON_ASCII) {
-      const n: i32 = bytesUtf8Length(b, i, to)
-      if (n === 0) {
+      const end: i32 = bytesUtf8End(b, i, to)
+      if (end === i) {
         return i
       }
-      i += n
+      i = end
       continue
     }
     if (c < BYTES_SPACE || c === BYTES_QUOTE || c === BYTES_BACKSLASH) {
@@ -644,19 +671,36 @@ const skipJsonPlainWalk = (b: u8[], from: i32, to: i32): i32 => {
   return i
 }
 
-/** `copyBytes`'s walk, once its ranges are checked: forward, or backward when `dst` is `src` and the bytes move up. */
+/**
+ * `copyBytes`'s walk, once its ranges are checked: forward, or backward when
+ * `dst` is `src` and the bytes move up. Each index is tested against its array
+ * as the walk goes, which the checked ranges always pass; natively the walk is
+ * one `llvm.memmove` instead.
+ */
 const copyBytesWalk = (dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void => {
+  const dstLength: i32 = toI32(dst.length)
+  const srcLength: i32 = toI32(src.length)
   if (at <= from) {
+    let d: i32 = at
+    let s: i32 = from
     let k: i32 = 0
-    while (k < count) {
-      dst[at + k] = src[from + k]
+    while (k < count && d >= 0 && d < dstLength && s >= 0 && s < srcLength) {
+      dst[d] = src[s]
+      d += 1
+      s += 1
       k += 1
     }
     return
   }
-  let k: i32 = count - 1
-  while (k >= 0) {
-    dst[at + k] = src[from + k]
+  // The last byte of each range, in i64 so the sum cannot overflow; the
+  // checked ranges make both fit an i32.
+  let d: i32 = toI32(toI64(at) + toI64(count) - toI64(1))
+  let s: i32 = toI32(toI64(from) + toI64(count) - toI64(1))
+  let k: i32 = count
+  while (k > 0 && d >= 0 && d < dstLength && s >= 0 && s < srcLength) {
+    dst[d] = src[s]
+    d -= 1
+    s -= 1
     k -= 1
   }
 }

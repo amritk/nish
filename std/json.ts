@@ -112,7 +112,7 @@
  * (`docs/wp26-stdlib.md` §4).
  */
 
-import { copyBytes, skipJsonPlain } from "nish/bytes"
+import { skipJsonPlain, tryCopyBytes } from "nish/bytes"
 
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9
@@ -1456,7 +1456,7 @@ export class JsonWriter {
    * fragment the caller encoded already, such as a cached object. Nothing in
    * it is checked, so a fragment that is not one whole JSON value makes a
    * text that is not JSON either. The bytes are copied in one move
-   * (`copyBytes`), as if all were read before any was written, so a window
+   * (`tryCopyBytes`), as if all were read before any was written, so a window
    * of the writer's own buffer comes out as it was.
    * In an indented text the fragment goes in where a value would, after its
    * line break and indent, but its own bytes are not re-indented: an object
@@ -1483,7 +1483,12 @@ export class JsonWriter {
       this.failed = JSON_WRITE_FULL
       return
     }
-    copyBytes(buf, at, bytes, off, len)
+    // Both windows are checked above, so this copies; were one not, nothing
+    // is written and the writer stops as full.
+    if (!tryCopyBytes(buf, at, bytes, off, len)) {
+      this.failed = JSON_WRITE_FULL
+      return
+    }
     // In u32, which cannot wrap: the test above keeps the sum within `buf`.
     this.end = toI32(toU32(at) + toU32(len))
     jsonWriterValueDone(this)
@@ -1933,7 +1938,10 @@ const jsonWriterPutRuns = (w: JsonWriter, bytes: u8[], off: i32, len: i32): bool
         w.failed = JSON_WRITE_FULL
         return false
       }
-      copyBytes(buf, at, bytes, i, count)
+      if (!tryCopyBytes(buf, at, bytes, i, count)) {
+        w.failed = JSON_WRITE_FULL
+        return false
+      }
       // In u32, which cannot wrap: the test above keeps the sum within `buf`.
       at = toI32(toU32(at) + toU32(count))
       i = run

@@ -197,7 +197,7 @@ shown).
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
-| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain`, `copyBytes` and `tryCopyBytes` for the runs a parser skips and a writer copies |
 | [`nish/temporal`](dates-and-times.md) | `PlainDate`, `PlainTime`, `PlainDateTime`, `Instant` and `Duration`: JavaScript's `Temporal`, in the ISO calendar, natively and under Node |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
@@ -2795,12 +2795,12 @@ run ends — the first index in `[from, to)` whose byte is not in the class, or
 
 `copyBytes(dst, at, src, from, count)` copies `count` bytes of `src` from
 `from` into `dst` at `at`. The two arrays may be the same one, and the ranges
-may overlap.
+may overlap. `tryCopyBytes` takes the same arguments and answers `false`,
+writing nothing, where `copyBytes` would panic, so a strict module uses it.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-import { copyBytes, skipBlank, skipDigits } from "nish/bytes";
+import { skipBlank, skipDigits, tryCopyBytes } from "nish/bytes";
 
 export const main = (): i32 => {
   const text: u8[] = [32, 10, 52, 50, 44]; // " \n42,"
@@ -2808,7 +2808,10 @@ export const main = (): i32 => {
   const end = skipDigits(text, start, 5);
   console.log(`${start} ${end}`); // 2 4
   const digits: u8[] = [0, 0];
-  copyBytes(digits, 0, text, start, end - start);
+  if (!tryCopyBytes(digits, 0, text, start, 2)) {
+    console.log("no room");
+    return 1;
+  }
   console.log(`${digits[0]} ${digits[1]}`); // 52 50
   return 0;
 };
@@ -2817,7 +2820,8 @@ export const main = (): i32 => {
 The runs never panic: `to` is clamped to the array and `from` to `to`, so a
 range past the end answers the end. `copyBytes` panics with
 `copyBytes: the range lies outside an array` if either window does not fit,
-before it writes anything. `skipJsonText` stops at a quote, a backslash, a
+before it writes anything; `tryCopyBytes` answers `false` there instead.
+`skipJsonText` stops at a quote, a backslash, a
 control byte or the first byte of a malformed UTF-8 sequence — the byte your
 decoder has to look at next. `skipJsonPlain` stops at a quote, a backslash or a
 control byte — the byte your writer has to escape.
