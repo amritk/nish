@@ -286,3 +286,33 @@ spawn to first answer, over 20 starts each:
 
 The handler's median sits inside the carrier's spread, so it starts no
 slower; it is not claimed as faster.
+
+## 6. Static files
+
+`nish/net/static` serves the files under one directory. A program routes a
+`*` path to it and passes the span the star matched; `serve` answers through
+`nish/net/http-server` (HTTP/1.1, HTTP/2 over TLS, h2c and HTTP/3) and
+`serveHandler` through `nish/net/handler`. The user guide is
+[Static files](guide/using-nish/static-files.md); the security record is
+[static.md](security/static.md).
+
+### Decisions
+
+- **A path is refused, not cleaned.** The span is percent-decoded once,
+  strictly, and refused whole when a segment is empty, starts with a dot, or
+  holds a backslash or a control byte; then the joined path's real path must
+  lie under the root's own. Nothing is rewritten into a different path.
+- **Not found sends nothing.** `serve` answers `STATIC_NOT_FOUND` for a
+  refused path and a missing file alike and leaves the answer to the program,
+  which already answers every other path it has nothing for.
+- **The cache follows the disk.** Each request stats the file; a changed size
+  or modification time reads it again under a new ETag, so a deploy that
+  replaces files under a running server is served at once. Files above
+  `maxCachedBytes` (at most 2^30) are read from disk on each request.
+- **Precompressed, never compressed.** A `.br` or `.gz` sibling is chosen by
+  the request's q-values, `br` first on a tie; it carries its own ETag and
+  `Content-Encoding`, and a range counts its bytes. With precompression on,
+  every answer says `Vary: Accept-Encoding`. Compressing on the fly is
+  `nish/net/http-compress`'s job (stage 4).
+- **One range.** A multi-range request is answered 200 with the whole file
+  rather than with `multipart/byteranges`.
