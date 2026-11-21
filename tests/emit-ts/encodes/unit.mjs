@@ -5,8 +5,9 @@
 // A loop in the shape of std/text.ts's `indexOfAnyFrom` and std/yaml.ts's
 // `yamlByte`: per byte of a large document it reads `strLen(text)` and
 // `charCodeAt(text, i)`, then a byte of a short needle and of a second short
-// word, so the strings alternate on every call. The document is not ASCII, so
-// it is the cache and not the ASCII path that keeps it. Prints the encodes and
+// word, so the strings alternate on every call. The document, the needle and
+// the word are none of them ASCII, so three encoded entries stay in the cache
+// at once and it is the cache, not the ASCII path, that keeps them. Prints the encodes and
 // exits 0 when they stay a small constant, 1 when they grow with the loop, as
 // a single-slot cache's do (one encode of the document per byte read).
 import path from "node:path"
@@ -18,8 +19,8 @@ const file = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, ".."
 const { charCodeAt, strLen } = await import(pathToFileURL(file).href)
 
 const text = "key: välue # ünïcode\n".repeat(5000)
-const needles = ":#\n"
-const word = "value"
+const needles = "é:#\n"
+const word = "välue"
 const before = encodes()
 let sum = 0
 for (let i = 0; i < strLen(text); i++) {

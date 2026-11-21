@@ -9,8 +9,9 @@
 //         `JsonDocument` with `YamlJsonLoader`
 //   json  the text parsed with `JsonDocument.parseText`
 //
-// The first line is the checksum, `<workload> <nodes> <values>`, the second
-// `ns <elapsed>` for every iteration together.
+// The first line is the checksum, `<workload> <nodes> <values> <sum>`, where
+// `<sum>` folds every iteration's nodes and values together so no side can
+// skip one; the second is `ns <elapsed>` for every iteration together.
 import { JsonLimits } from "nish/json-tokenizer"
 import { JSON_VALUE_MAX_VALUES, JsonDocument } from "nish/json-value"
 import { YamlStream, parseYaml } from "nish/yaml"
@@ -38,6 +39,7 @@ export const main = (): number => {
   const loader = new YamlJsonLoader()
   let s: YamlStream = parseYaml("")
   let nodes: i32 = 0
+  let sum: i64 = toI64(0)
   const t0: i64 = monotonicNanos()
   for (let r: i32 = 0; r < iterations; r += 1) {
     if (workload === "yaml") {
@@ -55,9 +57,10 @@ export const main = (): number => {
       }
       nodes = doc.length(root)
     }
+    sum = (sum * toI64(31) + toI64(nodes) + toI64(doc.top)) % toI64(1000000007)
   }
   const elapsed: i64 = monotonicNanos() - t0
-  console.log(`${workload} ${nodes} ${doc.top}`)
+  console.log(`${workload} ${nodes} ${doc.top} ${sum}`)
   console.log(`ns ${elapsed}`)
   return 0
 }

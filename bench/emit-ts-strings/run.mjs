@@ -77,8 +77,13 @@ if (!Number.isInteger(opts.rounds) || opts.rounds < 1 || !(opts.mb > 0) || !(opt
   fail("--rounds needs a positive integer, --mb and --timeout positive numbers")
 }
 
-/** bench/yaml-json/run.mjs's OpenAPI description, `paths` paths of two operations each. */
-const generateYaml = (paths) => {
+/**
+ * bench/yaml-json/run.mjs's OpenAPI description, `paths` paths of two
+ * operations each. With `utf8`, every summary carries text that is not ASCII,
+ * so strings.mjs reads the document through its encoded bytes and the
+ * multi-entry cache rather than its ASCII path.
+ */
+const generateYaml = (paths, utf8 = false) => {
   const out = [
     "openapi: 3.0.3",
     "info:",
@@ -104,7 +109,9 @@ const generateYaml = (paths) => {
       `  /things${i}/{id}:`,
       "    get:",
       `      operationId: getThing${i}`,
-      `      summary: Reads thing ${i}, with its fields and the links to its neighbours.`,
+      utf8
+        ? `      summary: Reads thing ${i} — its fields, and the links to its neighbours (Nachbarn, voisins, 隣人).`
+        : `      summary: Reads thing ${i}, with its fields and the links to its neighbours.`,
       "      parameters:",
       "        - name: id",
       "          in: path",
@@ -297,19 +304,20 @@ const median = (xs) => {
 const main = () => {
   const sides = build()
   const inputs = []
-  for (const [workload, generate, ext] of [
-    ["yaml", generateYaml, "yaml"],
-    ["json", generateJson, "json"],
+  for (const [name, workload, generate, ext] of [
+    ["yaml", "yaml", generateYaml, "yaml"],
+    ["yaml-utf8", "yaml", (paths) => generateYaml(paths, true), "yaml"],
+    ["json", "json", generateJson, "json"],
   ]) {
     for (const [size, bytes] of [
       ["100KB", 100 * 1024],
       ["3MB", 3 * 1024 * 1024],
     ]) {
-      const file = path.join(outDir, `${workload}-${size}.${ext}`)
+      const file = path.join(outDir, `${name}-${size}.${ext}`)
       fs.writeFileSync(file, generate(pathsFor(generate, bytes)))
       const length = fs.statSync(file).size
       const iterations = Math.max(1, Math.round((opts.mb * 1024 * 1024) / length))
-      inputs.push({ workload, size, file: path.relative(root, file), length, iterations })
+      inputs.push({ name, workload, size, file: path.relative(root, file), length, iterations })
     }
   }
   const runs = inputs.flatMap((input) =>
@@ -331,7 +339,7 @@ const main = () => {
       })
       if (p.error?.code === "ETIMEDOUT") {
         process.stderr.write(
-          `  ${r.side.name} ${r.input.workload} ${r.input.size}: over ${opts.timeout} s, not run again\n`
+          `  ${r.side.name} ${r.input.name} ${r.input.size}: over ${opts.timeout} s, not run again\n`
         )
         for (const same of runs) {
           if (same.input === r.input && same.side.name === r.side.name) {
@@ -360,7 +368,7 @@ const main = () => {
     const mine = runs.filter((r) => r.input === input)
     const seen = new Set(mine.flatMap((r) => [...r.checksums]))
     if (seen.size > 1) {
-      fail(`${input.workload} ${input.size}: the runs disagree: ${[...seen].join(" | ")}`)
+      fail(`${input.name} ${input.size}: the runs disagree: ${[...seen].join(" | ")}`)
     }
     const ms = {}
     const cells = names.map((name) => {
@@ -376,7 +384,7 @@ const main = () => {
     const ratio =
       ms.wasm !== undefined && ms["emit-ts"] !== undefined ? [`${(ms["emit-ts"] / ms.wasm).toFixed(1)}x`] : []
     console.log(
-      [`${input.workload} ${input.size}`, input.length, input.iterations, ...cells, ...ratio].join(" | ")
+      [`${input.name} ${input.size}`, input.length, input.iterations, ...cells, ...ratio].join(" | ")
     )
   }
 }
