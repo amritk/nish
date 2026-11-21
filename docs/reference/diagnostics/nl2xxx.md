@@ -7304,13 +7304,13 @@ The message of an error contains:
 ```ts
 // --deny-panics refuses a call into the standard library that may panic
 // (NL2458): the callee is outside the scope, so the call is where it is refused.
-import { trim } from "nish/text";
+import { split } from "nish/text";
 
-export const tidy = (s: string): string => trim(s);
+export const fields = (s: string, sep: string): string[] => split(s, sep);
 ```
 
 ```text
-This call to `trim` may panic: it reaches the `index` site at std/text.ts:232:43, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope: every module of this package is in it by default, and `--allow-panics` takes out the ones `noPanic` does not list
+This call to `split` may panic: it reaches the `panic` site at std/text.ts:289:5, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope: every module of this package is in it by default, and `--allow-panics` takes out the ones `noPanic` does not list
 ```
 
 ## NL2459

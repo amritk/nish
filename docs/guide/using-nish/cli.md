@@ -817,11 +817,14 @@ leaves the IR unchanged.
   ([The compatibility dialect](compat.md)).
 - **Every module of your package is held to no panic by default.** A panic
   the compiler cannot prove away is an error that names the guard which
-  proves it, and `--emit-panics <file.json>` lists every site. A call to
+  proves it, and `--emit-panics <file.json>` lists every site. The proof reads
+  a test that reaches the site, a `const` bound to an integer literal (never a
+  `let`), a mask `x & 255` or shift `x >>> 8`, the byte `charCodeAt`
+  answers, and a loop counting down from `s.length` under `end > 0`. A call to
   `readCString` or `readStruct` from `nish:unsafe` is refused there: each
   tests its pointer and panics with `ffi-null` on `NULL`, a check no proof
   removes. The standard library is not yet panic-free, so a call to `Map`,
-  `Set`, `trim`, `split` or a `JSON` read is refused too, for now
+  `Set`, `split` or a `JSON` read is refused too, for now
   ([The no-panic scope](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#the-no-panic-scope)).
 - **`--allow-panics`** relaxes the default: only the modules a `"noPanic"`
   list in your `package.json`'s `"nish"` field names are still held to no

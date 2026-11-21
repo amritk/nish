@@ -652,7 +652,7 @@ function FunctionFacts.holdsStackObject(this: FunctionFacts, local: Local): bool
   stackSites=0 stackLocals=0
   local +0:16 candidate: Local (const)
 function FactsTable.constructor(this: FactsTable): void -> @FactsTable.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -1187,7 +1187,7 @@ function isPointerParam(table: TypeTable, type: i32): boolean -> @isPointerParam
   callee +4:10 TypeTable.isStruct -> @TypeTable.isStruct
   callee +4:35 TypeTable.isArray -> @TypeTable.isArray
 function FactCollector.constructor(this: FactCollector, unit: AnalysisUnit, table: TypeTable, opts: Options, sig: FunctionSig, facts: FunctionFacts, known: FactsTable | null): void -> @FactCollector.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: facts known opts sig table unit
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=72 writesThrough=true captured=false
@@ -2280,7 +2280,7 @@ function FactCollector.collectResultFacts(this: FactCollector, node: Node): void
 function FactCollector.collectArrayFacts(this: FactCollector, node: Node): void -> @FactCollector.collectArrayFacts [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: FactCollector.collectMethodFacts FactCollector.isArrayValued FactCollector.noteArrayWrite FactCollector.noteSite FunctionFacts.isStackSite StringSet.add arrayMethodName callsAnything isAssignmentOperator isGuardedAccess newArrayLengthChecked nish_panic_index nish_str_eq panicTailCallees
+  calls: FactCollector.collectMethodFacts FactCollector.isArrayValued FactCollector.noteArrayWrite FactCollector.noteSite FunctionFacts.isStackSite StringSet.add arrayMethodName callsAnything isAssignmentOperator isGuardedAccess newArrayLengthChecked nish_panic_index nish_str_eq panicTailCallees unwrapParens
   pointer this: size=72 writesThrough=true captured=false passedTo=FactCollector.isArrayValued#0 FactCollector.noteSite#0 FactCollector.isArrayValued#0 FactCollector.isArrayValued#0 FactCollector.noteSite#0 FactCollector.collectMethodFacts#0 FactCollector.noteArrayWrite#0 FactCollector.noteSite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteSite#1 FactCollector.isArrayValued#1 FunctionFacts.isStackSite#1 FactCollector.noteSite#1 arrayMethodName#2 FactCollector.collectMethodFacts#1 FactCollector.noteArrayWrite#1 FactCollector.noteSite#1
   stackSites=1 stackLocals=1
@@ -2293,21 +2293,23 @@ function FactCollector.collectArrayFacts(this: FactCollector, node: Node): void 
   callee +19:72 FactCollector.isArrayValued -> @FactCollector.isArrayValued
   callee +20:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
   local +26:15 length: Node (const)
-  callee +27:13 newArrayLengthChecked -> @newArrayLengthChecked
-  local +28:17 tail: string[] (const)
-  callee +29:11 panicTailCallees -> @panicTailCallees
-  local +31:22 name: string (const)
-  callee +32:13 StringSet.add -> @StringSet.add
-  callee +34:11 FactCollector.noteSite -> @FactCollector.noteSite
-  local +39:11 method: string (const)
-  callee +39:20 arrayMethodName -> @arrayMethodName
-  callee +41:7 FactCollector.collectMethodFacts -> @FactCollector.collectMethodFacts
-  callee +46:7 isAssignmentOperator -> @isAssignmentOperator
-  callee +50:12 isGuardedAccess -> @isGuardedAccess
-  callee +51:9 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
-  callee +62:9 callsAnything -> @callsAnything
-  callee +64:9 StringSet.add -> @StringSet.add
-  callee +67:9 FactCollector.noteSite -> @FactCollector.noteSite
+  local +27:15 constant: ConstInfo | null (const)
+  callee +27:48 unwrapParens -> @unwrapParens
+  callee +29:11 newArrayLengthChecked -> @newArrayLengthChecked
+  local +31:17 tail: string[] (const)
+  callee +32:11 panicTailCallees -> @panicTailCallees
+  local +34:22 name: string (const)
+  callee +35:13 StringSet.add -> @StringSet.add
+  callee +37:11 FactCollector.noteSite -> @FactCollector.noteSite
+  local +42:11 method: string (const)
+  callee +42:20 arrayMethodName -> @arrayMethodName
+  callee +44:7 FactCollector.collectMethodFacts -> @FactCollector.collectMethodFacts
+  callee +49:7 isAssignmentOperator -> @isAssignmentOperator
+  callee +53:12 isGuardedAccess -> @isGuardedAccess
+  callee +54:9 FactCollector.noteArrayWrite -> @FactCollector.noteArrayWrite
+  callee +65:9 callsAnything -> @callsAnything
+  callee +67:9 StringSet.add -> @StringSet.add
+  callee +70:9 FactCollector.noteSite -> @FactCollector.noteSite
 function FactCollector.isArrayValued(this: FactCollector, expr: Node): boolean -> @FactCollector.isArrayValued [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray nish_panic_index
@@ -2935,7 +2937,7 @@ function settleScope(facts: FactsTable, i: i32, state: i32[], before: boolean[])
   callee +5:29 StringSet.at -> @StringSet.at
   callee +10:7 settleScope -> @settleScope
 function EscapeSet.constructor(this: EscapeSet): void -> @EscapeSet.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0

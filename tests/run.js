@@ -6388,6 +6388,54 @@ if (dealtHere("performance")) {
     skip("perf_bounds_toi32_user: the panic run needs clang")
   }
 
+  // `charCodeAt` reads one byte, so under `--deny-panics` its `+ 1` is at most
+  // 256: an `add nsw` with no overflow check. Byte 0xFF is the top of that
+  // range and only a native run has it as one byte (`--emit-ts` writes
+  // `fromCharCode(255)` as two UTF-8 bytes), so the program is written here,
+  // outside the emit-ts corpus; `tests/cases/deny_panics_charcode` is the
+  // cross-target case.
+  const charTopSrc = path.join(buildDir, "deny_panics_charcode_top.ts")
+  fs.writeFileSync(
+    charTopSrc,
+    [
+      "const next = (t: string, i: i32): i32 => {",
+      "  if (i < 0 || i >= toI32(t.length)) return 0;",
+      "  return toI32(t.charCodeAt(i)) + 1;",
+      "};",
+      "export const main = (): number => {",
+      "  const t = String.fromCharCode(255);",
+      "  console.log(toI32(t.length));",
+      "  console.log(next(t, 0));",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const charTopLl = path.join(buildDir, "deny_panics_charcode_top.ll")
+  const charTop = spawnNish([charTopSrc, "-o", charTopLl, "--deny-panics"], { cwd: root, encoding: "utf8" })
+  const charTopIr = charTop.status === 0 ? fs.readFileSync(charTopLl, "utf8") : ""
+  const charTopNext = /define[^\n]*@next\([^]*?\n}\n/.exec(charTopIr)?.[0] ?? ""
+  check(
+    "deny-panics: `charCodeAt(i) + 1` checks under --deny-panics as an `add nsw` with no overflow check",
+    charTop.status === 0 &&
+      /add nsw i32 %\d+, 1\b/.test(charTopNext) &&
+      !charTopNext.includes("with.overflow") &&
+      !charTopNext.includes("nish_panic"),
+    charTop.status === 0 ? charTopNext : charTop.stderr
+  )
+  if (has("clang") && charTop.status === 0) {
+    const exe = path.join(buildDir, "deny_panics_charcode_top")
+    const cc = linkNative(exe, charTopLl)
+    const run = cc.status === 0 ? spawnSync(exe, { encoding: "utf8" }) : null
+    check(
+      "deny-panics: a native string holding byte 0xFF is one byte long, and `charCodeAt(0) + 1` prints 256",
+      run !== null && run.status === 0 && run.stdout === "1\n256\n",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : cc.stderr
+    )
+  } else {
+    skip("deny-panics: the byte-0xFF run needs clang")
+  }
+
   // `std/text` is imported into every program that reads lines, so a warning
   // from inside it is a warning about code the user cannot change. A program
   // importing every export — read off the module, so a new one is covered the

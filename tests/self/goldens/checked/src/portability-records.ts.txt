@@ -156,7 +156,7 @@ function NodeList.constructor(this: NodeList): void -> @NodeList.constructor [co
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function RecordIndex.constructor(this: RecordIndex, walk: PortabilityWalk, aliased: StringSet): void -> @RecordIndex.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: aliased walk
   calls: CalleeEffects.constructor StringMap.constructor nish_alloc_struct
   pointer this: size=80 writesThrough=true captured=false
@@ -692,7 +692,7 @@ function mentionsIdent(n: Node, name: string): boolean -> @mentionsIdent
   local +0:14 child: Node (const)
   callee +1:9 mentionsIdent -> @mentionsIdent
 function CalleeEffects.constructor(this: CalleeEffects, program: CheckedProgram, table: TypeTable): void -> @CalleeEffects.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: program table
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false

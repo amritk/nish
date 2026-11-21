@@ -467,7 +467,7 @@ function DropOrigin.constructor(this: DropOrigin, node: Node, kind: string, call
   pointer unit: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function CalleeDrops.constructor(this: CalleeDrops, units: AnalysisUnit[], facts: FactsTable): void -> @CalleeDrops.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: facts units
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=80 writesThrough=true captured=false

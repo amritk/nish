@@ -3602,7 +3602,7 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
 that cannot panic. The standard library is not yet panic-free, so `Map`,
-`Set`, `trim`, `split` and the `JSON` reads are refused in the scope for now;
+`Set`, `split` and the `JSON` reads are refused in the scope for now;
 a program that needs them builds with `--allow-panics`, and says why where it
 is built.
 `uncheckedGet` and `uncheckedSet` are not proofs, but

@@ -148,7 +148,7 @@ function headPhi(acc: RecursionLoop, value: string, type: string, initial: strin
 function foldColdTest(fn: IRFunction, head: IRBlock, body: string[], call: IRBlock): boolean -> @foldColdTest
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: IRFunction.newBlock IRFunction.placeBlock nish_array_grow nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new onlyComputes renameOverflowEdges renamePhiEdges untilComma
+  calls: IRFunction.newBlock IRFunction.placeBlock nish_array_grow nish_panic_overflow nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new onlyComputes renameOverflowEdges renamePhiEdges untilComma
   pointer fn: size=184 writesThrough=true captured=false passedTo=IRFunction.newBlock#0 renameOverflowEdges#0 IRFunction.placeBlock#0
   pointer head: size=16 writesThrough=false captured=false
   pointer body: size=0 writesThrough=true captured=false
