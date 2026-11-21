@@ -60,7 +60,7 @@ read, and its size is bounded by that message.
 | PB-2 | None (a property) | `ProtoReader.next`, `ProtoReader.length` | A length is checked against the span when its field is read or skipped, not when its tag is read. `next` answers `true` for the field whose length is past the span, and the read or the following `next` refuses it. | **Accepted, not counted.** The caller sees a field number only, never a byte outside the span. `len`, `enter` and the skip all check the length before they move. Pinned by "the bad one after it is refused when passed over" and `net_protobuf_bad_length`. |
 | PB-3 | Low | `ProtoWriter` | `end` and the field lengths are `i32`, so the writer refuses to grow a message past `PROTO_MAX_SIZE` (2^31 − 2) bytes with `PROTO_ERR_WINDOW`. `endMessage` moves an embedded message's contents right once per enclosing `endMessage` when its length needs more than one byte. Writing a message nested d deep therefore copies up to d times its size. | **Accepted, not counted.** gRPC's framing caps a message at 2^32 − 1 bytes, and a program that writes one of 2^31 − 1 bytes or more needs another writer. The copy cost is bounded by `PROTO_MAX_DEPTH` and is the program's own nesting, not a peer's. No test reaches `PROTO_MAX_SIZE`. "a nested message of 20000 bytes" pins the move. |
 | PB-4 | None (a property) | `ProtoReader.len` | A `string` field is a length-delimited span like `bytes`: the reader does not check that it is UTF-8. | **Accepted, not counted; documented.** proto3 requires valid UTF-8 in a `string`, but the check belongs to the code that turns the span into a string with a schema in hand. `len`'s doc comment says the bytes are not checked to be UTF-8. |
-| PB-5 | None (a property) | `ProtoReader.float`, `f32OfBits` | `float` builds its `f32` through an `f64`, and the narrowing sets a signaling NaN's quiet bit: the bits 0x7f800001 come back as 0x7fc00001, without a fault. | **Accepted, not counted; documented.** The language has no conversion from bits to an `f32` that keeps a signaling NaN. `float`'s doc comment says so and that `fixed32` reads the exact bits. No vector holds a signaling NaN, so "re-encodes byte for byte" does not reach it. |
+| PB-5 | None (a property) | `ProtoReader.float`, `f32OfBits` | `float` builds its `f32` through an `f64`, and the narrowing sets a signaling NaN's quiet bit: the bits 0x7f800001 come back as 0x7fc00001, without a fault. | **Accepted, not counted; documented.** The language has no conversion from bits to an `f32` that keeps a signaling NaN. `float`'s doc comment says so and that `fixed32` reads the exact bits. Pinned by "a float of bits 0x7f800001 reads as 0x7fc00001". |
 
 Two bugs were found while the module was written, before it reached `main`,
 and are not counted. `bytes` bounded its copy loop with `q - from < count`, a
@@ -77,7 +77,9 @@ The skip check "a field of each wire type is skipped by it" fails on it.
 Each property below is pinned by a line of `tests/link/net_protobuf`'s
 `expected.out`, so the check that fails when one stops holding is
 `link/net_protobuf: exits with 0 and stdout matches expected.out`; the line
-names are quoted after each property. Six refusal codes also have a fixture
+names are quoted after each property. `tests/link/net_protobuf_f64` runs the
+same checks again compiled with `--number-mode f64`, against the same
+`expected.out`, so each line is pinned in both number modes. Six refusal codes also have a fixture
 of their own, `tests/link/net_protobuf_bad_*`, whose `main.ts` header says
 what it sends and what it answers: `PROTO_ERR_VARINT`, `PROTO_ERR_LENGTH`,
 `PROTO_ERR_FIELD`, `PROTO_ERR_GROUP`, `PROTO_ERR_DEPTH` and
@@ -86,14 +88,20 @@ what it sends and what it answers: `PROTO_ERR_VARINT`, `PROTO_ERR_LENGTH`,
 `PROTO_ERR_UNBALANCED` are pinned by `net_protobuf`'s lines alone.
 
 **The reader agrees with the reference implementation.** `vectors.ts` holds
-19 messages encoded by Google's `protobuf` Python package (7.36.1), each with
+26 messages encoded by Google's `protobuf` Python package (7.36.1), each with
 the fields it holds, written by `vectors.py` with the command in its header.
 Each decodes to its fields, re-encodes byte for byte through the writer, and
 is skipped field by field without a fault (`<vector>: decodes to its fields`,
 `re-encodes byte for byte`, `skips every field`). The vectors cover ten-byte
-negative int32 and int64, both extremes of each integer type, zigzag maxima,
+negative int32 and int64; the minimum and maximum of int32, int64, sint32,
+sint64, sfixed32 and sfixed64; the maximum of uint32, uint64, fixed32 and
+fixed64, and their zero, which proto3 does not send for a singular field, as
+an unpacked uint32, uint64 and fixed64 element and a packed fixed32 one;
 float subnormals and infinity, a two-byte length, an embedded message, packed
-fields and field number 2^29 − 1.
+and unpacked repeated fields and field number 2^29 − 1. One vector ends with
+four fields the schema does not know, one of each wire type, encoded by the
+reference implementation, which the reader skips; its writer check compares
+the known fields' bytes.
 
 **Every wire type is skipped by its size** (`a field of each wire type is
 skipped by it`, `the field after them reads`, `and nothing faults`). An
@@ -111,13 +119,15 @@ four (`a ragged packed fixed32`).
 
 **A length inside the span or a code.** A length past what is left of the
 span is `PROTO_ERR_LENGTH`, compared as a `u64` so that a length of 2^31
-or more cannot wrap (`a length past the span`, `a length of 2^64 - 1 bytes`, `a length cut short`, `net_protobuf_bad_length`). An inner length
+or more cannot wrap (`a length past the span`, `a length of 2^31 bytes`, `a length of 2^32 - 1 bytes`, `a length of 2^64 - 1 bytes`, `a length cut short`, `net_protobuf_bad_length`). An inner length
 is checked against the enclosing span, not the buffer (`an inner length past
 the outer span`, `an inner length past the outer span, entered`).
 
 **A tag names a field 1 to 2^29 − 1 of wire type 0, 1, 2 or 5.** Field 0 and
 a tag varint above 2^32 − 1 are `PROTO_ERR_FIELD` (`field number 0`, `a field
-number past 2^29 - 1`, `net_protobuf_bad_field`, which also reads 2^29 − 1).
+number past 2^29 - 1`, `a tag of 2^32 + 8`, and `net_protobuf_bad_field`,
+which sends the tag 2^32 + 8, field 1 in its low 32 bits, and also reads
+2^29 − 1).
 Wire types 3 and 4 are `PROTO_ERR_GROUP` (`a start group`, `an end group`,
 `net_protobuf_bad_group`), so the reader has no group skip to recurse in.
 Wire types 6 and 7 are `PROTO_ERR_WIRE_TYPE` (`wire type 6`, `wire type 7`).

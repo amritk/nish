@@ -18,11 +18,21 @@ PASS  int32 minimum: reads with no fault
 PASS  int32 minimum: writes with no fault
 PASS  int32 minimum: re-encodes byte for byte
 PASS  int32 minimum: skips every field
+PASS  int32 maximum: decodes to its fields
+PASS  int32 maximum: reads with no fault
+PASS  int32 maximum: writes with no fault
+PASS  int32 maximum: re-encodes byte for byte
+PASS  int32 maximum: skips every field
 PASS  int64 extremes: decodes to its fields
 PASS  int64 extremes: reads with no fault
 PASS  int64 extremes: writes with no fault
 PASS  int64 extremes: re-encodes byte for byte
 PASS  int64 extremes: skips every field
+PASS  int64 maximum: decodes to its fields
+PASS  int64 maximum: reads with no fault
+PASS  int64 maximum: writes with no fault
+PASS  int64 maximum: re-encodes byte for byte
+PASS  int64 maximum: skips every field
 PASS  uint32 maximum: decodes to its fields
 PASS  uint32 maximum: reads with no fault
 PASS  uint32 maximum: writes with no fault
@@ -33,6 +43,11 @@ PASS  zigzag: reads with no fault
 PASS  zigzag: writes with no fault
 PASS  zigzag: re-encodes byte for byte
 PASS  zigzag: skips every field
+PASS  zigzag minimum int32: decodes to its fields
+PASS  zigzag minimum int32: reads with no fault
+PASS  zigzag minimum int32: writes with no fault
+PASS  zigzag minimum int32: re-encodes byte for byte
+PASS  zigzag minimum int32: skips every field
 PASS  zigzag maxima: decodes to its fields
 PASS  zigzag maxima: reads with no fault
 PASS  zigzag maxima: writes with no fault
@@ -48,6 +63,21 @@ PASS  fixed widths: reads with no fault
 PASS  fixed widths: writes with no fault
 PASS  fixed widths: re-encodes byte for byte
 PASS  fixed widths: skips every field
+PASS  sfixed minima: decodes to its fields
+PASS  sfixed minima: reads with no fault
+PASS  sfixed minima: writes with no fault
+PASS  sfixed minima: re-encodes byte for byte
+PASS  sfixed minima: skips every field
+PASS  sfixed maxima: decodes to its fields
+PASS  sfixed maxima: reads with no fault
+PASS  sfixed maxima: writes with no fault
+PASS  sfixed maxima: re-encodes byte for byte
+PASS  sfixed maxima: skips every field
+PASS  unpacked zeros and maxima: decodes to its fields
+PASS  unpacked zeros and maxima: reads with no fault
+PASS  unpacked zeros and maxima: writes with no fault
+PASS  unpacked zeros and maxima: re-encodes byte for byte
+PASS  unpacked zeros and maxima: skips every field
 PASS  float and double: decodes to its fields
 PASS  float and double: reads with no fault
 PASS  float and double: writes with no fault
@@ -88,6 +118,11 @@ PASS  largest field number: reads with no fault
 PASS  largest field number: writes with no fault
 PASS  largest field number: re-encodes byte for byte
 PASS  largest field number: skips every field
+PASS  unknown fields after known ones: decodes to its fields
+PASS  unknown fields after known ones: reads with no fault
+PASS  unknown fields after known ones: writes with no fault
+PASS  unknown fields after known ones: re-encodes byte for byte
+PASS  unknown fields after known ones: skips every field
 PASS  every field: decodes to its fields
 PASS  every field: reads with no fault
 PASS  every field: writes with no fault
@@ -110,6 +145,9 @@ PASS  a fixed32 cut short
 PASS  a length past the span
 PASS  a length of 2^64 - 1 bytes
 PASS  a length cut short
+PASS  a length of 2^31 bytes
+PASS  a length of 2^32 - 1 bytes
+PASS  a float of bits 0x7f800001 reads as 0x7fc00001
 PASS  field number 0
 PASS  a field number past 2^29 - 1
 PASS  a start group
@@ -158,4 +196,4 @@ PASS  bytes writes its window
 PASS  an empty string
 PASS  int32 and int64 negatives take ten bytes
 PASS  a warm writer allocates nothing per field
-protobuf: 160 passed, 0 failed, 0 skipped
+protobuf: 198 passed, 0 failed, 0 skipped

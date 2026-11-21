@@ -36,9 +36,9 @@ const bytesText = (buf: readonly u8[], from: i32, n: i32): string => {
 /** `acc` and `item`, space-separated. */
 const join = (acc: string, item: string): string => (acc === "" ? item : `${acc} ${item}`)
 
-/** Whether `got[0, n)` is `want`. */
-const sameBytes = (got: readonly u8[], n: i32, want: readonly u8[]): boolean => {
-  if (n !== toI32(want.length) || n > toI32(got.length)) {
+/** Whether `got[0, n)` is `want[0, wantN)`. */
+const samePrefix = (got: readonly u8[], n: i32, want: readonly u8[], wantN: i32): boolean => {
+  if (n !== wantN || n > toI32(got.length) || n > toI32(want.length)) {
     return false
   }
   for (let i: i32 = 0; i < n; i += 1) {
@@ -48,6 +48,10 @@ const sameBytes = (got: readonly u8[], n: i32, want: readonly u8[]): boolean => 
   }
   return true
 }
+
+/** Whether `got[0, n)` is `want`. */
+const sameBytes = (got: readonly u8[], n: i32, want: readonly u8[]): boolean =>
+  samePrefix(got, n, want, toI32(want.length))
 
 /** The zigzag form of `v`, as an sint64 element is written. */
 const zigzag = (v: i64): u64 => toU64(v << toI64(1)) ^ toU64(v >> toI64(63))
@@ -184,12 +188,27 @@ const copyAll = (r: ProtoReader, w: ProtoWriter): string => {
       item = `${f}{${inner}}`
     } else if (f >= 17 && f <= 20) {
       item = copyPacked(r, w, f)
+    } else if (f === 21) {
+      const v = r.uint32()
+      w.uint32(f, v)
+      item = `${f}=${v}`
+    } else if (f === 22) {
+      const v = r.uint64()
+      w.uint64(f, v)
+      item = `${f}=${v}`
+    } else if (f === 23) {
+      const v = r.fixed64()
+      w.fixed64(f, v)
+      item = `${f}=${v}`
     } else if (f === PROTO_MAX_FIELD) {
       const v = r.uint32()
       w.uint32(f, v)
       item = `${f}=${v}`
     }
-    out = join(out, item)
+    // A field All does not know is left unread: the next `next` skips it.
+    if (item !== "") {
+      out = join(out, item)
+    }
   }
   return out
 }
@@ -214,7 +233,7 @@ const vectorChecks = (s: Suite): void => {
     s.eqStr(`${v.name}: decodes to its fields`, copyAll(r, w), v.fields)
     s.eqI32(`${v.name}: reads with no fault`, r.failed, PROTO_OK)
     s.eqI32(`${v.name}: writes with no fault`, w.failed, PROTO_OK)
-    s.ok(`${v.name}: re-encodes byte for byte`, sameBytes(w.buf, w.end, v.bytes))
+    s.ok(`${v.name}: re-encodes byte for byte`, samePrefix(w.buf, w.end, v.bytes, v.known))
     // Every field passed over unread, by its wire type.
     const k = over(v.bytes)
     let fields: i32 = 0
@@ -273,6 +292,17 @@ const refusalChecks = (s: Suite): void => {
   s.eqI32("a length past the span", skipAll([10, 5, 1, 2]), PROTO_ERR_LENGTH)
   s.eqI32("a length of 2^64 - 1 bytes", skipAll([10, 255, 255, 255, 255, 255, 255, 255, 255, 255, 1]), PROTO_ERR_LENGTH)
   s.eqI32("a length cut short", skipAll([10]), PROTO_ERR_TRUNCATED)
+  // A u64 to i32 narrowing would wrap these to a negative length.
+  s.eqI32("a length of 2^31 bytes", skipAll([10, 128, 128, 128, 128, 8, 1]), PROTO_ERR_LENGTH)
+  s.eqI32("a length of 2^32 - 1 bytes", skipAll([10, 255, 255, 255, 255, 15, 1]), PROTO_ERR_LENGTH)
+  // A signaling NaN read as a float comes back quiet; fixed32 keeps its bits.
+  const nan = new ProtoWriter([])
+  nan.fixed32(toI32(1), toU32(2139095041))
+  const nanRead = new ProtoReader(nan.buf, 0, nan.end)
+  s.ok(
+    "a float of bits 0x7f800001 reads as 0x7fc00001",
+    nanRead.next() && toU32(f32ToBits(nanRead.float())) === toU32(2143289345) && nanRead.failed === PROTO_OK,
+  )
   s.eqI32("field number 0", skipAll([0, 1]), PROTO_ERR_FIELD)
   s.eqI32("a field number past 2^29 - 1", skipAll([128, 128, 128, 128, 16, 1]), PROTO_ERR_FIELD)
   s.eqI32("a start group", skipAll([11]), PROTO_ERR_GROUP)
