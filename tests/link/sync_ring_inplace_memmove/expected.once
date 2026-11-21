@@ -1,2 +1,3 @@
-@nish.copyBytes :: call void @llvm.memmove.p0i8.p0i8.i64(
+@nish.tryCopyBytes :: call void @llvm.memmove.p0i8.p0i8.i64(
+@nish.copyBytes :: call i1 @nish.tryCopyBytes(
 @stage :: call void @nish.copyBytes(

@@ -106,9 +106,9 @@ const absentAt = (bucket: i32, h: u32): i64 => ~((toI64(bucket) << 32) | toI64(h
  * the bucket pointing at `key`, or to the first empty one. A tombstone is
  * walked past — its index field is 0, so its entry index is -1 and the range
  * test turns it away — and the load bound keeps a quarter of the buckets
- * empty, so the walk ends. It takes at most one step per bucket: a table with
- * no empty bucket answers absent at the bucket past its end, which
- * `insertAt` answers with a rebuild, as it does a full table.
+ * empty, so the walk ends. A bucket past the end, which a mask as wide as
+ * the table never gives, answers absent there, which `insertAt` answers with
+ * a rebuild.
  */
 const probeTable = <K>(slots: u32[], mask: i32, hashes: u32[], keys: K[], key: K): i64 => {
   const h = hashKey(key)
@@ -117,29 +117,30 @@ const probeTable = <K>(slots: u32[], mask: i32, hashes: u32[], keys: K[], key: K
   let bucket = toU32(homeBucket(h, mask))
   // The length is read in the condition rather than once: the key compare is
   // a call, and a call ends every length fact the bounds proof holds. The
-  // step and the bucket are `u32`s, whose `+` wraps, so the call leaves
-  // nothing they need proven.
-  for (let step: u32 = 0; step < toU32(slots.length); step = step + 1) {
-    const b = toI32(bucket)
-    if (b >= 0 && b < toI32(slots.length)) {
-      const word = slots[b]
-      if (word === 0) {
-        return absentAt(b, h)
-      }
-      if ((word & ~low) === fingerprint) {
-        const at = toI32((word & low) - 1)
-        if (
-          at >= 0 &&
-          at < toI32(hashes.length) &&
-          hashes[at] === h &&
-          at < toI32(keys.length) &&
-          sameKey(keys[at], key)
-        ) {
-          return foundAt(b, at)
-        }
+  // bucket is a `u32`, whose `+` wraps, so the call leaves nothing it needs
+  // proven. The load bound keeps a quarter of the buckets empty, so the walk
+  // ends at one; the test on `b` keeps a table with none from indexing past
+  // its end.
+  let b = toI32(bucket)
+  while (b >= 0 && b < toI32(slots.length)) {
+    const word = slots[b]
+    if (word === 0) {
+      return absentAt(b, h)
+    }
+    if ((word & ~low) === fingerprint) {
+      const at = toI32((word & low) - 1)
+      if (
+        at >= 0 &&
+        at < toI32(hashes.length) &&
+        hashes[at] === h &&
+        at < toI32(keys.length) &&
+        sameKey(keys[at], key)
+      ) {
+        return foundAt(b, at)
       }
     }
     bucket = (bucket + 1) & low
+    b = toI32(bucket)
   }
   return absentAt(toI32(slots.length), h)
 }
@@ -154,13 +155,14 @@ const fileEntry = (slots: u32[], mask: i32, h: u32, index: i32): void => {
   const word = slotWord(h, mask, index)
   const low = toU32(mask)
   let bucket = toU32(homeBucket(h, mask))
-  for (let step: u32 = 0; step < toU32(slots.length); step = step + 1) {
-    const b = toI32(bucket)
-    if (b >= 0 && b < toI32(slots.length) && slots[b] === 0) {
+  let b = toI32(bucket)
+  while (b >= 0 && b < toI32(slots.length)) {
+    if (slots[b] === 0) {
       slots[b] = word
       return
     }
     bucket = (bucket + 1) & low
+    b = toI32(bucket)
   }
 }
 
@@ -197,27 +199,34 @@ const compactHashes = (hashes: u32[]): void => {
 
 /**
  * The bucket table after a rebuild of `live` entries out of `used`, cleared.
- * More than half dead compacts at the same size; otherwise it doubles, and the
- * table never shrinks. Both happen in place — a new array would leave the old
- * one in the arena, once per rebuild, which a table that churns forever cannot
- * afford (§6.1).
+ * More than half dead compacts at the same size and clears the table in place
+ * — a new array would leave the old one in the arena, once per compaction,
+ * which a table that churns forever cannot afford (§6.1). Otherwise it
+ * doubles, and the table never shrinks.
  */
 const rebuiltSlots = (slots: u32[], live: i32, used: i32): u32[] => {
-  if (!(toI64(live) * 2 < toI64(used))) {
-    widenSlots(slots, 2)
+  if (toI64(live) * 2 < toI64(used)) {
+    clearSlots(slots)
+    return slots
   }
+  const n = toI32(slots.length)
+  if (n >= 0 && n < 32768) {
+    // A `u16` length is in range by its type; a larger table grows in place.
+    return new Array<u32>(toU16(n * 2))
+  }
+  widenSlots(slots, 2)
   clearSlots(slots)
   return slots
 }
 
 /**
  * Grow `slots` in place to `times` buckets for each it holds; the caller
- * clears or re-files them. It grows the table the `Map` or `Set` already owns
- * rather than allocating a new one, so a `Map` a task makes stays memory only
- * that task writes (`spawn`'s shared-write check). It grows by `push`, so a
- * table past the largest array, 2^31 - 1 elements, stops the program as out
- * of memory, as any allocation that size does: that is a `Map` or `Set` of
- * more than 2^29 entries. (Node's hold 2^24 and throw on the next insert.)
+ * clears or re-files them. Only a table past 2^15 buckets grows this way; a
+ * smaller one is allocated fresh, whose `u16` length needs no check. It grows by
+ * `push`, so a table past the largest array, 2^31 - 1 elements, stops the
+ * program as out of memory, as any allocation that size does: that is a `Map`
+ * or `Set` of more than 2^29 entries. (Node's hold 2^24 and throw on the next
+ * insert.)
  */
 const widenSlots = (slots: u32[], times: i32): void => {
   const n = toI32(slots.length)
@@ -573,6 +582,14 @@ export class Map<K, V> {
       size = size * 2
     }
     if (size > have && have > 0) {
+      const wanted = toI32(size)
+      if (wanted > 0 && wanted <= 65535) {
+        const slots = new Array<u32>(toU16(wanted))
+        this.slots = slots
+        this.mask = wanted - 1
+        refile(slots, this.entryHashes)
+        return
+      }
       const slots = this.slots
       widenSlots(slots, toI32(size / have))
       clearSlots(slots)
