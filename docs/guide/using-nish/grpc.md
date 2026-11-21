@@ -129,9 +129,10 @@ program.
 
 A client may send `grpc-timeout`, the time it will wait for the answer.
 `GrpcLimits.maxTimeout` (30 000 ms by default) caps it, so a client cannot
-ask for longer. The deadline is counted from when the server read the
-request's head. `call` answers `DEADLINE_EXCEEDED` to a call already past it, and so
-do `reply` and `fail` if you answer it late, in place of what you passed.
+ask for longer, and a call without one gets `maxTimeout` as its deadline.
+The deadline is counted from when the server read the request's head.
+`call` answers `DEADLINE_EXCEEDED` to a call already past it, and so do
+`reply` and `fail` if you answer it late, in place of what you passed.
 
 The deadline is checked only when you call one of them: nothing times a call
 out while your program holds it. A service that keeps calls waiting, for a
