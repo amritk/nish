@@ -1,5 +1,5 @@
 /**
- * `nish/net/grpc` — unary gRPC calls on `nish/net/http-server`'s HTTP/2
+ * `nish/net/grpc` — gRPC calls, unary and streaming, on `nish/net/http-server`'s HTTP/2
  * listeners (`listenHttp2Tls` and `listenH2c`). A call is a route: its
  * `:path` is `/<package>.<Service>/<Method>`, so the program adds it to the
  * server's `Router` as any other path, takes the request, and hands it here
@@ -14,7 +14,7 @@
  *     while (server.ready()) {
  *       const r = server.take();
  *       if (r.route === getSum && grpc.call(r) === GRPC_CALL) {
- *         const msg = new ProtoReader(r.body, grpc.messageStart(r), r.bodyLength);
+ *         const msg = new ProtoReader(r.body, grpc.messageStart(r), grpc.messageEnd(r));
  *         // ... decode, compute, encode the reply into w ...
  *         grpc.reply(r, w.buf, 0, w.end);
  *       }
@@ -30,11 +30,11 @@
  * `grpc-encoding` is offered), a declared length past `maxMessage`
  * `RESOURCE_EXHAUSTED`, and a body that is not exactly one length-prefixed
  * message `INTERNAL`. It answers `GRPC_CALL` only for a call the program now
- * owes an answer, whose message is `r.body[messageStart(r) .. r.bodyLength)`.
+ * owes an answer, whose message is `r.body[messageStart(r) .. messageEnd(r))`.
  *
  * **A call's deadline** runs from when the server read its head: its
  * `grpc-timeout`, capped at `limits.maxTimeout`, or `maxTimeout` when it has
- * none. `reply` and `fail` answer `DEADLINE_EXCEEDED` instead of the
+ * none. `reply`, `fail`, `send` and `finish` answer `DEADLINE_EXCEEDED` instead of the
  * program's answer once it has passed.
  *
  * **The answer** is `:status` 200 and `content-type: application/grpc`, then
@@ -43,8 +43,35 @@
  * and a head followed by a trailer section with `grpc-status` and the
  * percent-encoded `grpc-message` when it has one.
  *
+ * **Streaming calls.** A server-streaming call's request is one message, so
+ * `call` reads it; the program then sends its replies with `send`, one
+ * message each, and ends the call with `finish(r, GRPC_OK, "")`. A
+ * client-streaming or bidirectional call's request is a stream of messages:
+ * the program marks its route with `server.streamBody(route)`, reads the
+ * call with `open`, and its messages with `next`, each time `take` hands the
+ * request over:
+ *
+ *     let s = grpc.next(r);
+ *     while (s === GRPC_MESSAGE) {
+ *       const m = new ProtoReader(grpc.messageBytes(r), grpc.messageStart(r), grpc.messageEnd(r));
+ *       // ... decode m, perhaps send(r, ...) a reply ...
+ *       s = grpc.next(r);
+ *     }
+ *     if (s === GRPC_END) {
+ *       grpc.finish(r, GRPC_OK, "");
+ *     } // GRPC_MORE: wait for the next piece; GRPC_ANSWERED: r is the server's again
+ *
+ * `next` answers the faults `call` does, message by message, and a client
+ * that hung up (`CANCELLED`). `send` never blocks: it answers the bytes still
+ * queued, and a program that sends faster than the client reads stops above
+ * a budget of its own until `pending(r)` drains. A body the server streams
+ * is not under `bodyTimeout`, so a program waiting on a slow client checks
+ * `expired(r)` each turn and ends the call itself; `next`, `send` and
+ * `finish` answer `DEADLINE_EXCEEDED` once it has passed.
+ *
  * The record of what this module refuses and why is `docs/security/grpc.md`.
  */
+import { copyBytes } from "nish/bytes"
 import { HANDLER_ABSENT, HANDLER_DROPPED, HANDLER_SENT } from "nish/net/handler"
 import { httpFieldBytes } from "nish/net/http-fields"
 import { HTTP1_CHUNKED } from "nish/net/http1-codec"
@@ -89,6 +116,25 @@ export const GRPC_UNAUTHENTICATED: i32 = 16
 export const GRPC_CALL: i32 = 1
 /** `call`'s answer when it answered the request itself, with an HTTP status or a gRPC error; the request is the server's again. */
 export const GRPC_ANSWERED: i32 = 0
+/** `next`'s answer when it found a request message: `messageBytes(r)[messageStart(r) .. messageEnd(r))`. */
+export const GRPC_MESSAGE: i32 = 2
+/** `next`'s answer when the next message has not all arrived: wait until `take` hands the request over again. */
+export const GRPC_MORE: i32 = 3
+/** `next`'s answer when the client's stream of messages ended; the program ends the call with `finish`. */
+export const GRPC_END: i32 = 4
+/** `send`'s answer once the call is over: answered past its deadline, or its stream or connection gone. */
+export const GRPC_ENDED: i32 = -1
+
+/** A request index no call holds. */
+const GRPC_IDLE: i32 = 0
+/** A call read by `call` or `open`, whose answer has not begun. */
+const GRPC_OPEN: i32 = 1
+/** A call whose answer's head is sent: what is left is messages, then trailers. */
+const GRPC_BEGUN: i32 = 2
+/** A call that is answered, or whose stream is gone: the request is the server's again. */
+const GRPC_OVER: i32 = 3
+/** The largest per-call message buffer kept once its call is over. */
+const GRPC_KEEP: i32 = 65536
 
 /** The length prefix: one compressed-flag byte and a four-byte big-endian length. */
 const GRPC_PREFIX: i32 = 5
@@ -111,8 +157,10 @@ export class GrpcLimits {
 }
 
 /**
- * Reads unary gRPC calls from an `HttpServer`'s HTTP/2 requests and answers
- * them. It keeps no state per call: every answer reads the request again.
+ * Reads gRPC calls from an `HttpServer`'s HTTP/2 requests and answers them:
+ * unary calls (`call`, `reply`, `fail`) and streaming ones (`open`, `next`,
+ * `begin`, `send`, `finish`). What it keeps per call is indexed by the
+ * request's `index`, and is the call's until it is answered.
  */
 export class GrpcServer {
   private server: HttpServer
@@ -128,6 +176,26 @@ export class GrpcServer {
   private statusName: u8[]
   private messageName: u8[]
   private prefix: u8[]
+  /** `[grpc-status]`, the trailer names of a status with no message. */
+  private statusNames: u8[][]
+  /** `statusValues[s]` is `["<s>"]`, the trailer values of status `s` with no message. */
+  private statusValues: u8[][][]
+  /** Per request index: `GRPC_IDLE`, `GRPC_OPEN`, `GRPC_BEGUN` or `GRPC_OVER`. */
+  private states: i32[]
+  /** Per request index: how many bytes at the front of `body` `next` has read and not yet handed back with `consume`. */
+  private readAt: i32[]
+  /** Per request index: the length of the message `next` is copying into `bufs`, or -1 for none. */
+  private want: i32[]
+  /** Per request index: how many of that message's bytes are copied. */
+  private have: i32[]
+  /** Per request index: the buffer a message split across pieces is copied into. */
+  private bufs: u8[][]
+  /** Per request index: whether the last message is in `bufs`, not `body`. */
+  private inBuf: boolean[]
+  /** Per request index: where the last message starts. */
+  private starts: i32[]
+  /** Per request index: where the last message ends. */
+  private ends: i32[]
 
   /**
    * A gRPC reader and answerer over `server`. Panics on a limit outside its range.
@@ -157,36 +225,37 @@ export class GrpcServer {
       this.onlyValues.push([grpcType, httpFieldBytes(`${s}`)])
     }
     this.prefix = [toU8(0), toU8(0), toU8(0), toU8(0), toU8(0)]
+    this.statusNames = [this.statusName]
+    this.statusValues = []
+    for (let s: i32 = 0; s <= GRPC_UNAUTHENTICATED; s++) {
+      this.statusValues.push([this.onlyValues[s][1]])
+    }
+    this.states = []
+    this.readAt = []
+    this.want = []
+    this.have = []
+    this.bufs = []
+    this.inBuf = []
+    this.starts = []
+    this.ends = []
   }
 
   /**
-   * Reads `r` as a unary call. Answers it itself, and says so, when it is
+   * Reads `r` as a unary call, or a server-streaming one: a request that is
+   * one message, whole. Answers it itself, and says so, when it is
    * not one the program can answer: 415 for a `content-type` other than
    * `application/grpc` or `application/grpc+proto`, 505 off HTTP/2, and
    * otherwise a gRPC error in the Trailers-Only form (see the module's
-   * comment). Never panics on what the peer sent.
+   * comment). Never panics on what the peer sent; panics on a request whose
+   * body comes in pieces (`streaming`), which `open` and `next` read.
    * @param r a request `take` handed over and not yet answered
-   * @returns `GRPC_CALL` when the program owes `r` an answer through `reply` or `fail`, or `GRPC_ANSWERED` when `r` is the server's again
+   * @returns `GRPC_CALL` when the program owes `r` an answer through `reply`, `fail`, or `send` and `finish`, or `GRPC_ANSWERED` when `r` is the server's again
    */
   call(r: HttpServerRequest): i32 {
-    if (r.version !== 2) {
-      this.server.empty(r, GRPC_HTTP_VERSION_NOT_SUPPORTED)
-      return GRPC_ANSWERED
+    if (r.streaming) {
+      panic("GrpcServer.call: the request's body comes in pieces; read it with open and next")
     }
-    if (
-      !r.headerIs("content-type", "application/grpc") &&
-      !r.headerIs("content-type", "application/grpc+proto")
-    ) {
-      this.server.empty(r, GRPC_HTTP_UNSUPPORTED_MEDIA_TYPE)
-      return GRPC_ANSWERED
-    }
-    const timeout: i64 = this.timeout(r)
-    if (timeout < 0) {
-      this.only(r, GRPC_INTERNAL)
-      return GRPC_ANSWERED
-    }
-    if (monotonicNanos() - r.since > timeout) {
-      this.only(r, GRPC_DEADLINE_EXCEEDED)
+    if (!this.admit(r)) {
       return GRPC_ANSWERED
     }
     const status: i32 = this.framing(r)
@@ -194,16 +263,162 @@ export class GrpcServer {
       this.only(r, status)
       return GRPC_ANSWERED
     }
+    const i: i32 = this.slot(r)
+    this.starts[i] = GRPC_PREFIX
+    this.ends[i] = r.bodyLength
     return GRPC_CALL
   }
 
   /**
-   * Where `r`'s message starts in `r.body`; it ends at `r.bodyLength`.
-   * @param r a request `call` answered `GRPC_CALL` for
-   * @returns the offset of the message's first byte, past the length prefix
+   * Reads `r` as a call whose request is a stream of messages, client
+   * streaming or bidirectional, whether its body comes in pieces (a route
+   * `HttpServer.streamBody` marked, on HTTP/2) or whole. Answers it itself,
+   * and says so, as `call` does: 415, 505, a malformed `grpc-timeout`
+   * (`INTERNAL`) or a deadline already past. Its messages are read with
+   * `next`. Never panics on what the peer sent.
+   * @param r a request `take` handed over and not yet answered
+   * @returns `GRPC_CALL` when the program owes `r` an answer, or `GRPC_ANSWERED` when `r` is the server's again
+   */
+  open(r: HttpServerRequest): i32 {
+    if (!this.admit(r)) {
+      return GRPC_ANSWERED
+    }
+    this.slot(r)
+    return GRPC_CALL
+  }
+
+  /**
+   * Reads the call's next request message, across as many DATA frames as it
+   * came in. A message whole in `r.body` is read in place; one split across
+   * pieces is copied, piece by piece, into a buffer of the call's, each
+   * piece handed back with `consume` so the client may send more. Answers
+   * the call itself, and returns `GRPC_ANSWERED`, on a message whose prefix
+   * declares more than `maxMessage` bytes (`RESOURCE_EXHAUSTED`), a
+   * compressed one (`UNIMPLEMENTED`), an unknown flag byte or a body that
+   * ends inside a message (`INTERNAL`), a deadline past (`DEADLINE_EXCEEDED`)
+   * and a client that hung up (`CANCELLED`, which the server drops). Never
+   * panics on what the peer sent; panics on a request `open` or `call` did
+   * not answer `GRPC_CALL` for.
+   * @param r a call `open` read
+   * @returns `GRPC_MESSAGE` for a message, valid until the next call of `next`; `GRPC_MORE` to wait until `take` hands `r` over again; `GRPC_END` when the client's stream ended; `GRPC_ANSWERED` when `r` is the server's again
+   */
+  next(r: HttpServerRequest): i32 {
+    const i: i32 = this.held(r, "next")
+    if (this.states[i] === GRPC_OVER) {
+      return GRPC_ANSWERED
+    }
+    if (this.server.hungUp(r)) {
+      this.close(r, GRPC_CANCELLED, "")
+      return GRPC_ANSWERED
+    }
+    if (this.expired(r)) {
+      this.close(r, GRPC_DEADLINE_EXCEEDED, "")
+      return GRPC_ANSWERED
+    }
+    const body: u8[] = r.body
+    let at: i32 = this.readAt[i]
+    if (this.want[i] < 0) {
+      const left: i32 = r.bodyLength - at
+      if (left < GRPC_PREFIX) {
+        if (r.bodyEnded) {
+          if (left === 0) {
+            return GRPC_END
+          }
+          this.close(r, GRPC_INTERNAL, "")
+          return GRPC_ANSWERED
+        }
+        // A prefix not yet whole waits where it is: fewer than 5 bytes never fill the window.
+        this.server.consume(r, at)
+        this.readAt[i] = 0
+        return GRPC_MORE
+      }
+      const flag: i32 = toI32(body[at])
+      if (flag === 1) {
+        this.close(r, GRPC_UNIMPLEMENTED, "")
+        return GRPC_ANSWERED
+      }
+      if (flag !== 0) {
+        this.close(r, GRPC_INTERNAL, "")
+        return GRPC_ANSWERED
+      }
+      const length: i64 =
+        (toI64(body[at + 1]) << 24) | (toI64(body[at + 2]) << 16) | (toI64(body[at + 3]) << 8) | toI64(body[at + 4])
+      if (length > toI64(this.maxMessage)) {
+        this.close(r, GRPC_RESOURCE_EXHAUSTED, "")
+        return GRPC_ANSWERED
+      }
+      const n: i32 = toI32(length)
+      at += GRPC_PREFIX
+      if (left - GRPC_PREFIX >= n) {
+        this.readAt[i] = at + n
+        this.inBuf[i] = false
+        this.starts[i] = at
+        this.ends[i] = at + n
+        return GRPC_MESSAGE
+      }
+      if (toI32(this.bufs[i].length) < n) {
+        this.bufs[i] = new Array<u8>(n)
+      }
+      this.want[i] = n
+      this.have[i] = 0
+    }
+    const need: i32 = this.want[i] - this.have[i]
+    const avail: i32 = r.bodyLength - at
+    const piece: i32 = avail < need ? avail : need
+    copyBytes(this.bufs[i], this.have[i], body, at, piece)
+    this.have[i] += piece
+    at += piece
+    if (this.have[i] === this.want[i]) {
+      this.readAt[i] = at
+      this.inBuf[i] = true
+      this.starts[i] = 0
+      this.ends[i] = this.want[i]
+      this.want[i] = -1
+      return GRPC_MESSAGE
+    }
+    this.server.consume(r, at)
+    this.readAt[i] = 0
+    if (r.bodyEnded) {
+      this.close(r, GRPC_INTERNAL, "")
+      return GRPC_ANSWERED
+    }
+    return GRPC_MORE
+  }
+
+  /**
+   * The array that holds the message `call` or `next` found last: `r.body`,
+   * or the call's own buffer for a message `next` copied out of pieces.
+   * @param r a call `call` answered `GRPC_CALL` for, or `next` answered `GRPC_MESSAGE` for
+   * @returns the array whose `[messageStart(r) .. messageEnd(r))` is the message
+   */
+  messageBytes(r: HttpServerRequest): u8[] {
+    const i: i32 = this.at(r)
+    return i >= 0 && this.inBuf[i] ? this.bufs[i] : r.body
+  }
+
+  /**
+   * Where the message `call` or `next` found last starts in `messageBytes(r)`;
+   * for a unary call that is past the length prefix in `r.body`.
+   * @param r a call `call` answered `GRPC_CALL` for, or `next` answered `GRPC_MESSAGE` for
+   * @returns the offset of the message's first byte
    */
   messageStart(r: HttpServerRequest): i32 {
+    const i: i32 = this.at(r)
+    if (i >= 0) {
+      return this.starts[i]
+    }
     return r.bodyLength < GRPC_PREFIX ? r.bodyLength : GRPC_PREFIX
+  }
+
+  /**
+   * Where the message `call` or `next` found last ends in `messageBytes(r)`;
+   * for a unary call that is `r.bodyLength`.
+   * @param r a call `call` answered `GRPC_CALL` for, or `next` answered `GRPC_MESSAGE` for
+   * @returns the offset just past the message's last byte
+   */
+  messageEnd(r: HttpServerRequest): i32 {
+    const i: i32 = this.at(r)
+    return i >= 0 ? this.ends[i] : r.bodyLength
   }
 
   /**
@@ -219,11 +434,102 @@ export class GrpcServer {
   }
 
   /**
+   * Sends the head of the call's answer, `:status` 200 and `content-type:
+   * application/grpc`, so its reply messages can follow with `send`; `send`
+   * begins it too. Once begun the call ends with `finish` (or `fail`).
+   * Panics on a request `open` or `call` did not answer `GRPC_CALL` for.
+   * @param r a call `call` or `open` read
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the stream closed first and `r` is the server's again
+   */
+  begin(r: HttpServerRequest): i32 {
+    const i: i32 = this.held(r, "begin")
+    if (this.states[i] === GRPC_BEGUN) {
+      return HANDLER_SENT
+    }
+    if (this.states[i] === GRPC_OVER) {
+      return HANDLER_DROPPED
+    }
+    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, HTTP1_CHUNKED)
+    if (sent !== HANDLER_SENT) {
+      this.gone(r)
+      return sent
+    }
+    this.states[i] = GRPC_BEGUN
+    return HANDLER_SENT
+  }
+
+  /**
+   * Sends one reply message, `buf[off .. off + len)`, length-prefixed,
+   * beginning the answer if it has not begun. It never blocks: what the
+   * connection cannot take yet is queued, and the answer is how much is, so
+   * a program sending many messages stops above a budget of its own and goes
+   * back to its wait until `HttpServer.pending(r)` drops. Past the deadline
+   * it ends the call `DEADLINE_EXCEEDED` instead. Panics on a window outside
+   * `buf`, or a request `open` or `call` did not answer `GRPC_CALL` for.
+   * @param r a call `call` or `open` read
+   * @param buf the encoded reply message; the caller's again on return
+   * @param off where in `buf` the message starts
+   * @param len the message's length in bytes, at most 2^30 - 5
+   * @returns the bytes of the answer still queued, 0 or more, or `GRPC_ENDED` once the call is over and `r` is the server's again
+   */
+  send(r: HttpServerRequest, buf: u8[], off: i32, len: i32): i32 {
+    if (off < 0 || len < 0 || len > 1073741819 || off > toI32(buf.length) - len) {
+      panic(`GrpcServer.send: the window ${off} + ${len} is outside its ${buf.length} bytes`)
+    }
+    const i: i32 = this.held(r, "send")
+    if (this.states[i] === GRPC_OVER) {
+      return GRPC_ENDED
+    }
+    if (this.expired(r)) {
+      this.close(r, GRPC_DEADLINE_EXCEEDED, "")
+      return GRPC_ENDED
+    }
+    if (this.begin(r) !== HANDLER_SENT) {
+      return GRPC_ENDED
+    }
+    this.setPrefix(len)
+    if (
+      this.server.write(r, this.prefix, toI32(0), GRPC_PREFIX) !== HANDLER_SENT ||
+      this.server.write(r, buf, off, len) !== HANDLER_SENT
+    ) {
+      this.gone(r)
+      return GRPC_ENDED
+    }
+    return this.server.pending(r)
+  }
+
+  /**
+   * Ends the call with `status`: trailers carrying `grpc-status` and, when
+   * `message` is not empty, `grpc-message`, percent-encoded as `fail`'s is.
+   * A call whose answer has not begun is answered Trailers-Only when
+   * `message` is empty. Past the deadline it answers `DEADLINE_EXCEEDED`
+   * instead. Panics on a status outside 0 to 16, or a request `open` or
+   * `call` did not answer `GRPC_CALL` for.
+   * @param r a call `call` or `open` read; the server's again after this call
+   * @param status `GRPC_OK`, or the error, one of the `GRPC_*` statuses to `GRPC_UNAUTHENTICATED`
+   * @param message what went wrong, for a person reading the client's error; empty for none
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the stream closed first
+   */
+  finish(r: HttpServerRequest, status: i32, message: string): i32 {
+    if (status < GRPC_OK || status > GRPC_UNAUTHENTICATED) {
+      panic(`GrpcServer.finish: status ${status} is outside 0 to 16`)
+    }
+    const i: i32 = this.held(r, "finish")
+    if (this.states[i] === GRPC_OVER) {
+      return HANDLER_DROPPED
+    }
+    if (this.expired(r)) {
+      return this.close(r, GRPC_DEADLINE_EXCEEDED, "")
+    }
+    return this.close(r, status, message)
+  }
+
+  /**
    * Answers the call `r` with the message `buf[off .. off + len)`: status
    * 200, `content-type: application/grpc`, the length-prefixed message and a
    * trailer section with `grpc-status: 0`. Past `r`'s deadline it answers
-   * `DEADLINE_EXCEEDED` instead. Panics on a window outside `buf` and as the
-   * server's `start` does.
+   * `DEADLINE_EXCEEDED` instead. Panics on a window outside `buf`, on a call
+   * whose answer has begun, and as the server's `start` does.
    * @param r a request `call` answered `GRPC_CALL` for; the server's again after this call
    * @param buf the encoded reply message; the caller's again on return
    * @param off where in `buf` the message starts
@@ -234,23 +540,24 @@ export class GrpcServer {
     if (off < 0 || len < 0 || len > 1073741819 || off > toI32(buf.length) - len) {
       panic(`GrpcServer.reply: the window ${off} + ${len} is outside its ${buf.length} bytes`)
     }
+    const i: i32 = this.at(r)
+    if (i >= 0 && this.states[i] === GRPC_BEGUN) {
+      panic("GrpcServer.reply: the call's answer has begun; end it with finish")
+    }
+    this.over(r)
     if (this.expired(r)) {
       return this.only(r, GRPC_DEADLINE_EXCEEDED)
     }
     const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, GRPC_PREFIX + len)
     if (sent !== HANDLER_SENT) {
+      this.server.end(r)
       return sent
     }
-    this.prefix[0] = toU8(0)
-    this.prefix[1] = toU8((len >> 24) & 255)
-    this.prefix[2] = toU8((len >> 16) & 255)
-    this.prefix[3] = toU8((len >> 8) & 255)
-    this.prefix[4] = toU8(len & 255)
-    if (this.server.write(r, this.prefix, toI32(0), GRPC_PREFIX) !== HANDLER_SENT) {
-      this.server.end(r)
-      return HANDLER_DROPPED
-    }
-    if (this.server.write(r, buf, off, len) !== HANDLER_SENT) {
+    this.setPrefix(len)
+    if (
+      this.server.write(r, this.prefix, toI32(0), GRPC_PREFIX) !== HANDLER_SENT ||
+      this.server.write(r, buf, off, len) !== HANDLER_SENT
+    ) {
       this.server.end(r)
       return HANDLER_DROPPED
     }
@@ -261,10 +568,10 @@ export class GrpcServer {
    * Answers the call `r` with the gRPC error `status`: the Trailers-Only form
    * when `message` is empty, and otherwise a head and a trailer section
    * carrying `grpc-status` and `grpc-message`, the message's UTF-8 with every
-   * byte outside printable ASCII, and `%`, percent-encoded. Past `r`'s
-   * deadline it answers `DEADLINE_EXCEEDED` instead. Panics on a status
-   * outside 1 to 16.
-   * @param r a request `call` answered `GRPC_CALL` for; the server's again after this call
+   * byte outside printable ASCII, and `%`, percent-encoded. On a call whose
+   * answer has begun it ends it as `finish` does. Past `r`'s deadline it
+   * answers `DEADLINE_EXCEEDED` instead. Panics on a status outside 1 to 16.
+   * @param r a request `call` or `open` answered `GRPC_CALL` for; the server's again after this call
    * @param status the error, one of the `GRPC_*` statuses from `GRPC_CANCELLED` to `GRPC_UNAUTHENTICATED`
    * @param message what went wrong, for a person reading the client's error; empty for none
    * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the stream closed first
@@ -273,24 +580,144 @@ export class GrpcServer {
     if (status < GRPC_CANCELLED || status > GRPC_UNAUTHENTICATED) {
       panic(`GrpcServer.fail: status ${status} is outside 1 to 16`)
     }
+    const i: i32 = this.at(r)
+    if (i >= 0 && this.states[i] === GRPC_OVER) {
+      return HANDLER_DROPPED
+    }
     if (this.expired(r)) {
-      return this.only(r, GRPC_DEADLINE_EXCEEDED)
+      return this.close(r, GRPC_DEADLINE_EXCEEDED, "")
+    }
+    return this.close(r, status, message)
+  }
+
+  /** The version, `content-type`, `grpc-timeout` and deadline checks `call` and `open` share; false once it answered `r` itself. */
+  private admit(r: HttpServerRequest): boolean {
+    if (r.version !== 2) {
+      this.server.empty(r, GRPC_HTTP_VERSION_NOT_SUPPORTED)
+      return false
+    }
+    if (
+      !r.headerIs("content-type", "application/grpc") &&
+      !r.headerIs("content-type", "application/grpc+proto")
+    ) {
+      this.server.empty(r, GRPC_HTTP_UNSUPPORTED_MEDIA_TYPE)
+      return false
+    }
+    const timeout: i64 = this.timeout(r)
+    if (timeout < 0) {
+      this.only(r, GRPC_INTERNAL)
+      return false
+    }
+    if (monotonicNanos() - r.since > timeout) {
+      this.only(r, GRPC_DEADLINE_EXCEEDED)
+      return false
+    }
+    return true
+  }
+
+  /** Makes room for `r`'s index in the per-call state and opens a call there; the index. */
+  private slot(r: HttpServerRequest): i32 {
+    const i: i32 = r.index
+    while (toI32(this.states.length) <= i) {
+      this.states.push(GRPC_IDLE)
+      this.readAt.push(0)
+      this.want.push(-1)
+      this.have.push(0)
+      this.bufs.push(new Array<u8>(0))
+      this.inBuf.push(false)
+      this.starts.push(0)
+      this.ends.push(0)
+    }
+    this.states[i] = GRPC_OPEN
+    this.readAt[i] = 0
+    this.want[i] = -1
+    this.have[i] = 0
+    this.inBuf[i] = false
+    this.starts[i] = 0
+    this.ends[i] = 0
+    return i
+  }
+
+  /** `r`'s index when a call is open, begun or over there, or -1. */
+  private at(r: HttpServerRequest): i32 {
+    const i: i32 = r.index
+    return i >= 0 && i < toI32(this.states.length) && this.states[i] !== GRPC_IDLE ? i : -1
+  }
+
+  /** `r`'s index once `call` or `open` read it; panics, naming `who`, on a request neither did. */
+  private held(r: HttpServerRequest, who: string): i32 {
+    const i: i32 = this.at(r)
+    if (i < 0) {
+      panic(`GrpcServer.${who}: the request is not a call that open or call read`)
+    }
+    return i
+  }
+
+  /** Marks `r`'s call over, if it has one, and lets go of a large message buffer. */
+  private over(r: HttpServerRequest): void {
+    const i: i32 = this.at(r)
+    if (i < 0) {
+      return
+    }
+    this.states[i] = GRPC_OVER
+    this.want[i] = -1
+    if (toI32(this.bufs[i].length) > GRPC_KEEP) {
+      this.bufs[i] = new Array<u8>(0)
+    }
+  }
+
+  /** `r`'s stream closed under an answer the server started: hands `r` back and marks the call over. */
+  private gone(r: HttpServerRequest): void {
+    this.server.end(r)
+    this.over(r)
+  }
+
+  /**
+   * Ends the call `r` with `status` and, when not empty, `message`: trailers
+   * when its answer has begun, Trailers-Only when it has not and `message`
+   * is empty, and otherwise a head and then trailers.
+   */
+  private close(r: HttpServerRequest, status: i32, message: string): i32 {
+    const i: i32 = this.at(r)
+    const begun: boolean = i >= 0 && this.states[i] === GRPC_BEGUN
+    this.over(r)
+    if (!begun) {
+      if (message.length === 0) {
+        return this.only(r, status)
+      }
+      const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, HTTP1_CHUNKED)
+      if (sent !== HANDLER_SENT) {
+        this.server.end(r)
+        return sent
+      }
     }
     if (message.length === 0) {
-      return this.only(r, status)
-    }
-    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.contentType, this.grpcType, HTTP1_CHUNKED)
-    if (sent !== HANDLER_SENT) {
-      return sent
+      return this.server.trailers(r, this.statusNames, this.statusValues[status])
     }
     // Fresh arrays, never written again: the server reads them until the trailers are sent.
     const values: u8[][] = [this.statusValue(status), grpcPercentEncode(message)]
     return this.server.trailers(r, [this.statusName, this.messageName], values)
   }
 
-  /** Answers `r` with `status` in the Trailers-Only form: one HEADERS frame that ends the stream. */
+  /** Writes `len`'s uncompressed length prefix into `prefix`. */
+  private setPrefix(len: i32): void {
+    this.prefix[0] = toU8(0)
+    this.prefix[1] = toU8((len >> 24) & 255)
+    this.prefix[2] = toU8((len >> 16) & 255)
+    this.prefix[3] = toU8((len >> 8) & 255)
+    this.prefix[4] = toU8(len & 255)
+  }
+
+  /**
+   * Answers `r` with `status` in the Trailers-Only form: one HEADERS frame
+   * that ends the stream. A stream that closed first is handed back.
+   */
   private only(r: HttpServerRequest, status: i32): i32 {
-    return this.server.start(r, GRPC_HTTP_OK, this.onlyNames, this.onlyValues[status], toI32(0))
+    const sent: i32 = this.server.start(r, GRPC_HTTP_OK, this.onlyNames, this.onlyValues[status], toI32(0))
+    if (sent !== HANDLER_SENT) {
+      this.server.end(r)
+    }
+    return sent
   }
 
   /** The decimal bytes of `status`, from the Trailers-Only table. */
