@@ -131,7 +131,7 @@ export class HttpServerLimits {
   maxHead: i32 = 32768;          // copied head (method, target, fields); 431 above
   maxFields: i32 = 100;          // fields in one request head; 431 above
   maxResponseFields: i32 = 32;   // program fields + content-length + alt-svc
-  bodyTimeout: i32 = 30000;      // ms from head to whole body
+  bodyTimeout: i32 = 30000;      // ms from head to whole body; not a streamed body
   idleTimeout: i32 = 60000;      // ms an h2/h2c connection may hold no stream
   prefaceTimeout: i32 = 10000;   // ms an h2c peer has to send its 24 bytes
   altSvcMaxAge: i32 = 86400;     // Alt-Svc ma, seconds
@@ -454,7 +454,10 @@ two deadlines of its own, using its own clock and each carrier's
 `close(slot)`:
 
 - **`bodyTimeout`:** the time from a request's head to its last body byte,
-  for every version, as `HttpHandler.expireBodies` does for HTTP/1.1. On
+  for every version, as `HttpHandler.expireBodies` does for HTTP/1.1,
+  but only while the server reads a body: a body streamed to the program
+  on an h2 `streamBody` route is the program's from its head, and the
+  program keeps its own deadline for it. On
   HTTP/1.1 it closes the slot; on h2 it resets the stream with CANCEL; on
   h3 it calls `discardRequest` and resets the stream.
 - **`idleTimeout`:** how long an h2 or h2c connection may be open with no
@@ -817,7 +820,7 @@ version.
 | with `requests` 8: four h2 connections, 2 streams each | all 8 served; a fifth connection's stream is refused (pool full): the cap bounds a connection, not a peer (§9.2) |
 | `requests` of 1, 2 and 3, one GET on each of h2 and h3 | served (the per-connection cap is 1, not 0) |
 | `requests` of 0 | the constructor panics, naming `requests` |
-| a body that stalls past `bodyTimeout` | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
+| a body that stalls past `bodyTimeout` (not one the program streams) | h1: slot closed; h2: RST_STREAM CANCEL; h3: STOP_SENDING and reset; the request never reaches `take` |
 | an h2 connection with no open stream past `idleTimeout` | closed; a connection with an open stream is not |
 | an h2c connection that sends the preface, then nothing | closed by `idleTimeout`, not `prefaceTimeout` |
 | `altSvcMaxAge = 0`, with and without an HTTP/3 listener | `alt-svc: clear` on HTTP/1.1 and h2 over TLS; absent on h2c and h3 |

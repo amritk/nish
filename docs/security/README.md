@@ -81,7 +81,7 @@ the record that found it. The notes below the table name each such finding.
 | Header import, `nish c-import` | [c-import.md](c-import.md) | `src/c-import.ts`, `src/c-import-model.ts`, `src/c-import-json.ts`; the NL3062 data-model refusal in `src/compilation.ts` | 0 / 0 / 3 / 5 | 0 / 0 / 0 / 1 ³¹ |
 | Protobuf wire format | [protobuf.md](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md) | `std/net/protobuf.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | gRPC unary calls | [grpc.md](https://github.com/amritk/nish/blob/main/docs/security/grpc.md) | `std/net/grpc.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| **Total** ⁸ | | | **3 / 19 / 105 / 224** | **0 / 0 / 3 / 42** |
+| **Total** ⁸ | | | **3 / 19 / 107 / 225** | **0 / 0 / 2 / 42** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
