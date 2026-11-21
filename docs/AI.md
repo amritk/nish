@@ -130,13 +130,11 @@ are one node per line, which is to say diffable.
 
 ## A whole program
 
-This program divides by a value it does not test, so it builds with
-`--allow-panics` ([Proving it cannot panic](#proving-it-cannot-panic)); a
-guard that the divisor is not zero would let it build under the default. Other
-examples below that do integer arithmetic nothing bounds build the same way.
+This program builds under the default: its `%` sits behind the loop's
+`y > 0` test ([Proving it cannot panic](#proving-it-cannot-panic)). Examples
+below that do integer arithmetic nothing bounds build with `--allow-panics`.
 
-<!-- allow-panics: divides by a value it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 const gcd = (a: i32, b: i32): i32 => {
   let x = a;
@@ -2904,8 +2902,7 @@ was there) and `clear()`, and `keys()` / `values()` as the iterable of a
 and `s.forEach((x) => ...)` compile to that `for...of` walk with `f` inlined,
 and answer `void`. `entries` is refused by name.
 
-<!-- allow-panics: calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok-body --allow-panics -->
+<!-- nish:ok-body -->
 ```ts
 const seen = new Set<string>();
 const counts: Map<string, i32> = new Map();
@@ -2932,7 +2929,7 @@ console.log(`${seen.size} ${counts.size} ${seen.has("b")}`);
 three ways: a default with `??`, a `const` tested with `!== undefined` (or
 `=== undefined` and an early `return`), or a bare test. Each is one probe.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok-body --allow-panics -->
 ```ts
 const counts = new Map<string, i32>();
@@ -2966,7 +2963,7 @@ may `set`, `delete` or `clear` the table inside the walk and get exactly what
 JavaScript gives (a new key is visited later in the same walk; a key deleted
 before it is reached is not).
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok-body --allow-panics -->
 ```ts
 const ages = new Map<string, i32>();
@@ -3007,7 +3004,7 @@ string `+`) or assign. Anything else still compiles, as one probe per call.
 inserting it — and `reserve(m, n)`, which sizes the table for `n` entries; both
 are one module with the program and run unchanged under Node.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
@@ -3072,7 +3069,7 @@ tag under one key (NL2721) as a different string (NL2720). A `tag` on a class
 no union holds does nothing, and a JSON call on that class refuses its
 enum-member field.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -3114,7 +3111,7 @@ export const main = (): i32 => {
 };
 ```
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -3325,8 +3322,8 @@ you need to walk them, since there is no iteration yet.
 **Find the next byte of a few** — `indexOfAny(text, bytes, from)` from
 `nish/text` answers the first index at or after `from` whose byte is one of
 `bytes`, or -1: the scan for the next `"` or `\\` in a JSON string, the next
-delimiter in a line. `bytes` holds 1 to 16 ASCII bytes and anything else
-panics; `from` is clamped to `[0, text.length]`. Natively it reads 16 or 32
+delimiter in a line. `bytes` is any set, and an ASCII one answers the same
+natively and under Node; `from` is clamped to `[0, text.length]`. Natively it reads 16 or 32
 bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
@@ -3338,7 +3335,8 @@ methods on a number and no optional parameters, so `x.toFixed(n)` is
 both from `nish/text` and both answering what JavaScript does. `toFixed`
 rounds the exact binary value (`toFixed(1.005, 2)` is `"1.00"`) and panics
 outside 0 to 100 digits; `splitLimit` keeps the first `limit` pieces, a
-negative limit keeps all of them, and an empty separator panics.
+negative limit keeps all of them, and an empty separator splits into code
+points.
 (No block, as for `nish/text`; `tests/link/std_text_to_fixed` and
 `tests/link/std_text_split_limit` are its programs.)
 

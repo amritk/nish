@@ -69,7 +69,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/text.ts:869:3", "callee": "shiftTextAsciiRange", "via": "overflow" }
+                { "kind": "call", "at": "std/text.ts:939:3", "callee": "shiftTextAsciiRange", "via": "slice" }
               ]
             },
             {
@@ -78,8 +78,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/text.ts:855:3", "callee": "shiftTextAsciiRange", "via": "overflow" },
-                { "kind": "overflow", "at": "std/text.ts:855:59", "proven": true }
+                { "kind": "call", "at": "std/text.ts:925:3", "callee": "shiftTextAsciiRange", "via": "slice" }
               ]
             },
             {
@@ -88,10 +87,10 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/text.ts:765:18", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:768:7", "proven": true },
-                { "kind": "index", "at": "std/text.ts:776:29", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:781:5", "proven": true }
+                { "kind": "index", "at": "std/text.ts:790:18", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:793:7", "proven": true },
+                { "kind": "index", "at": "std/text.ts:801:29", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:806:5", "proven": true }
               ]
             },
             {
@@ -107,9 +106,9 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/text.ts:607:9", "proven": true },
-                { "kind": "index", "at": "std/text.ts:607:21", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:610:5", "proven": true }
+                { "kind": "index", "at": "std/text.ts:630:9", "proven": true },
+                { "kind": "index", "at": "std/text.ts:630:21", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:633:5", "proven": true }
               ]
             },
             {
@@ -117,12 +116,7 @@
               "exported": true,
               "capabilities": [],
               "witnesses": {},
-              "panics": [
-                { "kind": "panic", "at": "std/text.ts:650:5", "proven": false },
-                { "kind": "index", "at": "std/text.ts:654:15", "proven": true },
-                { "kind": "panic", "at": "std/text.ts:655:7", "proven": false },
-                { "kind": "overflow", "at": "std/text.ts:657:5", "proven": true }
-              ]
+              "panics": []
             },
             {
               "name": "padEnd",
@@ -130,8 +124,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/text.ts:948:3", "allowed": true },
-                { "kind": "call", "at": "std/text.ts:948:10", "callee": "textPadding", "via": "panic" }
+                { "kind": "oom", "at": "std/text.ts:1029:3", "allowed": true }
               ]
             },
             {
@@ -140,8 +133,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "call", "at": "std/text.ts:933:3", "callee": "textPadding", "via": "panic" },
-                { "kind": "oom", "at": "std/text.ts:933:3", "allowed": true }
+                { "kind": "oom", "at": "std/text.ts:1014:3", "allowed": true }
               ]
             },
             {
@@ -150,12 +142,11 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/text.ts:578:7", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:579:14", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:581:5", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:581:16", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:582:12", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:582:27", "proven": false }
+                { "kind": "oom", "at": "std/text.ts:599:7", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:600:14", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:602:5", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:602:16", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:605:12", "allowed": true }
               ]
             },
             {
@@ -164,13 +155,11 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "panic", "at": "std/text.ts:289:5", "proven": false },
-                { "kind": "oom", "at": "std/text.ts:292:27", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:305:7", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:305:49", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:296:27", "allowed": true },
                 { "kind": "oom", "at": "std/text.ts:309:7", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:309:18", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:311:13", "proven": false }
+                { "kind": "oom", "at": "std/text.ts:309:49", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:313:7", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:313:18", "allowed": true }
               ]
             },
             {
@@ -179,13 +168,12 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "panic", "at": "std/text.ts:341:5", "proven": false },
-                { "kind": "oom", "at": "std/text.ts:344:27", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:360:7", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:360:49", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:364:7", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:364:18", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:369:13", "proven": false }
+                { "kind": "oom", "at": "std/text.ts:346:12", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:353:27", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:366:7", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:366:49", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:370:7", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:370:18", "allowed": true }
               ]
             },
             {
@@ -247,34 +235,27 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "panic", "at": "std/text.ts:465:5", "proven": false },
-                { "kind": "oom", "at": "std/text.ts:469:12", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:479:7", "proven": false },
-                { "kind": "overflow", "at": "std/text.ts:483:7", "proven": false },
-                { "kind": "oom", "at": "std/text.ts:493:5", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:494:5", "proven": true },
-                { "kind": "oom", "at": "std/text.ts:498:5", "allowed": true },
-                { "kind": "call", "at": "std/text.ts:502:5", "callee": "fixedDigitsAdd", "via": "overflow" },
-                { "kind": "overflow", "at": "std/text.ts:503:5", "proven": true },
-                { "kind": "call", "at": "std/text.ts:512:15", "callee": "fixedDigitsHalve", "via": "overflow" },
-                { "kind": "index", "at": "std/text.ts:513:59", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:513:67", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:514:7", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:516:5", "proven": true },
-                { "kind": "call", "at": "std/text.ts:519:5", "callee": "fixedDigitsAdd", "via": "overflow" },
-                { "kind": "oom", "at": "std/text.ts:522:5", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:528:17", "proven": true },
-                { "kind": "index", "at": "std/text.ts:529:66", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:530:5", "proven": true },
-                { "kind": "oom", "at": "std/text.ts:534:5", "allowed": true },
-                { "kind": "index", "at": "std/text.ts:538:24", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:539:16", "proven": true },
-                { "kind": "oom", "at": "std/text.ts:540:7", "allowed": true },
-                { "kind": "oom", "at": "std/text.ts:542:5", "allowed": true },
-                { "kind": "overflow", "at": "std/text.ts:542:21", "proven": false },
-                { "kind": "overflow", "at": "std/text.ts:543:5", "proven": true },
-                { "kind": "slice", "at": "std/text.ts:545:10", "proven": false },
-                { "kind": "oom", "at": "std/text.ts:545:10", "allowed": true }
+                { "kind": "panic", "at": "std/text.ts:483:5", "proven": false },
+                { "kind": "oom", "at": "std/text.ts:487:12", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:514:5", "allowed": true },
+                { "kind": "overflow", "at": "std/text.ts:515:5", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:519:5", "allowed": true },
+                { "kind": "index", "at": "std/text.ts:534:59", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:534:67", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:535:7", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:543:5", "allowed": true },
+                { "kind": "overflow", "at": "std/text.ts:549:17", "proven": true },
+                { "kind": "index", "at": "std/text.ts:550:66", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:551:5", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:555:5", "allowed": true },
+                { "kind": "index", "at": "std/text.ts:559:30", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:560:9", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:561:7", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:563:5", "allowed": true },
+                { "kind": "overflow", "at": "std/text.ts:563:21", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:564:5", "proven": true },
+                { "kind": "slice", "at": "std/text.ts:566:10", "proven": false },
+                { "kind": "oom", "at": "std/text.ts:566:10", "allowed": true }
               ]
             },
             {

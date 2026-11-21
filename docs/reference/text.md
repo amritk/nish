@@ -359,20 +359,22 @@ The index of the first line that differs, the shorter length when
 
 The first index at or after `from` whose byte is one of `bytes`, or -1.
 
-`bytes` is a set of 1 to 16 ASCII bytes, and anything else panics: an empty
-set matches nothing, more than 16 is more than one vector of the runtime
-kernel compares, and an ASCII set is what keeps the answer the same under Node,
-where `charCodeAt` reads a UTF-16 unit rather than a byte. An ASCII byte
-never occurs inside a multi-byte UTF-8 sequence, so a non-ASCII `text`
-passes through and only its ASCII bytes can match — as in `splitLines`, the
-index is a byte offset natively. `from` is clamped to `[0, text.length]`,
-as `substring` clamps, so a negative `from` searches from the start and one
-past the end answers -1.
+The set is read unit by unit, as `text` is. An ASCII byte never occurs
+inside a multi-byte UTF-8 sequence, so with an ASCII set a non-ASCII `text`
+passes through, only its ASCII bytes can match, and the answer is the same
+natively and under Node but for the index itself, a byte offset natively,
+as in `splitLines`. A non-ASCII character in the set is not one member:
+natively each of its bytes is, so `"é"` also finds the first byte of `"è"`,
+while under Node its UTF-16 unit is; keep the set ASCII for one answer on
+both. An empty set matches nothing. `from` is clamped to
+`[0, text.length]`, as `substring` clamps, so a negative `from` searches
+from the start and one past the end answers -1.
 
-Natively the search is the runtime's `nish_str_index_of_any`, which reads
-16 or 32 bytes at a time (docs/LANGUAGE.md, "Byte search"). It is
-**variable-time**: how long it takes says where the first match is, so it is
-never for secret data.
+Natively a set of 1 to 16 bytes is searched by the runtime's
+`nish_str_index_of_any`, which reads 16 or 32 bytes at a time
+(docs/LANGUAGE.md, "Byte search"); a larger set is a plain loop that tests
+each byte against each member. It is **variable-time**: how long it takes
+says where the first match is, so it is never for secret data.
 
 ```ts
 const indexOfAny: (
@@ -390,8 +392,8 @@ The text searched.
 
 <scalar-field name="bytes" type="string" required>
 
-The set of bytes looked for, written as a string of 1 to 16
-  ASCII characters; their order does not matter.
+The set of bytes looked for, written as a string; their order
+  does not matter, and ASCII ones give the same answer on every host.
 
 </scalar-field>
 
@@ -405,7 +407,7 @@ Where the search starts, as a byte offset, clamped into
 <scalar-field name="returns" type="i32">
 
 The byte offset of the first match at or after `from`, or -1 when
-  there is none.
+  there is none, always so for an empty set.
 
 </scalar-field>
 
@@ -438,7 +440,7 @@ The length the answer is padded to, in `text.length`'s units.
 
 <scalar-field name="fill" type="string" required>
 
-The ASCII text repeated as the padding.
+The text repeated as the padding, cut as `padStart` cuts it.
 
 </scalar-field>
 
@@ -466,8 +468,9 @@ the library's own `text.length` is not walked, and what reaches the caller is
 a string rather than a number. Pad ASCII text, or count the width with
 `codePointLength` yourself, when the answer must be the same on both.
 
-**A fill that is not ASCII panics**, for the reason `indexOfAny`'s set must
-be ASCII: natively it would be cut in the middle of a UTF-8 sequence.
+A fill that is not ASCII is cut only where a code point starts, so its
+last copy may fall a unit or more short: `padStart("7", 2, "é")` is `"7"`
+natively, where `é` is two bytes and one does not fit, and `"é7"` under Node.
 
 ```ts
 const padStart: (
@@ -491,8 +494,8 @@ The length the answer is padded to, in `text.length`'s units.
 
 <scalar-field name="fill" type="string" required>
 
-The ASCII text repeated as the padding; `" "` and `"0"` are
-  the usual ones.
+The text repeated as the padding; `" "` and `"0"` are the
+  usual ones.
 
 </scalar-field>
 
@@ -565,11 +568,13 @@ there is nothing for NL8001 (`--warn-portability`) to warn about, and it
 does not; the pieces' own `.length`s are still counted in each platform's
 units, and NL8001 reads those where the program does.
 
-**An empty separator panics.** JavaScript splits a string on `""` into its
-UTF-16 units, which natively would be its bytes, and the two answers differ
-on any text that is not ASCII. A separator is almost always a literal the
-caller chose, so an empty one is a mistake in the program, like an index out
-of range, and not a condition a caller could recover from.
+**An empty separator splits `text` into its code points**, one piece each,
+and `split("", "")` is `[]`, as it is in JavaScript. JavaScript splits on
+`""` into UTF-16 units instead, which natively would be bytes, and a byte of
+a multi-byte character is not text; a code point is a whole character on
+both hosts. So the answer is JavaScript's for any text without characters
+past U+FFFF, and for those, an emoji say, JavaScript's two halves of a
+surrogate pair are one piece here, natively and under Node alike.
 
 ```ts
 const split: (text: string, sep: string) => string[]
@@ -583,14 +588,16 @@ The text to split.
 
 <scalar-field name="sep" type="string" required>
 
-The separator, compared byte for byte; it must not be empty.
-  Occurrences are found left to right and do not overlap.
+The separator, compared byte for byte; an empty one splits
+  between code points. Occurrences are found left to right and do not
+  overlap.
 
 </scalar-field>
 
 <scalar-field name="returns" type="string[]">
 
-A fresh array of the pieces, in order; never empty.
+A fresh array of the pieces, in order; empty only when both `text`
+  and `sep` are.
 
 </scalar-field>
 
@@ -608,9 +615,8 @@ into. So `splitLimit(text, sep, -1)` is `split(text, sep)`, and the two
 readings agree on every `i32`. Refusing a negative limit would have been a
 panic where JavaScript answers.
 
-**An empty separator panics**, whatever the limit, for the reason `split`
-gives; JavaScript would answer `[]` for a limit of 0, and its UTF-16 units
-otherwise.
+**An empty separator splits `text` into its code points**, as `split`'s
+does, and keeps the first `limit` of them.
 
 ```ts
 const splitLimit: (
@@ -628,8 +634,9 @@ The text to split.
 
 <scalar-field name="sep" type="string" required>
 
-The separator, compared byte for byte; it must not be empty.
-  Occurrences are found left to right and do not overlap.
+The separator, compared byte for byte; an empty one splits
+  between code points. Occurrences are found left to right and do not
+  overlap.
 
 </scalar-field>
 
@@ -726,7 +733,7 @@ rounds to zero keeps it: `toFixed(-0.0001, 2)` is `"-0.00"`.
 
 **`digits` outside 0 to 100 panics**, where JavaScript throws a
 `RangeError`: the count is almost always a literal the caller chose, so a
-bad one is a mistake in the program, as `split`'s empty separator is.
+bad one is a mistake in the program, as an out-of-range index is.
 
 ```ts
 const toFixed: (x: f64, digits: i32) => string

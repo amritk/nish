@@ -23,7 +23,7 @@ until the standard library is made panic-free.
 An `Upstream` is a pool of kept-alive connections to one origin, registered on
 the handler's loop. Make it once at start-up, beside the handler:
 
-<!-- allow-panics: calls `std/json.ts`, `std/net/handler.ts`, `std/net/router.ts`, `std/net/upstream.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/net/handler.ts`, `std/net/router.ts`, `std/net/upstream.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HandlerLimits, HttpHandler } from "nish/net/handler";

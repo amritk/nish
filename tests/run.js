@@ -1651,19 +1651,23 @@ const linkTests = fs.existsSync(linkDir)
       .sort()
   : []
 
-/** `indexOfAny`'s refused sets, each a link program and the panic it ends in (read after the loop). */
-const INDEX_OF_ANY_REFUSALS = [
-  ["std_text_index_of_any_empty_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_long_set", "indexOfAny: the set must hold 1 to 16 bytes"],
-  ["std_text_index_of_any_non_ascii_set", "indexOfAny: every byte of the set must be ASCII"],
+/** `indexOfAny`'s edge sets (empty, over 16 bytes, non-ASCII), each a link program run under Node after the loop. */
+const INDEX_OF_ANY_EDGES = [
+  "std_text_index_of_any_empty_set",
+  "std_text_index_of_any_long_set",
+  "std_text_index_of_any_non_ascii_set",
 ]
 
-/** `split`'s and the pads' refused arguments, each a link program and its panic (read after the loop). */
+/** `split`'s empty separator and the pads' non-ASCII fill, each a link program run under Node after the loop. */
+const TEXT_EDGES = [
+  "std_text_split_empty_separator",
+  "std_text_pad_non_ascii_fill",
+  "std_text_pad_start_non_ascii_fill",
+  "std_text_split_limit_empty_separator",
+]
+
+/** `toFixed`'s refused digit counts, each a link program and its panic (read after the loop). */
 const TEXT_REFUSALS = [
-  ["std_text_split_empty_separator", "split: an empty separator"],
-  ["std_text_pad_non_ascii_fill", "padEnd: every byte of the fill must be ASCII"],
-  ["std_text_pad_start_non_ascii_fill", "padStart: every byte of the fill must be ASCII"],
-  ["std_text_split_limit_empty_separator", "splitLimit: an empty separator"],
   ["std_text_to_fixed_negative_digits", "toFixed: digits must be 0 to 100"],
   ["std_text_to_fixed_too_many_digits", "toFixed: digits must be 0 to 100"],
 ]
@@ -1689,7 +1693,8 @@ const LINK_READ_LATER = [
   "range_export_napi",
   "range_export_napi_async",
   "range_export_unproven",
-  ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  ...INDEX_OF_ANY_EDGES,
+  ...TEXT_EDGES,
   ...TEXT_REFUSALS.map(([name]) => name),
   "std_compress_node",
   "std_json_conformance",
@@ -6556,6 +6561,27 @@ if (dealtHere("performance")) {
         ? `it does not compile:\n${diagnostics.map(diagnosticLine).join("\n")}${result.stderr}`
         : `${warnings.length} performance warning(s); prove each check away rather than silencing it ` +
             `(.claude/testing.md, "The performance gate"):\n${warnings.map(diagnosticLine).join("\n")}`
+    )
+  }
+
+  // An opt-out is stale once its example builds strict: each example that
+  // names `--allow-panics` on its `// smoke: args` line is built without the
+  // flag, with that line's other arguments, and must still be refused, so a
+  // fix in `std/` that frees it fails here until its header drops the flag.
+  const optOuts = gateSources.filter((source) => source.startsWith("examples/") && optOutArgs(source).length > 0)
+  const strictResults = await pool(optOuts, defaultJobs(), (source) => {
+    const args = corpusArgs(path.join(root, source)).filter((arg) => arg !== ALLOW_PANICS)
+    // strict: proves the example's opt-out is still needed
+    return spawnAsync(NISH, [source, ...args, "-o", `${path.join(buildDir, "perf_gate", "strict", source.replace(/[/.]/g, "_"))}/`], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  })
+  for (const [at, source] of optOuts.entries()) {
+    check(
+      `performance gate: ${source}'s --allow-panics opt-out is still needed`,
+      strictResults[at].status !== 0,
+      "it builds without the flag: drop --allow-panics from its `// smoke: args` line and its header's words about it"
     )
   }
 
@@ -11506,8 +11532,8 @@ if (dealtHere("runtimeCache")) {
     const programs = [
       ["examples/hello.ts", []],
       ["examples/argv.ts", ["7", "x"]],
-      ["examples/sets.ts", [], [ALLOW_PANICS]],
-      ["examples/wordcount.ts", [], [ALLOW_PANICS]],
+      ["examples/sets.ts", []],
+      ["examples/wordcount.ts", []],
       ["examples/multi/main.ts", [], [ALLOW_PANICS]],
     ]
     for (const profile of ["speed", "size"]) {
@@ -25979,7 +26005,7 @@ if (dealtHere("cliChecks")) {
     // build's IR is `--compact off`'s byte for byte.
     const holderWant = {
       "json-doc":
-        "std/json-tokenizer.ts:569:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 128 → 128 bytes",
+        "std/json-tokenizer.ts:604:14: layout: JsonTokenizer (std): 3 no saving that pays: JsonDocument saves 248 → 240, not JsonTokenizer itself, 120 → 120 bytes",
       "zlib-each":
         "std/compress/deflate.ts:674:14: layout: Deflater (std): 3 no saving that pays: ZlibCompressor saves 8 → 4, not Deflater itself, 256 → 256 bytes",
       "request-slot":
@@ -28510,6 +28536,52 @@ if (dealtHere("releaseChecks")) {
         denyThenAllow.ir === panickyAllowed.ir,
       [...cleanIr, { r: panickyBare.r }, panickyAllowed].map(({ r }) => shown(r)).join("")
     )
+
+    // `nish run`, `--emit-ts` and `--compat` hold the default as a plain
+    // compile does: each refuses a program that may panic and writes nothing,
+    // and `--allow-panics` builds it. `--compat` wants `main(): i32`, which
+    // `panicky` does not declare, so this program keeps one unproven index.
+    const compatSource = path.join(work, "compat_panicky.ts")
+    fs.writeFileSync(
+      compatSource,
+      [
+        "const at = (xs: i32[], i: i32): i32 => xs[i]",
+        "",
+        "export const main = (): i32 => {",
+        "  const xs: i32[] = [10, 20, 30]",
+        "  let i: i32 = 0",
+        "  for (const x of xs) i = i + x",
+        "  console.log(at(xs, i % 3))",
+        "  return 0",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const byDefault = "may panic here, and a module of this package, held to no panic by default"
+    const tsDir = (name) => path.join(work, name)
+    const modes = [
+      { name: "run", bare: ["run", panicky], allowed: ["run", ALLOW_PANICS, panicky], wrote: null, out: "59\n30\n" },
+      { name: "--emit-ts", bare: [panicky, "--emit-ts", tsDir("ets0")], allowed: [panicky, "--emit-ts", tsDir("ets1"), ALLOW_PANICS], wrote: [tsDir("ets0"), tsDir("ets1")] },
+      {
+        name: "--compat",
+        bare: [compatSource, "--compat", "-o", path.join(work, "compat0.ll")],
+        allowed: [compatSource, "--compat", ALLOW_PANICS, "-o", path.join(work, "compat1.ll")],
+        wrote: [path.join(work, "compat0.ll"), path.join(work, "compat1.ll")],
+      },
+    ].map((mode) => ({ ...mode, rBare: strict(mode.bare), rAllowed: strict(mode.allowed) }))
+    check(
+      "allow-panics: nish run, --emit-ts and --compat refuse a program that may panic without the flag, write nothing, and build it with the flag",
+      modes.every(
+        (m) =>
+          m.rBare.status === 1 &&
+          m.rBare.stderr.includes(byDefault) &&
+          m.rAllowed.status === 0 &&
+          !m.rAllowed.stderr.includes(byDefault) &&
+          (m.out === undefined || m.rAllowed.stdout === m.out) &&
+          (m.wrote === null || (!fs.existsSync(m.wrote[0]) && fs.existsSync(m.wrote[1])))
+      ),
+      modes.map((m) => `${m.name}:\n${shown(m.rBare)}${shown(m.rAllowed)}`).join("")
+    )
   }
 
   // ---- docs/AI.md and docs/guide: the examples compile ------------------------------------
@@ -29031,6 +29103,18 @@ if (dealtHere("releaseChecks")) {
         }
         if (s.kind === "ok") {
           check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
+          // An opt-out that is no longer needed is stale: the snippet builds
+          // strict, so its marker, its `allow-panics:` line and the page's
+          // sentence about the flag come out.
+          if (run.status === 0 && s.args.includes(ALLOW_PANICS)) {
+            const strictEntry = { ...s, args: s.args.filter((arg) => arg !== ALLOW_PANICS) }
+            const bare = compileProgram({ ...program, entry: strictEntry }, `${prefix}_${s.line}_strict`)
+            check(
+              `${rel}:${s.line}: its --allow-panics opt-out is still needed`,
+              bare.run.status !== 0,
+              "it builds without the flag: drop --allow-panics from its marker, the `<!-- allow-panics: -->` line above, and the page's words about it"
+            )
+          }
         } else {
           check(
             `${rel}:${s.line} is rejected with ${s.code}`,
@@ -45278,15 +45362,14 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
 
 // WP38 S1: `indexOfAny` from `nish/text` is the runtime kernel natively and
 // the walker `std/text.ts` writes under Node, so the four programs that call it
-// print the same and exit the same both ways: the edges, and the three sets it
-// refuses. A refusal is a panic, whose message the link loop does not read, so
-// it is held here on both sides, from the binary the loop built.
+// print the same and exit the same both ways: the edges, and the empty, long
+// and non-ASCII sets.
 //
 // And the recognition is the package's, not the path's: `std/text.ts` compiled
 // as a root -- what the performance gate does -- is an ordinary module, so its
 // walker is called as written and the kernel is never declared.
 if (!only || "std_text_index_of_any".includes(only)) {
-  for (const [name, message] of [["std_text_index_of_any", ""], ...INDEX_OF_ANY_REFUSALS]) {
+  for (const name of ["std_text_index_of_any", ...INDEX_OF_ANY_EDGES]) {
     const entry = path.join(linkDir, name, "main.ts")
     if (!fs.existsSync(entry)) {
       check(`link/${name}: indexOfAny-under-node`, false, `no such fixture: tests/link/${name}`)
@@ -45296,21 +45379,10 @@ if (!only || "std_text_index_of_any".includes(only)) {
     const want = fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8")
     const code = Number(fs.readFileSync(path.join(linkDir, name, "expected.code"), "utf8").trim())
     check(
-      `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints${message ? `, "${message}"` : ""}`,
-      run.status === code && run.stdout === want && run.stderr.includes(message),
+      `link/${name}: indexOfAny-under-node exits with ${code} and prints what the native binary prints`,
+      run.status === code && run.stdout === want,
       `--- native (expected.out)\n${want}--- node\n${shown(run)}`
     )
-    const exe = path.join(buildDir, "link", name, "app")
-    if (message && !HAS_CLANG) {
-      skip(`skipped: link/${name}: no clang, so there is no native binary to read the panic of`)
-    } else if (message) {
-      const native = spawnSync(exe, [], { encoding: "utf8" })
-      check(
-        `link/${name}: the native binary panics with "${message}"`,
-        native.status === 1 && native.stderr.includes(message),
-        fs.existsSync(exe) ? shown(native) : `no binary at ${exe}`
-      )
-    }
   }
   // `--profile wasi` links runtime-simd.c's scalar path (scripts/build.sh), so
   // the same programs run under Node's WASI print the same lines. The second is
@@ -45435,9 +45507,21 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
     pads.status === 0 && pads.stdout === "start: [  \u00e9]\nend: [\u00e9  ]\nemoji: [..\u{1F600}]\nmixed: [00\u00dfx]\n",
     shown(pads)
   )
-  // An empty separator and a non-ASCII fill are refused the same way on both
-  // sides: a panic, whose message the link loop does not read, so it is held
-  // here from the binary the loop built and from the Node run.
+  // An empty separator and a non-ASCII fill answer the same on both sides: the
+  // link loop holds the native run to expected.out, and this the Node run.
+  for (const name of TEXT_EDGES) {
+    const dir = path.join(linkDir, name)
+    const want = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    check(
+      `link/${name}: under the Node prelude it prints expected.out and exits 0`,
+      run.status === 0 && run.stdout === want,
+      `--- native (expected.out)\n${want}--- node\n${shown(run)}`
+    )
+  }
+  // A digit count outside 0 to 100 is refused the same way on both sides: a
+  // panic, whose message the link loop does not read, so it is held here from
+  // the binary the loop built and from the Node run.
   for (const [name, message] of TEXT_REFUSALS) {
     const dir = path.join(linkDir, name)
     const want = fs.readFileSync(path.join(dir, "expected.out"), "utf8")

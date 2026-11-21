@@ -62,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 55 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 56 modules.
 
 </scalar-card>
 
@@ -224,6 +224,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/net/postgres-carrier`](net/postgres-carrier.md) | `PgCarrier`, a `PgPool`'s queries on an `HttpHandler`'s loop, so a route handler queries PostgreSQL without blocking its worker. |
 | [`nish/net/postgres`](net/postgres.md) | The client side of PostgreSQL's frontend/backend protocol, version 3.0: a sans-IO connection that writes the frontend's messages into an output buffer and reads the backend's from an input buffer, for a program that owns its socket (`nish:net`) and its loop. |
 | [`nish/net/prefork`](net/prefork.md) | Run a server on every core: a supervisor process that starts one worker process per core, restarts one that dies, and stops them all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3). |
+| [`nish/net/protobuf`](net/protobuf.md) | Protobuf's wire format, without a schema: a reader that walks the fields of a message held in a `u8[]` span, and a writer that appends fields to a caller's buffer. |
 | [`nish/net/qpack`](net/qpack.md) | QPACK, the field compression of HTTP/3, as RFC 9204 defines it with a dynamic table of capacity 0: the Appendix A static table, the §4.1.1 prefixed integer up to 62 bits, the §4.1.2 string literal with an N-bit prefix, the §4.5 field-line representations under a Required Insert Count of 0, and what the encoder and decoder streams of §4.2 may carry when neither side ever inserts. |
 | [`nish/net/quic-conn-ack`](net/quic-conn-ack.md) | The packet numbers one QUIC packet number space has received, kept as ranges, which is what duplicate detection reads (RFC 9000 §12.3) and what an ACK frame is written from (§13.2, §19.3). |
 | [`nish/net/quic-conn-cid`](net/quic-conn-cid.md) | A QUIC connection's connection-ID table (RFC 9000 §5.1): the IDs this endpoint issued, which a datagram is routed by, and the ones the peer issued, which this endpoint sends to. |

@@ -1,0 +1,1741 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc6979-p256-ecdsa",
+  "source": {
+    "rfc": 6979,
+    "title": "Deterministic ECDSA on P-256 with SHA-256",
+    "sha256": "456e8f17558fdbd206f968b96fc6f1b4a71ea331ab30ad17f711ab3adaa7d701"
+  },
+  "sources": [
+    {
+      "id": "rfc6979",
+      "rfc": 6979,
+      "file": "rfcs/rfc6979.txt",
+      "sha256": "456e8f17558fdbd206f968b96fc6f1b4a71ea331ab30ad17f711ab3adaa7d701"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/p256"
+  },
+  "requirements": [
+    {
+      "id": "R-COMPAT",
+      "section": "1",
+      "level": "DEFINITION",
+      "quote": "Produced signatures remain fully compatible with plain DSA and ECDSA."
+    },
+    {
+      "id": "R-PRIV-RANGE",
+      "section": "2.2",
+      "level": "DEFINITION",
+      "quote": "The relevant standards prescribe that x shall not be 0; hence, x is an integer in the range [1, q-1]."
+    },
+    {
+      "id": "R-PUB",
+      "section": "2.2",
+      "level": "DEFINITION",
+      "quote": "For ECDSA, the public key is the curve point: U = xG"
+    },
+    {
+      "id": "R-TRUNCATE",
+      "section": "2.3.2",
+      "level": "DEFINITION",
+      "quote": "if qlen < blen, then the qlen leftmost bits are kept, and subsequent bits are discarded;"
+    },
+    {
+      "id": "R-EXPAND",
+      "section": "2.3.2",
+      "level": "DEFINITION",
+      "quote": "otherwise, qlen-blen bits (of value zero) are added to the left of the sequence (i.e., before the input bits in the sequence order)."
+    },
+    {
+      "id": "R-BITS2INT",
+      "section": "2.3.5",
+      "level": "DEFINITION",
+      "quote": "bits2int is used during signature generation and verification in standard DSA and ECDSA to transform a hash value (computed over the input message) into an integer modulo q."
+    },
+    {
+      "id": "R-HASH",
+      "section": "2.4",
+      "level": "DEFINITION",
+      "quote": "The message is first processed by H, yielding the value H(m), which is a sequence of bits of length hlen."
+    },
+    {
+      "id": "R-SIG-PAIR",
+      "section": "2.4",
+      "level": "DEFINITION",
+      "quote": "The pair (r, s) is the signature."
+    },
+    {
+      "id": "R-DETERMINISTIC",
+      "section": "3",
+      "level": "DEFINITION",
+      "quote": "Deterministic (EC)DSA is the process of generating an (EC)DSA signature over an input message m by using the standard (EC)DSA signature generation process (discussed in the previous section), except that the value k, instead of being randomly generated, is obtained through the process described in this section."
+    },
+    {
+      "id": "R-HMAC-H",
+      "section": "3.1.1",
+      "level": "DEFINITION",
+      "quote": "Here, we use HMAC with the same hash function H as the one used to process the input message prior to signature generation or verification."
+    },
+    {
+      "id": "R-MESSAGES",
+      "section": "A.2",
+      "level": "DEFINITION",
+      "quote": "The two input messages are the UTF-8 encoding of the strings \"sample\" and \"test\" (without the quotes), of length 48 and 32 bits, respectively."
+    }
+  ],
+  "exclusions": [
+    {
+      "section": "3.6",
+      "quote": "The entropy of that additional data SHALL be at least n bits, preferably n+64 bits or more, where n is the target security level.",
+      "reason": "a variant nish does not implement: the nonce is drawn from the private key and the digest alone, with no additional secret data"
+    },
+    {
+      "section": "A.3",
+      "quote": "The private key * MUST be set before generating the signature itself, but message * data can be input before setting the key.",
+      "reason": "a comment in the Java sample code, on the order of calls to its class; nish/crypto/p256 takes the private key and the message in one call"
+    },
+    {
+      "section": "A.3",
+      "quote": "{@link #setPrivateKey} MUST have * been called.",
+      "reason": "a comment on the sample code's sign(); nish/crypto/p256 takes the private key and the message in one call"
+    },
+    {
+      "section": "A.3",
+      "quote": "{@link #setPrivateKey} MUST * have been called.",
+      "reason": "a comment on the sample code's signHash(); nish/crypto/p256 takes the private key and the digest in one call"
+    }
+  ],
+  "functions": [
+    {
+      "name": "p256PublicKey",
+      "params": [
+        {
+          "name": "priv",
+          "type": "secret-bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "p256Sign",
+      "params": [
+        {
+          "name": "priv",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "digest",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "p256Verify",
+      "params": [
+        {
+          "name": "pub",
+          "type": "bytes"
+        },
+        {
+          "name": "digest",
+          "type": "bytes"
+        },
+        {
+          "name": "sig",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bool"
+    },
+    {
+      "name": "p256SignSha256",
+      "params": [
+        {
+          "name": "priv",
+          "type": "secret-bytes"
+        },
+        {
+          "name": "msg",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes?"
+    },
+    {
+      "name": "p256VerifySha256",
+      "params": [
+        {
+          "name": "pub",
+          "type": "bytes"
+        },
+        {
+          "name": "msg",
+          "type": "bytes"
+        },
+        {
+          "name": "sig",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bool"
+    },
+    {
+      "name": "sha256",
+      "module": "nish/crypto/sha256",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "A.2.5-SHA256-SAMPLE",
+      "title": "RFC 6979 A.2.5: With SHA-256, message = \"sample\"",
+      "covers": [
+        "R-DETERMINISTIC",
+        "R-HMAC-H",
+        "R-HASH",
+        "R-SIG-PAIR",
+        "R-MESSAGES"
+      ],
+      "source": {
+        "cite": {
+          "section": "A.2.5"
+        }
+      },
+      "call": "p256SignSha256",
+      "args": [
+        {
+          "hex": "c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721",
+          "label": "x"
+        },
+        {
+          "ascii": "sample"
+        }
+      ],
+      "expect": {
+        "concat": [
+          {
+            "hex": "efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716",
+            "label": "r"
+          },
+          {
+            "hex": "f7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8",
+            "label": "s"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "A.2.5-SHA256-TEST",
+      "title": "RFC 6979 A.2.5: With SHA-256, message = \"test\"",
+      "covers": [
+        "R-DETERMINISTIC",
+        "R-HMAC-H",
+        "R-HASH",
+        "R-SIG-PAIR",
+        "R-MESSAGES"
+      ],
+      "source": {
+        "cite": {
+          "section": "A.2.5"
+        }
+      },
+      "call": "p256SignSha256",
+      "args": [
+        {
+          "hex": "c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721",
+          "label": "x"
+        },
+        {
+          "ascii": "test"
+        }
+      ],
+      "expect": {
+        "concat": [
+          {
+            "hex": "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367",
+            "label": "r"
+          },
+          {
+            "hex": "019f4113742a2b14bd25926b49c649155f267e60d3814b4c0cc84250e46f0083",
+            "label": "s"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-PUB-FORM",
+      "title": "the public key of any private key is 65 octets and starts with the uncompressed-point octet 04; P-ROUNDTRIP holds the point itself",
+      "covers": ["R-PUB"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "pub",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256PublicKey",
+                  "args": [
+                    {
+                      "var": "x"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "len",
+                  "args": [
+                    {
+                      "var": "pub"
+                    }
+                  ]
+                },
+                {
+                  "int": 65
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "op": "slice",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "int": 0
+                    },
+                    {
+                      "int": 1
+                    }
+                  ]
+                },
+                {
+                  "op": "fill",
+                  "args": [
+                    {
+                      "int": 4
+                    },
+                    {
+                      "int": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-PRIV-RANGE",
+      "title": "a private key of 0, of q (as Section A.2.5 prints it) or of 2^256 - 1 is refused, and q - 1 is accepted",
+      "covers": ["R-PRIV-RANGE"],
+      "forall": [
+        {
+          "name": "d",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256PublicKey",
+                "args": [
+                  {
+                    "op": "zeros",
+                    "args": [
+                      {
+                        "int": 32
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256PublicKey",
+                "args": [
+                  {
+                    "op": "fill",
+                    "args": [
+                      {
+                        "int": 255
+                      },
+                      {
+                        "int": 32
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "op": "zeros",
+                    "args": [
+                      {
+                        "int": 32
+                      }
+                    ]
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "op": "fill",
+                    "args": [
+                      {
+                        "int": 255
+                      },
+                      {
+                        "int": 32
+                      }
+                    ]
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256PublicKey",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "isNull",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "notNull",
+            "args": [
+              {
+                "call": "p256PublicKey",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "notNull",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "hex": "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-SIG-FORM",
+      "title": "a signature is 64 octets, r then s",
+      "covers": ["R-SIG-PAIR"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256SignSha256",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "msg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 64
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-DIGEST",
+      "title": "signing a message is signing its SHA-256 hash",
+      "covers": ["R-HASH"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 200
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "call": "sha256",
+                    "args": [
+                      {
+                        "var": "msg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "p256SignSha256",
+                "args": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "msg"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TRUNCATE",
+      "title": "only the leftmost 256 bits of a longer digest count, to sign and to verify",
+      "covers": ["R-TRUNCATE", "R-BITS2INT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "d",
+          "type": "bytes",
+          "minLen": 33,
+          "maxLen": 64
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "sig",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256Sign",
+                  "args": [
+                    {
+                      "var": "x"
+                    },
+                    {
+                      "var": "d"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "var": "sig"
+                },
+                {
+                  "op": "unwrap",
+                  "args": [
+                    {
+                      "call": "p256Sign",
+                      "args": [
+                        {
+                          "var": "x"
+                        },
+                        {
+                          "op": "slice",
+                          "args": [
+                            {
+                              "var": "d"
+                            },
+                            {
+                              "int": 0
+                            },
+                            {
+                              "int": 32
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256Verify",
+                  "args": [
+                    {
+                      "op": "unwrap",
+                      "args": [
+                        {
+                          "call": "p256PublicKey",
+                          "args": [
+                            {
+                              "var": "x"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "slice",
+                      "args": [
+                        {
+                          "var": "d"
+                        },
+                        {
+                          "int": 0
+                        },
+                        {
+                          "int": 32
+                        }
+                      ]
+                    },
+                    {
+                      "var": "sig"
+                    }
+                  ]
+                },
+                {
+                  "bool": true
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-EXPAND",
+      "title": "a shorter digest counts as if zero octets were added to its left",
+      "covers": ["R-EXPAND", "R-BITS2INT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "d",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 31
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "var": "d"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "unwrap",
+            "args": [
+              {
+                "call": "p256Sign",
+                "args": [
+                  {
+                    "var": "x"
+                  },
+                  {
+                    "op": "concat",
+                    "args": [
+                      {
+                        "op": "zeros",
+                        "args": [
+                          {
+                            "op": "-",
+                            "args": [
+                              {
+                                "int": 32
+                              },
+                              {
+                                "op": "len",
+                                "args": [
+                                  {
+                                    "var": "d"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "d"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-ROUNDTRIP",
+      "title": "a signature verifies under the private key's public key",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 200
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "p256VerifySha256",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256PublicKey",
+                    "args": [
+                      {
+                        "var": "x"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "var": "msg"
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256SignSha256",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "msg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "bool": true
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-ROUNDTRIP-DIGEST",
+      "title": "a signature over a digest verifies under the private key's public key",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "d",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "p256Verify",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256PublicKey",
+                    "args": [
+                      {
+                        "var": "x"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "var": "d"
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256Sign",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "d"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "bool": true
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAMPER-SIG",
+      "title": "flipping any one bit of the signature makes it invalid",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        },
+        {
+          "name": "bit",
+          "type": "i32",
+          "min": 0,
+          "max": 511
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "pub",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256PublicKey",
+                  "args": [
+                    {
+                      "var": "x"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "sig",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256SignSha256",
+                  "args": [
+                    {
+                      "var": "x"
+                    },
+                    {
+                      "var": "msg"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256VerifySha256",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "var": "msg"
+                    },
+                    {
+                      "op": "flipBit",
+                      "args": [
+                        {
+                          "var": "sig"
+                        },
+                        {
+                          "var": "bit"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256Verify",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "call": "sha256",
+                      "args": [
+                        {
+                          "var": "msg"
+                        }
+                      ]
+                    },
+                    {
+                      "op": "flipBit",
+                      "args": [
+                        {
+                          "var": "sig"
+                        },
+                        {
+                          "var": "bit"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAMPER-MSG",
+      "title": "flipping any one bit of the message makes the signature invalid",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 100
+        },
+        {
+          "name": "bit",
+          "type": "i32",
+          "min": 0,
+          "max": 799
+        }
+      ],
+      "where": {
+        "op": "<",
+        "args": [
+          {
+            "var": "bit"
+          },
+          {
+            "op": "*",
+            "args": [
+              {
+                "int": 8
+              },
+              {
+                "op": "len",
+                "args": [
+                  {
+                    "var": "msg"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "p256VerifySha256",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256PublicKey",
+                    "args": [
+                      {
+                        "var": "x"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "flipBit",
+                "args": [
+                  {
+                    "var": "msg"
+                  },
+                  {
+                    "var": "bit"
+                  }
+                ]
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256SignSha256",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "msg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "bool": false
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAMPER-DIGEST",
+      "title": "flipping any one bit of the digest makes the signature invalid",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "d",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "bit",
+          "type": "i32",
+          "min": 0,
+          "max": 255
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "p256Verify",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256PublicKey",
+                    "args": [
+                      {
+                        "var": "x"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "flipBit",
+                "args": [
+                  {
+                    "var": "d"
+                  },
+                  {
+                    "var": "bit"
+                  }
+                ]
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256Sign",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "d"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "bool": false
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-TAMPER-KEY",
+      "title": "a signature does not verify under another private key's public key",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "y",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 100
+        }
+      ],
+      "where": {
+        "op": "!=",
+        "args": [
+          {
+            "var": "x"
+          },
+          {
+            "var": "y"
+          }
+        ]
+      },
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "call": "p256VerifySha256",
+            "args": [
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256PublicKey",
+                    "args": [
+                      {
+                        "var": "y"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "var": "msg"
+              },
+              {
+                "op": "unwrap",
+                "args": [
+                  {
+                    "call": "p256SignSha256",
+                    "args": [
+                      {
+                        "var": "x"
+                      },
+                      {
+                        "var": "msg"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "bool": false
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-SIZES",
+      "title": "a public key other than 65 octets or a signature other than 64 is invalid",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        },
+        {
+          "name": "cut",
+          "type": "i32",
+          "min": 1,
+          "max": 32
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "pub",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256PublicKey",
+                  "args": [
+                    {
+                      "var": "x"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "sig",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256SignSha256",
+                  "args": [
+                    {
+                      "var": "x"
+                    },
+                    {
+                      "var": "msg"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256VerifySha256",
+                  "args": [
+                    {
+                      "op": "slice",
+                      "args": [
+                        {
+                          "var": "pub"
+                        },
+                        {
+                          "int": 0
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "int": 65
+                            },
+                            {
+                              "var": "cut"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "var": "msg"
+                    },
+                    {
+                      "var": "sig"
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256VerifySha256",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "var": "msg"
+                    },
+                    {
+                      "op": "slice",
+                      "args": [
+                        {
+                          "var": "sig"
+                        },
+                        {
+                          "int": 0
+                        },
+                        {
+                          "op": "-",
+                          "args": [
+                            {
+                              "int": 64
+                            },
+                            {
+                              "var": "cut"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256VerifySha256",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "var": "msg"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "var": "sig"
+                        },
+                        {
+                          "op": "zeros",
+                          "args": [
+                            {
+                              "var": "cut"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-RANGE",
+      "title": "a signature with r or s of 0 is invalid",
+      "covers": ["R-COMPAT"],
+      "forall": [
+        {
+          "name": "x",
+          "type": "bytes",
+          "minLen": 32,
+          "maxLen": 32
+        },
+        {
+          "name": "msg",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 40
+        }
+      ],
+      "assert": {
+        "let": [
+          {
+            "name": "pub",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256PublicKey",
+                  "args": [
+                    {
+                      "var": "x"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "sig",
+            "value": {
+              "op": "unwrap",
+              "args": [
+                {
+                  "call": "p256SignSha256",
+                  "args": [
+                    {
+                      "var": "x"
+                    },
+                    {
+                      "var": "msg"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "in": {
+          "op": "and",
+          "args": [
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256VerifySha256",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "var": "msg"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "op": "zeros",
+                          "args": [
+                            {
+                              "int": 32
+                            }
+                          ]
+                        },
+                        {
+                          "op": "slice",
+                          "args": [
+                            {
+                              "var": "sig"
+                            },
+                            {
+                              "int": 32
+                            },
+                            {
+                              "int": 64
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            },
+            {
+              "op": "==",
+              "args": [
+                {
+                  "call": "p256VerifySha256",
+                  "args": [
+                    {
+                      "var": "pub"
+                    },
+                    {
+                      "var": "msg"
+                    },
+                    {
+                      "op": "concat",
+                      "args": [
+                        {
+                          "op": "slice",
+                          "args": [
+                            {
+                              "var": "sig"
+                            },
+                            {
+                              "int": 0
+                            },
+                            {
+                              "int": 32
+                            }
+                          ]
+                        },
+                        {
+                          "op": "zeros",
+                          "args": [
+                            {
+                              "int": 32
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "bool": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outOfScope": [
+    {
+      "name": "p256Ecdh",
+      "reason": "Diffie-Hellman on P-256 (SEC 1 Section 3.3.1), which RFC 6979 does not describe"
+    },
+    {
+      "name": "p256SignSha256Into",
+      "reason": "the same signature as p256SignSha256 written into a caller's array through a P256SignScratch, held by tests/link/crypto_p256; its message is a (msg, off, len) /* window */ and its (out, at) an /* out 64 */ write, but its first parameter is the class P256SignScratch, which vector 0.6.0 refuses in a ts-interface block (\"P256SignScratch is not a ts-interface type; use u8[], string, boolean, i8, i16, i32, i64, u8, u16, u32, u64, f64, Secret<u8[]>, u16[], u32[], u64[], each optionally | null\"), and it answers a boolean where an /* out CAP */ write returns the end offset"
+    },
+    {
+      "name": "P256SignScratch",
+      "reason": "the reusable scratch of p256SignSha256Into, a class and not a function"
+    },
+    {
+      "name": "P256_SCALAR_SIZE",
+      "reason": "an i32 constant a vector or property cannot call; every property draws a 32-octet private key"
+    },
+    {
+      "name": "P256_POINT_SIZE",
+      "reason": "an i32 constant a vector or property cannot call; P-PUB-FORM holds the 65-octet public key"
+    },
+    {
+      "name": "P256_SIGNATURE_SIZE",
+      "reason": "an i32 constant a vector or property cannot call; P-SIG-FORM holds the 64-octet signature"
+    }
+  ]
+}

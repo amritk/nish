@@ -1,7 +1,7 @@
-// `indexOfAny` refuses a set of 17 bytes: 16 is what one vector of the runtime
-// kernel compares, and a longer set panics rather than being searched some
-// slower way (docs/LANGUAGE.md, "Byte search"). `tests/run.js` holds the
-// native run and the run under Node to the same message.
+// `indexOfAny` with a set of 17 bytes, more than one vector of the runtime
+// kernel compares, is searched by a plain loop and finds what a short set
+// would (docs/LANGUAGE.md, "Byte search"). `tests/run.js` holds the native run
+// and the run under Node to the same output.
 import { indexOfAny } from "nish/text";
 
 export const main = (): number => {

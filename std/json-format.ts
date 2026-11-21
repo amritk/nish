@@ -127,7 +127,7 @@ const JF_QUERY: i32 = 5 // the fragment's set, and `iprivate` in an IRI
  * The code unit of `s` at `i`, or -1 past its end, so that a grammar can look
  * one unit ahead without testing the length first.
  */
-const jfUnitAt = (s: string, i: i32): i32 => (i < toI32(s.length) ? toI32(s.charCodeAt(i)) : -1)
+const jfUnitAt = (s: string, i: i32): i32 => (i >= 0 && i < toI32(s.length) ? toI32(s.charCodeAt(i)) : -1)
 
 const jfIsDigit = (c: i32): boolean => c >= 48 && c <= 57
 
@@ -140,17 +140,34 @@ const jfLower = (c: i32): i32 => (c >= 65 && c <= 90 ? c + 32 : c)
 
 /** The value of the `n` decimal digits of `s` at `at`, or -1 if any is not one. */
 const jfDigits = (s: string, at: i32, n: i32): i32 => {
-  let value: i32 = 0
-  let i: i32 = 0
-  while (i < n) {
-    const c = jfUnitAt(s, at + i)
-    if (!jfIsDigit(c)) {
+  const length: i32 = toI32(s.length)
+  // Callers read at most four digits, so the `u32` value stays below 10^4.
+  let value: u32 = 0
+  let i: i32 = at
+  let left: i32 = n
+  while (left > 0) {
+    if (i < 0 || i >= length) {
       return -1
     }
-    value = value * 10 + (c - 48)
+    const c = toI32(s.charCodeAt(i))
+    if (c < 48 || c > 57) {
+      return -1
+    }
+    value = value * 10 + toU32(c - 48)
+    i += 1
+    left -= 1
+  }
+  return toI32(value)
+}
+
+/** The end of the run of decimal digits of `s` that starts at `from`. */
+const jfDigitRunEnd = (s: string, from: i32): i32 => {
+  const length: i32 = toI32(s.length)
+  let i: i32 = from
+  while (i >= 0 && i < length && jfIsDigit(toI32(s.charCodeAt(i)))) {
     i += 1
   }
-  return value
+  return i
 }
 
 /** The number of days in `month` (1 to 12) of the Gregorian `year`. */
@@ -196,46 +213,42 @@ const jfFullTimeFrom = (s: string, at: i32): boolean => {
   if (jfUnitAt(s, at + 2) !== 58 || jfUnitAt(s, at + 5) !== 58) {
     return false
   }
+  const length: i32 = toI32(s.length)
   let i = at + 8
   if (jfUnitAt(s, i) === 46) {
     i += 1
     const start = i
-    while (jfIsDigit(jfUnitAt(s, i))) {
-      i += 1
-    }
+    i = jfDigitRunEnd(s, i)
     if (i === start) {
       return false
     }
   }
   const sign = jfUnitAt(s, i)
-  let offset: i32 = 0
+  const local: i32 = hour * 60 + minute
+  // What follows the seconds ends `s`, so its units are read back from the
+  // end: `Z` is the last unit and `±HH:MM` the last six.
   if (jfLower(sign) === 122) {
-    i += 1
-  } else if (sign === 43 || sign === 45) {
-    const offsetHour = jfDigits(s, i + 1, 2)
-    const offsetMinute = jfDigits(s, i + 4, 2)
-    if (
-      offsetHour < 0 ||
-      offsetHour > 23 ||
-      offsetMinute < 0 ||
-      offsetMinute > 59 ||
-      jfUnitAt(s, i + 3) !== 58
-    ) {
-      return false
-    }
-    offset = offsetHour * 60 + offsetMinute
-    if (sign === 45) {
-      offset = -offset
-    }
-    i += 6
-  } else {
+    return i === length - 1 && (second !== 60 || local === 1439)
+  }
+  if ((sign !== 43 && sign !== 45) || i !== length - 6) {
     return false
   }
-  if (i !== toI32(s.length)) {
+  const offsetHour = jfDigits(s, length - 5, 2)
+  const offsetMinute = jfDigits(s, length - 2, 2)
+  if (
+    offsetHour < 0 ||
+    offsetHour > 23 ||
+    offsetMinute < 0 ||
+    offsetMinute > 59 ||
+    jfUnitAt(s, length - 3) !== 58
+  ) {
     return false
   }
-  // The UTC minute of the day is in -1439 to 2878 before the wrap.
-  return second !== 60 || (hour * 60 + minute - offset + 1440) % 1440 === 1439
+  const offset: i32 = offsetHour * 60 + offsetMinute
+  // The UTC minute of the day: `+` is ahead of UTC and `-` behind it, and
+  // both minutes are below 1440, so one more day keeps the sum positive.
+  const utc: i32 = sign === 43 ? local - offset + 1440 : local + offset
+  return second !== 60 || utc % 1440 === 1439
 }
 
 /**
@@ -298,8 +311,8 @@ export const isDuration = (s: string): boolean => {
   let i: i32 = 1
   let inTime = false
   let last: i32 = -1
-  let count: i32 = 0
-  let timeCount: i32 = 0
+  let anyUnit = false
+  let anyTimeUnit = false
   while (i < length) {
     if (jfUnitAt(s, i) === 84) {
       if (inTime) {
@@ -311,29 +324,27 @@ export const isDuration = (s: string): boolean => {
       continue
     }
     const start = i
-    while (jfIsDigit(jfUnitAt(s, i))) {
-      i += 1
-    }
-    const unit = jfUnitAt(s, i)
-    if (i === start || unit < 0) {
+    i = jfDigitRunEnd(s, i)
+    if (i === start || i >= length) {
       return false
     }
+    const unit = jfUnitAt(s, i)
     i += 1
     if (unit === 87) {
       // `dur-week` is the whole duration.
-      return !inTime && count === 0 && i === length
+      return !inTime && !anyUnit && i === length
     }
     const k = jfUnitIndex(unit, inTime ? "HMS" : "YMD")
-    if (k < 0 || (last >= 0 && k !== last + 1)) {
+    if (k < 0 || (last >= 0 && k - last !== 1)) {
       return false
     }
     last = k
-    count += 1
+    anyUnit = true
     if (inTime) {
-      timeCount += 1
+      anyTimeUnit = true
     }
   }
-  return count > 0 && (!inTime || timeCount > 0)
+  return anyUnit && (!inTime || anyTimeUnit)
 }
 
 /** Whether `s[from, to)` is a dotted-quad IPv4 address. */
@@ -348,12 +359,18 @@ const jfIpv4Range = (s: string, from: i32, to: i32): boolean => {
       i += 1
     }
     const start = i
-    let value: i32 = 0
-    while (i < to && i - start < 3 && jfIsDigit(jfUnitAt(s, i))) {
-      value = value * 10 + (jfUnitAt(s, i) - 48)
+    // At most three digits, so the `u32` value stays below 1000.
+    let value: u32 = 0
+    let n: i32 = 0
+    while (n < 3 && i < to) {
+      const c = jfUnitAt(s, i)
+      if (c < 48 || c > 57) {
+        break
+      }
+      value = value * 10 + toU32(c - 48)
       i += 1
+      n += 1
     }
-    const n = i - start
     if (n === 0 || value > 255 || (n > 1 && jfUnitAt(s, start) === 48)) {
       return false
     }
@@ -367,14 +384,24 @@ const jfIpv6Range = (s: string, from: i32, to: i32): boolean => {
   let i = from
   let groups: i32 = 0
   let elided = false
-  if (i + 1 < to && jfUnitAt(s, i) === 58 && jfUnitAt(s, i + 1) === 58) {
-    elided = true
-    i += 2
+  if (i < to && jfUnitAt(s, i) === 58) {
+    const next = i + 1
+    if (next < to && jfUnitAt(s, next) === 58) {
+      elided = true
+      i = next + 1
+    }
   }
   while (i < to) {
+    // Past eight groups the address is already too long.
+    if (groups > 8) {
+      return false
+    }
     const start = i
-    while (i < to && jfIsHex(jfUnitAt(s, i))) {
+    // A fifth hex digit fails the group, so the run is not read past it.
+    let digits: i32 = 0
+    while (digits < 5 && i < to && jfIsHex(jfUnitAt(s, i))) {
       i += 1
+      digits += 1
     }
     if (i < to && jfUnitAt(s, i) === 46) {
       // An IPv4 tail ends the address and fills two groups.
@@ -384,11 +411,11 @@ const jfIpv6Range = (s: string, from: i32, to: i32): boolean => {
       groups += 2
       break
     }
-    if (i === start || i - start > 4) {
+    if (digits === 0 || digits > 4) {
       return false
     }
     groups += 1
-    if (i === to) {
+    if (i >= to) {
       break
     }
     if (jfUnitAt(s, i) !== 58) {
@@ -430,20 +457,37 @@ const jfIsLdh = (c: i32): boolean => jfIsAlpha(c) || jfIsDigit(c) || c === 45
 
 /** Whether `s[from, to)` is an RFC 1123 host name. */
 const jfHostnameRange = (s: string, from: i32, to: i32): boolean => {
-  if (to <= from || to - from > 253) {
+  // `from < to`, so the `u32` difference is exact.
+  if (to <= from || toU32(to) - toU32(from) > 253) {
     return false
   }
-  let start = from
+  // The label being read: its length, its first unit and its last.
+  let n: i32 = 0
+  let first: i32 = -1
+  let last: i32 = -1
   let i = from
   while (i <= to) {
-    if (i === to || jfUnitAt(s, i) === 46) {
-      const n = i - start
-      if (n === 0 || n > 63 || jfUnitAt(s, start) === 45 || jfUnitAt(s, i - 1) === 45) {
+    const c: i32 = i < to ? jfUnitAt(s, i) : 46
+    if (c === 46) {
+      if (n === 0 || first === 45 || last === 45) {
         return false
       }
-      start = i + 1
-    } else if (!jfIsLdh(jfUnitAt(s, i))) {
+      n = 0
+    } else if (!jfIsLdh(c)) {
       return false
+    } else {
+      // A label longer than 63 units fails the name.
+      if (n >= 63) {
+        return false
+      }
+      if (n === 0) {
+        first = c
+      }
+      last = c
+      n += 1
+    }
+    if (i >= to) {
+      return true
     }
     i += 1
   }
@@ -479,36 +523,43 @@ const jfIsAtext = (c: i32): boolean =>
  * quoted string, or -1 when it is neither.
  */
 const jfLocalPartEnd = (s: string): i32 => {
+  const length: i32 = toI32(s.length)
   let i: i32 = 0
   if (jfUnitAt(s, 0) === 34) {
     i = 1
-    while (true) {
+    while (i < length) {
       const c = jfUnitAt(s, i)
       if (c === 34) {
         return i + 1
       }
       if (c === 92) {
-        const quoted = jfUnitAt(s, i + 1)
+        const next = i + 1
+        if (next >= length) {
+          return -1
+        }
+        const quoted = jfUnitAt(s, next)
         if (quoted < 32 || quoted > 126) {
           return -1
         }
-        i += 2
+        i = next + 1
       } else if (c === 32 || c === 33 || (c >= 35 && c <= 91) || (c >= 93 && c <= 126)) {
         i += 1
       } else {
         return -1
       }
     }
+    // The quoted string has no closing quote.
+    return -1
   }
   while (true) {
     const start = i
-    while (jfIsAtext(jfUnitAt(s, i))) {
+    while (i < length && jfIsAtext(jfUnitAt(s, i))) {
       i += 1
     }
     if (i === start) {
       return -1
     }
-    if (jfUnitAt(s, i) !== 46) {
+    if (i >= length || jfUnitAt(s, i) !== 46) {
       return i
     }
     i += 1
@@ -567,7 +618,7 @@ export const isEmail = (s: string): boolean => {
   const inner = from + 1
   const end = length - 1
   if (
-    end - inner > 5 &&
+    end > inner + 5 &&
     jfLower(jfUnitAt(s, inner)) === 105 &&
     jfLower(jfUnitAt(s, inner + 1)) === 112 &&
     jfLower(jfUnitAt(s, inner + 2)) === 118 &&
@@ -623,12 +674,18 @@ const jfIsUcschar = (cp: i32): boolean => {
  * outside those ranges or units that do not encode one.
  */
 const jfUcsWidth = (s: string, i: i32, privateOk: boolean): i32 => {
+  const length: i32 = toI32(s.length)
+  if (i < 0 || i >= length) {
+    return 0
+  }
   const lead = jfUnitAt(s, i)
   let cp: i32 = 0
   let width: i32 = 0
+  // The unit after the lead.
+  let j: i32 = i + 1
   if (jfUnitsAreBytes()) {
     // UTF-8: no overlong form, no surrogate, nothing past U+10FFFF.
-    const b1 = jfUnitAt(s, i + 1)
+    const b1 = jfUnitAt(s, j)
     let low: i32 = 0x80
     let high: i32 = 0xbf
     if (lead >= 0xc2 && lead <= 0xdf) {
@@ -653,7 +710,11 @@ const jfUcsWidth = (s: string, i: i32, privateOk: boolean): i32 => {
     cp = (cp << 6) | (b1 & 0x3f)
     let k: i32 = 2
     while (k < width) {
-      const b = jfUnitAt(s, i + k)
+      if (j >= length) {
+        return 0
+      }
+      j += 1
+      const b = jfUnitAt(s, j)
       if (b < 0x80 || b > 0xbf) {
         return 0
       }
@@ -661,12 +722,14 @@ const jfUcsWidth = (s: string, i: i32, privateOk: boolean): i32 => {
       k += 1
     }
   } else if (lead >= 0xd800 && lead <= 0xdbff) {
-    const trail = jfUnitAt(s, i + 1)
+    const trail = jfUnitAt(s, j)
     if (trail < 0xdc00 || trail > 0xdfff) {
       return 0
     }
     width = 2
-    cp = ((lead - 0xd800) << 10) + (trail - 0xdc00) + 0x10000
+    // A lead surrogate's low ten bits are its offset from D800, and a
+    // trail's from DC00.
+    cp = (lead & 0x3ff) * 1024 + (trail & 0x3ff) + 0x10000
   } else if (lead >= 0xdc00 && lead <= 0xdfff) {
     return 0
   } else {
@@ -711,12 +774,13 @@ const jfInSet = (c: i32, set: i32): boolean => {
  * past ASCII where `iri` allows it, and 0 where none fits.
  */
 const jfUriUnit = (s: string, i: i32, set: i32, iri: boolean): i32 => {
-  const c = jfUnitAt(s, i)
-  if (c < 0) {
+  if (i < 0 || i >= toI32(s.length)) {
     return 0
   }
+  const c = jfUnitAt(s, i)
   if (c === 37) {
-    return jfIsHex(jfUnitAt(s, i + 1)) && jfIsHex(jfUnitAt(s, i + 2)) ? 3 : 0
+    const next = i + 1
+    return jfIsHex(jfUnitAt(s, next)) && next < toI32(s.length) && jfIsHex(jfUnitAt(s, next + 1)) ? 3 : 0
   }
   if (c < 0x80) {
     return jfInSet(c, set) ? 1 : 0
@@ -732,7 +796,8 @@ const jfUriRun = (s: string, from: i32, to: i32, set: i32, iri: boolean): boolea
     if (w === 0) {
       return false
     }
-    i += w
+    // The `w` units are in `s`, so the `u32` sum is at most its length.
+    i = toI32(toU32(i) + toU32(w))
   }
   return i === to
 }
@@ -755,17 +820,23 @@ const jfFind = (s: string, from: i32, to: i32, a: i32, b: i32): i32 => {
  * or `IPvFuture`, `"v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )`.
  */
 const jfIpLiteral = (s: string, from: i32, to: i32): boolean => {
-  if (jfLower(jfUnitAt(s, from)) !== 118) {
+  // An empty range is not `IPvFuture`, and not an IPv6 address either.
+  if (from >= to || jfLower(jfUnitAt(s, from)) !== 118) {
     return jfIpv6Range(s, from, to)
   }
-  let i = from + 1
+  const digits = from + 1
+  let i = digits
   while (i < to && jfIsHex(jfUnitAt(s, i))) {
     i += 1
   }
-  if (i === from + 1 || i >= to || jfUnitAt(s, i) !== 46 || i + 1 === to) {
+  if (i === digits || i >= to || jfUnitAt(s, i) !== 46) {
     return false
   }
-  return jfUriRun(s, i + 1, to, JF_USERINFO, false)
+  const rest = i + 1
+  if (rest === to) {
+    return false
+  }
+  return jfUriRun(s, rest, to, JF_USERINFO, false)
 }
 
 /** Whether `s[from, to)` is an RFC 3986 `authority`: `[ userinfo "@" ] host [ ":" port ]`. */
@@ -781,8 +852,9 @@ const jfAuthority = (s: string, from: i32, to: i32, iri: boolean): boolean => {
   }
   let port: i32 = 0
   if (jfUnitAt(s, host) === 91) {
+    // `jfFind` answers at most `to`.
     const close = jfFind(s, host, to, 93, 93)
-    if (close === to || !jfIpLiteral(s, host + 1, close)) {
+    if (host >= to || close >= to || !jfIpLiteral(s, host + 1, close)) {
       return false
     }
     port = close + 1
@@ -794,7 +866,7 @@ const jfAuthority = (s: string, from: i32, to: i32, iri: boolean): boolean => {
       return false
     }
   }
-  if (port === to) {
+  if (port >= to) {
     return true
   }
   if (jfUnitAt(s, port) !== 58) {
@@ -819,14 +891,14 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
   let i: i32 = 0
   if (jfIsAlpha(jfUnitAt(s, 0))) {
     let j: i32 = 1
-    while (true) {
+    while (j < length) {
       const c = jfUnitAt(s, j)
       if (!(jfIsAlpha(c) || jfIsDigit(c) || c === 43 || c === 45 || c === 46)) {
         break
       }
       j += 1
     }
-    if (jfUnitAt(s, j) === 58) {
+    if (j < length && jfUnitAt(s, j) === 58) {
       i = j + 1
     }
   }
@@ -834,9 +906,17 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
     return false
   }
   const pathEnd = jfFind(s, i, length, 63, 35)
-  if (jfUnitAt(s, i) === 47 && jfUnitAt(s, i + 1) === 47) {
-    const authorityEnd = jfFind(s, i + 2, pathEnd, 47, 47)
-    if (!jfAuthority(s, i + 2, authorityEnd, iri)) {
+  // Where the authority starts, after a `//`, or -1 without one.
+  let authority: i32 = -1
+  if (i < length && jfUnitAt(s, i) === 47) {
+    const next = i + 1
+    if (next < length && jfUnitAt(s, next) === 47) {
+      authority = next + 1
+    }
+  }
+  if (authority >= 0) {
+    const authorityEnd = jfFind(s, authority, pathEnd, 47, 47)
+    if (!jfAuthority(s, authority, authorityEnd, iri)) {
       return false
     }
     i = authorityEnd
@@ -852,14 +932,15 @@ const jfUriCheck = (s: string, iri: boolean, reference: boolean): boolean => {
     return false
   }
   i = pathEnd
-  if (jfUnitAt(s, i) === 63) {
-    const queryEnd = jfFind(s, i + 1, length, 35, 35)
-    if (!jfUriRun(s, i + 1, queryEnd, JF_QUERY, iri)) {
+  if (i < length && jfUnitAt(s, i) === 63) {
+    const query = i + 1
+    const queryEnd = jfFind(s, query, length, 35, 35)
+    if (!jfUriRun(s, query, queryEnd, JF_QUERY, iri)) {
       return false
     }
     i = queryEnd
   }
-  if (jfUnitAt(s, i) === 35) {
+  if (i < length && jfUnitAt(s, i) === 35) {
     return jfUriRun(s, i + 1, length, JF_FRAGMENT, iri)
   }
   return true
@@ -903,11 +984,16 @@ export const isIriReference = (s: string): boolean => jfUriCheck(s, true, true)
 
 /** The code units of RFC 6570's `varchar` at `i` of `s`, `ALPHA / DIGIT / "_" / pct-encoded`, or 0. */
 const jfVarchar = (s: string, i: i32): i32 => {
+  const length: i32 = toI32(s.length)
+  if (i < 0 || i >= length) {
+    return 0
+  }
   const c = jfUnitAt(s, i)
   if (jfIsAlpha(c) || jfIsDigit(c) || c === 95) {
     return 1
   }
-  return c === 37 && jfIsHex(jfUnitAt(s, i + 1)) && jfIsHex(jfUnitAt(s, i + 2)) ? 3 : 0
+  const next = i + 1
+  return c === 37 && next < length && jfIsHex(jfUnitAt(s, next)) && jfIsHex(jfUnitAt(s, next + 1)) ? 3 : 0
 }
 
 /**
@@ -916,46 +1002,60 @@ const jfVarchar = (s: string, i: i32): i32 => {
  * each a `varname` and a `:` prefix of 1 to 9999 or a `*`.
  */
 const jfExpressionEnd = (s: string, open: i32): i32 => {
+  const length: i32 = toI32(s.length)
+  // Outside `s` there is no `{` to start an expression.
+  if (open < 0 || open >= length) {
+    return -1
+  }
   let i = open + 1
-  const op = jfUnitAt(s, i)
-  if (jfUnitIndex(op, "+#./;?&=,!@|") >= 0) {
+  if (i < length && jfUnitIndex(jfUnitAt(s, i), "+#./;?&=,!@|") >= 0) {
     i += 1
   }
-  while (true) {
+  while (i < length) {
     let w = jfVarchar(s, i)
     if (w === 0) {
       return -1
     }
-    i += w
-    while (true) {
+    // `jfVarchar` counts only units of `s`, so the sum is at most its length.
+    i = toI32(toU32(i) + toU32(w))
+    while (i < length) {
       if (jfUnitAt(s, i) === 46) {
-        w = jfVarchar(s, i + 1)
+        const name = i + 1
+        w = jfVarchar(s, name)
         if (w === 0) {
           return -1
         }
-        i += 1 + w
+        i = toI32(toU32(name) + toU32(w))
       } else {
         w = jfVarchar(s, i)
         if (w === 0) {
           break
         }
-        i += w
+        i = toI32(toU32(i) + toU32(w))
       }
+    }
+    // An expression ends with a `}`, so running out of text is not one.
+    if (i >= length) {
+      return -1
     }
     const modifier = jfUnitAt(s, i)
     if (modifier === 58) {
-      const first = jfUnitAt(s, i + 1)
-      if (first < 49 || first > 57) {
+      const digit = i + 1
+      const first = jfUnitAt(s, digit)
+      if (digit >= length || first < 49 || first > 57) {
         return -1
       }
-      i += 2
+      i = digit + 1
       let more: i32 = 0
-      while (more < 3 && jfIsDigit(jfUnitAt(s, i))) {
+      while (more < 3 && i < length && jfIsDigit(jfUnitAt(s, i))) {
         i += 1
         more += 1
       }
     } else if (modifier === 42) {
       i += 1
+    }
+    if (i >= length) {
+      return -1
     }
     const next = jfUnitAt(s, i)
     if (next === 125) {
@@ -966,6 +1066,7 @@ const jfExpressionEnd = (s: string, open: i32): i32 => {
     }
     i += 1
   }
+  return -1
 }
 
 /**
@@ -1004,10 +1105,15 @@ export const isUriTemplate = (s: string): boolean => {
         return false
       }
     } else if (c === 37) {
-      if (!jfIsHex(jfUnitAt(s, i + 1)) || !jfIsHex(jfUnitAt(s, i + 2))) {
+      const next = i + 1
+      if (next >= length || !jfIsHex(jfUnitAt(s, next))) {
         return false
       }
-      i += 3
+      const last = next + 1
+      if (last >= length || !jfIsHex(jfUnitAt(s, last))) {
+        return false
+      }
+      i = last + 1
     } else if (c < 0x80) {
       if (!jfIsTemplateLiteral(c)) {
         return false
@@ -1018,7 +1124,8 @@ export const isUriTemplate = (s: string): boolean => {
       if (w === 0) {
         return false
       }
-      i += w
+      // `jfUcsWidth` counts only units of `s`, so the sum is at most its length.
+      i = toI32(toU32(i) + toU32(w))
     }
   }
   return true

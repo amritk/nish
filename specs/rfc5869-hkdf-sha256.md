@@ -1,6 +1,7 @@
 ---
 # Copied from vector (https://github.com/amritk/vector), specs/rfc5869-hkdf-sha256.md
-# at v0.2.1, with an Out of Scope section added. Copyright (c) 2026 Amrit Kahlon.
+# at v0.2.1, with an Out of Scope section and a Secret Forms section added.
+# Copyright (c) 2026 Amrit Kahlon.
 # Used under the MIT License, whose text follows.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -38,7 +39,8 @@ normative:
 --- abstract
 
 A profile of RFC 5869 for nish/crypto/hkdf: HKDF instantiated with
-SHA-256, so HashLen is 32. Every requirement quotes RFC 5869, the main
+SHA-256, so HashLen is 32, and the forms of it that hold the keying
+material as a `Secret`, for SHA-256 and SHA-384. Every requirement quotes RFC 5869, the main
 source; every binding sentence of RFC 5869 (MUST, MUST NOT, SHALL, SHALL
 NOT, REQUIRED) is tested or excluded here.
 
@@ -58,8 +60,17 @@ built on.
 // module: nish/crypto/hkdf
 export const hkdfExtractSha256 = (salt: u8[], ikm: u8[]): u8[]
 export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | null
+export const hkdfExtractSha384 = (salt: u8[], ikm: u8[]): u8[]
+export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | null
+export const hkdfExtractSha256Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u8[]>
+export const hkdfExtractSha384Secret = (salt: u8[], ikm: Secret<u8[]>): Secret<u8[]>
+export const hkdfExpandSha256Secret = (prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null
+export const hkdfExpandSha384Secret = (prk: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null
+export const hkdfSha256Secret = (salt: u8[], ikm: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null
+export const hkdfSha384Secret = (salt: u8[], ikm: Secret<u8[]>, info: u8[], length: i32): Secret<u8[]> | null
 // module: nish/crypto/hmac
 export const hmacSha256 = (key: u8[], data: u8[]): u8[]
+export const hmacSha384 = (key: u8[], data: u8[]): u8[]
 ~~~
 
 # Extract
@@ -137,27 +148,73 @@ forall (prk: u8[] /* 32..48 */, info: u8[] /* 0..32 */, n: i32 /* 0..300 */, m: 
 where n <= m
 ~~~
 
+# Secret Forms
+
+nish/crypto/hkdf also exports each derivation with its keying material held
+as a `Secret<u8[]>`, for SHA-256 and SHA-384. What a Secret form adds is
+wiping, which a functional test cannot observe and tests/wipes/crypto.js
+holds; the properties here hold each to the same output as its plain twin.
+RFC 5869 Appendix A has no SHA-384 test case, so SHA-384's plain forms are
+held to HMAC-SHA-384 by the definitions above, with HashLen 48, and its
+Secret forms to them.
+
+~~~ ts-property
+// P-EXTRACT-IS-HMAC-384 covers R-EXTRACT — HKDF-Extract over SHA-384 is HMAC-SHA-384 keyed by the salt
+forall (salt: u8[] /* 1..150 */, ikm: u8[] /* 0..150 */) => hkdfExtractSha384(salt, ikm) === hmacSha384(salt, ikm)
+~~~
+
+~~~ ts-property
+// P-EMPTY-SALT-384 covers R-SALT — an absent salt is HashLen zero octets, 48 for SHA-384
+forall (ikm: u8[] /* 0..150 */) => hkdfExtractSha384([], ikm) === hmacSha384(zeros(48), ikm)
+~~~
+
+~~~ ts-property
+// P-T1-T2-384 covers R-T — over SHA-384, the first two blocks are T(1) and T(2) as §2.3 defines them
+forall (prk: u8[] /* 48..64 */, info: u8[] /* 0..100 */) =>
+  unwrap(hkdfExpandSha384(prk, info, 96)).slice(0, 48) === hmacSha384(prk, info.concat([01])) &&
+  unwrap(hkdfExpandSha384(prk, info, 96)).slice(48, 96) === hmacSha384(prk, hmacSha384(prk, info.concat([01])).concat(info).concat([02]))
+~~~
+
+~~~ ts-property
+// P-EXPAND-LENGTH-384 covers R-L, R-OKM-LEN — over SHA-384, Expand gives exactly L octets for L <= 255*HashLen and refuses a longer L
+forall (prk: u8[] /* 48..64 */, info: u8[] /* 0..40 */, n: i32 /* 0..12400 */) =>
+  implies(n <= 255 * 48, hkdfExpandSha384(prk, info, n) !== null && unwrap(hkdfExpandSha384(prk, info, n)).length === n) &&
+  implies(n > 255 * 48, hkdfExpandSha384(prk, info, n) === null)
+~~~
+
+~~~ ts-property
+// P-SECRET-EXTRACT covers R-EXTRACT — hkdfExtractSha256Secret and hkdfExtractSha384Secret, given the IKM as a Secret, give the PRK their plain twins give
+forall (salt: u8[] /* 0..150 */, ikm: u8[] /* 0..150 */) =>
+  hkdfExtractSha256Secret(salt, ikm) === hkdfExtractSha256(salt, ikm) &&
+  hkdfExtractSha384Secret(salt, ikm) === hkdfExtractSha384(salt, ikm)
+~~~
+
+~~~ ts-property
+// P-SECRET-EXPAND-256 covers R-L, R-OKM-FIRST — hkdfExpandSha256Secret, given the PRK as a Secret, gives the OKM hkdfExpandSha256 gives and refuses the L it refuses
+forall (prk: u8[] /* 32..64 */, info: u8[] /* 0..40 */, n: i32 /* 0..8300 */) =>
+  implies(n <= 255 * 32, unwrap(hkdfExpandSha256Secret(prk, info, n)) === unwrap(hkdfExpandSha256(prk, info, n))) &&
+  implies(n > 255 * 32, hkdfExpandSha256Secret(prk, info, n) === null)
+~~~
+
+~~~ ts-property
+// P-SECRET-EXPAND-384 covers R-L, R-OKM-FIRST — hkdfExpandSha384Secret, given the PRK as a Secret, gives the OKM hkdfExpandSha384 gives and refuses the L it refuses
+forall (prk: u8[] /* 48..64 */, info: u8[] /* 0..40 */, n: i32 /* 0..12400 */) =>
+  implies(n <= 255 * 48, unwrap(hkdfExpandSha384Secret(prk, info, n)) === unwrap(hkdfExpandSha384(prk, info, n))) &&
+  implies(n > 255 * 48, hkdfExpandSha384Secret(prk, info, n) === null)
+~~~
+
+~~~ ts-property
+// P-SECRET-HKDF covers R-EXTRACT, R-OKM-FIRST — hkdfSha256Secret and hkdfSha384Secret are Expand of Extract, as their plain twins compose
+forall (salt: u8[] /* 0..64 */, ikm: u8[] /* 0..64 */, info: u8[] /* 0..40 */, n: i32 /* 0..300 */) =>
+  unwrap(hkdfSha256Secret(salt, ikm, info, n)) === unwrap(hkdfExpandSha256(hkdfExtractSha256(salt, ikm), info, n)) &&
+  unwrap(hkdfSha384Secret(salt, ikm, info, n)) === unwrap(hkdfExpandSha384(hkdfExtractSha384(salt, ikm), info, n))
+~~~
+
 # Out of Scope
 
-This contract tests only hkdfExtractSha256 and hkdfExpandSha256; every other
-export of nish/crypto/hkdf is declared out of scope below, with the reason it
+This contract tests hkdfExtractSha256 and hkdfExpandSha256, their SHA-384
+twins and the six Secret forms above; every other export of nish/crypto/hkdf is declared out of scope below, with the reason it
 is not tested.
-
-Out of scope: hkdfExtractSha384, HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256
-
-Out of scope: hkdfExpandSha384, HKDF over SHA-384 (HashLen 48); RFC 5869 Appendix A has no SHA-384 test case, and this profile fixes the hash to SHA-256
-
-Out of scope: hkdfExtractSha256Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
-
-Out of scope: hkdfExtractSha384Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
-
-Out of scope: hkdfExpandSha256Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
-
-Out of scope: hkdfExpandSha384Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
-
-Out of scope: hkdfSha256Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
-
-Out of scope: hkdfSha384Secret, the same derivation taking and giving Secret<u8[]>; what it adds is wiping, a non-functional property this profile cannot observe, covered by tests/wipes/crypto.js, and no test in this contract checks that its output equals the plain function's
 
 Out of scope: hkdfExpandLabelSha256, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869
 
@@ -167,11 +224,11 @@ Out of scope: hkdfExpandLabelSha256Secret, TLS 1.3's HKDF-Expand-Label (RFC 8446
 
 Out of scope: hkdfExpandLabelSha384Secret, TLS 1.3's HKDF-Expand-Label (RFC 8446 Section 7.1), not a construction of RFC 5869
 
-Out of scope: hkdfExtractInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare
+Out of scope: hkdfExtractInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its (out, at) is an `/* out hashLength */` write, but its first parameter is the class HkdfScratch, which vector 0.6.0 refuses in a ts-interface block ("`HkdfScratch` is not a ts-interface type; use u8[], string, boolean, i8, i16, i32, i64, u8, u16, u32, u64, f64, Secret<u8[]>, u16[], u32[], u64[], each optionally `| null`"), and it returns void where an `/* out CAP */` write returns the end offset
 
-Out of scope: hkdfExpandInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare
+Out of scope: hkdfExpandInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its first parameter is the class HkdfScratch, which vector 0.6.0 refuses in a ts-interface block ("`HkdfScratch` is not a ts-interface type; use u8[], string, boolean, i8, i16, i32, i64, u8, u16, u32, u64, f64, Secret<u8[]>, u16[], u32[], u64[], each optionally `| null`"), and its (out, at) is followed by the length and answers a boolean where an `/* out CAP */` write returns the end offset
 
-Out of scope: hkdfExpandLabelInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its signature takes a class and output offsets, which a ts-interface block cannot declare
+Out of scope: hkdfExpandLabelInto, an allocation-free variant writing into caller buffers through an HkdfScratch; its context is a `/* window */`, but its first parameter is the class HkdfScratch, which vector 0.6.0 refuses in a ts-interface block ("`HkdfScratch` is not a ts-interface type; use u8[], string, boolean, i8, i16, i32, i64, u8, u16, u32, u64, f64, Secret<u8[]>, u16[], u32[], u64[], each optionally `| null`"), it returns void where an `/* out CAP */` write returns the end offset, and it is RFC 8446's Expand-Label, not a construction of RFC 5869
 
 Out of scope: hkdfExpandLabelSha256Held, Expand-Label of a held Secret PRK, written in place into a Secret or a caller buffer; likewise RFC 8446, not RFC 5869
 

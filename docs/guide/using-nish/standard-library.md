@@ -197,7 +197,7 @@ shown).
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
-| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain`, `copyBytes` and `tryCopyBytes` for the runs a parser skips and a writer copies |
 | [`nish/temporal`](dates-and-times.md) | `PlainDate`, `PlainTime`, `PlainDateTime`, `Instant` and `Duration`: JavaScript's `Temporal`, in the ISO calendar, natively and under Node |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
@@ -220,6 +220,7 @@ shown).
 | [`nish/net/dns-config`](#nishnetdns-config) | `dnsParseResolvConf` and `dnsParseHosts`: `/etc/resolv.conf` and `/etc/hosts` read into fixed tables; `dnsHostsFind` and `dnsParseAddress` |
 | [`nish/net/dns-resolver`](#nishnetdns-resolver) | `DnsResolver`: a DNS stub resolver with no I/O of its own, which says what to send and reads what came back; it builds for `wasm32` |
 | [`nish/net/dns`](#nishnetdns) | `DnsClient`, the resolver on your own `pollWait` loop, and `resolveHost`, a blocking lookup for a CLI or start-up |
+| [`nish/net/protobuf`](#nishnetprotobuf) | `ProtoWriter` and `ProtoReader`: protobuf's wire format without a schema, every malformed message a `PROTO_ERR_*` code, never a panic |
 
 ## `nish/testing`
 
@@ -278,8 +279,7 @@ arrays of lines, and `skip(name, reason)`. Because an assertion returns a
 
 The string operations a program would otherwise write by hand.
 
-<!-- allow-panics: calls `std/text.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { contains, replaceAll, splitLines, splitWhitespace, trim } from "nish/text";
 
@@ -303,17 +303,18 @@ true
 
 `split(text, sep)` is JavaScript's `text.split(sep)`: a separator at either
 end or two in a row give empty strings, `""` splits to `[""]`, and a
-separator that never occurs gives `[text]`. An empty separator panics
-(`split: an empty separator`) rather than splitting into units, which are
-bytes in a compiled program and UTF-16 units under Node. The answers are the
-same both ways for any text and any non-empty separator.
+separator that never occurs gives `[text]`. An empty separator splits `text`
+into its code points, one character each, rather than into units, which are
+bytes in a compiled program and UTF-16 units under Node: `split("aé", "")` is
+`["a", "é"]` both ways. Only a character past U+FFFF, an emoji say, differs
+from JavaScript, which splits it into two halves; here it stays whole.
 
 `splitLimit(text, sep, limit)` is JavaScript's `text.split(sep, limit)`: it
 keeps the first `limit` pieces and drops the rest, so
 `splitLimit("a,b,c", ",", 2)` is `["a", "b"]` and a limit of 0 gives `[]`. A
 negative limit keeps every piece, as JavaScript's does, so
-`splitLimit(text, sep, -1)` is `split(text, sep)`. An empty separator panics
-here too (`splitLimit: an empty separator`).
+`splitLimit(text, sep, -1)` is `split(text, sep)`. An empty separator keeps
+the first `limit` code points.
 
 `toFixed(x, digits)` is JavaScript's `x.toFixed(digits)`, which Nish cannot
 write as a method: `x` with `digits` digits after the point, rounded on the
@@ -363,8 +364,8 @@ Node. `--warn-portability` does not flag a pad call, because the length it
 reads is read inside the library and the result is a string
 ([portability warnings](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#diagnostics-and-debugging-flags)),
 so pad only ASCII text, or work out the width with `codePointLength`. A
-`fill` that is not ASCII panics, because a cut at a byte width could split a
-character in two.
+`fill` that is not ASCII is cut only where a character starts, so the result
+can fall short of `width` rather than end in half a character.
 
 Together with `nish/regex` they turn a snake_case or kebab-case name into a
 camelCase identifier. A regex template cannot change case, so the regex only
@@ -538,8 +539,7 @@ it does not validate, and a nested value is stepped over rather than searched.
 It reads exactly the shape `nish --json` prints, which is what it was written
 for ([The CLI](cli.md#--json-for-tools)).
 
-<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { jsonField } from "nish/json";
 
@@ -568,8 +568,7 @@ one pass.
 own, placing every comma and colon itself, byte for byte what
 `JSON.stringify` writes. You say only what the value is:
 
-<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonWriter } from "nish/json";
 
@@ -616,8 +615,7 @@ it once, and it stays until you set it again.
   `null` as `JSON.stringify` does. A misuse before it, such as a value where a
   key is due, keeps its own code.
 
-<!-- allow-panics: calls `std/json.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json";
 
@@ -747,7 +745,7 @@ a `Map` with `string` keys whose values are any of those, or a `string`, a
 class, an array or a map with `| null`; and a `JsonNumber`, which keeps a
 number's text exactly.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -822,7 +820,7 @@ field keeps the member it held. That makes a string enum field the way to take
 one of a fixed set of strings from input: the decoder checks it for you, and
 allocates nothing to do it.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -876,7 +874,7 @@ can't be keyed by an enum; an array of one, `Role[]`, is fine. A
 decoding empties the map and fills it in the order the keys arrive, a key given
 twice is an error, and encoding writes the entries in the map's order.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/collections.ts`, `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -945,7 +943,7 @@ wider than a `u64` or with more digits than an `f64` comes back byte for byte.
 Read it with `text()`, `isI64()` and `i64()`, `isU64()` and `u64()`, or
 `f64()`, and set it with `setText`.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -1080,7 +1078,7 @@ variant, half read, so check `d.failed` before using anything it decoded. The ta
 when it is not the first key the decoder reads ahead to find it. A tag that is
 missing, not a string or no variant's is `JSON_DECODE_TAG`.
 
-<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; indexes an array without a guard the checker reads; calls `std/json-typed.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { JsonWriter } from "nish/json";
@@ -1250,8 +1248,7 @@ The offsets are into the array you gave `parseRanged`, or into the string
 UTF-16 code unit, its offsets count code units, so past the first non-ASCII
 character they differ from a native build's, which count UTF-8 bytes.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JsonLimits } from "nish/json-tokenizer";
 import { JsonDocument } from "nish/json-value";
@@ -1349,7 +1346,7 @@ are equal, and its rule is not JavaScript's: numbers are equal by value, so
 `1` and `1.0` are, objects are equal whatever the order of their members, and
 `true` is not `1`.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; pops an array it does not test for empty; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; pops an array it does not test for empty; calls `std/json-equal.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { jsonEqual, jsonEqualCanonical, jsonEqualFirstDuplicate } from "nish/json-equal";
@@ -1394,8 +1391,7 @@ first element of the member `tags`. A token is a member's key, with `~1` for a
 `/` in it and `~0` for a `~`, or an array index written without a leading
 zero.
 
-<!-- allow-panics: builds an array whose length it does not bound; does integer arithmetic nothing bounds; slices with bounds it does not test -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
 import { JSON_POINTER_NONE, isRelativeJsonPointer, jsonPointerEscape, jsonPointerParse, jsonPointerResolve } from "nish/json-pointer";
 import { JsonLimits } from "nish/json-tokenizer";
@@ -1773,7 +1769,7 @@ value at `key`, first storing `value` there if the key was missing, in one
 lookup. `reserve(m, n)` makes room for `n` entries up front, so filling the
 map never has to grow it.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
@@ -2101,7 +2097,7 @@ walks the arguments, and the answer is the id of the command they reached
 and every flag's value with where it came from. `finish` then prints the
 help, the version or an error, the way [`nish/cli`](#nishcli) lays help out.
 
-<!-- allow-panics: calls `panic`; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `panic`; calls `std/cli-args.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { Cli, ROOT, finish } from "nish/cli-args";
@@ -2794,12 +2790,12 @@ run ends — the first index in `[from, to)` whose byte is not in the class, or
 
 `copyBytes(dst, at, src, from, count)` copies `count` bytes of `src` from
 `from` into `dst` at `at`. The two arrays may be the same one, and the ranges
-may overlap.
+may overlap. `tryCopyBytes` takes the same arguments and answers `false`,
+writing nothing, where `copyBytes` would panic, so a strict module uses it.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `std/bytes.ts` code that keeps panic sites no proof removes yet -->
-<!-- nish:ok --allow-panics -->
+<!-- nish:ok -->
 ```ts
-import { copyBytes, skipBlank, skipDigits } from "nish/bytes";
+import { skipBlank, skipDigits, tryCopyBytes } from "nish/bytes";
 
 export const main = (): i32 => {
   const text: u8[] = [32, 10, 52, 50, 44]; // " \n42,"
@@ -2807,7 +2803,10 @@ export const main = (): i32 => {
   const end = skipDigits(text, start, 5);
   console.log(`${start} ${end}`); // 2 4
   const digits: u8[] = [0, 0];
-  copyBytes(digits, 0, text, start, end - start);
+  if (!tryCopyBytes(digits, 0, text, start, 2)) {
+    console.log("no room");
+    return 1;
+  }
   console.log(`${digits[0]} ${digits[1]}`); // 52 50
   return 0;
 };
@@ -2816,7 +2815,8 @@ export const main = (): i32 => {
 The runs never panic: `to` is clamped to the array and `from` to `to`, so a
 range past the end answers the end. `copyBytes` panics with
 `copyBytes: the range lies outside an array` if either window does not fit,
-before it writes anything. `skipJsonText` stops at a quote, a backslash, a
+before it writes anything; `tryCopyBytes` answers `false` there instead.
+`skipJsonText` stops at a quote, a backslash, a
 control byte or the first byte of a malformed UTF-8 sequence — the byte your
 decoder has to look at next. `skipJsonPlain` stops at a quote, a backslash or a
 control byte — the byte your writer has to escape.
@@ -3103,7 +3103,7 @@ WebAssembly build always takes the portable code.
 A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
 the program wipes both:
 
-<!-- allow-panics: calls `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/hmac.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
@@ -3921,6 +3921,162 @@ A program that uses `DnsClient` reports `net` and `entropy` under
 `--emit-capabilities`, the IDs being random; `resolveHost` adds `fs.read` for
 the two files and `clock` for its deadline. Both are native only, as every
 `nish:net` call is.
+
+## `nish/net/protobuf`
+
+`nish/net/protobuf` reads and writes protobuf's wire format, the encoding
+gRPC carries its messages in, without a schema: what a field number means is
+your code's. `new ProtoWriter(buf)` appends fields to `buf`: one call per
+field (`uint64`, `int32`, `sint64`, `fixed32`, `double`, `string`, `bytes` and
+the rest), and `beginMessage(field)` ... `endMessage()` around an embedded
+message or a packed repeated field. The message is `w.buf[0, w.end)`.
+`reset()` starts the next one in the same buffer, which then allocates nothing
+once it has grown to the message's size.
+
+`new ProtoReader(buf, from, to)` reads the message in `buf[from, to)`.
+`next()` moves to a field and sets `field` and `wireType`; one typed read
+takes its value, and a field you do not read is skipped by the next call to
+`next()`, so unknown fields pass. `len()` answers a string's or bytes'
+length, its bytes starting at `spanStart` in `buf` and not checked to be
+UTF-8. `enter()` and `leave()` walk an embedded message, and
+`enterPacked(wireType)` and `more()` the elements of a packed field.
+
+<!-- nish:ok -->
+```ts
+import { PROTO_OK, PROTO_WIRE_VARINT, ProtoReader, ProtoWriter } from "nish/net/protobuf";
+
+export const main = (): i32 => {
+  // message Place { string name = 1; Point at = 2; repeated uint64 floors = 3; }
+  // message Point { int32 x = 1; int32 y = 2; }
+  const w = new ProtoWriter([]);
+  w.string(1, "home");
+  w.beginMessage(2);
+  w.int32(1, 3);
+  w.int32(2, -4);
+  w.endMessage();
+  w.beginMessage(3);
+  w.packedVarint(toU64(1));
+  w.packedVarint(toU64(7));
+  w.endMessage();
+  console.log(`${w.end} bytes, failed ${w.failed}`);
+
+  const r = new ProtoReader(w.buf, 0, w.end);
+  while (r.next()) {
+    if (r.field === 1) {
+      console.log(`a name of ${r.len()} bytes`);
+    } else if (r.field === 2 && r.enter()) {
+      while (r.next()) {
+        console.log(`  field ${r.field}: ${r.int32()}`);
+      }
+      r.leave();
+    } else if (r.field === 3 && r.enterPacked(PROTO_WIRE_VARINT)) {
+      while (r.more()) {
+        console.log(`  floor ${r.uint64()}`);
+      }
+      r.leave();
+    }
+  }
+  if (r.failed !== PROTO_OK) {
+    console.log(`malformed: ${r.failed}`);
+    return 1;
+  }
+  return 0;
+};
+```
+
+```console
+$ nish run place.ts
+25 bytes, failed 0
+a name of 4 bytes
+  field 1: 3
+  field 2: -4
+  floor 1
+  floor 7
+```
+
+A field you have no schema for can still be passed on: its wire type says
+how to read it, and `bytes` copies a length-delimited field's span from the
+reader's buffer as it is. This relay drops field 2 and copies the rest.
+
+<!-- nish:ok -->
+```ts
+import { PROTO_WIRE_I32, PROTO_WIRE_I64, PROTO_WIRE_VARINT, ProtoReader, ProtoWriter } from "nish/net/protobuf"
+
+// Copies every field but `drop` from `r` to `w` by its wire type, so a field
+// this program has no schema for passes through unchanged.
+const relay = (r: ProtoReader, w: ProtoWriter, drop: i32): i32 => {
+  while (r.next()) {
+    const f: i32 = r.field
+    if (f === drop) {
+      // Not read: the next call to next() skips it.
+    } else if (r.wireType === PROTO_WIRE_VARINT) {
+      w.uint64(f, r.uint64())
+    } else if (r.wireType === PROTO_WIRE_I64) {
+      w.fixed64(f, r.fixed64())
+    } else if (r.wireType === PROTO_WIRE_I32) {
+      w.fixed32(f, r.fixed32())
+    } else {
+      const n: i32 = r.len()
+      w.bytes(f, r.buf, r.spanStart, n)
+    }
+  }
+  return r.failed < 0 ? r.failed : w.failed
+}
+
+export const main = (): i32 => {
+  // message Reading { double value = 1; sint32 delta = 2; float scale = 3;
+  //   string unit = 4; repeated fixed32 ids = 5; repeated sfixed64 marks = 6; }
+  const w = new ProtoWriter([])
+  w.double(1, toF64(3) / toF64(2))
+  w.sint32(2, -7)
+  w.float(3, toF32(2))
+  w.string(4, "kPa")
+  w.beginMessage(5)
+  w.packedFixed32(toU32(9))
+  w.packedFixed32(toU32(10))
+  w.endMessage()
+  w.beginMessage(6)
+  w.packedFixed64(toU64(11))
+  w.endMessage()
+
+  const out = new ProtoWriter([])
+  const failed: i32 = relay(new ProtoReader(w.buf, 0, w.end), out, 2)
+  console.log(`${w.end} bytes in, ${out.end} out, failed ${failed}`)
+
+  const r = new ProtoReader(out.buf, 0, out.end)
+  while (r.next()) {
+    if (r.field === 1) {
+      console.log(`value ${r.double()}`)
+    } else if (r.field === 3) {
+      console.log(`scale ${r.float()}`)
+    } else {
+      console.log(`field ${r.field}: ${r.len()} bytes`)
+    }
+  }
+  return failed
+}
+```
+
+```console
+$ nish run relay.ts
+41 bytes in, 39 out, failed 0
+value 1.5
+scale 2
+field 4: 3 bytes
+field 5: 8 bytes
+field 6: 8 bytes
+```
+
+**A malformed message is a code, never a panic.** The first fault sets
+`failed` to a negative `PROTO_ERR_*` code, and every later call answers
+`false` or 0 until `reset`: a varint longer than ten bytes, a value or length
+past the end of the span, field number 0, the group wire types, nesting past
+`PROTO_MAX_DEPTH` (100), or a read of the wrong wire type. Your own mistakes
+are codes too: a window outside its array is `PROTO_ERR_WINDOW`, and a field
+number outside 1 to 2^29 − 1 given to the writer is `PROTO_ERR_FIELD`. The
+module keeps no panic site, so the example builds without `--allow-panics`.
+What the reader refuses, and the tests that pin it, are in its
+[security record](https://github.com/amritk/nish/blob/main/docs/security/protobuf.md).
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports
