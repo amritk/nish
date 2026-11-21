@@ -1,0 +1,1 @@
+usage: prefork-server <port>   (NISH_WORKERS=<n> for n workers)

@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const target = path.join(root, "std", "json-tokenizer.ts")
 
-/** `JSON_TOK_SMALLEST_POWER` and `JSON_TOK_LARGEST_POWER`. */
+/** The table's first and last `q`: `jsonTokPowerOfFive` answers 0 below one and infinity above the other. */
 const SMALLEST = -342
 const LARGEST = 308
 

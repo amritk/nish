@@ -602,9 +602,9 @@ function loadMaybeValue(emitter: Emitter, parts: MaybeParts): string -> @loadMay
 function callValueAt(emitter: Emitter, read: FunctionSig, operands: string): string -> @callValueAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
-  calls: Emitter.llvmAbi FunctionSig.visibleOutside IRFunction.emitValue TypeTable.resultByValue nish_str_concat privateAbi unpackReturnedResult
-  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 unpackReturnedResult#0
-  pointer read: size=224 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  calls: Emitter.llvmAbi FunctionSig.visibleOutside IRFunction.emitValue TypeTable.resultByValue nish_str_concat noEntryOperand privateAbi unpackReturnedResult
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 noEntryOperand#0 unpackReturnedResult#0
+  pointer read: size=224 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 noEntryOperand#1
   stackSites=0 stackLocals=0
   local +0:9 isPrivate: boolean (const)
   callee +0:21 privateAbi -> @privateAbi
@@ -612,8 +612,20 @@ function callValueAt(emitter: Emitter, read: FunctionSig, operands: string): str
   local +1:9 value: string (const)
   callee +1:17 IRFunction.emitValue -> @IRFunction.emitValue
   callee +2:13 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +2:87 noEntryOperand -> @noEntryOperand
   callee +4:8 TypeTable.resultByValue -> @TypeTable.resultByValue
   callee +7:10 unpackReturnedResult -> @unpackReturnedResult
+function noEntryOperand(emitter: Emitter, read: FunctionSig): string -> @noEntryOperand [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.llvmAbi
+  calls: Emitter.llvmAbi FunctionSig.visibleOutside nish_panic_index nish_str_concat privateAbi
+  pointer emitter: size=424 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0
+  pointer read: size=224 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
+  stackSites=0 stackLocals=0
+  local +0:9 type: i32 (const)
+  callee +1:13 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +1:35 privateAbi -> @privateAbi
+  callee +1:60 FunctionSig.visibleOutside -> @FunctionSig.visibleOutside
 function valueOperand(emitter: Emitter, sig: FunctionSig, index: i32, value: string): string -> @valueOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via packResultObject

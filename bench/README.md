@@ -3004,6 +3004,17 @@ in is in parentheses.
   0.28.0 and Rust's `FxHashMap` (`node bench/map-keys/run.mjs`), the
   measurement behind the keyed integer hash; its README holds the protocol and
   the result. Not part of this suite.
+- `emit-ts-strings/`: what reading a `string` costs a program written back
+  out with `--emit-ts`, beside the same program built natively and for
+  wasm32-wasi (`node bench/emit-ts-strings/run.mjs`). `main.ts` loads YAML
+  into a `JsonDocument` and parses JSON, each from a generated document of
+  about 100 KB and about 3 MB; one YAML input carries text that is not ASCII,
+  so `runtime/core/strings.mjs`' encoded path is timed as well as its ASCII
+  one. Every iteration is folded into a checksum the sides must agree on, and
+  `--against <strings.mjs>` runs a second emit-ts side over another copy of
+  that file in the same interleaved rounds. The script's header holds the
+  protocol, and #2108 the figures. Not part of
+  this suite.
 - `wp48-refs/`: one AST-shaped tree in five layouts, pointer graphs against
   records in arrays addressed by `i32` (`node bench/wp48-refs/run.mjs`), the
   measurements behind the lean sibling-link layout

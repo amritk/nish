@@ -75,6 +75,15 @@ const JSON_NUMBER_LOWER_E: i32 = 101
 /** The byte at `i` of `s`, or `-1` past its end. */
 const jsonNumberByte = (s: string, i: i32): i32 => (i < toI32(s.length) ? toI32(s.charCodeAt(i)) : -1)
 
+/** A digit's value, with room for the low four bits of any byte. */
+type JsonNumberDigit = integer<0, 15>
+
+/** What one digit's subtraction takes from the next one up. */
+type JsonNumberBorrow = integer<0, 1>
+
+/** A byte of the text, as `charCodeAt` answers it. */
+type JsonNumberByte = integer<0, 65535>
+
 const jsonNumberIsDigit = (c: i32): boolean => c >= JSON_NUMBER_DIGIT_0 && c <= JSON_NUMBER_DIGIT_9
 
 /**
@@ -106,9 +115,8 @@ class JsonNumberParts {
   /** Where the integer part's digits start, and how many there are. */
   private intStart: i32
   private intLen: i32
-  /** Where the fraction's digits start, after the point, and how many there are. */
+  /** Where the fraction's digits start, after the point. */
   private fracStart: i32
-  private fracLen: i32
   /** The first significant digit's place among the integer and fraction digits run together. */
   private first: i32
   /**
@@ -135,6 +143,14 @@ class JsonNumberParts {
    *   class is not exported.
    */
   last: i64
+  /**
+   * `last` plus 2^62, which no exponent's size reaches, so that two of them
+   * subtract in `u64` without a sign to carry.
+   *
+   * @internal Read by the `jsonNumber*` free functions of this module; the
+   *   class is not exported.
+   */
+  lastBiased: u64
 
   constructor(text: string) {
     this.text = text
@@ -144,28 +160,39 @@ class JsonNumberParts {
     this.intStart = 0
     this.intLen = 0
     this.fracStart = 0
-    this.fracLen = 0
     this.first = 0
     this.count = 0
     this.lead = toI64(0)
     this.last = toI64(0)
+    this.lastBiased = toU64(0)
     this.code = this.read()
   }
 
   /**
-   * The k-th significant digit, `0 <= k < count`, as `0` to `9`.
+   * The k-th significant digit, `0 <= k < count`, as `0` to `9`: the low four
+   * bits of an ASCII digit are its value.
    *
    * @internal Read by the `jsonNumber*` free functions of this module; the
    *   class is not exported.
    */
-  digit(k: i32): i32 {
-    return this.placeDigit(this.first + k)
+  digit(k: i32): JsonNumberDigit {
+    // Places run over digits `read` found in the text, so the sum fits.
+    const value: i32 = this.placeByte(toI32(toI64(this.first) + toI64(k))) & 15
+    return value
   }
 
-  /** The digit at place `p` of the integer and fraction digits run together. */
-  private placeDigit(p: i32): i32 {
-    const at: i32 = p < this.intLen ? this.intStart + p : this.fracStart + (p - this.intLen)
-    return toI32(this.text.charCodeAt(at)) - JSON_NUMBER_DIGIT_0
+  /** The byte of the digit at place `p` of the integer and fraction digits run together. */
+  private placeByte(p: i32): JsonNumberByte {
+    const s: string = this.text
+    const intLen: i32 = this.intLen
+    // Both positions are inside the text `read` measured them in, so they fit.
+    const at: i32 =
+      p < intLen
+        ? toI32(toI64(this.intStart) + toI64(p))
+        : toI32(toI64(this.fracStart) + toI64(p) - toI64(intLen))
+    // Every place `read` counted is a digit of the text, so a place outside
+    // it is never asked for; the `0` only keeps the read in bounds.
+    return at >= 0 && at < toI32(s.length) ? toI32(s.charCodeAt(at)) : 48
   }
 
   /** Reads the text against RFC 8259's number grammar; answers `0` or a code. */
@@ -175,83 +202,99 @@ class JsonNumberParts {
     let i: i32 = 0
     if (jsonNumberByte(s, i) === JSON_NUMBER_MINUS) {
       this.negative = true
-      i += 1
+      i = 1
     }
-    this.intStart = i
+    const intStart: i32 = i
+    this.intStart = intStart
     const lead: i32 = jsonNumberByte(s, i)
-    if (!jsonNumberIsDigit(lead)) {
+    if (i >= n || !jsonNumberIsDigit(lead)) {
       return JSON_NUMBER_ERR_SYNTAX
     }
     i += 1
     if (lead !== JSON_NUMBER_DIGIT_0) {
-      while (jsonNumberIsDigit(jsonNumberByte(s, i))) {
+      while (i < n && jsonNumberIsDigit(toI32(s.charCodeAt(i)))) {
         i += 1
       }
     }
-    this.intLen = i - this.intStart
-    if (jsonNumberByte(s, i) === JSON_NUMBER_DOT) {
+    const intLen: i32 = i - intStart
+    this.intLen = intLen
+    let fracLen: i32 = 0
+    if (i < n && toI32(s.charCodeAt(i)) === JSON_NUMBER_DOT) {
       i += 1
-      this.fracStart = i
-      while (jsonNumberIsDigit(jsonNumberByte(s, i))) {
+      const fracStart: i32 = i
+      this.fracStart = fracStart
+      while (i < n && jsonNumberIsDigit(toI32(s.charCodeAt(i)))) {
         i += 1
       }
-      this.fracLen = i - this.fracStart
-      if (this.fracLen === 0) {
+      fracLen = i - fracStart
+      if (fracLen === 0) {
         return JSON_NUMBER_ERR_SYNTAX
       }
     }
-    let exponent: i64 = toI64(0)
+    // The exponent's size and sign apart, so that no step can overflow: the
+    // size stops growing past the bound.
+    let size: u64 = toU64(0)
+    let minus: boolean = false
     // An exponent past the bound is refused only once the digits are known
     // not all to be zero: `0e9999999999` is zero, as any other zero is.
     let big: boolean = false
     const e: i32 = jsonNumberByte(s, i)
-    if (e === JSON_NUMBER_LOWER_E || e === JSON_NUMBER_UPPER_E) {
+    if (i < n && (e === JSON_NUMBER_LOWER_E || e === JSON_NUMBER_UPPER_E)) {
       i += 1
-      let minus: boolean = false
       const sign: i32 = jsonNumberByte(s, i)
-      if (sign === JSON_NUMBER_PLUS || sign === JSON_NUMBER_MINUS) {
+      if (i < n && (sign === JSON_NUMBER_PLUS || sign === JSON_NUMBER_MINUS)) {
         minus = sign === JSON_NUMBER_MINUS
         i += 1
       }
       if (!jsonNumberIsDigit(jsonNumberByte(s, i))) {
         return JSON_NUMBER_ERR_SYNTAX
       }
-      while (jsonNumberIsDigit(jsonNumberByte(s, i))) {
+      while (i < n) {
+        const c: i32 = toI32(s.charCodeAt(i))
+        if (!jsonNumberIsDigit(c)) {
+          break
+        }
         // Adding stops past the bound, so a thousand-digit exponent neither
         // overflows nor is mistaken for a small one.
         if (!big) {
-          exponent = exponent * toI64(10) + toI64(jsonNumberByte(s, i) - JSON_NUMBER_DIGIT_0)
-          big = exponent > JSON_NUMBER_MAX_EXPONENT
+          size = size * toU64(10) + toU64(c - JSON_NUMBER_DIGIT_0)
+          big = size > toU64(JSON_NUMBER_MAX_EXPONENT)
         }
         i += 1
-      }
-      if (minus) {
-        exponent = -exponent
       }
     }
     if (i !== n) {
       return JSON_NUMBER_ERR_SYNTAX
     }
-    const places: i32 = this.intLen + this.fracLen
+    // Both counts are of digits in the text, so the sum fits.
+    const places: i32 = toI32(toI64(intLen) + toI64(fracLen))
     let first: i32 = 0
-    while (first < places && this.placeDigit(first) === 0) {
+    while (first < places && this.placeByte(first) === JSON_NUMBER_DIGIT_0) {
       first += 1
     }
-    if (first === places) {
+    if (first >= places || places <= 0) {
       return 0
     }
     if (big) {
       return JSON_NUMBER_ERR_EXPONENT
     }
     let last: i32 = places - 1
-    while (this.placeDigit(last) === 0) {
+    // The digit at `first` is not a zero, so the walk stops there at the latest.
+    while (last > 0 && this.placeByte(last) === JSON_NUMBER_DIGIT_0) {
       last -= 1
     }
     this.zero = false
     this.first = first
-    this.count = last - first + 1
-    this.lead = exponent + toI64(this.intLen - 1 - first)
-    this.last = exponent + toI64(this.intLen - 1 - last)
+    // Both are places, so the count fits.
+    this.count = toI32(toI64(last) - toI64(first) + toI64(1))
+    // A digit's exponent is the exponent plus `intLen - 1 - place`. The parts
+    // that add and the parts that take away are summed apart, each below
+    // 2^51, so the one subtraction is exact in `u64` and its result an `i64`.
+    const up: u64 = toU64(intLen) + (minus ? toU64(0) : size)
+    const down: u64 = minus ? size + toU64(1) : toU64(1)
+    this.lead = toI64(up - (down + toU64(first)))
+    this.last = toI64(up - (down + toU64(last)))
+    this.lastBiased = up + (toU64(1) << toU64(62)) - (down + toU64(last))
     return 0
   }
 }
@@ -309,8 +352,7 @@ export const jsonNumberCompare = (a: string, b: string): i32 => {
   if (sx === 0) {
     return 0
   }
-  const size: i32 = jsonNumberCompareSize(x, y)
-  return sx > 0 ? size : -size
+  return sx > 0 ? jsonNumberCompareSize(x, y) : jsonNumberCompareSize(y, x)
 }
 
 /**
@@ -338,7 +380,8 @@ export const jsonNumberCanonical = (text: string): string => {
     bytes.push(toU8(JSON_NUMBER_MINUS))
   }
   for (let k: i32 = 0; k < p.count; k++) {
-    bytes.push(toU8(p.digit(k) + JSON_NUMBER_DIGIT_0))
+    const digit: JsonNumberDigit = p.digit(k)
+    bytes.push(toU8(digit + JSON_NUMBER_DIGIT_0))
   }
   const digits: string = String.fromBytes(bytes, 0, toI32(bytes.length))
   return `${digits}e${p.last}`
@@ -366,40 +409,42 @@ const jsonNumberAtLeast = (rem: u8[], d: JsonNumberParts): boolean => {
  * has; each step shifts a digit in and takes the divisor away at most nine
  * times.
  */
-const jsonNumberDividesLong = (v: JsonNumberParts, d: JsonNumberParts, total: i64): boolean => {
+const jsonNumberDividesLong = (v: JsonNumberParts, d: JsonNumberParts, total: i32): boolean => {
   const n: i32 = d.count
-  const rem: u8[] = []
-  for (let k: i32 = 0; k <= n; k++) {
+  const rem: u8[] = [0]
+  for (let k: i32 = 0; k < n; k++) {
     rem.push(0)
   }
-  for (let step: i64 = toI64(0); step < total; step++) {
+  const width: i32 = toI32(rem.length)
+  // `rem` was just given `n + 1` bytes, so this never answers: it is what
+  // lets every read of the top byte below go unchecked.
+  if (toI32(rem.length) < 1) {
+    return false
+  }
+  for (let step: i32 = 0; step < total; step++) {
+    let next: i32 = 0
+    if (step < v.count) {
+      next = v.digit(step)
+    }
     // The remainder is below the divisor, so its top byte is zero and the
     // shift loses nothing.
-    for (let k: i32 = 0; k + 1 < toI32(rem.length); k++) {
-      rem[k] = rem[k + 1]
+    for (let k: i32 = 0; k < width; k++) {
+      rem[k] = k + 1 < width ? rem[k + 1] : toU8(next)
     }
-    let next: i32 = 0
-    if (step < toI64(v.count)) {
-      next = v.digit(toI32(step))
-    }
-    rem[toI32(rem.length) - 1] = toU8(next)
     // Below ten divisors now: a non-zero top byte is n + 1 digits against n,
     // so certainly at least the divisor; otherwise the low n digits decide.
     while (rem[0] > 0 || jsonNumberAtLeast(rem, d)) {
-      let borrow: i32 = 0
-      for (let k: i32 = toI32(rem.length) - 1; k >= 1; k--) {
-        let x: i32 = toI32(rem[k]) - d.digit(k - 1) - borrow
-        borrow = 0
-        if (x < 0) {
-          x += 10
-          borrow = 1
-        }
-        rem[k] = toU8(x)
+      let borrow: JsonNumberBorrow = 0
+      for (let k: i32 = width - 1; k >= 1; k--) {
+        const y: JsonNumberDigit = d.digit(k - 1)
+        const x: i32 = toI32(rem[k]) - y - borrow
+        borrow = x < 0 ? 1 : 0
+        rem[k] = toU8(x < 0 ? x + 10 : x)
       }
       rem[0] = toU8(toI32(rem[0]) - borrow)
     }
   }
-  for (let k: i32 = 0; k < toI32(rem.length); k++) {
+  for (let k: i32 = 0; k < width; k++) {
     if (rem[k] !== 0) {
       return false
     }
@@ -411,14 +456,19 @@ const jsonNumberDividesLong = (v: JsonNumberParts, d: JsonNumberParts, total: i6
  * The same for a divisor of at most 18 digits, whose remainder fits a `u64`
  * with a digit shifted in: one multiply and one remainder per step.
  */
-const jsonNumberDividesShort = (v: JsonNumberParts, d: JsonNumberParts, total: i64): boolean => {
+const jsonNumberDividesShort = (v: JsonNumberParts, d: JsonNumberParts, total: i32): boolean => {
   let divisor: u64 = toU64(0)
   for (let k: i32 = 0; k < d.count; k++) {
     divisor = divisor * toU64(10) + toU64(d.digit(k))
   }
+  // The divisor's first digit is not a zero, so this never answers: it is
+  // what lets the remainders below go unchecked.
+  if (divisor === toU64(0)) {
+    return false
+  }
   let rem: u64 = toU64(0)
-  for (let step: i64 = toI64(0); step < total; step++) {
-    const digit: u64 = step < toI64(v.count) ? toU64(v.digit(toI32(step))) : toU64(0)
+  for (let step: i32 = 0; step < total; step++) {
+    const digit: u64 = step < v.count ? toU64(v.digit(step)) : toU64(0)
     rem = (rem * toU64(10) + digit) % divisor
   }
   return rem === toU64(0)
@@ -460,19 +510,23 @@ export const jsonNumberMultipleOf = (value: string, divisor: string): i32 => {
   // value = V * 10^v.last and divisor = D * 10^d.last, neither V nor D ending
   // in a zero. A value whose last digit is finer than the divisor's would need
   // D * 10^k to divide V for some k above zero, and then ten would divide V.
-  const gap: i64 = v.last - d.last
-  if (gap < toI64(0)) {
+  if (v.lastBiased < d.lastBiased) {
     return 0
   }
-  const total: i64 = toI64(v.count) + gap
+  // Both exponents are below 2^52 either way, so neither sum wraps.
+  const total: u64 = toU64(v.count) + (v.lastBiased - d.lastBiased)
   const short: boolean = d.count <= JSON_NUMBER_SMALL_DIVISOR
-  // A module constant is a plain number under Node, where an `i64` is a
-  // BigInt: comparing the two is allowed, dividing them is not.
-  if (total > (short ? JSON_NUMBER_MAX_STEPS : toI64(JSON_NUMBER_MAX_STEPS) / toI64(d.count))) {
+  // A long divisor's steps each walk its digits: `total` past the bound over
+  // `d.count` is `total * d.count` past the bound, and with `total` within the
+  // bound that product is far below 2^64.
+  const most: u64 = toU64(JSON_NUMBER_MAX_STEPS)
+  if (total > most || (!short && total * toU64(d.count) > most)) {
     return JSON_NUMBER_ERR_GAP
   }
+  // Within the bound, 2^20, so the count fits.
+  const steps: i32 = toI32(total)
   if (short) {
-    return jsonNumberDividesShort(v, d, total) ? 1 : 0
+    return jsonNumberDividesShort(v, d, steps) ? 1 : 0
   }
-  return jsonNumberDividesLong(v, d, total) ? 1 : 0
+  return jsonNumberDividesLong(v, d, steps) ? 1 : 0
 }

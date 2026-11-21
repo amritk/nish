@@ -1861,7 +1861,7 @@ function skipDigits(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigits [expor
   callee +1:10 skipDigitsWalk -> @nish.skipDigitsWalk
   callee +1:28 bytesRunStart -> @nish.bytesRunStart
 function skipJsonText(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonText [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
   calls: nish.bytesRunEnd nish.bytesRunStart nish.skipJsonTextWalk
   pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipJsonTextWalk#0
@@ -1881,10 +1881,19 @@ function skipJsonPlain(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlain 
   callee +1:10 skipJsonPlainWalk -> @nish.skipJsonPlainWalk
   callee +1:31 bytesRunStart -> @nish.bytesRunStart
 function copyBytes(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tryCopyBytes
+  escaping: at count from
+  calls: nish.tryCopyBytes nish_panic
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.tryCopyBytes#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.tryCopyBytes#2
+  stackSites=0 stackLocals=0
+  callee +0:8 tryCopyBytes -> @nish.tryCopyBytes
+function tryCopyBytes(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): boolean -> @nish.tryCopyBytes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.copyBytesWalk
   escaping: at count from
-  calls: nish.copyBytesWalk nish_panic
+  calls: nish.copyBytesWalk
   pointer dst: size=0 writesThrough=true captured=false passedTo=nish.copyBytesWalk#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.copyBytesWalk#2
   stackSites=0 stackLocals=0
@@ -1903,29 +1912,30 @@ function skipDigitsWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigitsWal
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 c: i32 (const)
-function bytesUtf8Length(b: u8[], i: i32, to: i32): i32 -> @nish.bytesUtf8Length
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+function bytesUtf8End(b: u8[], i: i32, to: i32): i32 -> @nish.bytesUtf8End
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
-  calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 lead: i32 (const)
   local +1:7 low: i32 (let)
   local +2:7 high: i32 (let)
   local +3:7 n: i32 (let)
-  local +28:9 second: i32 (const)
-  local +32:7 k: i32 (let)
-  local +34:11 c: i32 (const)
+  local +30:7 j: i32 (let)
+  local +31:7 k: i32 (let)
+  local +36:11 c: i32 (const)
+  local +37:11 lowest: i32 (const)
+  local +38:11 highest: i32 (const)
 function skipJsonTextWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonTextWalk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
-  calls: nish.bytesUtf8Length nish_panic_overflow
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesUtf8Length#0
+  calls: nish.bytesUtf8End
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesUtf8End#0
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 c: i32 (const)
-  local +4:13 n: i32 (const)
-  callee +4:22 bytesUtf8Length -> @nish.bytesUtf8Length
+  local +4:13 end: i32 (const)
+  callee +4:24 bytesUtf8End -> @nish.bytesUtf8End
 function skipJsonPlainWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlainWalk
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
@@ -1934,14 +1944,20 @@ function skipJsonPlainWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPl
   local +0:7 i: i32 (let)
   local +2:11 c: i32 (const)
 function copyBytesWalk(dst: u8[], at: i32, src: readonly u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_panic_index nish_panic_overflow
+  escaping: at count from
   pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local -7:9 dstLength: i32 (const)
+  local -6:9 srcLength: i32 (const)
+  local -4:9 d: i32 (let)
+  local -3:9 s: i32 (let)
   local -2:9 k: i32 (let)
-  local +5:7 k: i32 (let)
+  local +9:7 d: i32 (let)
+  local +10:7 s: i32 (let)
+  local +11:7 k: i32 (let)
 module std/compress/gzip.ts [package nish]
 import Crc32 from "nish/compress/checksum" -> struct Crc32
 import DEFLATE_ERR_OUTPUT_LIMIT from "nish/compress/deflate" -> const DEFLATE_ERR_OUTPUT_LIMIT

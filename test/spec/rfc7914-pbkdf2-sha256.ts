@@ -6,11 +6,12 @@
 // parentheses; every requirement's text is quoted above its checks.
 // Property samples were chosen by the solver (boundaries) and a seeded PRNG.
 //
-// vector-contract-sha256: b5edb88222a6b19f58c562216fa96456e6752f27b00b44052a51edebd2acb1c7
+// vector-contract-sha256: fbf819d886e07e0568105b4aab814aa02a4549727b57fbbf941b59e047642a45
 
 import { Suite } from "nish/testing";
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
 import { Secret, expose, secret, wipe } from "nish:secret";
+import { wrappingAdd } from "nish:unsafe";
 
 /** `bytes` as lowercase hex, the way the RFC prints them. */
 const hexOf = (bytes: u8[]): string => {
@@ -51,6 +52,49 @@ const nibble = (c: number): i32 => {
   return v - 48;
 };
 
+/** Equal contents, or both null. */
+const bytesEq = (a: u8[] | null, b: u8[] | null): boolean => {
+  if (a === null || b === null) {
+    return a === null && b === null;
+  }
+  const n: i32 = toI32(a.length);
+  if (n !== toI32(b.length)) {
+    return false;
+  }
+  for (let i: i32 = 0; i < n; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const isNullBytes = (b: u8[] | null): boolean => b === null;
+
+/** `b[from, to)`, both ends clamped into the array. */
+const sliceBytes = (b: u8[], from: i32, to: i32): u8[] => {
+  const n: i32 = toI32(b.length);
+  let lo: i32 = from;
+  if (lo < 0) {
+    lo = 0;
+  }
+  if (lo > n) {
+    lo = n;
+  }
+  let hi: i32 = to;
+  if (hi < lo) {
+    hi = lo;
+  }
+  if (hi > n) {
+    hi = n;
+  }
+  const out: u8[] = [];
+  for (let i: i32 = lo; i < hi; i += 1) {
+    out.push(b[i]);
+  }
+  return out;
+};
+
 /** A fresh copy of `b`. */
 const copyBytes = (b: u8[]): u8[] => {
   const out: u8[] = [];
@@ -59,6 +103,26 @@ const copyBytes = (b: u8[]): u8[] => {
   }
   return out;
 };
+
+/**
+ * `unwrap` without exceptions: a null is recorded and stands in as no bytes,
+ * and the sample that saw it fails.
+ */
+class Unwrap {
+  sawNull: boolean
+
+  constructor() {
+    this.sawNull = false
+  }
+
+  get(b: u8[] | null): u8[] {
+    if (b !== null) {
+      return b
+    }
+    this.sawNull = true
+    return []
+  }
+}
 
 /** pbkdf2HmacSha256 on plain bytes: secrets are copied in, wiped after. */
 const plain_pbkdf2HmacSha256 = (a_password: u8[], a_salt: u8[], a_iterations: i32, a_length: i32): u8[] | null => {
@@ -99,11 +163,235 @@ const clause_PBKDF2_1 = (t: Suite): boolean => t.eqStr("[PBKDF2-1] RFC 7914 §11
  */
 const clause_PBKDF2_2 = (t: Suite): boolean => t.eqStr("[PBKDF2-2] RFC 7914 §11: 80,000 iterations, a 64-byte key (R-PBKDF2, R-ASCII)", hexOrNull(plain_pbkdf2HmacSha256(unhex("50617373776f7264"), unhex("4e61436c"), 80000, 64)), "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d");
 
+/**
+ * dkLen bytes, a prefix of every longer key
+ *
+ * R-PBKDF2 — RFC 7914 §11, DEFINITION:
+ *   The test vectors below can be used to verify the PBKDF2-HMAC-SHA-256
+ *   [RFC2898] function.
+ */
+const clause_P_PREFIX = (t: Suite): boolean => {
+  const table_pw: string[] = [
+    "d505f522dda7af99d3270c15acf2c07d4165da7c37",
+    "",
+    "85",
+    "e0409505be122b17f718d3e06c4329469101e549fbf0e5",
+    "c8f7ef819e25c5bc7936e5c683de6019e9631dfe59937889",
+    "32",
+    "6fd1e799e9f7bd955bfca586a9e5fa0a182aa0dbf1cf8b0f",
+    "6d7ae041d18ce31189b056d64ace343974f74ba616635be7",
+    "ea141404eecdb8d1bf2444c25fcad428",
+    "2f5614828ad591caeca10001665bdf09ed",
+    "0405a8b29c",
+    "",
+    "30045a02701c16ae6ca3433384c5dd102619",
+    "780e82c433af4ac85dbf6bab27a298",
+    "2fe2706ca2ee",
+    "09c910292175afedb87d05",
+    "8d252b0eecb638ec31b0694cd5291d8eef",
+    "87ece7d410204df331585bed2d",
+    "3b4f3fde477926b001d4e6dae5219bda287fd429d14431ba",
+    "502d2fff12ca42b26108cf4d4f93240aab",
+    "322b41280d",
+    "86a8b68e4a7984e6f50773",
+    "6661778f5cd5d155f8e399fb9c0bde20e97e2783c9a0",
+    "7ad54f2927da96652572a69eef3b",
+    "6c99ec5926b583c889ae3c1ae5a0780c",
+    "9ad6b6",
+    "acb2b303cb",
+    "",
+    "95a41c697c5af68b9108971df0260f22",
+    "c5f65e5cce9cc5fb59",
+    "782da3d3b85ba341189653bbe4d898ee7decd4",
+    "bba1da183c72e13f2319b2c0834471",
+  ];
+  const table_salt: string[] = [
+    "472da1c685a747",
+    "342ca06019b44ee973ffbb72e7ae4adc15c4a4fdd03b6e22",
+    "285ff16c",
+    "c7",
+    "9e52f02e9fb46cf875be54b1",
+    "",
+    "dc",
+    "b0be3db0a3cd06696815872a50c5f85ff136dde4ceab03",
+    "94a3c5f3a079f585e12523c89a47e810409f2fc51ad35394",
+    "6a9045a651d2f574",
+    "cb6b6b9cee4273ca7d",
+    "eb89fc6cda88d7497db3a6eadc9ffbdb861f0e09a3",
+    "45d9b65d764dcd9d78c46faf812ae7fde7",
+    "06e16f486bca0f86fa",
+    "5599885fb69ce9ddec29f9d7588edc",
+    "67df87975a964685a60a40647475f21b",
+    "44e2ca9361bd1dcf8d",
+    "87e08d8e8751d4ea26e576ea29d61876c54ac5eb",
+    "f3",
+    "4144520114a206d3c1fc1cb78f0c4961ca924c84",
+    "ca315ec0af15",
+    "123c9d4261f6839f46",
+    "0f018470d75aec32",
+    "28d9861588",
+    "c0d93ad436ce81afacec88ade8bee1fa5c",
+    "a70caf95",
+    "db266f13b02e1e62480a6b76d1",
+    "d01e2f3efcc1d014ecabde5ef0ab85509edcea",
+    "b73052192bfd697b58cd",
+    "e3fbf78a1edb",
+    "03b141d7b897641a137a",
+    "0c41",
+  ];
+  const table_n: i32[] = [1, 1, 2, 3, 1, 1, 2, 1, 2, 1, 2, 3, 1, 2, 1, 3, 2, 2, 3, 2, 3, 1, 1, 3, 2, 3, 2, 2, 3, 1, 1, 2];
+  const table_a: i32[] = [15, 24, 11, 29, 26, 12, 1, 35, 9, 39, 14, 7, 1, 2, 39, 40, 39, 38, 1, 16, 31, 32, 37, 28, 17, 11, 15, 17, 24, 15, 30, 37];
+  const table_b: i32[] = [16, 20, 13, 5, 31, 5, 36, 23, 6, 16, 30, 33, 32, 1, 29, 2, 0, 1, 39, 40, 33, 6, 11, 10, 27, 12, 34, 2, 0, 2, 20, 30];
+  for (let i: i32 = 0; i < 32; i += 1) {
+    const v_pw: u8[] = unhex(table_pw[i]);
+    const v_salt: u8[] = unhex(table_salt[i]);
+    const v_n: i32 = table_n[i];
+    const v_a: i32 = table_a[i];
+    const v_b: i32 = table_b[i];
+    const u: Unwrap = new Unwrap();
+    const v_k: u8[] | null = plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, wrappingAdd(v_a, v_b));
+    const holds: boolean = (!isNullBytes(v_k) && (toI32(u.get(v_k).length) === wrappingAdd(v_a, v_b)) && bytesEq(u.get(plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, v_a)), sliceBytes(u.get(v_k), 0, v_a)));
+    if (u.sawNull || !holds) {
+      let why: string = "the assertion is false";
+      if (u.sawNull) {
+        why = "unwrap met a null";
+      }
+      return t.fail("[P-PREFIX] dkLen bytes, a prefix of every longer key (R-PBKDF2)", `sample ${i + 1} of 32 (len(pw) = ${toI32(v_pw.length)}, len(salt) = ${toI32(v_salt.length)}, n = ${v_n}, a = ${v_a}, b = ${v_b}): ${why}`);
+    }
+  }
+  return t.pass("[P-PREFIX] dkLen bytes, a prefix of every longer key (R-PBKDF2) — 32 samples");
+};
+
+/**
+ * a count or a length below 1 is null
+ *
+ * R-REFUSE — rfc7914-pbkdf2-sha256 §3.1, MUST:
+ *   pbkdf2HmacSha256 MUST return null when the iteration count or the
+ *   derived-key length is less than 1.
+ */
+const clause_P_REFUSE = (t: Suite): boolean => {
+  const table_pw: string[] = [
+    "645c1bbe",
+    "b7182f5edc2926be401dcd8c68c946e37f32caac",
+    "85ba6d5f67452adbafef51a1a2",
+    "cbb205e052cc71b2afc96d4e84e1bf06",
+    "f139595dd66c1dd6e97b3d11caf7f8",
+    "",
+    "f0a11c30",
+    "",
+    "8e",
+    "26889d173754e877361075d7687f261361e2919a2bbfde",
+    "ce19a369d9383fe05da274ead575e632a0d1da963be2a8dd",
+    "1eb56c69b1fccb85",
+    "fffac1a6824c63",
+    "763be1e84e",
+    "50111b2443b3ea456f58",
+    "72433905ed62959a00c709d93e08fb70aa38a4b9",
+    "eefb4835ef5b",
+    "0527dc4eb7bbf21dfbfc55fe",
+    "2c5ee995b6ced0b005bd44ea459309493c7d39cb74",
+    "52f60671bee6fd2bd306e75ea1d126e015a55f32",
+    "a502678efea9b10275d8c257b793978fc66e09836f8e",
+    "c8a4f7844bb085",
+    "8d9a301d",
+    "e8524fd8420b770f38da2402f63009fb23c3525b3c308d70",
+    "f47e58e8af24c707842b",
+    "68",
+    "e53c129beb15c3e9b8",
+    "6135a1c0105597fd372848cc500e194007d1c010bb620b",
+    "",
+    "a06ce0",
+    "08813b58f7539d2dba2f",
+    "7adde59f4c7278cbe8ac",
+    "35633887e54babb244de",
+    "3ac9b3dfc27b094c412e16",
+    "4ca7a82b9c5d2eed59b6d5752504780d0b4017cd7af442",
+    "a3adbd",
+    "41067c2c2b029ceb12d5110f90ad27a3",
+    "666d64a54d8ae544",
+    "574f00324644e036cc7161bbea",
+    "6523cf883c6f588c855762e4f1b2a0",
+    "80a107e2de62bb6c30b4d24a55b14aaf391563",
+    "01e65579812239a42a775bad5be1e8",
+    "c4c86806083c28185b113eabef9f3175366662b3",
+    "ec1fc238496f2d4e9a3cab438bd47d85",
+    "0d530c1240caac61fd4fee00bb01d005cbe60988a13c04",
+    "8f5d",
+    "",
+    "ea",
+  ];
+  const table_salt: string[] = [
+    "a3",
+    "f2d79ecb4b9b28dbfa38af095d",
+    "6e0c89f65fa0acfa524f38ac1c89f2ed9c",
+    "05e364be3f30e9",
+    "80a6d1f09b10423996be9add0f",
+    "ebc463af6b08c5a1c35925609690767977",
+    "",
+    "2453952b4300da7922f1fc5ff564eb6351d1fff0e3078a2f",
+    "1d38",
+    "f464866a71df",
+    "112df2",
+    "",
+    "74",
+    "f90d9fb9f53eee209234da2eb8c96d5ded5bb0affd4fd6",
+    "c94d492086d9bd42607728d3c1a7e1171b76e5783f44eddc",
+    "574cc7fa",
+    "f24eedd66bd6a2ea0a01ff72f2f518a63c",
+    "0113304e",
+    "260ed4",
+    "ea51620b992f30b4d6b6ebac6fb0b1751d7498588a2a",
+    "a9a13a1cca1f",
+    "6d8816f8e6a0afd7b7a36546b46b6d6b",
+    "226c7bdfa2b2d67e9d0eb39363858d616c113f97a9fd9d6a",
+    "9e37de946454420431be70bffb08fb",
+    "c7",
+    "1c3b2cf27a5604a0d1e3874d5fc70bb94405906a3c57604c",
+    "1eeac20713dcb41391d9837b",
+    "",
+    "40951a1156bf3728c36bae604d78",
+    "0c9fc03a7d5e404b25656f1243f896adfebbe9a4ba783717",
+    "88",
+    "2d",
+    "e24ad1b790cebf4150",
+    "2ae99d6c7428dbaf4d1bc57ce2300cd6af2121",
+    "822ad9a01d76",
+    "933bd57ba42373",
+    "cefb455e2fd6504f09153ffade",
+    "82b04b4c",
+    "90f3a373b8c065219839ce78cf",
+    "728721c1d60c006d2163302b755caf2d75b31fbe1e",
+    "c906340a40bc003ef767",
+    "d2932d420c1f252267452d534a4dfab518b6",
+    "3613c1742ccc52a771187c9dbf85",
+    "b5deaa7b36bbe03ed2",
+    "",
+    "49482d973503a8d1e88d93a557091b7117653f",
+    "452e170555a5e924dc",
+    "12ec6aab7976ea240f9330a68e5fdd",
+  ];
+  const table_n: i32[] = [1, 0, 1, 2, 1, 0, -2, -1, -1, -1, -2, 0, -2, 0, -2, -2, -1, 1, 2, 2, -2, 2, 2, 0, -1, 0, 1, -2, 0, -2, 2, 1, 1, 2, 1, 1, 2, -2, -2, 0, 1, 2, -2, -1, 2, 1, 1, 1];
+  const table_len: i32[] = [2, -2, 0, -1, 0, 1, 2, 2, 1, -1, 2, 2, 0, -2, 0, -2, 0, -1, 2, -2, -1, 1, 2, 0, -2, -2, 2, 0, 1, 1, 0, -1, -1, -1, -1, 0, 2, 2, 0, -1, 0, -2, -1, 0, 0, 0, 1, 2];
+  for (let i: i32 = 0; i < 48; i += 1) {
+    const v_pw: u8[] = unhex(table_pw[i]);
+    const v_salt: u8[] = unhex(table_salt[i]);
+    const v_n: i32 = table_n[i];
+    const v_len: i32 = table_len[i];
+    const holds: boolean = ((!((v_n < 1) || (v_len < 1)) || isNullBytes(plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, v_len))) && (!((v_n >= 1) && (v_len >= 1)) || !isNullBytes(plain_pbkdf2HmacSha256(v_pw, v_salt, v_n, v_len))));
+    if (!holds) {
+      return t.fail("[P-REFUSE] a count or a length below 1 is null (R-REFUSE)", `sample ${i + 1} of 48 (len(pw) = ${toI32(v_pw.length)}, len(salt) = ${toI32(v_salt.length)}, n = ${v_n}, len = ${v_len}): the assertion is false`);
+    }
+  }
+  return t.pass("[P-REFUSE] a count or a length below 1 is null (R-REFUSE) — 48 samples");
+};
+
 export const main = (): i32 => {
   const t: Suite = new Suite("rfc7914-pbkdf2-sha256");
   let ran: string = "";
   ran = `${ran}${clause_PBKDF2_1(t) ? "1" : "0"}`;
   ran = `${ran}${clause_PBKDF2_2(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_PREFIX(t) ? "1" : "0"}`;
+  ran = `${ran}${clause_P_REFUSE(t) ? "1" : "0"}`;
   const code: i32 = t.done();
   const nonce: string = toI32(process.argv.length) > 1 ? process.argv[1] : "-";
   console.log(`vector-done ${nonce} ${ran}`);

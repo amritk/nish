@@ -84,6 +84,42 @@ On the façade's two HTTP/2 listeners:
   Trailers-Only form: one HEADERS frame with `grpc-status`, ending the stream.
 - **Deadlines.** `grpc-timeout` sets the request's deadline, capped by the
   handler's own timeouts; a call past it is answered `DEADLINE_EXCEEDED`.
+  (Superseded: the cap is `GrpcLimits.maxTimeout`, as the next paragraph
+  says.)
+
+As built, `GrpcServer` sits on an `HttpServer` and keeps no state per call:
+
+- `call(r)` answers every fault itself and returns `GRPC_CALL` only for a
+  call the program should answer. A request off HTTP/2 is answered 505,
+  since a gRPC client never sends one and the trailers it needs exist only
+  there.
+- The cap on a deadline is `GrpcLimits.maxTimeout` (30 s by default), not a
+  handler timeout: the façade has none per request. A call without
+  `grpc-timeout` gets the cap as its deadline. The deadline runs from
+  when the head was read (`r.since`). `call`, `reply` and `fail` answer
+  `DEADLINE_EXCEEDED` past it, and `expired(r)` lets a program that holds
+  calls drop the stale ones; nothing times a held call out by itself.
+- A malformed `grpc-timeout` (not 1 to 8 digits and one of `H M S m u n`) is
+  answered `INTERNAL`. The value is compared with the cap before it is
+  scaled, so no unit overflows.
+- The length cap is `GrpcLimits.maxMessage` (4 MiB by default, gRPC's own
+  default), behind `HttpServerLimits.maxBody`.
+- `fail` percent-encodes `grpc-message`, and with an empty message answers
+  in the Trailers-Only form. The Trailers-Only HEADERS frame carries `:status`
+  200, `content-type`, `grpc-status` and `content-length: 0`; the façade adds
+  `alt-svc` too on a TLS listener when the server advertises HTTP/3.
+
+`tests/link/net_grpc` pins the answers on three listeners and a second
+server:
+
+- over TLS: GetSum, and both forms of an error;
+- over h2c: GetSum, the content-types, every framing fault, both forms of an
+  error, a CR, LF and NUL in `grpc-message`, and the deadlines;
+- on a second h2c server whose `maxTimeout` is 60 ms: the cap;
+- over HTTP/1.1: only the 505.
+
+The malformed `grpc-timeout` values are its negative cases, since a refusal
+there needs a running server, not a compile error.
 
 It reads the network, so it lands with `docs/security/grpc.md` and its index
 row, and with a guide page under `docs/guide/` and its route.

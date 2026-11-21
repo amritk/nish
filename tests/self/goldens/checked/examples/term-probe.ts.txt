@@ -75,13 +75,13 @@ function termMultiplexer(env: TermEnv): string -> @nish.termMultiplexer
   pointer env: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function termPassthrough(multiplexer: string, query: string): string -> @nish.termPassthrough
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: query
   calls: nish.replaceAll nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
   callee +0:25 replaceAll -> @nish.replaceAll
 function probeQueries(env: TermEnv): string -> @nish.probeQueries [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.termMultiplexer nish.termPassthrough nish_alloc_struct nish_array_grow nish_str_eq
   pointer env: size=88 writesThrough=false captured=false passedTo=nish.termMultiplexer#0
   stackSites=1 stackLocals=1
@@ -1385,8 +1385,7 @@ const TWO_TO_53: f64 = 9007199254740992
 const ASCII_ZERO: i32 = 48
 const ASCII_DOT: i32 = 46
 const ASCII_MINUS: i32 = 45
-const INDEX_OF_ANY_MAX_SET: i32 = 16
-const NON_ASCII: i32 = 128
+const INDEX_OF_ANY_KERNEL_SET: i32 = 16
 const UTF8_TOP_BITS: i32 = 192
 const UTF8_CONTINUATION: i32 = 128
 const HIGH_SURROGATE: i32 = 55296
@@ -1452,66 +1451,72 @@ function contains(haystack: string, needle: string): boolean -> @nish.contains [
   calls: nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
 function split(text: string, sep: string): string[] -> @nish.split [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: text
+  calls: nish.splitCodePoints nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
+  callee +2:12 splitCodePoints -> @nish.splitCodePoints
   local +4:9 length: i32 (const)
   local +5:9 parts: string[] (const)
   local +6:7 start: i32 (let)
   local +10:11 at: i32 (const)
 function splitLimit(text: string, sep: string, limit: i32): string[] -> @nish.splitLimit [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_panic nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: limit text
+  calls: nish.splitCodePoints nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 sepLength: i32 (const)
+  callee +2:12 splitCodePoints -> @nish.splitCodePoints
   local +4:9 length: i32 (const)
   local +5:9 parts: string[] (const)
-  local +9:7 start: i32 (let)
-  local +13:11 at: i32 (const)
-function fixedDigitsHalve(digits: i32[], count: i32): i32 -> @nish.fixedDigitsHalve
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: nish_panic_overflow
+  local +6:7 start: i32 (let)
+  local +10:11 at: i32 (const)
+function fixedDigitsHalve(digits: u8[], count: i32): i32 -> @nish.fixedDigitsHalve
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: count
   pointer digits: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -4:7 carry: i32 (let)
-  local -3:7 i: i32 (let)
-  local -1:11 value: i32 (const)
-function fixedDigitsAdd(digits: i32[], doubling: boolean, amount: i32): void -> @nish.fixedDigitsAdd
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local -8:7 carry: i32 (let)
+  local -7:7 i: i32 (let)
+  local -3:11 at: i32 (const)
+  local -1:13 value: i32 (const)
+function fixedDigitsAdd(digits: u8[], doubling: boolean, amount: i32): void -> @nish.fixedDigitsAdd
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  escaping: amount
-  calls: nish_array_grow nish_panic_overflow
+  calls: nish_array_grow
   pointer digits: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -5:7 carry: i32 (let)
-  local -4:7 i: i32 (let)
-  local -3:9 length: i32 (const)
-  local -1:11 value: i32 (const)
+  local -9:7 carry: i32 (let)
+  local -8:7 i: i32 (let)
+  local -7:9 length: i32 (const)
+  local -5:11 digit: i32 (const)
+  local -4:9 value: i32 (let)
 function toFixed(x: f64, digits: i32): string -> @nish.toFixed [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: x
-  calls: llvm.fptosi.sat.i32.f64 nish.fixedDigitsAdd nish.fixedDigitsHalve nish_array_grow nish_panic nish_panic_overflow nish_panic_slice nish_str_from_f64 nish_str_new
+  escaping: digits x
+  calls: llvm.fptoui.sat.i8.f64 nish.fixedDigitsAdd nish.fixedDigitsHalve nish_array_grow nish_panic nish_panic_slice nish_str_from_f64 nish_str_new
   stackSites=2 stackLocals=2
   local +0:9 negative: boolean (const)
-  local +3:7 m: f64 (let)
-  local +4:7 exponent: i32 (let)
-  local +19:9 decimal: i32[] (const)
-  local +20:7 i: i32 (let)
-  local +26:11 last: f64 (const)
-  callee +31:5 fixedDigitsAdd -> @nish.fixedDigitsAdd
-  local +38:7 count: i32 (let)
-  local +39:7 dropped: i32 (let)
-  callee +41:15 fixedDigitsHalve -> @nish.fixedDigitsHalve
-  callee +48:5 fixedDigitsAdd -> @nish.fixedDigitsAdd
-  local +57:7 at: i32 (let)
-  local +61:9 bytes: u8[] (const)
-  local +67:11 digit: i32 (const)
+  local +5:7 m: f64 (let)
+  local +6:7 exponent: f64 (let)
+  local +21:9 places: i32 (const)
+  local +22:9 decimal: u8[] (const)
+  local +23:7 i: i32 (let)
+  local +29:11 last: f64 (const)
+  callee +34:5 fixedDigitsAdd -> @nish.fixedDigitsAdd
+  local +41:7 count: i32 (let)
+  local +42:7 dropped: i32 (let)
+  callee +44:15 fixedDigitsHalve -> @nish.fixedDigitsHalve
+  callee +51:5 fixedDigitsAdd -> @nish.fixedDigitsAdd
+  local +60:7 at: i32 (let)
+  local +64:9 bytes: u8[] (const)
+  local +70:11 digit: i32 (const)
 function replaceAll(text: string, needle: string, replacement: string): string -> @nish.replaceAll [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
-  calls: nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish_alloc_struct nish_array_grow nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=1 stackLocals=1
   local +0:9 needleLength: i32 (const)
   local +4:9 parts: string[] (const)
@@ -1527,16 +1532,22 @@ function firstDifference(left: string[], right: string[]): i32 -> @nish.firstDif
   local +1:9 rightLength: i32 (const)
   local +2:7 i: i32 (let)
 function indexOfAny(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAny [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: bytes from text
-  calls: nish.indexOfAnyFrom nish_panic
+  calls: nish.indexOfAnyFrom nish.indexOfAnyScan
   stackSites=0 stackLocals=0
   local +0:9 count: i32 (const)
-  local +4:7 j: i32 (let)
-  local +11:9 length: i32 (const)
-  local +12:7 start: i32 (let)
-  callee +19:10 indexOfAnyFrom -> @nish.indexOfAnyFrom
+  local +4:9 length: i32 (const)
+  local +5:7 start: i32 (let)
+  callee +14:12 indexOfAnyScan -> @nish.indexOfAnyScan
+  callee +16:10 indexOfAnyFrom -> @nish.indexOfAnyFrom
 function indexOfAnyFrom(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAnyFrom
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: bytes from text
+  calls: nish.indexOfAnyScan
+  stackSites=0 stackLocals=0
+  callee +0:73 indexOfAnyScan -> @nish.indexOfAnyScan
+function indexOfAnyScan(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAnyScan
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   stackSites=0 stackLocals=0
@@ -1558,18 +1569,32 @@ function codePointLength(text: string): i32 -> @nish.codePointLength [exported]
   callee +7:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
   local +18:7 afterHigh: boolean (let)
   local +20:11 unit: i32 (const)
-function shiftTextAsciiRange(text: string, low: i32, high: i32, delta: i32): string -> @nish.shiftTextAsciiRange
+function splitCodePoints(text: string, limit: i32): string[] -> @nish.splitCodePoints
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.textUnitsAreBytes nish_array_grow nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +1:9 bytes: boolean (const)
+  callee +1:26 textUnitsAreBytes -> @nish.textUnitsAreBytes
+  local +2:9 parts: string[] (const)
+  local +3:7 start: i32 (let)
+  local +4:7 afterHigh: boolean (let)
+  local +5:7 i: i32 (let)
+  local +7:11 unit: i32 (const)
+  local +8:11 starts: boolean (const)
+function shiftTextAsciiRange(text: string, low: i32, high: i32, toUpper: boolean): string -> @nish.shiftTextAsciiRange
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.textUnitsAreBytes nish_alloc_struct nish_array_grow nish_panic_overflow nish_panic_slice nish_str_new
+  calls: nish.textUnitsAreBytes nish_alloc_struct nish_array_grow nish_panic_slice nish_str_new
   stackSites=2 stackLocals=2
   local +0:9 length: i32 (const)
   local +1:7 i: i32 (let)
   callee +2:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
   local +3:11 bytes: u8[] (const)
   local +5:13 code: i32 (const)
-  local +11:9 parts: string[] (const)
-  local +12:7 start: i32 (let)
-  local +14:11 code: i32 (const)
+  local +7:13 moved: i32 (const)
+  local +13:9 parts: string[] (const)
+  local +14:7 start: i32 (let)
+  local +16:11 code: i32 (const)
 function asciiUpper(text: string): string -> @nish.asciiUpper [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
@@ -1582,23 +1607,29 @@ function asciiLower(text: string): string -> @nish.asciiLower [exported]
   calls: nish.shiftTextAsciiRange
   stackSites=0 stackLocals=0
   callee +0:3 shiftTextAsciiRange -> @nish.shiftTextAsciiRange
-function textPadding(text: string, width: i32, fill: string, caller: string): string -> @nish.textPadding
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_alloc_struct nish_arena_release nish_array_grow nish_panic nish_panic_overflow nish_str_concat nish_str_new
+function textPadding(text: string, width: i32, fill: string): string -> @nish.textPadding
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.textUnitsAreBytes nish_alloc_struct nish_array_grow nish_str_new
   stackSites=1 stackLocals=1
-  local +0:9 fillLength: i32 (const)
-  local +1:7 j: i32 (let)
-  local +8:9 needed: i32 (const)
-  local +12:9 parts: string[] (const)
-  local +13:7 left: i32 (let)
+  local +0:9 textLength: i32 (const)
+  local +1:9 fillLength: i32 (const)
+  local +8:7 left: u32 (let)
+  local +9:9 step: u32 (const)
+  local +10:9 parts: string[] (const)
+  local +16:7 cut: i32 (let)
+  local +17:9 bytes: boolean (const)
+  callee +17:26 textUnitsAreBytes -> @nish.textUnitsAreBytes
+  local +19:11 unit: i32 (const)
+  local +20:11 before: i32 (const)
+  local +21:11 inside: boolean (const)
 function padStart(text: string, width: i32, fill: string): string -> @nish.padStart [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: fill text width
   calls: nish.textPadding nish_str_concat
   stackSites=0 stackLocals=0
   callee +0:3 textPadding -> @nish.textPadding
 function padEnd(text: string, width: i32, fill: string): string -> @nish.padEnd [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: fill text width
   calls: nish.textPadding nish_str_concat
   stackSites=0 stackLocals=0

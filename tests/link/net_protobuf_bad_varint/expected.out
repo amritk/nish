@@ -1,0 +1,3 @@
+next: true, field 1
+read: 0, failed: -1
+then next: false

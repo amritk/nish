@@ -6239,9 +6239,9 @@ interface StringConstructor {
  * reached, visits a key set during the walk later in the same walk, and keeps a
  * re-set key in its place, as JavaScript's does.
  *
- * At most 2^24 − 1 entries (one fewer than Node's 2^24); one more panics with
- * `Map maximum size exceeded`, after first compacting away dead entries (not
- * while a loop walks the table). String keys are hashed with SipHash-1-3 under
+ * No entry cap of its own: past 2^29 entries the bucket table would outgrow
+ * the largest array, and the program stops as out of memory, as any
+ * allocation that size does (Node's `Map` throws at 2^24). String keys are hashed with SipHash-1-3 under
  * a per-process random key drawn from the system's entropy source before
  * `main`, and an integer, `boolean` or enum key under a per-process random
  * multiply-add-shift; if the entropy source fails the program panics before
@@ -6313,8 +6313,8 @@ interface Map<K, V> {
  * `new Set<T>()` takes no arguments ("`new Set<string>` takes no arguments in
  * this version"). `keys()` and `values()` are one walk, as JavaScript's are,
  * admitted only as the iterable of a `for...of`, which also takes the set
- * itself: `for (const x of s)`. At most 2^24 − 1 members; one more panics with
- * `Set maximum size exceeded`. Hashing, the entropy source and the walk's
+ * itself: `for (const x of s)`. Its size is bounded as a `Map`'s is, by
+ * memory alone. Hashing, the entropy source and the walk's
  * rules are `Map`'s. `add` and `has` are one probe each, and `if (!s.has(x)) {
  * s.add(x); ... }` with the `add` first in the branch asks about the member
  * once.

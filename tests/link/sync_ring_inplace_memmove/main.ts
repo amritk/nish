@@ -1,10 +1,11 @@
 // The in-place write `std/sync/ring.ts` shows, `copyBytes` into the window
 // `reserve` lends, pinned as one `llvm.memmove`: `expected.once` holds that
-// `nish/bytes`'s `copyBytes` makes exactly one memmove call and that `stage`
-// below calls `copyBytes`, not a loop of its own. A memmove is what lets the
-// source and the window overlap, so the program copies into the window
-// from a separate array, then within the window both ways, and the consumer
-// reads each record back where the ring holds it.
+// `nish/bytes`'s `tryCopyBytes`, which `copyBytes` calls, makes exactly one
+// memmove call and that `stage` below calls `copyBytes`, not a loop of its
+// own. A memmove is what lets the source and the window overlap, so the
+// program copies into the window from a separate array, then within the
+// window both ways, and the consumer reads each record back where the ring
+// holds it.
 //
 // The pin is here rather than in a `tests/cases` golden because that suite
 // compiles one module, and `copyBytes` is compiled in `nish/bytes`'s.
