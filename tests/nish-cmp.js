@@ -18153,23 +18153,42 @@ const DECLARED = [
   })),
   // The std/ instruction benches compile against this tree's std/, which the
   // seed's own std/ differs from or refuses.
-  ...["cli-args.ll", "std-cli-args.ll"].map((file) => ({
+  {
     program: "bench/std-cli-args.ts",
-    file,
+    file: "cli-args.ll",
     changelog: "std/ panic ratchet",
     why: "a new instruction bench driving std/cli-args.ts: the reference compiles it against the seed's std/cli-args.ts, whose functions, hash key and `Cli` constructor differ from this tree's",
-  })),
-  {
-    program: "bench/std-json-typed.ts",
-    file: "exit",
-    changelog: "std/ panic ratchet",
-    why: "a new instruction bench driving std/json-typed.ts: the seed's std/json-typed.ts gives `Doc.origin` a non-literal initializer the seed refuses, so the reference exits 1 where the candidate compiles it",
   },
+  ...[
+    "bytes.ll",
+    "json-tokenizer.ll",
+    "json-typed.ll",
+    "json.ll",
+    "std-json-typed.h",
+    "std-json-typed.ll",
+  ].map((file) => ({
+    program: "bench/std-json-typed.ts",
+    file,
+    changelog: "std/ panic ratchet",
+    why: "a new instruction bench driving std/json-typed.ts: the reference compiles it against the seed's std/bytes.ts, std/json*.ts and std/json-typed.ts, which differ from this tree's, so every module it reaches and its own header and IR differ",
+  })),
   {
     program: "tests/link/spawn_slot_proven/main.ts",
     file: "exit",
     changelog: "caller-proven spawn slots",
     why: "the candidate proves a `spawn` slot the caller's loop keeps in range and compiles the program under `--deny-panics`; the reference still counts std/threads.ts's slot check as a panic site and refuses it",
+  },
+  ...["examples/histogram.ts", "examples/tasks.ts"].map((program) => ({
+    program,
+    file: "exit",
+    changelog: "caller-proven spawn slots",
+    why: "the example now builds without `--allow-panics`: the candidate proves each `spawn` slot its loop keeps in range, where the reference still counts std/threads.ts's slot check as a panic site and refuses the call",
+  })),
+  {
+    program: "tests/link/parallel_length_proven/main.ts",
+    file: "exit",
+    changelog: "caller-proven spawn slots",
+    why: "the candidate proves the `parallelMapInto` call's `src.length <= dst.length` from the caller's guard and compiles the program under the default no-panic scope; the reference has no such proof and refuses it",
   },
 ]
 
