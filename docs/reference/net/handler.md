@@ -173,7 +173,7 @@ class HandlerLimits
 
 | Member | |
 | --- | --- |
-| `new HandlerLimits()` | The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30 second body timeout, a one MiB cap on a decoded body, and the carrier's own defaults with the body cap lowered to one MiB. Change a field after construction to tune one. |
+| `new HandlerLimits()` | The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30 second body timeout, a one MiB cap on a decoded body, and the carrier's own defaults with the body cap lowered to one MiB. Set a field to tune it. |
 | `bodyTimeout: i32` | Milliseconds from a request's head to the end of its body. A request still reading its body past it has its connection closed: the carrier's `idleTimeout` is refreshed by every byte, so a body trickled a byte at a time would otherwise hold its slot for good (HANDLER-5). It is checked each `wait`, at most once a second, so a connection may outlive it by up to a second, or until `wait` returns. |
 | `http: Http1Config` | The carrier's caps and timeouts; `http.maxBody` is the body cap, past which a request is answered 413. |
 | `jsonBytes: i32` | Bytes in the JSON scratch buffer: the largest body `json` and `problem` can write. A value past it makes `sendJson` answer 500. At least 256. |

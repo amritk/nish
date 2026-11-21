@@ -237,7 +237,7 @@ export class HandlerLimits {
   /**
    * The defaults: 256 slots, a 64 KiB JSON buffer, 256 events a turn, a 30
    * second body timeout, a one MiB cap on a decoded body, and the carrier's
-   * own defaults with the body cap lowered to one MiB. Change a field after construction to tune one.
+   * own defaults with the body cap lowered to one MiB. Set a field to tune it.
    */
   constructor() {
     this.http = new Http1Config()
