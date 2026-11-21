@@ -1,6 +1,6 @@
 {
   "$schema": "../build/vector/schemas/rfc-contract.json",
-  "contract": "rfc6234-sha",
+  "contract": "rfc6234-sha512",
   "source": {
     "rfc": 6234,
     "title": "SHA-384 and SHA-512",
@@ -8,9 +8,9 @@
   },
   "sources": [
     {
-      "id": "rfc6234-sha",
-      "path": "../specs/rfc6234-sha.xml",
-      "sha256": "c9fc92dd66ba8b5f12ca6ced6093fce24de0c4321fe73a16227c2f37f22c452a"
+      "id": "rfc6234-sha512",
+      "path": "../specs/rfc6234-sha512.xml",
+      "sha256": "288a0080173e1316de8e3d5b27ff9146860194feba5e637968af93f8151f312d"
     },
     {
       "id": "rfc6234",
@@ -46,12 +46,6 @@
       "section": "6.3",
       "level": "DEFINITION",
       "quote": "For SHA-384, the initial hash value, H(0), consists of the following eight 64-bit words, in hex."
-    },
-    {
-      "id": "R-SHA256-OUT",
-      "section": "6.2",
-      "level": "DEFINITION",
-      "quote": "For SHA-256, this is the concatenation of all of H(N)0, H(N)1, through H(N)7."
     },
     {
       "id": "R-DRIVER",
@@ -93,28 +87,6 @@
         }
       ],
       "returns": "bytes"
-    },
-    {
-      "name": "sha256",
-      "module": "nish/crypto/sha256",
-      "params": [
-        {
-          "name": "data",
-          "type": "bytes"
-        }
-      ],
-      "returns": "bytes"
-    },
-    {
-      "name": "sha1",
-      "module": "nish/crypto/sha1",
-      "params": [
-        {
-          "name": "data",
-          "type": "bytes"
-        }
-      ],
-      "returns": "bytes"
     }
   ],
   "clauses": [
@@ -127,7 +99,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha384(b\"abc\").hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha384",
       "args": [
         {
@@ -147,7 +119,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha384(b\"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu\").hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha384",
       "args": [
         {
@@ -167,7 +139,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha384(b\"0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567\").hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha384",
       "args": [
         {
@@ -187,7 +159,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha384(bytes.fromhex(\"b9\")).hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha384",
       "args": [
         {
@@ -207,7 +179,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha384(bytes.fromhex(\"a41c497779c0375ff10a7f4e08591739\")).hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha384",
       "args": [
         {
@@ -227,7 +199,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha384(bytes.fromhex(\"399669e28f6b9c6dbcbb6912ec10ffcf74790349b7dc8fbe4a8e7b3b5621db0f3e7dc87f823264bbe40d1811c9ea2061e1c84ad10a23fac1727e7202fc3f5042e6bf58cba8a2746e1f64f9b9ea352c711507053cf4e5339d52865f25cc22b5e87784a12fc961d66cb6e89573199a2ce6565cbdf13dca403832cfcb0e8b7211e83af32a11ac17929ff1c073a51cc027aaedeff85aad7c2b7c5a803e2404d96d2a77357bda1a6daeed17151cb9bc5125a422e941de0ca0fc5011c23ecffefdd09676711cf3db0a3440720e1615c1f22fbc3c721de521e1b99ba1bd5577408642147ed096\")).hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha384",
       "args": [
         {
@@ -247,7 +219,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha512(b\"abc\").hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha512",
       "args": [
         {
@@ -267,7 +239,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha512(b\"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu\").hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha512",
       "args": [
         {
@@ -287,7 +259,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha512(b\"0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567\").hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha512",
       "args": [
         {
@@ -307,7 +279,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha512(bytes.fromhex(\"d0\")).hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha512",
       "args": [
         {
@@ -327,7 +299,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha512(bytes.fromhex(\"8d4e3c0e3889191491816e9d98bff0a0\")).hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha512",
       "args": [
         {
@@ -347,7 +319,7 @@
         "command": "python3 -c 'import hashlib; print(hashlib.sha512(bytes.fromhex(\"a55f20c411aad132807a502d65824e31a2305432aa3d06d3e282a8d84e0de1de6974bf495469fc7f338f8054d58c26c49360c3e87af56523acf6d89d03e56ff2f868002bc3e431edc44df2f0223d4bb3b243586e1a7d924936694fcbbaf88d9519e4eb50a644f8e4f95eb0ea95bc4465c8821aacd2fe15ab4981164bbb6dc32f969087a145b0d9cc9c67c22b763299419cc4128be9a077b3ace634064e6d99283513dc06e7515d0d73132e9a0dc6d3b1f8b246f1a98a3fc72941b1e3bb2098e8bf16f268d64f0b0f4707fe1ea1a1791ba2f3c0c758e5f551863a96c949ad47d7fb40d2\")).hexdigest())'"
       },
       "section": "7",
-      "sectionSource": "rfc6234-sha",
+      "sectionSource": "rfc6234-sha512",
       "call": "sha512",
       "args": [
         {
@@ -424,88 +396,6 @@
           },
           {
             "int": 48
-          }
-        ]
-      }
-    },
-    {
-      "kind": "property",
-      "id": "P-LEN-ALL",
-      "title": "on one message sha384, sha256 and sha1 give 48, 32 and 20 bytes",
-      "covers": ["R-DIGEST", "R-SHA384-OUT", "R-SHA256-OUT"],
-      "forall": [
-        {
-          "name": "m",
-          "type": "bytes",
-          "minLen": 0,
-          "maxLen": 300
-        }
-      ],
-      "assert": {
-        "op": "and",
-        "args": [
-          {
-            "op": "==",
-            "args": [
-              {
-                "op": "len",
-                "args": [
-                  {
-                    "call": "sha384",
-                    "args": [
-                      {
-                        "var": "m"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "int": 48
-              }
-            ]
-          },
-          {
-            "op": "==",
-            "args": [
-              {
-                "op": "len",
-                "args": [
-                  {
-                    "call": "sha256",
-                    "args": [
-                      {
-                        "var": "m"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "int": 32
-              }
-            ]
-          },
-          {
-            "op": "==",
-            "args": [
-              {
-                "op": "len",
-                "args": [
-                  {
-                    "call": "sha1",
-                    "args": [
-                      {
-                        "var": "m"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "int": 20
-              }
-            ]
           }
         ]
       }
