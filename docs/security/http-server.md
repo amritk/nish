@@ -10,7 +10,7 @@ stream, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the HTTP application layer
 starts from evidence.
 
-Anchors are function names in `std/net/http-server.ts` at `67e1b333`, the
+Anchors are function names in `std/net/http-server.ts` at `ebe340ff`, the
 last commit to change it on the head that merges this record.
 
 **Result.** The façade parses nothing itself. A request's bytes are read by
