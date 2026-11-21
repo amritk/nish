@@ -1,6 +1,6 @@
 ---
 name: WP41 — a 64×64→128 high product with a wasm fallback
-overview: The mulHigh and mulHighIsNative builtins land in PR 1808 (S1), with P-256 and the JSON tokenizer moved onto mulHigh. Two measured stages remain — X25519 on five 51-bit limbs and Poly1305 on 64-bit limbs, each chosen by mulHighIsNative with today's narrow-limb code kept for wasm32 and Node, each landing only if it clears its bar.
+overview: The mulHigh and mulHighIsNative builtins land in PR 1808 (S1), with P-256 and the JSON tokenizer moved onto mulHigh. Two measured stages remain — X25519 on five 51-bit limbs and Poly1305 on 64-bit limbs, each chosen by mulHighIsNative with today's narrow-limb code kept for wasm32 and Node, each landing only if it clears its bar — plus PR 1808's two follow-ups, a cheaper wasm32 lowering and the P-256 constant-time fixture on mulHigh.
 priority: 70
 labels: [ready]
 issue: 2046
@@ -55,6 +55,39 @@ stages:
         status: pending
       - id: poly-docs
         content: Record the measurement in docs/BENCHMARKS.md, docs/crypto-performance.md and the Poly1305 note in docs/wp38-simd.md, update crypto-aead.md, crypto-chacha20-hw.md and the S3 state in docs/wp41-mul-high.md — see WP41 S3 — Poly1305 on 64-bit limbs where the wide multiply is native
+        status: pending
+  - id: wasm-mul-high-lowering
+    title: WP41 S4 — a cheaper wasm32 lowering for mulHigh, with one middle-column product left unmasked
+    goal: The wasm32 lowering of mulHigh in src/emit-builtins.ts adds one cross product to the middle column unmasked, as jsonTokMulHigh did, which is proven exact for every u64 pair and recovers the wasm32 instructions jsonTokEiselLemire gained in PR 1808
+    verification: node tests/run.js mul_high && node tests/run.js json && WASI_SYSROOT=/usr node tests/run.js wasi && node tests/run.js performance && node tests/nish-cmp.js && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2061
+    todos:
+      - id: wasm-lowering-baseline
+        content: Count the wasm32 instructions of jsonTokEiselLemire at the commit before PR 1808 and at the base, and time json tokenize on wasm32 at the base with the noise band of a byte-identical copy — see WP41 S4 — a cheaper wasm32 lowering for mulHigh, with one middle-column product left unmasked
+        status: pending
+      - id: wasm-lowering-emit
+        content: Rewrite the wasm32 path of emitMulHigh so the middle column is (p00 >> 32) + (p10 & mask) + p01 and the high half is p11 + (p10 >> 32) + (mid >> 32), with the bound that proves it exact in a comment — see WP41 S4 — a cheaper wasm32 lowering for mulHigh, with one middle-column product left unmasked
+        status: pending
+      - id: wasm-lowering-tests
+        content: Regenerate tests/cases/mul_high_wasm32.ll and the builtin-mul-high-wasm32 cookbook IR, and add boundary operands to the wasm32 run of mul_high_basic so the new sum is checked at its maximum — see WP41 S4 — a cheaper wasm32 lowering for mulHigh, with one middle-column product left unmasked
+        status: pending
+      - id: wasm-lowering-docs
+        content: Update the wasm32 lowering row and S4's state in docs/wp41-mul-high.md and the wasm32 entry in docs/IR_COOKBOOK.md — see WP41 S4 — a cheaper wasm32 lowering for mulHigh, with one middle-column product left unmasked
+        status: pending
+  - id: ct-asm-p256-mul-high
+    title: WP41 S5 — the P-256 constant-time fixture on mulHigh instead of its own four-product helper
+    goal: tests/cases/ct_asm_p256.ts calls mulHigh where it now calls its own copy of the four-product p256FiatMulxU64Hi, so its field copies are again the std module's functions and the assembly check holds the product std ships
+    verification: node tests/run.js ct_asm && node tests/run.js p256 && node tests/differential/goldens.js && npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs
+    issue: 2062
+    todos:
+      - id: ct-p256-swap
+        content: Replace p256FiatMulxU64Hi in tests/cases/ct_asm_p256.ts with mulHigh at every call, delete the helper and its ct-check line, and reword the header comment — see WP41 S5 — the P-256 constant-time fixture on mulHigh instead of its own four-product helper
+        status: pending
+      - id: ct-p256-check
+        content: Regenerate ct_asm_p256.ll and the goldens, confirm tests/ct-asm.js still holds every remaining ct-check function on x86-64 and aarch64 with the mul, mulx or umulh inline, and that ct_asm_p256.out is unchanged — see WP41 S5 — the P-256 constant-time fixture on mulHigh instead of its own four-product helper
+        status: pending
+      - id: ct-p256-docs
+        content: Update the P-256 fixture's description in docs/security/ct-verification.md and docs/security/crypto-ecc.md where they name the helper — see WP41 S5 — the P-256 constant-time fixture on mulHigh instead of its own four-product helper
         status: pending
 ---
 
@@ -161,6 +194,76 @@ RFC 8439 §2.5.2 and §2.8.2 vectors and the existing AEAD tests on both block f
 ### Docs
 
 `docs/BENCHMARKS.md` rows naming their commit; `docs/crypto-performance.md`'s ChaCha20-Poly1305 section; the Poly1305 note in `docs/wp38-simd.md`; `docs/security/crypto-aead.md` and `docs/security/crypto-chacha20-hw.md` (and their rows in `docs/security/README.md`); the S3 state in `docs/wp41-mul-high.md`.
+
+## WP41 S4 — a cheaper wasm32 lowering for mulHigh, with one middle-column product left unmasked
+
+Spec: [docs/wp41-mul-high.md](../../docs/wp41-mul-high.md), "Decisions" (the wasm32 lowering row). A follow-up named in [PR 1808](https://github.com/amritk/nish/pull/1808)'s body. Starts after PR 1808 merges: it changes the IR that PR's `emitMulHigh` emits. It touches `src/`, not `std/`, so it can run alongside S2 and S3; it shares `tests/nish-cmp.js` and the goldens with them, so whichever merges second takes in `main` and regenerates.
+
+**Owns:** `src/emit-builtins.ts`, `tests/run.js`, `tests/cases/mul_high_*`, `tests/self/goldens/**`, `tests/differential/**`, `tests/nish-cmp.js`, `tests/shard-costs.json`, `docs/cookbook/builtin-mul-high-wasm32.*`, `docs/IR_COOKBOOK.md`, `docs/wp41-mul-high.md`
+
+### The lowering
+
+PR 1808's wasm32 path masks both cross products into the middle column:
+
+```
+mid    = (p00 >> 32) + (p01 & 0xffffffff) + (p10 & 0xffffffff)
+result = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32)
+```
+
+`jsonTokMulHigh`, which it replaced, left one cross product whole:
+
+```
+cross  = (ll >> 32) + (hl & 0xffffffff) + lh
+result = (hl >> 32) + (cross >> 32) + aHi * bHi
+```
+
+That drops one `and`, one shift and one add, and `jsonTokEiselLemire` gained 14 wasm32 instructions when it moved onto `mulHigh`. The new sequence must stay exact for every `u64` pair: `(p00 >> 32)` and `(p10 & mask)` are each at most 2^32 − 1 and `p01` at most (2^32 − 1)^2 = 2^64 − 2^33 + 1, so `mid` is at most 2^64 − 1 and cannot wrap. That bound goes in the comment above the sequence. The native (`i128`) and TypeScript (`BigInt`) lowerings do not change, and the wasm32 path keeps no `i128` and no `__multi3`.
+
+### Constant time
+
+The sequence keeps no branch and no data-dependent memory access. wasm32 is not under `tests/ct-asm.js`, so there is no fixture to move. The PR says that in its body.
+
+### Bar
+
+- `jsonTokEiselLemire`'s wasm32 instruction count no higher than at the commit before PR 1808, read from the `.wasm` disassembly at both commits.
+- The `mul_high_wasm32.ll` golden is shorter than PR 1808's by at least the `and` the unmasked product drops.
+- json tokenize and P-256 on wasm32 not slower outside their band, measured interleaved at the base and the head with the noise band of a byte-identical copy.
+
+Missed → no `src/` change lands. The PR records the counts and timings and marks S4 "measured, not built" in `docs/wp41-mul-high.md`.
+
+### Tests
+
+`mul_high_wasm32.ll` and the `builtin-mul-high-wasm32` cookbook IR are regenerated, and the PR body shows the new IR. The wasm32 run of `mul_high_basic` adds the operands that reach the bound: `2^64 − 1` against itself, `2^32 − 1` against `2^64 − 1`, and pairs whose low halves are all ones. Its expected stdout is the `BigInt` answer. `node tests/run.js wasi` and `node tests/run.js performance` pass (a `src/` change). Any nish-cmp corpus program whose IR moves gets a narrow `DECLARED` entry.
+
+### Docs
+
+The wasm32 lowering row and S4's state in `docs/wp41-mul-high.md`; the wasm32 `mulHigh` entry in `docs/IR_COOKBOOK.md`.
+
+## WP41 S5 — the P-256 constant-time fixture on mulHigh instead of its own four-product helper
+
+A follow-up named in [PR 1808](https://github.com/amritk/nish/pull/1808)'s body. Starts after PR 1808 merges: the fixture calls `mulHigh`. Test-only, so it can run alongside S2, S3 and S4.
+
+**Owns:** `tests/cases/ct_asm_p256.*`, `tests/self/goldens/**`, `tests/differential/**`, `docs/security/ct-verification.md`, `docs/security/crypto-ecc.md`
+
+### The fixture
+
+`tests/cases/ct_asm_p256.ts` holds copies of std's P-256 constant-time cores, each "the module's function of the same name", for the assembly check in `tests/ct-asm.js`. PR 1808 moved `std/crypto/p256.ts` onto `mulHigh`, but the fixture still defines and calls its own `p256FiatMulxU64Hi`, the four-product helper. So the check holds a product std no longer ships. This stage:
+
+- calls `mulHigh(a, b)` at every `p256FiatMulxU64Hi(a, b)` call;
+- deletes the helper and its `// ct-check: p256FiatMulxU64Hi` line, since the product is now inline in each caller and held there;
+- rewords the header comment that lists "the 64-bit high multiply" among what is held.
+
+### Constant time
+
+Every remaining `ct-check` function passes on x86-64 and aarch64 with the native `mul`/`mulx` or `umulh` inline. CT-5 already models `mulx`. A function that stops passing is a finding, recorded in `docs/security/ct-verification.md`, not a check to relax.
+
+### Tests
+
+`ct_asm_p256.out` is unchanged: the known answers and RFC 6979 vectors the fixture runs still agree. `ct_asm_p256.ll` is regenerated and the PR body shows the IR diff. The self and differential goldens are regenerated.
+
+### Docs
+
+Where `docs/security/ct-verification.md` or `docs/security/crypto-ecc.md` names the fixture's helper, they name `mulHigh` instead.
 
 ## Out of scope
 
