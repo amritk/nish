@@ -62,7 +62,7 @@ SQLite and compression: 5 modules.
 
 <scalar-card title="Networking" icon="phosphor/regular/globe" href="#networking">
 
-DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 55 modules.
+DNS, HTTP/1.1, HTTP/2, HTTP/3, QUIC, TLS and the server: 57 modules.
 
 </scalar-card>
 
@@ -203,6 +203,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/net/dns-resolver`](net/dns-resolver.md) | A DNS stub resolver with no I/O of its own: it says which bytes to send to which server, reads the bytes that came back, and answers each lookup's addresses, while the program's own loop owns the sockets and the clock. |
 | [`nish/net/dns`](net/dns.md) | The stub resolver of `nish/net/dns-resolver` driven over `nish:net` sockets on the caller's own readiness loop, and `resolveHost`, which runs a loop of its own for a program that has none. |
 | [`nish/net/fetch`](net/fetch.md) | An HTTP/1.1 client. |
+| [`nish/net/grpc`](net/grpc.md) | Unary gRPC calls on `nish/net/http-server`'s HTTP/2 listeners (`listenHttp2Tls` and `listenH2c`). |
 | [`nish/net/handler`](net/handler.md) | Complete requests and their responses over the HTTP/1.1 carrier, so that a server answers requests instead of driving `Http1Server`'s events by hand. |
 | [`nish/net/hpack`](net/hpack.md) | HPACK, the header compression of HTTP/2, as RFC 7541 defines it: the §5.1 integer with an N-bit prefix, the §5.2 string literal with Appendix B's Huffman code, the Appendix A static table, the §2.3.2 dynamic table with its §4 size accounting and eviction, and the four §6 representations. |
 | [`nish/net/http-compress`](net/http-compress.md) | Content coding for HTTP responses (RFC 9110 §8.4 and §12.5.3): reading a request's `Accept-Encoding` and compressing a body with `Content-Encoding: gzip`, for any of the three servers. |
@@ -224,6 +225,7 @@ Every field Nish reads in `package.json`, and the capability lockfile it writes.
 | [`nish/net/postgres-carrier`](net/postgres-carrier.md) | `PgCarrier`, a `PgPool`'s queries on an `HttpHandler`'s loop, so a route handler queries PostgreSQL without blocking its worker. |
 | [`nish/net/postgres`](net/postgres.md) | The client side of PostgreSQL's frontend/backend protocol, version 3.0: a sans-IO connection that writes the frontend's messages into an output buffer and reads the backend's from an input buffer, for a program that owns its socket (`nish:net`) and its loop. |
 | [`nish/net/prefork`](net/prefork.md) | Run a server on every core: a supervisor process that starts one worker process per core, restarts one that dies, and stops them all on SIGTERM or SIGINT (`docs/wp42-multicore-server.md` §2.3). |
+| [`nish/net/protobuf`](net/protobuf.md) | Protobuf's wire format, without a schema: a reader that walks the fields of a message held in a `u8[]` span, and a writer that appends fields to a caller's buffer. |
 | [`nish/net/qpack`](net/qpack.md) | QPACK, the field compression of HTTP/3, as RFC 9204 defines it with a dynamic table of capacity 0: the Appendix A static table, the §4.1.1 prefixed integer up to 62 bits, the §4.1.2 string literal with an N-bit prefix, the §4.5 field-line representations under a Required Insert Count of 0, and what the encoder and decoder streams of §4.2 may carry when neither side ever inserts. |
 | [`nish/net/quic-conn-ack`](net/quic-conn-ack.md) | The packet numbers one QUIC packet number space has received, kept as ranges, which is what duplicate detection reads (RFC 9000 §12.3) and what an ACK frame is written from (§13.2, §19.3). |
 | [`nish/net/quic-conn-cid`](net/quic-conn-cid.md) | A QUIC connection's connection-ID table (RFC 9000 §5.1): the IDs this endpoint issued, which a datagram is routed by, and the ones the peer issued, which this endpoint sends to. |

@@ -51,7 +51,13 @@
 import { copyBytes } from "nish/bytes"
 import { JsonWriter } from "nish/json"
 import { HANDLER_ABSENT, HANDLER_DROPPED, HANDLER_MAX_WATCHED, HANDLER_SENT } from "nish/net/handler"
-import { HttpFields, httpFieldBytes, httpFieldIs } from "nish/net/http-fields"
+import {
+  HTTP_FIELDS_OK,
+  HttpFields,
+  httpFieldBytes,
+  httpFieldIs,
+  httpFieldsCheckOutgoing,
+} from "nish/net/http-fields"
 import { HTTP1_CHUNKED, HTTP1_NO_BODY, http1HexValue } from "nish/net/http1-codec"
 import {
   H1_AGAIN,
@@ -329,6 +335,21 @@ export class HttpServerRequest {
    * @internal Set and read by `HttpServer` in this module on HTTP/2 and 3.
    */
   ended: boolean = false
+  /**
+   * Whether `trailers` ended the response, so its stream ends with `trailerNames` and `trailerValues`, not an empty DATA frame.
+   * @internal Set by `HttpServer.trailers` in this module on HTTP/2, and cleared when a request is read into it.
+   */
+  trailing: boolean = false
+  /**
+   * The trailer field names `trailers` was given: the program's own array, held until the stream ends.
+   * @internal Read by `HttpServer` in this module once the body's last pending byte is with the carrier.
+   */
+  trailerNames: u8[][]
+  /**
+   * The trailer field values `trailers` was given, `trailerValues[k]` for `trailerNames[k]`.
+   * @internal Read by `HttpServer` in this module beside `trailerNames`.
+   */
+  trailerValues: u8[][]
 
   /**
    * An empty request for the server's pool; its buffers are made on its first use.
@@ -341,6 +362,8 @@ export class HttpServerRequest {
     this.params = []
     this.body = []
     this.pending = []
+    this.trailerNames = []
+    this.trailerValues = []
   }
 
   /**
@@ -1696,6 +1719,7 @@ export class HttpServer {
     r.quiet = r.methodIs("HEAD")
     r.left = -1
     r.ended = false
+    r.trailing = false
     this.route(r)
     const declared: i32 = this.declared(r)
     if (declared > toI32(r.body.length)) {
@@ -2335,6 +2359,72 @@ export class HttpServer {
   }
 
   /**
+   * Ends `r`'s HTTP/2 response with a trailer section, the fields
+   * `names[k]`: `values[k]`, in place of `end`: one HEADERS frame with
+   * END_STREAM after the body (RFC 9113 §8.1), sent once the body's last
+   * byte is with the carrier. `r` is the server's again once they are sent.
+   * The arrays are read until then, not copied: arrays that stay as they
+   * are, or ones kept per request (by `r.index`), which `take` hands out
+   * again only after the trailers went. An answer that ends with trailers
+   * starts with a body length above 0 or `HTTP1_CHUNKED`, since a head
+   * declaring 0 has ended the stream; on a HEAD request, a 204 or a 304 the
+   * head ended it too, and the trailers are dropped as body bytes are.
+   * Panics on another server's request, when the response is not started,
+   * on HTTP/1.1 or HTTP/3 (neither carrier sends trailers through the
+   * façade), on a head that declared a body length of 0, on a body short of
+   * the declared length, or on fields the carrier refuses (a name that is
+   * not a lowercase token, a value that is not field text, a
+   * connection-specific field, or names and values of different lengths).
+   * @param r a request whose response `start` began on HTTP/2; the server's again once the trailers are sent
+   * @param names the trailer field names, lowercase, as bytes beside `values`; read until the trailers are sent
+   * @param values each trailer field's value, `values[k]` for `names[k]`; read until the trailers are sent
+   * @returns `HANDLER_SENT`, or `HANDLER_DROPPED` when the connection or
+   *   stream closed first, or there are more fields than
+   *   `limits.maxResponseFields` and the stream was reset for it
+   */
+  trailers(r: HttpServerRequest, names: u8[][], values: u8[][]): i32 {
+    this.own(r, "trailers")
+    if (r.state !== HTTP_SERVER_STREAMING) {
+      panic(`HttpServer.trailers: the response is not started (state ${r.state})`)
+    }
+    if (r.kind === HTTP_SERVER_H1) {
+      panic("HttpServer.trailers: trailers are not sent on HTTP/1.1; end the response with end")
+    }
+    if (r.kind === HTTP_SERVER_H3) {
+      panic("HttpServer.trailers: trailers are not sent on HTTP/3; end the response with end")
+    }
+    if (httpFieldsCheckOutgoing(names, values) !== HTTP_FIELDS_OK) {
+      panic(
+        "HttpServer.trailers: the HTTP/2 carrier refuses the fields: a name that is not a lowercase token, a connection-specific field, a value that is not field text, or names and values of different lengths"
+      )
+    }
+    if (r.ended && !r.quiet) {
+      panic(
+        "HttpServer.trailers: the head declared a body length of 0, which ended the stream; start with HTTP1_CHUNKED"
+      )
+    }
+    if (!this.live(r)) {
+      this.release(r)
+      return HANDLER_DROPPED
+    }
+    if (r.left > 0 && !r.quiet) {
+      panic(`HttpServer.trailers: the body is ${r.left} byte(s) short of the length the response declared`)
+    }
+    if (toI32(names.length) > this.maxResponseFields) {
+      this.abort(r)
+      this.release(r)
+      return HANDLER_DROPPED
+    }
+    r.trailing = !r.quiet
+    r.trailerNames = names
+    r.trailerValues = values
+    r.state = HTTP_SERVER_FLUSHING
+    this.push(r)
+    this.nudge(r)
+    return HANDLER_SENT
+  }
+
+  /**
    * Hands an HTTP/2 or HTTP/3 stream's pending bytes to the carrier and, once
    * a flushing response has none left, ends the stream and hands `r` back.
    */
@@ -2348,7 +2438,8 @@ export class HttpServer {
     }
     const left: i32 = r.pendingEnd - r.pendingStart
     if (left > 0) {
-      const last: boolean = r.state === HTTP_SERVER_FLUSHING
+      // Trailers end the stream themselves, so the body's last DATA frame does not.
+      const last: boolean = r.state === HTTP_SERVER_FLUSHING && !r.trailing
       const taken: i32 = this.carry(r, r.pending, r.pendingStart, left, last)
       if (taken < 0) {
         this.drop(r)
@@ -2363,7 +2454,7 @@ export class HttpServer {
       return
     }
     if (!r.ended) {
-      const done: i32 = this.carryEnd(r)
+      const done: i32 = r.trailing ? this.carryTrailers(r) : this.carryEnd(r)
       if (done === 0) {
         return // no room for the end yet: the next push sends it
       }
@@ -2400,6 +2491,22 @@ export class HttpServer {
       if (done === H3_AGAIN) {
         return 0
       }
+    }
+    return done < 0 ? -1 : 1
+  }
+
+  /**
+   * Ends `r`'s HTTP/2 stream with the trailer section `trailers` was given:
+   * 1 when it is sent, 0 when the output has no room yet, -1 when the stream
+   * is gone or the section is too large for the output, which resets it.
+   */
+  private carryTrailers(r: HttpServerRequest): i32 {
+    const done: i32 = this.h2Conn(r.slot).writeTrailers(toI32(r.stream), r.trailerNames, r.trailerValues)
+    if (done === H2_AGAIN) {
+      return 0
+    }
+    if (done === H2_INVALID) {
+      this.abort(r)
     }
     return done < 0 ? -1 : 1
   }

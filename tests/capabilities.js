@@ -137,10 +137,12 @@ const accepted = new Set([
 // row either. The bounded waits, `readableWithin` and `writableWithin`, are the
 // same waits with a deadline timer. The task controls, `taskId`, `cancel`,
 // `cancelled` and `cancelAfter`, name, flag or time out a task of this program
-// and touch nothing outside it, so they carry no row. The check is that the
-// list is exactly those eleven.
+// and touch nothing outside it, so they carry no row. `lend` hands a task its
+// spawner's object to read in place: it lowers to its argument and reads no
+// byte outside the program, so it carries no row either. The check is that the
+// list is exactly those twelve.
 const ASYNC_EXPORTS =
-  "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter"
+  "spawn, awaitAll, sleep, readable, writable, readableWithin, writableWithin, taskId, cancel, cancelled, cancelAfter, lend"
 const moduleExports = declaration(modules, "nishModuleExports", "nish-modules.ts")
 const asyncList = /ASYNC_SPECIFIER\) \{\s*return "([^"]+)"/.exec(moduleExports)
 if (asyncList === null) {

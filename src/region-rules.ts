@@ -78,6 +78,13 @@ const ORIGIN_MIXED: i32 = 6
  * no memory but an ancestor's, may not grow, and may not be stored outside.
  */
 const ORIGIN_CHILD_ROOT: i32 = 7
+/**
+ * WP49 stage 6: in a task, its spawner's memory that `lend` of `nish:async`
+ * borrows. The spawner keeps it for the task's run, so the task's own memory
+ * may keep it, but it may keep no pointer the task writes, may not grow and
+ * may not be stored anywhere that outlives the task.
+ */
+const ORIGIN_LENT: i32 = 8
 
 /** Whether `o` is the region's memory or the parent's, in a child's `f`. */
 const childOrParent = (o: i32): boolean =>
@@ -94,12 +101,16 @@ const joinOrigin = (a: i32, b: i32): i32 => {
   if ((a === ORIGIN_ROOT && b === ORIGIN_REGION) || (a === ORIGIN_REGION && b === ORIGIN_ROOT)) {
     return ORIGIN_REGION
   }
+  if ((a === ORIGIN_LENT && b === ORIGIN_REGION) || (a === ORIGIN_REGION && b === ORIGIN_LENT)) {
+    return ORIGIN_LENT
+  }
   return childOrParent(a) && childOrParent(b) ? ORIGIN_MIXED : ORIGIN_UNKNOWN
 }
 
 /** Whether a value of origin `o` may be memory outside the region: what may not grow, nor keep the region's. */
 const mayBeOuter = (o: i32): boolean =>
   o === ORIGIN_OUTER ||
+  o === ORIGIN_LENT ||
   o === ORIGIN_UNKNOWN ||
   o === ORIGIN_PARENT ||
   o === ORIGIN_MIXED ||
@@ -239,6 +250,25 @@ const notFreshMessage = (fn: FunctionSig, ref: string, child: boolean): string =
 const childPlacementMessage = (what: string): string =>
   `${what}: a child region's parent is the region entered when it is made, so \`child\` and \`childWith\` ` +
   "are called only in the function `enter` or `enterWith` runs, and that function only by them"
+
+/**
+ * NL2822: a task stores into, grows or keeps the view `lend` borrowed from
+ * its spawner, which outlives the task's memory and is the spawner's again
+ * once the task ends.
+ */
+/** The values an array or object literal holds: its elements, or each property's value. */
+const literalValues = (literal: Node): Node[] => {
+  const out: Node[] = []
+  for (const child of literal.children) {
+    out.push(child.kind === NodeKind.Property ? child.children[child.children.length - 1] : child)
+  }
+  return out
+}
+
+const lentMessage = (who: string, what: string): string =>
+  `${who}, and ${what}: a view \`lend\` borrows is its spawner's memory, lent only while the task runs, ` +
+  "so the task may read it and copy out of it but may not write a pointer into it, grow it, or keep it " +
+  "past its end; copy what it needs out instead"
 
 const growthMessage = (who: string, what: string): string =>
   `${who}, and ${what}: storage outside the region that grows inside it ` +
@@ -672,8 +702,15 @@ class RegionWalk {
     ) {
       return this.origin(e.children[0])
     }
-    if (kind === NodeKind.New || kind === NodeKind.Array || kind === NodeKind.Object) {
-      return ORIGIN_REGION
+    if (kind === NodeKind.New) {
+      // A new object of the task's own that keeps a lent view is the view's
+      // to hold to: what grows or keeps its fields grows or keeps the view.
+      return this.lentIn(this.handedTo(e, this.program.nodeCallees[e.id])) ? ORIGIN_LENT : ORIGIN_REGION
+    }
+    if (kind === NodeKind.Array || kind === NodeKind.Object) {
+      // As with `new`: a literal of the task's own that holds a lent view is
+      // the view's to hold to, so a store through it is a store into the view.
+      return this.lentIn(literalValues(e)) ? ORIGIN_LENT : ORIGIN_REGION
     }
     if (kind === NodeKind.Template) {
       // A new string; a substitution that is one already may come back as it is.
@@ -749,8 +786,31 @@ class RegionWalk {
     return out
   }
 
+  /** Whether any of `handed` is a view `lend` borrowed. */
+  lentIn(handed: Node[]): boolean {
+    if (!this.task) {
+      return false
+    }
+    for (const arg of handed) {
+      const a = unwrapParens(arg)
+      if (a.kind !== NodeKind.Arrow && this.origin(a) === ORIGIN_LENT) {
+        return true
+      }
+    }
+    return false
+  }
+
   callOrigin(call: Node): i32 {
     const callee = this.program.nodeCallees[call.id]
+    if (callee === null && this.program.nodeBuiltins[call.id] === "async.lend") {
+      // WP49 stage 6: in a task, the spawner's memory it borrows; outside
+      // one, `lend` is the identity and its argument's origin.
+      const args = call.children[1].children
+      const lent = args.length > 0 ? this.origin(args[0]) : ORIGIN_UNKNOWN
+      return this.task && (lent === ORIGIN_OUTER || lent === ORIGIN_REGION || lent === ORIGIN_LENT)
+        ? ORIGIN_LENT
+        : lent
+    }
     if (callee !== null && regionRoleOf(callee) !== REGION_NONE) {
       // `enter` answers a scalar, `region` a handle: both copied, and typed so.
       return ORIGIN_UNKNOWN
@@ -895,7 +955,11 @@ class RegionWalk {
       return
     }
     this.noteWrite(holder)
-    if ((holder === ORIGIN_REGION || holder === ORIGIN_ROOT) && mayBeReleased(value)) {
+    // A lent view kept anywhere, even in the task's own memory, is a pointer
+    // the walk would lose: a store through the holder later reaches the view.
+    if (holder === ORIGIN_LENT || value === ORIGIN_LENT) {
+      this.report(at, lentMessage(this.who, what))
+    } else if ((holder === ORIGIN_REGION || holder === ORIGIN_ROOT) && mayBeReleased(value)) {
       this.reportOuter(at, what)
     } else if (holder === ORIGIN_PARENT && mayBeReleased(value)) {
       this.reportOuter(at, what)
@@ -1089,7 +1153,9 @@ class RegionWalk {
       if (grown >= 0 && grown < args.length) {
         const name = builtinNameOf(this.program, node)
         const text = textOf(this.program, args[grown])
-        this.report(node, growthMessage(this.who, `grows \`${text}\` with \`${name}\``))
+        const what = `grows \`${text}\` with \`${name}\``
+        const lent = this.origin(args[grown]) === ORIGIN_LENT
+        this.report(node, lent ? lentMessage(this.who, what) : growthMessage(this.who, what))
       }
       return
     }
@@ -1099,6 +1165,13 @@ class RegionWalk {
     }
     const holder = this.origin(receiver)
     if (method === "push" || method === "unshift" || method === "splice") {
+      if (holder === ORIGIN_LENT) {
+        this.report(
+          node,
+          lentMessage(this.who, `grows \`${textOf(this.program, receiver)}\` with \`${method}\``)
+        )
+        return
+      }
       if (mayBeOuter(holder)) {
         this.report(
           node,
@@ -1115,6 +1188,12 @@ class RegionWalk {
         }
       }
     }
+  }
+
+  /** NL2822 at `node`: it hands the lent view `arg` to `name`, which stores into it or may keep it. */
+  reportLentHanded(node: Node, arg: Node, name: string, stores: boolean): void {
+    const which = stores ? "which stores into it" : "which may keep it"
+    this.report(node, lentMessage(this.who, handsText(this.program, arg, name, which)))
   }
 
   /** The rules a user function or constructor is held to, from its facts, at `node`. */
@@ -1150,6 +1229,21 @@ class RegionWalk {
       if (pp === null || pp.captured || pp.keptInThis || pp.polluted) {
         // A callee that keeps it may keep it in memory `fn` allocated.
         this.noteAlias(arg, o)
+      }
+      if (o === ORIGIN_LENT) {
+        // A new object may keep the view, and is lent itself (`origin`): a
+        // constructor's capture is its `this` store when `keptInThis` says
+        // so, as a module holds no pointer, and a store into another
+        // argument is judged on that argument (`storesReach`).
+        if (
+          pp === null ||
+          pp.storesReach ||
+          (pp.captured && !(isNew && (pp.keptInThis || !pp.outlives))) ||
+          (pp.keptInThis && !isNew)
+        ) {
+          this.reportLentHanded(node, arg, name, pp !== null && pp.storesReach)
+        }
+        continue
       }
       if (pp === null) {
         // A `string` has no pointer facts, so a constructor is taken to keep it.
@@ -1214,7 +1308,9 @@ class RegionWalk {
     let written = -1
     for (let i = 0; i < origins.length && written < 0; i++) {
       const pp: PointerParamFacts | null = f.pointerParamAt(i + offset)
-      if (pp !== null && pp.writesReach && mayBeOuter(origins[i])) {
+      // A lent view may be written numbers, which keep nothing (`storesReach`).
+      const writes = pp !== null && (origins[i] === ORIGIN_LENT ? pp.storesReach : pp.writesReach)
+      if (writes && mayBeOuter(origins[i])) {
         written = i
       }
     }

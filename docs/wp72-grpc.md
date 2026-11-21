@@ -84,6 +84,42 @@ On the façade's two HTTP/2 listeners:
   Trailers-Only form: one HEADERS frame with `grpc-status`, ending the stream.
 - **Deadlines.** `grpc-timeout` sets the request's deadline, capped by the
   handler's own timeouts; a call past it is answered `DEADLINE_EXCEEDED`.
+  (Superseded: the cap is `GrpcLimits.maxTimeout`, as the next paragraph
+  says.)
+
+As built, `GrpcServer` sits on an `HttpServer` and keeps no state per call:
+
+- `call(r)` answers every fault itself and returns `GRPC_CALL` only for a
+  call the program should answer. A request off HTTP/2 is answered 505,
+  since a gRPC client never sends one and the trailers it needs exist only
+  there.
+- The cap on a deadline is `GrpcLimits.maxTimeout` (30 s by default), not a
+  handler timeout: the façade has none per request. A call without
+  `grpc-timeout` gets the cap as its deadline. The deadline runs from
+  when the head was read (`r.since`). `call`, `reply` and `fail` answer
+  `DEADLINE_EXCEEDED` past it, and `expired(r)` lets a program that holds
+  calls drop the stale ones; nothing times a held call out by itself.
+- A malformed `grpc-timeout` (not 1 to 8 digits and one of `H M S m u n`) is
+  answered `INTERNAL`. The value is compared with the cap before it is
+  scaled, so no unit overflows.
+- The length cap is `GrpcLimits.maxMessage` (4 MiB by default, gRPC's own
+  default), behind `HttpServerLimits.maxBody`.
+- `fail` percent-encodes `grpc-message`, and with an empty message answers
+  in the Trailers-Only form. The Trailers-Only HEADERS frame carries `:status`
+  200, `content-type`, `grpc-status` and `content-length: 0`; the façade adds
+  `alt-svc` too on a TLS listener when the server advertises HTTP/3.
+
+`tests/link/net_grpc` pins the answers on three listeners and a second
+server:
+
+- over TLS: GetSum, and both forms of an error;
+- over h2c: GetSum, the content-types, every framing fault, both forms of an
+  error, a CR, LF and NUL in `grpc-message`, and the deadlines;
+- on a second h2c server whose `maxTimeout` is 60 ms: the cap;
+- over HTTP/1.1: only the 505.
+
+The malformed `grpc-timeout` values are its negative cases, since a refusal
+there needs a running server, not a compile error.
 
 It reads the network, so it lands with `docs/security/grpc.md` and its index
 row, and with a guide page under `docs/guide/` and its route.
@@ -95,6 +131,30 @@ row, and with a guide page under `docs/guide/` and its route.
 - **S3:** `nish/net/grpc`, unary calls, with its record and guide page.
 - **S4:** interop: a stock gRPC client (`grpcurl`, or `ghz` for load) against
   both listeners in the interop job (`.github/workflows/interop.yml`).
+
+  As built, the interop job's `grpc` job runs the server
+  `tests/link/net_grpc_interop` builds into the interop image
+  (`/grpc-server serve`). It serves S3's test service (`tests/link/net_grpc/rig.ts`)
+  on a TLS listener and an h2c one and caps every call's deadline at 1 s
+  (`CAP_MS`). `tests/interop/grpc/check.sh` calls it from
+  `tests/interop/grpc/benchmark.proto`, since the server offers no reflection.
+  It runs seven checks on each listener, and the job fails on any one:
+
+  - grpcurl's GetSum 2 + 3 answers `{"result": 5}`, and -5 + 3 answers `-2`;
+  - Denied ends PERMISSION_DENIED with the message `no 100% é`, decoded from
+    its percent-encoding;
+  - Missing ends NOT_FOUND with no message;
+  - Slow, called with a 10 s deadline (`-max-time 10`), ends DEADLINE_EXCEEDED with no message,
+    in under 5 s, so it is the server's capped deadline that answered, not
+    grpc-go's own timeout;
+  - ghz makes 2000 GetSum calls, 10 at a time, and every one is OK. It is a
+    stability check: no throughput is recorded.
+
+  grpcurl 1.9.3 and ghz 0.120.0 are fetched by release and their SHA-256s
+  checked before either runs, as h2spec is. The job runs on a pull request
+  that touches any file it reads: a check in `node tests/run.js ci-scope`
+  follows the server's imports and fails on one the workflow's `paths` do
+  not name (`docs/wp10-ci.md`, "Scoped lanes").
 - **S5** *(deferred)*: message classes from a `.proto` file, written by a
   generator with their encode and decode, as `nish schema` does for JSON
   ([wp62](wp62-json-schema-classes.md)). Until then a program writes its

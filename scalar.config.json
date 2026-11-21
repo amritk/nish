@@ -505,6 +505,16 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/http-server" }]
                 }
               },
+              "/grpc": {
+                "type": "page",
+                "title": "gRPC",
+                "filepath": "docs/guide/using-nish/grpc.md",
+                "head": {
+                  "title": "gRPC · Nish",
+                  "meta": [{ "property": "og:title", "content": "gRPC" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/grpc" }]
+                }
+              },
               "/websocket": {
                 "type": "page",
                 "title": "WebSocket",
@@ -1724,6 +1734,18 @@
                           ]
                         }
                       },
+                      "/grpc": {
+                        "type": "page",
+                        "title": "grpc",
+                        "filepath": "docs/reference/net/grpc.md",
+                        "head": {
+                          "title": "grpc · Nish",
+                          "meta": [{ "property": "og:title", "content": "grpc" }],
+                          "links": [
+                            { "rel": "canonical", "href": "https://nishlang.com/reference/library/net/grpc" }
+                          ]
+                        }
+                      },
                       "/handler": {
                         "type": "page",
                         "title": "handler",
@@ -2023,6 +2045,21 @@
                             {
                               "rel": "canonical",
                               "href": "https://nishlang.com/reference/library/net/prefork"
+                            }
+                          ]
+                        }
+                      },
+                      "/protobuf": {
+                        "type": "page",
+                        "title": "protobuf",
+                        "filepath": "docs/reference/net/protobuf.md",
+                        "head": {
+                          "title": "protobuf · Nish",
+                          "meta": [{ "property": "og:title", "content": "protobuf" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/net/protobuf"
                             }
                           ]
                         }

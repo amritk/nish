@@ -991,6 +991,7 @@ const TLS_SERVER_MOVED = [
   ["tests/link/net_serve_deadline/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["tests/link/net_serve_hangup/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["tests/link/net_serve_pg/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
+  ["tests/link/net_serve_lent_window/main.ts", "tls.ll"],
   ["tests/link/net_serve_pipelined_flat/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["tests/link/net_serve_server_field/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
   ["tests/link/net_serve_server_panic/main.ts", "codec.ll record-server.ll tls-tcp.ll tls.ll"],
@@ -1321,6 +1322,30 @@ const FFI_ZEROEXT = "Widen narrow C arguments and results with zeroext"
 const WP68_BENCH = "WP68, shared libraries layered like atomic design"
 const WP68_BENCH_WHY =
   "a new WP68 bench program, which the candidate compiles with the codegen changes made since the reference was released"
+
+/** The changelog words of the stage that adds nish/net/protobuf. */
+const PROTOBUF_MODULE = "nish/net/protobuf, protobuf's wire format"
+const protobufModule = () =>
+  [
+    "net_protobuf",
+    "net_protobuf_bad_depth",
+    "net_protobuf_bad_field",
+    "net_protobuf_bad_group",
+    "net_protobuf_bad_length",
+    "net_protobuf_bad_reader_window",
+    "net_protobuf_bad_varint",
+    "net_protobuf_bad_writer_window",
+    "net_protobuf_f64",
+  ].map((name) => ({
+    program: `tests/link/${name}/main.ts`,
+    file: "exit",
+    changelog: PROTOBUF_MODULE,
+    why: "the program tests nish/net/protobuf, which is new in this release, so the seed's standard library has no such module and refuses it",
+  }))
+
+/** The changelog words of the stage that adds nish/net/grpc. */
+const GRPC_MODULE =
+  "Add nish/net/grpc, unary gRPC calls on the HTTP/2 listeners, with its security record (WP72 S3)"
 
 /** The changelog line of the stage that adds nish/crypto/scram. */
 const SCRAM_MODULE = "Add nish/crypto/scram and move the Postgres SCRAM arithmetic onto it"
@@ -9734,6 +9759,7 @@ const PROVER_READS_FILES = {
   "tests/link/net_serve_hangup/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_serve_head_drain/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_serve_pg/main.ts": ["gzip.ll", "http-compress.ll"],
+  "tests/link/net_serve_lent_window/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_serve_pipelined_flat/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_serve_queued_wait/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
   "tests/link/net_serve_raw/main.ts": ["chacha20poly1305.ll", "gzip.ll", "http-compress.ll"],
@@ -10044,9 +10070,187 @@ const proverReadsDeclared = () => [
   },
 ]
 
+/** The changelog words of WP72 S2, which ends an HTTP/2 answer of nish/net/http-server with trailers. */
+const SERVER_TRAILERS = "Trailers on the nish/net/http-server façade's HTTP/2 answers"
+/** WP72 S2's negatives call `HttpServer.trailers`, which the seed's std/net does not have. */
+const serverTrailersDeclared = () =>
+  ["after_end", "ended", "fields", "h1", "h3", "short", "unstarted"].map((name) => ({
+    program: `tests/link/net_http_server_trailers_${name}/main.ts`,
+    file: "exit",
+    changelog: SERVER_TRAILERS,
+    why: "the program calls HttpServer.trailers, which the seed's std/net does not have, so only the candidate compiles it",
+  }))
+
+// The std/ modules a strict module calls (Map and Set, text, JSON, array,
+// regex, bytes) prove or drop their panic sites under this PR's subject.
+const STD_PANIC_FREE = "std/ panic-free for strict modules"
+const stdPanicFree = (why, filesByProgram) =>
+  Object.entries(filesByProgram).flatMap(([program, files]) =>
+    files.map((file) => ({ program, file, changelog: STD_PANIC_FREE, why }))
+  )
+
 const DECLARED = [
   ...proverReadsDeclared(),
+  ...serverTrailersDeclared(),
+  ...stdPanicFree(
+    "Map and Set probe until a bucket answers instead of counting steps, and rebuild a small table into a fresh u16-sized array, so the inlined table walk changes",
+    {
+      "docs/cookbook/map-foreach.ts": ["map-foreach.ll"],
+      "docs/cookbook/map-iter.ts": ["map-iter.ll"],
+      "tests/link/map_walk_two_modules/main.ts": ["walker.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/array's sliceAll, what `xs.slice()` compiles to, copies directly instead of through slice's range check, so the copy changes",
+    {
+      "tests/cases/arr_slice.ts": ["arr_slice.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/text's indexOfAny walks its input under guards the prover reads, so the scan changes",
+    {
+      "bench/index-of-any.ts": ["index-of-any.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/regex compiles and matches with guarded indexes and Results in place of panics, so its code and its classes change",
+    {
+      "bench/regex/main.ts": ["main.h", "main.ll"],
+      "tests/link/caps_dep_std_not_refused/main.ts": ["main.h"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/json's reader, tokenizer and writer guard every index and grow their buffers without a computed array length, so json.ll changes",
+    Object.fromEntries(
+      [
+        "net_handler_rest_close",
+        "net_http_server",
+        "net_http_server_bad_limit",
+        "net_http_server_bad_param",
+        "net_http_server_bad_watch",
+        "net_http_server_caps",
+        "net_http_server_carriers",
+        "net_http_server_end_short",
+        "net_http_server_end_unstarted",
+        "net_http_server_foreign",
+        "net_http_server_h1_fields",
+        "net_http_server_h1_head",
+        "net_http_server_h1_slots",
+        "net_http_server_h1_twice",
+        "net_http_server_h2_connect",
+        "net_http_server_h2_head",
+        "net_http_server_h2_refused",
+        "net_http_server_h2_slots",
+        "net_http_server_h2_twice",
+        "net_http_server_h2c",
+        "net_http_server_h3_head",
+        "net_http_server_h3_slots",
+        "net_http_server_h3_twice",
+        "net_http_server_h3_webtransport",
+        "net_http_server_lifecycle",
+        "net_http_server_matrix",
+        "net_http_server_start_fields",
+        "net_http_server_start_length",
+        "net_http_server_start_refused",
+        "net_http_server_start_status",
+        "net_http_server_start_twice",
+        "net_http_server_take_none",
+        "net_http_server_timeouts",
+        "net_http_server_unbegun",
+        "net_http_server_wait_tls",
+        "net_http_server_write_long",
+        "net_http_server_write_unstarted",
+        "net_http_server_write_window",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["json.ll"]])
+    )
+  ),
+  ...stdPanicFree(
+    "the program decodes JSON into class fields, so it moves with std/json's guarded reader (json.ll, and the declarations and field ranges main.ll and main.h take from it) and with nish/bytes' guarded reads (bytes.ll)",
+    {
+      "tests/link/cls_field_init_json/main.ts": ["bytes.ll", "json.ll", "main.h", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "the emit-ts strings bench loads YAML into a JsonDocument and parses JSON, so it moves with the guarded readers of std/json, its tokenizer and value modules, std/yaml-json and nish/bytes, and with the declarations and field ranges main.ll and main.h take from them",
+    {
+      "bench/emit-ts-strings/main.ts": [
+        "bytes.ll",
+        "json-tokenizer.ll",
+        "json-value.ll",
+        "json.ll",
+        "main.h",
+        "main.ll",
+        "yaml-json.ll",
+      ],
+    }
+  ),
+  ...stdPanicFree(
+    "std/text's indexOfAny walks its input under guards the prover reads, so the scan inlined into the program changes",
+    Object.fromEntries(
+      [
+        "std_text_index_of_any",
+        "std_text_index_of_any_empty_set",
+        "std_text_index_of_any_long_set",
+        "std_text_index_of_any_non_ascii_offset",
+        "std_text_index_of_any_non_ascii_set",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["main.ll"]])
+    )
+  ),
+  ...stdPanicFree(
+    "std/text's case helpers index under guards instead of panicking, so the inlined code and the classes it declares change",
+    {
+      "tests/link/std_text_camel_case/main.ts": ["main.h", "main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/regex compiles and matches with guarded indexes and Results in place of panics, so the program's matching code and its classes change",
+    {
+      "tests/link/std_regex/main.ts": ["suite.ll"],
+      "tests/link/std_regex_f64/main.ts": ["suite.ll"],
+      "tests/link/std_regex_node/main.ts": ["main.h", "main.ll"],
+      "tests/link/std_regex_unicode/main.ts": ["main.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "std/json's writer guards every index and grows its buffer without a computed array length, so the formatter, its unit table and the classes they declare change",
+    {
+      "tests/link/std_json_format/main.ts": ["json-format.ll", "main.h", "units.ll"],
+    }
+  ),
+  ...stdPanicFree(
+    "the program calls nish/bytes' new tryCopyBytes, or reaches it through std/json, which now copies with that Result form in place of a panicking copy; the seed's nish/bytes does not export it, so the seed refuses the program",
+    Object.fromEntries(
+      [
+        "std_bytes_runs",
+        "std_json",
+        "std_json_tokenizer",
+        "std_text_f64",
+        "std_yaml_conformance",
+        "std_yaml_write",
+      ].map((name) => [`tests/link/${name}/main.ts`, ["exit"]])
+    )
+  ),
+  ...stdPanicFree(
+    "the example drops its --allow-panics opt-out now that the Map and Set calls it makes cannot panic, so the seed, whose collections still can, refuses it as a strict module",
+    {
+      "examples/sets.ts": ["exit"],
+      "examples/wordcount.ts": ["exit"],
+    }
+  ),
   ...scramModule(),
+  ...protobufModule(),
+  {
+    program: "tests/link/net_grpc/main.ts",
+    file: "exit",
+    changelog: GRPC_MODULE,
+    why: "the program tests nish/net/grpc, which is new in this release, so the seed's standard library has no such module and refuses it",
+  },
+  {
+    program: "tests/link/net_grpc_interop/main.ts",
+    file: "exit",
+    changelog: "Call the gRPC server with pinned grpcurl and ghz over TLS and h2c (WP72 S4)",
+    why: "the interop job's gRPC server is built on nish/net/grpc, which is new in this release, so the seed's standard library has no such module and refuses it",
+  },
   {
     program: "tests/cases/cls_field_init.ts",
     file: "exit",
@@ -11405,6 +11609,7 @@ const DECLARED = [
     ["tests/link/net_serve_deadline/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_serve_hangup/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_serve_pg/main.ts", "hkdf.ll hmac.ll record.ll"],
+    ["tests/link/net_serve_lent_window/main.ts", "hkdf.ll hmac.ll record.ll"],
     ["tests/link/net_serve_pipelined_flat/main.ts", "hkdf.ll hmac.ll record.ll"],
     [
       "tests/link/net_serve_queued_wait/main.ts",
@@ -12482,6 +12687,24 @@ const DECLARED = [
     file: "exit",
     changelog: SERVE_CANCEL,
     why: "the cookbook entry imports cancel, cancelAfter and the bounded waits from nish:async, which the 0.37.0 seed does not have, so only the candidate compiles it (WP49 stage 5, part 7)",
+  },
+  {
+    program: "tests/cases/async_lend.ts",
+    file: "exit",
+    changelog: "reads a spawner's object in place",
+    why: "the case imports lend from nish:async, which the 0.42.0 seed does not have, so only the candidate compiles it (WP49 stage 6, design B)",
+  },
+  {
+    program: "docs/cookbook/async-lend.ts",
+    file: "exit",
+    changelog: "reads a spawner's object in place",
+    why: "the cookbook entry imports lend from nish:async, which the 0.42.0 seed does not have, so only the candidate compiles it (WP49 stage 6, design B)",
+  },
+  {
+    program: "tests/link/net_http1_server_lend_park/main.ts",
+    file: "exit",
+    changelog: "reads a spawner's object in place",
+    why: 'the program calls Http1Connection.lendParsed, which this release adds to nish/net/http1-server for serve to lend a parsed head, so the 0.42.0 seed refuses it with "Unknown method" (WP49 stage 6, design B)',
   },
   {
     program: "tests/cases/async_spawn_handler_reach.ts",
@@ -14391,6 +14614,7 @@ const DECLARED = [
         "postgres-carrier.ll",
         "serve.ll",
       ],
+      "tests/link/net_serve_lent_window/main.ts": ["handler.ll", "main.h", "serve.ll"],
       "tests/link/net_serve_pipelined_flat/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
       "tests/link/net_serve_server_field/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
       "tests/link/net_serve_server_panic/main.ts": ["handler.ll", "main.h", "main.ll", "serve.ll"],
@@ -15088,6 +15312,7 @@ const DECLARED = [
       "tests/link/net_serve_deadline/main.ts": ["router.ll"],
       "tests/link/net_serve_hangup/main.ts": ["router.ll"],
       "tests/link/net_serve_pg/main.ts": ["router.ll"],
+      "tests/link/net_serve_lent_window/main.ts": ["router.ll"],
       "tests/link/net_serve_pipelined_flat/main.ts": ["router.ll"],
       "tests/link/net_serve_server_field/main.ts": ["router.ll"],
       "tests/link/net_serve_server_panic/main.ts": ["router.ll"],
@@ -16935,6 +17160,7 @@ const DECLARED = [
       "tests/link/net_serve_deadline/main.ts": ["json.ll"],
       "tests/link/net_serve_hangup/main.ts": ["json.ll"],
       "tests/link/net_serve_pg/main.ts": ["json.ll"],
+      "tests/link/net_serve_lent_window/main.ts": ["json.ll"],
       "tests/link/net_serve_pipelined_flat/main.ts": ["json.ll"],
       "tests/link/net_serve_queued_wait/main.ts": ["json.ll"],
       "tests/link/net_serve_server_field/main.ts": ["json.ll"],
@@ -17658,6 +17884,7 @@ const DECLARED = [
       "tests/link/net_serve_hangup/main.ts": ["bytes.ll"],
       "tests/link/net_serve_head_drain/main.ts": ["bytes.ll"],
       "tests/link/net_serve_pg/main.ts": ["bytes.ll"],
+      "tests/link/net_serve_lent_window/main.ts": ["bytes.ll"],
       "tests/link/net_serve_pipelined_flat/main.ts": ["bytes.ll"],
       "tests/link/net_serve_queued_wait/main.ts": ["std_bytes.ll"],
       "tests/link/net_serve_raw/main.ts": ["bytes.ll"],

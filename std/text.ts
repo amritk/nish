@@ -272,21 +272,25 @@ export const contains = (haystack: string, needle: string): boolean => toI32(hay
  * does not; the pieces' own `.length`s are still counted in each platform's
  * units, and NL8001 reads those where the program does.
  *
- * **An empty separator panics.** JavaScript splits a string on `""` into its
- * UTF-16 units, which natively would be its bytes, and the two answers differ
- * on any text that is not ASCII. A separator is almost always a literal the
- * caller chose, so an empty one is a mistake in the program, like an index out
- * of range, and not a condition a caller could recover from.
+ * **An empty separator splits `text` into its code points**, one piece each,
+ * and `split("", "")` is `[]`, as it is in JavaScript. JavaScript splits on
+ * `""` into UTF-16 units instead, which natively would be bytes, and a byte of
+ * a multi-byte character is not text; a code point is a whole character on
+ * both hosts. So the answer is JavaScript's for any text without characters
+ * past U+FFFF, and for those, an emoji say, JavaScript's two halves of a
+ * surrogate pair are one piece here, natively and under Node alike.
  *
  * @param text The text to split.
- * @param sep The separator, compared byte for byte; it must not be empty.
- *   Occurrences are found left to right and do not overlap.
- * @returns A fresh array of the pieces, in order; never empty.
+ * @param sep The separator, compared byte for byte; an empty one splits
+ *   between code points. Occurrences are found left to right and do not
+ *   overlap.
+ * @returns A fresh array of the pieces, in order; empty only when both `text`
+ *   and `sep` are.
  */
 export const split = (text: string, sep: string): string[] => {
   const sepLength: i32 = toI32(sep.length)
   if (sepLength === 0) {
-    panic("split: an empty separator")
+    return splitCodePoints(text, -1)
   }
   const length: i32 = toI32(text.length)
   const parts: string[] = []
@@ -308,7 +312,9 @@ export const split = (text: string, sep: string): string[] => {
     if (start >= 0 && start < length && at >= 0 && at < length) {
       parts.push(text.substring(start, at))
     }
-    start = at + sepLength
+    // A hit is a whole separator that ends by `length`, so the sum is at
+    // most `length`: it neither wraps a `u32` nor leaves an `i32`.
+    start = toI32(toU32(at) + toU32(sepLength))
   }
 }
 
@@ -325,26 +331,26 @@ export const split = (text: string, sep: string): string[] => {
  * readings agree on every `i32`. Refusing a negative limit would have been a
  * panic where JavaScript answers.
  *
- * **An empty separator panics**, whatever the limit, for the reason `split`
- * gives; JavaScript would answer `[]` for a limit of 0, and its UTF-16 units
- * otherwise.
+ * **An empty separator splits `text` into its code points**, as `split`'s
+ * does, and keeps the first `limit` of them.
  *
  * @param text The text to split.
- * @param sep The separator, compared byte for byte; it must not be empty.
- *   Occurrences are found left to right and do not overlap.
+ * @param sep The separator, compared byte for byte; an empty one splits
+ *   between code points. Occurrences are found left to right and do not
+ *   overlap.
  * @param limit The most pieces kept; a negative one keeps them all.
  * @returns A fresh array of at most `limit` pieces, in order.
  */
 export const splitLimit = (text: string, sep: string, limit: i32): string[] => {
+  if (limit === 0) {
+    return []
+  }
   const sepLength: i32 = toI32(sep.length)
   if (sepLength === 0) {
-    panic("splitLimit: an empty separator")
+    return splitCodePoints(text, limit)
   }
   const length: i32 = toI32(text.length)
   const parts: string[] = []
-  if (limit === 0) {
-    return parts
-  }
   let start: i32 = 0
   while (true) {
     // Searching from `start` rather than cutting `text` down after each match
@@ -366,7 +372,9 @@ export const splitLimit = (text: string, sep: string, limit: i32): string[] => {
     if (toI32(parts.length) === limit) {
       return parts
     }
-    start = at + sepLength
+    // A hit is a whole separator that ends by `length`, so the sum is at
+    // most `length`: it neither wraps a `u32` nor leaves an `i32`.
+    start = toI32(toU32(at) + toU32(sepLength))
   }
 }
 
@@ -395,17 +403,23 @@ const ASCII_MINUS: i32 = 45
  * the bit the halving dropped, 0 or 1.
  *
  * It is written with `>>` and `&` rather than `/` and `%` because under Node
- * an `i32` is a JavaScript number, and `/` there would give a fraction. The
- * name is long for the reason `isTextBlankByte`'s is.
+ * an `i32` is a JavaScript number, and `/` there would give a fraction. A
+ * digit is a `u8`, so `carry * 10 + digit` is known to stay small. The name is
+ * long for the reason `isTextBlankByte`'s is.
  */
-const fixedDigitsHalve = (digits: i32[], count: i32): i32 => {
+const fixedDigitsHalve = (digits: u8[], count: i32): i32 => {
   let carry: i32 = 0
-  let i: i32 = count - 1
-  while (i >= 0 && i < toI32(digits.length)) {
-    const value: i32 = carry * 10 + digits[i]
-    digits[i] = value >> 1
-    carry = value & 1
-    i -= 1
+  let i: i32 = count
+  while (i > 0 && i <= toI32(digits.length)) {
+    // `i` is above 0, so the digit below it is at `i - 1`; the test is what
+    // proves that index within `digits`, and it always holds.
+    const at: i32 = i - 1
+    if (at >= 0 && at < toI32(digits.length)) {
+      const value: i32 = (carry & 1) * 10 + toI32(digits[at])
+      digits[at] = toU8(value >> 1)
+      carry = value & 1
+    }
+    i = at
   }
   return carry
 }
@@ -416,18 +430,22 @@ const fixedDigitsHalve = (digits: i32[], count: i32): i32 => {
  * array grows by a digit when the answer carries out of the top. The name is
  * long for the reason `isTextBlankByte`'s is.
  */
-const fixedDigitsAdd = (digits: i32[], doubling: boolean, amount: i32): void => {
-  let carry: i32 = amount
+const fixedDigitsAdd = (digits: u8[], doubling: boolean, amount: i32): void => {
+  let carry: i32 = amount & 1
   let i: i32 = 0
   const length: i32 = toI32(digits.length)
   while (i < length) {
-    const value: i32 = (doubling ? digits[i] * 2 : digits[i]) + carry
-    digits[i] = value >= 10 ? value - 10 : value
+    const digit: i32 = toI32(digits[i])
+    let value: i32 = digit + (carry & 1)
+    if (doubling) {
+      value += digit
+    }
+    digits[i] = toU8(value >= 10 ? value - 10 : value)
     carry = value >= 10 ? 1 : 0
     i += 1
   }
   if (carry > 0) {
-    digits.push(carry)
+    digits.push(toU8(carry))
   }
 }
 
@@ -452,7 +470,7 @@ const fixedDigitsAdd = (digits: i32[], doubling: boolean, amount: i32): void => 
  *
  * **`digits` outside 0 to 100 panics**, where JavaScript throws a
  * `RangeError`: the count is almost always a literal the caller chose, so a
- * bad one is a mistake in the program, as `split`'s empty separator is.
+ * bad one is a mistake in the program, as an out-of-range index is.
  *
  * @param x The number to write.
  * @param digits How many digits to write after the point, from 0 to 100; with
@@ -471,8 +489,10 @@ export const toFixed = (x: f64, digits: i32): string => {
   const negative: boolean = x < 0
   // `x` is `m * 2^exponent` for an integer `m` below 2^53: scaling it into
   // [2^52, 2^53) by twos is exact, a subnormal included, and says `exponent`.
+  // The exponent is an `f64` because the count of steps is only known to be
+  // small from the format of `x`, which no bound states; it is exact there.
   let m: f64 = negative ? -x : x
-  let exponent: i32 = 0
+  let exponent: f64 = 0
   if (m > 0) {
     while (m < TWO_TO_52) {
       m *= 2
@@ -483,19 +503,20 @@ export const toFixed = (x: f64, digits: i32): string => {
       exponent += 1
     }
   }
-  // The number written is `m * 10^digits * 2^exponent`, rounded to an
-  // integer, with its last `digits` digits after the point. Multiplying by
-  // `10^digits` is that many zeros under the units; `m`'s own digits are exact
-  // to take out, since every step stays an integer below 2^53.
-  const decimal: i32[] = []
+  // The number written is `m * 10^places * 2^exponent`, rounded to an
+  // integer, with its last `places` digits after the point. Multiplying by
+  // `10^places` is that many zeros under the units; `m`'s own digits are
+  // exact to take out, since every step stays an integer below 2^53.
+  const places: i32 = digits
+  const decimal: u8[] = []
   let i: i32 = 0
-  while (i < digits) {
-    decimal.push(0)
+  while (i < places) {
+    decimal.push(toU8(0))
     i += 1
   }
   while (m > 0) {
     const last: f64 = m % 10
-    decimal.push(toI32(last))
+    decimal.push(toU8(last))
     m = (m - last) / 10
   }
   while (exponent > 0) {
@@ -510,7 +531,7 @@ export const toFixed = (x: f64, digits: i32): string => {
   let dropped: i32 = 0
   while (exponent < 0 && count > 0) {
     dropped = fixedDigitsHalve(decimal, count)
-    while (count > 0 && count <= toI32(decimal.length) && decimal[count - 1] === 0) {
+    while (count > 0 && count <= toI32(decimal.length) && decimal[count - 1] === toU8(0)) {
       count -= 1
     }
     exponent += 1
@@ -518,15 +539,15 @@ export const toFixed = (x: f64, digits: i32): string => {
   if (exponent === 0 && dropped === 1) {
     fixedDigitsAdd(decimal, false, 1)
   }
-  while (toI32(decimal.length) <= digits) {
-    decimal.push(0)
+  while (toI32(decimal.length) <= places) {
+    decimal.push(toU8(0))
   }
   // The text is the digits from the highest that is not zero down, but never
-  // from below the units, which is index `digits`; the halving leaves zeros
-  // above the number. The point goes before the last `digits` of them, and a
+  // from below the units, which is index `places`; the halving leaves zeros
+  // above the number. The point goes before the last `places` of them, and a
   // minus in front of any negative `x`.
   let at: i32 = toI32(decimal.length) - 1
-  while (at > digits && at >= 0 && at < toI32(decimal.length) && decimal[at] === 0) {
+  while (at > places && at >= 0 && at < toI32(decimal.length) && decimal[at] === toU8(0)) {
     at -= 1
   }
   const bytes: u8[] = []
@@ -535,8 +556,8 @@ export const toFixed = (x: f64, digits: i32): string => {
   }
   while (at >= 0 && at < toI32(decimal.length)) {
     // Read before the pushes: a push may move an array, so it ends the proof.
-    const digit: i32 = decimal[at]
-    if (at === digits - 1) {
+    const digit: i32 = toI32(decimal[at])
+    if (at + 1 === places) {
       bytes.push(toU8(ASCII_DOT))
     }
     bytes.push(toU8(ASCII_ZERO + digit))
@@ -579,7 +600,9 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
       return parts.join(replacement)
     }
     parts.push(rest.substring(0, at))
-    rest = rest.substring(at + needleLength, toI32(rest.length))
+    // A hit is a whole `needle` inside `rest`, so the sum is at most
+    // `rest.length`: it neither wraps a `u32` nor leaves an `i32`.
+    rest = rest.substring(toI32(toU32(at) + toU32(needleLength)), toI32(rest.length))
   }
 }
 
@@ -612,49 +635,41 @@ export const firstDifference = (left: string[], right: string[]): i32 => {
   return leftLength === rightLength ? -1 : i
 }
 
-/** The most bytes `indexOfAny` takes in its set: what one 16-byte vector of the runtime kernel compares. */
-const INDEX_OF_ANY_MAX_SET: i32 = 16
-
-/** The first byte that is not ASCII; `indexOfAny`'s set must stay below it. */
-const NON_ASCII: i32 = 128
+/** The most bytes the runtime kernel takes in `indexOfAny`'s set: what one 16-byte vector compares. */
+const INDEX_OF_ANY_KERNEL_SET: i32 = 16
 
 /**
  * The first index at or after `from` whose byte is one of `bytes`, or -1.
  *
- * `bytes` is a set of 1 to 16 ASCII bytes, and anything else panics: an empty
- * set matches nothing, more than 16 is more than one vector of the runtime
- * kernel compares, and an ASCII set is what keeps the answer the same under Node,
- * where `charCodeAt` reads a UTF-16 unit rather than a byte. An ASCII byte
- * never occurs inside a multi-byte UTF-8 sequence, so a non-ASCII `text`
- * passes through and only its ASCII bytes can match — as in `splitLines`, the
- * index is a byte offset natively. `from` is clamped to `[0, text.length]`,
- * as `substring` clamps, so a negative `from` searches from the start and one
- * past the end answers -1.
+ * The set is read unit by unit, as `text` is. An ASCII byte never occurs
+ * inside a multi-byte UTF-8 sequence, so with an ASCII set a non-ASCII `text`
+ * passes through, only its ASCII bytes can match, and the answer is the same
+ * natively and under Node but for the index itself, a byte offset natively,
+ * as in `splitLines`. A non-ASCII character in the set is not one member:
+ * natively each of its bytes is, so `"é"` also finds the first byte of `"è"`,
+ * while under Node its UTF-16 unit is; keep the set ASCII for one answer on
+ * both. An empty set matches nothing. `from` is clamped to
+ * `[0, text.length]`, as `substring` clamps, so a negative `from` searches
+ * from the start and one past the end answers -1.
  *
- * Natively the search is the runtime's `nish_str_index_of_any`, which reads
- * 16 or 32 bytes at a time (docs/LANGUAGE.md, "Byte search"). It is
- * **variable-time**: how long it takes says where the first match is, so it is
- * never for secret data.
+ * Natively a set of 1 to 16 bytes is searched by the runtime's
+ * `nish_str_index_of_any`, which reads 16 or 32 bytes at a time
+ * (docs/LANGUAGE.md, "Byte search"); a larger set is a plain loop that tests
+ * each byte against each member. It is **variable-time**: how long it takes
+ * says where the first match is, so it is never for secret data.
  *
  * @param text The text searched.
- * @param bytes The set of bytes looked for, written as a string of 1 to 16
- *   ASCII characters; their order does not matter.
+ * @param bytes The set of bytes looked for, written as a string; their order
+ *   does not matter, and ASCII ones give the same answer on every host.
  * @param from Where the search starts, as a byte offset, clamped into
  *   `[0, text.length]`.
  * @returns The byte offset of the first match at or after `from`, or -1 when
- *   there is none.
+ *   there is none, always so for an empty set.
  */
 export const indexOfAny = (text: string, bytes: string, from: i32): i32 => {
   const count: i32 = toI32(bytes.length)
-  if (count < 1 || count > INDEX_OF_ANY_MAX_SET) {
-    panic("indexOfAny: the set must hold 1 to 16 bytes")
-  }
-  let j: i32 = 0
-  while (j < count) {
-    if (toI32(bytes.charCodeAt(j)) >= NON_ASCII) {
-      panic("indexOfAny: every byte of the set must be ASCII")
-    }
-    j += 1
+  if (count === 0) {
+    return -1
   }
   const length: i32 = toI32(text.length)
   let start: i32 = from
@@ -664,20 +679,30 @@ export const indexOfAny = (text: string, bytes: string, from: i32): i32 => {
   if (start > length) {
     start = length
   }
+  // The kernel's contract is a set of 1 to 16 bytes, one vector of them.
+  if (count > INDEX_OF_ANY_KERNEL_SET) {
+    return indexOfAnyScan(text, bytes, start)
+  }
   return indexOfAnyFrom(text, bytes, start)
 }
 
 /**
- * `indexOfAny`'s walk, once its arguments are checked: the first index at or
- * after `from` whose byte is in `bytes`, or -1.
+ * `indexOfAny`'s walk for a set of 1 to 16 bytes, once `from` is clamped.
  *
- * This loop is what runs under Node. Natively the compiler recognises the one
- * call `indexOfAny` makes to it and calls the runtime kernel instead
- * (`src/kernels.ts`), so the loop is the kernel's meaning written in the
- * language rather than its implementation. The name is long for the reason
+ * Natively the compiler recognises the one call `indexOfAny` makes to it and
+ * calls the runtime kernel instead (`src/kernels.ts`), so what it calls is the
+ * kernel's meaning written in the language rather than its implementation;
+ * under Node that walk runs. The name is long for the reason
  * `isTextBlankByte`'s is.
  */
-const indexOfAnyFrom = (text: string, bytes: string, from: i32): i32 => {
+const indexOfAnyFrom = (text: string, bytes: string, from: i32): i32 => indexOfAnyScan(text, bytes, from)
+
+/**
+ * The first index at or after `from`, which is never negative, whose unit is
+ * one of `bytes`'s, or -1: `indexOfAny`'s search written as a loop. The name
+ * is long for the reason `isTextBlankByte`'s is.
+ */
+const indexOfAnyScan = (text: string, bytes: string, from: i32): i32 => {
   const length: i32 = toI32(text.length)
   const count: i32 = toI32(bytes.length)
   let i: i32 = from
@@ -783,6 +808,47 @@ export const codePointLength = (text: string): i32 => {
   return toI32(count)
 }
 
+/**
+ * `text`'s code points as one-code-point strings, the first `limit` of them,
+ * or all of them for a negative `limit`: `split` and `splitLimit` on an empty
+ * separator. A piece starts at each unit `codePointLength` counts, so the two
+ * agree on how many pieces there are, natively and under Node. The name is
+ * long for the reason `isTextBlankByte`'s is.
+ */
+const splitCodePoints = (text: string, limit: i32): string[] => {
+  const length: i32 = toI32(text.length)
+  const bytes: boolean = textUnitsAreBytes()
+  const parts: string[] = []
+  let start: i32 = 0
+  let afterHigh: boolean = false
+  let i: i32 = 0
+  while (i < length) {
+    const unit: i32 = toI32(text.charCodeAt(i))
+    const starts: boolean = bytes
+      ? (unit & UTF8_TOP_BITS) !== UTF8_CONTINUATION
+      : !(afterHigh && unit >= LOW_SURROGATE && unit < SURROGATE_END)
+    afterHigh = unit >= HIGH_SURROGATE && unit < LOW_SURROGATE
+    // The unit at 0 starts the first piece, which has nothing before it to
+    // take; every later start closes the piece before it.
+    if (starts && i > 0) {
+      // `start` is an earlier `i`, so this always holds; it is what proves
+      // `start` within `text`, as in `splitLines`.
+      if (start >= 0 && start < length) {
+        parts.push(text.substring(start, i))
+      }
+      if (toI32(parts.length) === limit) {
+        return parts
+      }
+      start = i
+    }
+    i += 1
+  }
+  if (length > 0) {
+    parts.push(text.substring(start, length))
+  }
+  return parts
+}
+
 /** The first and last lower-case ASCII letters, `a` and `z`. */
 const ASCII_LOWER_A: i32 = 97
 const ASCII_LOWER_Z: i32 = 122
@@ -795,22 +861,26 @@ const ASCII_UPPER_Z: i32 = 90
 const ASCII_CASE_DISTANCE: i32 = 32
 
 /**
- * `text` with every unit from `low` to `high` moved by `delta`, and every other
- * unit as it was: `asciiUpper` and `asciiLower`'s one walk.
+ * `text` with every unit from `low` to `high` moved up or down the ASCII table
+ * by the distance between the cases, down when `toUpper` is set, and every
+ * other unit as it was: `asciiUpper` and `asciiLower`'s one walk. The callers'
+ * ranges are letters, so a moved unit is a letter of the other case.
  *
  * Natively the units are bytes, so the answer is built as bytes, one array and
  * one `String.fromBytes`. Under Node a unit can be wider than a byte, so the
  * unchanged runs are cut out of `text` whole and only the changed letters are
  * made one at a time. The name is long for the reason `isTextBlankByte`'s is.
  */
-const shiftTextAsciiRange = (text: string, low: i32, high: i32, delta: i32): string => {
+const shiftTextAsciiRange = (text: string, low: i32, high: i32, toUpper: boolean): string => {
   const length: i32 = toI32(text.length)
   let i: i32 = 0
   if (textUnitsAreBytes()) {
     const bytes: u8[] = []
     while (i < length) {
       const code: i32 = toI32(text.charCodeAt(i))
-      bytes.push(toU8(code >= low && code <= high ? code + delta : code))
+      // A unit is a byte here, so either move stays well inside an `i32`.
+      const moved: i32 = toUpper ? code - ASCII_CASE_DISTANCE : code + ASCII_CASE_DISTANCE
+      bytes.push(toU8(code >= low && code <= high ? moved : code))
       i += 1
     }
     return String.fromBytes(bytes, 0, length)
@@ -825,7 +895,7 @@ const shiftTextAsciiRange = (text: string, low: i32, high: i32, delta: i32): str
       if (start >= 0 && start < length) {
         parts.push(text.substring(start, i))
       }
-      parts.push(String.fromCharCode(code + delta))
+      parts.push(String.fromCharCode(toUpper ? code - ASCII_CASE_DISTANCE : code + ASCII_CASE_DISTANCE))
       start = i + 1
     }
     i += 1
@@ -852,7 +922,7 @@ const shiftTextAsciiRange = (text: string, low: i32, high: i32, delta: i32): str
  * @returns A fresh string as long as `text`.
  */
 export const asciiUpper = (text: string): string =>
-  shiftTextAsciiRange(text, ASCII_LOWER_A, ASCII_LOWER_Z, -ASCII_CASE_DISTANCE)
+  shiftTextAsciiRange(text, ASCII_LOWER_A, ASCII_LOWER_Z, true)
 
 /**
  * `text` with its ASCII letters `A` to `Z` made `a` to `z`, and nothing else
@@ -866,40 +936,50 @@ export const asciiUpper = (text: string): string =>
  * @returns A fresh string as long as `text`.
  */
 export const asciiLower = (text: string): string =>
-  shiftTextAsciiRange(text, ASCII_UPPER_A, ASCII_UPPER_Z, ASCII_CASE_DISTANCE)
+  shiftTextAsciiRange(text, ASCII_UPPER_A, ASCII_UPPER_Z, false)
 
 /**
  * The padding `padStart` and `padEnd` put beside `text`: `fill` repeated and
  * cut so that `text` and the padding together are `width` units long, or `""`
  * when `text` is that long already or `fill` is empty.
  *
- * `fill` must be ASCII, and `caller` names the function in the panic when it
- * is not. A multi-byte fill cut at a byte width could end in half a UTF-8
- * sequence natively, which is text that is not well-formed, and padding is
- * done with spaces and zeros. The fill is checked before the width, so a bad
- * fill panics whether or not any padding was needed. The name is long for the
+ * The last copy of `fill` is cut only where a code point starts, so a
+ * non-ASCII fill never leaves half a UTF-8 sequence natively or half a
+ * surrogate pair under Node; the padding is then a unit or more short of the
+ * width rather than text that is not well-formed. The name is long for the
  * reason `isTextBlankByte`'s is.
  */
-const textPadding = (text: string, width: i32, fill: string, caller: string): string => {
+const textPadding = (text: string, width: i32, fill: string): string => {
+  const textLength: i32 = toI32(text.length)
   const fillLength: i32 = toI32(fill.length)
-  let j: i32 = 0
-  while (j < fillLength) {
-    if (toI32(fill.charCodeAt(j)) >= NON_ASCII) {
-      panic(`${caller}: every byte of the fill must be ASCII`)
-    }
-    j += 1
-  }
-  const needed: i32 = width - toI32(text.length)
-  if (needed <= 0 || fillLength === 0) {
+  if (width <= textLength || fillLength === 0) {
     return ""
   }
+  // `width` is above `textLength`, which is never negative, so the gap
+  // neither wraps as a `u32` nor fits less well than `width` did. `left` stays
+  // a `u32` because it only counts down while it is at least `fillLength`.
+  let left: u32 = toU32(width) - toU32(textLength)
+  const step: u32 = toU32(fillLength)
   const parts: string[] = []
-  let left: i32 = needed
-  while (left >= fillLength) {
+  while (left >= step) {
     parts.push(fill)
-    left -= fillLength
+    left -= step
   }
-  parts.push(fill.substring(0, left))
+  // `left` is below `fillLength` here, so it is an index into `fill`.
+  let cut: i32 = toI32(left)
+  const bytes: boolean = textUnitsAreBytes()
+  while (cut > 0 && cut < fillLength) {
+    const unit: i32 = toI32(fill.charCodeAt(cut))
+    const before: i32 = toI32(fill.charCodeAt(cut - 1))
+    const inside: boolean = bytes
+      ? (unit & UTF8_TOP_BITS) === UTF8_CONTINUATION
+      : unit >= LOW_SURROGATE && unit < SURROGATE_END && before >= HIGH_SURROGATE && before < LOW_SURROGATE
+    if (!inside) {
+      break
+    }
+    cut -= 1
+  }
+  parts.push(fill.substring(0, cut))
   return parts.join("")
 }
 
@@ -919,18 +999,19 @@ const textPadding = (text: string, width: i32, fill: string, caller: string): st
  * a string rather than a number. Pad ASCII text, or count the width with
  * `codePointLength` yourself, when the answer must be the same on both.
  *
- * **A fill that is not ASCII panics**, for the reason `indexOfAny`'s set must
- * be ASCII: natively it would be cut in the middle of a UTF-8 sequence.
+ * A fill that is not ASCII is cut only where a code point starts, so its
+ * last copy may fall a unit or more short: `padStart("7", 2, "é")` is `"7"`
+ * natively, where `é` is two bytes and one does not fit, and `"é7"` under Node.
  *
  * @param text The text to pad.
  * @param width The length the answer is padded to, in `text.length`'s units.
- * @param fill The ASCII text repeated as the padding; `" "` and `"0"` are
- *   the usual ones.
+ * @param fill The text repeated as the padding; `" "` and `"0"` are the
+ *   usual ones.
  * @returns `text` with the padding in front; `text` unchanged when no
  *   padding is needed.
  */
 export const padStart = (text: string, width: i32, fill: string): string =>
-  textPadding(text, width, fill, "padStart") + text
+  textPadding(text, width, fill) + text
 
 /**
  * `text` with `fill` repeated after it until it is `width` units long:
@@ -940,9 +1021,9 @@ export const padStart = (text: string, width: i32, fill: string): string =>
  *
  * @param text The text to pad.
  * @param width The length the answer is padded to, in `text.length`'s units.
- * @param fill The ASCII text repeated as the padding.
+ * @param fill The text repeated as the padding, cut as `padStart` cuts it.
  * @returns `text` with the padding after it; `text` unchanged when no
  *   padding is needed.
  */
 export const padEnd = (text: string, width: i32, fill: string): string =>
-  text + textPadding(text, width, fill, "padEnd")
+  text + textPadding(text, width, fill)

@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 814 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 815 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -7304,13 +7304,13 @@ The message of an error contains:
 ```ts
 // --deny-panics refuses a call into the standard library that may panic
 // (NL2458): the callee is outside the scope, so the call is where it is refused.
-import { split } from "nish/text";
+import { toFixed } from "nish/text";
 
-export const fields = (s: string, sep: string): string[] => split(s, sep);
+export const show = (x: f64, digits: i32): string => toFixed(x, digits);
 ```
 
 ```text
-This call to `split` may panic: it reaches the `panic` site at std/text.ts:289:5, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope: every module of this package is in it by default, and `--allow-panics` takes out the ones `noPanic` does not list
+This call to `toFixed` may panic: it reaches the `panic` site at std/text.ts:483:5, outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope: every module of this package is in it by default, and `--allow-panics` takes out the ones `noPanic` does not list
 ```
 
 ## NL2459
@@ -15705,6 +15705,42 @@ The message of an error contains:
 ```
 
 ## NL2822
+
+The message of an error contains:
+
+```text
+…a view `lend` borrows is its spawner's memory, lent only while the task runs…
+```
+
+[`nl2822_lent_view_stored.ts`](https://github.com/amritk/nish/blob/main/tests/wordings/nl2822_lent_view_stored.ts):
+
+```ts
+// NL2822: a spawned task hands a view `lend` borrows to a callee that stores a pointer into it.
+import { lend, spawn } from "nish:async"
+
+class Box {
+  items: i32[] = []
+}
+
+const refill = (b: Box): void => {
+  b.items = [1]
+}
+
+async function task(b: Box): Promise<void> {
+  refill(lend(b))
+}
+
+export async function main(): Promise<i32> {
+  spawn(task(new Box()))
+  return 0
+}
+```
+
+```text
+`task` runs as a spawned task, in a region of its own that is freed when it ends, and hands `lend(b)` to `refill`, which stores into it: a view `lend` borrows is its spawner's memory, lent only while the task runs, so the task may read it and copy out of it but may not write a pointer into it, grow it, or keep it past its end; copy what it needs out instead
+```
+
+## NL2823
 
 The message of an error contains:
 

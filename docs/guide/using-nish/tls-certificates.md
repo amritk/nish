@@ -25,7 +25,7 @@ the collections code it uses keep panic sites no proof removes yet, and
 they will build under the default once the standard library is made
 panic-free.
 
-<!-- allow-panics: calls `std/collections.ts`, `std/crypto/pki.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/pki-roots.ts`, `std/crypto/pki.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots";
@@ -84,7 +84,7 @@ too. It is the hash HTTP public key pinning used; for a PEM certificate,
 until you call it, and a hash that is not 32 bytes is not added: the call
 answers `false`.
 
-<!-- allow-panics: calls `std/collections.ts`, `std/crypto/pki.ts`, `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `std/crypto/pki.ts`, `std/crypto/sha256.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { PKI_ERR_DISTRUSTED, PkiTrustStore, pkiDistrustSpki, pkiTrustStore } from "nish/crypto/pki";

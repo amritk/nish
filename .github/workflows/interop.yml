@@ -6,7 +6,8 @@
 #
 # build:  the server image, tests/interop/server.dockerfile — Nish built from this
 #         checkout by the seed (the newest release, or `seed`) with LLVM 18, compiling
-#         tests/link/net_interop_server — shared with every job below.
+#         tests/link/net_interop_server, and the gRPC server
+#         tests/link/net_grpc_interop — shared with every job below.
 # quic-interop-runner: the runner's server role against quic-go and ngtcp2:
 #         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
 #         handshakeloss (L1), transferloss (L2), blackhole (B), http3, and
@@ -16,6 +17,12 @@
 #         link, every one of which must complete: goodput (G), 10 MB alone,
 #         and crosstraffic (C), 25 MB beside an iperf TCP CUBIC flow.
 # h2spec: every h2spec case against the HTTP/2 server.
+# grpc:   grpcurl calls the gRPC server over TLS and over h2c
+#         (tests/interop/grpc/check.sh): GetSum's sum, PERMISSION_DENIED with
+#         its message, NOT_FOUND, and DEADLINE_EXCEEDED for a call held past
+#         the server's capped deadline; then a short ghz run on each listener,
+#         every call of which must be OK. ghz is a stability check, not a
+#         benchmark: no throughput is recorded.
 # curl:   curl --http3 and --http2, a GET of a 1 MB file and a POST with a
 #         body each; curl --http1.1, plain and over TLS, a GET of /hello and of
 #         /big's 2 MiB chunked and a POST echoed back, small and of 1 MB; and
@@ -41,7 +48,7 @@
 #         copying its bytes (§5.3) and loadSync either side of 8 MB (§8).
 #
 # Every tool is pinned: actions by commit, images by digest, the runner by
-# commit, h2spec by release and SHA-256, Python packages by hash
+# commit, h2spec, grpcurl and ghz by release and SHA-256, Python packages by hash
 # (tests/interop/*-requirements.txt), tshark by its .debs' SHA-256. The
 # simulator's run.sh is patched (tests/interop/simulator.dockerfile) so its
 # pcaps keep the packets of the case's last fraction of a second. Nothing
@@ -76,6 +83,21 @@ on:
       - "runtime/runtime-sandbox.c"
       - "tests/interop/**"
       - "tests/link/net_interop_server*/**"
+      # WP72 S4: the gRPC server and every file it imports outside std/net
+      # and std/crypto (`node tests/run.js ci-scope` checks the list).
+      - "tests/link/net_grpc_interop*/**"
+      - "tests/link/net_grpc/**"
+      - "tests/link/net_tls_common/**"
+      - "tests/link/net_tls_record_common/**"
+      - "tests/link/net_http2/**"
+      - "tests/link/net_quic_frame/**"
+      - "tests/link/crypto_p256/**"
+      - "tests/link/crypto_x25519/**"
+      - "tests/link/crypto_x509/**"
+      - "std/testing.ts"
+      - "std/bytes.ts"
+      - "std/json.ts"
+      - "std/compress/**"
       # WP50 stage 6: the arena's page module, what builds and loads it, and
       # the ring it reads its input through.
       - "examples/wasm-arena/**"
@@ -132,6 +154,11 @@ env:
   # h2spec 2.6.0's release tarball and its SHA-256.
   H2SPEC_URL: https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz
   H2SPEC_SHA256: 157ee0de702e01ad40e752dbf074b366027e550c8e7504f9450da2809e279318
+  # grpcurl 1.9.3's and ghz 0.120.0's release tarballs and their SHA-256s.
+  GRPCURL_URL: https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_x86_64.tar.gz
+  GRPCURL_SHA256: a926b62a85787ccf73ef8736b3ae554f1242e39d92bb8767a79d6dd23b11d1d5
+  GHZ_URL: https://github.com/bojand/ghz/releases/download/v0.120.0/ghz-linux-x86_64.tar.gz
+  GHZ_SHA256: c1b5eee89fd7c779213f198753d1d961dfbcb257bc470eb3c336f333060a6d6c
   # curl 8.17 with HTTP/3 (quiche) and HTTP/2.
   CURL: ghcr.io/macbre/curl-http3@sha256:c3a360869a4e132180f458f83af2ce67b873b2302739eda27274dad4f62155f8
   # Playwright 1.56.0's Python image: Chromium 141, the browser that Playwright release pins.
@@ -424,6 +451,69 @@ jobs:
       - name: The server's log
         if: always()
         run: docker logs nish
+
+  grpc:
+    name: grpcurl and ghz against the gRPC server
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        timeout-minutes: 5
+        with:
+          name: nish-interop-image
+
+      - name: Start the server
+        id: server
+        run: |
+          docker load --input nish-interop.tar.gz
+          docker run -d --name grpc --network host --entrypoint /grpc-server nish-interop:ci serve
+          # Ready once it prints `ports tls N h2c M`, after binding both listeners.
+          for _ in $(seq 1 100); do docker logs grpc 2>&1 | grep -q '^ports ' && break; sleep 0.1; done
+          docker logs grpc
+          ports=$(docker logs grpc 2>&1 | grep -m 1 -E '^ports tls [0-9]+ h2c [0-9]+$') \
+            || { echo "the server printed no ports line" >&2; exit 1; }
+          read -r _ _ tls _ h2c <<< "$ports"
+          echo "tls=$tls" >> "$GITHUB_OUTPUT"
+          echo "h2c=$h2c" >> "$GITHUB_OUTPUT"
+
+      # Each tarball is pinned by its SHA-256, so the cache is keyed by both,
+      # and the check below runs on a restored copy exactly as on a download.
+      - name: Restore grpcurl and ghz
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/grpc-download
+          key: grpc-tools-${{ env.GRPCURL_SHA256 }}-${{ env.GHZ_SHA256 }}
+
+      - name: Fetch grpcurl and ghz and check their SHA-256s
+        timeout-minutes: 5
+        run: |
+          dl="$RUNNER_TEMP/grpc-download"
+          mkdir -p "$dl"
+          if [ ! -f "$dl/grpcurl.tar.gz" ]; then
+            curl -fsSL --retry 3 --connect-timeout 30 -o "$dl/grpcurl.tar.gz" "$GRPCURL_URL"
+          fi
+          if [ ! -f "$dl/ghz.tar.gz" ]; then
+            curl -fsSL --retry 3 --connect-timeout 30 -o "$dl/ghz.tar.gz" "$GHZ_URL"
+          fi
+          cp "$dl/grpcurl.tar.gz" "$dl/ghz.tar.gz" "$RUNNER_TEMP/"
+          echo "$GRPCURL_SHA256  $RUNNER_TEMP/grpcurl.tar.gz" | sha256sum -c -
+          echo "$GHZ_SHA256  $RUNNER_TEMP/ghz.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/grpcurl.tar.gz" -C "$RUNNER_TEMP" grpcurl
+          tar -xzf "$RUNNER_TEMP/ghz.tar.gz" -C "$RUNNER_TEMP" ghz
+
+      - name: Call the server with grpcurl and ghz, over TLS and h2c
+        timeout-minutes: 5
+        env:
+          TLS_PORT: ${{ steps.server.outputs.tls }}
+          H2C_PORT: ${{ steps.server.outputs.h2c }}
+        run: tests/interop/grpc/check.sh "$RUNNER_TEMP/grpcurl" "$RUNNER_TEMP/ghz" "$TLS_PORT" "$H2C_PORT"
+
+      - name: The server's log
+        if: always()
+        run: docker logs grpc
 
   curl:
     name: curl --http3, --http2 and --http1.1

@@ -103,7 +103,7 @@
  * `jsonTokW64`.
  */
 
-import { copyBytes, skipBlank, skipJsonText } from "nish/bytes"
+import { skipBlank, skipJsonText, tryCopyBytes } from "nish/bytes"
 
 /** The top-level value is complete and only blanks follow it. Answered again on every later call. */
 export const JSON_TOK_END: i32 = 0
@@ -273,53 +273,77 @@ const JSON_TOK_FOUR_BYTE_FLOOR: i32 = 65536
 const JSON_TOK_HIGH_SURROGATE: i32 = 55296
 const JSON_TOK_LOW_SURROGATE: i32 = 56320
 const JSON_TOK_SURROGATE_END: i32 = 57344
-const JSON_TOK_HEX_BASE: i32 = 16
 const JSON_TOK_TEN: i32 = 10
 
 /** The most significant digits a `u64` holds whatever they are, 10^19 - 1 being below 2^64. Past them, `parseFloat` reads the text. */
 const JSON_TOK_FAST_DIGITS: i32 = 19
 /** Clinger's fast path: 10^22 is the largest exact power of ten. */
 const JSON_TOK_FAST_EXPONENT: i32 = 22
-/** The decimal exponents `jsonTokPowerOfFive` has an entry for. Past them, a number of at most 19 digits is zero or infinite. */
-const JSON_TOK_SMALLEST_POWER: i32 = -342
-const JSON_TOK_LARGEST_POWER: i32 = 308
 /** Where an exponent's digits stop being added up: past it, `parseFloat` reads the text. */
 const JSON_TOK_EXPONENT_CAP: i32 = 100000
-/** 2^31 - 1 is 214748364 tens and 7: one more digit on a larger value, or a digit past 7 on that one, leaves `i32`. */
-const JSON_TOK_I32_TENS: i32 = 214748364
-const JSON_TOK_I32_LAST_DIGIT: i32 = 7
-
 /**
  * Whether the decimal digits `src[i, end)` add up to more than `bound`, which
- * is at least `0`. The sum stops as soon as it passes `bound`, and before a
- * step that would leave `i32`, which is past any `bound` too, so an exponent
- * of any length is compared exactly and nothing overflows, under Node as in
- * a native build.
+ * is at least `0`. The sum is kept in an `i64` and stops as soon as it passes
+ * `bound`: it is then at most ten times an `i32` plus one byte, so nothing
+ * overflows and an exponent of any length is compared exactly, under Node as
+ * in a native build.
  */
 const jsonTokDigitsExceed = (src: u8[], i: i32, end: i32, bound: i32): boolean => {
   let value: i32 = 0
   let at: i32 = i
   while (at < end && at < toI32(src.length)) {
-    const digit: i32 = toI32(src[at]) - JSON_TOK_DIGIT_0
-    if (value > JSON_TOK_I32_TENS || (value === JSON_TOK_I32_TENS && digit > JSON_TOK_I32_LAST_DIGIT)) {
+    const next: i64 = toI64(value) * toI64(JSON_TOK_TEN) + toI64(toI32(src[at]) - JSON_TOK_DIGIT_0)
+    if (next > toI64(bound)) {
       return true
     }
-    value = value * JSON_TOK_TEN + digit
-    if (value > bound) {
-      return true
-    }
+    // At most `bound`, so it fits.
+    value = toI32(next)
     at += 1
   }
   return false
 }
 
 /**
- * The furthest a window may end. The scan reads up to twelve bytes past a
- * position it has checked against the end, so a window that ends within 64
- * bytes of 2^31 - 1 is refused rather than let an offset overflow. Reaching
- * it takes an array of 2 GiB, so no test does.
+ * Where a window may end: at most 64 bytes short of 2^31 - 1. The scan reads
+ * up to twelve bytes past a position it has checked against the end, and the
+ * range is what proves each such offset fits; a window that ends any later is
+ * refused. Reaching it takes an array of 2 GiB, so no test does.
  */
-const JSON_TOK_END_CEILING: i32 = 2147483583
+type JsonTokEnd = integer<0, 2147483583>
+
+/**
+ * The `i64` of magnitude `m`, at most 2^63 when `negative` and below it
+ * otherwise. `-m` is `~(m - 1)`, which holds -2^63 where `-m` in an `i64`
+ * could not; a zero, `-0` included, is `0`.
+ */
+const jsonTokSigned = (m: u64, negative: boolean): i64 => {
+  if (!negative) {
+    return toI64(m)
+  }
+  if (m === toU64(0)) {
+    return toI64(0)
+  }
+  return ~toI64(m - toU64(1))
+}
+
+/**
+ * A zeroed depth stack `depth` bytes long, `depth` at least `0`. A depth that
+ * fits a `u16`, every real limit, is one allocation whose length needs no
+ * check; a larger one is grown a byte at a time, which only a limit past
+ * 65535 open containers pays for.
+ */
+const jsonTokDepthStack = (depth: i32): u8[] => {
+  if (depth >= 0 && depth <= 65535) {
+    return new Array<u8>(toU16(depth))
+  }
+  const stack: u8[] = []
+  let k: i32 = 0
+  while (k < depth) {
+    stack.push(toU8(0))
+    k += 1
+  }
+  return stack
+}
 
 /** The byte at `i`, or `-1` when `i` is outside `[0, end)` or outside `src`. */
 const jsonTokByteAt = (src: u8[], i: i32, end: i32): i32 => {
@@ -346,7 +370,7 @@ const JSON_TOK_EXACT_DIGITS: i32 = 18
  * `i + 8 <= src.length`; the test here repeats it so each index is proved.
  */
 const jsonTokLoad8 = (src: u8[], i: i32): u64 => {
-  if (i < 0 || i >= JSON_TOK_END_CEILING || i + 8 > toI32(src.length)) {
+  if (i < 0 || i > toI32(src.length) - 8) {
     return toU64(0)
   }
   return (
@@ -365,12 +389,10 @@ const jsonTokLoad8 = (src: u8[], i: i32): u64 => {
  * so it stops wherever `jsonTokByteAt` would have answered `-1`.
  */
 const jsonTokSkipBlank = (src: u8[], i: i32, end: i32): i32 => {
-  if (i < 0) {
-    return i
-  }
+  // `end` and the length are each compared, rather than the smaller of the
+  // two once, so every read below is proved inside `src`.
   const n: i32 = toI32(src.length)
-  const to: i32 = end < n ? end : n
-  if (i >= to) {
+  if (i < 0 || i >= end || i >= n) {
     return i
   }
   // Most runs between tokens are no blank or one, so those two bytes are
@@ -379,10 +401,10 @@ const jsonTokSkipBlank = (src: u8[], i: i32, end: i32): i32 => {
   if (!jsonTokIsBlank(toI32(src[i]))) {
     return i
   }
-  if (i + 1 >= to || !jsonTokIsBlank(toI32(src[i + 1]))) {
+  if (i + 1 >= end || i + 1 >= n || !jsonTokIsBlank(toI32(src[i + 1]))) {
     return i + 1
   }
-  return skipBlank(src, i + 2, to)
+  return skipBlank(src, i + 2, end < n ? end : n)
 }
 
 /**
@@ -407,7 +429,8 @@ const jsonTokSkipPlain = (src: u8[], i: i32, limit: i32): i32 => {
 }
 
 /** The value of one hex digit, or `-1`. */
-const jsonTokHexDigit = (b: i32): i32 => {
+const jsonTokHexDigit = (byte: u8): i32 => {
+  const b: i32 = toI32(byte)
   if (jsonTokIsDigit(b)) {
     return b - JSON_TOK_DIGIT_0
   }
@@ -426,18 +449,22 @@ const jsonTokHexDigit = (b: i32): i32 => {
  * hex digit.
  */
 const jsonTokHex4 = (src: u8[], at: i32, end: i32): i32 => {
+  const n: i32 = toI32(src.length)
   let value: i32 = 0
+  let i: i32 = at
   let k: i32 = 0
   while (k < 4) {
-    const b: i32 = jsonTokByteAt(src, at + k, end)
-    if (b < 0) {
+    if (i < 0 || i >= end || i >= n) {
       return JSON_TOK_ERR_TRUNCATED
     }
-    const digit: i32 = jsonTokHexDigit(b)
+    const digit: i32 = jsonTokHexDigit(src[i])
     if (digit < 0) {
       return JSON_TOK_ERR_ESCAPE
     }
-    value = value * JSON_TOK_HEX_BASE + digit
+    // `value` is below 2^12 before the shift and `digit` below 16, so this is
+    // `value * 16 + digit`, written so no step can overflow.
+    value = (value << 4) | digit
+    i += 1
     k += 1
   }
   return value
@@ -447,7 +474,7 @@ const jsonTokHex4 = (src: u8[], at: i32, end: i32): i32 => {
 const jsonTokInRange = (b: i32, low: i32, high: i32): boolean => b >= low && b <= high
 
 /**
- * The length of the UTF-8 sequence whose lead byte, at `at`, is not ASCII, or
+ * Where the UTF-8 sequence whose lead byte, at `at`, is not ASCII ends, or
  * `JSON_TOK_ERR_UTF8`. RFC 3629 §4's table, row by row: the second byte's
  * range depends on the lead, which is what refuses an overlong form (`C0`,
  * `C1`, `E0 80`–`E0 9F`, `F0 80`–`F0 8F`), a surrogate (`ED A0`–`ED BF`) and a
@@ -455,9 +482,15 @@ const jsonTokInRange = (b: i32, low: i32, high: i32): boolean => b >= low && b <
  * well formed as far as the window goes and is cut short by its end is
  * `JSON_TOK_ERR_TRUNCATED`, as any other value the window cuts short is.
  */
-const jsonTokUtf8Length = (src: u8[], at: i32, end: i32): i32 => {
-  const lead: i32 = jsonTokByteAt(src, at, end)
-  const second: i32 = jsonTokByteAt(src, at + 1, end)
+const jsonTokUtf8End = (src: u8[], at: i32, end: i32): i32 => {
+  // Each byte is read only once the window and the array are both known to
+  // reach it, so every index and every offset below is proved; a byte past
+  // either is the `-1` `jsonTokByteAt` would answer, which no range holds.
+  const n: i32 = toI32(src.length)
+  if (at < 0 || at >= end || at >= n) {
+    return JSON_TOK_ERR_UTF8
+  }
+  const lead: i32 = toI32(src[at])
   let low: i32 = JSON_TOK_CONTINUATION_LOW
   let high: i32 = JSON_TOK_CONTINUATION_HIGH
   let length: i32 = 0
@@ -480,18 +513,31 @@ const jsonTokUtf8Length = (src: u8[], at: i32, end: i32): i32 => {
   } else {
     return JSON_TOK_ERR_UTF8
   }
-  if (!jsonTokInRange(second, low, high)) {
-    return second < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_UTF8
+  if (at + 1 >= end || at + 1 >= n) {
+    return JSON_TOK_ERR_TRUNCATED
   }
-  let k: i32 = 2
-  while (k < length) {
-    const next: i32 = jsonTokByteAt(src, at + k, end)
-    if (!jsonTokInRange(next, JSON_TOK_CONTINUATION_LOW, JSON_TOK_CONTINUATION_HIGH)) {
-      return next < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_UTF8
-    }
-    k += 1
+  if (!jsonTokInRange(toI32(src[at + 1]), low, high)) {
+    return JSON_TOK_ERR_UTF8
   }
-  return length
+  if (length === 2) {
+    return at + 2
+  }
+  if (at + 2 >= end || at + 2 >= n) {
+    return JSON_TOK_ERR_TRUNCATED
+  }
+  if (!jsonTokInRange(toI32(src[at + 2]), JSON_TOK_CONTINUATION_LOW, JSON_TOK_CONTINUATION_HIGH)) {
+    return JSON_TOK_ERR_UTF8
+  }
+  if (length === 3) {
+    return at + 3
+  }
+  if (at + 3 >= end || at + 3 >= n) {
+    return JSON_TOK_ERR_TRUNCATED
+  }
+  if (!jsonTokInRange(toI32(src[at + 3]), JSON_TOK_CONTINUATION_LOW, JSON_TOK_CONTINUATION_HIGH)) {
+    return JSON_TOK_ERR_UTF8
+  }
+  return at + 4
 }
 
 /** How many bytes code point `cp` takes in UTF-8. */
@@ -510,7 +556,8 @@ const jsonTokUtf8Byte = (cp: i32, width: i32, k: i32): i32 => {
   if (width === 1) {
     return cp
   }
-  const shift: i32 = (width - 1 - k) * JSON_TOK_CONTINUATION_BITS
+  // A width is 1 to 4 and `k` below it, so the masks change neither.
+  const shift: i32 = ((width & 7) - 1 - (k & 7)) * JSON_TOK_CONTINUATION_BITS
   const bits: i32 = (cp >> shift) & JSON_TOK_LOW_SIX
   if (k > 0) {
     return JSON_TOK_CONTINUATION_LOW | bits
@@ -546,18 +593,6 @@ const jsonTokShortEscape = (b: i32): i32 => {
 }
 
 /**
- * How many raw bytes the escape at `at` takes, given the code point it decodes
- * to: 12 for a surrogate pair, the only escape past U+FFFF, 6 for any other
- * `\u`, 2 for a short one.
- */
-const jsonTokEscapeLength = (src: u8[], at: i32, end: i32, cp: i32): i32 => {
-  if (cp >= JSON_TOK_FOUR_BYTE_FLOOR) {
-    return 12
-  }
-  return jsonTokByteAt(src, at + 1, end) === JSON_TOK_LOWER_U ? 6 : 2
-}
-
-/**
  * The tokenizer. One per connection or per document; `reset` reuses it, and
  * nothing it does after the constructor allocates, except `numberF64`'s
  * `parseFloat` path, which releases what it allocated before it returns.
@@ -587,7 +622,7 @@ export class JsonTokenizer {
    * @internal Dead: written by the constructor and `reset`, never read.
    */
   off: i32
-  private end: i32
+  private end: JsonTokEnd
   /** The next byte `next()` reads. */
   private pos: i32
   private maxDepth: i32
@@ -661,11 +696,11 @@ export class JsonTokenizer {
     this.maxStringBytes = limits.maxStringBytes < 0 ? 0 : limits.maxStringBytes
     this.maxNumberBytes = limits.maxNumberBytes < 0 ? 0 : limits.maxNumberBytes
     this.maxTotalBytes = limits.maxTotalBytes < 0 ? 0 : limits.maxTotalBytes
-    this.stack = new Array<u8>(this.maxDepth)
+    this.stack = jsonTokDepthStack(this.maxDepth)
     this.src = src
     this.off = 0
     this.end = 0
-    this.stringFrom = -1 - this.maxStringBytes
+    this.stringFrom = ~this.maxStringBytes
     this.pos = 0
     this.depth = 0
     this.inside = 0
@@ -707,22 +742,30 @@ export class JsonTokenizer {
     this.errorAt = -1
     this.stringBytes = 0
     this.integral = false
-    // The second test is only reached when the first proves `off + len` fits.
-    if (off < 0 || len < 0 || off > toI32(src.length) - len || off + len > JSON_TOK_END_CEILING) {
+    // The window's end is summed in an `i64`, where two `i32`s cannot
+    // overflow, and kept only once it is known to fit in `src` and in
+    // `JsonTokEnd`.
+    const stop: i64 = toI64(off) + toI64(len)
+    // At most the length of `src` whenever it is kept, so it fits.
+    const last: i32 = toI32(stop)
+    if (off < 0 || len < 0 || stop > toI64(toI32(src.length)) || last < 0 || last > 2147483583) {
       this.off = 0
       this.end = 0
-      this.stringFrom = -1 - this.maxStringBytes
+      // `-1 - maxStringBytes`, which a complement cannot overflow.
+      this.stringFrom = ~this.maxStringBytes
       this.pos = 0
       this.fail(JSON_TOK_ERR_WINDOW, off)
       return
     }
     this.off = off
-    this.end = off + len
-    // Fits: `end` and `maxStringBytes` are both at least 0.
-    this.stringFrom = off + len - 1 - this.maxStringBytes
+    this.end = last
+    // At least `-1 - maxStringBytes`, which fits because `maxStringBytes` is
+    // at least 0.
+    this.stringFrom = toI32(toI64(off) + toI64(len) - toI64(1) - toI64(this.maxStringBytes))
     this.pos = off
     if (len > this.maxTotalBytes) {
-      this.fail(JSON_TOK_ERR_TOTAL_LIMIT, off + this.maxTotalBytes)
+      // Below `off + len`, so it fits.
+      this.fail(JSON_TOK_ERR_TOTAL_LIMIT, toI32(toI64(off) + toI64(this.maxTotalBytes)))
     }
   }
 
@@ -747,17 +790,25 @@ export class JsonTokenizer {
   next(): i32 {
     const src: u8[] = this.src
     const end: i32 = this.end
-    // `jsonTokSkipBlank` and then `jsonTokByteAt`, fused: both bounds are
-    // folded into `to` once, and the byte the skip stops at is the one read.
+    // `jsonTokSkipBlank` and then `jsonTokByteAt`, fused: the byte the skip
+    // stops at is the one read. `end` and the length are each compared, so
+    // both reads are proved inside `src`.
     const n: i32 = toI32(src.length)
-    const to: i32 = end < n ? end : n
     let at: i32 = this.pos
     let b: i32 = -1
-    if (at >= 0 && at < to) {
+    // One past the byte read, taken where `at < end` proves it fits; only a
+    // colon or a comma reads it, and either means a byte was read.
+    let past: i32 = 0
+    if (at >= 0 && at < end && at < n) {
       b = toI32(src[at])
+      past = at + 1
       if (jsonTokIsBlank(b)) {
-        at = jsonTokSkipBlank(src, at + 1, to)
-        b = at >= 0 && at < to ? toI32(src[at]) : -1
+        at = jsonTokSkipBlank(src, at + 1, end)
+        b = -1
+        if (at >= 0 && at < end && at < n) {
+          b = toI32(src[at])
+          past = at + 1
+        }
       }
     }
     const want: i32 = this.want
@@ -776,12 +827,12 @@ export class JsonTokenizer {
         break
       case JSON_TOK_COLON:
         if (want === JSON_TOK_WANT_COLON) {
-          return this.value(jsonTokSkipBlank(src, at + 1, end))
+          return this.value(jsonTokSkipBlank(src, past, end))
         }
         break
       case JSON_TOK_COMMA:
         if (want === JSON_TOK_WANT_COMMA_OR_CLOSE) {
-          const after: i32 = jsonTokSkipBlank(src, at + 1, end)
+          const after: i32 = jsonTokSkipBlank(src, past, end)
           if (this.inside === JSON_TOK_IN_OBJECT) {
             return this.key(after)
           }
@@ -790,12 +841,12 @@ export class JsonTokenizer {
         break
       case JSON_TOK_CLOSE_BRACE:
         if (want === JSON_TOK_WANT_COMMA_OR_CLOSE || want === JSON_TOK_WANT_KEY_OR_CLOSE) {
-          return this.close(at, JSON_TOK_IN_OBJECT)
+          return this.close(at, past, JSON_TOK_IN_OBJECT)
         }
         break
       case JSON_TOK_CLOSE_BRACKET:
         if (want === JSON_TOK_WANT_COMMA_OR_CLOSE || want === JSON_TOK_WANT_VALUE_OR_CLOSE) {
-          return this.close(at, JSON_TOK_IN_ARRAY)
+          return this.close(at, past, JSON_TOK_IN_ARRAY)
         }
         break
       default:
@@ -841,21 +892,24 @@ export class JsonTokenizer {
     return k
   }
 
-  /** A closer at `at`, which must match the innermost container, `inside`. */
-  private close(at: i32, inside: i32): i32 {
-    if (this.inside !== inside) {
+  /** A closer at `at`, ending at `past`, which must match the innermost container, `inside`. */
+  private close(at: i32, past: i32, inside: i32): i32 {
+    const depth: i32 = this.depth
+    // A container is open whenever `inside` names one, so the depth test
+    // refuses nothing the first does not.
+    if (this.inside !== inside || depth <= 0) {
       return this.fail(JSON_TOK_ERR_SYNTAX, at)
     }
     // The container closed was the stack's last byte, so the one now
     // innermost is the byte before it, or none.
-    const d: i32 = this.depth - 1
+    const d: i32 = depth - 1
     this.depth = d
     this.inside = d > 0 && d <= toI32(this.stack.length) ? toI32(this.stack[d - 1]) : 0
-    return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_END : JSON_TOK_ARRAY_END, at, at + 1)
+    return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_END : JSON_TOK_ARRAY_END, at, past)
   }
 
-  /** An opener at `at`, refused past the depth limit. */
-  private open(at: i32, inside: i32): i32 {
+  /** An opener at `at`, ending at `past`, refused past the depth limit. */
+  private open(at: i32, past: i32, inside: i32): i32 {
     const d: i32 = this.depth
     if (d >= this.maxDepth || d < 0 || d >= toI32(this.stack.length)) {
       return this.fail(JSON_TOK_ERR_DEPTH, at)
@@ -863,7 +917,7 @@ export class JsonTokenizer {
     this.stack[d] = toU8(inside)
     this.depth = d + 1
     this.inside = inside
-    return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_BEGIN : JSON_TOK_ARRAY_BEGIN, at, at + 1)
+    return this.emit(inside === JSON_TOK_IN_OBJECT ? JSON_TOK_OBJECT_BEGIN : JSON_TOK_ARRAY_BEGIN, at, past)
   }
 
   /** A key at `at`: a string, whose colon the next call reads. */
@@ -878,8 +932,14 @@ export class JsonTokenizer {
   /** A value at `at`. */
   private value(at: i32): i32 {
     const src: u8[] = this.src
-    const end: i32 = this.end
-    const b: i32 = jsonTokByteAt(src, at, end)
+    const end: JsonTokEnd = this.end
+    // What `jsonTokByteAt` answers outside the window, read here so that
+    // inside it `at + 1` is proved to fit.
+    if (at < 0 || at >= end || at >= toI32(src.length)) {
+      return this.fail(JSON_TOK_ERR_TRUNCATED, at)
+    }
+    const b: i32 = toI32(src[at])
+    const past: i32 = at + 1
     if (b === JSON_TOK_QUOTE) {
       return this.string(at, JSON_TOK_STRING)
     }
@@ -888,9 +948,9 @@ export class JsonTokenizer {
     }
     switch (b) {
       case JSON_TOK_OPEN_BRACE:
-        return this.open(at, JSON_TOK_IN_OBJECT)
+        return this.open(at, past, JSON_TOK_IN_OBJECT)
       case JSON_TOK_OPEN_BRACKET:
-        return this.open(at, JSON_TOK_IN_ARRAY)
+        return this.open(at, past, JSON_TOK_IN_ARRAY)
       case JSON_TOK_LOWER_T:
         return this.literal(at, "true", JSON_TOK_TRUE)
       case JSON_TOK_LOWER_F:
@@ -898,24 +958,29 @@ export class JsonTokenizer {
       case JSON_TOK_LOWER_N:
         return this.literal(at, "null", JSON_TOK_NULL)
       default:
-        return this.fail(b < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_SYNTAX, at)
+        return this.fail(JSON_TOK_ERR_SYNTAX, at)
     }
   }
 
   /** `true`, `false` or `null` at `at`; a window that ends inside the word is truncated. */
   private literal(at: i32, word: string, k: i32): i32 {
+    const src: u8[] = this.src
+    const end: JsonTokEnd = this.end
+    const srcLen: i32 = toI32(src.length)
     const n: i32 = toI32(word.length)
+    let i: i32 = at
     let matched: i32 = 0
-    while (
-      matched < n &&
-      jsonTokByteAt(this.src, at + matched, this.end) === toI32(word.charCodeAt(matched))
-    ) {
+    while (matched < n) {
+      if (i < 0 || i >= end || i >= srcLen) {
+        return this.fail(i >= end ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_SYNTAX, i)
+      }
+      if (toI32(src[i]) !== toI32(word.charCodeAt(matched))) {
+        return this.fail(JSON_TOK_ERR_SYNTAX, i)
+      }
+      i += 1
       matched += 1
     }
-    if (matched === n) {
-      return this.emit(k, at, at + n)
-    }
-    return this.fail(at + matched >= this.end ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_SYNTAX, at + matched)
+    return this.emit(k, at, i)
   }
 
   /**
@@ -931,24 +996,35 @@ export class JsonTokenizer {
    */
   private number(at: i32): i32 {
     const src: u8[] = this.src
-    const end: i32 = this.maxNumberBytes >= this.end - at ? this.end : at + this.maxNumberBytes + 1
+    const n: i32 = toI32(src.length)
+    const stop: JsonTokEnd = this.end
+    const cap: i32 = this.maxNumberBytes
+    if (at < 0 || at >= stop || at >= n) {
+      // `value` has read the byte at `at` before it calls here, so this is
+      // not reached; it answers what reading past the window answers.
+      return this.fail(JSON_TOK_ERR_TRUNCATED, at)
+    }
+    // One byte past the length limit, or the window's end when that comes
+    // first. Past the limit `at + cap + 1` is at most `stop`, so it fits.
+    const end: i32 = cap >= stop - at ? stop : toI32(toI64(at) + toI64(cap) + toI64(1))
     let i: i32 = at
-    const negative: boolean = jsonTokByteAt(src, i, end) === JSON_TOK_MINUS
+    const negative: boolean = toI32(src[at]) === JSON_TOK_MINUS
     if (negative) {
-      i += 1
+      i = at + 1
     }
     const digitsAt: i32 = i
-    const first: i32 = jsonTokByteAt(src, i, end)
+    if (i >= end || i >= n) {
+      return this.numberRefused(JSON_TOK_ERR_TRUNCATED, at, i)
+    }
+    const first: i32 = toI32(src[i])
     if (first < JSON_TOK_DIGIT_0 || first > JSON_TOK_DIGIT_9) {
-      return this.numberRefused(first < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_NUMBER, at, i)
+      return this.numberRefused(JSON_TOK_ERR_NUMBER, at, i)
     }
     // The integer part's digits and then the fraction's are folded into one
     // `u64` as they are passed, eight at a time while eight bytes remain. It
     // wraps on a long run, which needs no count: the digits are counted from
     // the indices once the runs end, and `numberF64` reads the mantissa only
     // when there are 19 or fewer. A leading `0` is its whole integer part.
-    const n: i32 = toI32(src.length)
-    const to: i32 = end < n ? end : n
     let mantissa: u64 = toU64(0)
     let fractionAt: i32 = -1
     let run: boolean = first !== JSON_TOK_DIGIT_0
@@ -960,13 +1036,7 @@ export class JsonTokenizer {
         // A run shorter than eight digits, most of a document's, ends
         // before its eighth byte: that one byte is read first, and only a
         // run that reaches it pays for the eight-byte read and check.
-        while (
-          i >= 0 &&
-          i < JSON_TOK_END_CEILING &&
-          i + 8 <= to &&
-          i + 8 <= n &&
-          jsonTokIsDigit(toI32(src[i + 7]))
-        ) {
+        while (i >= 0 && i <= n - 8 && i + 8 <= end && jsonTokIsDigit(toI32(src[i + 7]))) {
           const word: u64 = jsonTokLoad8(src, i)
           if (!jsonTokEightDigits(word)) {
             break
@@ -974,7 +1044,7 @@ export class JsonTokenizer {
           mantissa = mantissa * toU64(100000000) + jsonTokParseEight(word)
           i += 8
         }
-        while (i >= 0 && i < to && i < n) {
+        while (i >= 0 && i < end && i < n) {
           const digit: i32 = toI32(src[i]) - JSON_TOK_DIGIT_0
           if (digit < 0 || digit > 9) {
             break
@@ -983,7 +1053,7 @@ export class JsonTokenizer {
           i += 1
         }
       }
-      if (fractionAt >= 0 || jsonTokByteAt(src, i, end) !== JSON_TOK_DOT) {
+      if (fractionAt >= 0 || i < 0 || i >= end || i >= n || toI32(src[i]) !== JSON_TOK_DOT) {
         break
       }
       i += 1
@@ -996,15 +1066,25 @@ export class JsonTokenizer {
     }
     let integral: boolean = fractionAt < 0
     let digits: i32 = integral ? i - digitsAt : i - digitsAt - 1
-    let scale: i32 = integral ? 0 : fractionAt - i
-    const e: i32 = jsonTokByteAt(src, i, end)
-    if (e === JSON_TOK_LOWER_E || e === JSON_TOK_UPPER_E) {
+    // The fraction's length, less or plus the exponent, is the scale.
+    const fractionFrom: i32 = fractionAt >= 0 ? fractionAt : 0
+    const fractionTo: i32 = fractionAt >= 0 ? i : 0
+    let exponent: i32 = 0
+    let minus: boolean = false
+    if (
+      i >= 0 &&
+      i < end &&
+      i < n &&
+      (toI32(src[i]) === JSON_TOK_LOWER_E || toI32(src[i]) === JSON_TOK_UPPER_E)
+    ) {
       integral = false
       i += 1
-      const sign: i32 = jsonTokByteAt(src, i, end)
-      const minus: boolean = sign === JSON_TOK_MINUS
-      if (minus || sign === JSON_TOK_PLUS) {
-        i += 1
+      if (i < end && i < n) {
+        const sign: i32 = toI32(src[i])
+        minus = sign === JSON_TOK_MINUS
+        if (minus || sign === JSON_TOK_PLUS) {
+          i += 1
+        }
       }
       const digit: i32 = jsonTokByteAt(src, i, end)
       if (!jsonTokIsDigit(digit)) {
@@ -1012,23 +1092,37 @@ export class JsonTokenizer {
       }
       // Accumulated until it reaches the cap; a digit after that sends
       // `numberF64` to `parseFloat`, which reads any exponent.
-      let exponent: i32 = 0
-      while (i >= 0 && i < end && i < n && jsonTokIsDigit(toI32(src[i]))) {
+      while (i >= 0 && i < end && i < n) {
+        const d: i32 = toI32(src[i]) - JSON_TOK_DIGIT_0
+        if (d < 0 || d > 9) {
+          break
+        }
         if (exponent < JSON_TOK_EXPONENT_CAP) {
-          exponent = exponent * JSON_TOK_TEN + toI32(src[i]) - JSON_TOK_DIGIT_0
+          // Below ten times the cap plus ten, so it fits.
+          exponent = toI32(toI64(exponent) * toI64(JSON_TOK_TEN) + toI64(d))
         } else {
           digits = JSON_TOK_NUMBER_WALK
         }
         i += 1
       }
-      scale += minus ? -exponent : exponent
     }
-    if (i - at > this.maxNumberBytes) {
-      return this.fail(JSON_TOK_ERR_NUMBER_LIMIT, at + this.maxNumberBytes)
+    // Summed in an `i64`: a fraction of more than 2^31 digits, which no `i32`
+    // scale can hold, is sent to `parseFloat` below rather than overflow.
+    let scale: i64 = minus
+      ? toI64(fractionFrom) - toI64(fractionTo) - toI64(exponent)
+      : toI64(fractionFrom) - toI64(fractionTo) + toI64(exponent)
+    if (scale < toI64(-2147483648) || scale > toI64(2147483647)) {
+      digits = JSON_TOK_NUMBER_WALK
+      scale = toI64(0)
+    }
+    if (toI64(i) - toI64(at) > toI64(cap)) {
+      // Past the limit, so `at + cap` is below `i` and fits.
+      return this.fail(JSON_TOK_ERR_NUMBER_LIMIT, toI32(toI64(at) + toI64(cap)))
     }
     this.integral = integral
     this.numberMantissa = mantissa
-    this.numberScale = scale
+    // Inside `i32` once the test above has passed.
+    this.numberScale = toI32(scale)
     this.numberDigits = digits
     this.numberNegative = negative
     return this.emit(JSON_TOK_NUMBER, at, i)
@@ -1036,8 +1130,10 @@ export class JsonTokenizer {
 
   /** `code` at `i`, unless the number starting at `at` has run past its limit, which is the error then. */
   private numberRefused(code: i32, at: i32, i: i32): i32 {
-    if (i - at > this.maxNumberBytes) {
-      return this.fail(JSON_TOK_ERR_NUMBER_LIMIT, at + this.maxNumberBytes)
+    const cap: i32 = this.maxNumberBytes
+    if (toI64(i) - toI64(at) > toI64(cap)) {
+      // Below `i`, so it fits.
+      return this.fail(JSON_TOK_ERR_NUMBER_LIMIT, toI32(toI64(at) + toI64(cap)))
     }
     return this.fail(code, i)
   }
@@ -1050,31 +1146,41 @@ export class JsonTokenizer {
    */
   private string(at: i32, k: i32): i32 {
     const src: u8[] = this.src
-    const end: i32 = this.end
+    const end: JsonTokEnd = this.end
+    const n: i32 = toI32(src.length)
+    // Each caller read the opening quote at `at`, so this refuses nothing; it
+    // proves `at + 1` fits.
+    if (at < 0 || at >= end) {
+      return this.fail(JSON_TOK_ERR_TRUNCATED, at)
+    }
+    const first: i32 = at + 1
     // Where the string would pass its limit, or `end` when it cannot pass it
-    // before the window ends, which also keeps the sum from overflowing:
-    // below `stringFrom`, `at + 1 + maxStringBytes` is less than `end`.
-    const limit: i32 = at >= this.stringFrom ? end : at + 1 + this.maxStringBytes
-    let i: i32 = at + 1
-    let decoded: i32 = 0
+    // before the window ends; below `stringFrom`, `at + 1 + maxStringBytes`
+    // is less than `end`, so it fits.
+    const limit: i32 = at >= this.stringFrom ? end : toI32(toI64(first) + toI64(this.maxStringBytes))
+    let i: i32 = first
+    // How many more bytes the escapes so far are written with than they
+    // decode to: the decoded length is the raw one less this.
+    let saved: i32 = 0
+    let past: i32 = 0
     while (true) {
       // A run of plain bytes is stepped over in one call. Each ASCII byte or
       // UTF-8 sequence of it is one the checks below would pass with
-      // `decoded += width; i += width`, and the run stops short of `limit`,
+      // `i += width`, decoding to itself, and the run stops short of `limit`,
       // so the first byte it leaves is judged by those checks exactly as
       // before.
-      const run: i32 = i
       i = jsonTokSkipPlain(src, i, limit)
-      decoded += i - run
-      const b: i32 = jsonTokByteAt(src, i, end)
+      // No byte, at the limit or not, is a window cut short.
+      if (i < 0 || i >= end || i >= n) {
+        return this.fail(JSON_TOK_ERR_TRUNCATED, i)
+      }
+      const b: i32 = toI32(src[i])
       if (b === JSON_TOK_QUOTE) {
+        past = i + 1
         break
       }
       if (i >= limit) {
-        return this.fail(b < 0 ? JSON_TOK_ERR_TRUNCATED : JSON_TOK_ERR_STRING_LIMIT, i)
-      }
-      if (b < 0) {
-        return this.fail(JSON_TOK_ERR_TRUNCATED, i)
+        return this.fail(JSON_TOK_ERR_STRING_LIMIT, i)
       }
       if (b < JSON_TOK_SPACE) {
         return this.fail(JSON_TOK_ERR_CONTROL, i)
@@ -1084,25 +1190,37 @@ export class JsonTokenizer {
         if (cp < 0) {
           return cp
         }
-        decoded += jsonTokUtf8Width(cp)
-        i += jsonTokEscapeLength(src, i, end, cp)
+        // An escape takes 12 bytes for a surrogate pair, the only one past
+        // U+FFFF, 6 for any other `\u` and 2 for a short one. Each is added
+        // alone, so `i < end` proves the sum.
+        let length: i32 = 2
+        if (cp >= JSON_TOK_FOUR_BYTE_FLOOR) {
+          length = 12
+          i += 12
+        } else if (jsonTokByteAt(src, i + 1, end) === JSON_TOK_LOWER_U) {
+          length = 6
+          i += 6
+        } else {
+          i += 2
+        }
+        // At most `i - first`, so it fits.
+        saved = toI32(toI64(saved) + toI64(length) - toI64(jsonTokUtf8Width(cp)))
       } else if (b < JSON_TOK_ASCII_END) {
-        decoded += 1
         i += 1
       } else {
-        const width: i32 = jsonTokUtf8Length(src, i, end)
-        if (width < 0) {
-          return this.fail(width, i)
+        const stop: i32 = jsonTokUtf8End(src, i, end)
+        if (stop < 0) {
+          return this.fail(stop, i)
         }
-        decoded += width
-        i += width
+        i = stop
       }
     }
     if (i > limit) {
       return this.fail(JSON_TOK_ERR_STRING_LIMIT, limit)
     }
-    this.stringBytes = decoded
-    return this.emit(k, at, i + 1)
+    // No more than the raw length, so it fits.
+    this.stringBytes = toI32(toI64(i) - toI64(first) - toI64(saved))
+    return this.emit(k, at, past)
   }
 
   /**
@@ -1112,7 +1230,12 @@ export class JsonTokenizer {
    */
   private escapeCodePoint(at: i32): i32 {
     const src: u8[] = this.src
-    const end: i32 = this.end
+    const end: JsonTokEnd = this.end
+    // Every caller passes a backslash it read inside the window, so this
+    // refuses nothing; it proves each `at + k` below fits.
+    if (at < 0 || at >= end) {
+      return this.fail(JSON_TOK_ERR_TRUNCATED, at)
+    }
     const letter: i32 = jsonTokByteAt(src, at + 1, end)
     if (letter < 0) {
       return this.fail(JSON_TOK_ERR_TRUNCATED, at + 1)
@@ -1147,9 +1270,9 @@ export class JsonTokenizer {
     if (low < JSON_TOK_LOW_SURROGATE || low >= JSON_TOK_SURROGATE_END) {
       return this.fail(JSON_TOK_ERR_SURROGATE, at)
     }
-    return (
-      JSON_TOK_FOUR_BYTE_FLOOR + ((unit - JSON_TOK_HIGH_SURROGATE) << 10) + (low - JSON_TOK_LOW_SURROGATE)
-    )
+    // Each half is its surrogate block's start plus ten bits, so its low ten
+    // bits are what it adds.
+    return JSON_TOK_FOUR_BYTE_FLOOR + (unit & 0x3ff) * 1024 + (low & 0x3ff)
   }
 
   /**
@@ -1172,40 +1295,55 @@ export class JsonTokenizer {
    */
   stringInto(out: u8[], at: i32): i32 {
     const n: i32 = this.stringBytes
-    if (!this.isText() || at < 0 || at > toI32(out.length) - n) {
+    const outLength: i32 = toI32(out.length)
+    if (!this.isText() || at < 0) {
+      return -1
+    }
+    // The decoded length is never negative, so this is `at + n` past the end.
+    const room: i32 = outLength - at
+    if (n > room) {
+      return -1
+    }
+    const window: JsonTokEnd = this.end
+    const quote: i32 = this.tokStart
+    const close: i32 = this.tokEnd
+    // A text token lies inside the window, both quotes included, so this
+    // refuses only fields a caller has overwritten; it proves the offsets
+    // below fit.
+    if (quote < 0 || close < 2 || close > window || close <= quote) {
       return -1
     }
     const src: u8[] = this.src
-    const end: i32 = this.tokEnd - 1
-    let i: i32 = this.tokStart + 1
-    let o: i32 = at
+    const end: i32 = close - 1
+    let i: i32 = quote + 1
     if (n === end - i) {
       // No escape (see `keyEquals`): the bytes are copied as they are, as one
-      // `copyBytes` of as many as both arrays hold, which the caller's test
+      // `tryCopyBytes` of as many as both arrays hold, which the caller's test
       // above has made all of them.
       // The source window still in `src` is the case met; the clamps below
       // are for one shrunk since it was scanned.
-      if (i >= 0 && o >= 0 && end <= toI32(src.length)) {
-        copyBytes(out, o, src, i, n)
-        return n
+      const srcLength: i32 = toI32(src.length)
+      if (end <= srcLength) {
+        // A range that does not fit copies nothing, and says so.
+        return tryCopyBytes(out, at, src, i, n) ? n : 0
       }
-      if (i >= 0 && o >= 0) {
-        const srcLength: i32 = toI32(src.length)
-        const outLength: i32 = toI32(out.length)
-        let count: i32 = end - i
-        if (srcLength - i < count) {
-          count = srcLength - i
-        }
-        if (outLength - o < count) {
-          count = outLength - o
-        }
-        if (count > 0) {
-          copyBytes(out, o, src, i, count)
-          o += count
-        }
+      let count: i32 = end - i
+      if (srcLength - i < count) {
+        count = srcLength - i
       }
-      return o - at
+      if (room < count) {
+        count = room
+      }
+      if (count > 0) {
+        return tryCopyBytes(out, at, src, i, count) ? count : 0
+      }
+      return 0
     }
+    // Bytes decoded so far. Each step decodes no more bytes than it reads, so
+    // this stays at most `i - quote - 1` and fits. They are written from `o`
+    // while `out` has room, which `o` stops at.
+    let written: i32 = 0
+    let o: i32 = at
     while (i < end) {
       const b: i32 = jsonTokByteAt(src, i, end)
       // The plain run before the next escape is copied whole. In a string
@@ -1214,27 +1352,30 @@ export class JsonTokenizer {
       // here, as in a run of escapes, skips the scan.
       const stop: i32 = b === JSON_TOK_BACKSLASH ? i : jsonTokSkipPlain(src, i, end)
       if (stop > i) {
-        const count: i32 = stop - i
-        if (o >= 0) {
+        // The run stops at `end` at the latest, so this fits.
+        const count: i32 = toI32(toI64(stop) - toI64(i))
+        if (o >= 0 && o < outLength) {
           // The entry guard sized `out` for the decoded length the scan
           // measured, but the source can change after the scan: a backslash
           // turned plain lets a run outgrow that length, so the copy is cut
           // to the room left.
-          const room: i32 = toI32(out.length) - o
-          const c: i32 = room < count ? room : count
-          if (c > 0) {
-            copyBytes(out, o, src, i, c)
-          }
+          const left: i32 = outLength - o
+          const fits: i32 = left < count ? left : count
+          // What did not fit was not written, so it does not move `o`.
+          const c: i32 = tryCopyBytes(out, o, src, i, fits) ? fits : 0
+          // No more than the room left, so at most `outLength`.
+          o = toI32(toI64(o) + toI64(c))
         }
-        o += count
+        written = toI32(toI64(written) + toI64(count))
         i = stop
         continue
       }
       if (b !== JSON_TOK_BACKSLASH) {
         if (o >= 0 && o < toI32(out.length)) {
           out[o] = toU8(b)
+          o += 1
         }
-        o += 1
+        written = toI32(toI64(written) + toI64(1))
         i += 1
         continue
       }
@@ -1244,13 +1385,23 @@ export class JsonTokenizer {
       while (k < width) {
         if (o >= 0 && o < toI32(out.length)) {
           out[o] = toU8(jsonTokUtf8Byte(cp, width, k))
+          o += 1
         }
-        o += 1
+        written = toI32(toI64(written) + toI64(1))
         k += 1
       }
-      i += jsonTokEscapeLength(src, i, end, cp)
+      // An escape takes 12 bytes for a surrogate pair, the only one past
+      // U+FFFF, 6 for any other `\u` and 2 for a short one. Each is added
+      // alone, so `i < end` proves the sum.
+      if (cp >= JSON_TOK_FOUR_BYTE_FLOOR) {
+        i += 12
+      } else if (jsonTokByteAt(src, i + 1, end) === JSON_TOK_LOWER_U) {
+        i += 6
+      } else {
+        i += 2
+      }
     }
-    return o - at
+    return written
   }
 
   /**
@@ -1281,17 +1432,29 @@ export class JsonTokenizer {
     if (!this.isText() || n !== this.stringBytes) {
       return false
     }
+    const window: JsonTokEnd = this.end
+    const quote: i32 = this.tokStart
+    const close: i32 = this.tokEnd
+    // A text token lies inside the window, both quotes included, so this
+    // refuses only fields a caller has overwritten; it proves the offsets
+    // below fit.
+    if (quote < 0 || close < 2 || close > window || close <= quote) {
+      return false
+    }
     const src: u8[] = this.src
-    const end: i32 = this.tokEnd - 1
-    let i: i32 = this.tokStart + 1
+    const end: i32 = close - 1
+    let i: i32 = quote + 1
     let o: i32 = 0
     // Every escape decodes to fewer bytes than it is written with, so a string
     // whose decoded length is its raw length has none.
-    if (n === this.tokEnd - this.tokStart - 2) {
-      while (o < n) {
-        if (jsonTokByteAt(src, i + o, end) !== toI32(name.charCodeAt(o))) {
+    if (n === end - i) {
+      // `end - i` is `n`, so the loop stops at both ends together; each
+      // bound proves its own index.
+      while (i < end && o < n) {
+        if (jsonTokByteAt(src, i, end) !== toI32(name.charCodeAt(o))) {
           return false
         }
+        i += 1
         o += 1
       }
       return true
@@ -1316,7 +1479,16 @@ export class JsonTokenizer {
         o += 1
         k += 1
       }
-      i += jsonTokEscapeLength(src, i, end, cp)
+      // An escape takes 12 bytes for a surrogate pair, the only one past
+      // U+FFFF, 6 for any other `\u` and 2 for a short one. Each is added
+      // alone, so `i < end` proves the sum.
+      if (cp >= JSON_TOK_FOUR_BYTE_FLOOR) {
+        i += 12
+      } else if (jsonTokByteAt(src, i + 1, end) === JSON_TOK_LOWER_U) {
+        i += 6
+      } else {
+        i += 2
+      }
     }
     return o === n
   }
@@ -1342,50 +1514,52 @@ export class JsonTokenizer {
    * @returns the integer, or `0` when `isInteger()` does not hold.
    */
   numberI64(): i64 {
-    if (!this.isInteger()) {
-      return toI64(0)
-    }
-    const src: u8[] = this.src
-    const negated: i64 = this.integerValue
-    return jsonTokByteAt(src, this.tokStart, this.tokEnd) === JSON_TOK_MINUS ? negated : -negated
+    return this.isInteger() ? this.integerValue : toI64(0)
   }
 
   /**
-   * Reads the integral number's digits into `integerValue`, negated, and
-   * answers whether its magnitude fits `i64` for its sign. Accumulating a
-   * negative number reaches -2^63, where a positive one stops at 2^63 - 1, so
-   * the bound for a positive number is one less.
+   * Reads the integral number's value into `integerValue` and answers
+   * whether it fits `i64`. The magnitude is summed in a `u64` against the
+   * bound for its sign, 2^63 for a negative number and 2^63 - 1 for a
+   * positive one, so it stays below 2^64 and never wraps.
    */
   private integerScan(): boolean {
-    if (this.numberDigits <= JSON_TOK_EXACT_DIGITS) {
-      // Below 10^18, so `number()`'s mantissa is the magnitude and fits.
-      this.integerValue = -toI64(this.numberMantissa)
-      return true
-    }
     const src: u8[] = this.src
+    const window: JsonTokEnd = this.end
+    const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
-    const negative: boolean = jsonTokByteAt(src, this.tokStart, end) === JSON_TOK_MINUS
-    // Every `i64` here comes from `toI64`, which is a BigInt under Node, where a
-    // bare literal would be a double and the two do not mix.
-    // -2^63 has no literal (NL2055): -2^31 shifted up 32 bits.
-    const min: i64 = toI64(-2147483648) << toI64(32)
-    const ten: i64 = toI64(10)
-    const bound: i64 = negative ? min : min + toI64(1)
-    let acc: i64 = toI64(0)
-    let i: i32 = negative ? this.tokStart + 1 : this.tokStart
     const n: i32 = toI32(src.length)
-    if (i < 0 || end > n) {
+    // A number lies inside the window, so this refuses only fields a caller
+    // has overwritten; it proves `start + 1` fits.
+    if (start < 0 || start >= window || start >= n || end > window || end > n) {
       return false
     }
-    while (i < end && i < n) {
-      const digit: i64 = toI64(toI32(src[i]) - JSON_TOK_DIGIT_0)
-      if (acc < (bound + digit) / ten) {
-        return false
-      }
-      acc = acc * ten - digit
+    const negative: boolean = toI32(src[start]) === JSON_TOK_MINUS
+    if (this.numberDigits <= JSON_TOK_EXACT_DIGITS) {
+      // Below 10^18, so `number()`'s mantissa is the magnitude and fits.
+      this.integerValue = jsonTokSigned(this.numberMantissa, negative)
+      return true
+    }
+    // Every `u64` here comes from `toU64`, which is a BigInt under Node, where
+    // a bare literal would be a double and the two do not mix.
+    const one: u64 = toU64(1)
+    const ten: u64 = toU64(10)
+    const top: u64 = one << toU64(63)
+    const bound: u64 = negative ? top : top - one
+    let acc: u64 = toU64(0)
+    let i: i32 = start
+    if (negative) {
       i += 1
     }
-    this.integerValue = acc
+    while (i < end && i < n) {
+      const digit: u64 = toU64(toI32(src[i]) - JSON_TOK_DIGIT_0)
+      if (acc > (bound - digit) / ten) {
+        return false
+      }
+      acc = acc * ten + digit
+      i += 1
+    }
+    this.integerValue = jsonTokSigned(acc, negative)
     return true
   }
 
@@ -1422,11 +1596,17 @@ export class JsonTokenizer {
    */
   private unsignedScan(): boolean {
     const src: u8[] = this.src
+    const window: JsonTokEnd = this.end
     const end: i32 = this.tokEnd
     const n: i32 = toI32(src.length)
     let i: i32 = this.tokStart
+    // A number lies inside the window, so the first test refuses only fields
+    // a caller has overwritten; it bounds `end - i`.
+    if (i < 0 || i >= n || end <= 0 || end <= i || end > window || end > n) {
+      return false
+    }
     const digits: i32 = end - i
-    if (i < 0 || end > n || digits < 1 || digits > 20 || i >= n) {
+    if (digits < 1 || digits > 20) {
       return false
     }
     if (toI32(src[i]) === JSON_TOK_MINUS) {
@@ -1481,57 +1661,57 @@ export class JsonTokenizer {
       return false
     }
     const src: u8[] = this.src
-    const end: i32 = this.tokEnd
+    const window: JsonTokEnd = this.end
     const n: i32 = toI32(src.length)
     let i: i32 = this.tokStart
-    if (i < 0 || end > n) {
+    // A number lies inside the window, so this refuses only fields a caller
+    // has overwritten.
+    const close: i32 = this.tokEnd
+    if (i < 0 || i >= window || close <= 0 || close > window || close <= i) {
       return false
     }
+    const end: JsonTokEnd = close
     if (jsonTokByteAt(src, i, end) === JSON_TOK_MINUS) {
       i += 1
     }
-    let fraction: i32 = 0
-    let zeros: i32 = 0
-    let allZero = true
-    let afterDot = false
+    // F - z is the distance from the dot to the last nonzero digit, less one
+    // when that digit comes first; with no dot, the digits end where it would be.
+    let dot: i32 = -1
+    let last: i32 = -1
     while (i < end && i < n) {
       const b: i32 = toI32(src[i])
       if (b === JSON_TOK_DOT) {
-        afterDot = true
-      } else if (jsonTokIsDigit(b)) {
-        if (b === JSON_TOK_DIGIT_0) {
-          zeros += 1
-        } else {
-          zeros = 0
-          allZero = false
-        }
-        if (afterDot) {
-          fraction += 1
-        }
-      } else {
+        dot = i
+      } else if (!jsonTokIsDigit(b)) {
         break
+      } else if (b !== JSON_TOK_DIGIT_0) {
+        last = i
       }
       i += 1
     }
-    if (allZero) {
+    if (last < 0) {
       return true
     }
-    // The exponent the value needs to be whole: E >= need.
-    const need: i32 = fraction - zeros
+    if (dot < 0) {
+      dot = i
+    }
     if (i >= end) {
-      return need <= 0
+      return last < dot
     }
     // `i` is at the `e` or `E`.
     i += 1
     const sign: i32 = jsonTokByteAt(src, i, end)
     const minus: boolean = sign === JSON_TOK_MINUS
-    if (minus || sign === JSON_TOK_PLUS) {
+    if (i < end && (minus || sign === JSON_TOK_PLUS)) {
       i += 1
     }
-    if (minus) {
-      return need <= 0 && !jsonTokDigitsExceed(src, i, end, -need)
+    // `dot` and `last` are positions in the token, so each difference fits.
+    if (last > dot) {
+      // A nonzero fraction digit `last - dot` places down: E >= last - dot.
+      return !minus && jsonTokDigitsExceed(src, i, end, toI32(toI64(last) - toI64(dot) - toI64(1)))
     }
-    return need <= 0 || jsonTokDigitsExceed(src, i, end, need - 1)
+    // Whole already, with `dot - last - 1` zeros a negative exponent may take.
+    return !minus || !jsonTokDigitsExceed(src, i, end, toI32(toI64(dot) - toI64(last) - toI64(1)))
   }
 
   /**
@@ -1565,7 +1745,8 @@ export class JsonTokenizer {
         if (scale === 0) {
           value = toF64(mantissa)
         } else {
-          const power: f64 = jsonTokPowerOfTen(scale < 0 ? -scale : scale)
+          // Within the fast exponent's span, so the magnitude fits.
+          const power: f64 = jsonTokPowerOfTen(scale < 0 ? toI32(toI64(0) - toI64(scale)) : scale)
           value = scale < 0 ? toF64(mantissa) / power : toF64(mantissa) * power
         }
       } else {
@@ -1587,8 +1768,14 @@ export class JsonTokenizer {
       return this.numberSlow()
     }
     const src: u8[] = this.src
+    const window: JsonTokEnd = this.end
     const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
+    // A number lies inside the window, so this refuses only fields a caller
+    // has overwritten, as the length test below does.
+    if (start < 0 || start >= window) {
+      return this.numberSlow()
+    }
     const negative: boolean = jsonTokByteAt(src, start, end) === JSON_TOK_MINUS
     // At most 19 digits are accumulated, so the mantissa never wraps. Every
     // `u64` constant is spelled through `toU64`, because under Node a `u64` is
@@ -1596,8 +1783,11 @@ export class JsonTokenizer {
     const ten: u64 = toU64(10)
     let mantissa: u64 = toU64(0)
     let digits: i32 = 0
-    let i: i32 = negative ? start + 1 : start
-    if (i < 0 || end > toI32(src.length)) {
+    let i: i32 = start
+    if (negative) {
+      i += 1
+    }
+    if (end > toI32(src.length)) {
       return this.numberSlow()
     }
     // The length is read in each test rather than hoisted: the call to
@@ -1606,7 +1796,8 @@ export class JsonTokenizer {
       const b: i32 = toI32(src[i])
       if (jsonTokIsDigit(b)) {
         if (digits > 0 || b !== JSON_TOK_DIGIT_0) {
-          digits += 1
+          // `digits` is at most 19 here, so the mask changes nothing.
+          digits = (digits & 31) + 1
           if (digits > JSON_TOK_FAST_DIGITS) {
             return this.numberSlow()
           }
@@ -1624,7 +1815,8 @@ export class JsonTokenizer {
       if (exact && scale >= -JSON_TOK_FAST_EXPONENT && scale <= JSON_TOK_FAST_EXPONENT) {
         // Clinger: both operands are exact doubles, so one rounding. The
         // same decision as `numberF64`'s; change the two together.
-        const power: f64 = jsonTokPowerOfTen(scale < 0 ? -scale : scale)
+        // Within the fast exponent's span, so the magnitude fits.
+        const power: f64 = jsonTokPowerOfTen(scale < 0 ? toI32(toI64(0) - toI64(scale)) : scale)
         value = scale < 0 ? toF64(mantissa) / power : toF64(mantissa) * power
       } else {
         value = jsonTokEiselLemire(mantissa, scale)
@@ -1649,7 +1841,8 @@ export class JsonTokenizer {
     const src: u8[] = this.src
     const start: i32 = this.tokStart
     const end: i32 = this.tokEnd
-    if (start < 0 || start > end || end > toI32(src.length)) {
+    const n: i32 = toI32(src.length)
+    if (start < 0 || start > end || end > n) {
       return 0
     }
     return parseFloat(String.fromBytes(src, start, end))
@@ -1668,6 +1861,13 @@ export class JsonTokenizer {
    * @internal Called by `JsonDecoder.enterUnion`, std/json-typed.ts.
    */
   rewindObject(start: i32): void {
+    const window: JsonTokEnd = this.end
+    // The caller passes a `{` the tokenizer read, inside the window; any
+    // other offset names no object, and fails as a syntax error there.
+    if (start < 0 || start >= window) {
+      this.fail(JSON_TOK_ERR_SYNTAX, start)
+      return
+    }
     this.kind = JSON_TOK_OBJECT_BEGIN
     this.tokStart = start
     this.tokEnd = start + 1
@@ -1699,8 +1899,9 @@ export class JsonTokenizer {
     if (k !== JSON_TOK_OBJECT_BEGIN && k !== JSON_TOK_ARRAY_BEGIN) {
       return k
     }
-    const target: i32 = this.depth - 1
-    while (this.depth > target && k >= 0) {
+    // Inside the opener's depth until its closer steps back out of it.
+    const depth: i32 = this.depth
+    while (this.depth >= depth && k >= 0) {
       k = this.next()
     }
     return k
@@ -1815,9 +2016,10 @@ const jsonTokLeadingZeros = (w: u64): i32 => {
 
 /**
  * `w × 10^q` as the nearest double, ties to even, for a `w` of 1 to 19
- * decimal digits, so from 1 to 10^19 - 1, and any `q`: a `q` below
- * `JSON_TOK_SMALLEST_POWER` answers 0, one above `JSON_TOK_LARGEST_POWER`
- * infinity. Positive; the caller applies the sign.
+ * decimal digits, so from 1 to 10^19 - 1, and any `q`: a `q` below -342
+ * answers 0, one above 308 infinity, since `jsonTokPowerOfFive` has entries
+ * for those exponents alone and past them such a number is zero or infinite.
+ * Positive; the caller applies the sign.
  *
  * Mushtak and Lemire prove ("Fast Number Parsing Without Fallback", 2023)
  * that for such a `w` the product with the first 64 bits of the power of five,
@@ -1829,11 +2031,14 @@ const jsonTokLeadingZeros = (w: u64): i32 => {
 const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
   const one: u64 = toU64(1)
   const infinity: u64 = toU64(0x7ff) << toU64(52)
-  if (q < JSON_TOK_SMALLEST_POWER) {
-    return 0
-  }
-  if (q > JSON_TOK_LARGEST_POWER) {
+  // The bounds are written out, not named, so that they bound `q` below.
+  if (q > 308) {
     return bitsToF64(toI64(infinity))
+  }
+  // `q` counted from -342, the table's first row: a `q` below it is 0.
+  const from: i32 = q + 342
+  if (from < 0) {
+    return 0
   }
   // Normalize `w` so its top bit is set.
   const lz: i32 = jsonTokLeadingZeros(w0)
@@ -1841,7 +2046,7 @@ const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
   // compute_product_approximation: w × 5^q to the 55 bits a double needs
   // (52 explicit, the implicit one, a rounding bit and the one `upperbit` may
   // cost), with the next word of the power only when those bits are all ones.
-  const index: i32 = (q - JSON_TOK_SMALLEST_POWER) * 2
+  const index: i32 = from * 2
   const five: u64 = jsonTokPowerOfFive(index)
   let high: u64 = mulHigh(w, five)
   // The low half: natively a `u64` product wraps to it, and as a `bigint` the
@@ -1861,19 +2066,23 @@ const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
       low = low + second
     }
   }
-  const upperbit: i32 = toI32(high >> toU64(63))
+  const upperbit: i32 = toI32(high >> toU64(63)) & 1
   const shift: i32 = upperbit + 9
   let mantissa: u64 = high >> toU64(shift)
   // detail::power: floor(q × log2(5)) + q + 63, with upstream's bias so the
-  // shift is of a non-negative value. `q` is within ±342, so the product fits.
-  // The literals are upstream's `152170 + 65536` and `2048 * 65536`, folded,
-  // since a sum of literals is an `f64` under `--number-mode f64`.
-  const power: i32 = (q * 217706 + 134217728) >> 16
-  let power2: i32 = power - 2048 + 63 + upperbit - lz + 1023
-  if (power2 <= 0) {
+  // shift is of a non-negative value. The literals are upstream's
+  // `152170 + 65536` and `2048 * 65536 - 342 * 217706`, the last term because
+  // `from` is `q + 342`; folded, since a sum of literals is an `f64` under
+  // `--number-mode f64`. `from` is at most 650, so the product fits.
+  // From 911 to 3071, and `lz` at most 64: the masks change neither, and
+  // bound the sum.
+  const power: i32 = ((from * 217706 + 59762276) >> 16) & 4095
+  const biased: i32 = power - 2048 + 63 + upperbit - (lz & 127) + 1023
+  if (biased <= 0) {
     // A subnormal, or zero. The rounded mantissa is at most 2^52, and when it
     // reaches 2^52 those are already the bits of the smallest normal double.
-    const subnormalShift: i32 = 1 - power2
+    // `biased` is at least -1089, so the shift fits.
+    const subnormalShift: i32 = toI32(toI64(1) - toI64(biased))
     if (subnormalShift >= 64) {
       return 0
     }
@@ -1890,6 +2099,7 @@ const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
   }
   mantissa = (mantissa + (mantissa & one)) >> one
   const hidden: u64 = one << toU64(52)
+  let power2: i32 = biased
   if (mantissa >= hidden << one) {
     mantissa = hidden
     power2 += 1

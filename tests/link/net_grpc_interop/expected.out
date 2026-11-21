@@ -1,0 +1,7 @@
+PASS  a rig like serve's listens: HTTP/2 over TLS and h2c
+PASS  an h2c connection
+PASS  GetSum 2 + 3: SumReply { result: 5 }, then grpc-status 0
+PASS  Slow: held, unanswered before its deadline
+PASS  released once past the capped deadline
+PASS  Slow ends Trailers-Only with grpc-status 4, DEADLINE_EXCEEDED, and no message
+grpc interop server: 6 passed, 0 failed, 0 skipped

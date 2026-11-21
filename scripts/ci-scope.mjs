@@ -242,6 +242,34 @@ const globRe = (glob) => {
 export const matches = (file, globs) => globs.some((g) => globRe(g).test(file))
 
 /**
+ * A workflow's `on.pull_request.paths`, the globs GitHub runs it for on a pull
+ * request: interop.yml is scoped by these rather than by a lane, so
+ * tests/run.js checks what its jobs open against them with `matches`.
+ *
+ * @param {string} text the workflow's YAML
+ * @returns {string[] | null} the globs in order, or null when the workflow has no such list
+ */
+export const workflowPaths = (text) => {
+  const lines = text.split("\n")
+  const on = lines.indexOf("on:")
+  const pr = lines.indexOf("  pull_request:", on)
+  const paths = lines.indexOf("    paths:", pr)
+  if (on < 0 || pr < 0 || paths < 0 || lines.slice(on + 1, paths).some((l) => /^\S/.test(l))) {
+    return null
+  }
+  const globs = []
+  for (const line of lines.slice(paths + 1)) {
+    const m = /^ {6}- "([^"]+)"$/.exec(line)
+    if (m) {
+      globs.push(m[1])
+    } else if (!/^ {6}#/.test(line)) {
+      break
+    }
+  }
+  return globs.length > 0 ? globs : null
+}
+
+/**
  * Whether a lane can skip a change to this path: on its `unread` list, or on
  * its allowlist and off its read set.
  *

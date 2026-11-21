@@ -282,7 +282,7 @@ class JsonDocument
 | `parseText(s: string): JsonValue` | `parse` over the bytes of `s`, copied into an array the document reuses; `errorAt` is a byte offset in `s`. Keep in step with `parseTextRanged`. |
 | `parseTextRanged(s: string): JsonValue` | `parseRanged` over the bytes of `s`, as `parseText` is `parse`'s; its offsets are byte offsets in `s`. Keep in step with `parseText`. |
 | `push(a: JsonValue, v: JsonValue): i32` | Appends `v` to array `a`. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. |
-| `set(o: JsonValue, key: string, v: JsonValue): i32` | Sets member `key` of object `o` to `v`: in place, keeping its position, when `o` has the key, and appended last when it does not, as assigning a property of a JavaScript object does. The value it replaces leaves the object and is in no container afterwards. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`. |
+| `set(o: JsonValue, key: string, v: JsonValue): i32` | Sets member `key` of object `o` to `v`: in place, keeping its position, when `o` has the key, and appended last when it does not, as assigning a property of a JavaScript object does. The value it replaces leaves the object and is in no container afterwards. `JSON_VALUE_OK`, or `JSON_VALUE_ERR_HANDLE` or `JSON_VALUE_ERR_ATTACHED`, or `JSON_VALUE_ERR_VALUES` for a new key the stored bytes have no room for. |
 | `setKeyRange(o: JsonValue, i: i32, start: i32, end: i32): i32` | Gives the key of member `i` of object `o` the range `[start, end)`, as `setRange` does a value's. `JSON_VALUE_ERR_HANDLE` when `o` is not an object or has no member `i`. |
 | `setRange(v: JsonValue, start: i32, end: i32): i32` | Gives `v` the range `[start, end)`, for a loader that builds a document from another text with the `new*` methods and keeps where each value came from. `JSON_VALUE_OK`, `JSON_VALUE_ERR_HANDLE`, or `JSON_VALUE_ERR_RANGE` when `0 <= start <= end` does not hold. |
 | `start(v: JsonValue): i32` | The offset of `v`'s first byte in the bytes the document parsed. |
@@ -408,7 +408,9 @@ Text that is not one JSON number, for `newNumber`, or an `f64` that is NaN or an
 
 `JSON_VALUE_ERR_VALUES: i32`
 
-One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at its first byte) or a builder.
+One value more than `JsonDocument.maxValues`, by a parse (with `errorAt` at
+its first byte) or a builder; or, from a builder, text that would take the
+document's stored bytes past 2^31 - 1.
 
 </scalar-card>
 

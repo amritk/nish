@@ -94,13 +94,12 @@ const sliceBytes = (b: u8[], from: i32, to: i32): u8[] => {
   return out;
 };
 
-/** `n` as 8 little-endian bytes. */
-const le64 = (n: i32): u8[] => {
+/** The low `w` bytes of `n`'s bits, little-endian, or big-endian when `be`. */
+const intBytes = (n: u64, w: i32, be: boolean): u8[] => {
   const out: u8[] = [];
-  let v: i64 = toI64(n);
-  for (let i: i32 = 0; i < 8; i += 1) {
-    out.push(toU8(toI32(v & toI64(255))));
-    v = v >> toI64(8);
+  for (let i: i32 = 0; i < w; i += 1) {
+    const k: i32 = be ? w - 1 - i : i;
+    out.push(toU8(n >> toU64(k * 8)));
   }
   return out;
 };
@@ -1834,7 +1833,7 @@ const clause_P_CONTROL = (t: Suite): boolean => {
     const v_i: i32 = table_i[i];
     const v_z: string = table_z[i];
     const u: Unwrap = new Unwrap();
-    const holds: boolean = isNullBytes(hexDecode(`${v_a}${`${u.str(asciiOrNull(sliceBytes(le64(v_i), 0, 1)))}${v_z}`}`));
+    const holds: boolean = isNullBytes(hexDecode(`${v_a}${`${u.str(asciiOrNull(sliceBytes(intBytes(toU64(v_i), 8, false), 0, 1)))}${v_z}`}`));
     if (u.sawNull || !holds) {
       let why: string = "the assertion is false";
       if (u.sawNull) {

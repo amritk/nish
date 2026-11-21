@@ -128,7 +128,7 @@ not reach an array `dst` could be, but a table's own arrays are private to it:
 a `Map<string, i32>` beside an `i32[]` `dst` is fine, and a
 `Map<string, i32[]>` is refused, because one of its values could be `dst`.
 
-<!-- allow-panics: does integer arithmetic nothing bounds; calls `parallelMapInto`, whose length check no proof removes yet; indexes an array without a guard the checker reads; calls `std/collections.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: does integer arithmetic nothing bounds; calls `parallelMapInto`, whose length check no proof removes yet; indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { parallelMapInto } from "nish/threads";

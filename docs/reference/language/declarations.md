@@ -2744,6 +2744,40 @@ const run = async (): Promise<void> => {
   which may be the task's alone. A task may not itself spawn a task with an
   object or an array, directly or through a callee, since what it hands on may be its own region's (NL2689,
   `reject_async_spawn_nested`); a task with only copied arguments may.
+- **`lend(x)` reads a spawner's object in place.** `nish:async` exports
+  `lend`, which takes one object or array the task was handed and answers it
+  as it was given, with no copy (`async_lend`). Inside a spawned task the
+  view, and anything built from it, is the spawner's memory lent only while
+  the task runs: the task may read it, write numbers into it, copy out of it
+  and hand it to a callee or a constructor whose answer does not let it out.
+  Storing a pointer into it, growing it, or handing it to a callee that does
+  either is
+  `` hands `lend(note)` to `fill`, which stores into it: a view `lend`
+  borrows is its spawner's memory, lent only while the task runs `` (NL2822,
+  `reject_async_lend_store`, `tests/link/async_lend_store`,
+  `tests/wordings/nl2822_lent_view_stored`), and so is reaching it through
+  what a callee answers out of it (`reject_async_lend_returned`). An array or
+  object literal the task builds around the view is lent too, so a store
+  through `[lend(note)][0]` or `{ n: lend(note) }.n`, or a callee handed
+  such a literal that stores into it, is refused the same way
+  (`reject_async_lend_literal_array`, `reject_async_lend_literal_object`,
+  `reject_async_lend_literal_call`, `tests/link/async_lend_literal`), as is a
+  store through a literal nested around it or a value that may be it
+  (`reject_async_lend_literal_nested`, `reject_async_lend_ternary`). The view
+  may not be kept: storing it, or a literal around it, into a field or array
+  of the task's own, or pushing it into one, is refused at that store
+  (`reject_async_lend_kept_field`, `reject_async_lend_kept_literal`,
+  `reject_async_lend_kept_push`). The walk tracks a literal around a view as
+  the view itself, so a literal that holds one also refuses what the view
+  would: `const xs = [lend(a)]; xs.push(lend(b))`, or a store through
+  `[lend(a), new Note()][1]`, is refused although no view is written. A number,
+  `boolean`, enum or `string` is copied anyway, so `lend` of one is
+  `` `lend` from `nish:async` takes one object or array, its spawner's
+  memory, which a task reads in place and answers as it was given `` (NL2693,
+  `reject_async_lend_number`). Outside a task `lend` is
+  the identity, as it is under `--emit-ts` (`tests/emit-ts/async/lend`).
+  `std/net/serve.ts` reads each request this way, so a handler is handed
+  the connection's parsed request without a copy.
 - **A spawned task's function argument captures only what the task may
   share.** A top-level function, or an arrow written at the call, is a
   compile-time argument: the call is an instance with the function in its
@@ -4804,14 +4838,14 @@ export const main = (): i32 => {
 };
 ```
 
-- **The set is 1 to 16 ASCII bytes, or the call panics.** An empty set
-  (`indexOfAny: the set must hold 1 to 16 bytes`) matches nothing and is a
-  mistake rather than a search; seventeen bytes is more than one vector of the
-  kernel compares; and a byte of 128 or more
-  (`indexOfAny: every byte of the set must be ASCII`) would be one byte of a
-  multi-byte sequence natively and a UTF-16 unit under Node, which find
-  different things (`tests/link/std_text_index_of_any_empty_set`,
-  `_long_set`, `_non_ascii_set`).
+- **Any set is searched, and an ASCII one answers the same on both hosts.**
+  An empty set matches nothing and answers -1; a set of 1 to 16 bytes is the
+  kernel's, one vector of them, and a longer one is a plain loop that tests
+  each byte against each member. A character of 128 or more is read unit by
+  unit, as `text` is: natively each of its bytes is a member, so `"é"` also
+  finds the first byte of `"è"`, and under Node its UTF-16 unit is
+  (`tests/link/std_text_index_of_any_empty_set`, `_long_set`,
+  `_non_ascii_set`).
 - **`from` is clamped to `[0, text.length]`**, as `substring` clamps: a
   negative `from` searches from the start, and one at or past the length
   answers -1. The answer is a byte offset, like `s.length`; an ASCII byte
@@ -4874,8 +4908,8 @@ export const main = (): i32 => {
   last; a limit of 0 gives `[]`. A negative limit keeps every piece, because
   JavaScript reads the limit through `ToUint32` and -1 becomes 4294967295;
   that makes `splitLimit(text, sep, -1)` the same as `split(text, sep)`. An
-  empty separator panics (`splitLimit: an empty separator`) whatever the
-  limit, as `split`'s does, even where JavaScript would answer `[]`.
+  empty separator keeps the first `limit` code points, as `split`'s gives
+  them (`tests/link/std_text_split_limit_empty_separator`).
 
 ## Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 
@@ -4921,6 +4955,11 @@ export const main = (): i32 => {
   `copyBytes: the range lies outside an array` before any byte is written
   (`tests/link/std_bytes_copy_outside`). Overlapping ranges of one array copy
   as if every byte were read before any was written, as `copyWithin` does.
+- **`tryCopyBytes` answers `false` where `copyBytes` panics.** It takes the
+  same arguments and checks the same ranges; a range `copyBytes` would panic
+  on writes nothing and answers `false`, and every other copies and answers
+  `true`. It has no panic site, so a strict module calls it
+  (`tests/link/std_bytes_runs`).
 - **The walkers are the meaning.** Each public function clamps or checks its
   range, then makes one call to a private walker, a plain loop over the bytes,
   which is what runs under Node. Natively the compiler recognises that call by

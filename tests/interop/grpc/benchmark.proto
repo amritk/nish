@@ -1,0 +1,28 @@
+// The service `tests/link/net_grpc_interop` serves (`/grpc-server` in
+// `server.dockerfile`), for interop.yml's `grpc` job: grpcurl and ghz read
+// it with `-proto`, since the server offers no reflection. The routes are
+// `tests/link/net_grpc/rig.ts`'s.
+syntax = "proto3";
+
+package benchmark;
+
+service BenchmarkService {
+  // a + b.
+  rpc GetSum(SumRequest) returns (SumReply);
+  // PERMISSION_DENIED, with the message "no 100% é".
+  rpc Denied(SumRequest) returns (SumReply);
+  // NOT_FOUND, with no message.
+  rpc Missing(SumRequest) returns (SumReply);
+  // Held unanswered until its deadline, capped by the server, has passed:
+  // DEADLINE_EXCEEDED, with no message.
+  rpc Slow(SumRequest) returns (SumReply);
+}
+
+message SumRequest {
+  int32 a = 1;
+  int32 b = 2;
+}
+
+message SumReply {
+  int32 result = 1;
+}

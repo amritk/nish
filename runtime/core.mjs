@@ -91,7 +91,7 @@ export const Wide = Object.freeze({});
 
 // `mulHigh` / `mulHighIsNative` (WP41). A `u64` is a BigInt here, so the high
 // half is the exact product shifted down. A `number` operand is the mix the
-// native checker refuses (NL2822), and throws rather than answering from a
+// native checker refuses (NL2823), and throws rather than answering from a
 // double. `mulHighIsNative` is `false`, so std keeps its narrow-limb code under
 // Node, where `mulHigh` is a BigInt multiply and no faster than four products.
 export function mulHigh(a, b) {

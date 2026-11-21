@@ -787,10 +787,135 @@ const conversionWidth = (name: string): string => {
 /** Whether the core's own `toI32`, `toI64` and `toF64` read and write `width` exactly. */
 const exactWidth = (width: string): boolean => width === "i32" || width === "i64" || width === "f64"
 
+/** Whether a width is an integer held in a JavaScript `number`: i32, u8, u16 or u32. */
+const smallInt = (width: string): boolean =>
+  width === "i32" || width === "u8" || width === "u16" || width === "u32"
+
+/** Whether a width is held in a `bigint`: i64 or u64. */
+const bigWidth = (width: string): boolean => width === "i64" || width === "u64"
+
+/** The mask that keeps a u8 or u16, as text, or "" for another width. */
+const narrowMask = (width: string): string => {
+  if (width === "u8") {
+    return "255"
+  }
+  return width === "u16" ? "65535" : ""
+}
+
+/** The bits of an integer width, as `BigInt.asIntN` and `asUintN` take them. */
+const widthBits = (width: string): string => {
+  if (width === "u8") {
+    return "8"
+  }
+  if (width === "u16") {
+    return "16"
+  }
+  return bigWidth(width) ? "64" : "32"
+}
+
 /**
- * `toU8(x)` and the rest as `convert(x, "from", "to")`, except where the
- * core's own `toI32`, `toI64` or `toF64` is already exact: a signed or float
- * source going to a signed or f64 target.
+ * Whether reading `arg` three times costs and does what reading it once does:
+ * a name, or `.length` of a name or of `this.field`, left as written. Only
+ * these are spelled out inline where the saturating `f64 -> i32` reads its
+ * operand more than once.
+ */
+const rereadable = (arg: Node, changed: boolean): boolean => {
+  if (changed) {
+    return false
+  }
+  if (arg.kind === NodeKind.Ident) {
+    return true
+  }
+  if (arg.kind !== NodeKind.Member || arg.children.length !== 1 || arg.text !== "length") {
+    return false
+  }
+  const receiver = arg.children[0]
+  if (receiver.kind === NodeKind.Ident) {
+    return true
+  }
+  return (
+    receiver.kind === NodeKind.Member &&
+    receiver.children.length === 1 &&
+    receiver.children[0].kind === NodeKind.This
+  )
+}
+
+/**
+ * A conversion between two integer widths, or from one to `f64`, written out
+ * at the call: a `number` width is wrapped with `| 0`, `>>> 0` or a mask, a
+ * `bigint` one with `BigInt.asIntN` / `asUintN`, and a width that holds every
+ * value of the source is the operand itself. These are what the core's
+ * `convert` and `toI32` do, minus the dispatch on the kind names and the
+ * `typeof`, which V8 does not always inline into a hot caller
+ * (`runtime/core/numbers.mjs`, `convert`). "" for a pair this does not cover.
+ */
+const integerConversion = (x: string, from: string, to: string): string => {
+  const value = `(${x})`
+  if (from === to) {
+    return value
+  }
+  if (to === "f32") {
+    return ""
+  }
+  if (smallInt(from)) {
+    if (to === "f64") {
+      return value
+    }
+    if (to === "i64" || (to === "u64" && from !== "i32")) {
+      return `BigInt${value}`
+    }
+    if (to === "u64") {
+      return `BigInt.asUintN(64, BigInt${value})`
+    }
+    if (to === "i32") {
+      // A u8 or u16 is already an i32; a u32 past 2^31 wraps to negative.
+      return from === "u32" ? `(${value} | 0)` : value
+    }
+    if (to === "u32") {
+      return from === "i32" ? `(${value} >>> 0)` : value
+    }
+    // u8 or u16: a narrower source is already in range.
+    if (from === "u8" || (from === "u16" && to === "u16")) {
+      return value
+    }
+    return `(${value} & ${narrowMask(to)})`
+  }
+  if (!bigWidth(from)) {
+    return ""
+  }
+  if (to === "f64") {
+    return `Number${value}`
+  }
+  if (bigWidth(to)) {
+    return to === "i64" ? `BigInt.asIntN(64, ${x})` : `BigInt.asUintN(64, ${x})`
+  }
+  if (!smallInt(to)) {
+    return ""
+  }
+  const method = to === "i32" ? "asIntN" : "asUintN"
+  return `Number(BigInt.${method}(${widthBits(to)}, ${x}))`
+}
+
+/**
+ * `toI32` of an `f64` or `f32`: `llvm.fptosi.sat.i32`, which clamps and reads
+ * NaN as 0. `x | 0` truncates an in-range double and reads NaN as 0, so only
+ * the two clamps are spelled out; an operand that cannot be read again is
+ * left to the core's `toI32`.
+ */
+const floatToI32 = (x: string, arg: Node, changed: boolean): string | null => {
+  if (!rereadable(arg, changed)) {
+    return null
+  }
+  return `(${x} >= 2147483647 ? 2147483647 : ${x} <= -2147483648 ? -2147483648 : ${x} | 0)`
+}
+
+/**
+ * `toU8(x)` and the rest. A conversion between integer widths, or from one to
+ * `f64`, is written out at the call (`integerConversion`), and so is `toI32`
+ * of a float whose operand can be read again (`floatToI32`). The rest go to
+ * `convert(x, "from", "to")`, except where the core's own `toI32`, `toI64` or
+ * `toF64` is already exact: a signed or float source going to a signed or f64
+ * target.
  */
 const conversion = (walk: Walk, name: string, args: Node, operands: Operands): string | null => {
   const to = conversionWidth(name)
@@ -800,6 +925,13 @@ const conversion = (walk: Walk, name: string, args: Node, operands: Operands): s
   const from = kindName(typeOf(walk, args.children[0]))
   if (from.length === 0) {
     return null
+  }
+  const inline = integerConversion(operands.at(1), from, to)
+  if (inline.length > 0) {
+    return inline
+  }
+  if (to === "i32" && (from === "f64" || from === "f32")) {
+    return floatToI32(operands.at(1), args.children[0], operands.changed[1])
   }
   if (exactWidth(to) && (exactWidth(from) || (from === "f32" && to !== "f64"))) {
     return null

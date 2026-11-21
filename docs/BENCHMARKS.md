@@ -2440,6 +2440,284 @@ The async-db medians, before → after (first runs):
 
 The async-db's peak RSS is 36.4 MiB before and 36.3 after on `/db`, against db-entry's 66.0.
 
+## TechEmpower: the gate after the in-place request read (WP49 stage 6)
+
+This re-runs the gate after design B (#1637, #2104): `lend` from `nish:async` lets a spawned task read its spawner's object in place, and `serveTask` in `std/net/serve.ts` now hands the handler `new Request(lend(st.reqs[k]))`, the connection's parsed request, instead of a copy of it. The [#1595 spike](https://github.com/amritk/nish/issues/1595) put that copy at about 370 instructions a request. The before is `main` at `56ce4256` (the branch's base), the after is the branch at `cf52d581` (#2104's work). Both were built and measured here, one after the other, with `bench/techempower/run.sh` and `profile.sh` unchanged (`git diff 56ce4256 cf52d581 -- bench` is empty).
+
+| | |
+| --- | --- |
+| Date | 2026-11-21 |
+| nish | before: `build/nish` built from `main` at `56ce42566e3ab452d70dc5a11492364246543a21`; after: from the branch at `cf52d581ad19faba3230bd170f5e50e452b76282`; each `npm run build` from the 0.42.0 seed, `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores |
+| OS | linux 6.18.44 (x64) |
+| Postgres | 16 (Ubuntu's package), a throwaway cluster in each tree's `build/tfb/pg` |
+| Client | wrk 4.1.0 (Debian 4.1.0-4build2), TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | plaintext and json: server on CPU 0, wrk `-t 3` on CPUs 1-3. Database: server on CPU 0, Postgres on CPU 1, wrk `-t 2` on CPUs 2-3 |
+| Commands | `bash bench/techempower/profile.sh --only plaintext` and `--only json` in each tree (perf 6.8.12, valgrind 3.22.0); then in each tree `bash bench/techempower/run.sh --only plaintext`, then `--only json`, then `--only db`, before then after for each test, one run at a time with nothing else running; then `--only plaintext` and `--only json` once more in each tree, because each had a bimodal judged cell; no `db` re-run in either tree: `/db` 64's explicit pair was bimodal before, but the measurement closed before its re-run, so that cell is not judgeable |
+
+Every test ran the default 3 rounds of 10 s. The method, the band, the `*` rule, the judged set and the re-run rule are those of [the resume build's measurement](#techempower-the-gate-after-the-resume-build-wp49-stage-6). A judged cell is inside when the async median's delta is no worse than minus its band, and a `*` cell is never inside. A contestant is bimodal when one of its three rounds sits more than 15% from both others while those two are within 10% of each other. A judged cell whose explicit pair is bimodal takes its re-run's verdict, and is not judgeable if the re-run is bimodal too. Every other cell keeps the first run's verdict.
+
+**Outcome: the gate is not met. Seven of the eleven judged cells are inside after the in-place read (`/plaintext` at 256, `/json` at 32 to 256, `/db` at 64 and 256), three are outside (`/plaintext` at 1,024 and 4,096, `/json` at 16), and `/json` at 512 is not judgeable.** Before it, the same rule gave five inside (`/plaintext` 256, `/json` 16 to 64, `/db` 256), five outside (`/plaintext` 1,024 and 4,096, `/json` 128 to 512) and `/db` 64 not judgeable. The in-place read took 316 instructions a request off the async entry's `plaintext` and 286 off `json`, and the gap to the explicit entry narrowed by 314 and 289 (below), but the async entry still runs about 1,807 and 2,148 more than the explicit one, and `/plaintext` at 1,024 and 4,096 connections stays outside: 18.6% to 28.9% below it in both runs after the in-place read. Before it, 1,024 is outside by its first run (−31.0% on a 20.6% band; the re-run's −5.1% sits inside its own 21.0% band but is bimodal, so the first run's verdict stands) and 4,096 by its re-run (−29.7% on 1.7%).
+
+| test | connections | band before | async vs entry, before | verdict before | band after | async vs entry, after | verdict after |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | --- |
+| `/plaintext` | 256 | 11.7% (re-run 3.8%) | −10.3% (re-run −19.6%) | inside | 15.6% (re-run 9.4%) | −15.0% (re-run −16.8%) | inside |
+| `/plaintext` | 1024 | 20.6% (re-run 21.0%, bimodal) | −31.0% (re-run −5.1%) | outside | 3.4% (bimodal; re-run 4.4%) | −19.6% (re-run −18.6%) | outside (re-run's verdict) |
+| `/plaintext` | 4096 | 11.5% (bimodal; re-run 1.7%) | −40.2% (re-run −29.7%) | outside (re-run's verdict) | 0.6% (re-run 1.5%) | −24.9% (re-run −28.9%) | outside |
+| `/json` | 16 | 2.9% (re-run 0.9%) | −1.8% (re-run −0.2%) | inside | 3.3% (re-run 4.0%) | −4.7% (re-run −9.0%) | outside |
+| `/json` | 32 | 0.8% (re-run 3.9%) | +2.8% (re-run −0.7%) | inside | 1.6% (re-run 2.3%) | +1.6% (re-run −6.3%) | inside |
+| `/json` | 64 | 0.5% (re-run 0.0%) | +0.4% (re-run −0.7%) | inside | 1.0% (re-run 1.7%) | +0.4% (re-run −0.4%) | inside |
+| `/json` | 128 | 2.4% (re-run 7.5%) | −4.9% (re-run −9.5%) | outside | 1.4% (re-run 5.3%, bimodal) | −0.8% (re-run −9.5%) | inside |
+| `/json` | 256 | 1.9% (re-run 10.0%) | −8.8% (re-run +2.7%) | outside | 11.0% (re-run 4.4%) | −9.2% (re-run −6.7%) | inside |
+| `/json` | 512 | 4.0% (re-run 16.4%, bimodal) | −11.7% (re-run −10.6%) | outside | 3.6% (bimodal; re-run 12.6%, bimodal) | −18.0% (re-run −11.8%) | not judgeable |
+| `/db` | 64 | 6.4% (bimodal; no re-run) | +0.4% | not judgeable | 7.5% | −0.9% | inside |
+| `/db` | 256 | 3.4% | +10.8% | inside | 2.6% | +10.2% | inside |
+
+Reading the rounds:
+
+- **`/plaintext`:**
+  - The explicit pair was bimodal at 4,096 before (`entry-copy` 933,976, 863,453 and 1,092,307) and at 1,024 after (`entry-copy` 1,314,896, 1,143,154 and 1,081,290). Both re-runs settled: −29.7% on 1.7% before, −18.6% on 4.4% after.
+  - At 1,024 and 4,096, in every run of both trees, every async round is below every explicit round but one: the before re-run's `entry` at 1,024 has a round of 997,570 against async rounds of 915,688 to 989,072.
+  - The async medians rose from before to after on five of the six cells at 256 to 4,096 (first runs +0.8%, +11.2%, +16.5%; re-runs +3.9%, −0.8%, +5.9%). The explicit entry moved −7.2% to +15.7% over the same cells, so the deltas against it move within the bands.
+  - 256 is inside in both trees on a band of 11.7% and 15.6%; the re-runs, which do not count, read −19.6% on 3.8% and −16.8% on 9.4%.
+- **`/json`:**
+  - No judged explicit pair was bimodal before, so the first run stands there: 16 to 64 inside, 128 to 512 outside.
+  - After, only 512 was bimodal (`entry` and `entry-copy` both), and its re-run was bimodal again (`entry` 85,447, 174,514 and 190,432), so it is not judgeable. 128 and 256 are inside after on bands of 1.4% and 11.0%; their re-runs, which do not count, read −9.5% on 5.3% (`entry` bimodal) and −6.7% on 4.4%. 32 is inside after on its first run, +1.6% on 1.6%; its re-run, which does not count, reads −6.3% on 2.3%, outside.
+  - The async medians moved −6.9% to +0.6% from before to after across the six cells, and the explicit entry −5.5% to +1.8%: no `/json` cell moved by more than this session's spread.
+- **`/db`:** before, `db-entry` at 64 connections was bimodal (98,850, 28,357 and 96,902) and no re-run was made, so that cell is not judgeable there; 256 is inside, +10.8% on 3.4%. After, neither judged explicit pair is bimodal (`db-entry-copy` is, at 16 connections, which is not judged), so the first run stands: 64 and 256 are inside. The async-db medians moved −6.7% and −5.1% from before to after at 64 and 256, and db-entry −5.4% and −4.6%: the database tests moved together, a drift between the two runs that was not measured further. One async-db round at `/db` 16 before printed no figure (`n/a`); its median is of the other two.
+
+Peak RSS is unchanged: the async entry 8.8 MiB at `/plaintext` 16,384 connections in both trees' first runs (8.9 in both re-runs), the explicit entries 3.3; on `/json` 6.5 against 2.2.
+
+### Where the gap is
+
+`profile.sh` in each tree, callgrind's self instructions a request at its defaults:
+
+| | `plaintext` explicit | `plaintext` async | gap | `json` explicit | `json` async | gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| before (`56ce4256`) | 4,477 | 6,598 | 2,121 | 7,197 | 9,634 | 2,437 |
+| after (`cf52d581`) | 4,475 | 6,282 | 1,807 | 7,200 | 9,348 | 2,148 |
+| change | −2 | −316 (−4.8%) | −314 | +3 | −286 (−3.0%) | −289 |
+
+System calls a request (`strace -c`) are unchanged: 0.129 explicit and 0.135 async on `plaintext`, 2.027 and 2.109 on `json`, in both trees.
+
+By frame (async entry, `plaintext` then `json`):
+
+- **`serveTask`'s resume fell from 432.9 to 188.1 and from 489.2 to 248.1** (−244.8, −241.1): the copy of the request is gone from it.
+- **`HttpRequest`'s constructor (65.4 on `plaintext` before) left the top 20**, so it fell by at most 65.4, and `memcpy` fell by 30.3 and 30.1.
+- **`serveOn`'s resume rose from 483.0 to 551.8 and from 675.9 to 789.7** (+68.8, +113.8): the lending and the give-back, which park a lent request head until its task ends and return it to the connection only if the connection still holds it (`ServeConns.lendOut`, `giveBack`).
+
+On `plaintext` the frames above account for at most −340.5 (−244.8, at most −65.4, and −30.3) and +68.8, a net of at most −271.7 of the async entry's −316; the other −44.3 or more is spread below the top 20 and is not attributed here. Each is a bound because the constructor's figure after the in-place read is unknown, only below the top 20's last. On `json` they account for −271.2 (−241.1 and −30.1; `HttpRequest`'s constructor is not in that profile's top 20 before, so it has no figure) and +113.8, a net of −157.4 of −286, and the other −128.6 is not attributed. Either way the in-place read removed less than the about 378 [the resume build's measurement](#techempower-the-gate-after-the-resume-build-wp49-stage-6) attributed to the copy. What is left of the gap is the second task per request and `Router.match`, the two frames the in-place read does not touch.
+
+### The `/queries` cell in #1608's measurement
+
+#1608 reported the async-db at `/queries?queries=20` and 64 connections falling from 31,287 to 28,382 req/s. That is the async-db's own median. Against db-entry in the same run it went from +13.0% (band 1.5%) to +22.2% (band 9.2%), so db-entry fell further, from about 27,688 to about 23,226 (−16.1%, derived from those ratios). db-entry (`bench/techempower/db-main.ts`) does not import `nish/net/serve`, so the change #1608 measured could not move it. What did move it was not measured, and is recorded here as unexplained drift between the two sessions; `run.sh` runs `/db` and then `/queries` on the same Postgres cluster and resets nothing between contestants. The next measurement (the [resume build's](#techempower-the-gate-after-the-resume-build-wp49-stage-6)) read the async-db at 34,628 and 37,419 at that cell, above 31,287. In this one `/queries` at 64 is −1.3% against db-entry on a 5.1% band after the in-place read, and −4.4% on 13.7% before it.
+
+### The other database tests
+
+None of these is judged. Against db-entry, before then after the in-place read, at 16, 64 and 256 connections: `/queries` +5.8%, −4.4%, −27.7% then +10.7%, −1.3%, −21.0%, outside at 256 in both; `/updates` +8.4%, +14.4%, +9.5% then +10.6%, +13.1%, +12.4%; `/cached-queries` +7.6%, +13.5%, +13.9% then +13.1%, +23.5%, +19.0%; `/fortunes` −29.9%, −12.5%, −41.2% then −28.3%, −15.0%, −38.8%, outside at every count in both. The async-db's peak RSS is 26.3 to 26.8 MiB on these tests before and 26.3 to 26.4 after (18.7 and 19.1 on `/cached-queries`; 36.3 and 35.8 on `/db`) against db-entry's 65 to 67.
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1230283 (1207144) | 1241608 (1102851) | 1055593 (1026239) | 1183853 (1060624) | 3.3 |
+| entry-copy | 1373923 (1273045) | 985335 (924504) | 933977 (863453) | 981568 (933802) | 3.3 |
+| async | 1103578 (1067561) | 856195 (741247) | 631600 (613139) | 333434 (308773)* | 8.8 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 11.7% 1024: 20.6% 4096: 11.5% 16384: 17.1%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -10.3% inside 1024: -31.0% outside 4096: -40.2% outside 16384: -71.8% outside*
+- /plaintext c=16384: socket read errors in async rounds 1 to 3 (3579, 250, 4212)
+
+The re-run, before:
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1408568 (1326775) | 1035431 (997571) | 1008107 (957563) | 1118804 (1018723)* | 3.3 |
+| entry-copy | 1355614 (1295051) | 1252709 (1017283) | 991093 (916855) | 1073206 (961903)* | 3.3 |
+| async | 1132432 (1124602) | 982707 (915688) | 708499 (683773) | 336307 (314535)* | 8.9 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 3.8% 1024: 21.0% 4096: 1.7% 16384: 4.1%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -19.6% outside 1024: -5.1% inside 4096: -29.7% outside 16384: -69.9% outside*
+- /plaintext c=16384: socket read errors in async rounds 1 to 3 (2647, 59, 5179), entry round 1 (59) and entry-copy round 1 (122)
+
+### /plaintext, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1308562 (1126926) | 1183573 (902413) | 979757 (923338) | 967251 (966334) | 3.3 |
+| entry-copy | 1512330 (1391296) | 1143155 (1081290) | 974074 (937219) | 994082 (974977) | 3.3 |
+| async | 1112643 (1109633) | 951715 (910125) | 735576 (650138) | 343667 (339271)* | 8.8 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 15.6% 1024: 3.4% 4096: 0.6% 16384: 2.8%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -15.0% inside 1024: -19.6% outside 4096: -24.9% outside 16384: -64.5% outside*
+- /plaintext c=16384: socket read errors in async round 2 (59)
+
+The re-run, after:
+
+| contestant | 256 | 1024 | 4096 | 16384 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| entry | 1415470 (1367725) | 1198306 (1100781) | 1054141 (968353) | 962875 (937743) | 3.3 |
+| entry-copy | 1548382 (1497364) | 1251335 (1132002) | 1070344 (1022637) | 1102578 (944953)* | 3.3 |
+| async | 1177110 (1150685) | 975277 (937960) | 749959 (747939) | 344986 (342939)* | 8.9 |
+
+noise band (|entry - entry-copy| / entry, medians): 256: 9.4% 1024: 4.4% 4096: 1.5% 16384: 14.5%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 256: -16.8% outside 1024: -18.6% outside 4096: -28.9% outside 16384: -64.2% outside*
+- /plaintext c=16384: socket read errors in async rounds 1 to 3 (3861, 2049, 4268) and entry-copy round 2 (122)
+
+### /json, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 99677 (95743) | 115787 (111564) | 136353 (132471) | 164684 (150252) | 175156 (171921) | 173511 (172772) | 2.2 |
+| entry-copy | 96779 (95978) | 116680 (111314) | 137003 (131471) | 160807 (152230) | 178536 (165059) | 180447 (169815) | 2.2 |
+| async | 97847 (96904) | 119076 (115392) | 136861 (134678) | 156626 (145918) | 159719 (159330) | 153144 (151948) | 6.5 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 2.9% 32: 0.8% 64: 0.5% 128: 2.4% 256: 1.9% 512: 4.0%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -1.8% inside 32: +2.8% inside 64: +0.4% inside 128: -4.9% outside 256: -8.8% outside 512: -11.7% outside
+
+The re-run, before:
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 98473 (95401) | 112737 (112487) | 129134 (124772) | 166090 (147853) | 161519 (160749) | 183822 (148758) | 2.2 |
+| entry-copy | 97551 (91566) | 108334 (106948) | 129121 (120078) | 153573 (151238) | 177706 (165926) | 153604 (148992) | 2.2 |
+| async | 98272 (97471) | 112002 (105511) | 128263 (126716) | 150260 (149950) | 165812 (152190) | 164265 (162165) | 6.5 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 0.9% 32: 3.9% 64: 0.0% 128: 7.5% 256: 10.0% 512: 16.4%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -0.2% inside 32: -0.7% inside 64: -0.7% outside 128: -9.5% outside 256: +2.7% inside 512: -10.6% inside
+
+### /json, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 100665 (96310) | 117905 (110875) | 133487 (130973) | 155606 (151677) | 172191 (168837) | 173907 (136307) | 2.2 |
+| entry-copy | 97386 (96591) | 116013 (115283) | 134784 (133720) | 157854 (155332) | 153193 (150666) | 167563 (127521) | 2.2 |
+| async | 95888 (94365) | 119736 (115939) | 134020 (128240) | 154348 (151471) | 156383 (155018) | 142555 (125110) | 6.5 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 3.3% 32: 1.6% 64: 1.0% 128: 1.4% 256: 11.0% 512: 3.6%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -4.7% outside 32: +1.6% inside 64: +0.4% inside 128: -0.8% inside 256: -9.2% inside 512: -18.0% outside
+
+The re-run, after:
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 104279 (101563) | 117107 (104989) | 131977 (131284) | 141941 (116745) | 172081 (158915) | 174514 (85447) | 2.2 |
+| entry-copy | 100118 (96842) | 114377 (111093) | 129787 (129325) | 149440 (145668) | 164453 (148344) | 152597 (147958) | 2.2 |
+| async | 94894 (93421) | 109752 (106279) | 131425 (126135) | 128396 (128074) | 160592 (158020) | 153924 (136582) | 6.5 |
+
+noise band (|entry - entry-copy| / entry, medians): 16: 4.0% 32: 2.3% 64: 1.7% 128: 5.3% 256: 4.4% 512: 12.6%
+async vs entry (median delta, inside or outside the band; * had failures, never inside): 16: -9.0% outside 32: -6.3% outside 64: -0.4% inside 128: -9.5% outside 256: -6.7% outside 512: -11.8% inside
+
+### /db, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 26160 (23882) | 96902 (28358) | 99439 (95592) | 66.0 |
+| db-entry-copy | 26455 (24323) | 90721 (89739) | 96047 (93159) | 66.0 |
+| async-db | 59582 (58026) 1 n/a | 97319 (89266) | 110161 (101461) | 36.3 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 1.1% 64: 6.4% 256: 3.4%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +127.8% inside 64: +0.4% inside 256: +10.8% inside
+
+### /queries?queries=20, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 22741 (22152) | 25773 (24065) | 33004 (27271) | 66.5 |
+| db-entry-copy | 21110 (17793) | 22252 (19606) | 32603 (24761) | 66.6 |
+| async-db | 24050 (23678) | 24644 (24421) | 23852 (23187) | 26.3 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 7.2% 64: 13.7% 256: 1.2%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +5.8% inside 64: -4.4% inside 256: -27.7% outside
+
+### /updates?queries=20, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 5851 (5008) | 6433 (5370) | 6390 (5513) | 66.6 |
+| db-entry-copy | 6364 (6192) | 6101 (5162) | 6647 (5460) | 66.6 |
+| async-db | 6344 (6316) | 7361 (6387) | 6998 (6002) | 26.8 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 8.8% 64: 5.2% 256: 4.0%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +8.4% inside 64: +14.4% inside 256: +9.5% inside
+
+### /fortunes, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 51473 (50551) | 64533 (63646) | 62960 (58415) | 66.0 |
+| db-entry-copy | 52604 (49016) | 64276 (63057) | 60234 (52060) | 66.0 |
+| async-db | 36102 (33183) | 56440 (54029) | 36995 (36217) | 26.6 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 2.2% 64: 0.4% 256: 4.3%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -29.9% outside 64: -12.5% outside 256: -41.2% outside
+
+### /cached-queries?count=100, req/s, median (min) of 3 rounds of 10 s, before the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 62323 (57213) | 68862 (63381) | 63157 (53667) | 65.3 |
+| db-entry-copy | 61078 (58510) | 69432 (66114) | 67427 (52668) | 65.3 |
+| async-db | 67033 (64687) | 78134 (66533) | 71933 (65803) | 18.7 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 2.0% 64: 0.8% 256: 6.8%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +7.6% inside 64: +13.5% inside 256: +13.9% inside
+
+### /db, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 19751 (17599) | 91647 (81780) | 94886 (89344) | 66.0 |
+| db-entry-copy | 24014 (20373) | 98557 (94349) | 92457 (90941) | 66.0 |
+| async-db | 46310 (45368) | 90802 (86249) | 104540 (100038) | 35.8 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 21.6% 64: 7.5% 256: 2.6%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +134.5% inside 64: -0.9% inside 256: +10.2% inside
+
+### /queries?queries=20, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 21621 (18449) | 26406 (23854) | 33806 (31686) | 66.6 |
+| db-entry-copy | 21625 (20460) | 25053 (24132) | 34075 (32025) | 66.6 |
+| async-db | 23943 (23399) | 26052 (24260) | 26690 (26591) | 26.3 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 0.0% 64: 5.1% 256: 0.8%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +10.7% inside 64: -1.3% inside 256: -21.0% outside
+
+### /updates?queries=20, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 6095 (5627) | 6114 (6071) | 7345 (6905) | 66.6 |
+| db-entry-copy | 6531 (6207) | 6250 (5837) | 6999 (6905) | 66.6 |
+| async-db | 6740 (6365) | 6916 (6629) | 8256 (7616) | 26.4 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 7.1% 64: 2.2% 256: 4.7%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +10.6% inside 64: +13.1% inside 256: +12.4% inside
+
+### /fortunes, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 56931 (54357) | 66962 (64878) | 65199 (61884) | 66.0 |
+| db-entry-copy | 55552 (54543) | 63731 (61259) | 66179 (63723) | 65.9 |
+| async-db | 40793 (40476) | 56891 (55205) | 39876 (36727) | 26.3 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 2.4% 64: 4.8% 256: 1.5%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: -28.3% outside 64: -15.0% outside 256: -38.8% outside
+
+### /cached-queries?count=100, req/s, median (min) of 3 rounds of 10 s, after the in-place read
+
+| contestant | 16 | 64 | 256 | peak RSS, MiB |
+| --- | ---: | ---: | ---: | ---: |
+| db-entry | 61702 (61406) | 65719 (64223) | 67195 (66172) | 65.3 |
+| db-entry-copy | 62857 (62451) | 71024 (67516) | 69580 (66689) | 65.3 |
+| async-db | 69792 (67805) | 81172 (78488) | 79937 (79658) | 19.1 |
+
+noise band (|db-entry - db-entry-copy| / db-entry, medians): 16: 1.9% 64: 8.1% 256: 3.6%
+async-db vs db-entry (median delta, inside or outside the band; * had failures, never inside): 16: +13.1% inside 64: +23.5% inside 256: +19.0% inside
+
 <!-- http-codec-baseline:begin -->
 ## HTTP/1 codec baseline
 

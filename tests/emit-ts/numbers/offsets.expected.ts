@@ -2,13 +2,13 @@
 // which JavaScript's methods take where they refuse a `bigint`. Past 2^53 it
 // rounds, but to a value still past the end, where the clamp lands anyway.
 // An i64 element type keeps its fill value a `bigint`.
-import { convert, shlU64, offsets, idx } from "nish/runtime"
+import { shlU64, offsets, idx } from "nish/runtime"
 import type { i32, u64, u8, i64 } from "nish/runtime"
 export const main = (): i32 => {
-  const top: u64 = shlU64(convert(1, "i32", "u64"), 63n)
+  const top: u64 = shlU64(BigInt.asUintN(64, BigInt(1)), 63n)
   const a: u8[] = [1, 2, 3, 4, 5]
   a.fill(9, Number(top))
-  a.fill(...offsets(1, [8, convert(1, "i32", "u64"), convert(3, "i32", "u64")]))
+  a.fill(...offsets(1, [8, BigInt.asUintN(64, BigInt(1)), BigInt.asUintN(64, BigInt(3))]))
   const at: i64 = 3n
   a.fill(6, Number(at))
   console.log(`${idx(a, 0)} ${idx(a, 1)} ${idx(a, 2)} ${idx(a, 3)} ${idx(a, 4)}`)

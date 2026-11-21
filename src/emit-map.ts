@@ -647,12 +647,24 @@ const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
 const callValueAt = (emitter: Emitter, read: FunctionSig, operands: string): string => {
   const isPrivate = privateAbi(emitter.opts, read.visibleOutside())
   const value = emitter.fn.emitValue(
-    `call ${emitter.llvmAbi(read.returnType, isPrivate)} @${read.name}(${operands})`
+    `call ${emitter.llvmAbi(read.returnType, isPrivate)} @${read.name}(${operands}, ${noEntryOperand(emitter, read)})`
   )
   if (!emitter.table.resultByValue(read.returnType)) {
     return value
   }
   return unpackReturnedResult(emitter, read.returnType, value, false, isPrivate)
+}
+
+/**
+ * The last operand of a `keyAt` or `valueAt` call: what it answers for an
+ * index past the entries, `std/collections.ts`'s `none`. The compiler calls
+ * either only at an index a probe or a walk just found, so it is never the
+ * answer; it is the zero of its type, the same zero `emitMaybeLocal` gives the
+ * edge where a `get` found nothing.
+ */
+export const noEntryOperand = (emitter: Emitter, read: FunctionSig): string => {
+  const type = read.paramTypes[read.paramTypes.length - 1]
+  return `${emitter.llvmAbi(type, privateAbi(emitter.opts, read.visibleOutside()))} zeroinitializer`
 }
 
 /** A `V` handed to `setValueAt` or `insertAt` as parameter `index` of `sig`: a packable `Result` goes as its word. */

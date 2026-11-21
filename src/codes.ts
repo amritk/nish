@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 999
+export const RULE_COUNT: i32 = 1000
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -953,6 +953,8 @@ const diagnosticRules = (): string[] => [
   "NL2807",
   "`main` cannot take parameters (command-line arguments are not supported yet)",
   "NL2139",
+  "a view `lend` borrows is its spawner's memory, lent only while the task runs",
+  "NL2822",
   "region memory kept by memory outside the region points at freed memory once ",
   "NL2609",
   "` is generic: a function reference names one non-generic top-level function",
@@ -1351,7 +1353,7 @@ const diagnosticRules = (): string[] => [
   "` is not part of the standard library (it has: ",
   "NL3011",
   "` takes u64 operands (convert with toU64), got ",
-  "NL2822",
+  "NL2823",
   "`, and a data-parallel body cannot capture it: ",
   "NL2504",
   "`, which the capability policy does not grant (",
