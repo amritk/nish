@@ -199,7 +199,7 @@ and you import it as `nish/` followed by the module's name: `nish/text`,
 and so on. It is compiled into your program like your own code, so a module
 you import but never call costs nothing.
 
-<!-- allow-panics: indexes an array without a guard the checker reads; calls `std/text.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: indexes an array without a guard the checker reads -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { splitWhitespace, trim } from "nish/text";

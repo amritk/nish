@@ -291,9 +291,17 @@ export const slice = <T>(xs: readonly T[], start: number, end: number): T[] => {
 export const sliceFrom = <T>(xs: readonly T[], start: number): T[] => slice(xs, start, xs.length)
 
 /**
- * A copy of the whole of `xs`: what `xs.slice()` compiles to.
+ * A copy of the whole of `xs`: what `xs.slice()` compiles to. It copies
+ * directly rather than through `slice`, whose range check can panic and
+ * which a whole copy never needs, so it cannot panic but out of memory.
  *
  * @param xs the array copied; it is not changed.
  * @returns a new array with the same elements.
  */
-export const sliceAll = <T>(xs: readonly T[]): T[] => slice(xs, 0, xs.length)
+export const sliceAll = <T>(xs: readonly T[]): T[] => {
+  const out: T[] = []
+  for (let i: i32 = 0; i >= 0 && i < toI32(xs.length); i++) {
+    out.push(xs[i])
+  }
+  return out
+}

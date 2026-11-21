@@ -85,13 +85,15 @@ full 32-bit hash of each. The bucket table `slots` is open addressing with
 linear probing, and a bucket is one `u32`:
 
 ```text
-bits 31..24   the top eight bits of the key's hash (the fingerprint)
-bits 23..0    the entry's index plus one
+the high bits   the key's hash above the table's mask (the fingerprint)
+the mask bits   the entry's index plus one
 ```
 
 </scalar-detail>
 
-An empty bucket is 0. A deleted entry's bucket is `0x01000000` (16777216),
+The index field is as wide as the mask, `slots.length - 1`: a table holds
+at most three entries per four buckets, so every index plus one fits. An
+empty bucket is 0. A deleted entry's bucket is the mask plus one,
 fingerprint 1 and index field 0, which no live entry has; its stored hash is
 set to 0, which is why a computed hash of 0 is moved to 1. A probe reads the
 entry arrays only when a bucket's fingerprint matches, and compares the

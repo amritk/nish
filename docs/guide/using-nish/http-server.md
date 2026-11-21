@@ -24,7 +24,7 @@ refused by default until the standard library is made panic-free. The indexes
 and the `panic` call in your own code build under the default once a guard such
 as `i < xs.length` proves each index and the `panic` becomes an error answer.
 
-<!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/json.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
+<!-- allow-panics: calls `panic`; indexes an array without a guard the checker reads; calls `std/net/http-server.ts`, `std/net/router.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
 ```ts
 import { HttpServer, HttpServerLimits } from "nish/net/http-server";

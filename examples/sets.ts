@@ -1,12 +1,7 @@
-// Opt-out (`--allow-panics`): the `Map` and `Set` calls reach panic sites in
-// `std/collections`; this file keeps none of its own. Follow-up: make
-// `std/collections` panic-free, then build this file without `--allow-panics`.
-// smoke: args --allow-panics
-//
 // The global `Map` and `Set` (docs/wp32-map.md): no import, JavaScript's
 // semantics, and one probe of a fingerprinted table per `set`, `add`, `has` or
 // `delete`.
-//   nish --allow-panics examples/sets.ts --link build/sets && ./build/sets
+//   nish examples/sets.ts --link build/sets && ./build/sets
 // prints what it finds in a short text: how many words it has, how many of them
 // are distinct, which ones repeat, and how many of those also appear in a second
 // list. Under Node the same file runs on Node's own `Map` and `Set`
