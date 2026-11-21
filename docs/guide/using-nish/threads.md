@@ -1,9 +1,10 @@
 # Threads
 
-Nish runs code on several threads without letting two threads race on the
-same memory. It does that by offering a few shapes of parallel work, each
-with rules the compiler checks, instead of raw threads and shared variables.
-Pick the shape by what the work is:
+Nish runs code on several threads at once, across every core of a multicore
+machine, without letting two threads race on the same memory. Its
+multithreading is not raw threads and shared variables but a few shapes of
+parallel work, each with rules the compiler checks. Pick the shape by what
+the work is:
 
 | You need | Reach for |
 | --- | --- |
@@ -26,6 +27,11 @@ answer ([RUN_UNDER_NODE.md](../../RUN_UNDER_NODE.md) says how).
 
 Threads share one process. To share memory between processes, such as
 prefork workers, see [Shared memory between processes](shared-memory.md).
+
+Threading is for work that keeps the processor busy. For concurrency that
+mostly waits, such as many network connections at once, use
+[async functions](../language/async.md); to run a server on every core, see
+[A server on every core](networking.md#a-server-on-every-core-nishnetprefork).
 
 ## One function over an array: `parallelMapInto` and `parallelReduce`
 

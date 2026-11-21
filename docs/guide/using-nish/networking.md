@@ -467,10 +467,11 @@ fallback.
 
 ## A server on every core: `nish/net/prefork`
 
-A Nish server is one thread. To use every core, run one copy of it per core,
-each with its own `SO_REUSEPORT` listener on the same port: that is what
-`nish/net/prefork` does. Call `preforkWorkers(process.argv)` at the top of
-`main`, before you open a listener:
+A Nish server is one thread. To use every core of a multicore machine, run
+one copy of it per core, each with its own `SO_REUSEPORT` listener on the same
+port: that is what `nish/net/prefork` does. Call
+`preforkWorkers(process.argv)` at the top of `main`, before you open a
+listener:
 
 <!-- allow-panics: calls `std/net/prefork.ts` code that keeps panic sites no proof removes yet -->
 <!-- nish:ok --allow-panics -->
