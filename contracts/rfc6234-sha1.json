@@ -1,0 +1,284 @@
+{
+  "$schema": "../build/vector/schemas/rfc-contract.json",
+  "contract": "rfc6234-sha1",
+  "source": {
+    "rfc": 6234,
+    "title": "SHA-1",
+    "sha256": "8f39f02a57bfd1da15634706724a585766e6223f77ecdaf243cad16cd3a1aa1b"
+  },
+  "sources": [
+    {
+      "id": "rfc6234-sha1",
+      "path": "../specs/rfc6234-sha1.xml",
+      "sha256": "453d7da78ebc898aa65e31d27d0585cce5e75868434f1092f245dcce04d3c806"
+    },
+    {
+      "id": "rfc6234",
+      "rfc": 6234,
+      "file": "rfcs/rfc6234.txt",
+      "sha256": "8f39f02a57bfd1da15634706724a585766e6223f77ecdaf243cad16cd3a1aa1b"
+    }
+  ],
+  "target": {
+    "module": "nish/crypto/sha1"
+  },
+  "requirements": [
+    {
+      "id": "R-SHA1-OUT",
+      "section": "8.2.1",
+      "level": "DEFINITION",
+      "quote": "The SHA-1 algorithm produces a 160-bit message digest for a * given data stream that can serve as a means of providing a * \"fingerprint\" for a message."
+    },
+    {
+      "id": "R-DRIVER",
+      "section": "8.5",
+      "level": "DEFINITION",
+      "quote": "The following code is a main program test driver to exercise the code in sha1.c, sha224-256.c, sha384-512.c, hmac.c, and hkdf.c."
+    },
+    {
+      "id": "R-ASCII",
+      "section": "8.5",
+      "level": "DEFINITION",
+      "quote": "Note that the tests assume that character values are as in [US-ASCII] and a run time check warns if the code appears to have been compiled with some other character system."
+    }
+  ],
+  "exclusions": [
+    {
+      "section": "8.1.1",
+      "quote": "IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
+      "reason": "a term of the licence on the RFC's C code, which nish does not copy; no behaviour of a hash function can satisfy or violate it"
+    }
+  ],
+  "functions": [
+    {
+      "name": "sha1",
+      "params": [
+        {
+          "name": "data",
+          "type": "bytes"
+        }
+      ],
+      "returns": "bytes"
+    }
+  ],
+  "clauses": [
+    {
+      "kind": "vector",
+      "id": "SHA-1-1",
+      "title": "RFC 6234 §8.5: SHA-1 test 1, \"abc\", one block",
+      "covers": ["R-SHA1-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha1(b\"abc\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha1",
+      "call": "sha1",
+      "args": [
+        {
+          "ascii": "abc"
+        }
+      ],
+      "expect": {
+        "hex": "a9993e364706816aba3e25717850c26c9cd0d89d"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-1-2",
+      "title": "RFC 6234 §8.5: SHA-1 test 2, the two-block string",
+      "covers": ["R-SHA1-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha1(b\"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha1",
+      "call": "sha1",
+      "args": [
+        {
+          "ascii": "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+        }
+      ],
+      "expect": {
+        "hex": "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-1-4",
+      "title": "RFC 6234 §8.5: SHA-1 test 4, 640 bytes, ten copies of a 64-byte string",
+      "covers": ["R-SHA1-OUT", "R-DRIVER", "R-ASCII"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha1(b\"0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567\").hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha1",
+      "call": "sha1",
+      "args": [
+        {
+          "ascii": "0123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567012345670123456701234567"
+        }
+      ],
+      "expect": {
+        "hex": "dea356a2cddd90c7a7ecedc5ebb563934f460452"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-1-6",
+      "title": "RFC 6234 §8.5: SHA-1 test 6, one byte",
+      "covers": ["R-SHA1-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha1(bytes.fromhex(\"5e\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha1",
+      "call": "sha1",
+      "args": [
+        {
+          "hex": "5e"
+        }
+      ],
+      "expect": {
+        "hex": "5e6f80a34a9798cafc6a5db96cc57ba4c4db59c2"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-1-8",
+      "title": "RFC 6234 §8.5: SHA-1 test 8, 16 bytes",
+      "covers": ["R-SHA1-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha1(bytes.fromhex(\"9a7dfdf1ecead06ed646aa55fe757146\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha1",
+      "call": "sha1",
+      "args": [
+        {
+          "hex": "9a7dfdf1ecead06ed646aa55fe757146"
+        }
+      ],
+      "expect": {
+        "hex": "82abff6605dbe1c17def12a394fa22a82b544a35"
+      }
+    },
+    {
+      "kind": "vector",
+      "id": "SHA-1-10",
+      "title": "RFC 6234 §8.5: SHA-1 test 10, 163 bytes",
+      "covers": ["R-SHA1-OUT", "R-DRIVER"],
+      "source": {
+        "command": "python3 -c 'import hashlib; print(hashlib.sha1(bytes.fromhex(\"f78f92141bcd170ae89b4fba15a1d59f3fd84d223c9251bdacbbae61d05ed115a06a7ce117b7beead24421ded9c32592bd57edeae39c39fa1fe8946a84d0cf1f7beead1713e2e0959897347f67c80b0400c209815d6b10a683836fd5562a56cab1a28e81b6576654631cf16566b86e3b33a108b05307c00aff14a768ed7350606a0f85e6a91d396f5b5cbe577f9b38807c7d523d6d792f6ebc24a4ecf2b3a427cdbbfb\")).hexdigest())'"
+      },
+      "section": "7",
+      "sectionSource": "rfc6234-sha1",
+      "call": "sha1",
+      "args": [
+        {
+          "hex": "f78f92141bcd170ae89b4fba15a1d59f3fd84d223c9251bdacbbae61d05ed115a06a7ce117b7beead24421ded9c32592bd57edeae39c39fa1fe8946a84d0cf1f7beead1713e2e0959897347f67c80b0400c209815d6b10a683836fd5562a56cab1a28e81b6576654631cf16566b86e3b33a108b05307c00aff14a768ed7350606a0f85e6a91d396f5b5cbe577f9b38807c7d523d6d792f6ebc24a4ecf2b3a427cdbbfb"
+        }
+      ],
+      "expect": {
+        "hex": "cb0082c8f197d260991ba6a460e76e202bad27b3"
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-LEN-1",
+      "title": "sha1 gives 20 bytes (160 bits) for any message",
+      "covers": ["R-SHA1-OUT"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        }
+      ],
+      "assert": {
+        "op": "==",
+        "args": [
+          {
+            "op": "len",
+            "args": [
+              {
+                "call": "sha1",
+                "args": [
+                  {
+                    "var": "m"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "int": 20
+          }
+        ]
+      }
+    },
+    {
+      "kind": "property",
+      "id": "P-CHUNK",
+      "title": "the digest depends on every byte: appending one byte changes it",
+      "covers": ["R-SHA1-OUT"],
+      "forall": [
+        {
+          "name": "m",
+          "type": "bytes",
+          "minLen": 0,
+          "maxLen": 300
+        },
+        {
+          "name": "b",
+          "type": "bytes",
+          "minLen": 1,
+          "maxLen": 1
+        }
+      ],
+      "assert": {
+        "op": "!=",
+        "args": [
+          {
+            "call": "sha1",
+            "args": [
+              {
+                "var": "m"
+              }
+            ]
+          },
+          {
+            "call": "sha1",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "var": "m"
+                  },
+                  {
+                    "var": "b"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "outOfScope": [
+    {
+      "name": "Sha1",
+      "reason": "the streaming form of sha1; a vector row and a property here call only functions, so the class is left to nish's own tests (tests/run.js)"
+    },
+    {
+      "name": "SHA1_SIZE",
+      "reason": "a constant, not a function; the properties test the digest length it names"
+    },
+    {
+      "name": "SHA1_BLOCK",
+      "reason": "a constant, not a function; it names the block size the two-block vectors cross"
+    }
+  ]
+}
