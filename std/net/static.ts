@@ -140,8 +140,8 @@ const staticLower = (b: i32): i32 => (b >= 65 && b <= 90 ? b + 32 : b)
  */
 export const staticContentType = (name: string): string => {
   let dot: i32 = -1
-  for (let k: i32 = name.length - 1; k >= 0 && dot < 0; k--) {
-    const c: i32 = name.charCodeAt(k)
+  for (let k: i32 = toI32(name.length) - 1; k >= 0 && dot < 0; k--) {
+    const c: i32 = toI32(name.charCodeAt(k))
     if (c === 47) {
       return "application/octet-stream"
     }
@@ -152,15 +152,18 @@ export const staticContentType = (name: string): string => {
   if (dot < 0) {
     return "application/octet-stream"
   }
-  const length: i32 = name.length - dot - 1
+  const length: i32 = toI32(name.length) - dot - 1
   let at: i32 = 0
-  while (at < STATIC_TYPES.length) {
+  while (at < toI32(STATIC_TYPES.length)) {
     let k: i32 = 0
-    while (k < length && STATIC_TYPES.charCodeAt(at + k) === staticLower(name.charCodeAt(dot + 1 + k))) {
+    while (
+      k < length &&
+      toI32(STATIC_TYPES.charCodeAt(at + k)) === staticLower(toI32(name.charCodeAt(dot + 1 + k)))
+    ) {
       k++
     }
-    const space: i32 = STATIC_TYPES.indexOf(" ", at)
-    const bar: i32 = STATIC_TYPES.indexOf("|", space)
+    const space: i32 = toI32(STATIC_TYPES.indexOf(" ", at))
+    const bar: i32 = toI32(STATIC_TYPES.indexOf("|", space))
     if (k === length && space === at + length) {
       return STATIC_TYPES.substring(space + 1, bar)
     }
@@ -171,11 +174,12 @@ export const staticContentType = (name: string): string => {
 
 /** Whether `bytes[start .. end)` is `text`, ASCII case ignored. */
 const staticIs = (bytes: u8[], start: i32, end: i32, text: string): boolean => {
-  if (end - start !== text.length) {
+  const size: i32 = toI32(text.length)
+  if (end - start !== size) {
     return false
   }
-  for (let k: i32 = 0; k < text.length; k++) {
-    if (staticLower(toI32(bytes[start + k])) !== staticLower(text.charCodeAt(k))) {
+  for (let k: i32 = 0; k < size; k++) {
+    if (staticLower(toI32(bytes[start + k])) !== staticLower(toI32(text.charCodeAt(k)))) {
       return false
     }
   }
@@ -222,13 +226,21 @@ const staticDate = (b: u8[], start: i32, end: i32): i64 => {
     return -1
   }
   const at: i32 = start + 5
+  // The guard the prover reads for the month's three bytes, which the size
+  // test above already implies: it says `at + 5` is inside `b`.
+  if (at < 0 || at + 5 >= toI32(b.length)) {
+    return -1
+  }
+  const m0: i32 = toI32(b[at + 3])
+  const m1: i32 = toI32(b[at + 4])
+  const m2: i32 = toI32(b[at + 5])
   const day: i32 = staticTwo(b, at)
   let month: i32 = -1
   for (let m: i32 = 0; m < 12; m++) {
     if (
-      toI32(b[at + 3]) === STATIC_MONTHS.charCodeAt(3 * m) &&
-      toI32(b[at + 4]) === STATIC_MONTHS.charCodeAt(3 * m + 1) &&
-      toI32(b[at + 5]) === STATIC_MONTHS.charCodeAt(3 * m + 2)
+      m0 === toI32(STATIC_MONTHS.charCodeAt(3 * m)) &&
+      m1 === toI32(STATIC_MONTHS.charCodeAt(3 * m + 1)) &&
+      m2 === toI32(STATIC_MONTHS.charCodeAt(3 * m + 2))
     ) {
       month = m + 1
     }
@@ -275,11 +287,11 @@ const staticDate = (b: u8[], start: i32, end: i32): i64 => {
  * byte that is not a digit, or more than 18 digits.
  */
 const staticNumber = (b: u8[], start: i32, end: i32): i64 => {
-  if (end <= start || end - start > 18) {
+  if (start < 0 || end <= start || end - start > 18) {
     return -1
   }
   let n: i64 = 0
-  for (let k: i32 = start; k < end; k++) {
+  for (let k: i32 = start; k < end && k < toI32(b.length); k++) {
     const d: i32 = toI32(b[k]) - 48
     if (d < 0 || d > 9) {
       return -1
@@ -309,7 +321,7 @@ const staticQ = (b: u8[], start: i32, end: i32): i32 => {
   }
   let q: i32 = 1000 * whole
   let scale: i32 = 100
-  for (let k: i32 = start + 2; k < end; k++) {
+  for (let k: i32 = start + 2; k < end && k < toI32(b.length); k++) {
     const d: i32 = toI32(b[k]) - 48
     if (d < 0 || d > 9) {
       return -1
@@ -344,10 +356,10 @@ export class StaticFiles {
   path: u8[]
   /** How many bytes of `path` are the name. @internal */
   pathLength: i32 = 0
+  /** How many bytes of `etag` are the ETag; beside `pathLength`, so the two share one 8-byte slot. @internal */
+  etagLength: i32 = 0
   /** The ETag the plan made, `etag[0 .. etagLength)`. @internal */
   etag: u8[]
-  /** @internal */
-  etagLength: i32 = 0
   /** One streamed read. @internal */
   chunk: u8[]
   /** The open file the plan chose, or -1. @internal */
@@ -500,7 +512,7 @@ export class StaticFiles {
         sent = server.write(
           r,
           this.slot >= 0 ? this.bytes[this.slot] : this.chunk,
-          this.slot >= 0 ? toI32(pos) : 0,
+          this.slot >= 0 ? toI32(pos) : toI32(0),
           n
         )
         pos += toI64(n)
@@ -550,7 +562,7 @@ export class StaticFiles {
         sent = h.write(
           r,
           this.slot >= 0 ? this.bytes[this.slot] : this.chunk,
-          this.slot >= 0 ? toI32(pos) : 0,
+          this.slot >= 0 ? toI32(pos) : toI32(0),
           n
         )
         pos += toI64(n)
@@ -626,36 +638,55 @@ export class StaticFiles {
       this.refused = true
       return STATIC_NOT_FOUND
     }
-    const skip: i32 = decoded > 0 && path[0] === 47 ? 1 : 0
-    let m: i32 = decoded - skip
-    for (let k: i32 = 0; k < m; k++) {
-      path[k] = path[k + skip]
+    // `path` has 16 bytes of room past `maxPath`, so the decoded name and an
+    // appended `index.html` fit; each loop is still bounded by `room`, the
+    // guard the prover reads.
+    const room: i32 = toI32(path.length)
+    let m: i32 = decoded
+    if (decoded > 0 && path[0] === 47) {
+      m = decoded - 1
+      for (let k: i32 = 1; k < decoded && k < room; k++) {
+        path[k - 1] = path[k]
+      }
     }
     if (m === 0 || path[m - 1] === 47) {
       if (!this.limits.index) {
         return STATIC_NOT_FOUND
       }
       const index: string = "index.html"
-      for (let k: i32 = 0; k < index.length; k++) {
+      const size: i32 = toI32(index.length)
+      for (let k: i32 = 0; k < size && m + k < room; k++) {
         path[m + k] = toU8(index.charCodeAt(k))
       }
-      m += index.length
+      m += size
     }
+    if (m > room) {
+      this.refused = true
+      return STATIC_NOT_FOUND
+    }
+    // Each segment is refused when it is empty or starts with `.`, which
+    // `dot` holds from its first byte, and any byte below 32, 127 or `\`.
     let segment: i32 = 0
-    for (let k: i32 = 0; k <= m; k++) {
-      if (k === m || path[k] === 47) {
-        if (k === segment || path[segment] === 46) {
+    let dot: boolean = false
+    for (let k: i32 = 0; k < m && k < room; k++) {
+      const b: i32 = toI32(path[k])
+      if (b === 47) {
+        if (k === segment || dot) {
           this.refused = true
           return STATIC_NOT_FOUND
         }
         segment = k + 1
-      } else {
-        const b: i32 = toI32(path[k])
-        if (b < 32 || b === 127 || b === 92) {
-          this.refused = true
-          return STATIC_NOT_FOUND
-        }
+        dot = false
+      } else if (b < 32 || b === 127 || b === 92) {
+        this.refused = true
+        return STATIC_NOT_FOUND
+      } else if (k === segment && b === 46) {
+        dot = true
       }
+    }
+    if (m === segment || dot) {
+      this.refused = true
+      return STATIC_NOT_FOUND
     }
     this.pathLength = m
     const base: string = this.under + String.fromBytes(path, 0, m)
@@ -720,44 +751,48 @@ export class StaticFiles {
     let gzip: i32 = -1
     let identity: i32 = -1
     let star: i32 = -1
+    // Each scan is bounded by `e` and by `n`, and starts at `i`, which is
+    // never below 0 (an absent field is -1): the guards the prover reads for
+    // every index below.
+    const n: i32 = toI32(head.length)
     let i: i32 = this.acceptStart
     const e: i32 = this.acceptEnd
-    while (i < e) {
+    while (i < e && i >= 0) {
       let j: i32 = i
-      while (j < e && head[j] !== 44) {
+      while (j < e && j < n && head[j] !== 44) {
         j++
       }
       let a: i32 = i
-      while (a < j && staticSpace(toI32(head[a]))) {
+      while (a < j && a < n && staticSpace(toI32(head[a]))) {
         a++
       }
       let b: i32 = a
-      while (b < j && head[b] !== 59 && !staticSpace(toI32(head[b]))) {
+      while (b < j && b < n && head[b] !== 59 && !staticSpace(toI32(head[b]))) {
         b++
       }
       let q: i32 = 1000
       let ok: boolean = b > a
       let c: i32 = b
       while (ok && c < j) {
-        while (c < j && staticSpace(toI32(head[c]))) {
+        while (c < j && c < n && staticSpace(toI32(head[c]))) {
           c++
         }
         if (c === j) {
           break
         }
-        if (head[c] !== 59) {
+        if (c >= n || head[c] !== 59) {
           ok = false
           break
         }
         c++
-        while (c < j && staticSpace(toI32(head[c]))) {
+        while (c < j && c < n && staticSpace(toI32(head[c]))) {
           c++
         }
         const ps: i32 = c
-        while (c < j && head[c] !== 59 && !staticSpace(toI32(head[c]))) {
+        while (c < j && c < n && head[c] !== 59 && !staticSpace(toI32(head[c]))) {
           c++
         }
-        if (c - ps >= 2 && staticLower(toI32(head[ps])) === 113 && head[ps + 1] === 61) {
+        if (c - ps >= 2 && ps + 1 < n && staticLower(toI32(head[ps])) === 113 && head[ps + 1] === 61) {
           q = staticQ(head, ps + 2, c)
           ok = q >= 0
         }
@@ -769,7 +804,7 @@ export class StaticFiles {
           gzip = q
         } else if (staticIs(head, a, b, "identity")) {
           identity = q
-        } else if (b - a === 1 && head[a] === 42) {
+        } else if (b - a === 1 && a < n && head[a] === 42) {
           star = q
         }
       }
@@ -820,21 +855,24 @@ export class StaticFiles {
 
   /** Whether `If-None-Match` is `*` or names the ETag, weakly compared. @internal Called by `staticPlan`. */
   staticNoneMatch(head: u8[]): boolean {
+    // Every index below is at least `k`, never below 0 (an absent field is
+    // -1), and is tested against `n`: the guards the prover reads.
+    const n: i32 = toI32(head.length)
     let k: i32 = this.noneMatchStart
     const e: i32 = this.noneMatchEnd
-    while (k < e) {
+    while (k < e && k >= 0 && k < n) {
       const b: i32 = toI32(head[k])
       if (b === 42) {
         return true
       }
-      if (b === 87 && k + 2 < e && head[k + 1] === 47 && head[k + 2] === 34) {
+      if (b === 87 && k + 2 < e && k + 2 < n && head[k + 1] === 47 && head[k + 2] === 34) {
         k += 2
       } else if (b === 34) {
         let close: i32 = k + 1
-        while (close < e && head[close] !== 34) {
+        while (close < e && close < n && head[close] !== 34) {
           close++
         }
-        if (close === e) {
+        if (close >= e || close >= n) {
           return false
         }
         if (this.staticSameTag(head, k, close + 1)) {
@@ -852,7 +890,10 @@ export class StaticFiles {
   staticIfRange(head: u8[]): boolean {
     let s: i32 = this.ifRangeStart
     let e: i32 = this.ifRangeEnd
-    while (s < e && staticSpace(toI32(head[s]))) {
+    // `s` is never below 0 here (an absent field is -1) and each scan is
+    // tested against `n`: the guards the prover reads.
+    const n: i32 = toI32(head.length)
+    while (s < e && s >= 0 && s < n && staticSpace(toI32(head[s]))) {
       s++
     }
     while (e > s && staticSpace(toI32(head[e - 1]))) {
@@ -877,7 +918,10 @@ export class StaticFiles {
   staticRange(head: u8[]): i32 {
     let s: i32 = this.rangeStart
     let e: i32 = this.rangeEnd
-    while (s < e && staticSpace(toI32(head[s]))) {
+    // `s` is never below 0 here (an absent field is -1) and each scan is
+    // tested against `n`: the guards the prover reads.
+    const n: i32 = toI32(head.length)
+    while (s < e && s >= 0 && s < n && staticSpace(toI32(head[s]))) {
       s++
     }
     while (e > s && staticSpace(toI32(head[e - 1]))) {
@@ -890,11 +934,11 @@ export class StaticFiles {
       return 200
     }
     let k: i32 = s + 6
-    while (k < e && staticSpace(toI32(head[k]))) {
+    while (k < e && k >= 0 && k < n && staticSpace(toI32(head[k]))) {
       k++
     }
     let dash: i32 = -1
-    for (let x: i32 = k; x < e; x++) {
+    for (let x: i32 = k; x < e && x >= 0 && x < n; x++) {
       if (head[x] === 44) {
         return 200
       }
@@ -936,7 +980,7 @@ export class StaticFiles {
     if (this.size > toI64(this.limits.maxCachedBytes)) {
       return
     }
-    const stride: i32 = this.path.length
+    const stride: i32 = toI32(this.path.length)
     const m: i32 = this.pathLength
     let hit: i32 = -1
     for (let k: i32 = 0; k < this.limits.maxEntries && hit < 0; k++) {
@@ -961,7 +1005,7 @@ export class StaticFiles {
     }
     this.keyLength[k] = -1
     const size: i32 = toI32(this.size)
-    if (this.bytes[k].length < size) {
+    if (toI32(this.bytes[k].length) < size) {
       let cap: i32 = 64
       while (cap < size) {
         cap = 2 * cap
@@ -1063,11 +1107,8 @@ export class StaticFiles {
       values.push(httpFieldBytes(this.coding === STATIC_BR ? "br" : "gzip"))
     }
     if (status === 206) {
-      const prefix: string = "bytes "
-      for (let k: i32 = 0; k < prefix.length; k++) {
-        scratch[k] = toU8(prefix.charCodeAt(k))
-      }
-      let at: i32 = staticDigits(scratch, prefix.length, this.from, 10)
+      copyBytes(scratch, 0, httpFieldBytes("bytes "), 0, 6)
+      let at: i32 = staticDigits(scratch, 6, this.from, 10)
       scratch[at] = 45
       at = staticDigits(scratch, at + 1, this.to - 1, 10)
       scratch[at] = 47
