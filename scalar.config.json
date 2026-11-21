@@ -475,6 +475,16 @@
                   "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/http-router" }]
                 }
               },
+              "/static-files": {
+                "type": "page",
+                "title": "Static files",
+                "filepath": "docs/guide/using-nish/static-files.md",
+                "head": {
+                  "title": "Static files · Using Nish · Nish",
+                  "meta": [{ "property": "og:title", "content": "Static files · Using Nish" }],
+                  "links": [{ "rel": "canonical", "href": "https://nishlang.com/using-nish/static-files" }]
+                }
+              },
               "/api-server": {
                 "type": "page",
                 "title": "An API server",
@@ -2277,6 +2287,21 @@
                           ]
                         }
                       },
+                      "/static": {
+                        "type": "page",
+                        "title": "static",
+                        "filepath": "docs/reference/net/static.md",
+                        "head": {
+                          "title": "static · Nish",
+                          "meta": [{ "property": "og:title", "content": "static" }],
+                          "links": [
+                            {
+                              "rel": "canonical",
+                              "href": "https://nishlang.com/reference/library/net/static"
+                            }
+                          ]
+                        }
+                      },
                       "/tls": {
                         "type": "group",
                         "title": "tls",
@@ -3546,6 +3571,16 @@
                       "title": "HTTP router · Nish",
                       "meta": [{ "property": "og:title", "content": "HTTP router" }],
                       "links": [{ "rel": "canonical", "href": "https://nishlang.com/security/router" }]
+                    }
+                  },
+                  "/static": {
+                    "type": "page",
+                    "title": "Static files",
+                    "filepath": "docs/security/static.md",
+                    "head": {
+                      "title": "Static files · Networking · Nish",
+                      "meta": [{ "property": "og:title", "content": "Static files · Networking" }],
+                      "links": [{ "rel": "canonical", "href": "https://nishlang.com/security/static" }]
                     }
                   },
                   "/fetch": {

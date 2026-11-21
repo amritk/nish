@@ -44510,6 +44510,176 @@ if (!only || "sandbox".includes(only)) {
   )
 }
 
+// ---- `nish/net/static` in the http-app example, sandboxed, to curl (WP43 S3) ----
+//
+// `tests/link/net_static` drives `StaticFiles` with scripted Nish clients;
+// this asks curl, a client somebody else wrote, the same of the example a
+// user runs. The example is built with `--sandbox --allow
+// net,signal,clock,fs.read=<www>`, the grants its `main` reaches with the
+// directory as the only one it may read, and serves `--static <www>`: a file
+// with its type and ETag, a range, a 304 for that ETag, the `.br` and `.gz`
+// siblings, and a 404 for a symbolic link out of the directory and for a
+// `..` curl sends as it is. Then the same binary is pointed at a directory
+// beside the scope: Landlock refuses resolving it, so the file there that an
+// unsandboxed build would serve is a 404. Each server must stop on SIGINT and
+// exit 0.
+if (!only || "net_static".includes(only) || "http-app".includes(only)) {
+  const dir = path.join(buildDir, "net-static-app")
+  fs.rmSync(dir, { recursive: true, force: true })
+  const www = path.join(dir, "www")
+  const beside = path.join(dir, "beside")
+  fs.mkdirSync(www, { recursive: true })
+  fs.mkdirSync(beside, { recursive: true })
+  const css = "body { color: red }\n"
+  fs.writeFileSync(path.join(www, "site.css"), css)
+  fs.writeFileSync(path.join(www, "site.css.br"), "not really brotli")
+  fs.writeFileSync(path.join(www, "site.css.gz"), zlib.gzipSync(css))
+  fs.writeFileSync(path.join(beside, "secret.txt"), "beside the scope\n")
+  fs.symlinkSync(path.join(beside, "secret.txt"), path.join(www, "escape.txt"))
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("net_static app: --sandbox confines through Linux system calls, and this host is not Linux with clang")
+  } else if (!has("curl")) {
+    skip("net_static app: curl is not installed, so no third-party client asks the example for its files")
+  } else {
+    const exe = path.join(dir, "http-app")
+    const built = spawnNish(
+      [
+        path.join(root, "examples", "http-app", "main.ts"),
+        ALLOW_PANICS,
+        "--sandbox",
+        "--allow",
+        `net,signal,clock,fs.read=${www}`,
+        "-o",
+        dir + path.sep,
+        "--link",
+        exe,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    if (check("net_static app: examples/http-app links under --sandbox --allow net,signal,clock,fs.read=<www>", built.status === 0, shown(built))) {
+      /** Starts the example on a free port serving `files`: its port (0 if it never listened), its output so far and its end. */
+      const start = async (files) => {
+        const port = await new Promise((resolve) => {
+          const probe = net.createServer()
+          probe.listen(0, "127.0.0.1", () => {
+            const { port: free } = probe.address()
+            probe.close(() => resolve(free))
+          })
+        })
+        const server = spawn(exe, [String(port), "--static", files], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+        const said = { out: "" }
+        const timer = setTimeout(() => server.kill("SIGKILL"), 60000)
+        const done = new Promise((resolve) =>
+          server.on("close", (code, signal) => {
+            clearTimeout(timer)
+            resolve({ code, signal })
+          })
+        )
+        server.stdout.on("data", (chunk) => {
+          said.out += chunk
+        })
+        server.stderr.on("data", (chunk) => {
+          said.out += chunk
+        })
+        const listening = await new Promise((resolve) => {
+          server.stdout.on("data", () => {
+            if (said.out.includes(`listening on port ${port}\n`)) resolve(true)
+          })
+          server.on("close", () => resolve(false))
+        })
+        return { server, port: listening ? port : 0, said, done }
+      }
+      /** A curl GET of `target` with `args`: its exit, status, lower-cased head and body bytes. */
+      const get = (port, target, args = []) => {
+        const head = path.join(dir, "head.txt")
+        const body = path.join(dir, "body.bin")
+        fs.rmSync(head, { force: true })
+        fs.rmSync(body, { force: true })
+        const r = spawnSync("curl", ["-sS", "--max-time", "10", "--path-as-is", "-D", head, "-o", body, ...args, `http://127.0.0.1:${port}${target}`], { encoding: "utf8" })
+        const text = fs.existsSync(head) ? fs.readFileSync(head, "utf8").toLowerCase() : ""
+        const m = /^http\/[\d.]+ (\d{3})/.exec(text)
+        return {
+          code: r.status,
+          status: m === null ? 0 : Number(m[1]),
+          head: text,
+          body: fs.existsSync(body) ? fs.readFileSync(body) : Buffer.alloc(0),
+          err: String(r.stderr),
+        }
+      }
+      const said = (r) => `curl exit ${r.code} ${r.err}\n${r.head}${r.body.toString("latin1").slice(0, 200)}`
+      const stop = async (s, what) => {
+        if (s.port > 0) s.server.kill("SIGINT")
+        const ended = await s.done
+        check(`net_static app: ${what}: SIGINT stops the example, exit 0`, s.port > 0 && ended.code === 0, `exit ${ended.code} signal ${ended.signal}\n${s.said.out}`)
+      }
+
+      const inside = await start(www)
+      if (check("net_static app: the sandboxed example listens with --static <www>", inside.port > 0, inside.said.out)) {
+        const p = inside.port
+        const file = get(p, "/static/site.css")
+        check(
+          "net_static app: curl GETs a file, 200 as text/css with its body, its ETag and Vary",
+          file.code === 0 && file.status === 200 && file.head.includes("content-type: text/css; charset=utf-8\r\n") && file.head.includes("vary: accept-encoding\r\n") && file.body.toString() === css,
+          said(file)
+        )
+        const tag = /^etag: ("[^"\r\n]+")\r$/m.exec(file.head)
+        const fresh = get(p, "/static/site.css", ["-H", `If-None-Match: ${tag === null ? '"none"' : tag[1]}`])
+        check("net_static app: curl with If-None-Match of that ETag, 304 with no body", tag !== null && fresh.status === 304 && fresh.body.length === 0, said(fresh))
+        const part = get(p, "/static/site.css", ["-r", "5-9"])
+        check(
+          "net_static app: curl -r 5-9, 206 with Content-Range bytes 5-9/20",
+          part.status === 206 && part.head.includes("content-range: bytes 5-9/20\r\n") && part.body.toString() === css.slice(5, 10),
+          said(part)
+        )
+        const br = get(p, "/static/site.css", ["-H", "Accept-Encoding: br, gzip"])
+        check(
+          "net_static app: Accept-Encoding br, gzip: the .br sibling as br, the type of the file",
+          br.status === 200 && br.head.includes("content-encoding: br\r\n") && br.head.includes("content-type: text/css; charset=utf-8\r\n") && br.body.toString() === "not really brotli",
+          said(br)
+        )
+        const gz = get(p, "/static/site.css", ["--compressed", "-H", "Accept-Encoding: gzip"])
+        check(
+          "net_static app: curl --compressed with gzip alone: the .gz sibling, which curl decodes to the file",
+          gz.status === 200 && gz.head.includes("content-encoding: gzip\r\n") && gz.body.toString() === css,
+          said(gz)
+        )
+        const escape = get(p, "/static/escape.txt")
+        check("net_static app: a symbolic link out of the directory is 404", escape.status === 404 && !escape.body.toString().includes("beside the scope"), said(escape))
+        const dots = get(p, "/static/../beside/secret.txt")
+        check("net_static app: a `..` sent as it is is 404", dots.status === 404 && !dots.body.toString().includes("beside the scope"), said(dots))
+      }
+      await stop(inside, "inside the scope")
+
+      // Whether the kernel has Landlock: without it the sandbox cannot hold
+      // reads to the scope, and the directory beside it would be served.
+      const abiProbe = path.join(dir, "abi")
+      fs.writeFileSync(
+        `${abiProbe}.c`,
+        "#include <stdio.h>\n#include <unistd.h>\n#include <sys/syscall.h>\n" +
+          'int main(void) { long r = syscall(444, NULL, 0, 1); printf("%ld\\n", r < 0 ? 0 : r); return 0; }\n'
+      )
+      const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], { cwd: root, encoding: "utf8" })
+      const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
+      if (a.status !== 0) {
+        check("net_static app: the Landlock ABI probe compiles", false, shown(a))
+      } else if (abi < 1) {
+        skip("net_static app: this kernel has no Landlock (ABI 0), so --sandbox cannot hold fs.read to its scope and the directory beside it was not asked for")
+      } else {
+        const outside = await start(beside)
+        if (check("net_static app: the same binary listens with --static <beside the scope>", outside.port > 0, outside.said.out)) {
+          const refused = get(outside.port, "/static/secret.txt")
+          check(
+            "net_static app: beside fs.read=<www>, Landlock refuses the directory and its file is 404",
+            refused.status === 404 && !refused.body.toString().includes("beside the scope"),
+            said(refused)
+          )
+        }
+        await stop(outside, "beside the scope")
+      }
+    }
+  }
+}
+
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
 // five functions, so `unsafe_get_set` and `unsafe_wrapping` run unmodified and must
 // print the `.out` the native round trip in section A is held to -- the wraps at
