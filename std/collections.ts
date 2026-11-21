@@ -196,35 +196,36 @@ const compactHashes = (hashes: u32[]): void => {
 }
 
 /**
- * The bucket table after a rebuild of `live` entries out of `used`. More than
- * half dead compacts at the same size and clears the table in place — a new
- * array would leave the old one in the arena, once per compaction, which a
- * table that churns forever cannot afford (§6.1). Otherwise it doubles, and
- * the table never shrinks.
+ * The bucket table after a rebuild of `live` entries out of `used`, cleared.
+ * More than half dead compacts at the same size; otherwise it doubles, and the
+ * table never shrinks. Both happen in place — a new array would leave the old
+ * one in the arena, once per rebuild, which a table that churns forever cannot
+ * afford (§6.1).
  */
 const rebuiltSlots = (slots: u32[], live: i32, used: i32): u32[] => {
-  if (toI64(live) * 2 < toI64(used)) {
-    clearSlots(slots)
-    return slots
+  if (!(toI64(live) * 2 < toI64(used))) {
+    widenSlots(slots, 2)
   }
-  return emptySlots(slots, 2)
+  clearSlots(slots)
+  return slots
 }
 
 /**
- * A new bucket table of `times` empty buckets for each of `slots`'. It is
- * built by `push`, so a table past the largest array, 2^31 - 1 elements, stops
- * the program as out of memory, as any allocation that size does: that is a
- * `Map` or `Set` of more than 2^29 entries. (Node's hold 2^24 and throw on
- * the next insert.)
+ * Grow `slots` in place to `times` buckets for each it holds; the caller
+ * clears or re-files them. It grows the table the `Map` or `Set` already owns
+ * rather than allocating a new one, so a `Map` a task makes stays memory only
+ * that task writes (`spawn`'s shared-write check). It grows by `push`, so a
+ * table past the largest array, 2^31 - 1 elements, stops the program as out
+ * of memory, as any allocation that size does: that is a `Map` or `Set` of
+ * more than 2^29 entries. (Node's hold 2^24 and throw on the next insert.)
  */
-const emptySlots = (slots: u32[], times: i32): u32[] => {
-  const out: u32[] = []
-  for (let i: i32 = 0; i < toI32(slots.length); i++) {
-    for (let j: i32 = 0; j < times; j++) {
-      out.push(0)
+const widenSlots = (slots: u32[], times: i32): void => {
+  const n = toI32(slots.length)
+  for (let k: i32 = 1; k < times; k++) {
+    for (let i: i32 = 0; i < n; i++) {
+      slots.push(0)
     }
   }
-  return out
 }
 
 /**
@@ -572,8 +573,9 @@ export class Map<K, V> {
       size = size * 2
     }
     if (size > have && have > 0) {
-      const slots = emptySlots(this.slots, toI32(size / have))
-      this.slots = slots
+      const slots = this.slots
+      widenSlots(slots, toI32(size / have))
+      clearSlots(slots)
       this.mask = toI32(slots.length) - 1
       refile(slots, this.entryHashes)
     }
