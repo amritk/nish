@@ -43,6 +43,12 @@ A change to `std/` or `src/` that moves any nish-cmp corpus program's IR adds
 narrow `DECLARED` entries to `tests/nish-cmp.js` (program + file, the PR's
 release-note words) in the same PR; run nish-cmp before pushing.
 
+A change that makes a refused program compile (or a compiling one refuse)
+adds `file: "exit"` `DECLARED` entries to `tests/nish-cmp.js` for each corpus
+program it flips, and greps `docs/wp*.md`, `docs/MASTER_PLAN.md` and
+`tests/**` comments for the old rule's wording and its test names, not only
+`docs/LANGUAGE.md` and the guide.
+
 **`std/` line moves and panic proofs are pinned.** An edit that adds or
 removes lines in a `std/*.ts` file moves every `std/<file>.ts:LINE:COL` in
 `tests/link/*/expected.caps.json`, `tests/wordings/*.err` and
