@@ -184,6 +184,9 @@ Releases ride a train; nothing is published from a developer machine.
    runs wait as `action_required` until a maintainer approves them, so it also
    dispatches `ci.yml` and `pr-title.yml` at `release/next`. A dispatched run
    needs no approval and reports its checks on the pull request's head commit.
+   A pull request's required checks never count a dispatched run's check
+   runs, so `ci.yml`'s gate also reports its outcome as a `ci-gate` commit
+   status, which the ruleset's required `ci-gate` does count.
    GitHub refuses the merge while any run at the head waits for approval,
    required or not, so the job then deletes the waiting `pull_request` runs
    (for a minute after the push, as they appear). A run it cannot delete is

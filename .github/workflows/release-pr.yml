@@ -20,7 +20,9 @@
 # GITHUB_TOKEN, whose `pull_request` runs wait as `action_required` until a
 # maintainer approves them, so the step also dispatches ci.yml and
 # pr-title.yml at `release/next`: a dispatched run needs no approval, and its
-# checks land on the same commit, which is the PR's head. GitHub still refuses
+# checks land on the same commit, which is the PR's head. A PR's required
+# checks never count a dispatched run's check runs, so ci.yml's gate also
+# reports itself as a `ci-gate` commit status there. GitHub still refuses
 # the merge while any run at the head waits for approval, required or not, so
 # the job then deletes those waiting `pull_request` runs.
 #
@@ -237,7 +239,8 @@ jobs:
           # someone approves them. `workflow_dispatch` is exempt, as it is for
           # release.yml at the tag above, so start the two workflows whose
           # checks the merge requires at the branch: they report on the commit
-          # just pushed, the PR's head, with no approval and no personal token.
+          # just pushed, the PR's head, with no approval and no personal token
+          # (the required `ci-gate` as a commit status; see ci.yml's gate).
           # A refused dispatch leaves the pull request, which is still worth
           # opening, so it warns.
           for workflow in ci.yml pr-title.yml; do
