@@ -629,6 +629,36 @@ declare function ctSelect<T extends u32 | u64>(mask: T, a: T, b: T): T;
  */
 declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
 /**
+ * The high 64 bits of the 128-bit product of `a` and `b`, the half a `u64`
+ * `a * b` drops (WP41). Both operands are `u64`. Any other type is refused as
+ * `` `mulHigh` takes u64 operands (convert with toU64), got u32 `` (NL2822):
+ * `u32`, `i64`, `number` and a ranged integer included. A bare numeric
+ * literal is read as a `u64`, so `mulHigh(x, 3)` works, and one that does not
+ * fit is the literal's own refusal. The call takes exactly two arguments, and
+ * like every function it is not a value.
+ *
+ * On x86-64 and AArch64 it is one multiply (`mul`, `mulx` or `umulh`) and
+ * calls nothing. wasm32 has no wide multiply, so there it is four 32×32
+ * products and their carries, inline. Neither lowering branches on its
+ * operands. Under Node it is `(a * b) >> 64n` on BigInts, with the same
+ * answer. Capability: none.
+ *
+ * @param a one factor.
+ * @param b the other factor.
+ * @returns the top 64 bits of `a * b` computed in 128 bits.
+ */
+declare function mulHigh(a: u64, b: u64): u64;
+/**
+ * Whether `mulHigh` is one instruction on the build's target (WP41): `true` on
+ * x86-64 and AArch64, and `false` on wasm32 and under Node. It is a constant of
+ * the build, so a branch on it costs nothing and the path not taken is
+ * dropped. Code with a wide-limb algorithm and a narrow-limb one keeps both and
+ * picks with it. It takes no arguments. Capability: none.
+ *
+ * @returns `true` where the 64×64→128 product is native.
+ */
+declare function mulHighIsNative(): boolean;
+/**
  * Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may
  * drop as dead (#385): how a key, a secret scalar or another secret is cleared
  * once it is used. A statement: used as a value it is `` `secureZero` returns

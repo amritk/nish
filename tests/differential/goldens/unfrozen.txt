@@ -493,6 +493,10 @@ cases/mem_using_arena added after R6: no rewriter to freeze it with
 cases/mem_using_arena_or_return added after R6: no rewriter to freeze it with
 cases/mem_using_arena_tail added after R6: no rewriter to freeze it with
 cases/mem_wait_pid_scope added after R6: no rewriter to freeze it with
+cases/mul_high_aarch64 added after R6: no rewriter to freeze it with
+cases/mul_high_basic added after R6: no rewriter to freeze it with
+cases/mul_high_native added after R6: no rewriter to freeze it with
+cases/mul_high_wasm32 added after R6: no rewriter to freeze it with
 cases/neg_literal_i64_min added after R6: no rewriter to freeze it with
 cases/neg_literal_int_min_hex added after R6: no rewriter to freeze it with
 cases/neg_literal_unsigned added after R6: no rewriter to freeze it with

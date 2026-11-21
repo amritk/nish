@@ -2,7 +2,7 @@
 
 # NL2xxx\: the type checker
 
-The 813 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
+The 814 codes of band 2. [Diagnostics](../diagnostics.md) says what a code promises and how a rule's fragment is matched.
 
 ## NL2001
 
@@ -15702,4 +15702,12 @@ The message of an error contains:
 
 ```text
 ` again, which never ends (assign it in the constructor)
+```
+
+## NL2822
+
+The message of an error contains:
+
+```text
+` takes u64 operands (convert with toU64), got …
 ```

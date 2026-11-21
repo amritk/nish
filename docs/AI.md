@@ -2568,6 +2568,10 @@ barrier, so neither ever becomes a branch; select and compare on a secret with
 these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
 `secureZero(bytes)` sets every byte of a `u8[]` to zero in stores the optimiser
 may not drop, as a statement: how a key in a plain array is cleared once used.
+`mulHigh(a, b)` is the high 64 bits of the 128-bit product of two `u64`s
+(with `a * b` for the low half, the whole product), one multiply on x86-64 and
+AArch64 and four 32 × 32 products on wasm32, neither branching on an operand;
+`mulHighIsNative()` is `true` where it is one instruction.
 
 **Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
 array or a record of integer fields). It is opaque: no printing, interpolating,

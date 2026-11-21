@@ -29052,6 +29052,102 @@ attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-math-clz32 -->
 
+### `mulHigh`
+
+The top 64 bits of a `u64` product. On a 64-bit target it is a widening
+`i128` multiply and a shift, which LLVM selects as one `mul` on x86-64 and one
+`umulh` on AArch64. `mulHighIsNative()` is the constant `true` there.
+
+<!-- cookbook:begin builtin-mul-high -->
+Compiled with `--target x86_64-unknown-linux-gnu`.
+
+```ts
+const high = (a: u64, b: u64): u64 => mulHigh(a, b)
+
+const native = (): boolean => mulHighIsNative()
+```
+
+```llvm
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+define internal noundef i64 @high(i64 noundef %a, i64 noundef %b) #0 {
+entry:
+  %0 = zext i64 %a to i128
+  %1 = zext i64 %b to i128
+  %2 = mul i128 %0, %1
+  %3 = lshr i128 %2, 64
+  %4 = trunc i128 %3 to i64
+  ret i64 %4
+}
+
+define internal noundef zeroext i1 @native() #0 {
+entry:
+  ret i1 true
+}
+
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-mul-high -->
+
+wasm32 has no wide multiply, and an `i128` multiply there is a call to
+compiler-rt's `__multi3`, so the same source is four 32×32 products and their
+carries, with no `i128` in the IR and no branch on the operands.
+`mulHighIsNative()` is `false`.
+
+<!-- cookbook:begin builtin-mul-high-wasm32 -->
+Compiled with `--target wasm32`.
+
+```ts
+const high = (a: u64, b: u64): u64 => mulHigh(a, b)
+
+const native = (): boolean => mulHighIsNative()
+```
+
+```llvm
+target datalayout = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
+target triple = "wasm32-unknown-unknown"
+
+define internal noundef i64 @high(i64 noundef %a, i64 noundef %b) #0 {
+entry:
+  %0 = and i64 %a, 4294967295
+  %1 = lshr i64 %a, 32
+  %2 = and i64 %b, 4294967295
+  %3 = lshr i64 %b, 32
+  %4 = mul i64 %0, %2
+  %5 = mul i64 %0, %3
+  %6 = mul i64 %1, %2
+  %7 = mul i64 %1, %3
+  %8 = lshr i64 %4, 32
+  %9 = and i64 %5, 4294967295
+  %10 = and i64 %6, 4294967295
+  %11 = add i64 %8, %9
+  %12 = add i64 %11, %10
+  %13 = lshr i64 %5, 32
+  %14 = lshr i64 %6, 32
+  %15 = lshr i64 %12, 32
+  %16 = add i64 %7, %13
+  %17 = add i64 %16, %14
+  %18 = add i64 %17, %15
+  ret i64 %18
+}
+
+define internal noundef zeroext i1 @native() #0 {
+entry:
+  ret i1 false
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end builtin-mul-high-wasm32 -->
+
 ### `toI32` / `toI64` / `toF64`
 
 `sext`, `sitofp`, and the saturating `llvm.fptosi.sat` for `f64` to integer.

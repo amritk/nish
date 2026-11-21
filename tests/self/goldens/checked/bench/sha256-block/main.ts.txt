@@ -3293,25 +3293,13 @@ function p256FiatSubborrowxU64(arg1: u64, arg2: u64, arg3: u64): u64 -> @nish.p2
 function p256FiatSubborrowxU64Out2(arg2: u64, arg3: u64, out1: u64): u64 -> @nish.p256FiatSubborrowxU64Out2
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function p256FiatMulxU64Hi(arg1: u64, arg2: u64): u64 -> @nish.p256FiatMulxU64Hi
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local +0:9 a0: u64 (const)
-  local +1:9 a1: u64 (const)
-  local +2:9 b0: u64 (const)
-  local +3:9 b1: u64 (const)
-  local +4:9 p00: u64 (const)
-  local +5:9 p01: u64 (const)
-  local +6:9 p10: u64 (const)
-  local +7:9 p11: u64 (const)
-  local +8:9 mid: u64 (const)
 function p256FiatCmovznzU64(arg1: u64, arg2: u64, arg3: u64): u64 -> @nish.p256FiatCmovznzU64
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256FiatMul
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatMulxU64Hi nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
+  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
   pointer out1: size=0 writesThrough=true captured=false
   pointer arg1: size=0 writesThrough=false captured=false
   pointer arg2: size=0 writesThrough=false captured=false
@@ -3330,16 +3318,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -184:9 x4: u64 (const)
   local -183:9 x5: u64 (const)
   local -182:9 x6: u64 (const)
-  callee -182:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -181:9 x7: u64 (const)
   local -180:9 x8: u64 (const)
-  callee -180:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -179:9 x9: u64 (const)
   local -178:9 x10: u64 (const)
-  callee -178:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -177:9 x11: u64 (const)
   local -176:9 x12: u64 (const)
-  callee -176:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -175:9 x13: u64 (const)
   callee -175:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -174:9 x14: u64 (const)
@@ -3356,16 +3340,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -168:9 x20: u64 (const)
   callee -168:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -167:9 x21: u64 (const)
-  callee -167:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -167:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -167:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -166:9 x22: u64 (const)
   local -165:9 x23: u64 (const)
-  callee -165:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -164:9 x24: u64 (const)
   callee -164:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -163:9 x25: u64 (const)
-  callee -163:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -163:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -163:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -162:9 x26: u64 (const)
   callee -162:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -161:9 x27: u64 (const)
@@ -3393,16 +3374,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   callee -150:20 p256FiatAddcarryxU64Out2 -> @nish.p256FiatAddcarryxU64Out2
   local -149:9 x39: u64 (const)
   local -148:9 x40: u64 (const)
-  callee -148:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -147:9 x41: u64 (const)
   local -146:9 x42: u64 (const)
-  callee -146:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -145:9 x43: u64 (const)
   local -144:9 x44: u64 (const)
-  callee -144:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -143:9 x45: u64 (const)
   local -142:9 x46: u64 (const)
-  callee -142:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -141:9 x47: u64 (const)
   callee -141:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -140:9 x48: u64 (const)
@@ -3439,16 +3416,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -124:9 x64: u64 (const)
   callee -124:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -123:9 x65: u64 (const)
-  callee -123:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -123:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -123:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -122:9 x66: u64 (const)
   local -121:9 x67: u64 (const)
-  callee -121:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -120:9 x68: u64 (const)
   callee -120:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -119:9 x69: u64 (const)
-  callee -119:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -119:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -119:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -118:9 x70: u64 (const)
   callee -118:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -117:9 x71: u64 (const)
@@ -3477,16 +3451,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -105:9 x83: u64 (const)
   local -104:9 x84: u64 (const)
   local -103:9 x85: u64 (const)
-  callee -103:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -102:9 x86: u64 (const)
   local -101:9 x87: u64 (const)
-  callee -101:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -100:9 x88: u64 (const)
   local -99:9 x89: u64 (const)
-  callee -99:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -98:9 x90: u64 (const)
   local -97:9 x91: u64 (const)
-  callee -97:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -96:9 x92: u64 (const)
   callee -96:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -95:9 x93: u64 (const)
@@ -3523,16 +3493,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -79:9 x109: u64 (const)
   callee -79:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -78:9 x110: u64 (const)
-  callee -78:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -78:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -78:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -77:9 x111: u64 (const)
   local -76:9 x112: u64 (const)
-  callee -76:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -75:9 x113: u64 (const)
   callee -75:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -74:9 x114: u64 (const)
-  callee -74:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -74:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -74:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -73:9 x115: u64 (const)
   callee -73:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -72:9 x116: u64 (const)
@@ -3561,16 +3528,12 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -60:9 x128: u64 (const)
   local -59:9 x129: u64 (const)
   local -58:9 x130: u64 (const)
-  callee -58:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -57:9 x131: u64 (const)
   local -56:9 x132: u64 (const)
-  callee -56:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -55:9 x133: u64 (const)
   local -54:9 x134: u64 (const)
-  callee -54:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -53:9 x135: u64 (const)
   local -52:9 x136: u64 (const)
-  callee -52:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -51:9 x137: u64 (const)
   callee -51:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -50:9 x138: u64 (const)
@@ -3607,16 +3570,13 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
   local -34:9 x154: u64 (const)
   callee -34:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -33:9 x155: u64 (const)
-  callee -33:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -33:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -33:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -32:9 x156: u64 (const)
   local -31:9 x157: u64 (const)
-  callee -31:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -30:9 x158: u64 (const)
   callee -30:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -29:9 x159: u64 (const)
-  callee -29:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -29:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -29:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -28:9 x160: u64 (const)
   callee -28:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -27:9 x161: u64 (const)
@@ -3678,7 +3638,7 @@ function p256FiatMul(out1: u32[], arg1: u32[], arg2: u32[]): void -> @nish.p256F
 function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatMulxU64Hi nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
+  calls: nish.p256FiatAddcarryxU64 nish.p256FiatAddcarryxU64Out2 nish.p256FiatCmovznzU64 nish.p256FiatSubborrowxU64 nish.p256FiatSubborrowxU64Out2 nish.p256FiatWord64
   pointer out1: size=0 writesThrough=true captured=false
   pointer arg1: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -3692,16 +3652,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -184:9 x4: u64 (const)
   local -183:9 x5: u64 (const)
   local -182:9 x6: u64 (const)
-  callee -182:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -181:9 x7: u64 (const)
   local -180:9 x8: u64 (const)
-  callee -180:19 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -179:9 x9: u64 (const)
   local -178:9 x10: u64 (const)
-  callee -178:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -177:9 x11: u64 (const)
   local -176:9 x12: u64 (const)
-  callee -176:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -175:9 x13: u64 (const)
   callee -175:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -174:9 x14: u64 (const)
@@ -3718,16 +3674,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -168:9 x20: u64 (const)
   callee -168:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -167:9 x21: u64 (const)
-  callee -167:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -167:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -167:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -166:9 x22: u64 (const)
   local -165:9 x23: u64 (const)
-  callee -165:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -164:9 x24: u64 (const)
   callee -164:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -163:9 x25: u64 (const)
-  callee -163:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -163:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -163:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -162:9 x26: u64 (const)
   callee -162:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -161:9 x27: u64 (const)
@@ -3755,16 +3708,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   callee -150:20 p256FiatAddcarryxU64Out2 -> @nish.p256FiatAddcarryxU64Out2
   local -149:9 x39: u64 (const)
   local -148:9 x40: u64 (const)
-  callee -148:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -147:9 x41: u64 (const)
   local -146:9 x42: u64 (const)
-  callee -146:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -145:9 x43: u64 (const)
   local -144:9 x44: u64 (const)
-  callee -144:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -143:9 x45: u64 (const)
   local -142:9 x46: u64 (const)
-  callee -142:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -141:9 x47: u64 (const)
   callee -141:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -140:9 x48: u64 (const)
@@ -3801,16 +3750,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -124:9 x64: u64 (const)
   callee -124:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -123:9 x65: u64 (const)
-  callee -123:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -123:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -123:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -122:9 x66: u64 (const)
   local -121:9 x67: u64 (const)
-  callee -121:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -120:9 x68: u64 (const)
   callee -120:26 p256FiatWord64 -> @nish.p256FiatWord64
   local -119:9 x69: u64 (const)
-  callee -119:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -119:43 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -119:33 p256FiatWord64 -> @nish.p256FiatWord64
   local -118:9 x70: u64 (const)
   callee -118:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -117:9 x71: u64 (const)
@@ -3839,16 +3785,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -105:9 x83: u64 (const)
   local -104:9 x84: u64 (const)
   local -103:9 x85: u64 (const)
-  callee -103:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -102:9 x86: u64 (const)
   local -101:9 x87: u64 (const)
-  callee -101:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -100:9 x88: u64 (const)
   local -99:9 x89: u64 (const)
-  callee -99:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -98:9 x90: u64 (const)
   local -97:9 x91: u64 (const)
-  callee -97:20 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -96:9 x92: u64 (const)
   callee -96:20 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -95:9 x93: u64 (const)
@@ -3885,16 +3827,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -79:9 x109: u64 (const)
   callee -79:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -78:9 x110: u64 (const)
-  callee -78:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -78:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -78:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -77:9 x111: u64 (const)
   local -76:9 x112: u64 (const)
-  callee -76:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -75:9 x113: u64 (const)
   callee -75:27 p256FiatWord64 -> @nish.p256FiatWord64
   local -74:9 x114: u64 (const)
-  callee -74:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -74:44 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -74:34 p256FiatWord64 -> @nish.p256FiatWord64
   local -73:9 x115: u64 (const)
   callee -73:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -72:9 x116: u64 (const)
@@ -3923,16 +3862,12 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -60:9 x128: u64 (const)
   local -59:9 x129: u64 (const)
   local -58:9 x130: u64 (const)
-  callee -58:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -57:9 x131: u64 (const)
   local -56:9 x132: u64 (const)
-  callee -56:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -55:9 x133: u64 (const)
   local -54:9 x134: u64 (const)
-  callee -54:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -53:9 x135: u64 (const)
   local -52:9 x136: u64 (const)
-  callee -52:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -51:9 x137: u64 (const)
   callee -51:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -50:9 x138: u64 (const)
@@ -3969,16 +3904,13 @@ function p256FiatSquare(out1: u32[], arg1: u32[]): void -> @nish.p256FiatSquare
   local -34:9 x154: u64 (const)
   callee -34:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -33:9 x155: u64 (const)
-  callee -33:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -33:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -33:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -32:9 x156: u64 (const)
   local -31:9 x157: u64 (const)
-  callee -31:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
   local -30:9 x158: u64 (const)
   callee -30:28 p256FiatWord64 -> @nish.p256FiatWord64
   local -29:9 x159: u64 (const)
-  callee -29:21 p256FiatMulxU64Hi -> @nish.p256FiatMulxU64Hi
-  callee -29:45 p256FiatWord64 -> @nish.p256FiatWord64
+  callee -29:35 p256FiatWord64 -> @nish.p256FiatWord64
   local -28:9 x160: u64 (const)
   callee -28:21 p256FiatAddcarryxU64 -> @nish.p256FiatAddcarryxU64
   local -27:9 x161: u64 (const)

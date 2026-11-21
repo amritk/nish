@@ -244,6 +244,8 @@ export const builtinCapability = (name: string): i32 => {
     name === "f32ToBits" ||
     name === "ctSelect" ||
     name === "ctEq" ||
+    name === "mulHigh" ||
+    name === "mulHighIsNative" ||
     name === "secureZero" ||
     name === "parseInt" ||
     name === "parseFloat" ||
