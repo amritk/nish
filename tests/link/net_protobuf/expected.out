@@ -142,6 +142,9 @@ PASS  field number 0 is refused
 PASS  a field number past 2^29 - 1 is refused
 PASS  2^29 - 1 is written
 PASS  endMessage with none open
+PASS  a packed element with none open
+PASS  a packed fixed32 with none open
+PASS  a packed fixed64 with none open
 PASS  a nested message of 2 bytes
 PASS  a nested message of 200 bytes
 PASS  a nested message of 20000 bytes
@@ -150,4 +153,4 @@ PASS  bytes writes its window
 PASS  an empty string
 PASS  int32 and int64 negatives take ten bytes
 PASS  a warm writer allocates nothing per field
-protobuf: 152 passed, 0 failed, 0 skipped
+protobuf: 155 passed, 0 failed, 0 skipped

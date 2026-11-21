@@ -3995,6 +3995,79 @@ a name of 4 bytes
   floor 7
 ```
 
+A field you have no schema for can still be passed on: its wire type says
+how to read it, and `bytes` copies a length-delimited field's span from the
+reader's buffer as it is. This relay drops field 2 and copies the rest.
+
+<!-- nish:ok -->
+```ts
+import { PROTO_WIRE_I32, PROTO_WIRE_I64, PROTO_WIRE_VARINT, ProtoReader, ProtoWriter } from "nish/net/protobuf"
+
+// Copies every field but `drop` from `r` to `w` by its wire type, so a field
+// this program has no schema for passes through unchanged.
+const relay = (r: ProtoReader, w: ProtoWriter, drop: i32): i32 => {
+  while (r.next()) {
+    const f: i32 = r.field
+    if (f === drop) {
+      // Not read: the next call to next() skips it.
+    } else if (r.wireType === PROTO_WIRE_VARINT) {
+      w.uint64(f, r.uint64())
+    } else if (r.wireType === PROTO_WIRE_I64) {
+      w.fixed64(f, r.fixed64())
+    } else if (r.wireType === PROTO_WIRE_I32) {
+      w.fixed32(f, r.fixed32())
+    } else {
+      const n: i32 = r.len()
+      w.bytes(f, r.buf, r.spanStart, n)
+    }
+  }
+  return r.failed < 0 ? r.failed : w.failed
+}
+
+export const main = (): i32 => {
+  // message Reading { double value = 1; sint32 delta = 2; float scale = 3;
+  //   string unit = 4; repeated fixed32 ids = 5; repeated sfixed64 marks = 6; }
+  const w = new ProtoWriter([])
+  w.double(1, toF64(3) / toF64(2))
+  w.sint32(2, -7)
+  w.float(3, toF32(2))
+  w.string(4, "kPa")
+  w.beginMessage(5)
+  w.packedFixed32(toU32(9))
+  w.packedFixed32(toU32(10))
+  w.endMessage()
+  w.beginMessage(6)
+  w.packedFixed64(toU64(11))
+  w.endMessage()
+
+  const out = new ProtoWriter([])
+  const failed: i32 = relay(new ProtoReader(w.buf, 0, w.end), out, 2)
+  console.log(`${w.end} bytes in, ${out.end} out, failed ${failed}`)
+
+  const r = new ProtoReader(out.buf, 0, out.end)
+  while (r.next()) {
+    if (r.field === 1) {
+      console.log(`value ${r.double()}`)
+    } else if (r.field === 3) {
+      console.log(`scale ${r.float()}`)
+    } else {
+      console.log(`field ${r.field}: ${r.len()} bytes`)
+    }
+  }
+  return failed
+}
+```
+
+```console
+$ nish run relay.ts
+41 bytes in, 39 out, failed 0
+value 1.5
+scale 2
+field 4: 3 bytes
+field 5: 8 bytes
+field 6: 8 bytes
+```
+
 **A malformed message is a code, never a panic.** The first fault sets
 `failed` to a negative `PROTO_ERR_*` code, and every later call answers
 `false` or 0 until `reset`: a varint longer than ten bytes, a value or length

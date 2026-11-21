@@ -407,6 +407,15 @@ const writerChecks = (s: Suite): void => {
   w.reset()
   w.endMessage()
   s.eqI32("endMessage with none open", w.failed, PROTO_ERR_UNBALANCED)
+  w.reset()
+  w.packedVarint(toU64(0))
+  s.ok("a packed element with none open", w.failed === PROTO_ERR_UNBALANCED && w.end === 0)
+  w.reset()
+  w.packedFixed32(toU32(0))
+  s.eqI32("a packed fixed32 with none open", w.failed, PROTO_ERR_UNBALANCED)
+  w.reset()
+  w.packedFixed64(toU64(0))
+  s.eqI32("a packed fixed64 with none open", w.failed, PROTO_ERR_UNBALANCED)
   // A nested message of 200 bytes takes a two-byte length, and of 20000 three.
   for (let size: i32 = 1; size <= 20000; size *= 100) {
     w.reset()

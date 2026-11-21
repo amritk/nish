@@ -102,9 +102,9 @@ its value; neither can move the reader outside its span.
 bytes already there and pushing past its length, so a buffer that has grown
 to a message's size is reused without allocating once the writer is `reset`.
 Misuse (a field number outside 1 to 2^29 - 1, nesting past
-`PROTO_MAX_DEPTH`, an `endMessage` with no open message, a `bytes` window
-outside its source array, a message past `PROTO_MAX_SIZE` bytes) sets the
-same sticky `failed` code and writes nothing more. Neither side panics: a
+`PROTO_MAX_DEPTH`, an `endMessage` or a packed element with no open
+message, a `bytes` window outside its source array, a message past
+`PROTO_MAX_SIZE` bytes) sets the same sticky `failed` code and writes nothing more. Neither side panics: a
 reader window outside its array is `PROTO_ERR_WINDOW` too, so a program
 held to no panic may call both.
 
@@ -144,7 +144,7 @@ class ProtoReader
 | `enterPacked(wireType: i32): boolean` | Enters the current length-delimited field as a packed repeated field whose elements have `wireType`: `more` then moves from element to element, until `leave`. |
 | `fixed32(): u32` | Reads the current 32-bit field as a fixed32. |
 | `fixed64(): u64` | Reads the current 64-bit field as a fixed64. |
-| `float(): f32` | Reads the current 32-bit field as a float. |
+| `float(): f32` | Reads the current 32-bit field as a float. A signaling NaN comes back quiet, its top mantissa bit set; `fixed32` reads the exact bits. |
 | `int32(): i32` | Reads the current varint field as an int32, keeping its low 32 bits: a negative int32 arrives sign-extended to ten bytes. |
 | `int64(): i64` | Reads the current varint field as an int64. |
 | `leave(): boolean` | Leaves the span `enter` or `enterPacked` opened, skipping what is left of it the way `next` or `more` would, so a malformed rest is refused, and returns to the enclosing span. |
@@ -284,7 +284,7 @@ A varint or a fixed-width value runs past the end of the span.
 
 `PROTO_ERR_UNBALANCED: i32`
 
-A `leave` or `endMessage` with no span open.
+A `leave` or `endMessage` with no span open, or a packed element written outside one.
 
 </scalar-card>
 

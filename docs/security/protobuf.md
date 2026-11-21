@@ -20,7 +20,7 @@ until `reset`. Each byte of the span is passed once, so the work is linear in
 the message's length. Nothing in the module panics, not even the program's
 own mistakes: a reader window or a `bytes` source window outside its array,
 and a message past `PROTO_MAX_SIZE` bytes, are `PROTO_ERR_WINDOW`. No finding
-is counted; four properties are recorded as accepted (PB-1 to PB-4).
+is counted; five properties are recorded as accepted (PB-1 to PB-5).
 
 ## Scope
 
@@ -60,10 +60,14 @@ read, and its size is bounded by that message.
 | PB-2 | None (a property) | `ProtoReader.next`, `ProtoReader.length` | A length is checked against the span when its field is read or skipped, not when its tag is read. `next` answers `true` for the field whose length is past the span, and the read or the following `next` refuses it. | **Accepted, not counted.** The caller sees a field number only, never a byte outside the span. `len`, `enter` and the skip all check the length before they move. Pinned by "the bad one after it is refused when passed over" and `net_protobuf_bad_length`. |
 | PB-3 | Low | `ProtoWriter` | `end` and the field lengths are `i32`, so the writer refuses to grow a message past `PROTO_MAX_SIZE` (2^31 − 2) bytes with `PROTO_ERR_WINDOW`. `endMessage` moves an embedded message's contents right once per enclosing `endMessage` when its length needs more than one byte. Writing a message nested d deep therefore copies up to d times its size. | **Accepted, not counted.** gRPC's framing caps a message at 2^32 − 1 bytes, and a program that writes one of 2^31 − 1 bytes or more needs another writer. The copy cost is bounded by `PROTO_MAX_DEPTH` and is the program's own nesting, not a peer's. No test reaches `PROTO_MAX_SIZE`. "a nested message of 20000 bytes" pins the move. |
 | PB-4 | None (a property) | `ProtoReader.len` | A `string` field is a length-delimited span like `bytes`: the reader does not check that it is UTF-8. | **Accepted, not counted; documented.** proto3 requires valid UTF-8 in a `string`, but the check belongs to the code that turns the span into a string with a schema in hand. `len`'s doc comment says the bytes are not checked to be UTF-8. |
+| PB-5 | None (a property) | `ProtoReader.float`, `f32OfBits` | `float` builds its `f32` through an `f64`, and the narrowing sets a signaling NaN's quiet bit: the bits 0x7f800001 come back as 0x7fc00001, without a fault. | **Accepted, not counted; documented.** The language has no conversion from bits to an `f32` that keeps a signaling NaN. `float`'s doc comment says so and that `fixed32` reads the exact bits. No vector holds a signaling NaN, so "re-encodes byte for byte" does not reach it. |
 
-One bug was found while the module was written, before it reached `main`, and
-is not counted. `skip` advanced with `this.pos += this.length()`, which reads
-`pos` before the call that moves it past the length's varint, so a skipped
+Two bugs were found while the module was written, before it reached `main`,
+and are not counted. `bytes` bounded its copy loop with `q - from < count`, a
+subtraction the compiler could not prove fits, so a program held to no panic
+could not call it; the bound is now a widened sum, and the guide's relay
+example calls `bytes` under the no-panic check. And `skip` advanced with
+`this.pos += this.length()`, which reads `pos` before the call that moves it past the length's varint, so a skipped
 length-delimited field landed the varint's size short. It could misparse
 only inside the span, because the length had already been checked against it.
 The skip check "a field of each wire type is skipped by it" fails on it.
@@ -142,7 +146,9 @@ number outside 1 to 2^29 − 1 with `PROTO_ERR_FIELD` (`field number 0 is
 refused`, `a field number past 2^29 - 1 is refused`, `2^29 - 1 is written`),
 a 101st `beginMessage` with `PROTO_ERR_DEPTH` (`the writer nests to the
 cap`, `the writer refuses one more`) and an `endMessage` with none open with
-`PROTO_ERR_UNBALANCED` (`endMessage with none open`). `endMessage`'s
+`PROTO_ERR_UNBALANCED` (`endMessage with none open`), as is a packed element
+written with no message open (`a packed element with none open`, `a packed
+fixed32 with none open`, `a packed fixed64 with none open`). `endMessage`'s
 backpatch moves the contents one byte at a time from the top, each store
 checked against the message, so contents of one, two and three length bytes survive
 (`a nested message of 2 bytes`, `of 200 bytes`, `of 20000 bytes`, `a nested
@@ -156,17 +162,22 @@ rewrite of the message leave `Arena.used()` where it was.
 
 **The module keeps no panic site.** Every index is guarded and every sum
 widened, so the compiler's no-panic check, the default for a program's own
-package, passes on a program that calls it. The guide's example in
-`docs/guide/using-nish/standard-library.md`, under `nish/net/protobuf`, is
+package, passes on a program that calls it. The guide's two examples in
+`docs/guide/using-nish/standard-library.md`, under `nish/net/protobuf`, are
 marked `nish:ok` without `--allow-panics`, so the `guide` section's
-`standard-library.md:<line> compiles` check fails if a method it calls gains
-one.
+`standard-library.md:<line> compiles` checks fail if a method they call gains
+one. Between them they call `next`, `len`, `enter`, `enterPacked`, `more`,
+`leave`, the reader's `uint64`, `int32`, `fixed32`, `fixed64`, `float` and
+`double`, and every writer method but `reset`, `int64`, `uint32`, `bool`,
+`sint64`, `sfixed32` and `sfixed64`.
 
 ## Not pinned
 
-- The no-panic property of the methods the guide's example does not call
-  (the fixed, packed and `bytes` paths among them) was checked by a one-off
-  strict build of a program calling every public method, not by a test.
+- The no-panic property of the methods neither guide example calls (the
+  reader's `reset`, `int64`, `uint32`,
+  `bool`, `sint64`, `sint32`, `sfixed32` and `sfixed64`, and the writer's
+  above), was checked by a one-off strict build of a program calling every
+  public method, not by a test.
 - No fuzz target drives the reader yet. The properties above are pinned by
   the fixtures alone.
 - PB-3's `PROTO_MAX_SIZE` refusal is not reached by a test.

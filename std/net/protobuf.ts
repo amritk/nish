@@ -45,9 +45,9 @@
  * bytes already there and pushing past its length, so a buffer that has grown
  * to a message's size is reused without allocating once the writer is `reset`.
  * Misuse (a field number outside 1 to 2^29 - 1, nesting past
- * `PROTO_MAX_DEPTH`, an `endMessage` with no open message, a `bytes` window
- * outside its source array, a message past `PROTO_MAX_SIZE` bytes) sets the
- * same sticky `failed` code and writes nothing more. Neither side panics: a
+ * `PROTO_MAX_DEPTH`, an `endMessage` or a packed element with no open
+ * message, a `bytes` window outside its source array, a message past
+ * `PROTO_MAX_SIZE` bytes) sets the same sticky `failed` code and writes nothing more. Neither side panics: a
  * reader window outside its array is `PROTO_ERR_WINDOW` too, so a program
  * held to no panic may call both.
  *
@@ -92,7 +92,7 @@ export const PROTO_ERR_WIRE_TYPE: i32 = -6
 export const PROTO_ERR_DEPTH: i32 = -7
 /** A read whose wire type is not the current field's, or of a value already read. */
 export const PROTO_ERR_MISMATCH: i32 = -8
-/** A `leave` or `endMessage` with no span open. */
+/** A `leave` or `endMessage` with no span open, or a packed element written outside one. */
 export const PROTO_ERR_UNBALANCED: i32 = -9
 /** A reader window or a `bytes` source window outside its array, or a message that would grow past `PROTO_MAX_SIZE` bytes. */
 export const PROTO_ERR_WINDOW: i32 = -10
@@ -448,7 +448,8 @@ export class ProtoReader {
   }
 
   /**
-   * Reads the current 32-bit field as a float.
+   * Reads the current 32-bit field as a float. A signaling NaN comes back
+   * quiet, its top mantissa bit set; `fixed32` reads the exact bits.
    *
    * @returns The value, or 0 on a fault.
    */
@@ -871,7 +872,8 @@ export class ProtoWriter {
     }
     if (this.tag(field, PROTO_WIRE_LEN)) {
       this.putVarint(toU64(count))
-      for (let q: i32 = from; q >= 0 && q < toI32(src.length) && q - from < count; q += 1) {
+      const stop: i64 = toI64(from) + toI64(count)
+      for (let q: i32 = from; q >= 0 && q < toI32(src.length) && toI64(q) < stop; q += 1) {
         this.put(src[q])
       }
     }
@@ -957,6 +959,14 @@ export class ProtoWriter {
     }
   }
 
+  /** Whether an element may be written: no fault and a span open; with none open it sets `PROTO_ERR_UNBALANCED`. @internal */
+  packed(): boolean {
+    if (this.failed === PROTO_OK && this.depth <= 0) {
+      this.failed = PROTO_ERR_UNBALANCED
+    }
+    return this.failed === PROTO_OK
+  }
+
   /**
    * Writes one element of an open packed field as a varint: a uint64, or an
    * int64, int32 or bool converted to `u64` as `int64`, `int32` and `bool` do.
@@ -964,7 +974,7 @@ export class ProtoWriter {
    * @param v - The element.
    */
   packedVarint(v: u64): void {
-    if (this.failed === PROTO_OK) {
+    if (this.packed()) {
       this.putVarint(v)
     }
   }
@@ -976,7 +986,7 @@ export class ProtoWriter {
    * @param v - The element.
    */
   packedFixed32(v: u32): void {
-    if (this.failed === PROTO_OK) {
+    if (this.packed()) {
       this.putFixed(toU64(v), 4)
     }
   }
@@ -988,7 +998,7 @@ export class ProtoWriter {
    * @param v - The element.
    */
   packedFixed64(v: u64): void {
-    if (this.failed === PROTO_OK) {
+    if (this.packed()) {
       this.putFixed(v, 8)
     }
   }
