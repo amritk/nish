@@ -5,7 +5,7 @@
 // loop with.
 import { Secret } from "nish:secret"
 import { netLocalPort, tcpListen } from "nish:net"
-import { GRPC_CALL, GRPC_NOT_FOUND, GRPC_PERMISSION_DENIED, GrpcLimits, GrpcServer } from "nish/net/grpc"
+import { GRPC_CALL, GRPC_INVALID_ARGUMENT, GRPC_NOT_FOUND, GRPC_PERMISSION_DENIED, GrpcLimits, GrpcServer } from "nish/net/grpc"
 import { HttpServer, HttpServerLimits, HttpServerRequest } from "nish/net/http-server"
 import { Http1Config } from "nish/net/http1-server"
 import { Http2Config } from "nish/net/http2"
@@ -20,12 +20,16 @@ const GET_SUM: i32 = 0
 const DENIED: i32 = 1
 const MISSING: i32 = 2
 const SLOW: i32 = 3
+const CONTROL: i32 = 4
 
 /** `GrpcLimits.maxMessage` on the rig: small, so a declared length past it fits in a test. */
 export const RIG_MAX_MESSAGE: i32 = 64
 
 /** `/benchmark.BenchmarkService/Denied`'s `grpc-message`: printable ASCII, a `%`, and two bytes of UTF-8. */
 export const RIG_DENIED: string = "no 100% é"
+
+/** `/benchmark.BenchmarkService/Control`'s `grpc-message`: a CR, an LF and a NUL, each of which would end a field sent raw. */
+export const RIG_CONTROL: string = "a\r\nb\u0000c"
 
 /** The server, its listeners, the gRPC layer over it, and the program answering its calls. */
 export class GrpcRig {
@@ -45,16 +49,18 @@ export class GrpcRig {
   /** What `reply` and `fail` answered, in the order they were called. */
   results: i32[]
 
-  /** A server with `slots` connections per listener: h2c and HTTP/1.1, and HTTP/2 over TLS when `signed`. */
-  constructor(signed: boolean, slots: i32) {
+  /** A server with `slots` connections per listener: h2c and HTTP/1.1, and HTTP/2 over TLS when `signed`; `maxTimeout` in ms caps each call's deadline. */
+  constructor(signed: boolean, slots: i32, maxTimeout: i32) {
     const router = new Router(new RouterLimits())
     router.add("POST", "/benchmark.BenchmarkService/GetSum")
     router.add("POST", "/benchmark.BenchmarkService/Denied")
     router.add("POST", "/benchmark.BenchmarkService/Missing")
     router.add("POST", "/benchmark.BenchmarkService/Slow")
+    router.add("POST", "/benchmark.BenchmarkService/Control")
     this.h = new HttpServer(new HttpServerLimits(), router)
     const limits = new GrpcLimits()
     limits.maxMessage = RIG_MAX_MESSAGE
+    limits.maxTimeout = maxTimeout
     this.grpc = new GrpcServer(this.h, limits)
     this.signed = signed
     const clear: i32 = tcpListen("127.0.0.1", 0, 16)
@@ -135,6 +141,9 @@ export class GrpcRig {
         break
       case SLOW:
         this.held.push(r)
+        break
+      case CONTROL:
+        this.results.push(this.grpc.fail(r, GRPC_INVALID_ARGUMENT, RIG_CONTROL))
         break
       default:
         this.h.refuse(r)

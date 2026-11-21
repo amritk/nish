@@ -90,7 +90,11 @@ A gRPC client that speaks cleartext HTTP/2 reaches it: with
 `grpcurl -plaintext -proto calc.proto -d '{"a": 2, "b": 3}' localhost:50051
 calc.Calculator/GetSum` answers `{"result": 5}`. Serve real traffic over TLS
 with `listenHttp2Tls`, as [One server for HTTP/1.1, 2 and 3](http-server.md#adding-http2-and-http3)
-shows; nothing else in the program changes.
+shows. The loop then calls `server.waitSigned(1000, key)` in place of
+`server.wait(1000)`, with the certificate's private key as a
+[`Secret`](standard-library.md#nishsecret): `wait` panics once a TLS listener
+is configured, since it has no key to sign the handshake with. The rest of
+the program is the same.
 
 ## What `call` answers for you
 
